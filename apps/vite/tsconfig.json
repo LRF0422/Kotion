@@ -2,7 +2,10 @@
   "compilerOptions": {
     "paths": {
       "@ui/*": [
-        "../../packages/ui/src/*"
+        "../../packages/ui/src/index.ts"
+      ],
+      "@editor": [
+        "../../packages/editor/src/index.ts"
       ]
     },
     "target": "ES2020",

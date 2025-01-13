@@ -10,7 +10,25 @@
     "ui:add": "pnpm --filter @repo/ui ui:add",
     "volta:install": "curl https://get.volta.sh | bash"
   },
+  "dependencies": {
+    "deep-equal": "^2.2.3",
+    "lib0": "^0.2.99",
+    "lodash": "^4.17.21",
+    "lodash.escape": "^4.0.1",
+    "lodash.throttle": "^4.1.1",
+    "moment": "^2.30.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "uuid": "^10.0.0"
+  },
   "devDependencies": {
+    "@types/deep-equal": "^1.0.4",
+    "@types/lodash": "^4.17.7",
+    "@types/lodash-es": "^4.17.12",
+    "@types/react": "^18.3.10",
+    "@types/react-dom": "^18.3.0",
+    "@types/uuid": "^10.0.0",
+    "ahooks": "^3.8.0",
     "prettier": "^3.3.3",
     "turbo": "^2.1.2",
     "typescript": "^5.6.2"
