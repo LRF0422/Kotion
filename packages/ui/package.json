@@ -13,9 +13,6 @@
     "@repo/typescript-config": "workspace:*",
     "@types/node": "^22.7.4",
     "@types/react": "^18.3.10",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.47",
-    "tailwindcss": "^3.4.13",
     "typescript": "^5.6.2"
   },
   "dependencies": {
@@ -58,8 +55,6 @@
     "@radix-ui/react-tooltip": "^1.1.4",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^2.5.2",
-    "tailwindcss-animate": "^1.0.7",
     "emojibase": "^15.3.1",
     "y-prosemirror": "^1.2.12",
     "react-easy-sort": "^1.6.0"

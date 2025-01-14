@@ -232,7 +232,9 @@ export const SpaceDetail: React.FC = () => {
                     })
                 }}>
                     <div className=" p-2 mt-1 bg-muted rounded-sm flex-1 cursor-pointer">{space.name}</div>
-                    <Button size="icon" className="h-7 w-7"><ShareIcon className="h-2 w-2" /></Button>
+                    <Button size="icon">
+                        <ShareIcon className="h-4 w-4" />
+                    </Button>
                 </div>
         },
         {
