@@ -14,10 +14,9 @@ import { TiptapCollabProvider } from "@hocuspocus/provider";
 import { ThemeProvider } from "styled-components";
 import light from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
-import { cn } from "@ui/lib/utils";
+import { cn } from "@repo/ui";
 import { useSafeState } from "ahooks";
 import { ToC } from "./ToC";
-import { EditorWrapper } from "../components/editor-wrapper";
 import { PageContext, PageContextProps } from "./context";
 
 export interface EditorRenderProps extends EditorProvider, EditorKit {
@@ -85,12 +84,12 @@ export const EditorRender = forwardRef<
   return (editor && tableOfContents &&
     <PageContext.Provider value={pageInfo}>
       <ThemeProvider theme={light}>
-        <div className={cn("w-[calc(100vw-350px)]", props.className)} id="editor-container">
+        <div className={cn("w-full", props.className)} id="editor-container">
           <div className="flex flex-row relative w-full">
             <StyledEditor className="overflow-auto grow">
               <EditorContent editor={editor} />
             </StyledEditor>
-            {toc && <div className={cn("h-[calc(100vh-60px)] w-[300px] border-l sticky right-0 top-0")}>
+            {toc && <div className={cn("flex-none h-[calc(100vh-60px)] w-[300px] border-l sticky right-0 top-0")}>
               <MemorizedToC editor={editor as Editor} items={tableOfContents} />
             </div>}
           </div>

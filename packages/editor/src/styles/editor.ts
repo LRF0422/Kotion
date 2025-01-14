@@ -1,7 +1,7 @@
 import styled from "styled-components";
 
 export const StyledEditor = styled.div.attrs({
-  className: 'prose prose-headings:dark:text-white prose-li:dark:text-white prose-a:dark:text-white prose-code:dark:text-white prose-p:dark:text-white overflow-auto prose-img:m-0 max-w-none grow px-[180px]'
+  className: 'prose prose-headings:dark:text-white prose-li:dark:text-white prose-a:dark:text-white prose-code:dark:text-white prose-p:dark:text-white overflow-auto prose-img:m-0 max-w-none px-[180px]'
 })`
   box-sizing: border-box;
   width: 100%;
