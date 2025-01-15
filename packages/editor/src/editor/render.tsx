@@ -86,7 +86,7 @@ export const EditorRender = forwardRef<
       <ThemeProvider theme={light}>
         <div className={cn("w-full", props.className)} id="editor-container">
           <div className="flex flex-row relative w-full">
-            <StyledEditor className="overflow-auto grow">
+            <StyledEditor className="overflow-auto w-full">
               <EditorContent editor={editor} />
             </StyledEditor>
             {toc && <div className={cn("flex-none h-[calc(100vh-60px)] w-[300px] border-l sticky right-0 top-0")}>
