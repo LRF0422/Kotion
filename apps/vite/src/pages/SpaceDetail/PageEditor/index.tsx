@@ -11,7 +11,7 @@ import { event, ON_PAGE_REFRESH } from "../../../event";
 import { useApi } from "../../../hooks/use-api";
 import { useNavigator } from "../../../hooks/use-navigator";
 import { GlobalState } from "../../../store/GlobalState";
-import { TiptapCollabProvider } from "@hocuspocus/provider";
+import { TiptapCollabProvider } from "@repo/editor";
 import { Editor } from "@tiptap/core";
 import { useFullscreen, useKeyPress, useToggle, useUnmount } from "ahooks";
 import deepEqual from "deep-equal";
@@ -20,11 +20,11 @@ import {
     Contact2, Download, FileIcon,
     FullscreenIcon, Link, Loader, LoaderCircle, LockIcon, MessageSquareText,
     Minimize2, MoreHorizontal, MoveDownRight, Plus, Save, Trash2, Upload
-} from "lucide-react";
+} from "@repo/icon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@repo/ui";
 import * as Y from "@repo/editor"
 import { Avatar, AvatarImage } from "@repo/ui";
 import html2canvas from 'html2canvas';

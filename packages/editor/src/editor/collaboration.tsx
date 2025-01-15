@@ -125,7 +125,6 @@ export const CollaborationEditor = forwardRef<
             </div>
           </div>
         </div>
-
       </ThemeProvider >
     </PageContext.Provider>
   );

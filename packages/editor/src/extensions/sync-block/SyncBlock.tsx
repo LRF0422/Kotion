@@ -58,18 +58,6 @@ export const SyncBlockView: React.FC<NodeViewProps> = (props) => {
         }
     }, [])
 
-    useEffect(() => {
-        if (syncStatus && _editor) {
-            if (node.attrs.content && !node.attrs.init) {
-                _editor.chain().focus().insertContent(node.attrs.content).run()
-                updateAttributes({
-                    ...node.attrs,
-                    init: true
-                })
-            }
-        }
-    }, [syncStatus, _editor])
-
     return _editor && syncStatus && <NodeViewWrapper className="outline rounded-sm">
         <EditorContent editor={_editor} />
         <EditorMenu editor={_editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} toolbar={false} />
