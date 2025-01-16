@@ -11,7 +11,7 @@ import 'moment/locale/zh-cn';
 import { useToggle } from "ahooks";
 import { cn } from "@repo/ui";
 import { Button } from "@repo/ui";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuTrigger, Label } from "@repo/ui";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Label } from "@repo/ui";
 moment.locale('zh-cn');
 const localizer = momentLocalizer(moment) // or globalizeLocalizer
 

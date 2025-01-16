@@ -212,26 +212,23 @@ export const MarkdownView: React.FC<any> = (props) => {
 
     return editor && <div ref={ref} className=" relative h-full w-full flex items-center">
         {isObject(value) && getTitleContent(value)}
-        {
-            <Sheet onOpenChange={handleSave}>
-                <SheetTrigger>
-                    <Button size="sm" className={cn(" absolute right-0 top-0 h-full", hover ? "visible" : "invisible")}><AppWindowIcon className="h-3 w-3" /></Button>
-                </SheetTrigger>
-                <SheetContent className="w-[1000px]">
-                    <SheetHeader>
-                        <SheetTitle></SheetTitle>
-                        <SheetDescription>
-                        </SheetDescription>
-                    </SheetHeader>
-                    <div className="h-full w-full overflow-auto" onDoubleClick={(e) => e.stopPropagation()}>
-                        <StyledEditor className="h-full w-full prose max-w-none ">
-                            <EditorContent editor={editor} width="100%" height="100%" />
-                            <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} toolbar={false} />
-                        </StyledEditor>
-                    </div>
-                </SheetContent>
-            </Sheet>
-        }
+        <Sheet onOpenChange={handleSave}>
+            <SheetTrigger>
+                <Button size="sm" className={cn(" absolute right-0 top-0 h-full", hover ? "visible" : "invisible")}><AppWindowIcon className="h-3 w-3" /></Button>
+            </SheetTrigger>
+            <SheetContent className="w-[1000px]">
+                <SheetHeader>
+                    <SheetTitle></SheetTitle>
+                    <SheetDescription></SheetDescription>
+                </SheetHeader>
+                <div className="h-full w-full overflow-auto" onDoubleClick={(e) => e.stopPropagation()}>
+                    <StyledEditor className="h-full w-full prose max-w-none ">
+                        <EditorContent editor={editor} width="100%" height="100%" />
+                        <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} toolbar={false} />
+                    </StyledEditor>
+                </div>
+            </SheetContent>
+        </Sheet>
     </div>
 }
 

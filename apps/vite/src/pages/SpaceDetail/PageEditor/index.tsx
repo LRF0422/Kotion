@@ -178,7 +178,6 @@ export const PageEditor: React.FC = () => {
     return page && <div className="w-full h-full" ref={ref}>
         <header className="h-11 w-full flex flex-row justify-between px-1 border-b">
             <div className="flex flex-row items-center gap-2 px-1 text-sm">
-                {"😘"}
                 <span>{page.title}</span>
             </div>
             <div className="flex flex-row items-center gap-1 px-1">
