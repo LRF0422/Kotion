@@ -1,5 +1,5 @@
 import React, { ElementType, memo, useCallback, useEffect } from "react";
-import { ExtensionWrapper, Group } from ".";
+import { ExtensionWrapper, Group } from "@repo/common";
 import { Editor } from "@tiptap/core";
 import { Toggle } from "@repo/ui";
 import { Separator } from "@repo/ui";

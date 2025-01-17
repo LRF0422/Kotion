@@ -1,5 +1,5 @@
 import HardBreak from "@tiptap/extension-hard-break";
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 
 export * from "./hard-break";
 

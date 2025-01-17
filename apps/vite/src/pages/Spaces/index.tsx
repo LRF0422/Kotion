@@ -6,7 +6,7 @@ import { MultiSelect } from "@repo/ui";
 import { useApi } from "../../hooks/use-api";
 import { Space } from "../../model/Space";
 import { useSafeState } from "ahooks";
-import { Edit2, Eye, Plus, Star, UserCircle } from "lucide-react";
+import { Edit2, Eye, Plus, Star, UserCircle } from "@repo/icon";
 import React, { useEffect } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@repo/ui";

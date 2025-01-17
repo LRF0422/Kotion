@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { Figma } from "./figma";
 import { FigmaIcon } from "@repo/icon";
 import { FigmaBubbleMenu } from "./menu/bubble";

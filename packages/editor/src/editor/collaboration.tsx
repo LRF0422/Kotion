@@ -12,7 +12,7 @@ import TableOfContents, { getHierarchicalIndexes } from "@tiptap-pro/extension-t
 import { ThemeProvider } from "styled-components";
 import light from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
-import { ExtensionWrapper } from "./extendsion";
+import { ExtensionWrapper } from "@repo/common";
 import { MenuIcon, Sparkles } from "@repo/icon";
 import { useSafeState, useUnmount } from "ahooks";
 import { ToC } from "./ToC";

@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { DropCursor } from "./dropcursor";
 
 export * from "./dropcursor";

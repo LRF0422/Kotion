@@ -21,6 +21,7 @@
     "@hookform/resolvers": "^3.9.0",
     "@repo/icon": "workspace:*",
     "@repo/ui": "workspace:*",
+    "@repo/common": "workspace:*",
     "@tanstack/react-virtual": "^3.8.3",
     "@tiptap-pro/extension-table-of-contents": "^2.7.7",
     "@tiptap/core": "2.6.6",

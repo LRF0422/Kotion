@@ -1,5 +1,5 @@
 import React from "react";
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { PageContent } from "./page-content";
 import { List } from "@repo/icon";
 

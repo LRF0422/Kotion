@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "../../editor"
+import { ExtensionWrapper } from "@repo/common"
 import { Color } from "./color"
 import { ColorStaticMenu } from "./menu/static"
 import { TextStyle } from "@tiptap/extension-text-style"

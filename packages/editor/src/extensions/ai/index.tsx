@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { Ai } from "./ai";
 import { AiStaticMenu } from "./menu/AiStaticMenu";
 import { Sparkles } from "@repo/icon";

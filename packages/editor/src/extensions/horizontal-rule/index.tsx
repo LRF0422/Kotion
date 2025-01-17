@@ -1,5 +1,5 @@
 import { RulerIcon } from "@repo/icon";
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { HorizontalRule } from "./horizontal-rule";
 import { HorizontalRuleStaticMenu } from "./menu";
 import React from "react";

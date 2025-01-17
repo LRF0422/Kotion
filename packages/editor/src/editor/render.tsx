@@ -7,7 +7,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import { EditorKit } from "./kit";
 import { EditorProvider } from "./provider";
 import { AnyExtension, Content, Editor } from "@tiptap/core";
-import { ExtensionWrapper } from "./extendsion";
+import { ExtensionWrapper } from "@repo/common";
 import TableOfContents, { getHierarchicalIndexes } from "@tiptap-pro/extension-table-of-contents";
 import { useEditorExtension } from "./use-extension";
 import { TiptapCollabProvider } from "@hocuspocus/provider";

@@ -1,5 +1,5 @@
 import React from "react";
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { Image } from "./image";
 import { ImageBubbleMenu, ImageStaticMenu } from "./menu";
 // import { uploadImage } from "../../utilities";

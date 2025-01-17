@@ -1,5 +1,5 @@
 import { Calendar } from "@repo/ui";
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { Date } from "./date";
 import React from "react";
 

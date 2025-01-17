@@ -2,7 +2,7 @@ import { Extension } from "@tiptap/core";
 
 import { InlineMathNode } from "./inline-math-node";
 import { DEFAULT_OPTIONS, MathExtensionOption } from "./util/options";
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import "katex/dist/katex.min.css";
 
 export const MATH_EXTENSION_NAME = "mathExtension";

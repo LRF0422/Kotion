@@ -1,5 +1,5 @@
 import { Link2 } from "@repo/icon";
-import { ExtensionWrapper } from "../../editor/extendsion";
+import { ExtensionWrapper } from "@repo/common";
 import { Link } from "./link";
 import { LinkBubbleMenu, LinkStaticMenu } from "./menu";
 import { showLinkEditor } from "./menu/edit";

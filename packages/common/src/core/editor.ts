@@ -1,6 +1,5 @@
 import { AnyExtension, Editor } from "@tiptap/core";
 import { ElementType, ReactNode } from "react";
-import { ActiveNode } from "../extensions/dragable/utilities";
 
 export type Group = 'block' | 'inline' | 'mark' | 'custom'
 export interface ExtensionWrapper {
@@ -25,10 +24,5 @@ export interface ExtensionWrapper {
         action?: (editor: Editor) => void,
         render?: ElementType
     } | { divider: true; title: string })[],
-    flotMenuConfig?: ElementType[],
-    dragMenuConfig?: {
-        icon: ReactNode,
-        name: string,
-        action: (node: ActiveNode, editor: Editor) => void
-    }[]
+    flotMenuConfig?: ElementType[]
 }

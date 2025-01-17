@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { BackgroundColor } from "./background-color";
 import { BackGroundColorStaticMenu } from "./static-menu";
 

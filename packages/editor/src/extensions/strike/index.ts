@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "../../editor/extendsion";
+import { ExtensionWrapper } from "@repo/common";
 import { StrikeStaticMenu } from "./menu";
 import { Strike } from "./strike";
 

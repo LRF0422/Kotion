@@ -1,5 +1,5 @@
 import React from "react";
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { Flow } from "./flow";
 import { FlowerIcon } from "@repo/icon";
 

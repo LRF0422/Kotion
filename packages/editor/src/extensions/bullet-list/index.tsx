@@ -1,6 +1,6 @@
 import React from "react";
 import BulletList from "@tiptap/extension-bullet-list";
-import { ExtensionWrapper } from "../../editor/extendsion";
+import { ExtensionWrapper } from "@repo/common";
 import { BulletListStaticMenu } from "./menu/static-menu";
 import { List } from "@repo/icon";
 

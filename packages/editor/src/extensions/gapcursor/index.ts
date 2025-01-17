@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { GapCursor } from "./gapcursor";
 
 export * from "./gapcursor";

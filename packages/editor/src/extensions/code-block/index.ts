@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "../../editor/extendsion";
+import { ExtensionWrapper } from "@repo/common";
 import { CodeBlock } from "./code-block";
 import { CodeBlockStaticMenu } from "./menu";
 import BuiltInCodeBlock, {

@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { MindMap } from "./mindmap";
 import { IconMindTemplate } from "../../icons";
 import { MapIcon } from "@repo/icon";

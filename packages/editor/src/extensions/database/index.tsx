@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { Database } from "./database";
 import { DatabaseIcon } from "@repo/icon";
 import { GridRow } from "./grid-row";

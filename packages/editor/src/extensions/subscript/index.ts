@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { SubscriptStaticMenu } from "./menu";
 import { Subscript } from "./subscript";
 

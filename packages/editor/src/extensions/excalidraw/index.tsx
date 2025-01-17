@@ -1,5 +1,5 @@
 import React from "react";
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { Excalidraw } from "./excalidraw";
 import { PaintBucket } from "@repo/icon";
 

@@ -1,6 +1,6 @@
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { SuperscriptStaticMenu } from "./menu";
-import {Superscript} from './superscript'
+import { Superscript } from './superscript'
 export * from "./superscript";
 export * from "./menu";
 

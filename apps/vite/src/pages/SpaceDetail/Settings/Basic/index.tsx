@@ -3,7 +3,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel } from "@repo/ui";
 import { Input } from "@repo/ui";
 import { Textarea } from "@repo/ui";
 import { upload } from "../../../../utils/utils";
-import { Plus } from "lucide-react";
+import { Plus } from "@repo/icon";
 import React, { useContext } from "react";
 import { Button } from "@repo/ui";
 import { SettingContext } from "..";

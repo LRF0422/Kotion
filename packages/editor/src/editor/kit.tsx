@@ -7,7 +7,7 @@ import { Text } from "../extensions/text";
 import { HardBreak } from "../extensions/hard-break";
 import { TrailingNode } from "../extensions/trailing-node";
 import { Perf } from "../extensions/perf";
-import { ExtensionWrapper } from "./extendsion";
+import { ExtensionWrapper } from "@repo/common";
 import { buildInExtension } from "./build-in-extension";
 import Document from "@tiptap/extension-document";
 import { useState } from "react";

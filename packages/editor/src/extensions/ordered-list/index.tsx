@@ -1,5 +1,5 @@
 import OrderedList from "@tiptap/extension-ordered-list";
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { OrderListStaticMenu } from "./menu/static-menu";
 import ListItem from "@tiptap/extension-list-item";
 import { ListOrdered } from "@repo/icon";
