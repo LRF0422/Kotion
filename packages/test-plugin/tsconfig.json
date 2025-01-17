@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+        "target": "ES2019",
+        "module": "ESNext",
+        "moduleResolution": "node",
+        "strict": true,
+        "esModuleInterop": true,
+        "noImplicitOverride": true,
+        "noUnusedLocals": true,
+        "resolveJsonModule": true,
+        "useUnknownInCatchVariables": false,
+        "jsx": "react",
+        "typeRoots": [
+            "./types",
+            "./node_modules/@types"
+        ]
+    },
+    "include": [
+        "src/**/*.ts",
+        "src/index.tsx"
+    ],
+    "exclude": [
+        "node_modules"
+    ]
+}
