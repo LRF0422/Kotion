@@ -22,9 +22,6 @@ import { SpaceViewer } from './pages/SpaceViewer'
 
 function App() {
 
-  console.log('env', import.meta.env.PROD);
-
-
   const router = createBrowserRouter(createRoutesFromElements(
     [
       <Route path='/' element={<Layout />}>

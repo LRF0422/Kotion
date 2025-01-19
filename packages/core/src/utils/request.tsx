@@ -1,7 +1,8 @@
 import { Button } from '@repo/ui'
 import axios from 'axios'
 import { toast } from '@repo/ui'
-import { showWarningAlert } from './showAlertDlg'
+// import { showWarningAlert } from './showAlertDlg'
+import React from 'react'
 
 const TOKEN_KEY = 'knowledge-token'
 
@@ -52,7 +53,6 @@ axiosInstance.interceptors.request.use(config => {
   }
   return config
 }, error => {
-  console.log(error)
   Promise.reject(error)
 })
 
@@ -105,18 +105,17 @@ axiosInstance.interceptors.response.use(res => {
 }, error => {
   const { response, request } = error
   let { message } = error
-  console.log('error', error);
   if (response.status === 401 && !isRelogin.show) {
     isRelogin.show = true
-    showWarningAlert({
-      title: '系统提示',
-      content: '登录状态已过期，您可以继续留在该页面，或者重新登录',
-      onOk: () => {
-        // window.location.pathname = '/login'
-        isRelogin.show = false
-        throw new Error("no login ")
-      }
-    })
+    // showWarningAlert({
+    //   title: '系统提示',
+    //   content: '登录状态已过期，您可以继续留在该页面，或者重新登录',
+    //   onOk: () => {
+    //     // window.location.pathname = '/login'
+    //     isRelogin.show = false
+    //     throw new Error("no login ")
+    //   }
+    // })
     return Promise.reject(error)
   }
   if (message === 'Network Error') {
