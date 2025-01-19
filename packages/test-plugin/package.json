@@ -10,7 +10,8 @@
   "dependencies": {
     "@repo/common": "workspace:*",
     "@repo/ui": "workspace:*",
-    "rollup": "^4.30.1"
+    "rollup": "^4.30.1",
+    "rollup-plugin-postcss": "^4.0.2"
   },
   "keywords": [],
   "author": "",

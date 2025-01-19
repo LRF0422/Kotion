@@ -13,11 +13,14 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
 import { BUSINESS_TOPIC, ON_MESSAGE, event } from "../../event"
 import { toast } from "sonner"
 import { ErrorPage } from "./ErrorPage"
+import { useAsyncEffect } from "ahooks"
+import importScript from "../../utils/utils"
 
 export function Layout() {
 
     const dispatch = useDispatch()
     const navigator = useNavigator()
+    const [externalPlugin, setExternalPlugin] = useState<any>()
 
     useEffect(() => {
         useApi(APIS.GET_USER_INFO).then((res) => {
@@ -51,6 +54,15 @@ export function Layout() {
         }
     }, [])
 
+    useAsyncEffect(async () => {
+        const plugin = await importScript('http://127.0.0.1:5500/packages/test-plugin/dist/bundle.js')
+        if (plugin) {
+            console.log('plugin', plugin);
+
+            setExternalPlugin(plugin)
+        }
+    }, [])
+
     useEffect(() => {
         event.on(ON_MESSAGE, (message: any) => {
             if (message.data) {
@@ -80,6 +92,9 @@ export function Layout() {
 
     return (
         <ErrorBoundary fallback={<ErrorPage />}>
+            {
+                externalPlugin && externalPlugin.testPlugin.routes[0].element
+            }
             <div className={cn("grid min-h-screen w-full transition-all grid-cols-[70px_1fr]")}>
                 <div className="border-r md:block">
                     <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4">

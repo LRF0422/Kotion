@@ -1,4 +1,7 @@
 import typescript from '@rollup/plugin-typescript';
+import postcss from 'rollup-plugin-postcss';
+import tailwindcss from 'tailwindcss';
+import autoprefixer from 'autoprefixer';
 
 export default {
     input: 'src/index.tsx',
@@ -13,5 +16,15 @@ export default {
             "react": "React"
         }
     },
-    plugins: [typescript()],
+    plugins: [
+        typescript(),
+        postcss({
+            plugins: [
+                tailwindcss(),
+                autoprefixer(),
+            ],
+      extract: false,
+      minimize: true,
+    })
+    ],
 };

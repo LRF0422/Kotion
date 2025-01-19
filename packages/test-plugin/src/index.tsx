@@ -2,6 +2,7 @@
 import { KPlugin, PluginConfig } from "@repo/common"
 import { Button } from "@repo/ui"
 import React from "react"
+import "./index.css"
 
 interface TestPluginConfig extends PluginConfig {
 
@@ -19,7 +20,7 @@ export const testPlugin = new TestPlugin({
             name: '',
             path: '',
             element: <div>
-                <Button>1231231321</Button>
+                <Button className=" text-red-400" >Leong</Button>
             </div>
         }
     ]
