@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@repo/common": "workspace:*",
+    "@repo/ui": "workspace:*",
     "rollup": "^4.30.1"
   },
   "keywords": [],

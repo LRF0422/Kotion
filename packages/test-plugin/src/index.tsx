@@ -1,26 +1,26 @@
 
 import { KPlugin, PluginConfig } from "@repo/common"
+import { Button } from "@repo/ui"
 import React from "react"
 
-export interface TestPluginConfig extends PluginConfig {
+interface TestPluginConfig extends PluginConfig {
 
 
 
 }
-export class TestPlugin extends KPlugin<TestPluginConfig> {
+class TestPlugin extends KPlugin<TestPluginConfig> {
 }
 
-export const testPlugin = () => {
-
-    return new TestPlugin({
-        status: '',
-        name: 'test',
-        routes: [
-            {
-                name: '',
-                path: '',
-                element: <div></div>
-            }
-        ]
-    })
-}
+export const testPlugin = new TestPlugin({
+    status: '',
+    name: 'test',
+    routes: [
+        {
+            name: '',
+            path: '',
+            element: <div>
+                <Button>1231231321</Button>
+            </div>
+        }
+    ]
+})

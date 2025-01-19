@@ -14,8 +14,14 @@ export interface PluginConfig {
 
 export class KPlugin<T extends PluginConfig> {
 
-    constructor(config: T) {
+    _routes?: RouteConfig[]
 
+    constructor(config: T) {
+        this._routes = config.routes
+    }
+
+    get routes() {
+        return this._routes
     }
 
 }

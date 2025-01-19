@@ -2,12 +2,14 @@ import typescript from '@rollup/plugin-typescript';
 
 export default {
     input: 'src/index.tsx',
+    external: ['react', '@repo/common', '@repo/ui'],
 	output: {
 		file: 'dist/bundle.js',
         format: 'umd',
-        name: 'TestPlugin',
+        name: 'testPlugin',
         globals: {
-            "@repo/common": "@repo/common",
+            "@repo/common": "common",
+            "@repo/ui": "ui",
             "react": "React"
         }
     },

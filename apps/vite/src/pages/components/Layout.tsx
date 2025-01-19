@@ -1,7 +1,7 @@
 
 import { Outlet } from "react-router-dom"
 import { SiderMenu } from "./SiderMenu"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { cn } from "@repo/ui"
 import { useApi } from "../../hooks/use-api"
 import { APIS } from "../../api"
@@ -13,7 +13,6 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
 import { BUSINESS_TOPIC, ON_MESSAGE, event } from "../../event"
 import { toast } from "sonner"
 import { ErrorPage } from "./ErrorPage"
-
 
 export function Layout() {
 
