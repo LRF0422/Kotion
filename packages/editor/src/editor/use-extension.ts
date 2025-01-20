@@ -52,9 +52,8 @@ export const useEditorExtension = (ext?: string) => {
 		...resolveExtesions(full),
 		resloveSlash(full)
 	]
-	const [extensionWrappers, setWrappers] = useState<ExtensionWrapper[]>(full)
 	if (ext) {
 		editorExtensions = editorExtensions.filter(it => it.name !== ext);
 	}
-	return [editorExtensions, extensionWrappers]
+	return [editorExtensions, full]
 }
