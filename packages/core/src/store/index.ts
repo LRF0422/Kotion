@@ -1,6 +1,8 @@
 import { AnyAction, createStore } from "redux";
 import { GlobalState } from "./GlobalState";
 
+export * from "./GlobalState"
+
 
 export default createStore((state: GlobalState = {
     tabs: [],

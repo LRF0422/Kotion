@@ -3,17 +3,17 @@ import { Badge } from "@repo/ui";
 import { Button } from "@repo/ui";
 import { Separator } from "@repo/ui";
 import { CollaborationEditor } from "@repo/editor";
-import { useApi } from "../../hooks/use-api";
-import { useNavigator } from "../../hooks/use-navigator";
-import { GlobalState } from "../../store/GlobalState";
+import { useApi } from "@repo/core";
+import { useNavigator } from "@repo/core";
+import { GlobalState } from "@repo/core";
 import { TiptapCollabProvider } from "@repo/editor";
 import { Editor } from "@repo/editor";
-import { useToggle } from "ahooks";
-import deepEqual from "deep-equal";
+import { useToggle } from "@repo/core";
+import { deepEqual } from "@repo/core";
 import { LoaderCircle, LogOut, MessageSquareText } from "@repo/icon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { useParams } from "react-router-dom";
+import { useDispatch, useSelector } from "@repo/core";
+import { useParams } from "@repo/core";
 import * as Y from "@repo/editor"
 
 export const PageRoom: React.FC = () => {

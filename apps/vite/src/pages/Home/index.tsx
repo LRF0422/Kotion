@@ -1,8 +1,8 @@
 import { APIS } from "../../api";
 import { CardList } from "../components/CardList";
 import { Button } from "@repo/ui";
-import { useApi } from "../../hooks/use-api";
-import { useNavigator } from "../../hooks/use-navigator";
+import { useApi } from "@repo/core";
+import { useNavigator } from "@repo/core";
 import { Space as KSpace } from "../../model/Space";
 import { Book, Box, Clock, LayoutTemplate, Plus, UserCircle } from "@repo/icon";
 import React, { useEffect, useState } from "react";

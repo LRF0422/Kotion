@@ -5,12 +5,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui";
 import { Select } from "@repo/ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui";
 import { Tag, TagInput } from "@repo/ui";
-import { useApi } from "../../hooks/use-api";
-import { useSafeState } from "ahooks";
-import { Check, Mail, User, X } from "lucide-react";
+import { useApi } from "@repo/core";
+import { useSafeState } from "@repo/core";
+import { Check, Mail, User, X } from "@repo/icon";
 import React, { PropsWithChildren, useState } from "react";
-import { useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { useParams } from "@repo/core";
+import { toast } from "@repo/ui";
 
 export const CollaborationInvitationDlg: React.FC<PropsWithChildren> = (props) => {
 

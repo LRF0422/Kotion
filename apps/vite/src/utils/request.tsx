@@ -1,7 +1,8 @@
 import { Button } from '@repo/ui'
-import axios from 'axios'
+import { axios } from '@repo/core'
 import { toast } from '@repo/ui'
 import { showWarningAlert } from './showAlertDlg'
+import React from 'react'
 
 const TOKEN_KEY = 'knowledge-token'
 

@@ -2,7 +2,7 @@ import { Button } from "@repo/ui";
 import { Empty } from "@repo/ui";
 import { Separator } from "@repo/ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui";
-import { Copy, Plus } from "lucide-react";
+import { Copy, Plus } from "@repo/icon";
 import React from "react";
 
 export const Member: React.FC = () => {

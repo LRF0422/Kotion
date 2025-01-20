@@ -1,5 +1,5 @@
 import { Separator } from "@repo/ui";
-import { GlobalState } from "../../../../store/GlobalState";
+import { GlobalState } from "@repo/core";
 import React from "react";
 import { useSelector } from "react-redux";
 import { UserAvatar } from "../../UserAvatar";

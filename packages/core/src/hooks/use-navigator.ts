@@ -1,7 +1,7 @@
 import { useDispatch } from "react-redux"
 import { NavigateOptions, To, useNavigate } from "react-router-dom"
 
-export interface NavigateProps {
+export interface NavigatorProps {
     to: To,
     options?: NavigateOptions,
     extra?: {
@@ -16,7 +16,7 @@ export const useNavigator = () => {
     const dispatch = useDispatch()
 
     return {
-        go: (props: NavigateProps) => {
+        go: (props: NavigatorProps) => {
             if (props.extra?.attacheTabs) {
                 dispatch({
                     type: 'ADD_TAB',

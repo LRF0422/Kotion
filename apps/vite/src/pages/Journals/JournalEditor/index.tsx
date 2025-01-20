@@ -1,10 +1,10 @@
 import { CollaborationEditor } from "@repo/editor";
-import { GlobalState } from "../../../store/GlobalState";
-import { TiptapCollabProvider } from "@hocuspocus/provider";
-import deepEqual from "deep-equal";
+import { GlobalState } from "@repo/core";
+import { TiptapCollabProvider } from "@repo/editor";
+import { deepEqual } from "@repo/core";
 import React, { useMemo, useRef, useState } from "react";
-import { useSelector } from "react-redux";
-import { useParams } from "react-router-dom";
+import { useSelector } from "@repo/core";
+import { useParams } from "@repo/core";
 import * as Y from "@repo/editor"
 
 export const JournalEditor: React.FC = () => {

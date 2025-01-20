@@ -5,15 +5,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@repo/ui";
 import { Input } from "@repo/ui";
 import { Textarea } from "@repo/ui";
-import { useApi } from "../../hooks/use-api";
-import { GlobalState } from "../../store/GlobalState";
+import { useApi } from "@repo/core";
+import { GlobalState } from "@repo/core";
 import { upload } from "../../utils/utils";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus } from "lucide-react";
+import { zodResolver } from "@repo/ui";
+import { Plus } from "@repo/icon";
 import React, { ReactNode, useState } from "react";
-import { useForm } from "react-hook-form";
-import { useSelector } from "react-redux";
-import { z } from "zod";
+import { useForm } from "@repo/ui";
+import { useSelector } from "@repo/core";
+import { z } from "@repo/ui";
 
 export interface SpaceFormProps {
     callBack?: () => void

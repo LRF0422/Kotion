@@ -1,7 +1,8 @@
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@repo/ui";
 import { CircleAlert } from "@repo/icon";
 import { ReactNode, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot } from "@repo/core";
+import React from "react";
 
 
 export interface AlertProps {

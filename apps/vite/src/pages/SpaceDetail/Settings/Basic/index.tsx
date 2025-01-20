@@ -7,12 +7,12 @@ import { Plus } from "@repo/icon";
 import React, { useContext } from "react";
 import { Button } from "@repo/ui";
 import { SettingContext } from "..";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useApi } from "../../../../hooks/use-api";
+import { z } from "@repo/ui";
+import { useForm } from "@repo/ui";
+import { zodResolver } from "@repo/ui";
+import { useApi } from "@repo/core";
 import { APIS } from "../../../../api";
-import { toast } from "sonner";
+import { toast } from "@repo/ui";
 
 
 export const Basic: React.FC = () => {

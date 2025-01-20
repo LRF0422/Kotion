@@ -8,13 +8,13 @@ import { Separator } from "@repo/ui";
 import { Switch } from "@repo/ui";
 import { CollaborationEditor } from "@repo/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
-import { useApi } from "../../../hooks/use-api";
-import { useNavigator } from "../../../hooks/use-navigator";
-import { GlobalState } from "../../../store/GlobalState";
+import { useApi } from "@repo/core";
+import { useNavigator } from "@repo/core";
+import { GlobalState } from "@repo/core";
 import { TiptapCollabProvider } from "@repo/editor";
-import { Editor } from "@tiptap/core";
-import { useFullscreen, useKeyPress, useToggle, useUnmount } from "ahooks";
-import deepEqual from "deep-equal";
+import { Editor } from "@repo/editor";
+import { useFullscreen, useKeyPress, useToggle, useUnmount } from "@repo/core";
+import { deepEqual } from "@repo/core";
 import {
     ALargeSmall, ArrowLeft, BookTemplate, CircleArrowUp,
     Contact2, Download, FileIcon,
@@ -22,12 +22,11 @@ import {
     Minimize2, MoreHorizontal, MoveDownRight, Plus, Save, Trash2, Upload
 } from "@repo/icon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { useParams } from "react-router-dom";
+import { useDispatch, useSelector } from "@repo/core";
+import { useParams } from "@repo/core";
 import { toast } from "@repo/ui";
 import * as Y from "@repo/editor"
 import { Avatar, AvatarImage } from "@repo/ui";
-import html2canvas from 'html2canvas';
 import { cn } from "@repo/ui";
 import { CollaborationInvitationDlg } from "../../../pages/components/CollaborationInvitationDlg";
 
@@ -135,11 +134,6 @@ export const PageEditor: React.FC = () => {
     }
 
     const handleSaveAsTemplate = () => {
-        if (editor.current) {
-            html2canvas(ref.current).then((res) => {
-                res.toDataURL('png')
-            })
-        }
         useApi(APIS.SAVE_AS_TEMPLATE, { id: params.pageId }).then(() => {
             toast.success("保存成功")
         })

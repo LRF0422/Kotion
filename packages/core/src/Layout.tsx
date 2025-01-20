@@ -82,9 +82,6 @@ export function Layout() {
 
     return (
         <ErrorBoundary fallback={<ErrorPage />}>
-            {
-                externalPlugin && externalPlugin.testPlugin.routes[0].element
-            }
             <div className={cn("grid min-h-screen w-full transition-all grid-cols-[70px_1fr]")}>
                 <div className="border-r md:block">
                     <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4">

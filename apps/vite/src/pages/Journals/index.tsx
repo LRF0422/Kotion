@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import moment from 'moment';
+import { moment } from '@repo/core';
 import { cn } from "@repo/ui";
 import { Button } from "@repo/ui";
 import { ChevronLeftIcon, ChevronRightIcon } from "@repo/icon";

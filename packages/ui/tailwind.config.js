@@ -7,7 +7,9 @@ module.exports = {
     "./app/**/*.{ts,tsx}",
     "./src/**/*.{ts,tsx}",
     "node_modules/@repo/ui/**/*.{ts,tsx}",
-    "node_modules/@repo/editor/**/*.{ts,tsx}"
+    "node_modules/@repo/editor/**/*.{ts,tsx}",
+    "node_modules/@repo/core/**/*.{ts,tsx}",
+    "node_modules/@repo/common/**/*.{ts,tsx}"
   ],
   prefix: "",
   theme: {

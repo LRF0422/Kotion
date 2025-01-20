@@ -1,5 +1,6 @@
 import { Alert, AlertTitle, AlertDescription } from "@repo/ui"
 import { Button } from "@repo/ui"
+import React from "react"
 
 export const Delete: React.FC = () => {
     return <div className="flex flex-col gap-2">

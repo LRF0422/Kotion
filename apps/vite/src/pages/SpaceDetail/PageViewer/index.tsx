@@ -6,14 +6,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui";
 import { Separator } from "@repo/ui";
 import { EditorRender } from "@repo/editor";
 import { event, ON_FAVORITE_CHANGE } from "../../../event";
-import { useApi } from "../../../hooks/use-api";
-import { useNavigator } from "../../../hooks/use-navigator";
+import { useApi } from "@repo/core";
+import { useNavigator } from "@repo/core";
 import { Editor } from "@repo/editor";
-import { useToggle } from "ahooks";
+import { useToggle } from "@repo/core";
 import { Edit, Loader, MessageCircleCode, MoreHorizontal, Plus, Share, Star } from "@repo/icon";
 import React, { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
-import { toast } from "sonner";
+import { useParams } from "@repo/core";
+import { toast } from "@repo/ui";
 
 export const PageViewer: React.FC = () => {
 

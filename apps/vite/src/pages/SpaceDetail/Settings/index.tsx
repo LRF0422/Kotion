@@ -1,10 +1,10 @@
 import { APIS } from "../../../api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui";
-import { useApi } from "../../../hooks/use-api";
+import { useApi } from "@repo/core";
 import { Space } from "../../../model/Space";
-import { useSafeState } from "ahooks";
+import { useSafeState } from "@repo/core";
 import React, { createContext, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams } from "@repo/core";
 import { Basic } from "./Basic";
 import { Archive } from "./Archive";
 import { Delete } from "./Delete";

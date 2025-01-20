@@ -1,5 +1,5 @@
 import { Button } from "@repo/ui";
-import { useNavigator } from "../../hooks/use-navigator";
+import { useNavigator } from "@repo/core";
 import React from "react";
 
 export const ErrorPage: React.FC = () => {
