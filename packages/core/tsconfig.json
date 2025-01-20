@@ -11,10 +11,14 @@
     "noEmit": true,
     "strict": true,
     "jsx": "react",
-    "lib": ["ES2020", "DOM"]
+    "lib": [
+      "ES2020",
+      "DOM"
+    ]
   },
   "include": [
-    "src"
+    "src",
+    "../common/src/core/PluginManager.ts"
   ],
   "exclude": [
     "node_modules"

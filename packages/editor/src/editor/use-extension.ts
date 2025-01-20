@@ -1,5 +1,5 @@
 import { AnyExtension } from "@tiptap/core"
-import { useState } from "react"
+import { useContext, useState } from "react"
 import { Focus } from "../extensions/focus"
 import { TrailingNode } from "../extensions/trailing-node"
 import { Text } from '@tiptap/extension-text'
@@ -7,7 +7,7 @@ import BubbleMenu from "@tiptap/extension-bubble-menu"
 import { isChangeOrigin } from "@tiptap/extension-collaboration"
 import { resloveSlash, resolveExtesions } from "./kit"
 import { buildInExtension } from "./build-in-extension"
-import { ExtensionWrapper } from "@repo/common"
+import { AppContext, ExtensionWrapper } from "@repo/common"
 import { Paragraph } from "../extensions/paragraph"
 import { Placeholder } from "../extensions/placeholder"
 import { Perf } from "../extensions/perf"
@@ -45,12 +45,14 @@ export const runtimeExtension: AnyExtension[] = [
 
 export const useEditorExtension = (ext?: string) => {
 
+	const { pluginManager } = useContext(AppContext)
+	const full = [...buildInExtension, ...(pluginManager?.resloveEditorExtension() as ExtensionWrapper[])]
 	let editorExtensions = [
 		...runtimeExtension,
-		...resolveExtesions(buildInExtension),
-		resloveSlash(buildInExtension)
+		...resolveExtesions(full),
+		resloveSlash(full)
 	]
-	const [extensionWrappers, setWrappers] = useState<ExtensionWrapper[]>(buildInExtension)
+	const [extensionWrappers, setWrappers] = useState<ExtensionWrapper[]>(full)
 	if (ext) {
 		editorExtensions = editorExtensions.filter(it => it.name !== ext);
 	}
