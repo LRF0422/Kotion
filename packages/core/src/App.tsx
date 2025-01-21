@@ -17,17 +17,24 @@ import * as icon from "@repo/icon"
 import * as editor from "@repo/editor"
 import { useAsyncEffect, useSafeState } from "ahooks";
 import { AppContext, PluginManager } from "@repo/common";
+import { Shop } from "./components/Shop";
+
+
+declare global {
+    interface Window {
+        ui: any,
+        common: any,
+        core: any,
+        icon: any,
+        editor: any
+    }
+}
 
 window.React = React
-// @ts-ignore
 window.ui = ui
-// @ts-ignore
 window.common = common
-// @ts-ignore
 window.core = core
-// @ts-ignore
 window.icon = icon
-// @ts-ignore
 window.editor = editor
 
 
@@ -63,6 +70,7 @@ export const App: React.FC<AppProps> = (props) => {
             [
                 <Route path='/' element={<Layout />}>
                     {routes}
+                    <Route path="/shop" element={<Shop />} />
                 </Route>,
                 <Route path='/login' element={<Login />} />,
                 <Route path='/sign-up' element={<SignUpForm />} />

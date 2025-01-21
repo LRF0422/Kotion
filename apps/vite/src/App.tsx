@@ -7,6 +7,7 @@ import { SpaceSettings } from './pages/SpaceDetail/Settings'
 import { KPlugin, PluginConfig } from '@repo/common'
 import React from 'react'
 import "@repo/ui/src/globals.css"
+import { LayoutGrid } from '@repo/icon'
 
 
 interface DefaultPluginProps extends PluginConfig {
@@ -43,5 +44,14 @@ export const DefaultPluginInstance = new DefaultPlugin({
         }
       ]
     }
+  ],
+  menus: [
+    {
+      name: 'Home',
+      icon: <LayoutGrid className="h-5 w-5" />,
+      key: '/home',
+      attachTabs: true,
+      id: '/home'
+    },
   ]
 })
