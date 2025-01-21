@@ -7,6 +7,7 @@ import { SpaceSettings } from './pages/SpaceDetail/Settings'
 import { KPlugin, PluginConfig } from '@repo/common'
 import React from 'react'
 import "@repo/ui/src/globals.css"
+import { TestExtension } from './editor-extensions/test-extension'
 
 
 interface DefaultPluginProps extends PluginConfig {
@@ -43,5 +44,6 @@ export const DefaultPluginInstance = new DefaultPlugin({
         }
       ]
     }
-  ]
+  ],
+  editorExtension: [TestExtension]
 })
