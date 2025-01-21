@@ -233,6 +233,9 @@ importers:
 
   packages/common:
     dependencies:
+      '@repo/ui':
+        specifier: workspace:*
+        version: link:../ui
       '@tiptap/core':
         specifier: 2.6.6
         version: 2.6.6(@tiptap/pm@2.6.6)

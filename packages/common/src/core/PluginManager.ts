@@ -1,6 +1,6 @@
 import { Plugins } from "../../../core/src/App";
 import { ExtensionWrapper } from "./editor";
-import { MenuConfig } from "./menu";
+import { SiderMenuItemProps } from "./menu";
 import { RouteConfig } from "./route";
 
 export interface PluginConfig {
@@ -8,7 +8,7 @@ export interface PluginConfig {
     status: string
     routes?: RouteConfig[]
     globalRoutes?: RouteConfig[]
-    menus?: MenuConfig[]
+    menus?: SiderMenuItemProps[]
     editorExtension?: ExtensionWrapper[]
 }
 
@@ -18,12 +18,14 @@ export class KPlugin<T extends PluginConfig> {
     private _routes?: RouteConfig[]
     private _globalRoutes?: RouteConfig[]
     private _editorExtension?: ExtensionWrapper[]
+    private _menus?: SiderMenuItemProps[]
 
     constructor(config: T) {
         this.name = config.name
         this._routes = config.routes
         this._globalRoutes = config.globalRoutes
         this._editorExtension = config.editorExtension
+        this._menus = config.menus
     }
 
     get routes(): RouteConfig[] {
@@ -32,6 +34,10 @@ export class KPlugin<T extends PluginConfig> {
 
     get editorExtensions(): ExtensionWrapper[] {
         return this._editorExtension || []
+    }
+
+    get menus(): SiderMenuItemProps[] {
+        return this._menus || []
     }
 
 }
@@ -68,5 +74,15 @@ export class PluginManager {
         })
         return editorExtensions;
 
+    }
+
+    resloveMenus(): SiderMenuItemProps[] {
+        let menus: SiderMenuItemProps[] = []
+        this.plugins.forEach(plugin => {
+            if (plugin.menus) {
+                menus = [...menus, ...plugin.menus]
+            }
+        })
+        return menus;
     }
 }
