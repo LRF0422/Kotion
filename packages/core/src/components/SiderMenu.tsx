@@ -1,7 +1,7 @@
 import { useNavigator } from "../hooks/use-navigator";
-import { CalendarCheck2, Inbox, LayoutDashboard, LayoutGrid, MessageCircleCodeIcon, PanelBottom, Power, Settings, ShoppingBag, UserRoundPlus } from "@repo/icon";
-import React, { ReactNode, useContext, useEffect, useMemo } from "react";
-import { Empty, EmptyProps } from "@repo/ui";
+import { Inbox, LayoutDashboard, MessageCircleCodeIcon, Power, Settings, ShoppingBag, UserRoundPlus } from "@repo/icon";
+import React, { useContext, useMemo } from "react";
+import { Empty } from "@repo/ui";
 import { useLocation } from "react-router-dom";
 import { cn } from "@repo/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui";
