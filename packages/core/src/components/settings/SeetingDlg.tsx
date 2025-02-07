@@ -2,21 +2,16 @@ import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@repo/ui";
 import { TreeView } from "@repo/ui";
 import { TreeViewElement } from "@repo/ui";
-import { GlobalState } from "../../../store/GlobalState";
+import { GlobalState } from "../../store/GlobalState";
 import { useSafeState } from "ahooks";
-import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import } from "lucide-react";
+import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import } from "@repo/icon";
 import React, { PropsWithChildren } from "react";
 import { useSelector } from "react-redux";
 import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { Member } from "./components/Member";
 
-const moudles = import.meta.glob("./components/*.tsx")
-
 export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
-
-    console.log('moudles', moudles);
-
 
     const { userInfo } = useSelector((state: GlobalState) => state)
     const [currentKey, setCurrentKey] = useSafeState<string>()
@@ -32,12 +27,6 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
             default:
                 return <MyAccount />
         }
-        // if (currentKey) {
-        //     // @ts-ignore
-        //     const Component = React.lazy(moudles[`./compontents/${currentKey}.tsx`])
-        //     return <Component />
-        // }
-        // return <></>
     }
 
     const settingItems: TreeViewElement[] = [
