@@ -1,5 +1,5 @@
 import { useNavigator } from "../hooks/use-navigator";
-import { Inbox, LayoutDashboard, MessageCircleCodeIcon, Power, Settings, ShoppingBag, UserRoundPlus } from "@repo/icon";
+import { Blocks, Inbox, LayoutDashboard, MessageCircleCodeIcon, Power, Settings, ShoppingBag, UserRoundPlus } from "@repo/icon";
 import React, { useContext, useMemo } from "react";
 import { Empty } from "@repo/ui";
 import { useLocation } from "react-router-dom";
@@ -74,7 +74,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
             },
             {
                 name: 'Shop',
-                icon: <ShoppingBag className="h-5 w-5" />,
+                icon: <Blocks className="h-5 w-5" />,
                 key: '/shop',
                 attachTabs: true,
                 id: '/shop',
