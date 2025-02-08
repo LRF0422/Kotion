@@ -1,10 +1,10 @@
 import { BellRing, RefreshCcw } from "@repo/icon";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, Button, Input, Switch } from "@repo/ui";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, Input, Switch } from "@repo/ui";
 import React from "react";
 
 
 const Item = () => {
-    return <div className=" flex items-center space-x-4 rounded-md border p-4 h-[75px] hover:bg-muted cursor-pointer">
+    return <div className=" flex items-center space-x-4 rounded-md p-4 h-[75px] hover:bg-muted cursor-pointer">
         <BellRing />
         <div className="flex-1 space-y-1">
             <p className="text-sm font-medium leading-none text-nowrap">
@@ -30,7 +30,7 @@ export const Shop: React.FC = () => {
             <div className="px-1">
                 <Input className="h-7" placeholder="Search Extensions in Marketplace" />
             </div>
-            <Accordion type="single" collapsible className="h-[calc(100vh-70px)] overflow-auto">
+            <Accordion type="multiple" className="h-[calc(100vh-70px)] overflow-auto">
                 <AccordionItem value="installed" className="p-1">
                     <AccordionTrigger className="text-[12px] p-0 pb-1 ">INSTALLED</AccordionTrigger>
                     <AccordionContent>
@@ -51,6 +51,5 @@ export const Shop: React.FC = () => {
                 </AccordionItem>
             </Accordion>
         </div>
-        <div></div>
     </div>
 }
