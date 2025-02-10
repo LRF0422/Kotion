@@ -18,6 +18,7 @@ import * as editor from "@repo/editor"
 import { useAsyncEffect, useSafeState } from "ahooks";
 import { AppContext, PluginManager } from "@repo/common";
 import { Shop } from "./components/Shop";
+import { PluginDetail } from "./components/Shop/PluginDetail";
 
 
 declare global {
@@ -70,7 +71,9 @@ export const App: React.FC<AppProps> = (props) => {
             [
                 <Route path='/' element={<Layout />}>
                     {routes}
-                    <Route path="/shop" element={<Shop />} />
+                    <Route path="/plugin-hub" element={<Shop />}>
+                        <Route path="/plugin-hub/:id" element={<PluginDetail />} />
+                    </Route>
                 </Route>,
                 <Route path='/login' element={<Login />} />,
                 <Route path='/sign-up' element={<SignUpForm />} />

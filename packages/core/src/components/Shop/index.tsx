@@ -1,21 +1,56 @@
-import { BellRing, RefreshCcw } from "@repo/icon";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, Input, Switch } from "@repo/ui";
+import { BellRing, DownloadCloud, RefreshCcw, Star } from "@repo/icon";
+import {
+    Accordion, AccordionContent,
+    AccordionItem, AccordionTrigger,
+    Badge, Input, Separator, Tooltip,
+    TooltipContent, TooltipProvider, TooltipTrigger
+} from "@repo/ui";
 import React from "react";
+import { useNavigator } from "../../hooks/use-navigator";
+import { Outlet } from "react-router-dom";
 
 
 const Item = () => {
-    return <div className=" flex items-center space-x-4 rounded-md p-4 h-[75px] hover:bg-muted cursor-pointer">
-        <BellRing />
-        <div className="flex-1 space-y-1">
-            <p className="text-sm font-medium leading-none text-nowrap">
-                Push Notifications
-            </p>
-            <p className="text-sm text-muted-foreground">
-                Send notifications to device.
-            </p>
-        </div>
-        <Switch />
-    </div>
+    const navigator = useNavigator()
+    return <TooltipProvider>
+        <Tooltip>
+            <TooltipTrigger>
+                <div className=" flex items-center gap-2 rounded-md p-4 h-[75px] hover:bg-muted cursor-pointer relative" onClick={() => {
+                    navigator.go({
+                        to: '/plugin-hub/12123132'
+                    })
+                }}>
+                    <div >
+                        <BellRing className="h-6 w-6" />
+                    </div>
+                    <div className="flex flex-col items-start">
+                        <div className="flex items-center">
+                            <div className="text-sm text-left font-medium leading-none text-nowrap w-[145px]">
+                                Push Notifications
+                            </div>
+                            <div className="flex gap-1 text-[12px]">
+                                <div className="flex items-center"><DownloadCloud className="h-3 w-3" />100M</div>
+                                <div className="flex items-center"><Star className="h-3 w-3" />100M</div>
+                            </div>
+                        </div>
+                        <div className="text-sm text-muted-foreground text-nowrap w-[120px] text-ellipsis">
+                            Send notifications to device.
+                        </div>
+                        <Badge>Knowledge</Badge>
+                    </div>
+                </div>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="space-y-1">
+                <div className="text-[16px]">Push Notification</div>
+                <div className="flex gap-1 text-[14px]">
+                    <div className="flex items-center"><DownloadCloud className="h-3 w-3" />100M</div>
+                    <Separator orientation="vertical" />
+                    <div className="flex items-center"><Star fill="text-yellow-500" className="h-3 w-3" />100M</div>
+                </div>
+                <div className="text-[14px] text-muted-foreground">Send notifications to device.</div>
+            </TooltipContent>
+        </Tooltip>
+    </TooltipProvider>
 }
 
 export const Shop: React.FC = () => {
@@ -50,6 +85,9 @@ export const Shop: React.FC = () => {
                     </AccordionContent>
                 </AccordionItem>
             </Accordion>
+        </div>
+        <div>
+            <Outlet />
         </div>
     </div>
 }

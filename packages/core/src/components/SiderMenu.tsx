@@ -75,9 +75,9 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
             {
                 name: 'Shop',
                 icon: <Blocks className="h-5 w-5" />,
-                key: '/shop',
+                key: '/plugin-hub',
                 attachTabs: true,
-                id: '/shop',
+                id: '/plugin-hub',
             },
             {
                 name: 'Setting',
