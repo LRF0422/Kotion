@@ -11,6 +11,8 @@ export const SyncBlock = Node.create({
 
     name: 'syncBlock',
     group: 'block',
+    isolating: true,
+    atom: true,
     addOptions() {
         return {
         }

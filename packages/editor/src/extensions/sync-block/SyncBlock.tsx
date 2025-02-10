@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "../../editor";
+import { ExtensionWrapper } from "@repo/common";
 import { EditorMenu } from "../../editor/EditorMenu";
 import { PageContext } from "../../editor/context";
 import { useEditorExtension } from "../../editor/use-extension";
@@ -6,17 +6,18 @@ import { TiptapCollabProvider } from "@hocuspocus/provider";
 import { AnyExtension, Editor, NodeViewProps } from "@tiptap/core";
 import Collaboration from "@tiptap/extension-collaboration";
 import Document from "@tiptap/extension-document";
-import { EditorContent, NodeViewWrapper } from "@tiptap/react";
+import { EditorContent, NodeViewWrapper, useEditor } from "@tiptap/react";
 import { useSafeState } from "ahooks";
 import React, { useCallback, useContext, useEffect, useMemo } from "react";
 import { Doc } from 'yjs'
+import { StyledEditor } from "@editor/styles/editor";
 
 
 export const SyncBlockView: React.FC<NodeViewProps> = (props) => {
 
     const { editor, node, updateAttributes } = props
-    const [extensions, extensionWrappers] = useEditorExtension('doc')
-    const [_editor, setEditor] = useSafeState<Editor>()
+    const [extensions, extensionWrappers] = useEditorExtension()
+    // const [_editor, setEditor] = useSafeState<Editor>()
     const [syncStatus, setSyncStatus] = useSafeState(false)
     const pageInfo = useContext(PageContext)
     const blockId = node.attrs.blockId
@@ -26,40 +27,63 @@ export const SyncBlockView: React.FC<NodeViewProps> = (props) => {
     }, [pageInfo?.id, blockId])
 
     const provider = useMemo(() => {
+        const key = formatId()
+        console.log('key', key);
+
         const doc = new Doc()
         return new TiptapCollabProvider({
             baseUrl: 'ws://www.simple-platform.cn:1234',
-            name: formatId(),
-            token: formatId(),
+            name: key,
+            token: key,
             document: doc,
             onSynced: () => {
+                console.log('subDocument synced', doc.isSynced);
+
                 setSyncStatus(true)
             },
         })
-    }, [node.attrs.id])
+    }, [node.attrs.id, editor.isEditable])
+
+    const _editor = useEditor({
+        editable: editor.isEditable,
+        content: {},
+        extensions: [
+            ...extensions as AnyExtension[],
+            // Document.extend({
+            //     content: 'block*'
+            // }),
+            Collaboration.configure({
+                document: provider.document,
+                field: 'default'
+            })
+        ] as AnyExtension[],
+        editorProps: {
+            attributes: {
+                class: "magic-editor",
+                spellcheck: "false",
+                suppressContentEditableWarning: "false",
+            }
+        }
+    }, [editor.isEditable])
 
     useEffect(() => {
-        console.log('pageInfo', pageInfo);
-        const e = new Editor({
-            editable: editor.isEditable,
-            extensions: [
-                ...extensions as AnyExtension[],
-                Document.extend({
-                    content: 'block*'
-                }),
-                Collaboration.configure({
-                    document: provider.document
-                })
-            ] as AnyExtension[]
-        })
-        setEditor(e)
+
         return () => {
-            provider && provider.disconnect()
+            if (provider) {
+                provider.disconnect()
+                provider.destroy()
+            }
         }
     }, [])
 
-    return _editor && syncStatus && <NodeViewWrapper className="outline rounded-sm">
-        <EditorContent editor={_editor} />
-        <EditorMenu editor={_editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} toolbar={false} />
+    return <NodeViewWrapper className="outline rounded-sm leading-normal">
+        {
+            _editor && syncStatus && <>
+                <StyledEditor className=" min-h-10">
+                    <EditorContent editor={_editor} />
+                </StyledEditor>
+                <EditorMenu editor={_editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} toolbar={false} /></>
+        }
+
     </NodeViewWrapper>
 }

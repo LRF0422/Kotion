@@ -17,6 +17,7 @@ export const upsertQuery = `
     ON DUPLICATE KEY UPDATE data = ?
 `
 
+
 export class Mysql extends Database {
   db
   configuration = {
@@ -54,9 +55,20 @@ export class Mysql extends Database {
         database : this.configuration.database
       });
     
-      connection.connect()
+    connection.connect()
     this.db = connection
     this.db.query(this.configuration.schema)
+    this.db.on('error', (err) => {
+      this.db = null
+      this.db = mysql.createConnection({
+        host     : this.configuration.host,
+        user     : this.configuration.username,
+        password : this.configuration.password,
+        database : this.configuration.database
+      });
+      this.db.connect()
+      this.db.query(this.configuration.schema)
+    })
   }
 
   async onListen() {
