@@ -1,4 +1,4 @@
-import { BellRing, DownloadCloud, RefreshCcw, Star } from "@repo/icon";
+import { BellRing, DownloadCloud, PlusSquare, RefreshCcw, Star } from "@repo/icon";
 import {
     Accordion, AccordionContent,
     AccordionItem, AccordionTrigger,
@@ -8,6 +8,7 @@ import {
 import React from "react";
 import { useNavigator } from "../../hooks/use-navigator";
 import { Outlet } from "react-router-dom";
+import { PluginUploader } from "./PluginUploader";
 
 
 const Item = () => {
@@ -58,8 +59,15 @@ export const Shop: React.FC = () => {
         <div className=" border-r w-full h-screen">
             <div className="text-[12px] flex flex-row justify-between items-center p-2">
                 <div>EXTENSIONS</div>
-                <div className="cursor-pointer hover:bg-muted p-1 rounded-sm">
-                    <RefreshCcw className="h-4 w-4" />
+                <div className="flex gap-1 items-center">
+                    <div className="cursor-pointer hover:bg-muted p-1 rounded-sm">
+                        <RefreshCcw className="h-4 w-4" />
+                    </div>
+                    <div className="cursor-pointer hover:bg-muted p-1 rounded-sm">
+                        <PluginUploader>
+                            <PlusSquare className="h-4 w-4" />
+                        </PluginUploader>
+                    </div>
                 </div>
             </div>
             <div className="px-1">

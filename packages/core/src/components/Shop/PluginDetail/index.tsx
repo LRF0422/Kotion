@@ -1,17 +1,10 @@
-import { AnyExtension, EditorContent, EditorRender, useEditor } from "@repo/editor";
-import { useEditorExtension } from "@repo/editor/src/editor/use-extension";
-import { StyledEditor } from "@repo/editor/src/styles/editor";
-import { BellDotIcon, CheckCircle, CheckCircle2, DownloadCloudIcon, Settings, Star } from "@repo/icon";
+import { EditorRender } from "@repo/editor";
+import { BellDotIcon, CheckCircle2, DownloadCloudIcon, Settings } from "@repo/icon";
 import { Badge, Button, Empty, Rate, Separator, Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui";
 import React from "react";
 
 
 export const PluginDetail: React.FC = () => {
-
-    // const [extensions] = useEditorExtension()
-    // const editor = useEditor({
-    //     extensions: extensions as AnyExtension[]
-    // })
 
     return <div className="flex w-full justify-center h-screen bg-muted/60">
         <div className=" w-[80%]">
@@ -49,13 +42,13 @@ export const PluginDetail: React.FC = () => {
                     <TabsTrigger value="Detail">Detail</TabsTrigger>
                     <TabsTrigger value="ChangeLog">ChangeLog</TabsTrigger>
                 </TabsList>
-                <TabsContent value="Feature">
+                <TabsContent value="Feature" className="h-[calc(100vh-300px)] overflow-auto border rounded-sm">
                     <EditorRender
                         id="Feature"
                         toc={false}
                         toolbar={false}
                         isEditable
-                        className="w-full rounded-sm h-[calc(100vh-300px)] overflow-auto prose-sm"
+                        className="w-full rounded-sm h-full prose-sm"
                         withTitle={false} />
                 </TabsContent>
                 <TabsContent value="Detail">
