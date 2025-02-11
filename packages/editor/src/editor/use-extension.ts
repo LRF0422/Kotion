@@ -13,37 +13,39 @@ import { Placeholder } from "../extensions/placeholder"
 import { Perf } from "../extensions/perf"
 import { UniqueID } from "../extensions/unique-id"
 import { Doc } from "../extensions"
+import Document from "@tiptap/extension-document";
 import TextLoadingDecorationExtension from "../extensions/ai/text-loading"
 
 
-export const runtimeExtension: AnyExtension[] = [
-	Doc,
-	Paragraph,
-	Placeholder.configure({
-		placeholder: ({ node }) => {
-			if (node.type.name === 'heading') {
-				return 'What’s the title?'
-			}
-			if (node.type.name === 'codeBlock') {
-				return ''
-			}
-			return '输入`/`唤出菜单'
-		},
-	}),
-	Text,
-	Focus.configure({
-		mode: 'shallowest'
-	}),
-	TrailingNode,
-	Perf,
-	BubbleMenu,
-	TextLoadingDecorationExtension,
-	UniqueID.configure({
-		filterTransaction: t => !isChangeOrigin(t)
-	}),
-]
+export const useEditorExtension = (ext?: string, withTitle?: boolean) => {
 
-export const useEditorExtension = (ext?: string) => {
+
+	const runtimeExtension: AnyExtension[] = [
+		withTitle ? Doc : Document,
+		Paragraph,
+		Placeholder.configure({
+			placeholder: ({ node }) => {
+				if (node.type.name === 'heading') {
+					return 'What’s the title?'
+				}
+				if (node.type.name === 'codeBlock') {
+					return ''
+				}
+				return '输入`/`唤出菜单'
+			},
+		}),
+		Text,
+		Focus.configure({
+			mode: 'shallowest'
+		}),
+		TrailingNode,
+		Perf,
+		BubbleMenu,
+		TextLoadingDecorationExtension,
+		UniqueID.configure({
+			filterTransaction: t => !isChangeOrigin(t)
+		}),
+	]
 
 	const { pluginManager } = useContext(AppContext)
 	const full = [...buildInExtension, ...(pluginManager?.resloveEditorExtension() as ExtensionWrapper[])]

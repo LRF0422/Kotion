@@ -34,6 +34,7 @@ export interface EditorRenderProps extends EditorProvider, EditorKit {
   user?: any
   toc?: boolean
   pageInfo?: PageContextProps
+  withTitle?: boolean
 }
 
 const MemorizedToC = React.memo(ToC)
@@ -47,10 +48,11 @@ export const EditorRender = forwardRef<
     extensions,
     isEditable,
     toc = true,
-    pageInfo
+    pageInfo,
+    withTitle = true
   } = props;
 
-  const [exts, wrappers] = useEditorExtension()
+  const [exts, wrappers] = useEditorExtension(undefined, withTitle)
 
 
   const editor = useEditor(

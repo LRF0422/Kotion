@@ -1,9 +1,18 @@
+import { AnyExtension, EditorContent, EditorRender, useEditor } from "@repo/editor";
+import { useEditorExtension } from "@repo/editor/src/editor/use-extension";
+import { StyledEditor } from "@repo/editor/src/styles/editor";
 import { BellDotIcon, CheckCircle, CheckCircle2, DownloadCloudIcon, Settings, Star } from "@repo/icon";
-import { Badge, Empty, Rate, Separator, Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui";
+import { Badge, Button, Empty, Rate, Separator, Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui";
 import React from "react";
 
 
 export const PluginDetail: React.FC = () => {
+
+    // const [extensions] = useEditorExtension()
+    // const editor = useEditor({
+    //     extensions: extensions as AnyExtension[]
+    // })
+
     return <div className="flex w-full justify-center h-screen bg-muted/60">
         <div className=" w-[80%]">
             <div className="flex gap-10 items-center justify-center mt-10">
@@ -29,8 +38,8 @@ export const PluginDetail: React.FC = () => {
                     </div>
                     <div> Send notifications to device.</div>
                     <div className="gap-1 flex items-center">
-                        <Badge className="text-[12px] py-0.1">Install</Badge>
-                        <Settings className="h-4 w-4" />
+                        <Button className="text-[12px] py-0.1 h-5">Install</Button>
+                        <Settings className="p-1 hover:bg-muted rounded-sm cursor-pointer" />
                     </div>
                 </div>
             </div>
@@ -41,7 +50,13 @@ export const PluginDetail: React.FC = () => {
                     <TabsTrigger value="ChangeLog">ChangeLog</TabsTrigger>
                 </TabsList>
                 <TabsContent value="Feature">
-                    <Empty />
+                    <EditorRender
+                        id="Feature"
+                        toc={false}
+                        toolbar={false}
+                        isEditable
+                        className="w-full rounded-sm h-[calc(100vh-300px)] overflow-auto prose-sm"
+                        withTitle={false} />
                 </TabsContent>
                 <TabsContent value="Detail">
                     <Empty />
