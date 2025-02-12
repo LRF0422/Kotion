@@ -70,15 +70,13 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                 <DialogTitle>上传插件</DialogTitle>
                 <DialogDescription />
             </DialogHeader>
-            <div className="">
-                <Stepper
-                    steps={steps}
-                    currentStep={currentStep}
-                    onStepClick={handleStepClick}
-                    className="h-full"
-                />
-                {render()}
-            </div>
+            <Stepper
+                steps={steps}
+                currentStep={currentStep}
+                onStepClick={handleStepClick}
+                className="h-full"
+            />
+            {render()}
             <div className="text-center space-x-1">
                 <Button onClick={handlePrev}>上一步</Button>
                 <Button onClick={handleNext}>下一步</Button>
