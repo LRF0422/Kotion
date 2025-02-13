@@ -1,7 +1,13 @@
-import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, FileUploader, Form, FormControl, FormField, FormItem, FormLabel, Input, Step, Stepper, Textarea, useForm, zodResolver } from "@repo/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, FileUploader, Form, FormControl, FormField, FormItem, FormLabel, Input, Step, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, useForm, zodResolver } from "@repo/ui";
 import React, { PropsWithChildren } from "react";
 import { z } from "@repo/ui";
+import { Plus } from "@repo/icon";
+import { EditorRender } from "@repo/editor";
 
+interface Description {
+    label: string,
+    content: string
+}
 
 export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
 
@@ -14,12 +20,22 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
     ];
 
     const [currentStep, setCurrentStep] = React.useState(1);
+    const [descriptions, setDescriptions] = React.useState<Description[]>([
+        { label: "Feature", content: "插件名称" },
+        { label: "Detail", content: "插件名称" },
+        { label: "ChangeLog", content: "插件名称" },
+    ])
+
     const formSchema = z.object({
         name: z.string().min(2).max(50),
         key: z.string().min(2).max(50),
         version: z.string(),
         tags: z.string(),
         description: z.string().min(2).max(50),
+        descriptions: z.array(z.object({
+            label: z.string(),
+            content: z.string()
+        }))
     })
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -44,6 +60,11 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
     const handleStepClick = (stepNumber: number) => {
         setCurrentStep(stepNumber);
     };
+
+    const handleUpload = () => {
+        const value = form.getValues()
+        value.descriptions = descriptions
+    }
 
     const render = () => {
         switch (currentStep) {
@@ -115,8 +136,36 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                     </div>
                 </form>
             </Form>
+            case 3: return <div>
+                <Tabs defaultValue={descriptions[0].label}>
+                    <TabsList>
+                        {descriptions.map((item, index) => (
+                            <TabsTrigger key={index} value={item.label}>{item.label}</TabsTrigger>
+                        ))}
+                        <Button size="icon" className=" ml-1"><Plus className="h-4 w-4" /></Button>
+                    </TabsList>
+                    <div className="h-[200px]">
+                        {descriptions.map((item, index) => (
+                            <TabsContent key={index} value={item.label} className=" border rounded-sm h-full overflow-auto">
+                                <EditorRender
+                                    id=""
+                                    isEditable
+                                    withTitle={false}
+                                    toc={false}
+                                    toolbar={false}
+                                    className="w-full h-full prose-sm"
+                                />
+                            </TabsContent>
+                        ))
+                        }
+                    </div>
+                </Tabs>
+            </div>
             case 4: return <div>
                 <FileUploader />
+            </div>
+            case 5: return <div className=" flex justify-center w-full h-full">
+                <Button>提交审核</Button>
             </div>
             default: return <div>
                 <FileUploader />
@@ -138,10 +187,10 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                     onStepClick={handleStepClick}
                 />
                 {render()}
-                <div className="text-center space-x-1">
+                {currentStep !== 5 && <div className="text-center space-x-1">
                     <Button onClick={handlePrev}>上一步</Button>
                     <Button onClick={handleNext}>下一步</Button>
-                </div>
+                </div>}
             </div>
         </DialogContent>
     </Dialog>

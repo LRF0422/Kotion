@@ -1,5 +1,3 @@
-"use client"
-
 import * as React from "react"
 import { Cross2Icon, FileTextIcon, UploadIcon } from "@radix-ui/react-icons"
 import Dropzone, {

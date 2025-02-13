@@ -1,17 +1,18 @@
-import { BellRing, DownloadCloud, PlusSquare, RefreshCcw, Star } from "@repo/icon";
+import { ArrowDownToLine, BellRing, DownloadCloud, PlusSquare, RefreshCcw, Slack, Star } from "@repo/icon";
 import {
     Accordion, AccordionContent,
     AccordionItem, AccordionTrigger,
-    Badge, Input, Separator, Tooltip,
+    Badge, Button, Input, Separator, Tooltip,
     TooltipContent, TooltipProvider, TooltipTrigger
 } from "@repo/ui";
 import React from "react";
 import { useNavigator } from "../../hooks/use-navigator";
 import { Outlet } from "react-router-dom";
 import { PluginUploader } from "./PluginUploader";
+import { PluginManager } from "./PluginManager";
 
 
-const Item = () => {
+const Item = ({ installed = false }) => {
     const navigator = useNavigator()
     return <TooltipProvider>
         <Tooltip>
@@ -39,6 +40,10 @@ const Item = () => {
                         </div>
                         <Badge>Knowledge</Badge>
                     </div>
+                    <Button variant="secondary" className=" absolute bottom-1 right-1 h-6 px-2">
+                        <ArrowDownToLine className="h-3 w-3" />
+                        Install
+                    </Button>
                 </div>
             </TooltipTrigger>
             <TooltipContent side="right" className="space-y-1">
@@ -67,6 +72,11 @@ export const Shop: React.FC = () => {
                         <PluginUploader>
                             <PlusSquare className="h-4 w-4" />
                         </PluginUploader>
+                    </div>
+                    <div className="cursor-pointer hover:bg-muted p-1 rounded-sm">
+                        <PluginManager>
+                            <Slack className="h-4 w-4" />
+                        </PluginManager>
                     </div>
                 </div>
             </div>
