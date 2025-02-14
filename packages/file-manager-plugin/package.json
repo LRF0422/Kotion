@@ -1,15 +1,17 @@
 {
-  "name": "@repo/test-plugin",
+  "name": "@repo/file-manager",
   "version": "0.0.0",
   "description": "",
-  "main": "src/index.ts",
+  "main": "src/index.tsx",
   "scripts": {
     "build": "rollup -c",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
     "@repo/common": "workspace:*",
-    "@repo/ui": "workspace:*"
+    "@repo/ui": "workspace:*",
+    "@repo/icon": "workspace:*",
+    "@repo/editor": "workspace:*"
   },
   "keywords": [],
   "author": "",

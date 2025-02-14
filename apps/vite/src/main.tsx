@@ -5,9 +5,10 @@ import { App } from "@repo/core"
 import { DefaultPluginInstance } from './App'
 import React from 'react'
 import "@repo/ui/src/globals.css"
+import { fileManager } from '@repo/file-manager'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   // <React.StrictMode>
-  <App plugins={[DefaultPluginInstance]} />
+  <App plugins={[DefaultPluginInstance, fileManager]} />
   // </React.StrictMode>,
 )

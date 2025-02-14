@@ -77,8 +77,8 @@ export const Stepper: React.FC<StepperProps> = ({
                                         className={cn(
                                             "mt-2 text-xs text-center w-20",
                                             step.number === currentStep
-                                                ? "text-black font-bold"
-                                                : "text-black"
+                                                ? "font-bold"
+                                                : ""
                                         )}
                                     >
                                         {step.label}
