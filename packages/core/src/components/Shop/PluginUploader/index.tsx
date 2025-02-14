@@ -1,4 +1,4 @@
-import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, FileUploader, Form, FormControl, FormField, FormItem, FormLabel, Input, Step, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, useForm, zodResolver } from "@repo/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, FileUploader, Form, FormControl, FormField, FormItem, FormLabel, Input, Step, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, Tag, TagInput, Textarea, useForm, zodResolver } from "@repo/ui";
 import React, { PropsWithChildren } from "react";
 import { z } from "@repo/ui";
 import { Plus } from "@repo/icon";
@@ -20,6 +20,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
     ];
 
     const [currentStep, setCurrentStep] = React.useState(1);
+    const [activeTagIndex, setActiveTagIndex] = React.useState<number | null>(null);
     const [descriptions, setDescriptions] = React.useState<Description[]>([
         { label: "Feature", content: "插件名称" },
         { label: "Detail", content: "插件名称" },
@@ -30,7 +31,10 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
         name: z.string().min(2).max(50),
         key: z.string().min(2).max(50),
         version: z.string(),
-        tags: z.string(),
+        tags: z.array(z.object({
+            id: z.string(),
+            text: z.string()
+        })),
         description: z.string().min(2).max(50),
         descriptions: z.array(z.object({
             label: z.string(),
@@ -42,6 +46,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
         resolver: zodResolver(formSchema),
         defaultValues: {
             name: "",
+            tags: []
         },
     })
 
@@ -76,7 +81,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                             name="name"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Name</FormLabel>
+                                    <FormLabel>插件名称</FormLabel>
                                     <FormControl>
                                         <Input {...field} />
                                     </FormControl>
@@ -88,7 +93,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                             name="key"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Key</FormLabel>
+                                    <FormLabel>插件Key</FormLabel>
                                     <FormControl>
                                         <Input {...field} />
                                     </FormControl>
@@ -100,7 +105,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                             name="version"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Version</FormLabel>
+                                    <FormLabel>插件版本</FormLabel>
                                     <FormControl>
                                         <Input {...field} />
                                     </FormControl>
@@ -112,9 +117,11 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                             name="tags"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Tags</FormLabel>
+                                    <FormLabel>标签</FormLabel>
                                     <FormControl>
-                                        <Input {...field} />
+                                        <TagInput tags={field.value} setTags={(tags) => {
+                                            field.onChange(tags)
+                                        }} activeTagIndex={activeTagIndex} setActiveTagIndex={setActiveTagIndex} />
                                     </FormControl>
                                 </FormItem>
                             )}
@@ -126,7 +133,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                             name="description"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Description</FormLabel>
+                                    <FormLabel>插件描述</FormLabel>
                                     <FormControl>
                                         <Textarea {...field} />
                                     </FormControl>

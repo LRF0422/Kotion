@@ -357,7 +357,7 @@ export const SpaceDetail: React.FC = () => {
                 setVisible(value)
             }}
         >
-            <SheetContent className="w-[1000px]">
+            <SheetContent className="w-[1000px] max-w-none">
                 <SheetTitle className="flex flex-row items-center gap-1">
                     选择一个模板
                 </SheetTitle>
