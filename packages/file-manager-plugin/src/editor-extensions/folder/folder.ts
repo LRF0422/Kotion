@@ -22,12 +22,9 @@ export const Folder = Node.create({
     },
     addCommands() {
         return {
-            insertFolder: (folderId: string) => ({ commands }: CommandProps) => {
+            insertFolder: () => ({ commands }: CommandProps) => {
                 return commands.insertContent({
-                    type: this.name,
-                    attrs: {
-                        folderId: folderId
-                    }
+                    type: this.name
                 })
             }
         } as Partial<RawCommands>

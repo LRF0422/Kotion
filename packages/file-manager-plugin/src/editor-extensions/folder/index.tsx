@@ -3,6 +3,15 @@ import { Folder } from "./folder"
 import { FolderIcon } from "@repo/icon"
 import React from "react"
 
+
+declare module '@repo/editor' {
+    interface Commands<ReturnType> {
+        fileManager: {
+            insertFolder: () => ReturnType;
+        };
+    }
+}
+
 export const FolderExtension: ExtensionWrapper = {
     name: 'folder',
     extendsion: Folder,
@@ -12,6 +21,7 @@ export const FolderExtension: ExtensionWrapper = {
             slash: '/folder',
             icon: <FolderIcon />,
             action: (editor) => {
+                editor.commands.insertFolder()
             }
         }
     ]
