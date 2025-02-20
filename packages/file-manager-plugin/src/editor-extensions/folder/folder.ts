@@ -18,7 +18,9 @@ export const Folder = Node.create({
         ]
     },
     addNodeView() {
-        return ReactNodeViewRenderer(FolderView)
+        return ReactNodeViewRenderer(FolderView, {
+            stopEvent: () => true
+        })
     },
     addCommands() {
         return {
