@@ -14,14 +14,16 @@ interface EditableCellProps<TData, TValue> extends CellContext<TData, TValue> {
         cancelEditing: () => void;
         className?: string;
     }) => React.ReactElement;
+    renderValueView?: (value: TValue) => React.ReactElement;
 }
 
-export function EditableCell<TData, TValue>({
+export function _EditableCell<TData, TValue>({
     getValue,
     row: { index: rowId }, // TODO: better to use id instead of index because if we want row DnD, index will change. This is hard to do because we can't iterate over rows as easily.
     column: { id: colId },
     table,
     renderInput,
+    renderValueView
 }: EditableCellProps<TData, TValue>): React.ReactElement {
     const initialValue = getValue();
     const [isEditing, setIsEditing] = React.useState(false);
@@ -59,8 +61,6 @@ export function EditableCell<TData, TValue>({
         } else if (e.key === "Tab") {
             handleEndEditing();
         } else {
-            // Prevent Arrow key events from being picked up by the cell selection event
-            // handlers to allow users to use the arrow keys to navigate the input field
             e.stopPropagation();
         }
     };
@@ -101,10 +101,12 @@ export function EditableCell<TData, TValue>({
         <div
             onKeyDown={handleKeyDownOnView}
             onDoubleClick={onDoubleClick}
-            className="qz__data-table__editable-cell--viewing"
+            className="qz__data-table__editable-cell--viewing text-nowrap overflow-hidden text-ellipsis"
             tabIndex={0}
         >
-            {value ? String(value) : "-"}
+            {renderValueView ? renderValueView(value) : (value ? String(value) : "-")}
         </div>
     );
 }
+
+export const EditableCell = React.memo(_EditableCell)

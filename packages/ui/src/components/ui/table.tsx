@@ -6,13 +6,11 @@ const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
 >(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
-    <table
-      ref={ref}
-      className={cn("w-full caption-bottom text-sm", className)}
-      {...props}
-    />
-  </div>
+  <table
+    ref={ref}
+    className={cn("w-full caption-bottom text-sm", className)}
+    {...props}
+  />
 ))
 Table.displayName = "Table"
 
@@ -108,6 +106,16 @@ const TableCaption = React.forwardRef<
 ))
 TableCaption.displayName = "TableCaption"
 
+const MTable = React.memo(Table)
+const MTableHeader = React.memo(TableHeader)
+const MTableBody = React.memo(TableBody)
+const MTableFooter = React.memo(TableFooter)
+const MTableHead = React.memo(TableHead)
+const MTableRow = React.memo(TableRow)
+const MTableCell = React.memo(TableCell)
+const MTableCaption = React.memo(TableCaption)
+
+
 export {
   Table,
   TableHeader,
@@ -117,4 +125,12 @@ export {
   TableRow,
   TableCell,
   TableCaption,
+  MTable,
+  MTableHeader,
+  MTableBody,
+  MTableFooter,
+  MTableHead,
+  MTableRow,
+  MTableCell,
+  MTableCaption,
 }

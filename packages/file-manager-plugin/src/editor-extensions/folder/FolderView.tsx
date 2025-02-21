@@ -7,7 +7,7 @@ export const FolderView: React.FC<NodeViewProps> = (props) => {
 
     const { node: { attrs } } = props
 
-    return <NodeViewWrapper as="div" className=" rounded-sm w-full h-[300px] overflow-auto">
+    return <NodeViewWrapper as="div" className=" rounded-sm w-full">
         <div className="w-full border-b flex items-center gap-1 p-1">
             <Button variant={"ghost"}> <PlusCircle /> 新建文件夹</Button>
             <Button variant={"ghost"}><UploadIcon /> 上传文件</Button>

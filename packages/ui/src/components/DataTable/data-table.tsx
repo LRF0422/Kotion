@@ -12,18 +12,22 @@ import {
 
 
 import {
+    elementScroll,
     useVirtualizer,
     VirtualItem,
     Virtualizer,
+    VirtualizerOptions,
 } from '@tanstack/react-virtual'
 import React from 'react';
-import { Table as STable, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { MTable, MTableBody, MTableCell, MTableHead, MTableHeader, MTableRow, Table as STable, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Empty } from '../ui/empty';
 import { Input } from '../ui/input';
 import { EditableCell } from './EditableCell';
 import { DateTimePicker } from '../ui/datetime-picker';
 import { useCellSelection } from './useCellSelection';
 import { cn } from '@ui/lib/utils';
+import { MRate, Rate } from '../ui/rate';
+import { VDataTable } from './VDataTable';
 
 declare module '@tanstack/react-table' {
     interface TableMeta<TData extends RowData> {
@@ -45,6 +49,10 @@ interface DataTableProps {
     data: any[];
 }
 
+function easeInOutQuint(t: number) {
+    return t < 0.5 ? 16 * t * t * t * t * t : 1 + 16 * --t * t * t * t * t
+}
+
 function useSkipper() {
     const shouldSkipRef = React.useRef(true)
     const shouldSkip = shouldSkipRef.current
@@ -64,26 +72,26 @@ function useSkipper() {
 
 export const DataTable: React.FC<DataTableProps> = (props) => {
 
-    const [data, setData] = React.useState([
-        {
-            status: 'success',
-            progress: '100%',
-            createdAt: new Date(),
-        },
-        {
-            status: 'success',
-            progress: '100%',
-            createdAt: new Date(),
-        },
-        {
-            status: 'success',
-            progress: '100%',
-            createdAt: new Date(),
+    const [data, setData] = React.useState(() => {
+        const d = []
+        for (let i = 0; i < 2; i++) {
+            d.push({
+                id: i,
+                status: 'success',
+                progress: '100%',
+                createdAt: new Date(),
+                rate: 3
+            })
         }
-    ])
-    const [autoResetPageIndex, skipAutoResetPageIndex] = useSkipper()
+        return d
+    })
+
     const columns = React.useMemo<ColumnDef<any>[]>(
         () => [
+            {
+                accessorKey: 'id',
+                header: 'ID',
+            },
             {
                 accessorKey: 'status',
                 header: 'Status',
@@ -102,7 +110,6 @@ export const DataTable: React.FC<DataTableProps> = (props) => {
             {
                 accessorKey: 'progress',
                 header: 'Profile Progress',
-                size: 80,
                 cell: (cell) => (
                     <EditableCell {...cell}
                         renderInput={(props) => {
@@ -110,6 +117,27 @@ export const DataTable: React.FC<DataTableProps> = (props) => {
                                 onBlur={() => props.onBlur()}
                                 value={props.value as any}
                                 onChange={(e) => props.onChange(e.target.value)}
+                            />
+                        }}
+                    />
+                )
+            },
+            {
+                accessorKey: 'rate',
+                header: 'Rate',
+                cell: (cell) => (
+                    <EditableCell {...cell}
+                        renderValueView={(value) => (
+                            <MRate variant='yellow' rating={value as number} disabled />
+                        )}
+                        renderInput={(props) => {
+                            return <MRate
+                                variant='yellow'
+                                rating={props.value as any | 0}
+                                onRatingChange={(rate) => {
+                                    props.onChange(rate)
+                                    props.onBlur()
+                                }}
                             />
                         }}
                     />
@@ -137,139 +165,103 @@ export const DataTable: React.FC<DataTableProps> = (props) => {
                         }}
                     />
                 ),
-                size: 250,
+            },
+            {
+                accessorKey: 'createdAt',
+                header: 'Created At',
+                cell: (cell) => (
+                    <EditableCell {...cell}
+                        renderInput={(props) => {
+                            return <DateTimePicker
+                                value={props.value ? new Date(props.value as string) : undefined}
+                                onChange={(e) => {
+                                    props.onChange(e?.toISOString())
+                                }}
+                                onPopoverOpenChange={(value) => {
+                                    if (!value) {
+                                        setTimeout(() => {
+                                            props.onBlur()
+                                        }, 500);
+                                    }
+                                }}
+                            />
+                        }}
+                    />
+                ),
+            },
+            {
+                accessorKey: 'createdAt',
+                header: 'Created At',
+                cell: (cell) => (
+                    <EditableCell {...cell}
+                        renderInput={(props) => {
+                            return <DateTimePicker
+                                value={props.value ? new Date(props.value as string) : undefined}
+                                onChange={(e) => {
+                                    props.onChange(e?.toISOString())
+                                }}
+                                onPopoverOpenChange={(value) => {
+                                    if (!value) {
+                                        setTimeout(() => {
+                                            props.onBlur()
+                                        }, 500);
+                                    }
+                                }}
+                            />
+                        }}
+                    />
+                ),
             },
         ],
         []
     )
 
 
+    // const table = useReactTable({
+    //     data,
+    //     columns,
+    //     getCoreRowModel: getCoreRowModel(),
+    //     getSortedRowModel: getSortedRowModel(),
+    //     meta: {
+    //         updateData: (rowIndex, columnId, value) => {
+    //             skipAutoResetPageIndex()
+    //             setData(old =>
+    //                 old.map((row, index) => {
+    //                     if (index === rowIndex) {
+    //                         return {
+    //                             ...old[rowIndex]!,
+    //                             [columnId]: value,
+    //                         }
+    //                     }
+    //                     return row
+    //                 })
+    //             )
+    //         },
+    //     },
+    //     debugTable: true,
+    // })
 
-    const table = useReactTable({
-        data,
-        columns,
-        getCoreRowModel: getCoreRowModel(),
-        getSortedRowModel: getSortedRowModel(),
-        meta: {
-            updateData: (rowIndex, columnId, value) => {
-                skipAutoResetPageIndex()
-                setData(old =>
-                    old.map((row, index) => {
-                        if (index === rowIndex) {
-                            return {
-                                ...old[rowIndex]!,
-                                [columnId]: value,
-                            }
-                        }
-                        return row
-                    })
-                )
-            },
-        },
-        debugTable: true,
-    })
+    // const {
+    //     selectedCell,
+    //     selection: selectedRange,
+    //     getCellRef,
+    //     isCellSelected,
+    //     isCellInRange,
+    //     handleClick,
+    //     handleKeyDown,
+    //     handleMouseDown,
+    //     handleMouseEnter,
+    // } = useCellSelection(table.getRowModel().rows, table.getVisibleFlatColumns());
 
-    const {
-        selectedCell,
-        selection: selectedRange,
-        getCellRef,
-        isCellSelected,
-        isCellInRange,
-        handleClick,
-        handleKeyDown,
-        handleMouseDown,
-        handleMouseEnter,
-    } = useCellSelection(table.getRowModel().rows, table.getVisibleFlatColumns());
+    // const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableRowElement>({
+    //     count: table.getRowModel().rows.length,
+    //     estimateSize: () => 33, //estimate row height for accurate scrollbar dragging
+    //     getScrollElement: () => tableContainerRef.current,
+    //     overscan: 40,
+    //     scrollToFn
+    // })
 
-    return <div>
-        <STable>
-            <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                        {headerGroup.headers.map((header) => {
-                            return (
-                                <TableHead key={header.id}>
-                                    {header.isPlaceholder
-                                        ? null
-                                        : flexRender(
-                                            header.column.columnDef.header,
-                                            header.getContext()
-                                        )}
-                                </TableHead>
-                            )
-                        })}
-                    </TableRow>
-                ))}
-            </TableHeader>
-            <TableBody>
-                {table.getRowModel().rows?.length ? (
-                    table.getRowModel().rows.map((row) => (
-                        <TableRow
-                            key={row.id}
-                            data-state={row.getIsSelected() && "selected"}
-                        >
-                            {row.getVisibleCells().map((cell) => {
-                                const cellRef = getCellRef(cell.row.id, cell.column.id);
-                                const isSelected = isCellSelected(
-                                    cell.row.id,
-                                    cell.column.id
-                                );
-                                const isInRange = isCellInRange(cell.row.id, cell.column.id);
-                                const isEditable = cell.column.columnDef.meta?.editable;
-                                return <TableCell
-                                    ref={cellRef}
-                                    key={cell.id}
-                                    className={cn(" outline-offset-[-2px] select-none", {
-                                        "outline outline-cyan-400 outline-3": isSelected,
-                                        "bg-cyan-400": !isSelected && isInRange
-                                    })}
-                                    onKeyDown={(e) => {
+    // const { rows } = table.getRowModel()
 
-                                        handleKeyDown(e, cell.row.id, cell.column.id);
-                                        if (e.key === "Enter") {
-                                            const editableCell = cellRef.current?.querySelector(
-                                                ".qz__data-table__editable-cell--viewing"
-                                            );
-                                            if (editableCell) {
-                                                const event = new KeyboardEvent("keydown", {
-                                                    key: "Enter",
-                                                    bubbles: true,
-                                                    cancelable: true,
-                                                });
-
-                                                editableCell.dispatchEvent(event);
-                                            }
-                                        }
-                                    }}
-                                    onMouseDown={() =>
-                                        handleMouseDown(cell.row.id, cell.column.id)
-                                    }
-                                    onMouseEnter={() =>
-                                        handleMouseEnter(cell.row.id, cell.column.id)
-                                    }
-                                    onClick={() =>
-                                        handleClick(cell.row.id, cell.column.id)
-                                    }
-                                >
-                                    {flexRender(
-                                        cell.column.columnDef.cell,
-                                        cell.getContext()
-                                    )}
-                                </TableCell>
-                            })}
-                        </TableRow>
-                    ))
-                ) : (
-                    <TableRow>
-                        <TableCell
-                            colSpan={columns.length}
-                            className="h-24 text-center"
-                        >
-                            <Empty />
-                        </TableCell>
-                    </TableRow>
-                )}
-            </TableBody>
-        </STable>
-    </div>
+    return <VDataTable columns={columns} data={data} height="300px" />
 }
