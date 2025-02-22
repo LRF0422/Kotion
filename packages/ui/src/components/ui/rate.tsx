@@ -151,3 +151,5 @@ const PartialStar = ({ fillPercentage, size, className, Icon }: PartialStarProps
         </div>
     );
 };
+
+export const MRate = React.memo(Rate)

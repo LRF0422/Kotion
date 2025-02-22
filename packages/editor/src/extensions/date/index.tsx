@@ -1,7 +1,7 @@
-import { Calendar } from "@repo/ui";
 import { ExtensionWrapper } from "@repo/common";
 import { Date } from "./date";
 import React from "react";
+import { Calendar } from "@repo/icon";
 
 declare module "@tiptap/core" {
 	interface Commands<ReturnType> {

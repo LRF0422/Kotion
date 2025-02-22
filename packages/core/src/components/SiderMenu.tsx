@@ -1,5 +1,5 @@
 import { useNavigator } from "../hooks/use-navigator";
-import { Blocks, Inbox, LayoutDashboard, MessageCircleCodeIcon, Power, Settings, ShoppingBag, UserRoundPlus } from "@repo/icon";
+import { Blocks, Inbox, LayoutDashboard, MessageCircleCodeIcon, Power, Settings, UserRoundPlus } from "@repo/icon";
 import React, { useContext, useMemo } from "react";
 import { Empty } from "@repo/ui";
 import { useLocation } from "react-router-dom";
@@ -131,7 +131,9 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
                 key: '/setting',
                 attachTabs: true,
                 id: '/setting',
-                isGroup: true
+                isGroup: true,
+                onClick: () => {
+                }
             }
         ]
     }, [])

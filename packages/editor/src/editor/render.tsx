@@ -14,7 +14,7 @@ import { TiptapCollabProvider } from "@hocuspocus/provider";
 import { ThemeProvider } from "styled-components";
 import light from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
-import { cn } from "@repo/ui";
+import { Dialog, DialogTrigger, cn } from "@repo/ui";
 import { useSafeState } from "ahooks";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
@@ -53,7 +53,6 @@ export const EditorRender = forwardRef<
   } = props;
 
   const [exts, wrappers] = useEditorExtension(undefined, withTitle)
-
 
   const editor = useEditor(
     {

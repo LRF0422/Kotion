@@ -665,7 +665,7 @@ importers:
         specifier: ^1.2.1
         version: 1.2.2(@types/react-dom@18.3.5)(@types/react@18.3.18)(react-dom@18.3.1)(react@18.3.1)
       '@radix-ui/react-slot':
-        specifier: ^1.1.0
+        specifier: ^1.1.1
         version: 1.1.1(@types/react@18.3.18)(react@18.3.1)
       '@radix-ui/react-switch':
         specifier: ^1.1.0
@@ -688,6 +688,9 @@ importers:
       '@repo/icon':
         specifier: workspace:*
         version: link:../icon
+      '@tanstack/react-table':
+        specifier: ^8.21.2
+        version: 8.21.2(react-dom@18.3.1)(react@18.3.1)
       '@tanstack/react-virtual':
         specifier: ^3.8.3
         version: 3.11.2(react-dom@18.3.1)(react@18.3.1)
@@ -724,6 +727,9 @@ importers:
       react-resizable-panels:
         specifier: ^2.1.4
         version: 2.1.7(react-dom@18.3.1)(react@18.3.1)
+      react-virtuoso:
+        specifier: ^4.12.0
+        version: 4.12.5(react-dom@18.3.1)(react@18.3.1)
       recharts:
         specifier: ^2.12.7
         version: 2.15.0(react-dom@18.3.1)(react@18.3.1)
@@ -2088,14 +2094,38 @@ packages:
     resolution: {integrity: sha512-0wDLwCVF5V3x3b1SGXPCDcdsbDHMBe+lkFzBRaHeLvNi+nrrnZ1lA18u+OTWO8iSWU2GxUOCvlXtDuqftc1oiA==}
     peerDependencies:
       tailwindcss: '>=3.0.0 || insiders || >=4.0.0-alpha.20 || >=4.0.0-beta.1'
+    dependencies:
+      lodash.castarray: 4.4.0
+      lodash.isplainobject: 4.0.6
+      lodash.merge: 4.6.2
+      postcss-selector-parser: 6.0.10
+      tailwindcss: 3.4.17
+    dev: true
 
-  '@tanstack/react-virtual@3.11.2':
+  /@tanstack/react-table@8.21.2(react-dom@18.3.1)(react@18.3.1):
+    resolution: {integrity: sha512-11tNlEDTdIhMJba2RBH+ecJ9l1zgS2kjmexDPAraulc8jeNA4xocSNeyzextT0XJyASil4XsCYlJmf5jEWAtYg==}
+    engines: {node: '>=12'}
+    peerDependencies:
+      react: '>=16.8'
+      react-dom: '>=16.8'
+    dependencies:
+      '@tanstack/table-core': 8.21.2
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+    dev: false
+
+  /@tanstack/react-virtual@3.11.2(react-dom@18.3.1)(react@18.3.1):
     resolution: {integrity: sha512-OuFzMXPF4+xZgx8UzJha0AieuMihhhaWG0tCqpp6tDzlFwOmNBPYMuLOtMJ1Tr4pXLHmgjcWhG6RlknY2oNTdQ==}
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  '@tanstack/virtual-core@3.11.2':
+  /@tanstack/table-core@8.21.2:
+    resolution: {integrity: sha512-uvXk/U4cBiFMxt+p9/G7yUWI/UbHYbyghLCjlpWZ3mLeIZiUBSKcUnw9UnKkdRz7Z/N4UBuFLWQdJCjUe7HjvA==}
+    engines: {node: '>=12'}
+    dev: false
+
+  /@tanstack/virtual-core@3.11.2:
     resolution: {integrity: sha512-vTtpNt7mKCiZ1pwU9hfKPhpdVO2sVzFQsxoVBGtOSHxlrRRzYr8iQ2TlwbAcRYCcEiZ9ECAM8kBzH0v2+VzfKw==}
 
   '@tiptap-pro/extension-table-of-contents@2.17.2':
@@ -11102,7 +11132,9 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  react@18.3.1:
+  /react@18.3.1:
+    resolution: {integrity: sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==}
+    engines: {node: '>=0.10.0'}
     dependencies:
       loose-envify: 1.4.0
 
