@@ -39,7 +39,7 @@ export const CollaborationEditor = forwardRef<
   Editor | null,
   React.PropsWithChildren<CollaborationEditorProps>
 >((props, ref) => {
-  const { content, user, provider, pageInfo } = props
+  const { content, user, provider, pageInfo, toc } = props
 
   const [tableOfContents, setTableOfContents] = useSafeState<any[]>()
   const [extensions, extensionWrappers] = useEditorExtension()
@@ -106,22 +106,21 @@ export const CollaborationEditor = forwardRef<
       <ThemeProvider theme={light}>
         <div className={cn("flex flex-col w-[calc(100vw-350px)] grow z-30")}>
           <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />
-          <div className={cn("w-full", props.className)} id="editor-container"  >
+          <div className={cn("w-full", props.className)} >
             <div className="flex relative w-full ">
               <StyledEditor className="w-full grow">
                 <EditorContent editor={editor} />
               </StyledEditor>
-              <div className={cn("border-l w-[300px] sticky top-0 right-0 box-border", props.className)}>
-                <Tabs defaultValue="toc">
-                  <TabsList>
-                    <TabsTrigger value="toc"><MenuIcon className="h-4 w-4" /></TabsTrigger>
-                    <TabsTrigger value="ai"><Sparkles className="h-4 w-4" /></TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="toc">
-                    <MemorizedToC editor={editor as Editor} items={tableOfContents} />
-                  </TabsContent>
-                </Tabs>
-              </div>
+              {
+                toc && <div className={cn("border-l w-[300px] sticky top-0 right-0 box-border", props.className)}>
+                  <Tabs defaultValue="toc">
+                    <TabsList>
+                      <TabsTrigger value="toc"><MenuIcon className="h-4 w-4" /></TabsTrigger>
+                      <TabsTrigger value="ai"><Sparkles className="h-4 w-4" /></TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+              }
             </div>
           </div>
         </div>
