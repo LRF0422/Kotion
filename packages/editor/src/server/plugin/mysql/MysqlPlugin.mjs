@@ -19,7 +19,9 @@ export const upsertQuery = `
 
 
 export class Mysql extends Database {
+
   db
+  pingInterval
   configuration = {
     schema,
     fetch: async ({ documentName }) => {
@@ -69,6 +71,16 @@ export class Mysql extends Database {
       this.db.connect()
       this.db.query(this.configuration.schema)
     })
+
+    clearInterval(this.pingInterval)
+    this.pingInterval = setInterval(() => {
+      console.log('ping...');
+      this.db.ping((err) => {
+          if (err) {
+              console.log('ping error: ' + JSON.stringify(err));
+          }
+      });
+  }, 3600000);
   }
 
   async onListen() {

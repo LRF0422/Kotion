@@ -94,7 +94,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
     useEffect(() => {
         setData(getDatabaseData(props.node))
         columnsRef.current = props.node.attrs.columns
-    }, [props.node.attrs.updateFlag])
+    }, [props])
 
     const doUpdate = () => {
         props.updateAttributes({
@@ -171,7 +171,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
         }
         props.updateAttributes(newVal)
         addCol(props.editor.state, props.editor.view, props.node, props.getPos(), column)
-        doUpdate()
+        // doUpdate()
     }, [props.node])
 
     const getContent = (view: string) => {

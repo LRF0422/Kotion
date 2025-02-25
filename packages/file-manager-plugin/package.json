@@ -11,7 +11,8 @@
     "@repo/common": "workspace:*",
     "@repo/ui": "workspace:*",
     "@repo/icon": "workspace:*",
-    "@repo/editor": "workspace:*"
+    "@repo/editor": "workspace:*",
+    "@repo/core": "workspace:*"
   },
   "keywords": [],
   "author": "",

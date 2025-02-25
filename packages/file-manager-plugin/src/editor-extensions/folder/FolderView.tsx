@@ -1,7 +1,8 @@
 import React from "react"
 import { NodeViewProps, NodeViewWrapper } from "@repo/editor"
-import { Button, DataTable, Input } from "@repo/ui"
+import { Button, DataTable, Input, Table } from "@repo/ui"
 import { PlusCircle, UploadIcon } from "@repo/icon"
+import { useApi } from "@repo/core"
 
 export const FolderView: React.FC<NodeViewProps> = (props) => {
 
@@ -13,6 +14,6 @@ export const FolderView: React.FC<NodeViewProps> = (props) => {
             <Button variant={"ghost"}><UploadIcon /> 上传文件</Button>
             <Input placeholder="搜索文件" className=" w-[200px] h-7" />
         </div>
-        <DataTable data={[]} columns={[]} />
+        <Table></Table>
     </NodeViewWrapper>
 }

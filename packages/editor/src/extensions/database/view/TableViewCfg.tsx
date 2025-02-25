@@ -11,10 +11,6 @@ export const TableViewCfg = (props: { visible: boolean, toggle: () => void }) =>
 
     return <div
         className={cn("absolute p-1 inset-y-0 right-0 w-[250px] border rounded-sm transition ease-in-out bg-popover text-popover-foreground z-50 text-sm shadow-sm ", visible ? " visible slide-in-from-right animate-in fade-in-0 " : " invisible slide-out-to-right animate-out fade-out-0")}
-        onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-        }}
     >
         <div className="flex flex-col gap-1" id="container">
             <Label className="mb-1 font-bold p-2 flex justify-between items-center">表格设置 <XCircle className="h-4 w-4 cursor-pointer" onClick={toggle} /></Label>
