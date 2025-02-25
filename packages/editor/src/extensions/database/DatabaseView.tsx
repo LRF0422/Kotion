@@ -9,7 +9,6 @@ import { Calendar, ChartArea, CheckSquare, Image, Kanban, Link2, MoreVertical, P
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from "@repo/ui";
 import { cloneDeep } from "lodash";
 import { ChartView } from "./view/ChartView";
-import { useClickAway } from "ahooks";
 import { CalendarView } from "./view/CalendarView";
 
 
@@ -74,7 +73,8 @@ const allColumnType: ColumnType[] = [
 ]
 
 export type Context = NodeViewProps & {
-    data: any[], handleAddRow: (data?: any) => void,
+    data: any[],
+    handleAddRow: (data?: any) => void,
     handleAddCol: (column: any) => void,
     handleDelCol: (columnIndex: number) => void,
     handleDataChange: (row: number, col: number, data: any) => void,
@@ -89,32 +89,33 @@ export const NodeViewContext = createContext<Context>({} as Context)
 export const DatabaseView: React.FC<NodeViewProps> = (props) => {
 
     const [data, setData] = useState<any[]>([])
-    const [currentView, setCurrentView] = useState<string>()
-    const [optionOpen, setOptionOpen] = useState(false)
-    const moreButton = useRef<any>()
-    const optionBody = useRef<any>()
     const columnsRef = useRef<any[]>(props.node.attrs.columns)
-    const nodeRef = useRef<any>(props.node)
-
-    useClickAway(() => {
-        setOptionOpen(false)
-    }, [moreButton, optionBody])
 
     useEffect(() => {
         setData(getDatabaseData(props.node))
         columnsRef.current = props.node.attrs.columns
-    }, [props])
+    }, [props.node.attrs.updateFlag])
+
+    const doUpdate = () => {
+        props.updateAttributes({
+            ...props.node.attrs,
+            updateFlag: props.node.attrs.updateFlag + 1
+        })
+    }
 
     const doAddRow = useCallback((data?: any) => {
         addRow(props.editor.state, props.editor.view, props.node, props.getPos(), data)
+        doUpdate()
     }, [props])
 
     const onDataChange = useCallback((row: number, col: number, data: any) => {
         updateCellData(props.editor.state, props.editor.view, props.node, props.getPos(), col, row, data)
+        doUpdate()
     }, [props])
 
     const doDelCol = useCallback((colIndex: number) => {
         deleteColV2(props.editor.state, props.editor.view, props.node, props.getPos(), colIndex)
+        doUpdate()
     }, [props])
 
     const doMoveCol = useCallback((source: string, target: string) => {
@@ -142,10 +143,12 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
 
     const doDeleteRow = useCallback((rowIndex: number) => {
         removeRow(props.editor.state, props.editor.view, props.node, props.getPos(), rowIndex)
+        doUpdate()
     }, [props])
 
     const doUpdateCellBatch = useCallback((updateCells: UpdateCellProps[]) => {
         updateCellDataV2(props.editor.state, props.editor.view, props.node, props.getPos(), updateCells)
+        doUpdate()
     }, [props])
 
     const onUpdateColumnSize = useCallback((columnIndex: number, newSize: number) => {
@@ -168,30 +171,19 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
         }
         props.updateAttributes(newVal)
         addCol(props.editor.state, props.editor.view, props.node, props.getPos(), column)
+        doUpdate()
     }, [props.node])
 
     const getContent = (view: string) => {
         switch (view) {
             case 'table':
-                return <TableView
-                    viewKey={view}
-                    columns={props.node.attrs.columns}
-                    data={data}
-                    onDataChange={onDataChange}
-                    onRowAppended={doAddRow}
-                    onColumnResize={onUpdateColumnSize} />
+                return <TableView />
             case 'chart':
                 return <ChartView />
             case 'calendar':
                 return <CalendarView viewKey={view} />
             default:
-                return <TableView
-                    viewKey={view}
-                    columns={props.node.attrs.columns}
-                    data={data}
-                    onDataChange={onDataChange}
-                    onRowAppended={doAddRow}
-                    onColumnResize={onUpdateColumnSize} />
+                return <TableView />
         }
     }
 
@@ -235,7 +227,8 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
 
     return <NodeViewWrapper className="leading-normal" contentEditable={false} >
         <NodeViewContext.Provider value={{
-            ...props, data: data,
+            ...props,
+            data: data,
             handleAddRow: doAddRow,
             handleAddCol: handleAddColumn,
             handleDelCol: doDelCol,
@@ -246,7 +239,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
             columns: [...props.node.attrs.columns], columnTypes: allColumnType
         }} >
             <div className="h-min-[300px] w-full rounded-md">
-                <Tabs defaultValue="table" className="min-h-[300px]" onValueChange={(value) => setCurrentView(value)}>
+                <Tabs defaultValue="table" className="min-h-[300px]">
                     <div className="flex justify-between">
                         <TabsList className="">
                             <div className="flex flex-row items-center">
@@ -259,7 +252,10 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
                                                     {v}
                                                 </div>
                                                 <DropdownMenu>
-                                                    <DropdownMenuTrigger><MoreVertical className="h-3 w-3" /></DropdownMenuTrigger>
+                                                    <DropdownMenuTrigger onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        e.preventDefault()
+                                                    }}><MoreVertical className="h-3 w-3" /></DropdownMenuTrigger>
                                                     <DropdownMenuContent side="bottom" align="center" sideOffset={10} className="w-[200px]">
                                                         <DropdownMenuItem className="p-1">
                                                             Rename

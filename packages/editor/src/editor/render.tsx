@@ -85,7 +85,7 @@ export const EditorRender = forwardRef<
   return (editor && tableOfContents &&
     <PageContext.Provider value={pageInfo}>
       <ThemeProvider theme={light}>
-        <div className={cn("w-[calc(100vw-350px)]", props.className)} id="editor-container">
+        <div className={cn("w-[calc(100vw-350px)]", props.className)}>
           <div className="flex flex-row relative w-full h-full">
             <StyledEditor className="overflow-auto grow">
               <EditorContent editor={editor} />

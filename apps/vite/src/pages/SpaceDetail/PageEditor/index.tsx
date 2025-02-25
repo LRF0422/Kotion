@@ -96,7 +96,7 @@ export const PageEditor: React.FC = () => {
             page.title = title
             page.icon = icon
             page.id = params.pageId
-            page.content = JSON.stringify(pageContent).replace(""," ")
+            page.content = JSON.stringify(pageContent).replace("", " ")
             page.publish = publish
             if (publish) {
                 useApi(APIS.CREATE_OR_SAVE_PAGE, undefined, page).then((res) => {
@@ -142,7 +142,7 @@ export const PageEditor: React.FC = () => {
     const provider = useMemo(() => {
         const doc = new Y.Doc()
         return new TiptapCollabProvider({
-            baseUrl: 'ws://localhost:1234',
+            baseUrl: 'ws://www.simple-platform.cn:1234',
             name: params.pageId as string,
             token: params.pageId as string,
             document: doc,
@@ -347,6 +347,7 @@ export const PageEditor: React.FC = () => {
                     className="h-[calc(100vh-80px)]  overflow-auto"
                     id={params.pageId as string}
                     user={userInfo}
+                    toc={false}
                     token={params.pageId as string}
                     content={JSON.parse(page.content)}
                 />

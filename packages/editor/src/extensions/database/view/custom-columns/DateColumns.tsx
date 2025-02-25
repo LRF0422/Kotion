@@ -8,18 +8,14 @@ import { AppWindowIcon, CheckSquare, Clock10, ImageIcon, Link2, SlidersIcon, Sta
 import React, { useContext, useRef, useState } from "react";
 import { textEditor } from "react-data-grid";
 import { TagInput } from "@repo/ui";
-import { useHover } from "ahooks";
+import { useHover, useToggle } from "ahooks";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@repo/ui";
 import { cn } from "@repo/ui";
 import { NodeViewContext } from "../../DatabaseView";
-import { AnyExtension, EditorContent, useEditor } from "@tiptap/react";
-import { useEditorExtension } from "../../../../editor/use-extension";
+import { Editor } from "@tiptap/react";
 import { isArray, isObject } from "lodash";
 import { getTitleContent } from "../../../../editor/utilities";
-import { StyledEditor } from "../../../../styles/editor";
-// import { PageSelector } from "@ui/components/PageSelector";
-import { EditorMenu } from "../../../../editor/EditorMenu";
-import { ExtensionWrapper } from "../../../../editor";
+import { EditorRender } from "@editor/editor";
 
 
 export const DateColumnEditor: React.FC<any> = (props) => {
@@ -187,24 +183,11 @@ export const MarkdownView: React.FC<any> = (props) => {
     const hover = useHover(ref)
     const { column, row } = props
     const value = row[column.key]
-    const [extension, extensionWrappers] = useEditorExtension()
+    const editor = useRef<Editor>(null)
     const { handleDataChange, data, editor: mainEditor } = useContext(NodeViewContext)
-    const editor = useEditor({
-        content: value,
-        editable: mainEditor.isEditable,
-        extensions: extension as AnyExtension[],
-        editorProps: {
-            attributes: {
-                class: "magic-editor",
-                spellcheck: "false",
-                suppressContentEditableWarning: "false",
-            }
-        }
-    }, [value])
-
     const handleSave = (open: boolean) => {
-        if (!open && editor && editor.isEditable) {
-            const json = editor.getJSON()
+        if (!open && editor.current && mainEditor.isEditable) {
+            const json = editor.current.getJSON()
             handleDataChange(data.indexOf(row), column.idx, json)
         }
     }
@@ -213,19 +196,16 @@ export const MarkdownView: React.FC<any> = (props) => {
     return editor && <div ref={ref} className=" relative h-full w-full flex items-center">
         {isObject(value) && getTitleContent(value)}
         <Sheet onOpenChange={handleSave}>
-            <SheetTrigger>
+            <SheetTrigger asChild >
                 <Button size="sm" className={cn(" absolute right-0 top-0 h-full", hover ? "visible" : "invisible")}><AppWindowIcon className="h-3 w-3" /></Button>
             </SheetTrigger>
-            <SheetContent className="w-[1000px]">
+            <SheetContent className="w-[1000px] sm:max-w-none">
                 <SheetHeader>
                     <SheetTitle></SheetTitle>
                     <SheetDescription></SheetDescription>
                 </SheetHeader>
                 <div className="h-full w-full overflow-auto" onDoubleClick={(e) => e.stopPropagation()}>
-                    <StyledEditor className="h-full w-full prose max-w-none ">
-                        <EditorContent editor={editor} width="100%" height="100%" />
-                        <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} toolbar={false} />
-                    </StyledEditor>
+                    <EditorRender content={value} id="" toolbar={false} isEditable={mainEditor.isEditable} ref={editor} />
                 </div>
             </SheetContent>
         </Sheet>

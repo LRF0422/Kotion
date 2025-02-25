@@ -78,6 +78,10 @@ export const Database = Node.create({
             viewOptions: {
                 default: this.options.defaultViewConfig,
                 rendered: true
+            },
+            updateFlag: {
+                default: 0,
+                rendered: true
             }
         }
     },
