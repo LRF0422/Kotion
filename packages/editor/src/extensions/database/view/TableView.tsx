@@ -1,8 +1,5 @@
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@repo/ui";
-import { Input } from "@repo/ui";
-import { GridColumn } from "@glideapps/glide-data-grid"
-import { ArrowRight, Edit2, Edit3, Filter, List, Lock, MoreHorizontal, Plus, Settings, SortDesc, SquareStack, Table, Trash2, XCircle } from "@repo/icon";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Settings, Table } from "@repo/icon";
+import { useContext, useEffect, useMemo, useRef } from "react";
 import { NodeViewContext } from "../DatabaseView";
 import { Button } from "@repo/ui";
 import 'react-data-grid/lib/styles.css';
@@ -11,12 +8,9 @@ import DataGrid, { DataGridHandle, FillEvent } from 'react-data-grid';
 
 import { useToggle } from "ahooks";
 import { cn } from "@repo/ui";
-import { Label } from "@repo/ui";
-import { Separator } from "@repo/ui";
 import { getCellIcon, getCellView, getEditor } from "./custom-columns/DateColumns";
 import styled from "styled-components";
 import { useTheme } from "@repo/ui";
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuShortcut, ContextMenuTrigger } from "@repo/ui";
 import { UpdateCellProps } from "../utils";
 import React from "react";
 import { TableViewCfg } from "./TableViewCfg";
@@ -75,7 +69,7 @@ export const TableView: React.FC = () => {
         <Container>
             <DataGrid
                 ref={gridRef}
-                rowClass={() => 'hover:bg-mute'}
+                rowClass={() => ''}
                 onFill={handleFill}
                 rowKeyGetter={(row) => row.id}
                 columns={columns.map((it) => ({

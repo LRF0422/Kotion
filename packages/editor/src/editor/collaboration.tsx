@@ -106,16 +106,18 @@ export const CollaborationEditor = forwardRef<
       <ThemeProvider theme={light}>
         <div className={cn("flex flex-col w-[calc(100vw-350px)] grow z-30")}>
           <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />
-          <div className={cn("w-full", props.className)} >
+          <div className={cn("w-full", props.className)}>
             <div className="flex relative w-full ">
               <StyledEditor className="w-full grow">
-                <EditorContent editor={editor} />
+                <EditorContent editor={editor} id="editor-container" />
               </StyledEditor>
               {
-                toc && <div className={cn("border-l w-[300px] sticky top-0 right-0 box-border", props.className)}>
+                <div className={cn("border-l w-[300px] sticky top-0 right-0 box-border", props.className)}>
                   <Tabs defaultValue="toc">
                     <TabsList>
-                      <TabsTrigger value="toc"><MenuIcon className="h-4 w-4" /></TabsTrigger>
+                      <TabsTrigger value="toc"><MenuIcon className="h-4 w-4" />
+                        <MemorizedToC editor={editor} items={tableOfContents} />
+                      </TabsTrigger>
                       <TabsTrigger value="ai"><Sparkles className="h-4 w-4" /></TabsTrigger>
                     </TabsList>
                   </Tabs>

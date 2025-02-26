@@ -347,8 +347,8 @@ export const PageEditor: React.FC = () => {
                     className="h-[calc(100vh-80px)]  overflow-auto"
                     id={params.pageId as string}
                     user={userInfo}
-                    toc={false}
                     token={params.pageId as string}
+                    toc={true}
                     content={JSON.parse(page.content)}
                 />
             }
