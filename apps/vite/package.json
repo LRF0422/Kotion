@@ -18,13 +18,13 @@
     "@repo/core": "workspace:*",
     "@repo/file-manager": "workspace:*",
     "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
     "evaluatex": "^2.2.0",
     "event-source-polyfill": "^1.0.31",
     "lodash": "^4.17.21",
     "lodash.escape": "^4.0.1",
     "lodash.throttle": "^4.1.1",
-    "next-themes": "^0.3.0",
-    "postcss": "^8.4.47"
+    "next-themes": "^0.3.0"
   },
   "devDependencies": {
     "@types/event-source-polyfill": "^1.0.5",

@@ -12,7 +12,9 @@
     "@repo/ui": "workspace:*",
     "@repo/icon": "workspace:*",
     "@repo/editor": "workspace:*",
-    "@repo/core": "workspace:*"
+    "@repo/core": "workspace:*",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47"
   },
   "keywords": [],
   "author": "",

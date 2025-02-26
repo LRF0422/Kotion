@@ -6,7 +6,6 @@ import { PageEditor } from './pages/SpaceDetail/PageEditor'
 import { SpaceSettings } from './pages/SpaceDetail/Settings'
 import { KPlugin, PluginConfig } from '@repo/common'
 import React from 'react'
-import "@repo/ui/src/globals.css"
 import { LayoutGrid } from '@repo/icon'
 import { TestExtension } from './editor-extensions/test-extension'
 

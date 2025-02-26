@@ -4,7 +4,7 @@ import { App } from "@repo/core"
 
 import { DefaultPluginInstance } from './App'
 import React from 'react'
-import "@repo/ui/src/globals.css"
+import "@repo/ui/globals.css"
 import { fileManager } from '@repo/file-manager'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

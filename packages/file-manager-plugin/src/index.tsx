@@ -3,6 +3,7 @@ import { KPlugin, PluginConfig } from "@repo/common"
 import { FolderExtension } from "./editor-extensions/folder"
 import { Folder } from "@repo/icon"
 import React from "react"
+import "@repo/ui/globals.css"
 
 interface FileManagerPluginConfig extends PluginConfig {
 

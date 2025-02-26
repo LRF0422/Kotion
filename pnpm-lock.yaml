@@ -586,6 +586,12 @@ importers:
       '@repo/ui':
         specifier: workspace:*
         version: link:../ui
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.4.20(postcss@8.4.49)
+      postcss:
+        specifier: ^8.4.47
+        version: 8.4.49
     devDependencies:
       '@rollup/plugin-node-resolve':
         specifier: ^16.0.0

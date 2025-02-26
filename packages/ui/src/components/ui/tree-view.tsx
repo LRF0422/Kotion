@@ -10,6 +10,7 @@ import {
     TreeItemGroup,
 } from "./tree-view-api";
 import { Empty } from "./empty";
+import { EmptyState } from "./empty-state";
 
 
 interface TreeViewComponentProps extends React.HTMLAttributes<HTMLDivElement> { }
@@ -78,7 +79,7 @@ export const TreeView = ({
                 {elements.map((element: any) => (
                     <TreeItem
                         aria-label="Root"
-                        key={element.key}
+                        key={element.id}
                         elements={[element]}
                         indicator={indicator}
                     />

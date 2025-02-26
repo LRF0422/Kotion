@@ -7,7 +7,7 @@ import store from './store'
 import { Login } from "./components/Login";
 import { SignUpForm } from "./components/SignUp";
 
-import '@repo/ui/src/globals.css'
+import '@repo/ui/globals.css'
 import '@repo/editor/src/styles/editor.css'
 
 import * as ui from "@repo/ui"
