@@ -3,21 +3,19 @@ import { EditorMenu } from "../../editor/EditorMenu";
 import { PageContext } from "../../editor/context";
 import { useEditorExtension } from "../../editor/use-extension";
 import { TiptapCollabProvider } from "@hocuspocus/provider";
-import { AnyExtension, Editor, NodeViewProps } from "@tiptap/core";
+import { AnyExtension, NodeViewProps } from "@tiptap/core";
 import Collaboration from "@tiptap/extension-collaboration";
-import Document from "@tiptap/extension-document";
 import { EditorContent, NodeViewWrapper, useEditor } from "@tiptap/react";
 import { useSafeState } from "ahooks";
 import React, { useCallback, useContext, useEffect, useMemo } from "react";
 import { Doc } from 'yjs'
-import { StyledEditor } from "@editor/styles/editor";
+import { StyledEditor } from "../../styles/editor";
 
 
 export const SyncBlockView: React.FC<NodeViewProps> = (props) => {
 
-    const { editor, node, updateAttributes } = props
+    const { editor, node } = props
     const [extensions, extensionWrappers] = useEditorExtension()
-    // const [_editor, setEditor] = useSafeState<Editor>()
     const [syncStatus, setSyncStatus] = useSafeState(false)
     const pageInfo = useContext(PageContext)
     const blockId = node.attrs.blockId

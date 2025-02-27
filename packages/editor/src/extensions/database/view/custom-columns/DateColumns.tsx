@@ -15,7 +15,7 @@ import { NodeViewContext } from "../../DatabaseView";
 import { Editor } from "@tiptap/react";
 import { isArray, isObject } from "lodash";
 import { getTitleContent } from "../../../../editor/utilities";
-import { EditorRender } from "@editor/editor";
+import { EditorRender } from "../../../../editor/render";
 
 
 export const DateColumnEditor: React.FC<any> = (props) => {

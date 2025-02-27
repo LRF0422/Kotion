@@ -1,4 +1,4 @@
-import { getCurrentNode } from '@editor/utilities';
+import { getCurrentNode } from '../../utilities';
 import { Extension } from '@tiptap/core';
 
 import { AllSelection, NodeSelection, Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';

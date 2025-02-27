@@ -10,8 +10,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@ui": path.resolve(__dirname, "../../packages/ui/src"),
-      "@editor": path.resolve(__dirname, "../../packages/editor/src"),
+      "@ui": path.resolve(__dirname, "../../packages/ui/src")
     },
   },
 });
