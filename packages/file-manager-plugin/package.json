@@ -14,7 +14,8 @@
     "@repo/editor": "workspace:*",
     "@repo/core": "workspace:*",
     "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.47"
+    "postcss": "^8.4.47",
+    "rollup-plugin-import-css": "^3.5.8"
   },
   "keywords": [],
   "author": "",

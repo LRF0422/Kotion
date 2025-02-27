@@ -47,7 +47,7 @@ const files = [
     }
 ]
 
-export const FileManager: React.FC<FileManagerProps> = () => {
+export const FileManagerView: React.FC<FileManagerProps> = () => {
     return <div className=" rounded-sm border">
         <div className=" w-full bg-muted border-b flex items-center">
             <Button size="sm" variant="ghost">

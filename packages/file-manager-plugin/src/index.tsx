@@ -4,6 +4,7 @@ import { FolderExtension } from "./editor-extensions/folder"
 import { Folder } from "@repo/icon"
 import React from "react"
 import "@repo/ui/globals.css"
+import { FileManagerView } from "./editor-extensions/component/FileManager"
 
 interface FileManagerPluginConfig extends PluginConfig {
 
@@ -17,15 +18,19 @@ export const fileManager = new FileManager({
     status: '',
     name: 'test',
     editorExtension: [FolderExtension],
+    routes: [
+        {
+            name: 'fileManager',
+            path: '/fileManager',
+            element: <FileManagerView folderId="111" />
+        }
+    ],
     menus: [
         {
             id: 'fileManager',
             name: 'fileManager',
             key: '文件管理',
-            icon: <Folder className="h-5 w-5" />,
-            onClick: () => {
-                console.log('fileManager')
-            }
+            icon: <Folder className="h-5 w-5" />
         }
     ]
 })

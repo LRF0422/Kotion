@@ -12,7 +12,7 @@ export interface FileCardProps {
 
 
 export const FileCard: React.FC = () => {
-    return <Card className=" bg-red-600">
+    return <Card className="bg-[red]">
         <CardHeader className="p-0">
             <CardTitle className="p-0 m-0">
                 <Checkbox className="ml-1" />
