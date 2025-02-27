@@ -1,23 +1,21 @@
 {
+    // "extends": "@repo/typescript-config/react-library.json",
     "compilerOptions": {
-        "target": "ES2019",
-        "module": "ESNext",
-        "moduleResolution": "node",
-        "strict": true,
+        "baseUrl": ".",
         "esModuleInterop": true,
-        "noImplicitOverride": true,
-        "noUnusedLocals": true,
-        "resolveJsonModule": true,
-        "useUnknownInCatchVariables": false,
+        "forceConsistentCasingInFileNames": true,
+        "isolatedModules": true,
+        "moduleResolution": "node",
+        "preserveWatchOutput": true,
+        "skipLibCheck": true,
+        "noEmit": true,
+        "strict": true,
         "jsx": "react",
-        "typeRoots": [
-            "./types",
-            "./node_modules/@types"
-        ]
+        "target": "ES2020",
+        "paths": {}
     },
     "include": [
-        "src/**/*.ts",
-        "src/**/*.tsx"
+        "src"
     ],
     "exclude": [
         "node_modules"

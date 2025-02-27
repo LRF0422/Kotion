@@ -1,7 +1,8 @@
-import { Archive, CopyIcon, CopyPlus, CopySlash, DownloadIcon, FileIcon, FolderIcon, ScissorsIcon, Trash2 } from "@repo/icon";
+import { CopySlash, DownloadIcon, FileIcon, FolderIcon, ScissorsIcon, Trash2 } from "@repo/icon";
 import { Button, TreeView } from "@repo/ui";
 import React from "react";
 import { FileCard } from "./FileCard";
+import "@repo/ui/globals.css"
 
 
 export interface FileManagerProps {
@@ -68,7 +69,7 @@ export const FileManagerView: React.FC<FileManagerProps> = () => {
             </Button>
         </div>
         <div className="grid w-full transition-all grid-cols-[200px_1fr]">
-            <div className="border-r h-[400px]">
+            <div className="border-r h-fit">
                 <TreeView
                     size="sm"
                     className="w-full m-0"
@@ -94,7 +95,7 @@ export const FileManagerView: React.FC<FileManagerProps> = () => {
                         Files
                     </div>
                 </div>
-                <div className="grid grid-cols-4 w-full gap-1 p-6 overflow-auto  h-[calc(100%-100px)]">
+                <div className="flex flex-wrap w-full gap-2 p-6 overflow-auto h-dvh">
                     {
                         files.map((it, index) => (
                             <FileCard key={index} />
