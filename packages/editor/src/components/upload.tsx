@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { Editor } from "@tiptap/core";
-import { Input } from "@ui/components/ui/input";
-import { Button } from "@ui/components/ui/button";
+import { Input } from "@repo/ui";
+import { Button } from "@repo/ui";
 // import { fileOpen } from "browser-fs-access";
 
 interface Props {

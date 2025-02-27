@@ -4,7 +4,7 @@ import { NodeSelection } from "@tiptap/pm/state";
 import { Enable, Resizable as ReactResizable, ResizeCallback } from "re-resizable";
 
 import { throttle } from "lodash";
-import { cn } from "@ui/lib/utils";
+import { cn } from "@repo/ui";
 
 interface Props {
   width: number | string;
