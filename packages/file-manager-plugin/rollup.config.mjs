@@ -5,7 +5,7 @@ import autoprefixer from 'autoprefixer';
 
 export default {
     input: 'src/index.tsx',
-    external: ['react', '@repo/common', '@repo/ui'],
+    external: ['react', '@repo/common', '@repo/ui', '@repo/icon', '@repo/editor'],
 	output: {
 		file: 'dist/bundle.js',
         format: 'umd',
@@ -13,6 +13,8 @@ export default {
         globals: {
             "@repo/common": "common",
             "@repo/ui": "ui",
+            "@repo/icon": "icon",
+            "@repo/editor": "editor",
             "react": "React"
         }
     },

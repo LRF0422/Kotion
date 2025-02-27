@@ -10,7 +10,6 @@ import {
     TreeItemGroup,
 } from "./tree-view-api";
 import { Empty } from "./empty";
-import { EmptyState } from "./empty-state";
 
 
 interface TreeViewComponentProps extends React.HTMLAttributes<HTMLDivElement> { }
