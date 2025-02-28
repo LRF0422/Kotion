@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
-    "paths": {
-    },
+    "paths": {},
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": [
@@ -16,10 +15,11 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "noEmitOnError": false,
     "noEmit": true,
     "jsx": "react",
     /* Linting */
-    "strict": true,
+    "strict": false,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true

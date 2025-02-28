@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { Loader2 } from "@repo/icon";
 import React from "react";
 
 const LoadingWrapStyle: React.CSSProperties = {

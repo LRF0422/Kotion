@@ -33,7 +33,7 @@ export default {
         }
     },
     meridiem: function (hour, minute, isLower) {
-        var hm = hour * 100 + minute;
+        const hm = hour * 100 + minute;
         if (hm < 600) {
             return '凌晨';
         } else if (hm < 900) {
@@ -59,13 +59,13 @@ export default {
             return this.minutes() === 0 ? '[昨天]Ah[点整]' : '[昨天]LT';
         },
         nextWeek: function () {
-            var startOfWeek, prefix;
+            let startOfWeek, prefix;
             startOfWeek = moment().startOf('week');
             prefix = this.unix() - startOfWeek.unix() >= 7 * 24 * 3600 ? '[下]' : '[本]';
             return this.minutes() === 0 ? prefix + 'dddAh点整' : prefix + 'dddAh点mm';
         },
         lastWeek: function () {
-            var startOfWeek, prefix;
+            let startOfWeek, prefix;
             startOfWeek = moment().startOf('week');
             prefix = this.unix() < startOfWeek.unix() ? '[上]' : '[本]';
             return this.minutes() === 0 ? prefix + 'dddAh点整' : prefix + 'dddAh点mm';
