@@ -1,7 +1,7 @@
-import { Plus, Settings, Table } from "@repo/icon";
+import { Plus, SearchIcon, Settings, Table } from "@repo/icon";
 import { useContext, useEffect, useMemo, useRef } from "react";
 import { NodeViewContext } from "../DatabaseView";
-import { Button } from "@repo/ui";
+import { Button, Input } from "@repo/ui";
 import 'react-data-grid/lib/styles.css';
 
 import DataGrid, { DataGridHandle, FillEvent } from 'react-data-grid';
@@ -38,6 +38,9 @@ export const TableView: React.FC = () => {
 
     }, [data])
 
+    useEffect(() => {
+    }, [])
+
     function handleFill({ columnKey, sourceRow, targetRow }: FillEvent<any>): any {
         return { ...targetRow, [columnKey]: sourceRow[columnKey as keyof any] };
     }
@@ -63,9 +66,12 @@ export const TableView: React.FC = () => {
         })
     }
 
-    return <div className="relative">
-        <Button size="sm" onClick={toggle}><Settings className="h-3 w-3" /></Button>
-        <Button size="sm" onClick={handleAddRow}><Plus className="h-3 w-3" /></Button>
+    return <div className="relative space-y-1 ">
+        <div className=" space-x-1 flex items-center">
+            <Button variant="outline" size="sm" onClick={toggle} ><Settings className="h-4 w-4 mr-1" /> Setting</Button>
+            <Button variant="outline" size="sm" onClick={handleAddRow}><Plus className="h-4 w-4 mr-1" /> Add Row</Button>
+            <Input className="h-9 w-28" icon={<SearchIcon className="h-5 w-5" />} />
+        </div>
         <Container>
             <DataGrid
                 ref={gridRef}

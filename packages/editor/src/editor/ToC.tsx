@@ -45,6 +45,8 @@ export const ToC: React.FC<{ items: any[], editor: Editor, className?: string }>
                 history.pushState(null, null, `#${id}`)
             }
             const container = document.querySelector("#editor-container")
+            console.log('container', container);
+            
             container?.scrollTo({
                 top: element.getBoundingClientRect().top + container.scrollTop - 50,
                 behavior: 'smooth',

@@ -2,7 +2,7 @@
 import { Outlet } from "react-router-dom"
 import { SiderMenu } from "./components/SiderMenu"
 import { useEffect, useState } from "react"
-import { cn } from "@repo/ui"
+import { SparklesText, cn } from "@repo/ui"
 import { useApi } from "./hooks/use-api"
 import { APIS } from "./api"
 import { useDispatch } from "react-redux"
@@ -86,6 +86,7 @@ export function Layout() {
                 <div className="border-r md:block">
                     <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4">
                         {/* <img src={Logo} className="h-9 w-9" /> */}
+                        <SparklesText className=" text-lg" sparklesCount={5} text="KN" />
                         <div className="flex-1 px-2">
                             <SiderMenu />
                         </div>

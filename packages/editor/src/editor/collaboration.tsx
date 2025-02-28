@@ -112,15 +112,8 @@ export const CollaborationEditor = forwardRef<
                 <EditorContent editor={editor} id="editor-container" />
               </StyledEditor>
               {
-                <div className={cn("border-l w-[300px] sticky top-0 right-0 box-border", props.className)}>
-                  <Tabs defaultValue="toc">
-                    <TabsList>
-                      <TabsTrigger value="toc"><MenuIcon className="h-4 w-4" />
-                        <MemorizedToC editor={editor} items={tableOfContents} />
-                      </TabsTrigger>
-                      <TabsTrigger value="ai"><Sparkles className="h-4 w-4" /></TabsTrigger>
-                    </TabsList>
-                  </Tabs>
+                <div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>
+                  <MemorizedToC editor={editor} items={tableOfContents} />
                 </div>
               }
             </div>
