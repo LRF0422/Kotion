@@ -1,5 +1,5 @@
 import { CopySlash, DownloadIcon, FileIcon, FolderIcon, ListIcon, ScissorsIcon, Trash2 } from "@repo/icon";
-import { Button, TreeView } from "@repo/ui";
+import { Button, TreeView, cn } from "@repo/ui";
 import React from "react";
 import { FileCardList } from "./FileCard";
 import { FileList } from "./FileList";
@@ -9,6 +9,7 @@ import { useSafeState } from "ahooks";
 
 export interface FileManagerProps {
     folderId: string
+    className?: string
 }
 
 export interface FileProps {
@@ -40,11 +41,11 @@ const files: FileProps[] = [
     },
 ]
 
-export const FileManagerView: React.FC<FileManagerProps> = () => {
+export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     const [selectedFiles, setSelectFiles] = useSafeState<string[]>([])
 
-    return <div className=" rounded-sm border not-prose">
+    return <div className={cn("rounded-sm border not-prose", props.className)}>
         <div className=" w-full bg-muted border-b flex items-center justify-between">
             <div className="flex items-center">
                 <Button size="sm" variant="ghost">

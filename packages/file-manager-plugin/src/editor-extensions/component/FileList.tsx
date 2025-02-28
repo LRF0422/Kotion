@@ -15,7 +15,7 @@ export const FileItem: React.FC = () => {
 
 export const FileList: React.FC<FileListProps> = (props) => {
     const { files } = props
-    return <div className="not-prose">
+    return <div className="not-prose border-none">
         <Table className="rounded-sm">
             <TableHeader className=" border-b">
                 <TableHead></TableHead>
