@@ -86,7 +86,7 @@ export function Layout() {
                 <div className="border-r md:block">
                     <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4">
                         {/* <img src={Logo} className="h-9 w-9" /> */}
-                        <SparklesText className=" text-lg" sparklesCount={5} text="KN" />
+                        <SparklesText className=" text-[30px]" sparklesCount={5} text="KN" />
                         <div className="flex-1 px-2">
                             <SiderMenu />
                         </div>

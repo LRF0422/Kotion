@@ -1,14 +1,16 @@
 import { CopySlash, DownloadIcon, FileIcon, FolderIcon, ListIcon, ScissorsIcon, Trash2 } from "@repo/icon";
 import { Button, TreeView, cn } from "@repo/ui";
-import React from "react";
+import React, { useEffect } from "react";
 import { FileCardList } from "./FileCard";
 import { FileList } from "./FileList";
 import "@repo/ui/globals.css"
 import { useSafeState } from "ahooks";
+import { useApi } from "@repo/core";
+import { APIS } from "../../api";
 
 
 export interface FileManagerProps {
-    folderId: string
+    folderId?: string
     className?: string
 }
 
@@ -44,6 +46,14 @@ const files: FileProps[] = [
 export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     const [selectedFiles, setSelectFiles] = useSafeState<string[]>([])
+    const [files, setFiles] = useSafeState<FileProps[]>([])
+    const { folderId} = props
+
+    useEffect(() => {
+        if(!folderId) {
+            useApi(APIS.GET_ROOT_FOLDER)
+        }
+    }, [folderId])
 
     return <div className={cn("rounded-sm border not-prose", props.className)}>
         <div className=" w-full bg-muted border-b flex items-center justify-between">

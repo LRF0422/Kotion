@@ -1,4 +1,4 @@
-import { API } from "../hooks/use-api";
+import { API } from "@repo/core";
 import { method } from "lodash";
 
 
