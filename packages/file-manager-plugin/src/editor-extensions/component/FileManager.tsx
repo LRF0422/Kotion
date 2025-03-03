@@ -1,9 +1,9 @@
-import { CopySlash, DownloadIcon, FileIcon, FolderIcon, ListIcon, ScissorsIcon, Trash2 } from "@repo/icon";
+import { CopySlash, DownloadIcon, FileIcon, FolderIcon, ListIcon, ScissorsIcon, Trash2, Upload, UploadIcon } from "@repo/icon";
 import { Button, TreeView, cn } from "@repo/ui";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { FileCardList } from "./FileCard";
 import "@repo/ui/globals.css"
-import { useSafeState } from "@repo/core";
+import { useSafeState, useUploadFile } from "@repo/core";
 import { useApi } from "@repo/core";
 import { APIS } from "../../api";
 
@@ -20,42 +20,61 @@ export interface FileProps {
     children?: FileProps[]
 }
 
-const reslove = (file: any) => {
-    if (!file.children) {
-        return {
-            id: file.id,
-            name: file.name,
-            isFolder: file.type.value === 'FOLDER',
-            icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />
-        }
-    } else {
-        return {
-            id: file.id,
-            name: file.name,
-            isFolder: file.type.value === 'FOLDER',
-            children: file.children.map((item: any) => reslove(item)),
-            icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />
-        }
-    }
-}
-
 export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     const [selectedFiles, setSelectFiles] = useSafeState<string[]>([])
+    const [currentFolderId, setCurrentFolderId] = useSafeState<string | undefined>(props.folderId)
+    const [updateFlag, setUpdateFlag] = useState(0)
     const [files, setFiles] = useSafeState<FileProps[]>([])
     const { folderId } = props
+    const { uploadedFiles, upload } = useUploadFile()
 
+
+    const reslove = (file: any) => {
+        if (!file.children) {
+            return {
+                id: file.id,
+                name: file.name,
+                isFolder: file.type.value === 'FOLDER',
+                icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />,
+                onClick: () => {
+
+                }
+            }
+        } else {
+            return {
+                id: file.id,
+                name: file.name,
+                isFolder: file.type.value === 'FOLDER',
+                children: file.children.map((item: any) => reslove(item)),
+                icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />
+            }
+        }
+    }
     useEffect(() => {
         if (!folderId) {
             useApi(APIS.GET_ROOT_FOLDER).then(res => {
                 setFiles(res.data.map((item: any) => reslove(item)))
             })
         }
-    }, [folderId])
+    }, [folderId, updateFlag])
 
     return <div className={cn("rounded-sm border not-prose", props.className)}>
         <div className=" w-full bg-muted border-b flex items-center justify-between">
             <div className="flex items-center">
+                <Button size="sm" variant="ghost" onClick={() => {
+                    upload().then(res => {
+                        useApi(APIS.UPLOAD_FILE, null, {
+                            name: res.orginalName,
+                            path: res.name
+                        }).then(res => {
+                            console.log(res)
+                        })
+                    })
+                }}>
+                    <UploadIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
+                    Upload
+                </Button>
                 <Button size="sm" variant="ghost">
                     <CopySlash className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
                     Copy
@@ -81,6 +100,9 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         </div>
         <div className="grid w-full transition-all grid-cols-[200px_1fr]">
             <div className="border-r h-[calc(100vh-40px)]">
+                <div className=" p-1 bg-muted/80">
+                    Files
+                </div>
                 <TreeView
                     size="sm"
                     className="w-full m-0"

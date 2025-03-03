@@ -7,6 +7,11 @@ export const APIS = {
         url: '/knowledge-file-center/folder/root',
         method: 'GET',
         name: 'Get Root Folder'
+    } as API,
+    UPLOAD_FILE: {
+        url: '/knowledge-file-center/file',
+        method: 'POST',
+        name: 'Upload File'
     } as API
 
 }

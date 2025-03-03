@@ -67,14 +67,14 @@ export const App: React.FC<AppProps> = (props) => {
             plugins.forEach(it => pluginManager.register(it))
         }
 
-        const remotePlugin = await importScript('http://127.0.0.1:5501/packages/file-manager-plugin/dist/bundle.js')
+        // const remotePlugin = await importScript('http://127.0.0.1:5501/packages/file-manager-plugin/dist/bundle.js')
 
-        console.log('remotePlugin', remotePlugin);
+        // console.log('remotePlugin', remotePlugin);
 
-        if (remotePlugin) {
-            pluginManager.register(remotePlugin.fileManager)
+        // if (remotePlugin) {
+        //     pluginManager.register(remotePlugin.fileManager)
 
-        }
+        // }
         const routeConfigs = pluginManager.resloveRoutes()
         const routes = routeConfigs.map(it => reslove(it))
         setRouter(createBrowserRouter(createRoutesFromElements(
