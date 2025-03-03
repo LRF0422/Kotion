@@ -611,6 +611,9 @@ importers:
       rollup-plugin-postcss:
         specifier: ^4.0.2
         version: 4.0.2(postcss@8.4.49)
+      rollup-plugin-typescript-paths:
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@5.7.3)
 
   packages/icon:
     dependencies:
@@ -5533,6 +5536,11 @@ packages:
     engines: {node: '>=10'}
     peerDependencies:
       postcss: 8.x
+
+  rollup-plugin-typescript-paths@1.5.0:
+    resolution: {integrity: sha512-zly2aiGNjYJNq5YUi6eyGrQnCYUQ8b5czOtHZIGriwG9U3Ba2F9hlSklafXCdsNulK/IlNmE0Kzj0h+fVV32pA==}
+    peerDependencies:
+      typescript: '>=3.4'
 
   rollup-pluginutils@2.8.2:
     resolution: {integrity: sha512-EEp9NhnUkwY8aif6bxgovPHMoMoNr2FulJziTndpt5H9RdwC47GSGuII9XxpSdzVGM0GWrNPHV6ie1LTNJPaLQ==}
@@ -11486,6 +11494,10 @@ snapshots:
       style-inject: 0.3.0
     transitivePeerDependencies:
       - ts-node
+
+  rollup-plugin-typescript-paths@1.5.0(typescript@5.7.3):
+    dependencies:
+      typescript: 5.7.3
 
   rollup-pluginutils@2.8.2:
     dependencies:

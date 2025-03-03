@@ -1,5 +1,6 @@
 import typescript from "@rollup/plugin-typescript";
 import postcss from "rollup-plugin-postcss";
+import { typescriptPaths } from "rollup-plugin-typescript-paths";
 import tailwindcss from "tailwindcss";
 import autoprefixer from "autoprefixer";
 import css from "rollup-plugin-import-css";
@@ -30,6 +31,7 @@ export default {
   plugins: [
     typescript(),
     css(),
+    typescriptPaths(),
     postcss({
       plugins: [tailwindcss(), autoprefixer()],
       extract: false,
