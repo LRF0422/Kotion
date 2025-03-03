@@ -19,6 +19,7 @@ import { useAsyncEffect, useSafeState } from "ahooks";
 import { AppContext, PluginManager } from "@repo/common";
 import { Shop } from "./components/Shop";
 import { PluginDetail } from "./components/Shop/PluginDetail";
+import { importScript } from "./utils/utils";
 
 
 declare global {
@@ -47,13 +48,13 @@ export interface AppProps {
 
 const reslove = (config: common.RouteConfig) => {
     if (config.children) {
-        return <Route path={config.path} element={config.element} >
+        return <Route path={config.path} element={config.element} key={config.path} >
             {
                 config.children.map(it => reslove(it))
             }
         </Route>
     } else {
-        return <Route path={config.path} element={config.element} />
+        return <Route path={config.path} element={config.element} key={config.path} />
     }
 }
 
@@ -64,6 +65,15 @@ export const App: React.FC<AppProps> = (props) => {
     useAsyncEffect(async () => {
         if (plugins) {
             plugins.forEach(it => pluginManager.register(it))
+        }
+
+        const remotePlugin = await importScript('http://127.0.0.1:5501/packages/file-manager-plugin/dist/bundle.js')
+
+        console.log('remotePlugin', remotePlugin);
+
+        if (remotePlugin) {
+            pluginManager.register(remotePlugin.fileManager)
+
         }
         const routeConfigs = pluginManager.resloveRoutes()
         const routes = routeConfigs.map(it => reslove(it))

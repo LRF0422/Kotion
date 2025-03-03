@@ -1,6 +1,6 @@
 import { Download, FileIcon, FolderIcon } from "@repo/icon";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, cn } from "@repo/ui";
-import { useSafeState } from "ahooks";
+import { useSafeState } from "@repo/core";
 import React from "react";
 import { FileProps } from "./FileManager";
 
@@ -40,7 +40,7 @@ export const FileCard: React.FC<FileCardProps> = (props) => {
                     <FileIcon className="h-20 w-20" strokeWidth={1} />
             }
         </CardContent>
-        <CardFooter className="p-2 m-0 border-t text-sm">
+        <CardFooter className="p-2 m-0 border-t text-sm text-nowrap overflow-hidden text-ellipsis">
             {name}
         </CardFooter>
     </Card>

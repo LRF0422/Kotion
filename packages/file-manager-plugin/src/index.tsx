@@ -23,7 +23,7 @@ export const fileManager = new FileManager({
         {
             name: 'fileManager',
             path: '/fileManager',
-            element: <FileManagerView folderId="111" />
+            element: <FileManagerView />
         }
     ],
     menus: [

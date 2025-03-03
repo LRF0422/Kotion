@@ -12,8 +12,7 @@ import {
 import {
   BubbleMenu,
   BubbleMenuProps,
-  Button,
-  Tooltip
+  Button
 } from "../../../components";
 import { copyNode, deleteNode, isNodeActivePro } from "../../../utilities";
 

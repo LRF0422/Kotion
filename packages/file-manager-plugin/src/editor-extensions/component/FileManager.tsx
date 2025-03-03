@@ -2,9 +2,8 @@ import { CopySlash, DownloadIcon, FileIcon, FolderIcon, ListIcon, ScissorsIcon, 
 import { Button, TreeView, cn } from "@repo/ui";
 import React, { useEffect } from "react";
 import { FileCardList } from "./FileCard";
-import { FileList } from "./FileList";
 import "@repo/ui/globals.css"
-import { useSafeState } from "ahooks";
+import { useSafeState } from "@repo/core";
 import { useApi } from "@repo/core";
 import { APIS } from "../../api";
 
@@ -17,41 +16,40 @@ export interface FileManagerProps {
 export interface FileProps {
     name: string,
     isFolder: boolean,
-    id: string
+    id: string,
+    children?: FileProps[]
 }
 
-const files: FileProps[] = [
-    {
-        name: 'tmp',
-        isFolder: true,
-        id: '1123123'
-    },
-    {
-        name: 'workspace',
-        isFolder: false,
-        id: 'wwerewre'
-    },
-    {
-        name: 'workspace',
-        isFolder: true,
-        id: 'drgfhfg'
-    },
-    {
-        name: 'workspace',
-        isFolder: true,
-        id: "43656"
-    },
-]
+const reslove = (file: any) => {
+    if (!file.children) {
+        return {
+            id: file.id,
+            name: file.name,
+            isFolder: file.type.value === 'FOLDER',
+            icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />
+        }
+    } else {
+        return {
+            id: file.id,
+            name: file.name,
+            isFolder: file.type.value === 'FOLDER',
+            children: file.children.map((item: any) => reslove(item)),
+            icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />
+        }
+    }
+}
 
 export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     const [selectedFiles, setSelectFiles] = useSafeState<string[]>([])
     const [files, setFiles] = useSafeState<FileProps[]>([])
-    const { folderId} = props
+    const { folderId } = props
 
     useEffect(() => {
-        if(!folderId) {
-            useApi(APIS.GET_ROOT_FOLDER)
+        if (!folderId) {
+            useApi(APIS.GET_ROOT_FOLDER).then(res => {
+                setFiles(res.data.map((item: any) => reslove(item)))
+            })
         }
     }, [folderId])
 
@@ -86,20 +84,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 <TreeView
                     size="sm"
                     className="w-full m-0"
-                    elements={[
-                        {
-                            name: 'Folder 1',
-                            id: '1',
-                            icon: <FolderIcon className="h-4 w-4" />,
-                            children: [
-                                {
-                                    name: 'Folder 2',
-                                    id: '1-1',
-                                    icon: <FileIcon className="h-4 w-4" />,
-                                }
-                            ]
-                        }
-                    ]}
+                    elements={files}
                 />
             </div>
             <div className="">
@@ -109,7 +94,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                     </div>
                 </div>
                 <FileCardList files={files} selectedFiles={selectedFiles} setSelectFiles={setSelectFiles} />
-                <FileList files={files} selectedFiles={selectedFiles} setSelectFiles={setSelectFiles} />
+                {/* <FileList files={files} selectedFiles={selectedFiles} setSelectFiles={setSelectFiles} /> */}
             </div>
         </div>
     </div>

@@ -85,29 +85,29 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
       }}
       forNode>
       <div>
-          <Button
-            size="small"
-            active={!!(align === "left")}
-            icon={<IconImageAlignLeft />}
-            onClick={setAlignLeft}
-          />
+        <Button
+          size="small"
+          active={!!(align === "left") as boolean}
+          icon={<IconImageAlignLeft />}
+          onClick={setAlignLeft}
+        />
 
-          <Button
-            size="small"
-            active={!!(align === "center")}
-            icon={<IconImageAlignCenter />}
-            onClick={setAlignCenter}
-          />
+        <Button
+          size="small"
+          active={!!(align === "center") as boolean}
+          icon={<IconImageAlignCenter />}
+          onClick={setAlignCenter}
+        />
 
-          <Button
-            size="small"
-            active={!!(align === "right")}
-            icon={<IconImageAlignRight />}
-            onClick={setAlignRight}
-          />
+        <Button
+          size="small"
+          active={(!!(align === "right")) as boolean}
+          icon={<IconImageAlignRight />}
+          onClick={setAlignRight}
+        />
 
         <Divider />
-          <Button size="small" icon={<IconDelete />} onClick={deleteMe} />
+        <Button size="small" icon={<IconDelete />} onClick={deleteMe} />
       </div>
     </BubbleMenu>
   );
