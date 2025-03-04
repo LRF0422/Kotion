@@ -12,6 +12,11 @@ export const APIS = {
         url: '/knowledge-file-center/file',
         method: 'POST',
         name: 'Upload File'
+    } as API,
+    GET_CHILDREN: {
+        url: '/knowledge-file-center/folder/children',
+        method: 'GET',
+        name: 'Get Children'
     } as API
 
 }

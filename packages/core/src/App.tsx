@@ -93,11 +93,13 @@ export const App: React.FC<AppProps> = (props) => {
     return router && <AppContext.Provider value={{
         pluginManager: pluginManager
     }}>
-        <ThemeProvider>
-            <Provider store={store}>
-                <RouterProvider router={router} />
-                <Toaster />
-            </Provider>
-        </ThemeProvider>
+        <core.ModalProvider>
+            <ThemeProvider>
+                <Provider store={store}>
+                    <RouterProvider router={router} />
+                    <Toaster />
+                </Provider>
+            </ThemeProvider>
+        </core.ModalProvider>
     </AppContext.Provider>
 }

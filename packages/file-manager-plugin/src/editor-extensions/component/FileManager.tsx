@@ -1,4 +1,4 @@
-import { CopySlash, DownloadIcon, FileIcon, FolderIcon, ListIcon, ScissorsIcon, Trash2, Upload, UploadIcon } from "@repo/icon";
+import { CopySlash, DownloadIcon, FileIcon, FolderIcon, ListIcon, ScissorsIcon, Trash2, UploadIcon } from "@repo/icon";
 import { Button, TreeView, cn } from "@repo/ui";
 import React, { useEffect, useState } from "react";
 import { FileCardList } from "./FileCard";
@@ -24,7 +24,10 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     const [selectedFiles, setSelectFiles] = useSafeState<string[]>([])
     const [currentFolderId, setCurrentFolderId] = useSafeState<string | undefined>(props.folderId)
+    const [currentItem, setCurrentItem] = useState<any | undefined>()
     const [updateFlag, setUpdateFlag] = useState(0)
+    const [currentFolderItems, setCurrentFolderItems] = useState<FileProps[]>([])
+    const [repoKey, setRepoKey] = useState<string>()
     const [files, setFiles] = useSafeState<FileProps[]>([])
     const { folderId } = props
     const { uploadedFiles, upload } = useUploadFile()
@@ -38,7 +41,10 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 isFolder: file.type.value === 'FOLDER',
                 icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />,
                 onClick: () => {
-
+                    if (file.type.value === 'FOLDER') {
+                        setCurrentFolderId(file.id)
+                    }
+                    setCurrentItem(file)
                 }
             }
         } else {
@@ -47,7 +53,13 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 name: file.name,
                 isFolder: file.type.value === 'FOLDER',
                 children: file.children.map((item: any) => reslove(item)),
-                icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />
+                icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />,
+                onClick: () => {
+                    if (file.type.value === 'FOLDER') {
+                        setCurrentFolderId(file.id)
+                    }
+                    setCurrentItem(file)
+                }
             }
         }
     }
@@ -58,6 +70,14 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
             })
         }
     }, [folderId, updateFlag])
+
+    useEffect(() => {
+        if (currentItem && currentItem.type.value === 'FOLDER') {
+            useApi(APIS.GET_CHILDREN, { folderId: currentItem.id }).then(res => {
+                setCurrentFolderItems(res.data.map((item: any) => reslove(item)))
+            })
+        }
+    }, [currentItem])
 
     return <div className={cn("rounded-sm border not-prose", props.className)}>
         <div className=" w-full bg-muted border-b flex items-center justify-between">
@@ -98,12 +118,13 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 </Button>
             </div>
         </div>
-        <div className="grid w-full transition-all grid-cols-[200px_1fr]">
-            <div className="border-r h-[calc(100vh-40px)]">
+        <div className="grid w-full transition-all grid-cols-[200px_1fr] h-full">
+            <div className="border-r h-full">
                 <div className=" p-1 bg-muted/80">
                     Files
                 </div>
                 <TreeView
+                    selectParent={true}
                     size="sm"
                     className="w-full m-0"
                     elements={files}
@@ -115,7 +136,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                         Files
                     </div>
                 </div>
-                <FileCardList files={files} selectedFiles={selectedFiles} setSelectFiles={setSelectFiles} />
+                <FileCardList files={currentFolderItems} selectedFiles={selectedFiles} setSelectFiles={setSelectFiles} />
                 {/* <FileList files={files} selectedFiles={selectedFiles} setSelectFiles={setSelectFiles} /> */}
             </div>
         </div>
