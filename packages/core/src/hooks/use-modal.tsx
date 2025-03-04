@@ -39,7 +39,9 @@ export const ModalProvider: React.FC<PropsWithChildren> = ({ children }) => {
             content: config.content,
             desc: config.desc,
             footer: config.footer,
-            simple: config.simple
+            simple: config.simple,
+            width: config.width || 600,
+            height: config.height || 800
         })
     }
 
@@ -78,14 +80,11 @@ export const ModalProvider: React.FC<PropsWithChildren> = ({ children }) => {
                     height: modalState.height + 'px'
                 }}
             >
-                {
-                    modalState.title &&
-                    <DialogHeader>
-                        <DialogTitle>{modalState.title}</DialogTitle>
-                        {modalState.desc && <DialogDescription>{modalState.desc}</DialogDescription>}
-                    </DialogHeader>
-                }
+               
+               
+                <div className="">
                 {modalState.content}
+                </div>
                 {modalState.footer && <DialogFooter>{modalState.footer}</DialogFooter>}
             </DialogContent>
         </Dialog>

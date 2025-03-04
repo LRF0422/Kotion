@@ -23,7 +23,7 @@ export const fileManager = new FileManager({
         {
             name: 'fileManager',
             path: '/fileManager',
-            element: <FileManagerView className=" h-[calc(100vh-40px)]" />
+            element: <FileManagerView className=" h-full" />
         }
     ],
     menus: [

@@ -79,8 +79,8 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         }
     }, [currentItem])
 
-    return <div className={cn("rounded-sm border not-prose", props.className)}>
-        <div className=" w-full bg-muted border-b flex items-center justify-between">
+    return <div className={cn("rounded-sm flex flex-col border not-prose", props.className)}>
+        <div className=" w-full bg-muted border-b flex items-center justify-between h-[40px]">
             <div className="flex items-center">
                 <Button size="sm" variant="ghost" onClick={() => {
                     upload().then(res => {
@@ -118,8 +118,8 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 </Button>
             </div>
         </div>
-        <div className="grid w-full transition-all grid-cols-[200px_1fr] h-full">
-            <div className="border-r h-full">
+        <div className="grid w-full grid-cols-[200px_1fr] flex-1">
+            <div className="border-r">
                 <div className=" p-1 bg-muted/80">
                     Files
                 </div>

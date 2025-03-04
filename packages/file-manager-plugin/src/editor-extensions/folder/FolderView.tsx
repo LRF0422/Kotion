@@ -12,6 +12,7 @@ export const FolderView: React.FC<NodeViewProps> = (props) => {
     useEffect(() => {
         openModal({
             simple: true,
+            width: 1000,
             content: <FileManagerView className=" h-full" />,
             title: 'Select a folder'
         })
