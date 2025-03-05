@@ -1,13 +1,12 @@
 import { Check, CopySlash, DownloadIcon, FileIcon, FolderIcon, ListIcon, ScissorsIcon, Trash2, UploadIcon, XIcon } from "@repo/icon";
 import { Button, Separator, TreeView, cn } from "@repo/ui";
-import React, { useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { FileCardList } from "./FileCard";
 import "@repo/ui/globals.css"
 import { useSafeState, useUploadFile } from "@repo/core";
 import { useApi } from "@repo/core";
 import { APIS } from "../../api";
 import { Menu } from "./Menu";
-
 
 export interface FileManagerProps {
     folderId?: string
@@ -18,27 +17,63 @@ export interface FileManagerProps {
     multiple?: boolean
     target?: 'folder' | 'file' | 'both'
 }
-
-export interface FileProps {
+export interface FileItem {
     name: string,
     isFolder: boolean,
     id: string,
-    children?: FileProps[]
+    children?: FileItem[]
+}
+export interface FileManagerState {
+    currentFolderItems: FileItem[],
+    selectedFiles: FileItem[]
+    setSelectFiles: React.Dispatch<React.SetStateAction<FileItem[]>>
+    currentFolderId: string
+    repoKey: string
+    handleUpload: (type: 'FOLDER' | 'FILE', name?: string) => void
+    handelete: (ids: string[]) => void
 }
 
+export const FileManageContext = createContext<FileManagerState | null>(null)
+export const useFileManagerState = () => useContext(FileManageContext)
 export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     const { selectable = false, onCancel, onConfirm, multiple = false, target = 'both' } = props
 
-    const [selectedFiles, setSelectFiles] = useSafeState<string[]>([])
-    const [currentFolderId, setCurrentFolderId] = useSafeState<string | undefined>(props.folderId)
+    const [selectedFiles, setSelectFiles] = useSafeState<FileItem[]>([])
+    const [currentFolderId, setCurrentFolderId] = useSafeState<string>(props.folderId || "")
     const [currentItem, setCurrentItem] = useState<any | undefined>()
     const [updateFlag, setUpdateFlag] = useState(0)
-    const [currentFolderItems, setCurrentFolderItems] = useState<FileProps[]>([])
-    const [repoKey, setRepoKey] = useState<string>()
-    const [files, setFiles] = useSafeState<FileProps[]>([])
+    const [currentFolderItems, setCurrentFolderItems] = useState<FileItem[]>([])
+    const [repoKey, setRepoKey] = useState<string>("")
+    const [files, setFiles] = useSafeState<FileItem[]>([])
     const { folderId } = props
     const { uploadedFiles, upload } = useUploadFile()
+
+
+    const createFile = useCallback((type: 'FOLDER' | 'FILE', name?: string) => {
+        if (type === 'FOLDER') {
+            useApi(APIS.CREATE_FOLDER, null, {
+                name: "New Folder",
+                parentId: currentFolderId,
+                type: type,
+                repositoryKey: repoKey,
+            }).then(() => {
+                setUpdateFlag(updateFlag + 1)
+            })
+        } else {
+            upload().then((res) => {
+                useApi(APIS.CREATE_FOLDER, null, {
+                    name: res.orginalName,
+                    parentId: currentFolderId,
+                    type: type,
+                    repositoryKey: repoKey,
+                    path: res.name
+                }).then(() => {
+                    setUpdateFlag(updateFlag + 1)
+                })
+            })
+        }
+    }, [])
 
 
     const reslove = (file: any) => {
@@ -87,90 +122,96 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         }
     }, [currentItem])
 
-    return <div className={cn("rounded-sm flex flex-col border not-prose", props.className)}>
-        <div className=" w-full bg-muted border-b flex items-center justify-between h-[40px]">
-            <div className="flex items-center h-full gap-1">
-                <Button size="sm" variant="ghost" onClick={() => {
-                    upload().then(res => {
-                        useApi(APIS.UPLOAD_FILE, null, {
-                            name: res.orginalName,
-                            path: res.name
-                        }).then(res => {
-                            console.log(res)
+    return <FileManageContext.Provider value={{
+        selectedFiles,
+        setSelectFiles,
+        currentFolderId,
+        currentFolderItems,
+        repoKey,
+        handleUpload: createFile,
+        handelete: (ids) => { }
+
+    }}>
+        <div className={cn("rounded-sm flex flex-col border not-prose", props.className)}>
+            <div className=" w-full bg-muted border-b flex items-center justify-between h-[40px]">
+                <div className="flex items-center h-full gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => {
+                        upload().then(res => {
+                            useApi(APIS.UPLOAD_FILE, null, {
+                                name: res.orginalName,
+                                path: res.name
+                            }).then(res => {
+                                console.log(res)
+                            })
                         })
-                    })
-                }}>
-                    <UploadIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                    Upload
-                </Button>
-                <Button size="sm" variant="ghost">
-                    <CopySlash className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                    Copy
-                </Button>
-                <Button size="sm" variant="ghost">
-                    <ScissorsIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                    Cut
-                </Button>
-                <Button size="sm" variant="ghost">
-                    <Trash2 className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                    Delete
-                </Button>
-                <Button size="sm" variant="ghost">
-                    <DownloadIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                    Download
-                </Button>
-                {
-                    selectable &&
-                    <>
-                        <Separator orientation="vertical" />
-                        {
-                            selectedFiles.length > 0 &&
-                            <Button size="sm" className="h-8">
-                                <Check className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                                Confirm
+                    }}>
+                        <UploadIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
+                        Upload
+                    </Button>
+                    <Button size="sm" variant="ghost">
+                        <CopySlash className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
+                        Copy
+                    </Button>
+                    <Button size="sm" variant="ghost">
+                        <ScissorsIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
+                        Cut
+                    </Button>
+                    <Button size="sm" variant="ghost">
+                        <Trash2 className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
+                        Delete
+                    </Button>
+                    <Button size="sm" variant="ghost">
+                        <DownloadIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
+                        Download
+                    </Button>
+                    {
+                        selectable &&
+                        <>
+                            <Separator orientation="vertical" />
+                            {
+                                selectedFiles.length > 0 &&
+                                <Button size="sm" className="h-8">
+                                    <Check className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
+                                    Confirm
+                                </Button>
+                            }
+                            <Button size="sm" className="h-8" onClick={() => { onCancel && onCancel() }} >
+                                <XIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
+                                Cancel
                             </Button>
-                        }
-                        <Button size="sm" className="h-8" onClick={() => { onCancel && onCancel() }} >
-                            <XIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                            Cancel
-                        </Button>
-                    </>
-                }
-            </div>
-            <div className="flex items-center">
-                <Button size="sm" variant="ghost">
-                    <ListIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                </Button>
-            </div>
-        </div>
-        <div className="grid w-full grid-cols-[200px_1fr] flex-1">
-            <div className="border-r">
-                <div className=" p-1 bg-muted/80">
-                    Files
+                        </>
+                    }
                 </div>
-                <TreeView
-                    selectParent={true}
-                    size="sm"
-                    className="w-full m-0"
-                    elements={files}
-                />
+                <div className="flex items-center">
+                    <Button size="sm" variant="ghost">
+                        <ListIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
+                    </Button>
+                </div>
             </div>
-            <div className="">
-                <div className="w-full border-b bg-muted/50 h-[45px] flex items-center" >
-                    <div className="ml-2">
+            <div className="grid w-full grid-cols-[200px_1fr] flex-1">
+                <div className="border-r">
+                    <div className=" p-1 bg-muted/80">
                         Files
                     </div>
-                </div>
-                <Menu>
-                    <FileCardList
-                        target={target}
-                        files={currentFolderItems}
-                        selectedFiles={selectedFiles}
-                        setSelectFiles={setSelectFiles}
+                    <TreeView
+                        selectParent={true}
+                        size="sm"
+                        className="w-full m-0"
+                        elements={files}
                     />
-                </Menu>
-                {/* <FileList files={files} selectedFiles={selectedFiles} setSelectFiles={setSelectFiles} /> */}
+                </div>
+                <div className="">
+                    <div className="w-full border-b bg-muted/50 h-[45px] flex items-center" >
+                        <div className="ml-2">
+                            Files
+                        </div>
+                    </div>
+                    <Menu>
+                        <FileCardList />
+                    </Menu>
+                    {/* <FileList files={files} selectedFiles={selectedFiles} setSelectFiles={setSelectFiles} /> */}
+                </div>
             </div>
         </div>
-    </div>
+    </FileManageContext.Provider>
 }

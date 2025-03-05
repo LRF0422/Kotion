@@ -1,17 +1,14 @@
 import React from "react"
-import { FileProps } from "./FileManager"
+import { FileItem } from "./FileManager"
 import { Checkbox, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@repo/ui"
 
 
 export interface FileListProps {
-    files: FileProps[],
+    files: FileItem[],
     selectedFiles: string[],
     setSelectFiles: any
 }
 
-export const FileItem: React.FC = () => {
-    return <div>FileItem</div>
-}
 
 export const FileList: React.FC<FileListProps> = (props) => {
     const { files } = props
