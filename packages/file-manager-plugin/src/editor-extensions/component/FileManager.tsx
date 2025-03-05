@@ -1,16 +1,22 @@
-import { CopySlash, DownloadIcon, FileIcon, FolderIcon, ListIcon, ScissorsIcon, Trash2, UploadIcon } from "@repo/icon";
-import { Button, TreeView, cn } from "@repo/ui";
+import { Check, CopySlash, DownloadIcon, FileIcon, FolderIcon, ListIcon, ScissorsIcon, Trash2, UploadIcon, XIcon } from "@repo/icon";
+import { Button, Separator, TreeView, cn } from "@repo/ui";
 import React, { useEffect, useState } from "react";
 import { FileCardList } from "./FileCard";
 import "@repo/ui/globals.css"
 import { useSafeState, useUploadFile } from "@repo/core";
 import { useApi } from "@repo/core";
 import { APIS } from "../../api";
+import { Menu } from "./Menu";
 
 
 export interface FileManagerProps {
     folderId?: string
     className?: string
+    selectable?: boolean
+    onCancel?: () => void
+    onConfirm?: (files: string[]) => void
+    multiple?: boolean
+    target?: 'folder' | 'file' | 'both'
 }
 
 export interface FileProps {
@@ -21,6 +27,8 @@ export interface FileProps {
 }
 
 export const FileManagerView: React.FC<FileManagerProps> = (props) => {
+
+    const { selectable = false, onCancel, onConfirm, multiple = false, target = 'both' } = props
 
     const [selectedFiles, setSelectFiles] = useSafeState<string[]>([])
     const [currentFolderId, setCurrentFolderId] = useSafeState<string | undefined>(props.folderId)
@@ -81,7 +89,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     return <div className={cn("rounded-sm flex flex-col border not-prose", props.className)}>
         <div className=" w-full bg-muted border-b flex items-center justify-between h-[40px]">
-            <div className="flex items-center">
+            <div className="flex items-center h-full gap-1">
                 <Button size="sm" variant="ghost" onClick={() => {
                     upload().then(res => {
                         useApi(APIS.UPLOAD_FILE, null, {
@@ -111,6 +119,23 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                     <DownloadIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
                     Download
                 </Button>
+                {
+                    selectable &&
+                    <>
+                        <Separator orientation="vertical" />
+                        {
+                            selectedFiles.length > 0 &&
+                            <Button size="sm" className="h-8">
+                                <Check className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
+                                Confirm
+                            </Button>
+                        }
+                        <Button size="sm" className="h-8" onClick={() => { onCancel && onCancel() }} >
+                            <XIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
+                            Cancel
+                        </Button>
+                    </>
+                }
             </div>
             <div className="flex items-center">
                 <Button size="sm" variant="ghost">
@@ -136,7 +161,14 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                         Files
                     </div>
                 </div>
-                <FileCardList files={currentFolderItems} selectedFiles={selectedFiles} setSelectFiles={setSelectFiles} />
+                <Menu>
+                    <FileCardList
+                        target={target}
+                        files={currentFolderItems}
+                        selectedFiles={selectedFiles}
+                        setSelectFiles={setSelectFiles}
+                    />
+                </Menu>
                 {/* <FileList files={files} selectedFiles={selectedFiles} setSelectFiles={setSelectFiles} /> */}
             </div>
         </div>

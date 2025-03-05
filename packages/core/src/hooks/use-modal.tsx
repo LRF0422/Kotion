@@ -45,6 +45,10 @@ export const ModalProvider: React.FC<PropsWithChildren> = ({ children }) => {
         })
     }
 
+    const onClose = (data: any) => {
+
+    }
+
     const closeModal = () => {
         setModalState({
             ...modalState,
@@ -80,10 +84,10 @@ export const ModalProvider: React.FC<PropsWithChildren> = ({ children }) => {
                     height: modalState.height + 'px'
                 }}
             >
-               
-               
+
+
                 <div className="">
-                {modalState.content}
+                    {modalState.content}
                 </div>
                 {modalState.footer && <DialogFooter>{modalState.footer}</DialogFooter>}
             </DialogContent>
