@@ -41,7 +41,7 @@ export const LinkEdit: React.FC<{
   }, []);
 
   return (
-    <div style={{ width: 280 }} className="flex flex-col gap-2 bg-popover text-popover-foreground p-2 rounded-sm">
+    <div style={{ width: 280 }} className="flex flex-col gap-2 bg-popover text-popover-foreground p-2 rounded-sm border shadow-sm">
       <Label htmlFor="label">标题</Label>
       <Input id="label" defaultValue={text} onChange={(e) => setText(e.target.value)} />
       <Label htmlFor="link">链接</Label>

@@ -6,7 +6,7 @@ import { useState } from "react";
 
 export interface KnowledgeFile {
     name: string
-    orginalName: string
+    originalName: string
 }
 
 export interface UploadKit {

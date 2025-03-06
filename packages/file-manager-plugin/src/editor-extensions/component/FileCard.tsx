@@ -1,8 +1,8 @@
 import { Download, FileIcon, FolderIcon } from "@repo/icon";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, cn } from "@repo/ui";
 import { useSafeState } from "@repo/core";
-import React from "react";
-import { FileManagerState, useFileManagerState } from "./FileManager";
+import React, { useEffect } from "react";
+import { FileItem, FileManagerState, useFileManagerState } from "./FileManager";
 
 
 export interface FileCardProps {
@@ -16,27 +16,28 @@ export interface FileCardProps {
 }
 
 
-export const FileCard: React.FC<FileCardProps> = (props) => {
-    const { name, isFolder, objectId, target = 'both' } = props
+export const FileCard: React.FC<FileItem> = (props) => {
+    const { isFolder, id, name } = props
+    const { selectedFiles, setSelectFiles } = useFileManagerState() as FileManagerState
     const [checked, setChecked] = useSafeState<boolean>(false)
+
+    useEffect(() => {
+        setChecked(!!selectedFiles.find(it => it.id === id))
+    }, [selectedFiles, props])
     return <div onContextMenu={() => {
         setChecked(true)
-        props.onSelect(objectId, true)
     }}>
         <Card className={cn("w-[200px] bg-muted/40 shadow-sm hover:bg-muted/90 hover:shadow-md", checked ? "outline" : "")}>
             <CardHeader className="p-0">
                 <CardTitle className="p-0 m-0">
                     <div className="flex items-center justify-between p-1">
                         {
-                            (isFolder && (target == 'both' || target == 'folder')) && <Checkbox className="ml-1" defaultChecked={checked} onCheckedChange={(checked) => {
-                                props.onSelect(objectId, checked as boolean)
-                                setChecked(checked as boolean)
-                            }} />
-                        }
-                        {
-                            (!isFolder && (target == 'both' || target == 'file')) && <Checkbox className="ml-1" defaultChecked={checked} onCheckedChange={(checked) => {
-                                props.onSelect(objectId, checked as boolean)
-                                setChecked(checked as boolean)
+                            <Checkbox className="ml-1" checked={checked} onCheckedChange={(value) => {
+                                if (value) {
+                                    setSelectFiles([...selectedFiles, props])
+                                } else {
+                                    setSelectFiles(selectedFiles.filter(it => it.id !== id))
+                                }
                             }} />
                         }
                         <div>
@@ -61,24 +62,14 @@ export const FileCard: React.FC<FileCardProps> = (props) => {
 }
 
 export const FileCardList: React.FC = (props) => {
-
-    const { selectedFiles, setSelectFiles, currentFolderItems } = useFileManagerState() as FileManagerState
+    const { currentFolderItems } = useFileManagerState() as FileManagerState
     return <div className="h-full w-full">
         <div className="flex flex-wrap w-full gap-2 p-6 overflow-auto">
             {
                 currentFolderItems.map((it, index) => (
                     <FileCard
-                        onSelect={(id, checked) => {
-                            if (checked) {
-                                setSelectFiles([...selectedFiles, it])
-                            } else {
-                                setSelectFiles(selectedFiles.filter(it => it.id !== id))
-                            }
-                        }}
-                        objectId={it.id}
                         key={index}
-                        name={it.name}
-                        isFolder={it.isFolder}
+                        {...it}
                     />
                 ))
             }

@@ -23,7 +23,9 @@ export const Menu: React.FC<PropsWithChildren> = (props) => {
                     <FolderIcon className="h-4 w-4" />
                 </ContextMenuShortcut>
             </ContextMenuItem>
-            <ContextMenuItem>Upload File
+            <ContextMenuItem onClick={() => {
+                handleUpload('FILE')
+            }}>Upload File
                 <ContextMenuShortcut>
                     <UploadIcon className="h-4 w-4" />
                 </ContextMenuShortcut>

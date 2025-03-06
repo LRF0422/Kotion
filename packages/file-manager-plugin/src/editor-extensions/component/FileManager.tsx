@@ -22,15 +22,20 @@ export interface FileItem {
     isFolder: boolean,
     id: string,
     children?: FileItem[]
+    type: {
+        value: 'FOLDER' | 'FILE'
+    }
 }
 export interface FileManagerState {
     currentFolderItems: FileItem[],
     selectedFiles: FileItem[]
     setSelectFiles: React.Dispatch<React.SetStateAction<FileItem[]>>
     currentFolderId: string
+    currentItem?: FileItem,
+    setCurrentItem: React.Dispatch<React.SetStateAction<FileItem | undefined>>
     repoKey: string
     handleUpload: (type: 'FOLDER' | 'FILE', name?: string) => void
-    handelete: (ids: string[]) => void
+    handleDelete: (ids: string[]) => void
 }
 
 export const FileManageContext = createContext<FileManagerState | null>(null)
@@ -41,11 +46,11 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     const [selectedFiles, setSelectFiles] = useSafeState<FileItem[]>([])
     const [currentFolderId, setCurrentFolderId] = useSafeState<string>(props.folderId || "")
-    const [currentItem, setCurrentItem] = useState<any | undefined>()
+    const [currentItem, setCurrentItem] = useState<FileItem>()
     const [updateFlag, setUpdateFlag] = useState(0)
     const [currentFolderItems, setCurrentFolderItems] = useState<FileItem[]>([])
     const [repoKey, setRepoKey] = useState<string>("")
-    const [files, setFiles] = useSafeState<FileItem[]>([])
+    const [files, setFiles] = useSafeState<any[]>([])
     const { folderId } = props
     const { uploadedFiles, upload } = useUploadFile()
 
@@ -53,7 +58,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const createFile = useCallback((type: 'FOLDER' | 'FILE', name?: string) => {
         if (type === 'FOLDER') {
             useApi(APIS.CREATE_FOLDER, null, {
-                name: "New Folder",
+                name: name || "New Folder",
                 parentId: currentFolderId,
                 type: type,
                 repositoryKey: repoKey,
@@ -63,7 +68,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         } else {
             upload().then((res) => {
                 useApi(APIS.CREATE_FOLDER, null, {
-                    name: res.orginalName,
+                    name: res.originalName,
                     parentId: currentFolderId,
                     type: type,
                     repositoryKey: repoKey,
@@ -73,6 +78,9 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 })
             })
         }
+    }, [currentFolderId])
+
+    const handleDelete = useCallback((ids: string[]) => {
     }, [])
 
 
@@ -84,6 +92,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 isFolder: file.type.value === 'FOLDER',
                 icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />,
                 onClick: () => {
+                    console.log('123123123')
                     if (file.type.value === 'FOLDER') {
                         setCurrentFolderId(file.id)
                     }
@@ -120,30 +129,25 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 setCurrentFolderItems(res.data.map((item: any) => reslove(item)))
             })
         }
-    }, [currentItem])
+    }, [currentItem, updateFlag])
 
     return <FileManageContext.Provider value={{
         selectedFiles,
         setSelectFiles,
         currentFolderId,
         currentFolderItems,
+        currentItem,
+        setCurrentItem,
         repoKey,
         handleUpload: createFile,
-        handelete: (ids) => { }
+        handleDelete: handleDelete
 
     }}>
         <div className={cn("rounded-sm flex flex-col border not-prose", props.className)}>
             <div className=" w-full bg-muted border-b flex items-center justify-between h-[40px]">
                 <div className="flex items-center h-full gap-1">
                     <Button size="sm" variant="ghost" onClick={() => {
-                        upload().then(res => {
-                            useApi(APIS.UPLOAD_FILE, null, {
-                                name: res.orginalName,
-                                path: res.name
-                            }).then(res => {
-                                console.log(res)
-                            })
-                        })
+                        createFile('FILE')
                     }}>
                         <UploadIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
                         Upload

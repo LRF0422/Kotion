@@ -66,7 +66,8 @@ export const ModalProvider: React.FC<PropsWithChildren> = ({ children }) => {
             closeModal
         }}
     >
-        <Dialog open={modalState.isOpen} onOpenChange={(value) => {
+        <Dialog open={modalState.isOpen}
+        onOpenChange={(value) => {
             setModalState({
                 ...modalState,
                 isOpen: value
