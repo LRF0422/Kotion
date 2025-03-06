@@ -1,4 +1,4 @@
-import { Check, CopySlash, DownloadIcon, FileIcon, FolderIcon, FolderOpenIcon, ListIcon, ScissorsIcon, Trash2, UploadIcon, XIcon } from "@repo/icon";
+import { Check, DownloadIcon, FileIcon, FolderIcon, FolderOpenIcon, ListIcon, Trash2, UploadIcon, XIcon } from "@repo/icon";
 import { Button, EmptyState, Separator, TreeView, cn } from "@repo/ui";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { FileCardList } from "./FileCard";
@@ -102,7 +102,6 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 isFolder: file.type.value === 'FOLDER',
                 icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />,
                 onClick: () => {
-                    console.log('123123123')
                     if (file.type.value === 'FOLDER') {
                         setCurrentFolderId(file.id)
                     }

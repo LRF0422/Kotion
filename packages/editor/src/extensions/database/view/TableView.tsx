@@ -66,12 +66,12 @@ export const TableView: React.FC = () => {
         })
     }
 
-    return <div className="relative space-y-1 ">
+    return <div className="relative space-y-2 ">
         {
             editor.isEditable && <div className=" space-x-1 flex items-center">
                 <Button variant="outline" size="sm" onClick={toggle} ><Settings className="h-4 w-4 mr-1" /> Setting</Button>
                 <Button variant="outline" size="sm" onClick={handleAddRow}><Plus className="h-4 w-4 mr-1" /> Add Row</Button>
-                <Input className="h-9 w-28" icon={<SearchIcon className="h-5 w-5" />} />
+                <Input className="h-9 w-30" icon={<SearchIcon className="h-5 w-5" />} />
             </div>
         }
         <Container>
