@@ -1,4 +1,4 @@
-import { Download, FileIcon, FolderIcon } from "@repo/icon";
+import { Download, FileIcon, FolderIcon, XIcon } from "@repo/icon";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, cn } from "@repo/ui";
 import { useSafeState } from "@repo/core";
 import React, { useEffect } from "react";
@@ -40,9 +40,12 @@ export const FileCard: React.FC<FileItem> = (props) => {
                                 }
                             }} />
                         }
-                        <div>
+                        <div className="flex items-center gap-1">
                             <div className="p-1 hover:bg-muted cursor-pointer rounded-sm">
                                 <Download className="h-4 w-4" />
+                            </div>
+                            <div className="p-1 hover:bg-muted cursor-pointer rounded-sm">
+                                <XIcon className="h-4 w-4" />
                             </div>
                         </div>
                     </div>
@@ -54,7 +57,7 @@ export const FileCard: React.FC<FileItem> = (props) => {
                         <FileIcon className="h-20 w-20" strokeWidth={1} />
                 }
             </CardContent>
-            <CardFooter className="p-2 m-0 border-t text-sm text-nowrap overflow-hidden text-ellipsis">
+            <CardFooter className="p-2 m-0 border-t text-sm text-nowrap overflow-hidden text-ellipsis h-[30px]">
                 {name}
             </CardFooter>
         </Card>
@@ -63,8 +66,8 @@ export const FileCard: React.FC<FileItem> = (props) => {
 
 export const FileCardList: React.FC = (props) => {
     const { currentFolderItems } = useFileManagerState() as FileManagerState
-    return <div className="h-full w-full">
-        <div className="flex flex-wrap w-full gap-2 p-6 overflow-auto">
+    return <div className="h-full w-full overflow-auto max-h-full">
+        <div className="flex flex-wrap w-full gap-2 p-6">
             {
                 currentFolderItems.map((it, index) => (
                     <FileCard

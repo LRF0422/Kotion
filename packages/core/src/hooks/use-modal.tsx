@@ -67,27 +67,26 @@ export const ModalProvider: React.FC<PropsWithChildren> = ({ children }) => {
         }}
     >
         <Dialog open={modalState.isOpen}
-        onOpenChange={(value) => {
-            setModalState({
-                ...modalState,
-                isOpen: value
-            })
-        }}>
+            onOpenChange={(value) => {
+                setModalState({
+                    ...modalState,
+                    isOpen: value
+                })
+            }}>
             <DialogTrigger asChild>
                 {children}
             </DialogTrigger>
             <DialogContent
-                className={cn(" max-w-none", {
+                className={cn(" max-w-none overflow-auto", {
                     "p-0": modalState.simple
                 })}
                 style={{
                     width: modalState.width + 'px',
-                    height: modalState.height + 'px'
+                    height: modalState.height + 'px',
+                    maxHeight: modalState.height + 'px'
                 }}
             >
-
-
-                <div className="">
+                <div className="w-full h-full overflow-auto">
                     {modalState.content}
                 </div>
                 {modalState.footer && <DialogFooter>{modalState.footer}</DialogFooter>}

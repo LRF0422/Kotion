@@ -144,7 +144,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     }}>
         <div className={cn("rounded-sm flex flex-col border not-prose", props.className)}>
-            <div className=" w-full bg-muted border-b flex items-center justify-between h-[40px]">
+            <div className="w-full bg-muted border-b flex items-center justify-between h-[40px]">
                 <div className="flex items-center h-full gap-1">
                     <Button size="sm" variant="ghost" onClick={() => {
                         createFile('FILE')
@@ -192,7 +192,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                     </Button>
                 </div>
             </div>
-            <div className="grid w-full grid-cols-[200px_1fr] flex-1">
+            <div className="grid w-full grid-cols-[200px_1fr] flex-1 overflow-auto h-[calc(100%-40px)]">
                 <div className="border-r">
                     <div className=" p-1 bg-muted/80">
                         Files
@@ -204,15 +204,17 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                         elements={files}
                     />
                 </div>
-                <div className="">
+                <div className="overflow-auto w-full flex flex-col h-full">
                     <div className="w-full border-b bg-muted/50 h-[45px] flex items-center" >
                         <div className="ml-2">
                             Files
                         </div>
                     </div>
-                    <Menu>
-                        <FileCardList />
-                    </Menu>
+                    <div className="flex-1 overflow-auto h-[calc(100%-45px)]">
+                        <Menu>
+                            <FileCardList />
+                        </Menu>
+                    </div>
                     {/* <FileList files={files} selectedFiles={selectedFiles} setSelectFiles={setSelectFiles} /> */}
                 </div>
             </div>
