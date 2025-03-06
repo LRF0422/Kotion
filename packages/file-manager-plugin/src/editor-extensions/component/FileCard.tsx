@@ -1,4 +1,4 @@
-import { Download, FileIcon, FolderIcon, XIcon } from "@repo/icon";
+import { Download, FileIcon, FolderOpenIcon, XIcon } from "@repo/icon";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, cn } from "@repo/ui";
 import { useSafeState } from "@repo/core";
 import React, { useEffect } from "react";
@@ -18,21 +18,26 @@ export interface FileCardProps {
 
 export const FileCard: React.FC<FileItem> = (props) => {
     const { isFolder, id, name } = props
-    const { selectedFiles, setSelectFiles } = useFileManagerState() as FileManagerState
+    const { selectedFiles, setSelectFiles, selectable, setCurrentFolderId } = useFileManagerState() as FileManagerState
     const [checked, setChecked] = useSafeState<boolean>(false)
 
     useEffect(() => {
         setChecked(!!selectedFiles.find(it => it.id === id))
     }, [selectedFiles, props])
-    return <div onContextMenu={() => {
-        setChecked(true)
-    }}>
+    return <div
+        onContextMenu={() => {
+            setChecked(true)
+        }}
+        onDoubleClick={() => {
+            setCurrentFolderId(id)
+        }}
+    >
         <Card className={cn("w-[200px] bg-muted/40 shadow-sm hover:bg-muted/90 hover:shadow-md", checked ? "outline" : "")}>
             <CardHeader className="p-0">
                 <CardTitle className="p-0 m-0">
                     <div className="flex items-center justify-between p-1">
                         {
-                            <Checkbox className="ml-1" checked={checked} onCheckedChange={(value) => {
+                            selectable && <Checkbox className="ml-1" checked={checked} onCheckedChange={(value) => {
                                 if (value) {
                                     setSelectFiles([...selectedFiles, props])
                                 } else {
@@ -53,11 +58,11 @@ export const FileCard: React.FC<FileItem> = (props) => {
             </CardHeader>
             <CardContent className="flex items-center justify-center">
                 {
-                    isFolder ? <FolderIcon className="h-20 w-20 fill-sky-500 text-sky-500" strokeWidth={0} /> :
+                    isFolder ? <FolderOpenIcon className="h-20 w-20 fill-sky-500 text-sky-500" strokeWidth={1} /> :
                         <FileIcon className="h-20 w-20" strokeWidth={1} />
                 }
             </CardContent>
-            <CardFooter className="p-2 m-0 border-t text-sm text-nowrap overflow-hidden text-ellipsis h-[30px]">
+            <CardFooter className="p-2 m-0 border-t text-sm text-nowrap overflow-hidden text-ellipsis h-[30px] select-none">
                 {name}
             </CardFooter>
         </Card>

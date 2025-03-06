@@ -1,5 +1,5 @@
-import { Check, CopySlash, DownloadIcon, FileIcon, FolderIcon, ListIcon, ScissorsIcon, Trash2, UploadIcon, XIcon } from "@repo/icon";
-import { Button, Separator, TreeView, cn } from "@repo/ui";
+import { Check, CopySlash, DownloadIcon, FileIcon, FolderIcon, FolderOpenIcon, ListIcon, ScissorsIcon, Trash2, UploadIcon, XIcon } from "@repo/icon";
+import { Button, EmptyState, Separator, TreeView, cn } from "@repo/ui";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { FileCardList } from "./FileCard";
 import "@repo/ui/globals.css"
@@ -7,16 +7,9 @@ import { useSafeState, useUploadFile } from "@repo/core";
 import { useApi } from "@repo/core";
 import { APIS } from "../../api";
 import { Menu } from "./Menu";
+import { toast } from "@repo/ui";
 
-export interface FileManagerProps {
-    folderId?: string
-    className?: string
-    selectable?: boolean
-    onCancel?: () => void
-    onConfirm?: (files: string[]) => void
-    multiple?: boolean
-    target?: 'folder' | 'file' | 'both'
-}
+
 export interface FileItem {
     name: string,
     isFolder: boolean,
@@ -26,11 +19,23 @@ export interface FileItem {
         value: 'FOLDER' | 'FILE'
     }
 }
+
+export interface FileManagerProps {
+    folderId?: string
+    className?: string
+    selectable?: boolean
+    onCancel?: () => void
+    onConfirm?: (files: FileItem[]) => void
+    multiple?: boolean
+    target?: 'folder' | 'file' | 'both'
+}
 export interface FileManagerState {
+    selectable?: boolean,
     currentFolderItems: FileItem[],
     selectedFiles: FileItem[]
     setSelectFiles: React.Dispatch<React.SetStateAction<FileItem[]>>
     currentFolderId: string
+    setCurrentFolderId: React.Dispatch<React.SetStateAction<string>>,
     currentItem?: FileItem,
     setCurrentItem: React.Dispatch<React.SetStateAction<FileItem | undefined>>
     repoKey: string
@@ -67,7 +72,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
             })
         } else {
             upload().then((res) => {
-                useApi(APIS.CREATE_FOLDER, null, {
+                const promise = useApi(APIS.CREATE_FOLDER, null, {
                     name: res.originalName,
                     parentId: currentFolderId,
                     type: type,
@@ -75,6 +80,11 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                     path: res.name
                 }).then(() => {
                     setUpdateFlag(updateFlag + 1)
+                })
+                toast.promise(promise, {
+                    loading: 'Uploading...',
+                    success: 'Uploaded',
+                    error: 'Upload failed',
                 })
             })
         }
@@ -118,25 +128,49 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     useEffect(() => {
         if (!folderId) {
             useApi(APIS.GET_ROOT_FOLDER).then(res => {
-                setFiles(res.data.map((item: any) => reslove(item)))
+                const items = res.data.map((item: any) => reslove(item))
+                setFiles(items)
+                setCurrentFolderItems(items)
+            })
+        } else {
+            useApi(APIS.GET_CHILDREN, { folderId }).then(res => {
+                const items = res.data.map((item: any) => reslove(item))
+                setFiles(items)
+                setCurrentFolderItems(items)
             })
         }
-    }, [folderId, updateFlag])
+    }, [folderId])
 
     useEffect(() => {
-        if (currentItem && currentItem.type.value === 'FOLDER') {
-            useApi(APIS.GET_CHILDREN, { folderId: currentItem.id }).then(res => {
-                setCurrentFolderItems(res.data.map((item: any) => reslove(item)))
+        if (!currentFolderId) {
+            useApi(APIS.GET_ROOT_FOLDER).then(res => {
+                const items = res.data.map((item: any) => reslove(item))
+                setCurrentFolderItems(items)
+            })
+        } else {
+            useApi(APIS.GET_CHILDREN, { folderId: currentFolderId }).then(res => {
+                const items = res.data.map((item: any) => reslove(item))
+                setCurrentFolderItems(items)
             })
         }
-    }, [currentItem, updateFlag])
+    }, [currentFolderId, updateFlag])
+
+    // useEffect(() => {
+    //     if (currentItem && currentItem.type.value === 'FOLDER') {
+    //         useApi(APIS.GET_CHILDREN, { folderId: currentItem.id }).then(res => {
+    //             setCurrentFolderItems(res.data.map((item: any) => reslove(item)))
+    //         })
+    //     }
+    // }, [currentItem, updateFlag])
 
     return <FileManageContext.Provider value={{
         selectedFiles,
         setSelectFiles,
         currentFolderId,
+        setCurrentFolderId,
         currentFolderItems,
         currentItem,
+        selectable,
         setCurrentItem,
         repoKey,
         handleUpload: createFile,
@@ -153,14 +187,6 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                         Upload
                     </Button>
                     <Button size="sm" variant="ghost">
-                        <CopySlash className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                        Copy
-                    </Button>
-                    <Button size="sm" variant="ghost">
-                        <ScissorsIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                        Cut
-                    </Button>
-                    <Button size="sm" variant="ghost">
                         <Trash2 className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
                         Delete
                     </Button>
@@ -174,7 +200,9 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             <Separator orientation="vertical" />
                             {
                                 selectedFiles.length > 0 &&
-                                <Button size="sm" className="h-8">
+                                <Button size="sm" className="h-8" onClick={() => {
+                                    onConfirm && onConfirm(selectedFiles)
+                                }}>
                                     <Check className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
                                     Confirm
                                 </Button>
@@ -198,6 +226,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                         Files
                     </div>
                     <TreeView
+                        initialSelectedId={currentFolderId}
                         selectParent={true}
                         size="sm"
                         className="w-full m-0"
@@ -211,11 +240,26 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                         </div>
                     </div>
                     <div className="flex-1 overflow-auto h-[calc(100%-45px)]">
-                        <Menu>
-                            <FileCardList />
-                        </Menu>
+                        {
+                            currentFolderItems.length > 0 ? (
+                                <Menu>
+                                    <FileCardList />
+                                </Menu>
+                            ) :
+                                <EmptyState
+                                    icons={[FolderOpenIcon]}
+                                    title="No files"
+                                    description=""
+                                    className=" h-full w-full max-w-none border-none rounded-none"
+                                    action={{
+                                        label: 'Upload Files',
+                                        onClick: () => {
+                                            createFile('FILE')
+                                        }
+                                    }}
+                                />
+                        }
                     </div>
-                    {/* <FileList files={files} selectedFiles={selectedFiles} setSelectFiles={setSelectFiles} /> */}
                 </div>
             </div>
         </div>
