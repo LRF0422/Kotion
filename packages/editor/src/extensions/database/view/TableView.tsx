@@ -127,6 +127,7 @@ export const TableView: React.FC = () => {
         </Container>
         <div id="portal" className=" left-0 top-0 z-[9999] fixed" />
         <TableViewCfg visible={visible} toggle={toggle} />
+        <div className="italic text-secondary-foreground text-sm">{data.length} total rows</div>
     </div>
 }
 // @ts-ignore

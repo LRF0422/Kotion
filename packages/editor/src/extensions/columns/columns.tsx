@@ -22,7 +22,7 @@ export const Columns = Node.create({
   addOptions() {
     return {
       HTMLAttributes: {
-        class: "columns"
+        class: "columns",
       }
     };
   },

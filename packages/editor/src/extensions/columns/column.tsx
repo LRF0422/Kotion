@@ -15,7 +15,10 @@ export const Column = Node.create({
   addOptions() {
     return {
       HTMLAttributes: {
-        class: "column"
+        class: "column",
+        style: { 
+          flex: '1 1 0%'
+         }
       }
     };
   },

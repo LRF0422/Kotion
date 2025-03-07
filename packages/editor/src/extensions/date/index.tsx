@@ -1,5 +1,6 @@
 import { ExtensionWrapper } from "@repo/common";
 import { Date } from "./date";
+import { Calendar as ECalendar } from "./calendar";
 import React from "react";
 import { Calendar } from "@repo/icon";
 
@@ -14,7 +15,7 @@ declare module "@tiptap/core" {
 
 export const DateExtension: ExtensionWrapper = {
 	name: Date.name,
-	extendsion: Date,
+	extendsion: [Date, ECalendar],
 	slashConfig: [
 		{
 			icon: <Calendar className="h-4 w-4" />,

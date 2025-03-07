@@ -9,7 +9,6 @@ export const DateView: React.FC<NodeViewProps> = (props) => {
 	return <NodeViewWrapper as="span">
 		<DateTimePicker
 			locale={zhCN}
-			className="h-6"
 			disabled={!props.editor.isEditable}
 			value={props.node.attrs.date && new Date(props.node.attrs.date)}
 			onChange={(value => {

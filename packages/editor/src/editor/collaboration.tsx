@@ -39,10 +39,10 @@ export const CollaborationEditor = forwardRef<
   Editor | null,
   React.PropsWithChildren<CollaborationEditorProps>
 >((props, ref) => {
-  const { content, user, provider, pageInfo, toc } = props
+  const { content, user, provider, pageInfo, toc, withTitle } = props
 
   const [tableOfContents, setTableOfContents] = useSafeState<any[]>()
-  const [extensions, extensionWrappers] = useEditorExtension()
+  const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle)
 
 
 

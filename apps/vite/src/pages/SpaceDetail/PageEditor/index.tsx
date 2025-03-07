@@ -349,6 +349,7 @@ export const PageEditor: React.FC = () => {
                     user={userInfo}
                     token={params.pageId as string}
                     toc={true}
+                    withTitle={true}
                     content={JSON.parse(page.content)}
                 />
             }

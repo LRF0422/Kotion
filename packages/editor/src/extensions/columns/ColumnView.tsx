@@ -14,7 +14,7 @@ export const ColumnView: React.FC<NodeViewProps> = (props) => {
         [updateAttributes]
     );
 
-    return <NodeViewWrapper className="prose-p:m-1">
+    return <NodeViewWrapper className="prose-p:m-1 w-full">
         <Resizable
             className={cn("rounded-sm transition-all duration-75", editor.isEditable ? " outline" : " hover:outline")}
             height="100%"
