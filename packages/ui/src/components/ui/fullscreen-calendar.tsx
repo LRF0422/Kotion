@@ -81,7 +81,7 @@ export function FullScreenCalendar({ data }: FullScreenCalendarProps) {
   }
 
   return (
-    <div className="flex flex-1 flex-col bg-popover border rounded-lg">
+    <div className="flex flex-1 flex-col bg-popover border rounded-lg p-2">
       {/* Calendar Header */}
       <div className="flex flex-col space-y-4 p-4 md:flex-row md:items-center md:justify-between md:space-y-0 lg:flex-none">
         <div className="flex flex-auto">
