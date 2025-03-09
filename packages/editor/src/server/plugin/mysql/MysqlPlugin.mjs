@@ -85,4 +85,39 @@ export class Mysql extends Database {
 
   async onListen() {
   }
+  onError() {
+
+    const connection = mysql.createConnection({
+      host     : this.configuration.host,
+      user     : this.configuration.username,
+      password : this.configuration.password,
+      database : this.configuration.database
+    });
+  
+  connection.connect()
+  this.db = connection
+  this.db.query(this.configuration.schema)
+  this.db.on('error', (err) => {
+    this.db = null
+    this.db = mysql.createConnection({
+      host     : this.configuration.host,
+      user     : this.configuration.username,
+      password : this.configuration.password,
+      database : this.configuration.database
+    });
+    this.db.connect()
+    this.db.query(this.configuration.schema)
+  })
+
+  clearInterval(this.pingInterval)
+  this.pingInterval = setInterval(() => {
+    console.log('ping...');
+    this.db.ping((err) => {
+        if (err) {
+            console.log('ping error: ' + JSON.stringify(err));
+        }
+    });
+}, 3600000);
+
+  }
 }

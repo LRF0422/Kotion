@@ -1,9 +1,9 @@
-import { Node, NodeType, Schema } from "@tiptap/pm/model";
+import { Node, NodeType, Schema, Slice } from "@tiptap/pm/model";
 import { EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, DecorationSource, EditorView } from "@tiptap/pm/view";
 import { findParentNode } from "prosemirror-utils";
 import { uuidv4 } from "lib0/random";
-import { JSONContent } from "@tiptap/core";
+import { Content, Editor, JSONContent } from "@tiptap/core";
 import { cloneDeep } from "lodash";
 
 export interface Column {
@@ -23,7 +23,7 @@ const creatDefaultData = (dataType: string) => {
 	}
 }
 
-export function createGridView(schema: Schema, columns: any[], length = 3) {
+export function createGridView(schema: Schema, columns: any[], length = 0) {
 	const types = getGridViewNodeTypes(schema);
 	console.log(types);
 
@@ -31,7 +31,7 @@ export function createGridView(schema: Schema, columns: any[], length = 3) {
 	const row = []
 
 	for (let i = 0; i < length; i++) {
-		const data: any[] = []
+		const data: Node[] = []
 		columns.forEach((it, index) => {
 			const cell = (types.gridCell as NodeType).createAndFill({
 				data: creatDefaultData(it.dataType)
@@ -41,7 +41,7 @@ export function createGridView(schema: Schema, columns: any[], length = 3) {
 			}
 		})
 		row.push(
-			(types.gridRow as NodeType).createChecked({}, data)
+			(types.gridRow as NodeType).createChecked({ id: data[0].attrs.data }, data)
 		)
 	}
 
@@ -82,14 +82,11 @@ export function isInGrid(state: EditorState): boolean {
 	return false;
 }
 
-export const addRow = (state: EditorState, view: EditorView, node: Node, pos: number, data?: any) => {
+export const addRow = (editor: Editor,state: EditorState, view: EditorView, node: Node, pos: number, data?: any) => {
 
 	if (node) {
-		let insertPos = pos
-		node.forEach(n => {
-			insertPos = insertPos + n.nodeSize
-		})
-
+		const json = node.toJSON() as JSONContent
+		const rows = json.content || []
 		const colCount = node.attrs.columns.length
 		const columns = node.attrs.columns
 		const cols = []
@@ -97,10 +94,15 @@ export const addRow = (state: EditorState, view: EditorView, node: Node, pos: nu
 			const id = columns[i].id
 			const fieldValue = data && (data[id] || undefined)
 			cols.push(
-				(state.schema.nodes['gridCell'] as NodeType).createAndFill({ isHeader: false, data: fieldValue || creatDefaultData(node.attrs.columns[i].dataType) })
+				(state.schema.nodes['gridCell'] as NodeType).createAndFill({ isHeader: false, dataType: node.attrs.columns[i].dataType, data: fieldValue || creatDefaultData(node.attrs.columns[i].dataType) })
 			)
 		}
-		const tr = state.tr.insert(insertPos, (state.schema.nodes['gridRow'] as NodeType).createChecked(null, cols as Node[]))
+		const row = (state.schema.nodes['gridRow'] as NodeType).createChecked({ id: cols[0]?.attrs.data }, cols as Node[]).toJSON()
+		rows.push(row)
+		json.content = rows
+		const tr =  state.tr.replaceRangeWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
+
+		// const tr = state.tr.insert(insertPos, (state.schema.nodes['gridRow'] as NodeType).createChecked({ id: cols[0]?.attrs.data }, cols as Node[]))
 		view.dispatch(tr)
 	}
 
@@ -113,21 +115,24 @@ export const addCol = (state: EditorState, view: EditorView, node: Node, pos: nu
 	const value = creatDefaultData(column.dataType)
 	console.log('value', value);
 
-	node.forEach((r) => {
-		const json = r.toJSON() as JSONContent
-		if (json) {
-			json.content?.push({
+	const json = node.toJSON() as JSONContent
+
+	if(json) {
+		json.content?.forEach(row => {
+			row.content?.push({
 				type: 'gridCell',
 				attrs: {
-					data: value
+					data: value,
+					dataType: column.dataType
 				}
 			})
-			console.log('json', json);
-			tr.replaceWith(insertPos, insertPos + r.nodeSize, Node.fromJSON(state.schema, json))
-			insertPos = insertPos + r.nodeSize + 1
-		}
-	})
-	view.dispatch(tr)
+		})
+		json.attrs!.columns.push(column)
+		console.log('json', json)
+		tr.replaceWith(pos, pos + node.nodeSize,Node.fromJSON(state.schema, json))
+		view.dispatch(tr)
+	}
+
 }
 
 export const deleteCol = (state: EditorState, view: EditorView, node: Node, pos: number, colIndex: number) => {
@@ -235,20 +240,50 @@ export function drawCellSelection(state: EditorState): DecorationSource | null {
 	return null
 }
 
-export const removeRow = (state: EditorState, view: EditorView, node: Node, pos: number, rowIndex: number) => {
+export const removeRow = (editor: Editor, state: EditorState, view: EditorView, node: Node, pos: number, rowIndex: string[]) => {
 	const grid = node
-
+	// const tr = state.tr
 	if (grid) {
-		let start = pos + 1
-		let end = start;
-		for (let i = 0; i <= (rowIndex); i++) {
-			end = end + grid.child(i).nodeSize
+		// rowIndex.forEach(row => {
+		// 	let start = pos + 1
+		// 	let end = start;
+		// 	for (let i = 0; i <= (row); i++) {
+		// 		end = end + grid.child(i).nodeSize
+
+		// 	}
+		// 	start = end - grid.child(row).nodeSize
+		// 	console.log('start', start);
+		// 	console.log('end', end);
+		// 	console.log(editor.$node('gridCell', {
+		// 		data: 'b49dd5c2-2273-4ed1-aac4-c1dbb3b47ede'
+		// 	}))
+		// 	tr.deleteRange(start, end)
+		// })
+		const json = node.toJSON() as JSONContent
+		const res = editor.$node('database', {
+			blockId: node.attrs.blockId
+		})
+		console.log('res', res);
+
+		if(res) {
+			json.content = json.content?.filter(it => !rowIndex.includes(it?.attrs?.id))
+			const tr= state.tr.deleteRange(res?.range?.from, res?.to)
+			.insert(pos,Node.fromJSON(state.schema, json))
+			view.dispatch(tr)
 		}
-		start = end - grid.child(rowIndex).nodeSize
-		console.log('start', start);
-		console.log('end', end);
-		const tr = state.tr.delete(start, end)
-		view.dispatch(tr)
+		
+	
+		// rowIndex.forEach(key => {
+		// 	const res = editor.$node("gridRow", {
+		// 		id: key
+		// 	})
+		// 	if (res) {
+		// 		console.log('res', res);
+		// 		tr.delete(res.from, res.to)
+		// 	}
+		// })
+
+		// view.dispatch(tr)
 	}
 }
 
@@ -281,6 +316,8 @@ export const updateCellData = (state: EditorState, view: EditorView, node: Node,
 }
 
 export const updateCellDataV2 = (state: EditorState, view: EditorView, node: Node, pos: number, updateCells: UpdateCellProps[] = []) => {
+	console.log('update cell, props', updateCells);
+	
 	if (updateCells.length > 0) {
 		const tr = state.tr
 		updateCells.forEach(it => {

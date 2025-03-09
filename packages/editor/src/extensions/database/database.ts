@@ -14,7 +14,7 @@ declare module "@tiptap/core" {
 export const Database = Node.create({
     name: 'database',
     group: 'block',
-    content: 'gridRow+',
+    content: 'gridRow*',
     draggable: true,
     selectable: true,
     addOptions() {

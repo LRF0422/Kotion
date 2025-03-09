@@ -188,7 +188,7 @@ export const MarkdownView: React.FC<any> = (props) => {
     const handleSave = (open: boolean) => {
         if (!open && editor.current && mainEditor.isEditable) {
             const json = editor.current.getJSON()
-            handleDataChange(data.indexOf(row), column.idx, json)
+            handleDataChange(data.indexOf(row), column.idx -1, json)
         }
     }
 

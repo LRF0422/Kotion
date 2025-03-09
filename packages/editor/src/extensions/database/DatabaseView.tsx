@@ -80,7 +80,7 @@ export type Context = NodeViewProps & {
     handleDataChange: (row: number, col: number, data: any) => void,
     handleDataChangeBatch: (updateCells: UpdateCellProps[]) => void,
     handleMoveCol: (source: string, target: string) => void,
-    handleDeleteRow: (rowIndex: number) => void,
+    handleDeleteRow: (rowIndex: string[]) => void,
     columns: any[], columnTypes: ColumnType[]
 }
 
@@ -104,7 +104,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
     }
 
     const doAddRow = useCallback((data?: any) => {
-        addRow(props.editor.state, props.editor.view, props.node, props.getPos(), data)
+        addRow(props.editor, props.editor.state, props.editor.view, props.node, props.getPos(), data)
         doUpdate()
     }, [props])
 
@@ -141,8 +141,8 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
         // props.updateAttributes(newVal)
     }, [props])
 
-    const doDeleteRow = useCallback((rowIndex: number) => {
-        removeRow(props.editor.state, props.editor.view, props.node, props.getPos(), rowIndex)
+    const doDeleteRow = useCallback((rowIndex: string[]) => {
+        removeRow(props.editor, props.editor.state, props.editor.view, props.node, props.getPos(), rowIndex)
         doUpdate()
     }, [props])
 

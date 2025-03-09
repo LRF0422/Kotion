@@ -1,5 +1,5 @@
 import { NodeViewWrapper } from "@tiptap/react";
-import React, { useContext, useMemo } from "react";
+import React, { useContext, useEffect, useMemo } from "react";
 import { Calendar, momentLocalizer } from 'react-big-calendar'
 import moment from 'moment'
 
@@ -13,6 +13,7 @@ import { cn } from "@repo/ui";
 import { Button } from "@repo/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Label } from "@repo/ui";
 moment.locale('zh-cn');
+import "./calendar.css"
 const localizer = momentLocalizer(moment) // or globalizeLocalizer
 
 
@@ -23,6 +24,7 @@ export const CalendarView: React.FC<any> = (props) => {
     const [visible, { toggle }] = useToggle(false)
     const [flag, { toggle: t }] = useToggle(false)
     const config = node.attrs.viewOptions[props.viewKey] || {}
+
 
     const { defaultDate } = useMemo(() => ({
         defaultDate: new Date()

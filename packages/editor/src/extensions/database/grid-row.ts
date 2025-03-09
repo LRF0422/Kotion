@@ -2,7 +2,7 @@ import { Node, mergeAttributes } from "@tiptap/core";
 
 export const GridRow = Node.create({
 	name: 'gridRow',
-	content: 'gridCell+',
+	content: 'gridCell*',
 	selectable: true,
 	draggable: true,
 
@@ -10,6 +10,9 @@ export const GridRow = Node.create({
 		return {
 			isHeader: {
 				default: false
+			},
+			id: {
+				default: null
 			}
 		}
 	},

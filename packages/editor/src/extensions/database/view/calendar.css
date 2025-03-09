@@ -1,0 +1,30 @@
+/* 引入 Tailwind 的基础样式 */
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+
+.rbc-selected-cell {
+    @apply bg-muted
+}
+
+.rbc-month-view {
+    @apply border
+}
+
+.rbc-off-range-bg {
+    @apply bg-muted
+}
+
+.rbc-toolbar button {
+    @apply dark:text-popover-foreground hover:bg-muted active:bg-muted visited:bg-muted visited:text-popover
+}
+
+
+.rbc-current-time-indicator {
+    @apply bg-muted
+}
+
+.rbc-tody {
+    @apply bg-muted
+}
