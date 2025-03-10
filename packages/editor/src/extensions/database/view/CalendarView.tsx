@@ -9,11 +9,12 @@ import { CalendarClock, Settings, X } from "@repo/icon";
 
 import 'moment/locale/zh-cn';
 import { useToggle } from "ahooks";
-import { cn } from "@repo/ui";
+import { AutoForm, Form, ZodProvider, cn, fieldConfig, z } from "@repo/ui";
 import { Button } from "@repo/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Label } from "@repo/ui";
 moment.locale('zh-cn');
 import "./calendar.css"
+import { useModal } from "../../../../../core/src";
 const localizer = momentLocalizer(moment) // or globalizeLocalizer
 
 
@@ -24,11 +25,41 @@ export const CalendarView: React.FC<any> = (props) => {
     const [visible, { toggle }] = useToggle(false)
     const [flag, { toggle: t }] = useToggle(false)
     const config = node.attrs.viewOptions[props.viewKey] || {}
-
+    const { openModal, closeModal } = useModal()
 
     const { defaultDate } = useMemo(() => ({
         defaultDate: new Date()
     }), [])
+
+    const mySchema = z.object({
+        name: z.string().superRefine(
+            fieldConfig({
+                label: '事件名称'
+            })
+        ),
+        startDate: z.date().superRefine(
+            fieldConfig({
+                label: '开始时间'
+            })
+        ),
+        endDate: z.date().superRefine(
+            fieldConfig({
+                label: '结束时间'
+            })
+        ),
+        people: z.enum(["张三", "李四", "王五"]).superRefine(
+            fieldConfig({
+                label: '执行人'
+            })
+        ),
+        color: z.string().superRefine(
+            fieldConfig({
+                label: '颜色',
+                fieldType: 'color'
+            })
+        ),
+    });
+    const schemaProvider = new ZodProvider(mySchema);
 
     return <NodeViewWrapper className="w-full h-[700px] relative flex flex-col gap-1 text-popover-foreground">
         <div>
@@ -54,10 +85,23 @@ export const CalendarView: React.FC<any> = (props) => {
             onSelectSlot={(info) => {
                 if (info.action === "select") {
                     console.log('info', info);
-                    handleAddRow({
-                        test2: info.start.toISOString(),
-                        test3: info.end.toISOString(),
-                        test: "Test"
+                    openModal({
+                        title: '新增事件',
+                        height: 'auto',
+                        content: <div className=" p-2">
+                            <AutoForm
+                                schema={schemaProvider}
+                                withSubmit
+                                onSubmit={() => {
+                                    handleAddRow({
+                                        test2: info.start.toISOString(),
+                                        test3: info.end.toISOString(),
+                                        test: "Test"
+                                    })
+                                    closeModal()
+                                }}
+                            />
+                        </div>
                     })
                 }
             }}

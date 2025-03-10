@@ -33,8 +33,6 @@ export const importScript = (() => {
 
                 resolve(Com)
             })
-
-            // 监听加载失败情况
             script.addEventListener('error', (error) => {
                 reject(error)
             })

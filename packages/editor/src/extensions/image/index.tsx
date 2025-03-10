@@ -22,16 +22,6 @@ export const ImageExtension: ExtensionWrapper = {
 			slash: '/image',
 			icon: <ImageIcon className="h-4 w-4" />,
 			action: (editor) => {
-				// uploadImage(editor).then(res => {
-				// 	editor
-				// 	  .chain()
-				// 	  .focus()
-				// 	  .setImage({
-				// 		...res,
-				// 		src: res.url
-				// 	  })
-				// 	  .run();
-				//   });
 			}
 		}
 	]

@@ -1,8 +1,4 @@
-/* 引入 Tailwind 的基础样式 */
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
-
+@import "@repo/ui/globals.css";
 
 .rbc-selected-cell {
     @apply bg-muted
@@ -25,6 +21,6 @@
     @apply bg-muted
 }
 
-.rbc-tody {
-    @apply bg-muted
+.rbc-today {
+    @apply bg-muted-foreground/70
 }

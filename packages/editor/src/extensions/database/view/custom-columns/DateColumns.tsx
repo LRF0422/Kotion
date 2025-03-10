@@ -188,7 +188,7 @@ export const MarkdownView: React.FC<any> = (props) => {
     const handleSave = (open: boolean) => {
         if (!open && editor.current && mainEditor.isEditable) {
             const json = editor.current.getJSON()
-            handleDataChange(data.indexOf(row), column.idx -1, json)
+            handleDataChange(data.indexOf(row), column.idx - 1, json)
         }
     }
 
@@ -199,7 +199,7 @@ export const MarkdownView: React.FC<any> = (props) => {
             <SheetTrigger asChild >
                 <Button size="sm" className={cn(" absolute right-0 top-0 h-full", hover ? "visible" : "invisible")}><AppWindowIcon className="h-3 w-3" /></Button>
             </SheetTrigger>
-            <SheetContent className="w-[1000px] sm:max-w-none">
+            <SheetContent className="w-[90%] sm:max-w-none">
                 <SheetHeader>
                     <SheetTitle></SheetTitle>
                     <SheetDescription></SheetDescription>

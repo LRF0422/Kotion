@@ -1,9 +1,15 @@
 import { XIcon } from "@repo/icon";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, cn } from "@repo/ui";
+import { isNumber } from "lodash";
 import React, { PropsWithChildren, ReactNode, createContext, useContext, useState } from "react";
 
 
-const ModalContext = createContext<any>({})
+export interface ModalCTX {
+    openModal: (config: Omit<ModalState, 'isOpen'>) => void
+    closeModal: () => void
+}
+
+const ModalContext = createContext<ModalCTX>({} as ModalCTX)
 
 export const useModal = () => useContext(ModalContext)
 
@@ -14,8 +20,8 @@ export interface ModalState {
     desc?: ReactNode,
     content: ReactNode,
     footer?: ReactNode,
-    width: number,
-    height: number,
+    width?: number,
+    height?: number | string,
     simple?: boolean
 
 }
@@ -41,7 +47,7 @@ export const ModalProvider: React.FC<PropsWithChildren> = ({ children }) => {
             footer: config.footer,
             simple: config.simple,
             width: config.width || 600,
-            height: config.height || 800
+            height: config.height || 'auto'
         })
     }
 
@@ -83,9 +89,16 @@ export const ModalProvider: React.FC<PropsWithChildren> = ({ children }) => {
                 style={{
                     width: modalState.width + 'px',
                     height: modalState.height + 'px',
-                    maxHeight: modalState.height + 'px'
+                    maxHeight: isNumber(modalState.height) ? modalState.height + 'px' : modalState.height,
                 }}
             >
+                {
+                    !modalState.simple && modalState.title &&
+                    <DialogHeader>
+                        <DialogTitle>{modalState.title}</DialogTitle>
+                        <DialogDescription></DialogDescription>
+                    </DialogHeader>
+                }
                 <div className="w-full h-full overflow-auto">
                     {modalState.content}
                 </div>

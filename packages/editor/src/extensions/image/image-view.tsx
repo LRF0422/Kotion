@@ -11,6 +11,7 @@ export const ImageView: React.FC<NodeViewProps> = ({
 }) => {
   const { src, width, height, align, aspectRatio } = attrs;
 
+
   const flexJustifyContent = useMemo(() => {
     if (align === "center") return "center";
     if (align === "right") return "flex-end";

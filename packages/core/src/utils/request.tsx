@@ -1,7 +1,6 @@
 import { Button } from '@repo/ui'
 import axios from 'axios'
 import { toast } from '@repo/ui'
-// import { showWarningAlert } from './showAlertDlg'
 import React from 'react'
 
 const TOKEN_KEY = 'knowledge-token'
@@ -64,13 +63,11 @@ axiosInstance.interceptors.response.use(res => {
 
   // 消息
   const msg = res.data.msg
-  // console.log('res', res);
 
   if (status !== 200) {
     toast.error(res.data.msg)
     return Promise.reject(res.data.msg)
   }
-  // console.log('res', res);
 
   if (res.request.responseType === 'blob' || res.request.responseType === 'arraybuffer') {
     return res.data
@@ -89,10 +86,6 @@ axiosInstance.interceptors.response.use(res => {
     }
     return Promise.reject('无效的会话，或者会话已过期，请重新登录。')
   } if (code === 500) {
-    // Notification.error({
-    //   title: '错误',
-    //   content: 'error',
-    // })
     return Promise.reject(new Error(msg))
   } if (code !== 200) {
     toast.error(res.data.msg, {
@@ -107,15 +100,6 @@ axiosInstance.interceptors.response.use(res => {
   let { message } = error
   if (response.status === 401 && !isRelogin.show) {
     isRelogin.show = true
-    // showWarningAlert({
-    //   title: '系统提示',
-    //   content: '登录状态已过期，您可以继续留在该页面，或者重新登录',
-    //   onOk: () => {
-    //     // window.location.pathname = '/login'
-    //     isRelogin.show = false
-    //     throw new Error("no login ")
-    //   }
-    // })
     return Promise.reject(error)
   }
   if (message === 'Network Error') {
