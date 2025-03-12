@@ -267,8 +267,7 @@ export const removeRow = (editor: Editor, state: EditorState, view: EditorView, 
 
 		if(res) {
 			json.content = json.content?.filter(it => !rowIndex.includes(it?.attrs?.id))
-			const tr= state.tr.deleteRange(res?.range?.from, res?.to)
-			.insert(pos,Node.fromJSON(state.schema, json))
+			const tr= state.tr.replaceWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
 			view.dispatch(tr)
 		}
 		

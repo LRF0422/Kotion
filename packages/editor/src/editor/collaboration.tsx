@@ -13,11 +13,9 @@ import { ThemeProvider } from "styled-components";
 import light from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
 import { ExtensionWrapper } from "@repo/common";
-import { MenuIcon, Sparkles } from "@repo/icon";
 import { useSafeState, useUnmount } from "ahooks";
 import { ToC } from "./ToC";
 import { cn } from "@repo/ui";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui";
 import { EditorMenu } from "./EditorMenu";
 import { PageContext } from "./context";
 

@@ -8,13 +8,17 @@
   },
   "dependencies": {
     "@repo/common": "workspace:*",
-    "@repo/ui": "workspace:*",
-    "@repo/icon": "workspace:*",
     "@repo/editor": "workspace:*",
+    "@repo/icon": "workspace:*",
+    "@repo/ui": "workspace:*",
+    "@types/pako": "^2.0.3",
     "axios": "^1.7.7",
+    "browser-fs-access": "^0.35.0",
     "event-source-polyfill": "^1.0.31",
+    "json-hpack": "^0.0.2",
+    "pako": "^2.1.0",
     "react-error-boundary": "^4.0.13",
-    "browser-fs-access": "^0.35.0"
+    "zipson": "^0.2.12"
   },
   "devDependencies": {
     "@types/event-source-polyfill": "^1.0.5",

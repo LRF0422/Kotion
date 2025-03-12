@@ -1,7 +1,7 @@
 import { Plus, SearchIcon, Settings, Table, Trash2 } from "@repo/icon";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { NodeViewContext } from "../DatabaseView";
-import { Button, Checkbox, Input } from "@repo/ui";
+import { Button, Input } from "@repo/ui";
 import 'react-data-grid/lib/styles.css';
 
 import DataGrid, { DataGridHandle, FillEvent, SelectColumn } from 'react-data-grid';
@@ -14,7 +14,6 @@ import { useTheme } from "@repo/ui";
 import { UpdateCellProps } from "../utils";
 import React from "react";
 import { TableViewCfg } from "./TableViewCfg";
-import { da } from "date-fns/locale";
 
 
 const Container = styled.div`
@@ -26,22 +25,17 @@ const Container = styled.div`
 export const TableView: React.FC = () => {
 
     const { theme } = useTheme()
-    const { editor, columns, data, handleMoveCol, node, updateAttributes, handleDataChangeBatch, handleAddRow, handleDeleteRow } = useContext(NodeViewContext)
+    const { editor,
+        columns,
+        data,
+        handleMoveCol,
+        node,
+        updateAttributes,
+        handleDataChangeBatch,
+        handleAddRow, handleDeleteRow } = useContext(NodeViewContext)
     const [visible, { toggle }] = useToggle(false)
     const gridRef = useRef<DataGridHandle>(null);
     const [selectedRows, setSelectedRows] = useState((): ReadonlySet<string> => new Set());
-
-    useEffect(() => {
-        console.log('columns Change', columns);
-    }, [columns])
-
-    useEffect(() => {
-        console.log('data Change', data);
-
-    }, [data])
-
-    useEffect(() => {
-    }, [])
 
     function handleFill({ columnKey, sourceRow, targetRow }: FillEvent<any>): any {
         return { ...targetRow, [columnKey]: sourceRow[columnKey as keyof any] };
@@ -75,19 +69,16 @@ export const TableView: React.FC = () => {
                 <Button variant="outline" size="sm" onClick={handleAddRow}><Plus className="h-4 w-4 mr-1" /> Add Row</Button>
                 {
                     selectedRows.size > 0 && <Button variant="outline" size="sm" onClick={() => {
-                        // const idx: number[] = []
-                        // data.filter((it, index) => {
-                        //     const b = selectedRows.has(it.id)
-                        //     if(b) {
-                        //         idx.push(index)
-                        //     }
-                        //     return b
-                        // })
-                        // console.log('idx', idx)
                         handleDeleteRow(Array.from(selectedRows))
+                        setSelectedRows(new Set())
                     }}><Trash2 className="h-4 w-4 mr-1" /> Delete</Button>
                 }
                 <Input className="h-9 w-30" icon={<SearchIcon className="h-5 w-5" />} />
+                {
+                    selectedRows.size > 0 && <div className=" text-sm italic text-secondary">
+                        selected {selectedRows.size} items
+                    </div>
+                }
             </div>
         }
         <Container>

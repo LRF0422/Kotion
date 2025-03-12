@@ -4,6 +4,8 @@ import { CodeBlockStaticMenu } from "./menu";
 import BuiltInCodeBlock, {
     // CodeBlockOptions
 } from "@tiptap/extension-code-block";
+import { CodeIcon } from "@repo/icon";
+import React from "react";
 
 export * from "./code-block";
 export * from "./menu";
@@ -15,5 +17,15 @@ export const CodeblockExtension: ExtensionWrapper = {
     menuConfig: {
         group: 'block',
         menu: CodeBlockStaticMenu
-    }
+    },
+    slashConfig: [
+        {
+            text: 'Code Block',
+            slash: '/code-block',
+            icon: <CodeIcon className="h-4 w-4" />,
+            action: (editor) => {
+                editor.commands.toggleCodeBlock()
+            }
+        }
+    ]
 }

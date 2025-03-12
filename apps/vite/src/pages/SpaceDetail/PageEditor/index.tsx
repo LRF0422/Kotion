@@ -8,7 +8,7 @@ import { Separator } from "@repo/ui";
 import { Switch } from "@repo/ui";
 import { CollaborationEditor } from "@repo/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
-import { useApi } from "@repo/core";
+import { parse, stringify, useApi } from "@repo/core";
 import { useNavigator } from "@repo/core";
 import { GlobalState } from "@repo/core";
 import { TiptapCollabProvider } from "@repo/editor";
@@ -35,6 +35,7 @@ export const PageEditor: React.FC = () => {
     const params = useParams()
     const { userInfo, rightCollpase } = useSelector((state: GlobalState) => state)
     const [loading, { toggle }] = useToggle(false)
+    const [pageLoading, { toggle: toggleLoading }] = useToggle(false)
     const [synceStatus, setSyncStatus] = useState(false)
     const lastAwarenessRef = useRef<any[]>([])
     const dispatch = useDispatch()
@@ -48,8 +49,10 @@ export const PageEditor: React.FC = () => {
     const [fullScreen, { toggleFullscreen }] = useFullscreen(ref)
 
     useEffect(() => {
+        toggleLoading()
         useApi(APIS.GET_PAGE_CONTENT, { id: params.pageId }).then((res) => {
             setPage(res.data)
+            toggleLoading()
         })
 
         return () => {
@@ -96,7 +99,7 @@ export const PageEditor: React.FC = () => {
             page.title = title
             page.icon = icon
             page.id = params.pageId
-            page.content = JSON.stringify(pageContent).replace("", " ")
+            page.content = stringify(pageContent)
             page.publish = publish
             if (publish) {
                 useApi(APIS.CREATE_OR_SAVE_PAGE, undefined, page).then((res) => {
@@ -169,7 +172,12 @@ export const PageEditor: React.FC = () => {
         setSyncStatus(false)
     })
 
-    return page && <div className="w-full h-full" ref={ref}>
+    return pageLoading ? <div className="w-full h-full flex items-center justify-center">
+        <div className="flex flex-row gap-2 items-center">
+            Loading...
+            <Loader className=" animate-spin h-5 w-5" />
+        </div>
+    </div> : (page && <div className="w-full h-full" ref={ref}>
         <header className="h-11 w-full flex flex-row justify-between px-1 border-b">
             <div className="flex flex-row items-center gap-2 px-1 text-sm">
                 <span>{page.title}</span>
@@ -350,9 +358,9 @@ export const PageEditor: React.FC = () => {
                     token={params.pageId as string}
                     toc={true}
                     withTitle={true}
-                    content={JSON.parse(page.content)}
+                    content={parse(page.content || "{}")}
                 />
             }
         </main>
-    </div>
+    </div>)
 }

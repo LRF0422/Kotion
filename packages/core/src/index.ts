@@ -6,6 +6,7 @@ export * from "react-redux"
 export * from "ahooks"
 export * from "react-router-dom"
 export * from "react-dom"
+export * from "./utils/zip-util"
 export { createRoot } from "react-dom/client"
 export * from "browser-fs-access"
 
