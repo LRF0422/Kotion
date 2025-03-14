@@ -58,3 +58,4 @@ export { SyncBlockExtension } from './sync-block'
 export { MindMapExtension } from "./mindmap"
 export { LineHeightExtension } from "./line-height"
 export { IdentExtension } from "./ident"
+export { CommentExtension } from "./comment"

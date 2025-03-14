@@ -1,4 +1,4 @@
-import React, { ReactNode, forwardRef, useImperativeHandle } from "react";
+import React, { ReactNode, forwardRef, useEffect, useImperativeHandle } from "react";
 import { AnyExtension, Content, Editor } from "@tiptap/core";
 
 import { EditorRenderProps } from "./render";
@@ -43,6 +43,9 @@ export const CollaborationEditor = forwardRef<
   const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle)
 
 
+  useEffect(() => {
+
+  }, [extensions])
 
   const editor = useEditor(
     {
