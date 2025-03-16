@@ -14,10 +14,11 @@ import { TiptapCollabProvider } from "@hocuspocus/provider";
 import { ThemeProvider } from "styled-components";
 import light from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
-import { Dialog, DialogTrigger, cn } from "@repo/ui";
+import { Dialog, DialogTrigger, Tabs, TabsContent, TabsList, TabsTrigger, cn } from "@repo/ui";
 import { useSafeState } from "ahooks";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
+import { Contact2, MessageCircle, MessageCircleMore, TableOfContentsIcon } from "@repo/icon";
 
 export interface EditorRenderProps extends EditorProvider, EditorKit {
   content?: Content;
@@ -90,9 +91,19 @@ export const EditorRender = forwardRef<
             <StyledEditor className="overflow-auto grow">
               <EditorContent editor={editor} />
             </StyledEditor>
-            {toc && <div className={cn("flex-none h-[calc(100vh-60px)] w-[300px] border-l sticky right-0 top-0")}>
-              <MemorizedToC editor={editor as Editor} items={tableOfContents} />
-            </div>}
+            <Tabs defaultValue="contact" className=" flex-none h-[calc(100vh-60px)] w-[300px] border-l sticky right-0 top-0">
+              <TabsList className=" rounded-none w-full justify-start">
+                <TabsTrigger value="content"><TableOfContentsIcon className="h-4 w-4" /></TabsTrigger>
+                <TabsTrigger value="comment">
+                  <MessageCircleMore className="h-4 w-4" />
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="content">
+                {toc && <div>
+                  <MemorizedToC editor={editor as Editor} items={tableOfContents} />
+                </div>}
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       </ThemeProvider>

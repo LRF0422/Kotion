@@ -5,7 +5,7 @@ import { Button, Select } from "../../components";
 import { copy } from "../../utilities";
 import { Copy } from "@repo/icon";
 
-export const CodeBlockView_: React.FC<NodeViewProps> = ({
+export const CodeBlockView: React.FC<NodeViewProps> = ({
   editor,
   node: { attrs },
   updateAttributes,
@@ -55,5 +55,3 @@ export const CodeBlockView_: React.FC<NodeViewProps> = ({
     </NodeViewWrapper>
   );
 };
-
-export const CodeBlockView = React.memo(CodeBlockView_)

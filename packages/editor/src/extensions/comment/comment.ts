@@ -1,8 +1,9 @@
 import { Mark, mergeAttributes } from "@tiptap/core";
 import { v4 as uuidv4 } from "uuid";
 import { findIndex } from 'lodash'
-import { TiptapCollabProvider } from "@hocuspocus/provider";
-import { CSSProperties } from "react";
+import { Doc } from "yjs";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { findMarkPosition } from "@editor/utilities";
 
 export interface CommentInterface {
     user: any,
@@ -30,7 +31,7 @@ interface CommentsStorageInterface {
 
 export interface CommentOptionsInterface {
     user: {},
-    provider?: TiptapCollabProvider
+    document?: Doc
 }
 
 declare module '@tiptap/core' {
@@ -58,25 +59,22 @@ const Comments = Mark.create<CommentOptionsInterface, CommentsStorageInterface>(
         }
     },
 
-    onCreate(this) {
-        const provider: TiptapCollabProvider | undefined = this.options.provider;
-        console.log("provider", provider);
-
-        if (provider) {
-
-            const doc = provider.document
-            const comments = doc.getArray("Comments")
-            if (!doc.getMap("config").get("initComment")) {
-                doc.getArray("Comments").insert(0, [])
-                doc.getMap("config").set("initComment", true)
-            }
-            comments.observeDeep(() => {
-                console.log("comment update")
-                const commandList = comments.toArray()
-                this.storage.comments = commandList as CustomCommentInterface[]
-            })
-        }
-    },
+    // onCreate(this) {
+    //     const doc = this.editor.extensionManager.extensions.find(it => it.name === 'collaboration')?.options.document as Doc
+    //     if (doc) {
+    //         this.options.document = doc
+    //         const comments = doc.getArray("Comments")
+    //         if (!doc.getMap("config").get("initComment")) {
+    //             doc.getArray("Comments").insert(0, [])
+    //             doc.getMap("config").set("initComment", true)
+    //         }
+    //         comments.observeDeep(() => {
+    //             const commandList = comments.toArray()
+    //             console.log("comment update", commandList)
+    //             this.storage.comments = commandList as CustomCommentInterface[]
+    //         })
+    //     }
+    // },
     addAttributes() {
         return {
             comment_id: {
@@ -109,7 +107,7 @@ const Comments = Mark.create<CommentOptionsInterface, CommentsStorageInterface>(
                         finalComment.parent_title = parent.comments[commentIndex].comment.substring(0, 50);
                     }
                     this.storage.comments[index].comments?.push(finalComment)
-                    this.options.provider?.document?.getArray("Comments").insert(0, this.storage.comments)
+                    // this.options?.document?.getArray("Comments").insert(0, this.storage.comments)
                 } else {
                     commentsList = {
                         threadId: uuidv4(),
@@ -118,7 +116,7 @@ const Comments = Mark.create<CommentOptionsInterface, CommentsStorageInterface>(
                     commentsList.comments?.push(finalComment);
                     commands.setMark('comment', { 'comment_id': commentsList.threadId })
                     this.storage.comments.push(commentsList);
-                    this.options.provider?.document?.getArray("Comments").insert(0, this.storage.comments)
+                    // this.options.document?.getArray("Comments").insert(0, this.storage.comments)
                 }
                 return true
             },
@@ -135,8 +133,7 @@ const Comments = Mark.create<CommentOptionsInterface, CommentsStorageInterface>(
                     }
 
                     this.storage.comments = comments;
-                    this.options.provider?.document?.getArray("Comments").insert(0, comments)
-                    this.options.provider?.forceSync()
+                    this.options?.document?.getArray("Comments").insert(0, comments)
                     this.editor.state.doc.descendants((node: any, pos: any) => {
                         const { marks } = node
                         marks.forEach((mark: any) => {
@@ -181,8 +178,21 @@ const Comments = Mark.create<CommentOptionsInterface, CommentsStorageInterface>(
                 getAttrs: (el) => !!(el as HTMLSpanElement).getAttribute('comment_id')?.trim() && null,
             },
         ]
+    },
+    addProseMirrorPlugins() {
+        return [
+            new Plugin({
+                key: new PluginKey('comment'),
+                props: {
+                    handleDOMEvents: {
+                        mousedown: (view, event) => {
+                            const { state } = view;
+                        }
+                    }
+                }
+            })
+        ]
     }
-    ,
 })
 
 export default Comments;

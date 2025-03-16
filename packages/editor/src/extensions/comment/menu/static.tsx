@@ -15,7 +15,7 @@ export const CommentStaticMenu: React.FC<{ editor: Editor }> = (props) => {
         size="sm"
         pressed={isCommentActive}
         onClick={() => {
-            editor.commands.addComments({ comment: '123123123213', parent_id: null })
+            editor.commands.addComments({ comment: '', parent_id: null })
         }}
     >
         <MessageCircleMore className="h-4 w-4" />
