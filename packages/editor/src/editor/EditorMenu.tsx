@@ -67,10 +67,9 @@ export const EditorMenu: React.FC<{ editor: Editor, extensionWrappers: Extension
                 {renderItem(record.mark, 1, editor)}
                 {renderItem(record.inline, 2, editor)}
                 {renderItem(record.block, 3, editor)}
-                {renderItem(bubbleMenu, 4, editor)}
-
             </div>
         }
+         {renderItem(bubbleMenu, 4, editor)}
         {
             flotMenu.length > 0 && <ReactBubble
                 forNode

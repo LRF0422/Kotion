@@ -19,6 +19,7 @@ import { useSafeState } from "ahooks";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
 import { Contact2, MessageCircle, MessageCircleMore, TableOfContentsIcon } from "@repo/icon";
+import { EditorMenu } from "./EditorMenu";
 
 export interface EditorRenderProps extends EditorProvider, EditorKit {
   content?: Content;
@@ -88,6 +89,7 @@ export const EditorRender = forwardRef<
       <ThemeProvider theme={light}>
         <div className={cn("w-[calc(100vw-350px)]", props.className)}>
           <div className="flex flex-row relative w-full h-full">
+              <EditorMenu editor={editor} extensionWrappers={wrappers as ExtensionWrapper[]} toolbar={props.toolbar} />
             <StyledEditor className="overflow-auto grow">
               <EditorContent editor={editor} />
             </StyledEditor>

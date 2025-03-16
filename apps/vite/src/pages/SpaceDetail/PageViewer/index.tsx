@@ -110,14 +110,14 @@ export const PageViewer: React.FC = () => {
         </header>
         <main className="w-full">
             <EditorRender
-                ref={editor}
-                content={parse(page.content || "{}")}
-                className="h-[calc(100vh-60px)] overflow-auto"
-                id={params.pageId as string}
-                isEditable={false}
-                isColl={false}
-                pageInfo={page}
-                toolbar
+                    ref={editor}
+                    content={parse(page.content || "{}")}
+                    className="h-[calc(100vh-60px)] overflow-auto"
+                    id={params.pageId as string}
+                    isEditable={false}
+                    isColl={false}
+                    pageInfo={page}
+                    toolbar={ false}
             />
         </main>
     </div>)
