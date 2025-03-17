@@ -8,7 +8,6 @@ import { Editor } from "@tiptap/core";
 import { EditorState } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
 import React, { useMemo } from "react";
-import { useTheme } from "@/theme";
 
 
 const defaultTippyOptions: BuiltInTiptapBubbleMenuProps["tippyOptions"] = {

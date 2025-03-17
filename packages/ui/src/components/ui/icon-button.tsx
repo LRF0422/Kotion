@@ -9,7 +9,7 @@ export interface IconButtonProps {
     disabled?: boolean;
 }
 export const IconButton: React.FC<IconButtonProps> = (props) => {
-    return <div className={ cn("p-1 hover:bg-muted rounded-md cursor-pointer", props.className) } onClick={props.onClick} >
-        { props.icon }
+    return <div className={cn("p-1 hover:bg-muted rounded-md cursor-pointer flex items-center justify-center", props.className)} onClick={props.onClick} >
+        {props.icon}
     </div>
 }

@@ -40,11 +40,9 @@ export const BubbleMenu = (props: BubbleMenuProps) => {
       shouldShow
     });
 
-    // @ts-ignore
     editor.registerPlugin(plugin);
-
-    // @ts-ignore
     return () => editor.unregisterPlugin(pluginKey);
+
   }, [props.editor, element]);
 
   return (

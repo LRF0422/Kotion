@@ -5,6 +5,7 @@ import Comments from "../comment";
 import { Node } from "@tiptap/pm/model";
 import { Avatar, Button, IconButton, Separator, Textarea } from "@repo/ui";
 import { CheckIcon, HeartIcon, MoreHorizontalIcon, ReplyIcon, Trash2, XIcon } from "@repo/icon";
+import { useAttributes } from "@editor/hooks";
 
 
 const CommentItem = () => {
@@ -20,7 +21,7 @@ const CommentItem = () => {
                 <div className=" font-medium">Admin</div>
                 <div className=" italic text-gray-400 text-xs">2025/03/25</div>
                 <div className=" absolute right-0 top-0">
-                    <MoreHorizontalIcon className="h-4 w-4" />
+                    <IconButton icon={<MoreHorizontalIcon className="h-4 w-4" />} />
                 </div>
             </div>
         </div>
@@ -29,13 +30,13 @@ const CommentItem = () => {
         </div>
         {
             editing ? <div className=" space-y-1">
-                <Textarea />
+                <Textarea spellCheck={false} />
                 <div className="flex gap-1 justify-end w-full">
-                    <IconButton className=" h-5 w-5" icon={<CheckIcon className="h-3 w-3" />} onClick={() => setEditing(false)} /> 
-                    <IconButton className=" h-5 w-5" icon={ <XIcon className="h-3 w-3"/>} onClick={() => setEditing(false)} /> 
+                    <IconButton className=" h-5 w-5" icon={<CheckIcon className="h-4 w-4" />} onClick={() => setEditing(false)} />
+                    <IconButton className=" h-5 w-5" icon={<XIcon className="h-4 w-4" />} onClick={() => setEditing(false)} />
                 </div>
             </div> :
-                 <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1">
                     <IconButton
                         icon={<ReplyIcon className="h-4 w-4" />}
                         onClick={() => {
@@ -43,9 +44,9 @@ const CommentItem = () => {
                         }}
                     />
                     <IconButton icon={<Trash2 className="h-4 w-4" />} />
-                    <IconButton icon={ <HeartIcon className="h-4 w-4"/> } />
-        </div>
-       }
+                    <IconButton icon={<HeartIcon className="h-4 w-4" />} />
+                </div>
+        }
         <Separator orientation="horizontal" />
     </div>
 }
@@ -56,9 +57,8 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
         return isMarkActive(editor.state, Comments.name)
     }, [editor]);
 
-    const unsetSetComment = () => {
-        editor.commands.removeSpecificComment("123123", "123123");
-    }
+
+    const threadId = useAttributes(editor, 'threadId') as string
 
     const getReferenceClientRect = useCallback(() => {
         const { selection } = editor.state;
@@ -82,7 +82,17 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
         }}
     >
         <div className="w-[250px]">
-            <div className=" text-md h-[30px] p-1">Comments</div>
+            <div className="flex justify-between items-center">
+                <div className=" text-md h-[30px] p-1">Comments</div>
+                <div className=" flex items-center gap-1">
+                    <IconButton icon={<CheckIcon className="h-4 w-4" />} onClick={() => {
+                        editor.commands.removeSpecificComment(threadId, "123123");
+                    }} />
+                    <IconButton icon={<Trash2 className="h-4 w-4" />} onClick={() => {
+                        editor.commands.removeSpecificComment(threadId, "123123");
+                    }} />
+                </div>
+            </div>
             <Separator orientation="horizontal" />
             <CommentItem />
         </div>
