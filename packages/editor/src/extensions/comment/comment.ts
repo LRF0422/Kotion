@@ -2,8 +2,6 @@ import { Mark, mergeAttributes } from "@tiptap/core";
 import { v4 as uuidv4 } from "uuid";
 import { findIndex } from 'lodash'
 import { Doc } from "yjs";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
-import { CSSProperties } from "react";
 
 export interface CommentInterface {
     user: any,
@@ -33,23 +31,6 @@ export interface CommentOptionsInterface {
     user: {},
     document?: Doc,
     HTMLAttributes: any,
-}
-
-
-const cssPropertiesToComponent = (dict: React.CSSProperties) => {
-    let str = '';
-    for (const [key, value] of Object.entries(dict)) {
-        let clo = '';
-        key.split('').forEach(lt => {
-            if (lt.toUpperCase() === lt) {
-                clo += '-' + lt.toLowerCase();
-            } else {
-                clo += lt;
-            }
-        });
-        str += clo + ':' + value + ';';
-    }
-    return str;
 }
 
 declare module '@tiptap/core' {
@@ -85,10 +66,6 @@ const Comments = Mark.create<CommentOptionsInterface, CommentsStorageInterface>(
                 parseHTML: (element: any) => element.getAttribute('comment_id'),
                 renderHTML: (attrs) => ({ 'comment_id': attrs.comment_id }),
             },
-            HTMLAttributes: {
-                class: 'bg-muted',
-                style: "background-color: red"
-            }
         }
     },
     addCommands() {

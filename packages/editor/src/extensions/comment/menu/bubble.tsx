@@ -3,7 +3,7 @@ import { Editor, findParentNode, isMarkActive, posToDOMRect } from "@tiptap/core
 import React, { useCallback, useState } from "react";
 import Comments from "../comment";
 import { Node } from "@tiptap/pm/model";
-import { Avatar, Button, IconButton, Separator, Textarea } from "@repo/ui";
+import { Avatar, IconButton, Separator, Textarea } from "@repo/ui";
 import { CheckIcon, HeartIcon, MoreHorizontalIcon, ReplyIcon, Trash2, XIcon } from "@repo/icon";
 import { useAttributes } from "@editor/hooks";
 
@@ -26,7 +26,10 @@ const CommentItem = () => {
             </div>
         </div>
         <div className="p-1">
-            Meet Decoroom, where innovation meets inspiration in the realm of virtual interior design. Our brand identity reflects the essence of creating personalized and enchanting spaces that resonate with individual tastes and lifestyles.
+            Meet Decoroom,
+            where innovation meets inspiration in the realm of virtual interior design.
+            Our brand identity
+            reflects the essence of creating personalized and enchanting spaces that resonate with individual tastes and lifestyles.
         </div>
         {
             editing ? <div className=" space-y-1">

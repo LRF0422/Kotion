@@ -17,6 +17,7 @@
     "@repo/common": "workspace:*",
     "@repo/core": "workspace:*",
     "@repo/file-manager": "workspace:*",
+    "@repo/mermaid-plugin": "workspace:*",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
     "evaluatex": "^2.2.0",
