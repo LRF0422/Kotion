@@ -14,7 +14,7 @@
     "@repo/icon": "workspace:*",
     "@repo/ui": "workspace:*",
     "autoprefixer": "^10.4.20",
-    "mermaid": "^11.5.0",
+    "mermaid": "^11.4.1",
     "postcss": "^8.4.47"
   },
   "keywords": [],

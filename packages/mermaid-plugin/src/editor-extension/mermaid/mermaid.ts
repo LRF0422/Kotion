@@ -22,6 +22,14 @@ export const Mermaid = Node.create({
         return ReactNodeViewRenderer(MermaidView)
     },
 
+    addAttributes() {
+        return {
+            data: {
+                default: null
+            }
+        }
+    },
+
     addCommands() {
         return {
             insertMermaid: () => ({ commands }) => {
