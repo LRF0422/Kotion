@@ -10,7 +10,6 @@ export const FormatPainerStaticMenu: React.FC<{ editor: Editor }> = (props) => {
     return <Toggle size="sm" pressed={false} onClick={() => {
         editor.commands.setPainter(editor?.state.selection.$head.marks() as Mark[]);
     }}>
-        <PaintRollerIcon className="h-4 w-4"
-        />
+        <PaintRollerIcon className="h-4 w-4" />
     </Toggle>
 }
