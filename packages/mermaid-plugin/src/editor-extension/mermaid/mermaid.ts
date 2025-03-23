@@ -14,6 +14,10 @@ export const Mermaid = Node.create({
     name: "mermaid",
     group: "block",
     content: "paragraph*",
+    draggable: true,
+    atom: true,
+    isolating: true,
+    allowGapCursor: true,
     renderHTML() {
         return ["div", { class: "node-mermaid" }, 0];
     },

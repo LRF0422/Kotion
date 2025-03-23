@@ -8,7 +8,7 @@ import { Separator } from "@repo/ui";
 import { Switch } from "@repo/ui";
 import { CollaborationEditor } from "@repo/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
-import { parse, stringify, useApi } from "@repo/core";
+import { useApi } from "@repo/core";
 import { useNavigator } from "@repo/core";
 import { GlobalState } from "@repo/core";
 import { TiptapCollabProvider } from "@repo/editor";
@@ -99,7 +99,10 @@ export const PageEditor: React.FC = () => {
             page.title = title
             page.icon = icon
             page.id = params.pageId
-            page.content = stringify(pageContent)
+            page.content = JSON.stringify(pageContent)
+
+            console.log('content', pageContent);
+            console.log('page', page.content);            
             page.publish = publish
             if (publish) {
                 useApi(APIS.CREATE_OR_SAVE_PAGE, undefined, page).then((res) => {
@@ -358,7 +361,7 @@ export const PageEditor: React.FC = () => {
                     token={params.pageId as string}
                     toc={true}
                     withTitle={true}
-                    content={parse(page.content || "{}")}
+                    content={JSON.parse(page.content)}
                 />
             }
         </main>

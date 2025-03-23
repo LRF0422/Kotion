@@ -3,5 +3,9 @@ import { Typography } from "@tiptap/extension-typography";
 
 export const TypographyExtension: ExtensionWrapper = {
 	name: Typography.name,
-	extendsion: Typography
+	extendsion: Typography.configure({
+		emDash: false,
+		leftArrow: false,
+		rightArrow: false
+	})
 }

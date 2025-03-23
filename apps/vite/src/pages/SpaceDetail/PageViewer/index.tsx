@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui";
 import { Separator } from "@repo/ui";
 import { EditorRender } from "@repo/editor";
 import { event, ON_FAVORITE_CHANGE } from "../../../event";
-import { parse, useApi } from "@repo/core";
+import { useApi } from "@repo/core";
 import { useNavigator } from "@repo/core";
 import { Editor } from "@repo/editor";
 import { useToggle } from "@repo/core";
@@ -110,14 +110,14 @@ export const PageViewer: React.FC = () => {
         </header>
         <main className="w-full">
             <EditorRender
-                    ref={editor}
-                    content={parse(page.content || "{}")}
-                    className="h-[calc(100vh-60px)] overflow-auto"
-                    id={params.pageId as string}
-                    isEditable={false}
-                    isColl={false}
-                    pageInfo={page}
-                    toolbar={ false}
+                ref={editor}
+                content={JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">"))}
+                className="h-[calc(100vh-60px)] overflow-auto"
+                id={params.pageId as string}
+                isEditable={false}
+                isColl={false}
+                pageInfo={page}
+                toolbar={false}
             />
         </main>
     </div>)
