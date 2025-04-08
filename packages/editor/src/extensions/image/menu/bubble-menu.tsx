@@ -4,7 +4,6 @@ import { Editor, isNodeSelection, posToDOMRect } from "@tiptap/core";
 import {
   BubbleMenu,
   BubbleMenuProps,
-  Button,
   Divider
 } from "../../../components";
 import {
@@ -16,6 +15,7 @@ import {
 import { useAttributes } from "../../../hooks/use-attributes";
 import { deleteNode, isNodeActive } from "../../../utilities";
 import { Image as ImageExtension } from "../image";
+import { Toggle } from "@repo/ui";
 
 const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const { width: currentWidth, height: currentHeight, align } = useAttributes(
@@ -85,29 +85,34 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
       }}
       forNode>
       <div>
-        <Button
-          size="small"
-          active={!!(align === "left") as boolean}
-          icon={<IconImageAlignLeft />}
+        <Toggle
+          size="sm"
+          pressed={!!(align === "left") as boolean}
           onClick={setAlignLeft}
-        />
+        >
+          <IconImageAlignLeft />
+        </Toggle>
 
-        <Button
-          size="small"
-          active={!!(align === "center") as boolean}
-          icon={<IconImageAlignCenter />}
+        <Toggle
+          size="sm"
+          pressed={!!(align === "center") as boolean}
           onClick={setAlignCenter}
-        />
+        >
+          <IconImageAlignCenter />
+        </Toggle>
 
-        <Button
-          size="small"
-          active={(!!(align === "right")) as boolean}
-          icon={<IconImageAlignRight />}
+        <Toggle
+          size="sm"
+          pressed={(!!(align === "right")) as boolean}
           onClick={setAlignRight}
-        />
+        >
+          <IconImageAlignRight />
+        </Toggle>
 
         <Divider />
-        <Button size="small" icon={<IconDelete />} onClick={deleteMe} />
+        <Toggle size="sm" pressed={false} onClick={deleteMe}>
+          <IconDelete />
+        </Toggle>
       </div>
     </BubbleMenu>
   );

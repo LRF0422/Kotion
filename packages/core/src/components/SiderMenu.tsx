@@ -94,7 +94,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
                 name: 'UserInfo',
                 icon: <DropdownMenu>
                     <DropdownMenuTrigger>
-                        <Avatar className="h-9 w-9">
+                        <Avatar className="h-9 w-9 border">
                             <AvatarImage src={`http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${userInfo?.avatar}`} />
                             <AvatarFallback>{userInfo?.account}</AvatarFallback>
                         </Avatar>
@@ -127,7 +127,6 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
                         <DropdownMenuItem className="flex flex-row items-center gap-1" onClick={handleLogout}> <Power className="h-4 w-4" />注销账号</DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>,
-                className: 'hover:bg-white',
                 key: '/setting',
                 attachTabs: true,
                 id: '/setting',

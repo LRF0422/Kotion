@@ -2,7 +2,6 @@ import { NodeViewContent, NodeViewProps, NodeViewWrapper } from "@repo/editor"
 import React, { useEffect, useRef, useState } from "react"
 import mermaid from 'mermaid'
 import { useAsyncEffect, useDebounce, useTheme } from "@repo/core"
-import { Textarea } from "@repo/ui"
 export const MermaidView: React.FC<NodeViewProps> = (props) => {
 
     const ref = useRef<HTMLPreElement>(null)
@@ -13,14 +12,14 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
 
     useEffect(() => {
         mermaid.initialize({ startOnLoad: false, theme: theme === "dark" ? "dark" : "default", suppressErrorRendering: false })
-    }, [])
+    }, [theme])
 
     useAsyncEffect(async () => {
         if (value && value.trim()) {
             const res = await mermaid.render("preview111", value)
             setSvg(btoa(res.svg))
         }
-    }, [value, ref])
+    }, [value, ref.current, theme])
 
     return <NodeViewWrapper className="h-auto">
         <div className=" hidden" ref={divRef}></div>
@@ -32,6 +31,5 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
                 {svg && <img src={`data:image/svg+xml;base64,${svg}`} width="100%" />}
             </div>
         </div>
-
     </NodeViewWrapper>
 }

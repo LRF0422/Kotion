@@ -13,7 +13,7 @@ declare module '@repo/editor' {
 export const Mermaid = Node.create({
     name: "mermaid",
     group: "block",
-    content: "paragraph*",
+    content: "block*",
     draggable: true,
     atom: true,
     isolating: true,

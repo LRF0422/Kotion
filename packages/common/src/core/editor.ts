@@ -1,9 +1,9 @@
-import { AnyExtension, Editor } from "@tiptap/core";
+import { AnyExtension, Editor, Extension, Mark, Node } from "@tiptap/core";
 import { ElementType, ReactNode } from "react";
 
 export type Group = 'block' | 'inline' | 'mark' | 'custom'
 export interface ExtensionWrapper {
-    extendsion: AnyExtension | AnyExtension[]
+    extendsion: AnyExtension | AnyExtension[] | any
     name: string
     icon?: ReactNode
     desc?: ReactNode
