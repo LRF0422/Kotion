@@ -13,8 +13,6 @@ import { toast } from "@repo/ui";
 import _copy from "./copy-to-clipboard"
 import { Fragment, Node, Slice } from "@tiptap/pm/model";
 import { EditorState } from "@tiptap/pm/state";
-//@ts-ignore
-import { __serializeForClipboard } from "@tiptap/pm/view"
 
 export function copy(text: string | { text: string; format: string }[]) {
   return _copy(text, () => toast.success("拷贝成功"));
@@ -43,7 +41,8 @@ export const copyNode = (editor: Editor, extensionName: string) => {
 
   if (targetNode) {
     const slice = new Slice(Fragment.fromArray([targetNode]), 0, 0);
-    const { dom, text } = __serializeForClipboard(editor.view, slice);
+    // @ts-ignore
+    const { dom, text } = editor.view.serializeForClipboard(slice)
 
     const data = [{ format: "text/html", text: dom.innerHTML }];
 

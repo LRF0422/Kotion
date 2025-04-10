@@ -8,7 +8,6 @@ import { EditorKit } from "./kit";
 import { EditorProvider } from "./provider";
 import { AnyExtension, Content, Editor } from "@tiptap/core";
 import { ExtensionWrapper } from "@repo/common";
-import TableOfContents, { getHierarchicalIndexes } from "@tiptap-pro/extension-table-of-contents";
 import { useEditorExtension } from "./use-extension";
 import { TiptapCollabProvider } from "@hocuspocus/provider";
 import { ThemeProvider } from "styled-components";
@@ -63,12 +62,6 @@ export const EditorRender = forwardRef<
       extensions: [
         ...(extensions as AnyExtension[] || []),
         ...(exts as AnyExtension[] || []),
-        TableOfContents.configure({
-          getIndex: getHierarchicalIndexes,
-          onUpdate: (data) => {
-            setTableOfContents(data)
-          }
-        }),
       ],
       editorProps: {
         attributes: {
@@ -89,7 +82,7 @@ export const EditorRender = forwardRef<
       <ThemeProvider theme={light}>
         <div className={cn("w-[calc(100vw-350px)]", props.className)}>
           <div className="flex flex-row relative w-full h-full">
-              <EditorMenu editor={editor} extensionWrappers={wrappers as ExtensionWrapper[]} toolbar={props.toolbar} />
+            <EditorMenu editor={editor} extensionWrappers={wrappers as ExtensionWrapper[]} toolbar={props.toolbar} />
             <StyledEditor className="overflow-auto grow">
               <EditorContent editor={editor} />
             </StyledEditor>
@@ -102,7 +95,7 @@ export const EditorRender = forwardRef<
               </TabsList>
               <TabsContent value="content">
                 {toc && <div>
-                  <MemorizedToC editor={editor as Editor} items={tableOfContents} />
+                  <MemorizedToC editor={editor as Editor} />
                 </div>}
               </TabsContent>
             </Tabs>

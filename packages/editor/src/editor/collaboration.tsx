@@ -8,7 +8,6 @@ import { CollaborationCursor } from "@tiptap/extension-collaboration-cursor"
 import { getUserColor } from "./utilities";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEditorExtension } from "./use-extension";
-import TableOfContents, { getHierarchicalIndexes } from "@tiptap-pro/extension-table-of-contents";
 import { ThemeProvider } from "styled-components";
 import light from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
@@ -64,12 +63,6 @@ export const CollaborationEditor = forwardRef<
             color: getUserColor()
           }
         }),
-        TableOfContents.configure({
-          getIndex: getHierarchicalIndexes,
-          onUpdate: (data) => {
-            setTableOfContents(data)
-          }
-        }),
       ],
       onCreate({ editor: currentEditor }) {
         if (!provider.document.getMap('config').get('initialContentLoaded')) {
@@ -114,7 +107,7 @@ export const CollaborationEditor = forwardRef<
               </StyledEditor>
               {
                 <div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>
-                  <MemorizedToC editor={editor} items={tableOfContents} />
+                  <MemorizedToC editor={editor} />
                 </div>
               }
             </div>

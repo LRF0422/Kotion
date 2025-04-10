@@ -7,9 +7,9 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-        "@repo/ui": "workspace:*",
-        "@tiptap/pm": "2.6.6",
-        "@tiptap/core": "2.6.6"
+    "@repo/ui": "workspace:*",
+    "@tiptap/pm": "2.11.7",
+    "@tiptap/core": "2.11.7"
   },
   "keywords": [],
   "author": "",

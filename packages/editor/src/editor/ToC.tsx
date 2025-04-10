@@ -21,11 +21,12 @@ export const ToCEmptyState = () => {
     )
 }
 
-export const ToC: React.FC<{ items: any[], editor: Editor, className?: string }> = ({
-    items = [],
+export const ToC: React.FC<{ editor: Editor, className?: string }> = ({
     editor,
     className
 }) => {
+    const items = editor.storage.tableOfContent.toc
+
     if (items.length === 0) {
         return <ToCEmptyState />
     }
@@ -46,7 +47,7 @@ export const ToC: React.FC<{ items: any[], editor: Editor, className?: string }>
             }
             const container = document.querySelector("#editor-container")
             console.log('container', container);
-            
+
             container?.scrollTo({
                 top: element.getBoundingClientRect().top + container.scrollTop - 50,
                 behavior: 'smooth',
@@ -57,7 +58,7 @@ export const ToC: React.FC<{ items: any[], editor: Editor, className?: string }>
     return (
         <ScrollArea className={cn("h-full w-full p-3 overflow-auto", className)}>
             <div className=' font-bold'>Table of contents</div>
-            {items.map((item: any, i) => (
+            {items.map((item: any, i: number) => (
                 <ToCItem onItemClick={onItemClick} key={item.id} item={item} index={i + 1} />
             ))}
         </ScrollArea>

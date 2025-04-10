@@ -24,7 +24,7 @@ export const AIExtension: ExtensionWrapper = {
             text: '文生成图',
             slash: '/aiImage',
             action: (editor) => {
-                editor.commands.insertAiImage()
+                // editor.commands.insertAiImage()
             }
         }
     ]
