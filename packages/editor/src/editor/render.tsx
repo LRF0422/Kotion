@@ -77,7 +77,7 @@ export const EditorRender = forwardRef<
   const [tableOfContents, setTableOfContents] = useSafeState<any[]>()
 
   useImperativeHandle(ref, () => editor as Editor);
-  return (editor && tableOfContents &&
+  return (editor &&
     <PageContext.Provider value={pageInfo}>
       <ThemeProvider theme={light}>
         <div className={cn("w-[calc(100vw-350px)]", props.className)}>

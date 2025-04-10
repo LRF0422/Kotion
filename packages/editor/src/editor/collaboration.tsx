@@ -95,7 +95,7 @@ export const CollaborationEditor = forwardRef<
   })
   useImperativeHandle(ref, () => editor as Editor)
 
-  return (editor && tableOfContents &&
+  return (editor &&
     <PageContext.Provider value={pageInfo}>
       <ThemeProvider theme={light}>
         <div className={cn("flex flex-col w-[calc(100vw-350px)] grow z-30")}>

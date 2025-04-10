@@ -7,7 +7,7 @@ export interface TableOfContentStorage {
 
 
 export const TableOfContent = Extension.create<any, TableOfContentStorage>({
-    name: 'table-of-content',
+    name: 'tableOfContent',
     addStorage() {
         return {
             toc: []
