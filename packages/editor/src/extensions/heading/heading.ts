@@ -47,36 +47,36 @@ export const Heading = BuiltInHeading.extend<HeadingOptions>({
     this.storage.editor = this.editor;
   },
 
-  renderHTML({ HTMLAttributes, node }) {
-    const hasLevel: any = this.options.levels.includes(node.attrs.level);
-    const level = hasLevel ? node.attrs.level : this.options.levels[0];
+  // renderHTML({ HTMLAttributes, node }) {
+  //   const hasLevel: any = this.options.levels.includes(node.attrs.level);
+  //   const level = hasLevel ? node.attrs.level : this.options.levels[0];
 
-    // const fold = document.createElement("button");
-    // fold.innerText = "";
-    // fold.innerHTML = FOLD_SVG;
-    // fold.type = "button";
-    // fold.className = `heading-fold ${node.attrs.collapsed ? "collapsed" : ""}`;
-    // fold.addEventListener("mousedown", event => handleFoldContent(event, this));
+  //   // const fold = document.createElement("button");
+  //   // fold.innerText = "";
+  //   // fold.innerHTML = FOLD_SVG;
+  //   // fold.type = "button";
+  //   // fold.className = `heading-fold ${node.attrs.collapsed ? "collapsed" : ""}`;
+  //   // fold.addEventListener("mousedown", event => handleFoldContent(event, this));
 
-    return [
-      `h${level}`,
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
-      [
-        "span",
-        {
-          contentEditable: false,
-          class: `heading-actions ${node.attrs.collapsed ? "collapsed" : ""}`
-        },
-      ],
-      [
-        "span",
-        {
-          class: "heading-content"
-        },
-        0
-      ]
-    ];
-  },
+  //   return [
+  //     `h${level}`,
+  //     mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
+  //     [
+  //       "span",
+  //       {
+  //         contentEditable: false,
+  //         class: `heading-actions ${node.attrs.collapsed ? "collapsed" : ""}`
+  //       },
+  //     ],
+  //     [
+  //       "span",
+  //       {
+  //         class: "heading-content"
+  //       },
+  //       0
+  //     ]
+  //   ];
+  // },
 
   addKeyboardShortcuts() {
     return this.options.levels.reduce(
@@ -88,25 +88,25 @@ export const Heading = BuiltInHeading.extend<HeadingOptions>({
         }
       }),
       {
-        Backspace: ({ editor }) => {
-          const { state, view } = editor;
-          const { $from, from, to, empty } = state.selection;
+        // Backspace: ({ editor }) => {
+        //   const { state, view } = editor;
+        //   const { $from, from, to, empty } = state.selection;
 
-          if (!empty) return false;
+        //   if (!empty) return false;
 
-          if ($from.parent.type.name !== this.name) return false;
+        //   if ($from.parent.type.name !== this.name) return false;
 
-          const $pos = state.doc.resolve(from - 1);
-          if ($pos.parent === $from.parent) return false;
+        //   const $pos = state.doc.resolve(from - 1);
+        //   if ($pos.parent === $from.parent) return false;
 
-          view.dispatch(
-            state.tr
-              .setBlockType(from, to, state.schema.nodes.paragraph as NodeType)
-              .scrollIntoView()
-          );
+        //   view.dispatch(
+        //     state.tr
+        //       .setBlockType(from, to, state.schema.nodes.paragraph as NodeType)
+        //       .scrollIntoView()
+        //   );
 
-          return true;
-        },
+        //   return true;
+        // },
         Enter: ({ editor }) => {
           const { state, view } = editor;
           const { $from, from, $to, to } = state.selection;
