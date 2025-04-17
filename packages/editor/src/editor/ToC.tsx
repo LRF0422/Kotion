@@ -3,14 +3,17 @@ import { ScrollArea } from '@repo/ui'
 import { cn } from '@repo/ui'
 import { Editor } from '@tiptap/core'
 import { TextSelection } from '@tiptap/pm/state'
-import React from 'react'
+import { useSafeState } from 'ahooks'
+import React, { useEffect } from 'react'
+
+
 
 export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number }> = ({ item, onItemClick, index }) => {
     return (
         <div className={cn("hover:bg-muted rounded-sm m-1 p-1 text-sm transition-all duration-300 w-full overflow-hidden text-ellipsis text-wrap")} style={{
             paddingLeft: `${10 * item.level}px`
         }}>
-            <a className={`before:[content:attr(data-item-index)"."] flex gap-1`} href={`#${item.id}`} onClick={e => onItemClick(e, item.id)} data-item-index={item.itemIndex}>{item.textContent}</a>
+            <a className={`before:[content:attr(data-item-index)"."] flex gap-1`} href={`#${item.id}`} onClick={e => onItemClick(e, item)} data-item-index={index}>{item.text}</a>
         </div>
     )
 }
@@ -25,33 +28,27 @@ export const ToC: React.FC<{ editor: Editor, className?: string }> = ({
     editor,
     className
 }) => {
-    const items = editor.storage.tableOfContent.toc
+
+    const [items, setItems] = useSafeState<any[]>([])
+
+    useEffect(() => {
+        const toc = editor.storage.tableOfContent.toc
+        setItems(toc)
+    }, [editor.state])
 
     if (items.length === 0) {
         return <ToCEmptyState />
     }
 
-    const onItemClick = (e: Event, id: any) => {
+    const onItemClick = (e: Event, item: any) => {
         e.preventDefault()
 
         if (editor) {
-            const element = editor.view.dom.querySelector(`[data-toc-id="${id}"`) as Element
-            const pos = editor.view.posAtDOM(element, 0)
+            const pos = item.pos
             const tr = editor.view.state.tr
             tr.setSelection(new TextSelection(tr.doc.resolve(pos)))
+                .scrollIntoView()
             editor.view.dispatch(tr)
-            editor.view.focus()
-            if (history.pushState) {
-                // @ts-ignore
-                history.pushState(null, null, `#${id}`)
-            }
-            const container = document.querySelector("#editor-container")
-            console.log('container', container);
-
-            container?.scrollTo({
-                top: element.getBoundingClientRect().top + container.scrollTop - 50,
-                behavior: 'smooth',
-            })
         }
     }
 

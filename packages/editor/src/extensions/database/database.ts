@@ -17,6 +17,8 @@ export const Database = Node.create({
     content: 'gridRow*',
     draggable: true,
     selectable: true,
+    isolating: true,
+    atom: true,
     addOptions() {
         return {
             defaultViewConfig: {
@@ -108,7 +110,7 @@ export const Database = Node.create({
                 const node = createGridView(state.schema, this.options.defaultViewConfig.table.columns);
                 if (dispatch) {
                     const offset = tr.selection.anchor + 1;
-                    tr.insert(state.selection.anchor, node)
+                    tr.insert(state.selection.anchor + 1, node)
                         .scrollIntoView()
                         .setSelection(TextSelection.near(tr.doc.resolve(offset)))
                 }

@@ -95,8 +95,6 @@ export const createSlash = (name: string, options?: SlashOptions) => {
 
             return {
               onStart: props => {
-                console.log('slashProps', props);
-
                 isEditable = props.editor.isEditable;
                 if (!isEditable) return;
 
@@ -104,8 +102,6 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                   props,
                   editor: props.editor
                 });
-
-                console.log('slash component', component);
 
 
                 popup = tippy("body", {

@@ -38,7 +38,7 @@ export interface EditorRenderProps extends EditorProvider, EditorKit {
   withTitle?: boolean
 }
 
-const MemorizedToC = React.memo(ToC)
+// const MemorizedToC = React.memo(ToC)
 
 export const EditorRender = forwardRef<
   Editor | null,
@@ -86,19 +86,7 @@ export const EditorRender = forwardRef<
             <StyledEditor className="overflow-auto grow">
               <EditorContent editor={editor} />
             </StyledEditor>
-            <Tabs defaultValue="contact" className=" flex-none h-[calc(100vh-60px)] w-[300px] border-l sticky right-0 top-0">
-              <TabsList className=" rounded-none w-full justify-start">
-                <TabsTrigger value="content"><TableOfContentsIcon className="h-4 w-4" /></TabsTrigger>
-                <TabsTrigger value="comment">
-                  <MessageCircleMore className="h-4 w-4" />
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="content">
-                {toc && <div>
-                  <MemorizedToC editor={editor as Editor} />
-                </div>}
-              </TabsContent>
-            </Tabs>
+            <ToC editor={editor as Editor} className=" flex-none h-[calc(100vh-60px)] w-[300px] border-l sticky right-0 top-0" />
           </div>
         </div>
       </ThemeProvider>

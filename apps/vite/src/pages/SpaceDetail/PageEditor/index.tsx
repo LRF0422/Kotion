@@ -33,12 +33,11 @@ import { CollaborationInvitationDlg } from "../../../pages/components/Collaborat
 export const PageEditor: React.FC = () => {
     const [page, setPage] = useState<any>()
     const params = useParams()
-    const { userInfo, rightCollpase } = useSelector((state: GlobalState) => state)
+    const { userInfo } = useSelector((state: GlobalState) => state)
     const [loading, { toggle }] = useToggle(false)
     const [pageLoading, { toggle: toggleLoading }] = useToggle(false)
     const [synceStatus, setSyncStatus] = useState(false)
     const lastAwarenessRef = useRef<any[]>([])
-    const dispatch = useDispatch()
     const [status, setStatus] = useState<any>({
         status: 'connecting'
     })
@@ -102,7 +101,7 @@ export const PageEditor: React.FC = () => {
             page.content = JSON.stringify(pageContent)
 
             console.log('content', pageContent);
-            console.log('page', page.content);            
+            console.log('page', page.content);
             page.publish = publish
             if (publish) {
                 useApi(APIS.CREATE_OR_SAVE_PAGE, undefined, page).then((res) => {
@@ -132,12 +131,6 @@ export const PageEditor: React.FC = () => {
         handleSave()
     })
 
-    const handleCollpase = () => {
-        dispatch({
-            type: 'UPDATE_RIGHT_COLLPASE',
-            payload: !rightCollpase
-        })
-    }
 
     const handleSaveAsTemplate = () => {
         useApi(APIS.SAVE_AS_TEMPLATE, { id: params.pageId }).then(() => {
@@ -162,8 +155,6 @@ export const PageEditor: React.FC = () => {
             },
             onSynced: () => {
                 setSyncStatus(true)
-                console.log('synced');
-
             },
             onStatus: (status) => {
                 setStatus(status)
@@ -213,7 +204,7 @@ export const PageEditor: React.FC = () => {
                 <Button variant="ghost" size="icon" onClick={() => handleSave()}><Save className="h-5 w-5" /></Button>
                 <Button variant="ghost" size="icon" onClick={() => handleSave(true)}><CircleArrowUp className="h-5 w-5" /></Button>
                 <Separator orientation="vertical" />
-                <Button variant="ghost" size="icon" onClick={handleCollpase}>
+                <Button variant="ghost" size="icon">
                     <MessageSquareText className="h-5 w-5" />
                 </Button>
                 <Button variant="ghost" size="icon">
@@ -351,7 +342,7 @@ export const PageEditor: React.FC = () => {
         </header>
         <main className=" w-full flex flex-row justify-center">
             {
-                synceStatus && <CollaborationEditor
+                synceStatus && page && <CollaborationEditor
                     pageInfo={page}
                     ref={editor}
                     provider={provider}

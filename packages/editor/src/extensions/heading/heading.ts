@@ -48,15 +48,15 @@ export const Heading = BuiltInHeading.extend<HeadingOptions>({
   },
 
   renderHTML({ HTMLAttributes, node }) {
-    const hasLevel = this.options.levels.includes(node.attrs.level);
+    const hasLevel: any = this.options.levels.includes(node.attrs.level);
     const level = hasLevel ? node.attrs.level : this.options.levels[0];
 
-    const fold = document.createElement("button");
-    fold.innerText = "";
-    fold.innerHTML = FOLD_SVG;
-    fold.type = "button";
-    fold.className = `heading-fold ${node.attrs.collapsed ? "collapsed" : ""}`;
-    fold.addEventListener("mousedown", event => handleFoldContent(event, this));
+    // const fold = document.createElement("button");
+    // fold.innerText = "";
+    // fold.innerHTML = FOLD_SVG;
+    // fold.type = "button";
+    // fold.className = `heading-fold ${node.attrs.collapsed ? "collapsed" : ""}`;
+    // fold.addEventListener("mousedown", event => handleFoldContent(event, this));
 
     return [
       `h${level}`,
@@ -154,66 +154,66 @@ export const Heading = BuiltInHeading.extend<HeadingOptions>({
     );
   },
 
-  addProseMirrorPlugins() {
-    let loaded = false;
+  // addProseMirrorPlugins() {
+  //   let loaded = false;
 
-    return [
-      new Plugin({
-        key: new PluginKey("folding"),
-        view(view) {
-          loaded = false;
-          view.dispatch(view.state.tr.setMeta("folding", { loaded: true }));
-          return {};
-        },
-        appendTransaction: (transactions, oldState, newState) => {
-          if (loaded) return;
+  //   return [
+  //     new Plugin({
+  //       key: new PluginKey("folding"),
+  //       view(view) {
+  //         loaded = false;
+  //         view.dispatch(view.state.tr.setMeta("folding", { loaded: true }));
+  //         return {};
+  //       },
+  //       appendTransaction: (transactions, oldState, newState) => {
+  //         if (loaded) return;
 
-          if (
-            !transactions.some(transaction => transaction.getMeta("folding"))
-          ) {
-            return;
-          }
+  //         if (
+  //           !transactions.some(transaction => transaction.getMeta("folding"))
+  //         ) {
+  //           return;
+  //         }
 
-          let modified = false;
-          const tr = newState.tr;
-          const blocks = findBlockNodes(newState.doc);
+  //         let modified = false;
+  //         const tr = newState.tr;
+  //         const blocks = findBlockNodes(newState.doc);
 
-          for (const block of blocks) {
-            if (block.node.type.name === "heading") {
-              const persistKey = headingToPersistenceKey(
-                block.node,
-                // @ts-ignore
-                this.editor.options.editorProps.id
-              );
-              const persistedState = localStorage?.getItem(persistKey);
+  //         for (const block of blocks) {
+  //           if (block.node.type.name === "heading") {
+  //             const persistKey = headingToPersistenceKey(
+  //               block.node,
+  //               // @ts-ignore
+  //               this.editor.options.editorProps.id
+  //             );
+  //             const persistedState = localStorage?.getItem(persistKey);
 
-              if (persistedState === "collapsed") {
-                tr.setNodeMarkup(block.pos, undefined, {
-                  ...block.node.attrs,
-                  collapsed: true
-                });
-                modified = true;
-              }
-            }
-          }
+  //             if (persistedState === "collapsed") {
+  //               tr.setNodeMarkup(block.pos, undefined, {
+  //                 ...block.node.attrs,
+  //                 collapsed: true
+  //               });
+  //               modified = true;
+  //             }
+  //           }
+  //         }
 
-          loaded = true;
-          return modified ? tr : null;
-        },
+  //         loaded = true;
+  //         return modified ? tr : null;
+  //       },
 
-        props: {
-          decorations: state => {
-            const { doc } = state;
-            const decorations: Decoration[] = findCollapsedNodes(doc).map(
-              block =>
-                Decoration.node(block.pos, block.pos + block.node.nodeSize, {
-                  class: "folded-content"
-                })
-            );
-            return DecorationSet.create(doc, decorations);
-          }
-        }
-      })
-    ];
-  }
+  //       props: {
+  //         decorations: state => {
+  //           const { doc } = state;
+  //           const decorations: Decoration[] = findCollapsedNodes(doc).map(
+  //             block =>
+  //               Decoration.node(block.pos, block.pos + block.node.nodeSize, {
+  //                 class: "folded-content"
+  //               })
+  //           );
+  //           return DecorationSet.create(doc, decorations);
+  //         }
+  //       }
+  //     })
+  //   ];
+  // }
 });

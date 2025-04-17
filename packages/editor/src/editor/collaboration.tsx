@@ -30,7 +30,7 @@ export interface CollaborationEditorProps extends EditorRenderProps {
   onAwarenessUpdate?: (users: { clientId: number; user: { nickName: string } }[]) => void;
 }
 
-const MemorizedToC = React.memo(ToC)
+// const MemorizedToC = React.memo(ToC)
 
 export const CollaborationEditor = forwardRef<
   Editor | null,
@@ -38,7 +38,6 @@ export const CollaborationEditor = forwardRef<
 >((props, ref) => {
   const { content, user, provider, pageInfo, toc, withTitle } = props
 
-  const [tableOfContents, setTableOfContents] = useSafeState<any[]>()
   const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle)
 
 
@@ -107,7 +106,7 @@ export const CollaborationEditor = forwardRef<
               </StyledEditor>
               {
                 <div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>
-                  <MemorizedToC editor={editor} />
+                  <ToC editor={editor} />
                 </div>
               }
             </div>
