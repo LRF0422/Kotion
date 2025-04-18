@@ -72,7 +72,7 @@ export const Database = Node.create({
                 }
             },
             views: {
-                default: ["chart", "table", "calendar"],
+                default: ["table", "chart", "calendar"],
                 rendered: true
             },
             viewOptions: {

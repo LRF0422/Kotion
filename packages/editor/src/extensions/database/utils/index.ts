@@ -82,7 +82,7 @@ export function isInGrid(state: EditorState): boolean {
 	return false;
 }
 
-export const addRow = (editor: Editor,state: EditorState, view: EditorView, node: Node, pos: number, data?: any) => {
+export const addRow = (editor: Editor, state: EditorState, view: EditorView, node: Node, pos: number, data?: any) => {
 
 	if (node) {
 		const json = node.toJSON() as JSONContent
@@ -100,7 +100,7 @@ export const addRow = (editor: Editor,state: EditorState, view: EditorView, node
 		const row = (state.schema.nodes['gridRow'] as NodeType).createChecked({ id: cols[0]?.attrs.data }, cols as Node[]).toJSON()
 		rows.push(row)
 		json.content = rows
-		const tr =  state.tr.replaceRangeWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
+		const tr = state.tr.replaceRangeWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
 
 		// const tr = state.tr.insert(insertPos, (state.schema.nodes['gridRow'] as NodeType).createChecked({ id: cols[0]?.attrs.data }, cols as Node[]))
 		view.dispatch(tr)
@@ -117,7 +117,7 @@ export const addCol = (state: EditorState, view: EditorView, node: Node, pos: nu
 
 	const json = node.toJSON() as JSONContent
 
-	if(json) {
+	if (json) {
 		json.content?.forEach(row => {
 			row.content?.push({
 				type: 'gridCell',
@@ -129,7 +129,7 @@ export const addCol = (state: EditorState, view: EditorView, node: Node, pos: nu
 		})
 		json.attrs!.columns.push(column)
 		console.log('json', json)
-		tr.replaceWith(pos, pos + node.nodeSize,Node.fromJSON(state.schema, json))
+		tr.replaceWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
 		view.dispatch(tr)
 	}
 
@@ -265,13 +265,13 @@ export const removeRow = (editor: Editor, state: EditorState, view: EditorView, 
 		})
 		console.log('res', res);
 
-		if(res) {
+		if (res) {
 			json.content = json.content?.filter(it => !rowIndex.includes(it?.attrs?.id))
-			const tr= state.tr.replaceWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
+			const tr = state.tr.replaceWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
 			view.dispatch(tr)
 		}
-		
-	
+
+
 		// rowIndex.forEach(key => {
 		// 	const res = editor.$node("gridRow", {
 		// 		id: key
@@ -316,7 +316,7 @@ export const updateCellData = (state: EditorState, view: EditorView, node: Node,
 
 export const updateCellDataV2 = (state: EditorState, view: EditorView, node: Node, pos: number, updateCells: UpdateCellProps[] = []) => {
 	console.log('update cell, props', updateCells);
-	
+
 	if (updateCells.length > 0) {
 		const tr = state.tr
 		updateCells.forEach(it => {

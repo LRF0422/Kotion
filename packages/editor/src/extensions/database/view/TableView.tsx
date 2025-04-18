@@ -1,5 +1,5 @@
 import { Plus, SearchIcon, Settings, Table, Trash2 } from "@repo/icon";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useMemo, useRef, useState } from "react";
 import { NodeViewContext } from "../DatabaseView";
 import { Button, Input } from "@repo/ui";
 import 'react-data-grid/lib/styles.css';

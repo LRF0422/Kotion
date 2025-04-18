@@ -1,41 +1,17 @@
-import { ChartBar, ChartBarDecreasing, ChartColumnBig, TrendingUp } from "@repo/icon"
-import { Bar, BarChart, CartesianGrid, XAxis } from "@repo/ui"
+import { ChartArea, ChartBar, ChartColumnBig, ChartPie } from "@repo/icon"
+import { EmptyState, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui"
+import * as Charts from "./charts"
 
 import {
     Card,
     CardContent,
-    CardDescription,
-    CardFooter,
     CardHeader,
-    CardTitle,
 } from "@repo/ui"
-import {
-    ChartConfig,
-    ChartContainer,
-    ChartTooltip,
-    ChartTooltipContent,
-} from "@repo/ui"
-import React, { forwardRef } from "react"
+import React, { forwardRef, useCallback, useContext } from "react"
 import { DropdownMenuContent, DropdownMenuLabel } from "@repo/ui"
-const chartData = [
-    { month: "January", desktop: 186, mobile: 80 },
-    { month: "February", desktop: 305, mobile: 200 },
-    { month: "March", desktop: 237, mobile: 120 },
-    { month: "April", desktop: 73, mobile: 190 },
-    { month: "May", desktop: 209, mobile: 130 },
-    { month: "June", desktop: 214, mobile: 140 },
-]
+import { NodeViewContext } from "../DatabaseView"
+import { useToggle } from "ahooks"
 
-const chartConfig = {
-    desktop: {
-        label: "Desktop",
-        color: "hsl(var(--chart-1))",
-    },
-    mobile: {
-        label: "Mobile",
-        color: "hsl(var(--chart-2))",
-    },
-} satisfies ChartConfig
 
 const ViewOption = forwardRef((props, ref: any) => {
     return <DropdownMenuContent ref={ref} className="w-[300px]">
@@ -43,43 +19,65 @@ const ViewOption = forwardRef((props, ref: any) => {
     </DropdownMenuContent>
 })
 
-export const ChartView: React.FC = () => {
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Bar Chart - Multiple</CardTitle>
-                <CardDescription>January - June 2024</CardDescription>
+export const ChartView: React.FC<any> = (props) => {
+
+    const { node, updateAttributes } = useContext(NodeViewContext)
+    const config = node.attrs.viewOptions[props.viewKey] || {}
+    const [flag, { toggle: t }] = useToggle(false)
+
+    const renderView = useCallback(() => {
+        if (config.type) {
+            const Chart = Object.values(Charts).find((Chart: any) => Chart.default.name === config.type)
+            return Chart && <Chart.default.component {...props} />
+        }
+    }, [config])
+
+    return <div>
+        <Card className="">
+            <CardHeader className=" border-b p-2">
+                <div className="flex items-center gap-2">
+                    <Select defaultValue={config.type} onValueChange={(value: string) => {
+                        config.type = value
+                        updateAttributes({
+                            ...node.attrs,
+                            viewOptions: {
+                                ...node.attrs.viewOptions,
+                                [props.viewKey]: { ...config }
+                            }
+                        })
+                        t()
+                    }}>
+                        <SelectTrigger className="w-[200px] h-8">
+                            <SelectValue placeholder="Select a chart type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {
+                                Object.values(Charts).map((Chart: any, i) => (
+                                    <SelectItem key={i} value={Chart.default.name}>{Chart.default.name}</SelectItem>
+                                ))
+                            }
+                        </SelectContent>
+                    </Select>
+                </div>
             </CardHeader>
-            <CardContent>
-                <ChartContainer config={chartConfig}>
-                    <BarChart accessibilityLayer data={chartData}>
-                        <CartesianGrid vertical={false} />
-                        <XAxis
-                            dataKey="month"
-                            tickLine={false}
-                            tickMargin={10}
-                            axisLine={false}
-                            tickFormatter={(value: any) => value.slice(0, 3)}
-                        />
-                        <ChartTooltip
-                            cursor={false}
-                            content={<ChartTooltipContent indicator="dashed" />}
-                        />
-                        <Bar dataKey="desktop" fill="var(--color-desktop)" radius={4} />
-                        <Bar dataKey="mobile" fill="var(--color-mobile)" radius={4} />
-                    </BarChart>
-                </ChartContainer>
+            <CardContent className="w-full h-full p-0" >
+                {
+                    config.type ? renderView() : <EmptyState
+                        className="border-none w-full max-w-none rounded-none"
+                        title="No chart selected"
+                        description="Select a chart to view its contents"
+                        action={{
+                            label: 'Select a chart',
+                            onClick: () => {
+                                console.log('123')
+                            }
+                        }}
+                        icons={[ChartBar, ChartPie, ChartArea]}
+                    />
+                }
             </CardContent>
-            <CardFooter className="flex-col items-start gap-2 text-sm">
-                <div className="flex gap-2 font-medium leading-none">
-                    Trending up by 5.2% this month <TrendingUp className="h-4 w-4" />
-                </div>
-                <div className="leading-none text-muted-foreground">
-                    Showing total visitors for the last 6 months
-                </div>
-            </CardFooter>
         </Card>
-    )
+    </div>
 }
 
 // @ts-ignore
