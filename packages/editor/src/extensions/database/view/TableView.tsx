@@ -22,7 +22,7 @@ const Container = styled.div`
     }
 `
 
-export const TableView: React.FC = () => {
+export const TableView: React.FC<any> = (props) => {
 
     const { theme } = useTheme()
     const { editor,

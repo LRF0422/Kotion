@@ -177,13 +177,13 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
     const getContent = (view: string) => {
         switch (view) {
             case 'table':
-                return <TableView />
+                return <TableView viewKey={view} />
             case 'chart':
-                return <ChartView />
+                return <ChartView viewKey={view} />
             case 'calendar':
                 return <CalendarView viewKey={view} />
             default:
-                return <TableView />
+                return <TableView viewKey={view} />
         }
     }
 

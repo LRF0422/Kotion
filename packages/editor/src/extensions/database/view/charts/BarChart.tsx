@@ -47,6 +47,13 @@ const Component: React.FC<any> = (props) => {
     const [flag, { toggle: t }] = useToggle(false)
     const config = node.attrs.viewOptions[props.viewKey] || {}
 
+
+    useEffect(() => {
+        console.log('config', config);
+        console.log('node attrs', node.attrs);
+        console.log('props', props)
+    }, [config])
+
     return <div className="flex w-full h-full items-stretch ">
         <div className="w-[300px] not-prose border-r bg-muted overflow-auto">
             <Accordion type="multiple" >
