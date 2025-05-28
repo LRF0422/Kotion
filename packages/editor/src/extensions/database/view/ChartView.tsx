@@ -11,6 +11,8 @@ import React, { forwardRef, useCallback, useContext } from "react"
 import { DropdownMenuContent, DropdownMenuLabel } from "@repo/ui"
 import { NodeViewContext } from "../DatabaseView"
 import { useToggle } from "ahooks"
+import BarChart from "./charts/BarChart"
+import AreaChart from "./charts/AreaChart"
 
 
 const ViewOption = forwardRef((props, ref: any) => {
@@ -21,16 +23,21 @@ const ViewOption = forwardRef((props, ref: any) => {
 
 export const ChartView: React.FC<any> = (props) => {
 
-    const { node, updateAttributes } = useContext(NodeViewContext)
+    const { node, updateAttributes, data, columns, editor } = useContext(NodeViewContext)
     const config = node.attrs.viewOptions[props.viewKey] || {}
     const [flag, { toggle: t }] = useToggle(false)
 
     const renderView = useCallback(() => {
         if (config.type) {
-            const Chart = Object.values(Charts).find((Chart: any) => Chart.default.name === config.type)
-            return Chart && <Chart.default.component {...props} />
+            switch (config.type) {
+                case 'Bar Chart':
+                    return <BarChart.component {...props} node={node} updateAttributes={updateAttributes} data={data} columns={columns} config={config} t={t} />
+                case 'Area Chart':
+                    return <AreaChart.component {...props} node={node} updateAttributes={updateAttributes} data={data} columns={columns} config={config} t={t} />
+            }
         }
-    }, [config])
+        return <></>
+    }, [config, data, columns, node, columns])
 
     return <div>
         <Card className="">

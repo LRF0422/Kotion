@@ -171,7 +171,6 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
         }
         props.updateAttributes(newVal)
         addCol(props.editor.state, props.editor.view, props.node, props.getPos(), column)
-        // doUpdate()
     }, [props.node])
 
     const getContent = (view: string) => {
@@ -181,7 +180,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
             case 'chart':
                 return <ChartView viewKey={view} />
             case 'calendar':
-                return <CalendarView viewKey={view} />
+                return <CalendarView  />
             default:
                 return <TableView viewKey={view} />
         }

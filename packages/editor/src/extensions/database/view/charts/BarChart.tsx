@@ -20,7 +20,6 @@ import {
 import React, { useContext, useEffect } from "react"
 import { ChartKit } from "./types"
 import { NodeViewContext } from "../../DatabaseView"
-import { useToggle } from "ahooks"
 const chartData = [
     { month: "January", desktop: 186, mobile: 80 },
     { month: "February", desktop: 305, mobile: 200 },
@@ -43,9 +42,8 @@ const chartConfig = {
 
 const Component: React.FC<any> = (props) => {
 
-    const { data, columns, node, updateAttributes } = useContext(NodeViewContext)
-    const [flag, { toggle: t }] = useToggle(false)
-    const config = node.attrs.viewOptions[props.viewKey] || {}
+    const { data, columns, updateAttributes, config, t } = props
+    const { editor, node } = useContext(NodeViewContext)
 
 
     useEffect(() => {
@@ -68,7 +66,7 @@ const Component: React.FC<any> = (props) => {
                                     </SelectTrigger>
                                     <SelectContent>
                                         {
-                                            columns.map((column, index) => (
+                                            columns.map((column: any, index: number) => (
                                                 <SelectItem key={index} value={column.id}>
                                                     {column.title}
                                                 </SelectItem>
@@ -95,12 +93,8 @@ const Component: React.FC<any> = (props) => {
                                         config.title = e.target.value
                                         updateAttributes({
                                             ...node.attrs,
-                                            viewOptions: {
-                                                ...node.attrs.viewOptions,
-                                                [props.viewKey]: { ...config }
-                                            }
+                                            [props.viewKey]: { ...config }
                                         })
-                                        t()
                                     }} />
                                 </div>
                                 <div className=" space-y-1">
@@ -109,12 +103,8 @@ const Component: React.FC<any> = (props) => {
                                         config.desc = e.target.value
                                         updateAttributes({
                                             ...node.attrs,
-                                            viewOptions: {
-                                                ...node.attrs.viewOptions,
-                                                [props.viewKey]: { ...config }
-                                            }
+                                            [props.viewKey]: { ...config }
                                         })
-                                        t()
                                     }} />
                                 </div>
                             </CardContent>

@@ -311,25 +311,25 @@ importers:
         version: 6.0.3(@types/react@18.3.18)(lodash@4.17.21)(marked@15.0.7)(react-dom@18.3.1(react@18.3.1))(react-responsive-carousel@3.2.23)(react@18.3.1)
       '@hocuspocus/extension-database':
         specifier: ^2.13.7
-        version: 2.15.0(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
+        version: 2.15.2(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
       '@hocuspocus/extension-logger':
         specifier: ^2.13.7
-        version: 2.15.0(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
+        version: 2.15.2(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
       '@hocuspocus/extension-redis':
-        specifier: ^2.15.2
+        specifier: ^2.13.7
         version: 2.15.2(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
       '@hocuspocus/extension-sqlite':
         specifier: ^2.13.7
-        version: 2.15.0(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
+        version: 2.15.2(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
       '@hocuspocus/provider':
-        specifier: ^2.13.5
-        version: 2.15.0(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
+        specifier: ^2.13.7
+        version: 2.15.2(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
       '@hocuspocus/server':
         specifier: ^2.13.7
-        version: 2.15.0(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
+        version: 2.15.2(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
       '@hocuspocus/transformer':
         specifier: ^2.13.7
-        version: 2.15.0(@tiptap/pm@2.11.7)(y-prosemirror@1.2.15(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21))(yjs@13.6.21)
+        version: 2.15.2(@tiptap/core@2.11.7(@tiptap/pm@2.11.7))(@tiptap/pm@2.11.7)(y-prosemirror@1.2.15(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21))(yjs@13.6.21)
       '@hookform/resolvers':
         specifier: ^3.9.0
         version: 3.10.0(react-hook-form@7.54.2(react@18.3.1))
@@ -1283,19 +1283,16 @@ packages:
       react-dom: ^16.12.0 || 17.x || 18.x
       react-responsive-carousel: ^3.2.7
 
-  '@hocuspocus/common@2.15.0':
-    resolution: {integrity: sha512-xmapO5PnQvf3lYFWrrOaYPjmdrEIVYOpyjInuiCkCzkUmMQCZDVM3wXjPdMJbgAtQXEPUDVkwpr6dJTLjZgTTQ==}
-
   '@hocuspocus/common@2.15.2':
     resolution: {integrity: sha512-wU1wxXNnQQMXyeL3mdSDYiQsm/r/QyJVjjQhF7sUBrLnjdsN7bA1cvfcSvJBr1ymrMSeYRmUL3UlQmEHEOaP7w==}
 
-  '@hocuspocus/extension-database@2.15.0':
-    resolution: {integrity: sha512-KWaO2SQZzI1pyDq+ZWw9iYIcqURwCVoYHI0VJ2Fsk9nUnX33BGkumcQZT/0mPAjgy+LxXyar3d4bDPBEoAL0sA==}
+  '@hocuspocus/extension-database@2.15.2':
+    resolution: {integrity: sha512-BkYDfKA99udx7AEkqWReBS61kvGMC9SqoPJs3v8xNgpaj2GGyMJQlUdQRMhPyZTn2osV+pqhk8Hn7xUJCW1RJg==}
     peerDependencies:
       yjs: ^13.6.8
 
-  '@hocuspocus/extension-logger@2.15.0':
-    resolution: {integrity: sha512-ZDDcgEDCjIMmBBikca9DukowXIGrdep1AtEHltNG8E2nvuwDd08bCLptPB/YjzwnnbwKF5foIaY7aK3kOoIeHA==}
+  '@hocuspocus/extension-logger@2.15.2':
+    resolution: {integrity: sha512-nqSnSFI+xO7dBTsgzSANKvx09ptq8J4Doz3AdLgxfaweYC85qFao7mAx1ZCtWoVHseVwBYua6S3dTwQq5IsWEg==}
 
   '@hocuspocus/extension-redis@2.15.2':
     resolution: {integrity: sha512-2BNBLnDEQq2v3uQSidBSdUOIbHhH383SGxn+hmy6tDQfrt2hLE4MwilgDdcCO0FKOCYaJrV7HyKu6/WyzLbAOg==}
@@ -1303,17 +1300,11 @@ packages:
       y-protocols: ^1.0.6
       yjs: ^13.6.8
 
-  '@hocuspocus/extension-sqlite@2.15.0':
-    resolution: {integrity: sha512-S0dZOxDVum9d00+MhNZDhs3IxldFUdAUOzCwM0ySKObuw5FeYaAkbencVJae4/RwUs8mJ7OCVClhkFZYYlp08w==}
+  '@hocuspocus/extension-sqlite@2.15.2':
+    resolution: {integrity: sha512-nUldcZLj4EumDpBzqjVY4qFI8PCyFRmGoF6pxGig8PTMipezg9D3vSyc/UfY7ao9ircUA8cDVH+LK4W65n6mUA==}
 
-  '@hocuspocus/provider@2.15.0':
-    resolution: {integrity: sha512-Zd1YYVIg1PYfxqMbwWlb89+R/pOGg+UQZWBr7u3g2RDOttdM8F9zzyUzm9XcI7CAGZAUvuqB/oiSsMyGxDsuNg==}
-    peerDependencies:
-      y-protocols: ^1.0.6
-      yjs: ^13.6.8
-
-  '@hocuspocus/server@2.15.0':
-    resolution: {integrity: sha512-JfhDOz11EOWLs3uExC5ymX2GZwsHodDpCNIwaaTBImffyQEzUqkkBGOHsnMsT9s6ST0ijnVCxCQ4nXp/qTxDZw==}
+  '@hocuspocus/provider@2.15.2':
+    resolution: {integrity: sha512-mdBurviyaUd7bQx4vMIE39WqRJDTpfFelHOVXr7w/jA8G1E7K7lxQ9/DacSrbg+9o8s+1z1+SerZiUjaToaBJg==}
     peerDependencies:
       y-protocols: ^1.0.6
       yjs: ^13.6.8
@@ -1324,10 +1315,11 @@ packages:
       y-protocols: ^1.0.6
       yjs: ^13.6.8
 
-  '@hocuspocus/transformer@2.15.0':
-    resolution: {integrity: sha512-KxfCUTpchX5AYhRiQbV7yj9K4WppoZt3wbdbJQFJv0BglgkuwInDJng9ENrlz9/LjyWYXQjqv61GS1Db3RF4Sg==}
+  '@hocuspocus/transformer@2.15.2':
+    resolution: {integrity: sha512-FAo/rt0kch+YeBBp/iit74q+4RV6YRjdZXmvE0/Aw+n/nSW1W0ZNGXnhncfm8qP0CuXnss/Aw8dpfEPZKUWDJw==}
     peerDependencies:
-      '@tiptap/pm': ^2.1.12
+      '@tiptap/core': ^2.6.4
+      '@tiptap/pm': ^2.6.4
       y-prosemirror: ^1.2.1
       yjs: ^13.6.8
 
@@ -6476,10 +6468,6 @@ packages:
     resolution: {integrity: sha512-8XkAphELsDnEGrDxUOHB3RGvXz6TeuYSGEZBOjtTtPm2lwhGBjLgOzLHB63IUWfBpNucQjND6d3AOudO+H3RWQ==}
     hasBin: true
 
-  uuid@11.0.5:
-    resolution: {integrity: sha512-508e6IcKLrhxKdBbcA2b4KQZlLVp2+J5UwQ6F7Drckkc5N9ZJwFa4TgWtsww9UG8fGHbm6gbV19TdM5pQ4GaIA==}
-    hasBin: true
-
   uuid@11.1.0:
     resolution: {integrity: sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A==}
     hasBin: true
@@ -7120,26 +7108,22 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@hocuspocus/common@2.15.0':
-    dependencies:
-      lib0: 0.2.99
-
   '@hocuspocus/common@2.15.2':
     dependencies:
       lib0: 0.2.99
 
-  '@hocuspocus/extension-database@2.15.0(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)':
+  '@hocuspocus/extension-database@2.15.2(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)':
     dependencies:
-      '@hocuspocus/server': 2.15.0(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
+      '@hocuspocus/server': 2.15.2(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
       yjs: 13.6.21
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
       - y-protocols
 
-  '@hocuspocus/extension-logger@2.15.0(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)':
+  '@hocuspocus/extension-logger@2.15.2(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)':
     dependencies:
-      '@hocuspocus/server': 2.15.0(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
+      '@hocuspocus/server': 2.15.2(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -7153,7 +7137,7 @@ snapshots:
       kleur: 4.1.5
       lodash.debounce: 4.0.8
       redlock: 4.2.0
-      uuid: 11.0.5
+      uuid: 11.1.0
       y-protocols: 1.0.6(yjs@13.6.21)
       yjs: 13.6.21
     transitivePeerDependencies:
@@ -7161,9 +7145,9 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@hocuspocus/extension-sqlite@2.15.0(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)':
+  '@hocuspocus/extension-sqlite@2.15.2(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)':
     dependencies:
-      '@hocuspocus/extension-database': 2.15.0(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
+      '@hocuspocus/extension-database': 2.15.2(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)
       kleur: 4.1.5
       sqlite3: 5.1.7
     transitivePeerDependencies:
@@ -7174,25 +7158,11 @@ snapshots:
       - y-protocols
       - yjs
 
-  '@hocuspocus/provider@2.15.0(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)':
+  '@hocuspocus/provider@2.15.2(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)':
     dependencies:
-      '@hocuspocus/common': 2.15.0
+      '@hocuspocus/common': 2.15.2
       '@lifeomic/attempt': 3.1.0
       lib0: 0.2.99
-      ws: 8.18.0
-      y-protocols: 1.0.6(yjs@13.6.21)
-      yjs: 13.6.21
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@hocuspocus/server@2.15.0(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21)':
-    dependencies:
-      '@hocuspocus/common': 2.15.0
-      async-lock: 1.4.1
-      kleur: 4.1.5
-      lib0: 0.2.99
-      uuid: 11.0.5
       ws: 8.18.0
       y-protocols: 1.0.6(yjs@13.6.21)
       yjs: 13.6.21
@@ -7206,7 +7176,7 @@ snapshots:
       async-lock: 1.4.1
       kleur: 4.1.5
       lib0: 0.2.99
-      uuid: 11.0.5
+      uuid: 11.1.0
       ws: 8.18.0
       y-protocols: 1.0.6(yjs@13.6.21)
       yjs: 13.6.21
@@ -7214,7 +7184,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@hocuspocus/transformer@2.15.0(@tiptap/pm@2.11.7)(y-prosemirror@1.2.15(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21))(yjs@13.6.21)':
+  '@hocuspocus/transformer@2.15.2(@tiptap/core@2.11.7(@tiptap/pm@2.11.7))(@tiptap/pm@2.11.7)(y-prosemirror@1.2.15(prosemirror-model@1.24.1)(prosemirror-state@1.4.3)(prosemirror-view@1.38.1)(y-protocols@1.0.6(yjs@13.6.21))(yjs@13.6.21))(yjs@13.6.21)':
     dependencies:
       '@tiptap/core': 2.11.7(@tiptap/pm@2.11.7)
       '@tiptap/pm': 2.11.7
@@ -12959,8 +12929,6 @@ snapshots:
   util-deprecate@1.0.2: {}
 
   uuid@10.0.0: {}
-
-  uuid@11.0.5: {}
 
   uuid@11.1.0: {}
 

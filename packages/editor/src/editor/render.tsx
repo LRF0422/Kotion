@@ -9,7 +9,7 @@ import { EditorProvider } from "./provider";
 import { AnyExtension, Content, Editor } from "@tiptap/core";
 import { ExtensionWrapper } from "@repo/common";
 import { useEditorExtension } from "./use-extension";
-import { TiptapCollabProvider } from "@hocuspocus/provider";
+import { HocuspocusProvider } from "@hocuspocus/provider";
 import { ThemeProvider } from "styled-components";
 import light from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
@@ -29,7 +29,7 @@ export interface EditorRenderProps extends EditorProvider, EditorKit {
   id: string;
   offsetTop?: number,
   isColl?: boolean
-  provider?: TiptapCollabProvider,
+  provider?: HocuspocusProvider,
   className?: string,
   toolbar?: boolean,
   user?: any

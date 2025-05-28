@@ -3,6 +3,7 @@ import { ReactNodeViewRenderer } from "@tiptap/react";
 import { DatabaseView } from "./DatabaseView";
 import { createGridView } from "./utils";
 import { TextSelection } from "@tiptap/pm/state";
+import { any } from "@repo/ui";
 
 declare module "@tiptap/core" {
     interface Commands<ReturnType> {
@@ -79,10 +80,6 @@ export const Database = Node.create({
                 default: this.options.defaultViewConfig,
                 rendered: true
             },
-            updateFlag: {
-                default: 0,
-                rendered: true
-            }
         }
     },
     renderHTML({ HTMLAttributes }) {

@@ -17,6 +17,7 @@ import { ToC } from "./ToC";
 import { cn } from "@repo/ui";
 import { EditorMenu } from "./EditorMenu";
 import { PageContext } from "./context";
+import { log } from "node:console";
 
 
 export interface CollaborationEditorProps extends EditorRenderProps {
@@ -71,6 +72,9 @@ export const CollaborationEditor = forwardRef<
             currentEditor.commands.setContent(content as Content)
           }
         }
+      },
+      onTransaction() { 
+        console.log('transaction!!!!');
       },
       editorProps: {
         attributes: {
