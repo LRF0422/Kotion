@@ -27,7 +27,7 @@ export interface CollaborationEditorProps extends EditorRenderProps {
   user: any,
   className?: string
   onStatus?: (status: any) => void
-  provider: TiptapCollabProvider
+  provider?: TiptapCollabProvider
   onAwarenessUpdate?: (users: { clientId: number; user: { nickName: string } }[]) => void;
 }
 
@@ -49,32 +49,33 @@ export const CollaborationEditor = forwardRef<
   const editor = useEditor(
     {
       editable: true,
+      content: content,
       immediatelyRender: true,
       shouldRerenderOnTransaction: false,
       extensions: [
         ...extensions as AnyExtension[],
-        Collaboration.configure({
-          document: provider.document
-        }),
-        CollaborationCursor.configure({
-          provider: provider,
-          user: {
-            ...user,
-            color: getUserColor()
-          }
-        }),
+        // Collaboration.configure({
+        //   document: provider.document
+        // }),
+        // CollaborationCursor.configure({
+        //   provider: provider,
+        //   user: {
+        //     ...user,
+        //     color: getUserColor()
+        //   }
+        // }),
       ],
-      onCreate({ editor: currentEditor }) {
-        if (!provider.document.getMap('config').get('initialContentLoaded')) {
-          provider.document.getMap('config').set('initialContentLoaded', true)
-          console.log('content', content);
-          if (currentEditor.isEmpty) {
-            currentEditor.commands.setContent(content as Content)
-          }
-        }
-      },
-      onTransaction() { 
-        console.log('transaction!!!!');
+      // onCreate({ editor: currentEditor }) {
+      //   if (!provider.document.getMap('config').get('initialContentLoaded')) {
+      //     provider.document.getMap('config').set('initialContentLoaded', true)
+      //     console.log('content', content);
+      //     if (currentEditor.isEmpty) {
+      //       currentEditor.commands.setContent(content as Content)
+      //     }
+      //   }
+      // },
+      onTransaction(props) {
+        console.log('transaction!!!!', props);
       },
       editorProps: {
         attributes: {

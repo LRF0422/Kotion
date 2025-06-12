@@ -138,29 +138,29 @@ export const PageEditor: React.FC = () => {
         })
     }
 
-    const provider = useMemo(() => {
-        const doc = new Y.Doc()
-        return new TiptapCollabProvider({
-            baseUrl: 'ws://www.simple-platform.cn:1234',
-            name: params.pageId as string,
-            token: params.pageId as string,
-            document: doc,
-            onAwarenessUpdate: ({ states }) => {
-                const users = states.map((state) => ({ clientId: state.clientId, user: state.user }));
-                if (deepEqual(userInfo, lastAwarenessRef.current)) {
-                    return;
-                }
-                setUsers(users)
-                lastAwarenessRef.current = users;
-            },
-            onSynced: () => {
-                setSyncStatus(true)
-            },
-            onStatus: (status) => {
-                setStatus(status)
-            }
-        })
-    }, [params.pageId])
+    // const provider = useMemo(() => {
+    //     const doc = new Y.Doc()
+    //     return new TiptapCollabProvider({
+    //         baseUrl: 'ws://www.simple-platform.cn:1234',
+    //         name: params.pageId as string,
+    //         token: params.pageId as string,
+    //         document: doc,
+    //         onAwarenessUpdate: ({ states }) => {
+    //             const users = states.map((state) => ({ clientId: state.clientId, user: state.user }));
+    //             if (deepEqual(userInfo, lastAwarenessRef.current)) {
+    //                 return;
+    //             }
+    //             setUsers(users)
+    //             lastAwarenessRef.current = users;
+    //         },
+    //         onSynced: () => {
+    //             setSyncStatus(true)
+    //         },
+    //         onStatus: (status) => {
+    //             setStatus(status)
+    //         }
+    //     })
+    // }, [params.pageId])
 
     useUnmount(() => {
         setSyncStatus(false)
@@ -182,6 +182,7 @@ export const PageEditor: React.FC = () => {
                         {status?.status} {loading && <LoaderCircle className="h-3 w-3 animate-spin" />}
                     </div>
                 </Badge>
+                {/* 
                 <div className="mx-2 ">
                     {
                         users ? <div className="flex flex-row gap-2">
@@ -200,7 +201,7 @@ export const PageEditor: React.FC = () => {
                         </div> : <div><Loader className="h-4 w-4 animate-spin" /></div>
                     }
                 </div>
-                <Separator orientation="vertical" />
+                <Separator orientation="vertical" /> */}
                 <Button variant="ghost" size="icon" onClick={() => handleSave()}><Save className="h-5 w-5" /></Button>
                 <Button variant="ghost" size="icon" onClick={() => handleSave(true)}><CircleArrowUp className="h-5 w-5" /></Button>
                 <Separator orientation="vertical" />
@@ -342,10 +343,10 @@ export const PageEditor: React.FC = () => {
         </header>
         <main className=" w-full flex flex-row justify-center">
             {
-                synceStatus && page && <CollaborationEditor
+                page && <CollaborationEditor
                     pageInfo={page}
                     ref={editor}
-                    provider={provider}
+                    // provider={provider}
                     className="h-[calc(100vh-80px)]  overflow-auto"
                     id={params.pageId as string}
                     user={userInfo}

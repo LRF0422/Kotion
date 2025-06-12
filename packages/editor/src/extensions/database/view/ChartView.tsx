@@ -23,9 +23,12 @@ const ViewOption = forwardRef((props, ref: any) => {
 
 export const ChartView: React.FC<any> = (props) => {
 
-    const { node, updateAttributes, data, columns, editor } = useContext(NodeViewContext)
+    const { node, updateAttributes, data, columns, editor, getPos } = useContext(NodeViewContext)
     const config = node.attrs.viewOptions[props.viewKey] || {}
     const [flag, { toggle: t }] = useToggle(false)
+
+    console.log('props', props);
+
 
     const renderView = useCallback(() => {
         if (config.type) {
@@ -45,14 +48,20 @@ export const ChartView: React.FC<any> = (props) => {
                 <div className="flex items-center gap-2">
                     <Select defaultValue={config.type} onValueChange={(value: string) => {
                         config.type = value
-                        updateAttributes({
-                            ...node.attrs,
-                            viewOptions: {
-                                ...node.attrs.viewOptions,
-                                [props.viewKey]: { ...config }
-                            }
-                        })
-                        t()
+                        const tr = editor.state.tr
+                        const currNode = tr.doc.nodeAt(getPos())
+                        if (currNode) {
+                            console.log(currNode);
+                            tr.setNodeMarkup(getPos(), undefined, {
+                                ...currNode.attrs,
+                                viewOptions: {
+                                    ...currNode.attrs.viewOptions,
+                                    [props.viewKey]: { ...config }
+                                }
+                            })
+                            editor.view.dispatch(tr)
+                            t()
+                        }
                     }}>
                         <SelectTrigger className="w-[200px] h-8">
                             <SelectValue placeholder="Select a chart type" />

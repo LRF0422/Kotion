@@ -10,6 +10,7 @@ import { cn } from '@ui/lib/utils'
 import { Paintbrush } from '@repo/icon'
 import { useMemo, useState } from 'react'
 import React from 'react'
+import { IconButton } from '..'
 
 export function PickerExample() {
   const [background, setBackground] = useState('#B4D455')
@@ -28,10 +29,12 @@ export function ColorPicker({
   background,
   setBackground,
   className,
+  simple = false
 }: {
   background: string
   setBackground: (background: string) => void
   className?: string
+  simple?: boolean
 }) {
   const solids = [
     '#E2E2E2',
@@ -82,28 +85,35 @@ export function ColorPicker({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
-          variant={'outline'}
-          className={cn(
-            'w-[220px] justify-start text-left font-normal',
-            !background && 'text-muted-foreground',
-            className
-          )}
-        >
-          <div className="w-full flex items-center gap-2">
-            {background ? (
-              <div
-                className="h-4 w-4 rounded !bg-center !bg-cover transition-all"
-                style={{ background }}
-              ></div>
-            ) : (
-              <Paintbrush className="h-4 w-4" />
+        {
+          simple ? (
+            <IconButton icon={background ? <div
+              className="h-4 w-4 rounded !bg-center !bg-cover transition-all"
+              style={{ background }}
+            ></div> : <Paintbrush className="h-4 w-4" />} />
+          ) : (<Button
+            variant={'outline'}
+            className={cn(
+              'w-[220px] justify-start text-left font-normal',
+              !background && 'text-muted-foreground',
+              className
             )}
-            <div className="truncate flex-1">
-              {background ? background : 'Pick a color'}
+          >
+            <div className="w-full flex items-center gap-2">
+              {background ? (
+                <div
+                  className="h-4 w-4 rounded !bg-center !bg-cover transition-all"
+                  style={{ background }}
+                ></div>
+              ) : (
+                <Paintbrush className="h-4 w-4" />
+              )}
+              <div className="truncate flex-1">
+                {background ? background : 'Pick a color'}
+              </div>
             </div>
-          </div>
-        </Button>
+          </Button>)
+        }
       </PopoverTrigger>
       <PopoverContent className="w-64">
         <Tabs defaultValue={defaultTab} className="w-full">
