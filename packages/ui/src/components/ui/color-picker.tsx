@@ -10,7 +10,7 @@ import { cn } from '@ui/lib/utils'
 import { Paintbrush } from '@repo/icon'
 import { useMemo, useState } from 'react'
 import React from 'react'
-import { IconButton } from '..'
+import { IconButton, Toggle } from '..'
 
 export function PickerExample() {
   const [background, setBackground] = useState('#B4D455')
@@ -87,10 +87,12 @@ export function ColorPicker({
       <PopoverTrigger asChild>
         {
           simple ? (
-            <IconButton icon={background ? <div
-              className="h-4 w-4 rounded !bg-center !bg-cover transition-all"
-              style={{ background }}
-            ></div> : <Paintbrush className="h-4 w-4" />} />
+            <Toggle pressed={false} size="sm">
+              {background ? <div
+                className="h-4 w-4 rounded !bg-center !bg-cover transition-all"
+                style={{ background }}
+              ></div> : <Paintbrush className="h-4 w-4" />}
+            </Toggle>
           ) : (<Button
             variant={'outline'}
             className={cn(

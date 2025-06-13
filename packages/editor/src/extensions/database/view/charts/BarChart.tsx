@@ -1,6 +1,6 @@
 "use client"
 
-import { PlusIcon, Trash2Icon, TrendingUp } from "@repo/icon"
+import { PlusIcon, Trash2Icon } from "@repo/icon"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, Bar, BarChart, CartesianGrid, ColorPicker, IconButton, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, XAxis } from "@repo/ui"
 
 import {
@@ -21,14 +21,6 @@ import React, { useContext, useEffect } from "react"
 import { ChartKit } from "./types"
 import { NodeViewContext } from "../../DatabaseView"
 import { uuidv4 } from "lib0/random"
-const chartData = [
-    { month: "January", desktop: 186, mobile: 80 },
-    { month: "February", desktop: 305, mobile: 200 },
-    { month: "March", desktop: 237, mobile: 120 },
-    { month: "April", desktop: 73, mobile: 190 },
-    { month: "May", desktop: 209, mobile: 130 },
-    { month: "June", desktop: 214, mobile: 140 },
-]
 
 const chartConfig = {
     desktop: {
@@ -46,12 +38,6 @@ const Component: React.FC<any> = (props) => {
     const { data, columns, updateAttributes, config, t } = props
     const { editor, node } = useContext(NodeViewContext)
 
-
-    useEffect(() => {
-        console.log('config', config);
-        console.log('node attrs', node.attrs);
-        console.log('props', props)
-    }, [config])
 
     return <div className="flex w-full h-full items-stretch ">
         <div className="w-[300px] not-prose border-r bg-muted overflow-auto">
@@ -117,8 +103,15 @@ const Component: React.FC<any> = (props) => {
                                                     }
                                                 </SelectContent>
                                             </Select>
-                                            <ColorPicker simple background="" setBackground={() => {
-
+                                            <ColorPicker simple background={it.color || ""} setBackground={(value) => {
+                                                const item = config.yAxis.find((i: any) => i.key === it.key)
+                                                item.color = value
+                                                config.yAxis = [...(config.yAxis || [])]
+                                                updateAttributes({
+                                                    ...node.attrs,
+                                                    [props.viewKey]: { ...config }
+                                                })
+                                                t()
                                             }} />
                                             <IconButton icon={<PlusIcon className="h-4 w-4" />} onClick={() => {
                                                 config.yAxis = [...(config.yAxis || []), {
@@ -183,6 +176,28 @@ const Component: React.FC<any> = (props) => {
                                         t()
                                     }} />
                                 </div>
+                                <div className=" space-y-1">
+                                    <Label htmlFor="desc">Footer</Label>
+                                    <Input className="h-8" defaultValue={config.desc} id="desc" placeholder="Footer" onChange={(e) => {
+                                        config.footer = e.target.value
+                                        updateAttributes({
+                                            ...node.attrs,
+                                            [props.viewKey]: { ...config }
+                                        })
+                                        t()
+                                    }} />
+                                </div>
+                                <div className=" space-y-1">
+                                    <Label htmlFor="desc">Footer Description</Label>
+                                    <Input className="h-8" defaultValue={config.desc} id="desc" placeholder="Footer Description" onChange={(e) => {
+                                        config.footerDesc = e.target.value
+                                        updateAttributes({
+                                            ...node.attrs,
+                                            [props.viewKey]: { ...config }
+                                        })
+                                        t()
+                                    }} />
+                                </div>
                             </CardContent>
                         </Card>
                     </AccordionContent>
@@ -221,10 +236,10 @@ const Component: React.FC<any> = (props) => {
             </CardContent>
             <CardFooter className="flex-col items-start gap-2 text-sm">
                 <div className="flex gap-2 font-medium leading-none">
-                    Trending up by 5.2% this month <TrendingUp className="h-4 w-4" />
+                    {config.footer}
                 </div>
                 <div className="leading-none text-muted-foreground">
-                    Showing total visitors for the last 6 months
+                    {config.footerDesc}
                 </div>
             </CardFooter>
         </Card>
