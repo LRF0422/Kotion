@@ -1,4 +1,4 @@
-import { Button } from "@repo/ui";
+import { Button, IconButton } from "@repo/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewWrapper } from "@tiptap/react";
 import React, { createContext, ElementType, useCallback, useEffect, useRef, useState } from "react";
@@ -180,7 +180,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
             case 'chart':
                 return <ChartView viewKey={view} />
             case 'calendar':
-                return <CalendarView  />
+                return <CalendarView />
             default:
                 return <TableView viewKey={view} />
         }
@@ -213,8 +213,6 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
             ...props.node.attrs,
             views: views
         })
-        console.log('changed views', props);
-
     }, [props])
 
     const handleRemoveView = (key: string) => {
@@ -271,7 +269,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
                                     ))}
                                 </div>
                                 <DropdownMenu>
-                                    <DropdownMenuTrigger><Button variant="ghost" size="icon" ><Plus className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                    <DropdownMenuTrigger><IconButton icon={<Plus className="h-4 w-4" />} /></DropdownMenuTrigger>
                                     <DropdownMenuContent className="w-[300px]">
                                         <DropdownMenuLabel>新建视图</DropdownMenuLabel>
                                         <DropdownMenuSeparator />

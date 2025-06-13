@@ -178,7 +178,7 @@ const Component: React.FC<any> = (props) => {
                                 </div>
                                 <div className=" space-y-1">
                                     <Label htmlFor="desc">Footer</Label>
-                                    <Input className="h-8" defaultValue={config.desc} id="desc" placeholder="Footer" onChange={(e) => {
+                                    <Input className="h-8" defaultValue={config.footer} id="desc" placeholder="Footer" onChange={(e) => {
                                         config.footer = e.target.value
                                         updateAttributes({
                                             ...node.attrs,
@@ -189,7 +189,7 @@ const Component: React.FC<any> = (props) => {
                                 </div>
                                 <div className=" space-y-1">
                                     <Label htmlFor="desc">Footer Description</Label>
-                                    <Input className="h-8" defaultValue={config.desc} id="desc" placeholder="Footer Description" onChange={(e) => {
+                                    <Input className="h-8" defaultValue={config.footerDesc} id="desc" placeholder="Footer Description" onChange={(e) => {
                                         config.footerDesc = e.target.value
                                         updateAttributes({
                                             ...node.attrs,
