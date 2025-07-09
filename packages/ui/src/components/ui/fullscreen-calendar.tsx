@@ -19,7 +19,7 @@ import {
   ChevronRightIcon,
   PlusCircleIcon,
   SearchIcon,
-} from "lucide-react"
+} from "@repo/icon"
 
 import { cn } from "@ui/lib/utils"
 import { Button } from "@ui/components/ui/button"
