@@ -12,14 +12,22 @@ export interface KnowledgeFile {
 export interface UploadKit {
     uploadedFiles: KnowledgeFile[]
     remove: (path: string) => void
-    upload: (type?: string[]) => Promise<KnowledgeFile>
+    upload: (type?: string[]) => Promise<KnowledgeFile>,
+    uploadFile: (file: File) => Promise<KnowledgeFile>,
+    usePath: (fileName: string) => string
 }
 
 export const useUploadFile = () => {
 
     const [files, setFiles] = useState<KnowledgeFile[]>([])
+
+    const downloadPath = "http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName="
     const remove = (path: string) => {
         setFiles(files.filter(file => file.name !== path))
+    }
+
+    const usePath = (fileName: string) => {
+        return downloadPath + fileName
     }
     const upload = async (type: string[] = ["**/*"]) => {
         const blob = await fileOpen({
@@ -32,10 +40,20 @@ export const useUploadFile = () => {
         return res.data
     }
 
+    const uploadFile = async (file: File) => {
+        const res = await useApi(APIS.UPLOAD_FILE, null, {
+            file: file
+        }, { 'Content-Type': 'multipart/form-data' })
+        setFiles([...files, res.data])
+        return res.data
+    }
+
     return {
         uploadedFiles: files,
         upload,
-        remove
+        uploadFile,
+        remove,
+        usePath
     } as UploadKit
 
 }

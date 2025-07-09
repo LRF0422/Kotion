@@ -1,15 +1,18 @@
-import { ArrowDownToLine, BellRing, DownloadCloud, PlusSquare, RefreshCcw, Slack, Star } from "@repo/icon";
+import { ArrowDownToLine, BellRing, BoxIcon, BoxSelect, DownloadCloud, PlugIcon, PlusSquare, RefreshCcw, Slack, Star } from "@repo/icon";
 import {
     Accordion, AccordionContent,
     AccordionItem, AccordionTrigger,
-    Badge, Button, Input, Separator, Tooltip,
+    Badge, Button, EmptyState, Input, Separator, Tooltip,
     TooltipContent, TooltipProvider, TooltipTrigger
 } from "@repo/ui";
-import React from "react";
+import React, { useEffect } from "react";
 import { useNavigator } from "../../hooks/use-navigator";
 import { Outlet } from "react-router-dom";
 import { PluginUploader } from "./PluginUploader";
 import { PluginManager } from "./PluginManager";
+import { useApi } from "../../hooks";
+import { APIS } from "../../api";
+import { useSafeState } from "ahooks";
 
 
 const Item = ({ installed = false }) => {
@@ -60,6 +63,16 @@ const Item = ({ installed = false }) => {
 }
 
 export const Shop: React.FC = () => {
+
+    const [plugins, setPlugins] = useSafeState([])
+    const [installedPlugins, setInstalledPlugins] = useSafeState([])
+
+    useEffect(() => {
+        useApi(APIS.GET_PLUGIN_LIST).then(res => {
+            setPlugins(res.data)
+        })
+    }, [])
+
     return <div className=" grid grid-cols-[300px_1fr] w-full">
         <div className=" border-r w-full h-screen">
             <div className="text-[12px] flex flex-row justify-between items-center p-2">
@@ -88,8 +101,19 @@ export const Shop: React.FC = () => {
                     <AccordionTrigger className="text-[12px] p-0 pb-1 ">INSTALLED</AccordionTrigger>
                     <AccordionContent>
                         <div className="flex flex-col gap-1">
-                            <Item />
-                            <Item />
+                            {
+                                installedPlugins.length > 0 ? installedPlugins.map((plugin, index) => {
+                                    return <Item key={index} installed={true} />
+                                }) : <EmptyState
+                                    title="No installed plugins"
+                                    className=" border-none "
+                                    action={{
+                                        label: "Get Plugins",
+                                        onClick: () => { }
+                                    }}
+                                    icons={[BoxSelect]}
+                                    description="" />
+                            }
                         </div>
                     </AccordionContent>
                 </AccordionItem>

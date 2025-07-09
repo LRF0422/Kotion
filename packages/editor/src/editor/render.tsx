@@ -36,6 +36,7 @@ export interface EditorRenderProps extends EditorProvider, EditorKit {
   toc?: boolean
   pageInfo?: PageContextProps
   withTitle?: boolean
+  onBlur?: (editor: Editor) => void
 }
 
 // const MemorizedToC = React.memo(ToC)
@@ -50,7 +51,8 @@ export const EditorRender = forwardRef<
     isEditable,
     toc = true,
     pageInfo,
-    withTitle = true
+    withTitle = true,
+    onBlur
   } = props;
 
   const [exts, wrappers] = useEditorExtension(undefined, withTitle)
@@ -63,6 +65,7 @@ export const EditorRender = forwardRef<
         ...(extensions as AnyExtension[] || []),
         ...(exts as AnyExtension[] || []),
       ],
+      onBlur: ({ editor }) => { onBlur && onBlur(editor) },
       editorProps: {
         attributes: {
           class: "magic-editor",
@@ -86,7 +89,7 @@ export const EditorRender = forwardRef<
             <StyledEditor className="overflow-auto grow">
               <EditorContent editor={editor} />
             </StyledEditor>
-            <ToC editor={editor as Editor} className=" flex-none h-[calc(100vh-60px)] w-[300px] border-l sticky right-0 top-0" />
+            {toc && <ToC editor={editor as Editor} className=" flex-none h-[calc(100vh-60px)] w-[300px] border-l sticky right-0 top-0" />}
           </div>
         </div>
       </ThemeProvider>

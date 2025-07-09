@@ -1,17 +1,20 @@
 import {
     Button, Dialog, DialogContent, DialogDescription,
     DialogHeader, DialogTitle, DialogTrigger, FileUploader,
-    Form, FormControl, FormField, FormItem, FormLabel, Input,
+    Form, FormControl, FormField, FormItem, FormLabel, IconButton, Input,
+    Label,
     Step, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TagInput, Textarea, useForm, zodResolver
 } from "@repo/ui";
 import React, { PropsWithChildren } from "react";
 import { z } from "@repo/ui";
-import { Plus } from "@repo/icon";
-import { EditorRender } from "@repo/editor";
+import { PlusIcon } from "@repo/icon";
+import { EditorRender, JSONContent } from "@repo/editor";
+import { useUploadFile } from "../../../hooks";
+import { useSafeState } from "ahooks";
 
 interface Description {
     label: string,
-    content: string
+    content: JSONContent
 }
 
 export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
@@ -24,12 +27,38 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
         { number: 5, label: "提交审核" }
     ];
 
+    const logoSize = [
+        {
+            label: '64X64',
+            size: [64, 64],
+            src: ""
+        },
+        {
+            label: '100X100',
+            size: [100, 100],
+            src: ""
+        },
+        {
+            label: '120X120',
+            size: [120, 120],
+            src: ""
+        },
+        {
+            label: '150X150',
+            size: [150, 150],
+            src: ""
+        }
+    ]
+
+    const { upload, usePath, uploadFile } = useUploadFile()
     const [currentStep, setCurrentStep] = React.useState(1);
     const [activeTagIndex, setActiveTagIndex] = React.useState<number | null>(null);
+    const [logos, setLogos] = useSafeState(logoSize)
+    const [attachments, setAttachments] = useSafeState<File[]>([])
     const [descriptions, setDescriptions] = React.useState<Description[]>([
-        { label: "Feature", content: "插件名称" },
-        { label: "Detail", content: "插件名称" },
-        { label: "ChangeLog", content: "插件名称" },
+        { label: "Feature", content: {} },
+        { label: "Detail", content: {} },
+        { label: "ChangeLog", content: {} },
     ])
 
     const formSchema = z.object({
@@ -73,7 +102,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
 
     const handleUpload = () => {
         const value = form.getValues()
-        value.descriptions = descriptions
+        // value.descriptions = descriptions
     }
 
     const render = () => {
@@ -154,18 +183,23 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                         {descriptions.map((item, index) => (
                             <TabsTrigger key={index} value={item.label}>{item.label}</TabsTrigger>
                         ))}
-                        <Button size="icon" className=" ml-1"><Plus className="h-4 w-4" /></Button>
+                        <IconButton icon={<PlusIcon className="h-4 w-4" />} className="ml-1" />
                     </TabsList>
                     <div className="h-[200px]">
                         {descriptions.map((item, index) => (
                             <TabsContent key={index} value={item.label} className=" border rounded-sm h-full overflow-auto">
                                 <EditorRender
                                     id=""
+                                    content={item.content}
                                     isEditable
                                     withTitle={false}
                                     toc={false}
                                     toolbar={false}
                                     className="w-full h-full prose-sm"
+                                    onBlur={(editor) => {
+                                        const content = editor.getJSON();
+                                        setDescriptions((data) => data.map((it, i) => i === index ? { ...it, content } : it))
+                                    }}
                                 />
                             </TabsContent>
                         ))
@@ -173,11 +207,41 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                     </div>
                 </Tabs>
             </div>
-            case 4: return <div>
-                <FileUploader />
+            case 4: return <div className="flex justify-center">
+                <FileUploader value={attachments} className=" w-[100%]"
+                    onValueChange={(files) => setAttachments(files)}
+                    onUpload={(file) => {
+                        return uploadFile(file[0]).then((res) => {
+                            console.log('uploaded file => ', res);
+                        })
+                    }} />
             </div>
-            case 5: return <div className=" flex justify-center w-full h-full">
+            case 5: return <div className=" flex justify-center items-center w-full h-full gap-1">
+                <Button onClick={handlePrev}>上一步</Button>
                 <Button>提交审核</Button>
+            </div>
+            case 2: return <div className="flex gap-3 w-full h-[200px] justify-center">
+                {
+                    logos.map((it, index) => (
+                        it.src ? <img src={usePath(it.src)} width={it.size[0] + 'px'} height={it.size[1] + 'px'} /> :
+                            <div className=" space-y-1" key={index}>
+                                <div
+                                    style={{
+                                        width: it.size[0],
+                                        height: it.size[1]
+                                    }}
+                                    className={`flex items-center justify-center border rounded-sm bg-muted cursor-pointer`}
+                                    onClick={() => {
+                                        upload().then(res => {
+                                            setLogos(logos.map((item, i) => i === index ? { ...item, src: res.name } : item))
+                                        })
+                                    }}
+                                >
+                                    {it.label}
+                                </div>
+                            </div>
+                    ))
+                }
             </div>
             default: return <div>
                 <FileUploader />

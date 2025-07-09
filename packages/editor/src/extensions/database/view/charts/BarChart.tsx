@@ -6,10 +6,6 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, Bar, BarC
 import {
     Card,
     CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
 } from "@repo/ui"
 import {
     ChartConfig,
@@ -21,6 +17,7 @@ import React, { useContext, useEffect } from "react"
 import { ChartKit } from "./types"
 import { NodeViewContext } from "../../DatabaseView"
 import { uuidv4 } from "lib0/random"
+import { BaseChart } from "./BaseChart"
 
 const chartConfig = {
     desktop: {
@@ -39,8 +36,8 @@ const Component: React.FC<any> = (props) => {
     const { editor, node } = useContext(NodeViewContext)
 
 
-    return <div className="flex w-full h-full items-stretch ">
-        <div className="w-[300px] not-prose border-r bg-muted overflow-auto">
+    return <BaseChart
+        configPanel={
             <Accordion type="multiple" defaultValue={["x", "y", "title"]}>
                 <AccordionItem value="x" >
                     <AccordionTrigger className="p-2" >X-axis</AccordionTrigger>
@@ -78,7 +75,7 @@ const Component: React.FC<any> = (props) => {
                         <Card>
                             <CardContent className="p-2 space-y-3">
                                 {
-                                    config.yAxis ? config.yAxis.map((it: any, index: number) => (
+                                    (config.yAxis && config.yAxis.length > 0) ? config.yAxis.map((it: any, index: number) => (
                                         <div className=" space-x-1 flex items-center" key={index}>
                                             <Select defaultValue={it.value} onValueChange={(value) => {
                                                 const item = config.yAxis.find((i: any) => i.key === it.key)
@@ -203,47 +200,34 @@ const Component: React.FC<any> = (props) => {
                     </AccordionContent>
                 </AccordionItem>
             </Accordion>
-        </div>
-        <Card className=" border-none flex-1">
-            <CardHeader>
-                <CardTitle>{config.title}</CardTitle>
-                <CardDescription>{config.desc}</CardDescription>
-            </CardHeader>
-            <CardContent >
-                <ChartContainer config={chartConfig} className=" shadow-none">
-                    <BarChart accessibilityLayer data={data}>
-                        <CartesianGrid vertical={false} />
-                        <XAxis
-                            dataKey={config.xAxis || ""}
-                            tickLine={false}
-                            tickMargin={10}
-                            axisLine={false}
-                        // tickFormatter={(value) => value.slice(0, 3)}
-                        />
-                        <ChartTooltip
-                            cursor={false}
-                            content={<ChartTooltipContent indicator="dashed" />}
-                        />
-                        {
-                            config.yAxis && config.yAxis.map((yAxis: any, index: number) => (
-                                <Bar dataKey={yAxis.value} key={index} fill={
-                                    yAxis.color || "var(--color-desktop)"
-                                } radius={4} />
-                            ))
-                        }
-                    </BarChart>
-                </ChartContainer>
-            </CardContent>
-            <CardFooter className="flex-col items-start gap-2 text-sm">
-                <div className="flex gap-2 font-medium leading-none">
-                    {config.footer}
-                </div>
-                <div className="leading-none text-muted-foreground">
-                    {config.footerDesc}
-                </div>
-            </CardFooter>
-        </Card>
-    </div>
+        }
+        chart={
+            <ChartContainer config={chartConfig} className=" shadow-none">
+                <BarChart accessibilityLayer data={data}>
+                    <CartesianGrid vertical={false} />
+                    <XAxis
+                        dataKey={config.xAxis || ""}
+                        tickLine={false}
+                        tickMargin={10}
+                        axisLine={false}
+                    // tickFormatter={(value) => value.slice(0, 3)}
+                    />
+                    <ChartTooltip
+                        cursor={false}
+                        content={<ChartTooltipContent indicator="dashed" />}
+                    />
+                    {
+                        config.yAxis && config.yAxis.map((yAxis: any, index: number) => (
+                            <Bar dataKey={yAxis.value} key={index} fill={
+                                yAxis.color || "var(--color-desktop)"
+                            } radius={4} />
+                        ))
+                    }
+                </BarChart>
+            </ChartContainer>
+        }
+        config={config}
+    />
 }
 
 export default {
