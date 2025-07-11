@@ -28,7 +28,7 @@ export function EmptyState({
       "group hover:bg-muted/50 transition duration-500 hover:duration-200",
       className
     )}>
-      <div className="flex justify-center isolate">
+      <div className="flex justify-center isolate" >
         {icons.length === 3 ? (
           <>
             <div className="bg-background size-12 grid place-items-center rounded-xl relative left-2.5 top-1.5 -rotate-6 shadow-lg ring-1 ring-border group-hover:-translate-x-5 group-hover:-rotate-12 group-hover:-translate-y-0.5 transition duration-500 group-hover:duration-200">
