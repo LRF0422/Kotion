@@ -1,6 +1,6 @@
 import { SearchIcon } from "@repo/icon";
 import { Button, Card, CardDescription, CardHeader, CardTitle, Input, ScrollArea, Select, Separator, cn } from "@repo/ui";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 export const Marketplace: React.FC = () => {
 
@@ -14,6 +14,21 @@ export const Marketplace: React.FC = () => {
     ])
 
     const [selectCategory, setSelectCategory] = useState<string>("All")
+    const [plugins, setPlugins] = useState<any[]>([])
+
+    useEffect(() => {
+        for (let i = 0; i < 20; i++) {
+            setPlugins(plugins => [...plugins, {
+                name: "Plugin " + i,
+                description: "This is a plugin",
+                author: "Author " + i,
+                category: categories[Math.floor(Math.random() * categories.length)],
+                stars: Math.floor(Math.random() * 100),
+                downloads: Math.floor(Math.random() * 100000),
+                version: "1.0.0",
+            }])
+        }
+    }, [])
 
     return <div className="w-full">
         <div>
@@ -46,28 +61,27 @@ export const Marketplace: React.FC = () => {
                 <Separator orientation="vertical" />
                 <Select></Select>
             </div>
-            <ScrollArea className="w-full h-[calc(100vh-100px)] rounded-sm">
-                <div className="flex gap-2 items-center">
-                    <Card className=" h-[100px] w-[300px]">
-                        <CardHeader>
-                            <CardTitle>
-                                2123
-                            </CardTitle>
-                            <CardDescription>
-                                2123
-                            </CardDescription>
-                        </CardHeader>
-                    </Card>
-                    <Card className=" h-[100px] w-[300px]">
-                        <CardHeader>
-                            <CardTitle>
-                                2123
-                            </CardTitle>
-                            <CardDescription>
-                                2123
-                            </CardDescription>
-                        </CardHeader>
-                    </Card>
+            <ScrollArea className="w-full h-[calc(100vh-160px)] rounded-sm">
+                <div className=" grid grid-cols-3 gap-2 w-full">
+                    {
+                        plugins.map((plugin, index) => (
+                            <div key={index}>
+                                <Card className="h-[160px] relative">
+                                    <div className=" w-[80px] text-center absolute right-0 top-0 text-xs text-gray-300 p-1 rounded-sm bg-muted">
+                                        {plugin.category}
+                                    </div>
+                                    <CardHeader>
+                                        <CardTitle>
+                                            2123
+                                        </CardTitle>
+                                        <CardDescription>
+                                            {plugin.name}
+                                        </CardDescription>
+                                    </CardHeader>
+                                </Card>
+                            </div>
+                        ))
+                    }
                 </div>
             </ScrollArea>
         </div>
