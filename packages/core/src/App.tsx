@@ -20,6 +20,7 @@ import { AppContext, PluginManager } from "@repo/common";
 import { Shop } from "./components/Shop";
 import { PluginDetail } from "./components/Shop/PluginDetail";
 import { importScript } from "./utils/utils";
+import { Marketplace } from "./components/Shop/Marketplace";
 
 
 declare global {
@@ -82,6 +83,7 @@ export const App: React.FC<AppProps> = (props) => {
                 <Route path='/' element={<Layout />}>
                     {routes}
                     <Route path="/plugin-hub" element={<Shop />}>
+                        <Route path="/plugin-hub" element={<Marketplace />} />
                         <Route path="/plugin-hub/:id" element={<PluginDetail />} />
                     </Route>
                 </Route>,

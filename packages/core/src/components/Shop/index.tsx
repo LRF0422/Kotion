@@ -96,7 +96,7 @@ export const Shop: React.FC = () => {
             <div className="px-1">
                 <Input className="h-7" placeholder="Search Extensions in Marketplace" />
             </div>
-            <Accordion type="multiple" className="h-[calc(100vh-70px)] overflow-auto">
+            <Accordion type="multiple" defaultValue={["installed", "recommended"]} className="h-[calc(100vh-70px)] overflow-auto">
                 <AccordionItem value="installed" className="p-1">
                     <AccordionTrigger className="text-[12px] p-0 pb-1 ">INSTALLED</AccordionTrigger>
                     <AccordionContent>
