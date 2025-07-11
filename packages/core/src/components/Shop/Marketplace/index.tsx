@@ -37,8 +37,23 @@ export const Marketplace: React.FC = () => {
                     <Button size="sm" variant="secondary">Installed Plugins</Button>
                 </div>
                 <div className="space-y-2">
+                    <div className=" text-center prose prose:text-white ">
+                        <h1>Empower your AI Editor</h1>
+                        <p>Discover
+                            Models
+                            ,
+                            Tools
+                            ,
+                            Agent Strategies
+                            ,
+                            Extensions
+                            and
+                            Bundles
+                            in
+                            Dify Marketplace</p>
+                    </div>
                     <Input placeholder="Search plugins" className="h-9 w-[500px] bg-muted" icon={<SearchIcon className="h-4 w-4" />} />
-                    <div className="flex gap-2 items-center justify-between w-full text-[20px]">
+                    <div className="flex gap-2 items-center justify-between w-full text-[16px]">
                         {
                             categories.map((it, index) => <div
                                 onClick={() => setSelectCategory(it)}
@@ -66,7 +81,7 @@ export const Marketplace: React.FC = () => {
                     {
                         plugins.map((plugin, index) => (
                             <div key={index}>
-                                <Card className="h-[160px] relative">
+                                <Card className="h-[120px] relative">
                                     <div className=" w-[80px] text-center absolute right-0 top-0 text-xs text-gray-300 p-1 rounded-sm bg-muted">
                                         {plugin.category}
                                     </div>
