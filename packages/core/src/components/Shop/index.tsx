@@ -66,12 +66,19 @@ export const Shop: React.FC = () => {
 
     const [plugins, setPlugins] = useSafeState([])
     const [installedPlugins, setInstalledPlugins] = useSafeState([])
+    const navigator = useNavigator()
 
     useEffect(() => {
         useApi(APIS.GET_PLUGIN_LIST).then(res => {
             setPlugins(res.data)
         })
     }, [])
+
+    const goToMarketplace = () => {
+        navigator.go({
+            to: '/plugin-hub'
+        })
+    }
 
     return <div className=" grid grid-cols-[300px_1fr] w-full">
         <div className=" border-r w-full h-screen">
@@ -109,7 +116,9 @@ export const Shop: React.FC = () => {
                                     className=" border-none "
                                     action={{
                                         label: "Get Plugins",
-                                        onClick: () => { }
+                                        onClick: () => {
+                                            goToMarketplace()
+                                        }
                                     }}
                                     icons={[BoxSelect]}
                                     description="" />

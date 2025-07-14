@@ -51,10 +51,6 @@ export const ModalProvider: React.FC<PropsWithChildren> = ({ children }) => {
         })
     }
 
-    const onClose = (data: any) => {
-
-    }
-
     const closeModal = () => {
         setModalState({
             ...modalState,

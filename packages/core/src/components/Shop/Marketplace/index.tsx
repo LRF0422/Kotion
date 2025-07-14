@@ -1,6 +1,7 @@
-import { HomeIcon, SearchIcon } from "@repo/icon";
-import { Avatar, Button, Card, CardDescription, CardHeader, CardTitle, EmptyState, Input, ScrollArea, Select, Separator, cn } from "@repo/ui";
-import React, { useEffect, useState } from "react";
+import { ArchiveIcon, ArrowUpRight, DownloadIcon, FilePlus2, PlusIcon, SearchIcon } from "@repo/icon";
+import { Avatar, Button, Card, CardDescription, CardFooter, CardHeader, CardTitle, EmptyState, IconButton, Input, ScrollArea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, cn } from "@repo/ui";
+import React, { useState } from "react";
+import { PluginUploader } from "../PluginUploader";
 
 export const Marketplace: React.FC = () => {
 
@@ -34,39 +35,72 @@ export const Marketplace: React.FC = () => {
         {
             name: "Plugin 5",
             category: "Wiki"
+        },
+        {
+            name: "Plugin 6",
+            category: "Wiki"
+        },
+        {
+            name: "Plugin 6",
+            category: "Wiki"
+        },
+        {
+            name: "Plugin 6",
+            category: "Wiki"
+        },
+        {
+            name: "Plugin 6",
+            category: "Wiki"
+        },
+        {
+            name: "Plugin 6",
+            category: "Wiki"
+        },
+        {
+            name: "Plugin 6",
+            category: "Wiki"
         }
     ])
 
     return <div className="w-full">
-        <div>
-            <div className=" flex justify-between items-start w-full px-2 py-3">
-                <div>
-                    <Button size="sm" variant="secondary">Installed Plugins</Button>
-                </div>
-                <div className="space-y-2">
-                    <Input placeholder="Search plugins" className="h-9 w-[500px] bg-muted" icon={<SearchIcon className="h-4 w-4" />} />
-                    <div className="flex gap-2 items-center justify-between w-full text-[16px]">
-                        {
-                            categories.map((it, index) => <div
-                                onClick={() => setSelectCategory(it)}
-                                className={cn("rounded-sm px-3 py-1 hover:bg-muted cursor-pointer", selectCategory === it ? "bg-muted outline" : "")}
-                                key={index}>
-                                {it}
-                            </div>)
-                        }
-                    </div>
-                </div>
-                <div className="flex gap-2 items-center">
-                    <Button size="sm" variant="secondary">Request a plugin</Button>
-                    <Button size="sm">Publish plugins</Button>
+        <div className=" flex justify-between items-start w-full px-2 py-3 border-b shadow-sm">
+            <div>
+                <Button size="sm" variant="secondary"><ArchiveIcon className="h-4 w-4 mr-1" />Installed Plugins</Button>
+            </div>
+            <div className="space-y-2">
+                <Input placeholder="Search plugins" className="h-9 w-[500px] bg-muted" icon={<SearchIcon className="h-4 w-4" />} />
+                <div className="flex gap-2 items-center justify-between w-full text-[16px]">
+                    {
+                        categories.map((it, index) => <div
+                            onClick={() => setSelectCategory(it)}
+                            className={cn("rounded-sm px-3 py-1 hover:bg-muted cursor-pointer", selectCategory === it ? "bg-muted outline" : "")}
+                            key={index}>
+                            {it}
+                        </div>)
+                    }
                 </div>
             </div>
+            <div className="flex gap-2 items-center">
+                <Button size="sm" variant="secondary"><FilePlus2 className="h-4 w-4 mr-1" />Request a plugin</Button>
+                <PluginUploader>
+                    <Button size="sm"><PlusIcon className="h-4 w-4 mr-1" />Publish plugins</Button>
+                </PluginUploader>
+            </div>
         </div>
-        <div className="bg-muted/40 w-full rounded-sm px-10  space-y-2 py-2">
-            <div className="flex gap-2 items-center h-[30px]">
+        <div className="bg-muted/40 w-full rounded-sm px-10  space-y-3 py-2">
+            <div className="flex gap-2 items-center h-[30px] text-sm">
                 <span>Result</span>
                 <Separator orientation="vertical" />
-                <Select></Select>
+                <Select>
+                    <SelectTrigger className="w-[180px] h-8">
+                        <div className=" mr-2">Sort by</div> <SelectValue placeholder="Theme" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="light">Light</SelectItem>
+                        <SelectItem value="dark">Dark</SelectItem>
+                        <SelectItem value="system">System</SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
             <ScrollArea className="w-full h-[calc(100vh-160px)] rounded-sm">
                 {
@@ -80,28 +114,43 @@ export const Marketplace: React.FC = () => {
                         {
                             plugins.map((plugin, index) => (
                                 <div key={index}>
-                                    <Card className="h-[130px] relative hover:bg-muted/40 cursor-pointer">
-                                        <div className=" w-[80px] text-center absolute right-0 top-0 text-xs text-gray-300 p-1 rounded-sm bg-muted">
+                                    <Card className="relative">
+                                        <div className=" w-[80px] text-center absolute right-0 top-0 text-xs p-1  rounded-bl-md rounded-tr-md bg-secondary">
                                             {plugin.category}
                                         </div>
                                         <CardHeader>
                                             <CardTitle className=" text-sm">
                                                 <div className="flex items-center gap-2">
-                                                    <Avatar className=" border rounded-sm">
+                                                    <Avatar className=" border rounded-sm w-[60px] h-[60px]">
                                                         {/* <HomeIcon /> */}
                                                     </Avatar>
                                                     <div>
-                                                        {plugin.name}
-                                                        <div className="text-xs text-secondary">
-                                                            {plugin.name}
+                                                        anspire_search
+                                                        <div className="text-xs text-gray-400">
+                                                            anspire
+                                                            /
+                                                            anspire_search
                                                         </div>
                                                     </div>
                                                 </div>
                                             </CardTitle>
                                             <CardDescription>
-                                                {plugin.name}
+                                                The next generation of real-time intelligent search engine for AI provides multi-channel and full-network content in a user-friendly format for your applications.
                                             </CardDescription>
                                         </CardHeader>
+                                        <CardFooter className="pb-3 space-x-1">
+                                            <IconButton className="px-2 border" icon={<div className="flex items-center gap-1 text-sm">
+                                                <DownloadIcon className="w-4 h-4" />
+                                                Install
+                                            </div>} />
+                                            <IconButton className="px-2 border" icon={<div className="flex items-center gap-1 text-sm">
+                                                <ArrowUpRight className="w-4 h-4" />
+                                                Details
+                                            </div>} />
+                                            <div className="text-xs text-gray-500 flex items-center gap-1">
+                                                <DownloadIcon className="h-3 w-3" />1000,00
+                                            </div>
+                                        </CardFooter>
                                     </Card>
                                 </div>
                             ))

@@ -34,11 +34,11 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
     }
 
     const handleGoToPersonalSpace = () => {
-        useApi(APIS.PERSONAL_SPACE).then((res) => {
-            navigator.go({
-                to: `/space-detail/${res.data.id}`
-            })
-        })
+        // useApi(APIS.PERSONAL_SPACE).then((res) => {
+        //     navigator.go({
+        //         to: `/space-detail/${res.data.id}`
+        //     })
+        // })
     }
 
 
