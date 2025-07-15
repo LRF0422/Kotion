@@ -8,7 +8,7 @@ import {
     ChevronDown,
     XIcon,
     WandSparkles,
-} from "lucide-react";
+} from "@repo/icon";
 
 import { cn } from "@ui/lib/utils";
 import { Separator } from "@ui/components/ui/separator";

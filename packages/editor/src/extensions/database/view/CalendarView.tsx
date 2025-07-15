@@ -14,7 +14,7 @@ import { Button } from "@repo/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Label } from "@repo/ui";
 moment.locale('zh-cn');
 import "./calendar.css"
-import { useModal } from "../../../../../core/src";
+// import { useModal } from "@re";
 const localizer = momentLocalizer(moment) // or globalizeLocalizer
 
 
@@ -25,7 +25,7 @@ export const CalendarView: React.FC<any> = (props) => {
     const [visible, { toggle }] = useToggle(false)
     const [flag, { toggle: t }] = useToggle(false)
     const config = node.attrs.viewOptions[props.viewKey] || {}
-    const { openModal, closeModal } = useModal()
+    // const { openModal, closeModal } = useModal()
 
     const { defaultDate } = useMemo(() => ({
         defaultDate: new Date()
@@ -85,24 +85,24 @@ export const CalendarView: React.FC<any> = (props) => {
             onSelectSlot={(info) => {
                 if (info.action === "select") {
                     console.log('info', info);
-                    openModal({
-                        title: '新增事件',
-                        height: 'auto',
-                        content: <div className=" p-2">
-                            <AutoForm
-                                schema={schemaProvider}
-                                withSubmit
-                                onSubmit={() => {
-                                    handleAddRow({
-                                        test2: info.start.toISOString(),
-                                        test3: info.end.toISOString(),
-                                        test: "Test"
-                                    })
-                                    closeModal()
-                                }}
-                            />
-                        </div>
-                    })
+                    // openModal({
+                    //     title: '新增事件',
+                    //     height: 'auto',
+                    //     content: <div className=" p-2">
+                    //         <AutoForm
+                    //             schema={schemaProvider}
+                    //             withSubmit
+                    //             onSubmit={() => {
+                    //                 handleAddRow({
+                    //                     test2: info.start.toISOString(),
+                    //                     test3: info.end.toISOString(),
+                    //                     test: "Test"
+                    //                 })
+                    //                 closeModal()
+                    //             }}
+                    //         />
+                    //     </div>
+                    // })
                 }
             }}
             titleAccessor={(e) => {

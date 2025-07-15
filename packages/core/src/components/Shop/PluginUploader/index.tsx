@@ -2,12 +2,11 @@ import {
     Button, Dialog, DialogContent, DialogDescription,
     DialogHeader, DialogTitle, DialogTrigger, FileUploader,
     Form, FormControl, FormField, FormItem, FormLabel, IconButton, Input,
-    Label,
     Step, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TagInput, Textarea, useForm, zodResolver
 } from "@repo/ui";
 import React, { PropsWithChildren } from "react";
 import { z } from "@repo/ui";
-import { PlusIcon } from "@repo/icon";
+import { CheckCircle2, PlusIcon } from "@repo/icon";
 import { EditorRender, JSONContent } from "@repo/editor";
 import { useUploadFile } from "../../../hooks";
 import { useSafeState } from "ahooks";
@@ -216,9 +215,12 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                         })
                     }} />
             </div>
-            case 5: return <div className=" flex justify-center items-center w-full h-full gap-1">
-                <Button onClick={handlePrev}>上一步</Button>
-                <Button>提交审核</Button>
+            case 5: return <div className="flex flex-col items-center w-full h-full gap-2">
+                <CheckCircle2 className="h-[200px]  w-[200px] text-green-500" />
+                <div className=" space-x-2 mt-4">
+                    <Button onClick={handlePrev}>上一步</Button>
+                    <Button>提交审核</Button>
+                </div>
             </div>
             case 2: return <div className="flex gap-3 w-full h-[200px] justify-center">
                 {

@@ -1,5 +1,3 @@
-@import "@repo/ui/globals.css";
-
 .rbc-selected-cell {
     @apply bg-muted
 }

@@ -1,6 +1,6 @@
 import React from "react";
 import { Button } from "@ui/components/ui/button";
-import { TrashIcon } from "lucide-react";
+import { TrashIcon } from "@repo/icon";
 import { ArrayElementWrapperProps } from "@autoform/react";
 
 export const ArrayElementWrapper: React.FC<ArrayElementWrapperProps> = ({

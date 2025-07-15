@@ -33,7 +33,7 @@ declare global {
     }
 }
 
-window.React = React
+// window.React = React
 window.ui = ui
 window.common = common
 window.core = core
