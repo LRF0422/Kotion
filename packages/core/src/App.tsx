@@ -7,9 +7,6 @@ import store from './store'
 import { Login } from "./components/Login";
 import { SignUpForm } from "./components/SignUp";
 
-import '@repo/ui/globals.css'
-import '@repo/editor/src/styles/editor.css'
-
 import * as ui from "@repo/ui"
 import * as common from "@repo/common"
 import * as core from "./index"
@@ -33,7 +30,7 @@ declare global {
     }
 }
 
-// window.React = React
+window.React = React
 window.ui = ui
 window.common = common
 window.core = core
