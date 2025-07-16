@@ -3,11 +3,11 @@ import commonjs from "@rollup/plugin-commonjs";
 import resolve from "@rollup/plugin-node-resolve";
 import typescript from "rollup-plugin-typescript2";
 import postcss from "rollup-plugin-postcss";
-import { typescriptPaths } from "rollup-plugin-typescript-paths";
 import tailwindcss from "tailwindcss";
 import autoprefixer from "autoprefixer";
 import nested from "postcss-nested";
 import cssnext from "postcss-cssnext";
+import json from "@rollup/plugin-json";
 
 export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   external: [
@@ -54,7 +54,7 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   plugins: [
     commonjs(),
     resolve(),
-    // typescriptPaths(),
+    json(),
     postcss({
       plugins: [tailwindcss(), autoprefixer(), nested(), cssnext()],
       extract: false,
@@ -69,6 +69,7 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
           target: "ES2018",
           paths: {
             "@ui/*": ["../ui/src/*"],
+            "@editor/*": ["../editor/src/*"],
           },
         },
       },

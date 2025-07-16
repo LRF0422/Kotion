@@ -1,4 +1,4 @@
-"use client"
+
 
 import { TrendingUp } from "@repo/icon"
 import { Area, AreaChart, CartesianGrid, XAxis } from "@repo/ui"

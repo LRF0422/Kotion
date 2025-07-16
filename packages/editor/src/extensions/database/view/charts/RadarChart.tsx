@@ -1,4 +1,4 @@
-"use client"
+
 
 import { TrendingUp } from "@repo/icon"
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "@repo/ui"

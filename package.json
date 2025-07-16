@@ -4,6 +4,8 @@
   "license": "MIT",
   "scripts": {
     "build": "turbo build",
+    "build:core": "pnpm --filter @repo/core build",
+    "build:ui": "pnpm --filter @repo/ui build",
     "build:editor": "pnpm --filter @repo/editor build",
     "clean:packages": "rm -rf ./packages/*/dist",
     "dev": "turbo dev",
@@ -15,6 +17,7 @@
   },
   "dependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",
+    "@rollup/plugin-json": "^6.1.0",
     "ahooks": "^3.9.0",
     "deep-equal": "^2.2.3",
     "lib0": "^0.2.109",

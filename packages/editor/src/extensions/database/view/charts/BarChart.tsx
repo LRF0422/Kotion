@@ -1,4 +1,4 @@
-"use client"
+
 
 import { PlusIcon, Trash2Icon } from "@repo/icon"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, Bar, BarChart, CartesianGrid, ColorPicker, IconButton, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, XAxis } from "@repo/ui"
