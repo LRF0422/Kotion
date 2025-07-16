@@ -4,7 +4,7 @@ import { NodeViewContext } from "../DatabaseView";
 import { Button, Input } from "@repo/ui";
 import 'react-data-grid/lib/styles.css';
 
-import DataGrid, { DataGridHandle, FillEvent, SelectColumn } from 'react-data-grid';
+import { CalculatedColumn, DataGrid, DataGridHandle, FillEvent, SelectColumn } from 'react-data-grid';
 
 import { useToggle } from "ahooks";
 import { cn } from "@repo/ui";
@@ -54,8 +54,8 @@ export const TableView: React.FC<any> = (props) => {
         ];
     }, [data]);
 
-    const handleColumnResize = (index: number, width: number) => {
-        columns[index].width = width
+    const handleColumnResize = (index: CalculatedColumn<any, any>, width: number) => {
+        columns[index.idx].width = width
         updateAttributes({
             ...node.attrs,
             columns: columns
@@ -86,7 +86,7 @@ export const TableView: React.FC<any> = (props) => {
                 ref={gridRef}
                 rowClass={() => ''}
                 onFill={handleFill}
-                rowKeyGetter={(row) => row.id}
+                rowKeyGetter={(row: any) => row.id}
                 selectedRows={selectedRows}
                 onSelectedRowsChange={setSelectedRows}
                 columns={[
@@ -122,9 +122,9 @@ export const TableView: React.FC<any> = (props) => {
                 onColumnResize={handleColumnResize}
                 bottomSummaryRows={editor.isEditable ? summaryRows : undefined}
                 onColumnsReorder={handleReorder}
-                onRowsChange={(rows, data) => {
+                onRowsChange={(rows: any, data: any) => {
                     if (data.indexes.length > 0) {
-                        const updateCells: UpdateCellProps[] = data.indexes.map(index => {
+                        const updateCells: UpdateCellProps[] = data.indexes.map((index: number) => {
                             const d = rows[index]
                             return {
                                 colIndex: data.column.idx - 1,

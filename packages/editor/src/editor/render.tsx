@@ -17,7 +17,6 @@ import { Dialog, DialogTrigger, Tabs, TabsContent, TabsList, TabsTrigger, cn } f
 import { useSafeState } from "ahooks";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
-import { Contact2, MessageCircle, MessageCircleMore, TableOfContentsIcon } from "@repo/icon";
 import { EditorMenu } from "./EditorMenu";
 
 export interface EditorRenderProps extends EditorProvider, EditorKit {

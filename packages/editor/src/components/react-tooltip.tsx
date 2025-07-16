@@ -2,8 +2,9 @@ import React, { useEffect, useRef } from "react";
 import { Editor } from "@tiptap/core";
 import tippy, { Instance } from "tippy.js";
 
-import { Tooltip, Button } from "../components";
+import { Tooltip } from "../components";
 import { createRoot } from "react-dom/client";
+import { Button } from "@repo/ui";
 
 export const _ReactTooltip: React.FC<{
   editor: Editor;
@@ -50,13 +51,14 @@ export const _ReactTooltip: React.FC<{
     <span ref={containerRef}>
       <Tooltip editor={editor} title={title}>
         <Button
-          icon={icon}
           onClick={() => {
             popupRef.current?.state.isVisible
               ? popupRef.current.hide()
               : popupRef.current?.show();
           }}
-        />
+        >
+          {icon}
+        </Button>
       </Tooltip>
     </span>
   );

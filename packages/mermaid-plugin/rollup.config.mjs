@@ -1,41 +1,4 @@
-import typescript from "@rollup/plugin-typescript";
-import postcss from "rollup-plugin-postcss";
-import { typescriptPaths } from "rollup-plugin-typescript-paths";
-import tailwindcss from "tailwindcss";
-import autoprefixer from "autoprefixer";
-import css from "rollup-plugin-import-css";
+import { baseConfig } from "@repo/rollup-config";
+import pkg from "./package.json" with { type: "json" };
 
-export default {
-  input: "src/index.tsx",
-  external: [
-    "react",
-    "@repo/common",
-    "@repo/ui",
-    "@repo/icon",
-    "@repo/editor",
-    "@repo/core",
-  ],
-  output: {
-    file: "dist/bundle.js",
-    format: "umd",
-    name: "testPlugin",
-    globals: {
-      "@repo/common": "common",
-      "@repo/ui": "ui",
-      "@repo/icon": "icon",
-      "@repo/editor": "editor",
-      "@repo/core": "core",
-      react: "React",
-    },
-  },
-  plugins: [
-    typescript(),
-    css(),
-    typescriptPaths(),
-    postcss({
-      plugins: [tailwindcss(), autoprefixer()],
-      extract: false,
-      minimize: true,
-    }),
-  ],
-};
+export default baseConfig({ input: "src/index.ts", pkg });

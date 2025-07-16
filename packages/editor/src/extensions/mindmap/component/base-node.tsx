@@ -20,10 +20,10 @@ export const NodeWrapper = React.forwardRef<
 
 export const BaseNode: React.FC<NodeProps> = (props) => {
   return <NodeWrapper>
-    <>
-      {props.data.label}
+    <div>
+      {props.data.label as string}
       <Handle type="source" position={Position.Right} />
       <Handle type="target" position={Position.Left} />
-    </>
+    </div>
   </NodeWrapper>
 }

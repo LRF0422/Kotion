@@ -1,9 +1,10 @@
 import React, { useRef, useMemo } from "react";
 import { NodeViewWrapper, NodeViewContent, NodeViewProps } from "@tiptap/react";
 
-import { Button, Select } from "../../components";
+import { Select } from "../../components";
 import { copy } from "../../utilities";
 import { Copy } from "@repo/icon";
+import { Button } from "@repo/ui";
 
 export const CodeBlockView: React.FC<NodeViewProps> = ({
   editor,
@@ -41,10 +42,9 @@ export const CodeBlockView: React.FC<NodeViewProps> = ({
             onChange={(value) => updateAttributes({ language: value })}
             disabled={!isEditable}></Select>
           <Button
-            size="small"
-            icon={<Copy className="h-4 w-4" />}
+            size="sm"
             onClick={() => copy($container?.current?.innerText as string)}
-          />
+          ><Copy className="h-4 w-4" /></Button>
         </div>
         <div>
           <pre ref={$container} className="prose-pre:bg-slate-600">

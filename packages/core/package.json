@@ -25,12 +25,7 @@
   "devDependencies": {
     "@types/event-source-polyfill": "^1.0.5",
     "@types/react-redux": "^7.1.34",
-    "@rollup/plugin-node-resolve": "^16.0.0",
-    "@rollup/plugin-typescript": "^12.1.2",
-    "rollup": "^4.30.1",
-    "rollup-plugin-postcss": "^4.0.2",
-    "rollup-plugin-typescript-paths": "^1.5.0",
-    "rollup-plugin-import-css": "^3.5.8"
+    "@repo/rollup-config": "workspace:*"
   },
   "keywords": [],
   "author": "",

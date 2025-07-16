@@ -11,12 +11,12 @@ import {
 } from "../../../icons";
 import {
   BubbleMenu,
-  BubbleMenuProps,
-  Button
+  BubbleMenuProps
 } from "../../../components";
 import { copyNode, deleteNode, isNodeActivePro } from "../../../utilities";
 
 import { Columns } from "../columns";
+import { Button, IconButton } from "@repo/ui";
 
 export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const shouldShow = useCallback<BubbleMenuProps["shouldShow"]>(() => {
@@ -80,23 +80,20 @@ export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
       shouldShow={shouldShow}
       tippyOptions={{ getReferenceClientRect }}>
       <div className="flex flex-row items-center gap-1">
-        <Button onClick={copyMe} icon={<IconCopy />} size="small" />
-        <Button
+        <IconButton onClick={copyMe} icon={<IconCopy />} />
+        <IconButton
           onClick={addColBefore}
           icon={<IconAddColumnBefore />}
-          size="small"
         />
-        <Button
+        <IconButton
           onClick={addColAfter}
           icon={<IconAddColumnAfter />}
-          size="small"
         />
-        <Button
+        <IconButton
           onClick={deleteCol}
           icon={<IconDeleteColumn />}
-          size="small"
         />
-        <Button size="small" icon={<IconDelete />} onClick={deleteMe} />
+        <IconButton icon={<IconDelete />} onClick={deleteMe} />
       </div>
     </BubbleMenu>
   );

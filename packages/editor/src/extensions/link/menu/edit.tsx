@@ -1,11 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Editor, getMarkRange, posToDOMRect } from "@tiptap/core";
 import tippy, { Instance } from "tippy.js";
-import { ThemeProvider } from "styled-components";
 
 import { isMarkActive } from "../../../utilities/mark";
 import { Link as LinkExtension } from "../link";
-import { getEditorTheme } from "../../../editor/theme";
 import { Input } from "@repo/ui";
 import { createRoot } from "react-dom/client";
 import { Button } from "@repo/ui";

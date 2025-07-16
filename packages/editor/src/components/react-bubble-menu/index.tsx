@@ -1,5 +1,5 @@
 import { BubbleMenuPlugin, BubbleMenuPluginProps } from "./bubble-menu-pluin";
-import React, { useEffect, useState } from "react";
+import React, { EffectCallback, useEffect, useState } from "react";
 
 type Optional<T, K extends keyof T> = Pick<Partial<T>, K> & Omit<T, K>;
 
@@ -15,8 +15,6 @@ export const BubbleMenu = (props: BubbleMenuProps) => {
   const [element, setElement] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
-
-    console.log('enter');
 
     if (!element) {
       return;
@@ -41,7 +39,9 @@ export const BubbleMenu = (props: BubbleMenuProps) => {
     });
 
     editor.registerPlugin(plugin);
-    return () => editor.unregisterPlugin(pluginKey);
+    return () => {
+      editor.unregisterPlugin(pluginKey)
+    };
 
   }, [props.editor, element]);
 

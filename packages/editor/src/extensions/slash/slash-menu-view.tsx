@@ -24,15 +24,15 @@ const StyledContainer = styled.div`
   max-height: 240px;
   overflow: auto;
 
-  box-shadow: ${props => props.theme.slashMenuBoxshadow};
-  // background-color: ${props => props.theme.background};
-  border-radius: ${props => props.theme.borderRadius};
+  box-shadow: ${props => ((props.theme as any) as any).slashMenuBoxshadow};
+  // background-color: ${props => (props.theme as any).background};
+  border-radius: ${props => (props.theme as any).borderRadius};
 `;
 
 const StyledTitle = styled.div`
   padding: 8px 16px;
 
-  color: ${props => props.theme.slashMenuTitleColor};
+  color: ${props => (props.theme as any).slashMenuTitleColor};
 `;
 
 const StyledItem = styled.div<{ active: boolean }>`
@@ -41,7 +41,7 @@ const StyledItem = styled.div<{ active: boolean }>`
 
   padding: 8px 16px;
   height: 60px;
-  // color: ${props => props.theme.slashMenuColor};
+  // color: ${props => (props.theme as any).slashMenuColor};
 
   cursor: pointer;  
 
@@ -56,7 +56,7 @@ const StyledText = styled.div`
 `;
 
 const StyledSlash = styled.div`
-  // color: ${props => props.theme.slashMenuTitleColor};
+  // color: ${props => (props.theme as any).slashMenuTitleColor};
 `;
 
 export { StyledItem as SlashItem, StyledText as SlashText, StyledSlash as Slash }

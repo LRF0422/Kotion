@@ -4,8 +4,6 @@ import { useCallback } from "react";
 
 import {
   BubbleMenu,
-  Button,
-  Divider
 } from "../../../components";
 import { useAttributes } from "../../../hooks/use-attributes";
 import { IconEdit, IconUnlink, IconVisitlink } from "../../../icons";

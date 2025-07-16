@@ -1,11 +1,9 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { ActiveNode } from "./utilities";
 import { Trash2 } from "@repo/icon";
 import { Editor } from "..";
-import { Instance } from 'tippy.js'
 import { useEditorExtension } from "../../editor/use-extension";
 import { useSafeState } from "ahooks";
-import { ExtensionWrapper } from "../../editor";
 
 
 export const DragableMenu: React.FC<{ activeNode: ActiveNode, editor: Editor, callBack: () => void }> = ({ activeNode, editor, callBack }) => {
@@ -25,14 +23,6 @@ export const DragableMenu: React.FC<{ activeNode: ActiveNode, editor: Editor, ca
             }
         }
     ])
-
-    useEffect(() => {
-        (extensions as ExtensionWrapper[]).forEach(extension => {
-            if (extension.dragMenuConfig) {
-                setActions(acts => [...acts, ...(extension.dragMenuConfig as any[])])
-            }
-        })
-    }, [])
 
     return <div className="w-[160px] border bg-popover text-popover-foreground rounded-sm shadow-lg p-1 flex flex-col ">
         {

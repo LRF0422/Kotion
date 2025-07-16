@@ -3,11 +3,10 @@ import { createRoot } from "react-dom/client";
 import { Editor } from "@tiptap/core";
 import tippy, { Instance } from "tippy.js";
 
-import { Button } from "../../components";
 import { useActive } from "../../hooks/use-active";
 import { TextAlign } from "./text-align";
 import { AlignCenter, AlignJustify, AlignLeft, AlignRight } from "@repo/icon";
-import { Toggle } from "@repo/ui";
+import { Button, Toggle } from "@repo/ui";
 
 const _TextAlignStaticMenu: React.FC<{
   editor: Editor;
@@ -56,10 +55,10 @@ const _TextAlignStaticMenu: React.FC<{
     const root = createRoot(div)
     root.render(
       <>
-        <Button onClick={toggle("left")} icon={<AlignLeft className="h-4 w-4" />} />
-        <Button onClick={toggle("center")} icon={<AlignCenter className="h-4 w-4" />} />
-        <Button onClick={toggle("right")} icon={<AlignRight className="h-4 w-4" />} />
-        <Button onClick={toggle("justify")} icon={<AlignJustify className="h-4 w-4" />} />
+        <Button size="sm" onClick={toggle("left")} ><AlignLeft className="h-4 w-4" /></Button>
+        <Button onClick={toggle("center")} ><AlignCenter className="h-4 w-4" /></Button>
+        <Button onClick={toggle("right")} ><AlignRight className="h-4 w-4" /></Button>
+        <Button onClick={toggle("justify")} ><AlignJustify className="h-4 w-4" /></Button>
       </>,
     )
 

@@ -1,7 +1,6 @@
 import React, { useCallback } from "react";
 import { Editor } from "@tiptap/core";
 
-import { Button, Tooltip } from "../../components";
 import { useActive } from "../../hooks/use-active";
 
 import { Italic as ItalicExtension } from "./italic";

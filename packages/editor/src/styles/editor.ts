@@ -47,7 +47,7 @@ export const StyledEditor = styled.div.attrs({
   .heading-anchor,
   .heading-fold {
     display: inline-block;
-    color: ${props => props.theme.text};
+    color: ${props => ((props.theme as any) as any).text};
     opacity: 0.75;
     cursor: pointer;
     background: none;
@@ -56,7 +56,7 @@ export const StyledEditor = styled.div.attrs({
     margin: 0;
     padding: 0;
     text-align: left;
-    font-family: ${props => props.theme.fontFamilyMono};
+    font-family: ${props => ((props.theme as any) as any).fontFamilyMono};
     font-size: 14px;
     line-height: 0;
     width: 12px;
@@ -70,7 +70,7 @@ export const StyledEditor = styled.div.attrs({
 
   .heading-actions {
     opacity: 0;
-    background: ${props => props.theme.background};
+    background: ${props => ((props.theme as any) as any).background};
     flex-direction: row;
     display: inline-flex;
     position: absolute;
@@ -279,18 +279,18 @@ export const StyledEditor = styled.div.attrs({
 
     tr {
       position: relative;
-      border-bottom: 1px solid ${props => props.theme.tableBorderColor};
+      border-bottom: 1px solid ${props => ((props.theme as any) as any).tableBorderColor};
     }
 
     th {
-      // background: ${props => props.theme.tableHeaderBgColor};
+      // background: ${props => (props.theme as any).tableHeaderBgColor};
     }
 
     td,
     th {
       position: relative;
       vertical-align: top;
-      border: 1px solid ${props => props.theme.tableBorderColor};
+      border: 1px solid ${props => (props.theme as any).tableBorderColor};
       position: relative;
       padding: 4px 8px !important;
       text-align: left;
@@ -299,14 +299,14 @@ export const StyledEditor = styled.div.attrs({
 
     .selectedCell {
       position: relative;
-      border: 1px solid ${props => props.theme.tableSelectedBorderColor};
-      background-color: ${props => props.theme.tableSelectedCellBgColor};
+      border: 1px solid ${props => (props.theme as any).tableSelectedBorderColor};
+      background-color: ${props => (props.theme as any).tableSelectedCellBgColor};
 
       &::after {
         box-sizing: content-box;
         height: 100%;
         width: 100%;
-        border: 1px solid ${props => props.theme.tableSelectedBorderColor};
+        border: 1px solid ${props => (props.theme as any).tableSelectedBorderColor};
         content: "";
         position: absolute;
         left: -1px;
@@ -346,7 +346,7 @@ export const StyledEditor = styled.div.attrs({
 
         width: 4px;
         height: 4px;
-        background-color: ${props => props.theme.tableBorderColor};
+        background-color: ${props => (props.theme as any).tableBorderColor};
         border-radius: 50%;
         display: block;
       }
@@ -360,22 +360,22 @@ export const StyledEditor = styled.div.attrs({
         left: 0;
         width: 100%;
         height: 10px;
-        background: ${props => props.theme.tableHeaderBgColor};
-        border: 1px solid ${props => props.theme.tableBorderColor};
+        background: ${props => (props.theme as any).tableHeaderBgColor};
+        border: 1px solid ${props => (props.theme as any).tableBorderColor};
         display: block;
       }
 
       &:hover {
         font-size: 14px;
-        color: ${props => props.theme.tableSelectedBorderColor};
+        color: ${props => (props.theme as any).tableSelectedBorderColor};
 
         &::before {
           display: none;
         }
 
         &::after {
-          background: ${props => props.theme.tableSelectedControlBgColor};
-          border-color: ${props => props.theme.tableSelectedControlBgColor};
+          background: ${props => (props.theme as any).tableSelectedControlBgColor};
+          border-color: ${props => (props.theme as any).tableSelectedControlBgColor};
         }
       }
 
@@ -384,8 +384,8 @@ export const StyledEditor = styled.div.attrs({
       }
 
       &.selected::after {
-        background: ${props => props.theme.tableSelectedControlBgColor};
-        border-color: ${props => props.theme.tableSelectedControlBgColor};
+        background: ${props => (props.theme as any).tableSelectedControlBgColor};
+        border-color: ${props => (props.theme as any).tableSelectedControlBgColor};
       }
     }
 
@@ -414,7 +414,7 @@ export const StyledEditor = styled.div.attrs({
         bottom: -2px;
         width: 4px;
         height: 4px;
-        background-color: ${props => props.theme.tableBorderColor};
+        background-color: ${props => (props.theme as any).tableBorderColor};
         border-radius: 50%;
         display: block;
       }
@@ -428,22 +428,22 @@ export const StyledEditor = styled.div.attrs({
         top: 0;
         height: 100%;
         width: 10px;
-        background: ${props => props.theme.tableHeaderBgColor};
-        border: 1px solid ${props => props.theme.tableBorderColor};
+        background: ${props => (props.theme as any).tableHeaderBgColor};
+        border: 1px solid ${props => (props.theme as any).tableBorderColor};
         display: block;
       }
 
       &:hover {
         font-size: 14px;
-        color: ${props => props.theme.tableSelectedBorderColor};
+        color: ${props => (props.theme as any).tableSelectedBorderColor};
 
         &::before {
           display: none;
         }
 
         &::after {
-          background: ${props => props.theme.tableSelectedControlBgColor};
-          border-color: ${props => props.theme.tableSelectedBorderColor};
+          background: ${props => (props.theme as any).tableSelectedControlBgColor};
+          border-color: ${props => (props.theme as any).tableSelectedBorderColor};
         }
       }
 
@@ -452,8 +452,8 @@ export const StyledEditor = styled.div.attrs({
       }
 
       &.selected::after {
-        background: ${props => props.theme.tableSelectedControlBgColor};
-        border-color: ${props => props.theme.tableSelectedBorderColor};
+        background: ${props => (props.theme as any).tableSelectedControlBgColor};
+        border-color: ${props => (props.theme as any).tableSelectedBorderColor};
       }
     }
 
@@ -466,21 +466,21 @@ export const StyledEditor = styled.div.attrs({
         top: -12px;
         left: -12px;
         display: block;
-        background: ${props => props.theme.tableHeaderBgColor};
+        background: ${props => (props.theme as any).tableHeaderBgColor};
         width: 10px;
         height: 10px;
-        border: 1px solid ${props => props.theme.tableBorderColor};
+        border: 1px solid ${props => (props.theme as any).tableBorderColor};
         border-top-left-radius: 3px;
       }
       
       &:hover::after {
-        background: ${props => props.theme.tableSelectedControlBgColor};
-        border-color: ${props => props.theme.tableSelectedBorderColor};
+        background: ${props => (props.theme as any).tableSelectedControlBgColor};
+        border-color: ${props => (props.theme as any).tableSelectedBorderColor};
       }
 
       &.selected::after {
-        background: ${props => props.theme.tableSelectedControlBgColor};
-        border-color: ${props => props.theme.tableSelectedBorderColor};
+        background: ${props => (props.theme as any).tableSelectedControlBgColor};
+        border-color: ${props => (props.theme as any).tableSelectedBorderColor};
       }
     }
   }
@@ -492,7 +492,7 @@ export const StyledEditor = styled.div.attrs({
     bottom: -2px;
     width: 4px;
     pointer-events: none;
-    background-color: ${props => props.theme.tableResizeHandleBgColor};
+    background-color: ${props => ((props.theme as any) as any).tableResizeHandleBgColor};
   }
 
   .resize-cursor {
@@ -504,7 +504,7 @@ export const StyledEditor = styled.div.attrs({
   /* S Code */
   code {
     padding: 4px;
-    font-family: ${props => props.theme.fontFamilyMono};
+    font-family: ${props => (props.theme as any).fontFamilyMono};
     font-size: 0.875rem;
     line-height: 1.3;
     cursor: text;
@@ -635,7 +635,7 @@ export const StyledEditor = styled.div.attrs({
       min-width: 0;
       padding: 0px;
       border: none;
-      border-radius: ${props => props.theme.borderRadius};
+      border-radius: ${props => (props.theme as any).borderRadius};
       flex: 1 1 0%;
       box-sizing: border-box;
     }
