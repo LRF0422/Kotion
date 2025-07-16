@@ -66,7 +66,6 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
       tsconfigOverride: {
         compilerOptions: {
           declaration: true,
-          rootDir: `../../`,
           declarationMap: true,
           target: "ES2018",
           paths: {

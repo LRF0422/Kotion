@@ -3,18 +3,19 @@
   "version": "0.0.0",
   "description": "",
   "main": "src/index.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js"
-    }
-  },
+  "types": "src/index.ts",
+  "type": "module",
   "scripts": {
+    "build": "rollup -c",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
     "@repo/ui": "workspace:*",
     "@tiptap/pm": "2.11.7",
     "@tiptap/core": "2.11.7"
+  },
+  "devDependencies": {
+    "@repo/rollup-config": "workspace:*"
   },
   "keywords": [],
   "author": "",

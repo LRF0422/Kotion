@@ -5,7 +5,7 @@ import { Folder } from "@repo/icon"
 import React from "react"
 import { FileManagerView } from "./editor-extensions/component/FileManager"
 
-import "@repo/ui/globals.css"
+// import "@repo/ui/globals.css"
 
 interface FileManagerPluginConfig extends PluginConfig {
 

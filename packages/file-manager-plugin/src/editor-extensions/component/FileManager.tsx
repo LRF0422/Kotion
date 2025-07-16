@@ -2,7 +2,6 @@ import { Check, DownloadIcon, FileIcon, FolderIcon, FolderOpenIcon, ListIcon, Tr
 import { Button, EmptyState, Separator, TreeView, cn } from "@repo/ui";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { FileCardList } from "./FileCard";
-import "@repo/ui/globals.css"
 import { useSafeState, useUploadFile } from "@repo/core";
 import { useApi } from "@repo/core";
 import { APIS } from "../../api";
