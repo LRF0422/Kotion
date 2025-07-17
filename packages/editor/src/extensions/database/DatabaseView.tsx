@@ -85,7 +85,6 @@ export type Context = NodeViewProps & {
 }
 
 export const NodeViewContext = createContext<Context>({} as Context)
-
 export const DatabaseView: React.FC<NodeViewProps> = (props) => {
 
     const [data, setData] = useState<any[]>([])

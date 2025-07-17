@@ -4,7 +4,7 @@ import { NodeViewContext } from "../DatabaseView";
 import { Button, Input } from "@repo/ui";
 import 'react-data-grid/lib/styles.css';
 
-import { CalculatedColumn, DataGrid, DataGridHandle, FillEvent, SelectColumn } from 'react-data-grid';
+import DataGrid, { CalculatedColumn, DataGridHandle, FillEvent, SelectColumn } from 'react-data-grid';
 
 import { useToggle } from "ahooks";
 import { cn } from "@repo/ui";
@@ -54,8 +54,8 @@ export const TableView: React.FC<any> = (props) => {
         ];
     }, [data]);
 
-    const handleColumnResize = (index: CalculatedColumn<any, any>, width: number) => {
-        columns[index.idx].width = width
+    const handleColumnResize = (index: number, width: number) => {
+        columns[index].width = width
         updateAttributes({
             ...node.attrs,
             columns: columns
