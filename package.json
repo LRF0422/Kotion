@@ -2,6 +2,7 @@
   "name": "turborepo-vite-shadcn-ui",
   "private": true,
   "license": "MIT",
+  "version": "0.0.0",
   "scripts": {
     "build": "turbo build",
     "build:core": "pnpm --filter @repo/core build",
