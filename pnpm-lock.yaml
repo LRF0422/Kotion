@@ -155,13 +155,13 @@ importers:
         version: link:../../packages/editor
       '@repo/file-manager':
         specifier: workspace:*
-        version: link:../../packages/file-manager-plugin
+        version: link:../../packages/plugin-file-manager
       '@repo/icon':
         specifier: workspace:*
         version: link:../../packages/icon
       '@repo/mermaid-plugin':
         specifier: workspace:*
-        version: link:../../packages/mermaid-plugin
+        version: link:../../packages/plugin-mermaid
       '@repo/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -557,7 +557,17 @@ importers:
         specifier: ^5.6.2
         version: 5.8.3
 
-  packages/file-manager-plugin:
+  packages/icon:
+    dependencies:
+      lucide-react:
+        specifier: ^0.446.0
+        version: 0.446.0(react@18.3.1)
+    devDependencies:
+      '@repo/rollup-config':
+        specifier: workspace:*
+        version: link:../rollup-config
+
+  packages/plugin-file-manager:
     dependencies:
       '@repo/common':
         specifier: workspace:*
@@ -579,17 +589,7 @@ importers:
         specifier: workspace:*
         version: link:../rollup-config
 
-  packages/icon:
-    dependencies:
-      lucide-react:
-        specifier: ^0.446.0
-        version: 0.446.0(react@18.3.1)
-    devDependencies:
-      '@repo/rollup-config':
-        specifier: workspace:*
-        version: link:../rollup-config
-
-  packages/mermaid-plugin:
+  packages/plugin-mermaid:
     dependencies:
       '@repo/common':
         specifier: workspace:*
