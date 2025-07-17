@@ -10,6 +10,7 @@
     "build:editor": "pnpm --filter @kn/editor build",
     "build:app": "pnpm --filter vite build",
     "clean:packages": "rm -rf ./packages/*/dist",
+    "clean:lib": "rm -rf ./packages/*/node_modules",
     "dev": "turbo dev",
     "room-server": "pnpm --filter @kn/editor room-server",
     "lint": "turbo lint",
