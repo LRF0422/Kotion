@@ -1,5 +1,5 @@
-import { Alert, AlertTitle, AlertDescription } from "@repo/ui"
-import { Button } from "@repo/ui"
+import { Alert, AlertTitle, AlertDescription } from "@kn/ui"
+import { Button } from "@kn/ui"
 import React from "react"
 
 export const Delete: React.FC = () => {

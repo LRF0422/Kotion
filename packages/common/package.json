@@ -1,5 +1,5 @@
 {
-  "name": "@repo/common",
+  "name": "@kn/common",
   "version": "0.0.0",
   "description": "",
   "main": "src/index.ts",
@@ -14,12 +14,12 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@repo/ui": "workspace:*",
+    "@kn/ui": "workspace:*",
     "@tiptap/pm": "2.11.7",
     "@tiptap/core": "2.11.7"
   },
   "devDependencies": {
-    "@repo/rollup-config": "workspace:*"
+    "@kn/rollup-config": "workspace:*"
   },
   "keywords": [],
   "author": "",

@@ -1,8 +1,8 @@
-import { EmojiSelector } from "@repo/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui";
+import { EmojiSelector } from "@kn/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
-import { Clock, Image, UserCircle } from "@repo/icon";
+import { Clock, Image, UserCircle } from "@kn/icon";
 import React, { useEffect, useRef } from "react";
 
 

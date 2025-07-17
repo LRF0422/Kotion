@@ -15,7 +15,7 @@ import {
 import { useAttributes } from "../../../hooks/use-attributes";
 import { deleteNode, isNodeActive } from "../../../utilities";
 import { Image as ImageExtension } from "../image";
-import { Toggle } from "@repo/ui";
+import { Toggle } from "@kn/ui";
 
 const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const { width: currentWidth, height: currentHeight, align } = useAttributes(

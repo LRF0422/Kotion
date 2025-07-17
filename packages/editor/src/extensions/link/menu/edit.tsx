@@ -4,10 +4,10 @@ import tippy, { Instance } from "tippy.js";
 
 import { isMarkActive } from "../../../utilities/mark";
 import { Link as LinkExtension } from "../link";
-import { Input } from "@repo/ui";
+import { Input } from "@kn/ui";
 import { createRoot } from "react-dom/client";
-import { Button } from "@repo/ui";
-import { Label } from "@repo/ui";
+import { Button } from "@kn/ui";
+import { Label } from "@kn/ui";
 import { MarkType } from "@tiptap/pm/model";
 
 export const LinkEdit: React.FC<{

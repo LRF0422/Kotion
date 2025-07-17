@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { Loading } from "./loading";
 
 export * from "./loading";

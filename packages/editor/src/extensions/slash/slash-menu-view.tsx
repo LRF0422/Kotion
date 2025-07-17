@@ -10,7 +10,7 @@ import scrollIntoView from "scroll-into-view-if-needed";
 import styled from "styled-components";
 
 import { SlashMenuItem } from "./slash";
-import { cn } from "@repo/ui";
+import { cn } from "@kn/ui";
 
 
 interface IProps {

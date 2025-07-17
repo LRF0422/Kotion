@@ -1,8 +1,8 @@
-import { Node, ReactNodeViewRenderer } from "@repo/editor";
+import { Node, ReactNodeViewRenderer } from "@kn/editor";
 import { MermaidView } from "./MermaidView";
 
 
-declare module '@repo/editor' {
+declare module '@kn/editor' {
     interface Commands<ReturnType> {
         mermaid: {
             insertMermaid: () => ReturnType;

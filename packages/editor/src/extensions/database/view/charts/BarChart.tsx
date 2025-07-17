@@ -1,18 +1,18 @@
 
 
-import { PlusIcon, Trash2Icon } from "@repo/icon"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, Bar, BarChart, CartesianGrid, ColorPicker, IconButton, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, XAxis } from "@repo/ui"
+import { PlusIcon, Trash2Icon } from "@kn/icon"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, Bar, BarChart, CartesianGrid, ColorPicker, IconButton, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, XAxis } from "@kn/ui"
 
 import {
     Card,
     CardContent,
-} from "@repo/ui"
+} from "@kn/ui"
 import {
     ChartConfig,
     ChartContainer,
     ChartTooltip,
     ChartTooltipContent,
-} from "@repo/ui"
+} from "@kn/ui"
 import React, { useContext, useEffect } from "react"
 import { ChartKit } from "./types"
 import { NodeViewContext } from "../../DatabaseView"

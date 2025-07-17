@@ -1,12 +1,12 @@
-import { Button, IconButton } from "@repo/ui";
+import { Button, IconButton } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewWrapper } from "@tiptap/react";
 import React, { createContext, ElementType, useCallback, useEffect, useRef, useState } from "react";
 import { TableView } from "./view/TableView";
 import { addCol, addRow, deleteColV2, getDatabaseData, moveCol, removeRow, updateCellData, updateCellDataV2, UpdateCellProps } from "./utils";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui";
-import { Calendar, ChartArea, CheckSquare, Image, Kanban, Link2, MoreVertical, Plus, SlidersIcon, Star, StarIcon, Table2, TagIcon, Text, TimerIcon, Trash2, TypeIcon } from "@repo/icon";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from "@repo/ui";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
+import { Calendar, ChartArea, CheckSquare, Image, Kanban, Link2, MoreVertical, Plus, SlidersIcon, Star, StarIcon, Table2, TagIcon, Text, TimerIcon, Trash2, TypeIcon } from "@kn/icon";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from "@kn/ui";
 import { cloneDeep } from "lodash";
 import { ChartView } from "./view/ChartView";
 import { CalendarView } from "./view/CalendarView";

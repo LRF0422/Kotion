@@ -1,4 +1,4 @@
-import { baseConfig } from "@repo/rollup-config";
+import { baseConfig } from "@kn/rollup-config";
 import pkg from "./package.json" with { type: "json" };
 
 export default baseConfig({ input: "src/index.ts", pkg });
@@ -7,22 +7,22 @@ export default baseConfig({ input: "src/index.ts", pkg });
 //   input: "src/index.ts",
 //   external: [
 //     "react",
-//     "@repo/common",
-//     "@repo/ui",
-//     "@repo/icon",
-//     "@repo/editor",
-//     "@repo/core",
+//     "@kn/common",
+//     "@kn/ui",
+//     "@kn/icon",
+//     "@kn/editor",
+//     "@kn/core",
 //   ],
 //   output: {
 //     file: "dist/index.js",
 //     format: "umd",
 //     name: "icon",
 //     globals: {
-//       "@repo/common": "common",
-//       "@repo/ui": "ui",
-//       "@repo/icon": "icon",
-//       "@repo/editor": "editor",
-//       "@repo/core": "core",
+//       "@kn/common": "common",
+//       "@kn/ui": "ui",
+//       "@kn/icon": "icon",
+//       "@kn/editor": "editor",
+//       "@kn/core": "core",
 //       react: "React",
 //     },
 //   },

@@ -8,7 +8,7 @@ import {
     ChevronDown,
     XIcon,
     WandSparkles,
-} from "@repo/icon";
+} from "@kn/icon";
 
 import { cn } from "@ui/lib/utils";
 import { Separator } from "@ui/components/ui/separator";

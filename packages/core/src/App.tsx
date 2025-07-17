@@ -1,19 +1,19 @@
 import React, { useMemo } from "react";
 import { createBrowserRouter, createRoutesFromElements, Route, RouterProvider } from "react-router-dom";
 import { Layout } from "./Layout";
-import { ThemeProvider, Toaster } from "@repo/ui";
+import { ThemeProvider, Toaster } from "@kn/ui";
 import { Provider } from "react-redux";
 import store from './store'
 import { Login } from "./components/Login";
 import { SignUpForm } from "./components/SignUp";
 
-import * as ui from "@repo/ui"
-import * as common from "@repo/common"
+import * as ui from "@kn/ui"
+import * as common from "@kn/common"
 import * as core from "./index"
-import * as icon from "@repo/icon"
-import * as editor from "@repo/editor"
+import * as icon from "@kn/icon"
+import * as editor from "@kn/editor"
 import { useAsyncEffect, useSafeState } from "ahooks";
-import { AppContext, PluginManager } from "@repo/common";
+import { AppContext, PluginManager } from "@kn/common";
 import { Shop } from "./components/Shop";
 import { PluginDetail } from "./components/Shop/PluginDetail";
 import { importScript } from "./utils/utils";

@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { Title } from "./title";
 
 export { Title }

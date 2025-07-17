@@ -12,7 +12,7 @@ import { copyNode, deleteNode } from "../../../utilities";
 
 import { Table } from "../table";
 import { IconAddColumnAfter, IconAddColumnBefore, IconAddRowAfter, IconAddRowBefore, IconCopy, IconDeleteColumn, IconDeleteRow, IconDeleteTable, IconMergeCell, IconSplitCell, IconTableHeaderCell, IconTableHeaderColumn, IconTableHeaderRow } from "../../../icons";
-import { Button } from "@repo/ui";
+import { Button } from "@kn/ui";
 
 export const TableBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const shouldShow = useCallback<BubbleMenuProps["shouldShow"]>(() => {

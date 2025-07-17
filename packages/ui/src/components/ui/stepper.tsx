@@ -1,6 +1,6 @@
 import React, { ReactNode, useRef } from "react";
 import { cn } from "@ui/lib/utils";
-import { Check } from "@repo/icon";
+import { Check } from "@kn/icon";
 import { ScrollArea, ScrollBar } from "@ui/components/ui/scroll-area";
 
 export interface Step {

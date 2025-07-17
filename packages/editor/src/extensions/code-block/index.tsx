@@ -1,10 +1,10 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { CodeBlock } from "./code-block";
 import { CodeBlockStaticMenu } from "./menu";
 import BuiltInCodeBlock, {
     // CodeBlockOptions
 } from "@tiptap/extension-code-block";
-import { CodeIcon } from "@repo/icon";
+import { CodeIcon } from "@kn/icon";
 import React from "react";
 
 export * from "./code-block";

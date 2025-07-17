@@ -1,16 +1,16 @@
-import { Plus, SearchIcon, Settings, Table, Trash2 } from "@repo/icon";
+import { Plus, SearchIcon, Settings, Table, Trash2 } from "@kn/icon";
 import { useContext, useMemo, useRef, useState } from "react";
 import { NodeViewContext } from "../DatabaseView";
-import { Button, Input } from "@repo/ui";
+import { Button, Input } from "@kn/ui";
 import 'react-data-grid/lib/styles.css';
 
-import DataGrid, { CalculatedColumn, DataGridHandle, FillEvent, SelectColumn } from 'react-data-grid';
+import DataGrid, { DataGridHandle, FillEvent, SelectColumn } from 'react-data-grid';
 
 import { useToggle } from "ahooks";
-import { cn } from "@repo/ui";
+import { cn } from "@kn/ui";
 import { getCellIcon, getCellView, getEditor } from "./custom-columns/DateColumns";
 import styled from "styled-components";
-import { useTheme } from "@repo/ui";
+import { useTheme } from "@kn/ui";
 import { UpdateCellProps } from "../utils";
 import React from "react";
 import { TableViewCfg } from "./TableViewCfg";

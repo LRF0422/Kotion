@@ -1,7 +1,7 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { MindMap } from "./mindmap";
 import { IconMindTemplate } from "../../icons";
-import { MapIcon } from "@repo/icon";
+import { MapIcon } from "@kn/icon";
 import React from "react";
 
 

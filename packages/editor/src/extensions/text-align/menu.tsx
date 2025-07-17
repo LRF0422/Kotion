@@ -5,8 +5,8 @@ import tippy, { Instance } from "tippy.js";
 
 import { useActive } from "../../hooks/use-active";
 import { TextAlign } from "./text-align";
-import { AlignCenter, AlignJustify, AlignLeft, AlignRight } from "@repo/icon";
-import { Button, Toggle } from "@repo/ui";
+import { AlignCenter, AlignJustify, AlignLeft, AlignRight } from "@kn/icon";
+import { Button, Toggle } from "@kn/ui";
 
 const _TextAlignStaticMenu: React.FC<{
   editor: Editor;

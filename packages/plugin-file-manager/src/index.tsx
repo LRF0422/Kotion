@@ -1,11 +1,11 @@
 
-import { KPlugin, PluginConfig } from "@repo/common"
+import { KPlugin, PluginConfig } from "@kn/common"
 import { FolderExtension } from "./editor-extensions/folder"
-import { Folder } from "@repo/icon"
+import { Folder } from "@kn/icon"
 import React from "react"
 import { FileManagerView } from "./editor-extensions/component/FileManager"
 
-// import "@repo/ui/globals.css"
+// import "@kn/ui/globals.css"
 
 interface FileManagerPluginConfig extends PluginConfig {
 

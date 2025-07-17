@@ -4,7 +4,7 @@ import { Circle, CircleShape } from "./nodes/circle";
 import { useFullscreen } from "ahooks";
 import { NodeViewProps } from "@tiptap/core";
 import { useDnD } from "./DndContext";
-import { Fullscreen } from "@repo/icon";
+import { Fullscreen } from "@kn/icon";
 import Sider from "./Sider";
 import { v4 as uuidv4 } from "uuid";
 import { Triangle, TriangleShape } from "./nodes/triangle";

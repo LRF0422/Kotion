@@ -1,4 +1,4 @@
-import { DateTimePicker } from "@repo/ui";
+import { DateTimePicker } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewWrapper } from "@tiptap/react";
 import { zhCN } from "date-fns/locale";

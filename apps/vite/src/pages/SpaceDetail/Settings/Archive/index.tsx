@@ -1,5 +1,5 @@
-import { Alert, AlertDescription, AlertTitle } from "@repo/ui";
-import { Button } from "@repo/ui";
+import { Alert, AlertDescription, AlertTitle } from "@kn/ui";
+import { Button } from "@kn/ui";
 import React from "react";
 
 

@@ -1,5 +1,5 @@
 
-import { KPlugin, PluginConfig } from "@repo/common"
+import { KPlugin, PluginConfig } from "@kn/common"
 import { MermaidExtension } from "./editor-extension/mermaid"
 
 interface MermaidPluginConfig extends PluginConfig {

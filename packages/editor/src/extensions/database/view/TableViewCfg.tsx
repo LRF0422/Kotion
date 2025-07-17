@@ -1,5 +1,5 @@
-import { ArrowRight, Edit2, Filter, List, LockIcon, Plus, SortDesc, SquareStack, Trash2, XCircle } from "@repo/icon"
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Input, Label, Separator, cn } from "@repo/ui"
+import { ArrowRight, Edit2, Filter, List, LockIcon, Plus, SortDesc, SquareStack, Trash2, XCircle } from "@kn/icon"
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Input, Label, Separator, cn } from "@kn/ui"
 import React, { useContext, useState } from "react"
 import { NodeViewContext } from "../DatabaseView"
 

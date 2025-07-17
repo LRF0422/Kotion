@@ -1,6 +1,6 @@
 import React from "react";
 import { ActiveNode } from "./utilities";
-import { Trash2 } from "@repo/icon";
+import { Trash2 } from "@kn/icon";
 import { Editor } from "..";
 import { useEditorExtension } from "../../editor/use-extension";
 import { useSafeState } from "ahooks";

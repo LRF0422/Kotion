@@ -6,7 +6,7 @@ import {
     type EmojiPickerListRowProps,
     EmojiPicker as EmojiPickerPrimitive,
 } from "frimousse";
-import { LoaderIcon, SearchIcon } from "@repo/icon";
+import { LoaderIcon, SearchIcon } from "@kn/icon";
 import * as React from "react";
 
 import { cn } from "@ui/lib/utils";

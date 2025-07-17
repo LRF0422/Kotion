@@ -1,4 +1,4 @@
-import { API } from "@repo/core";
+import { API } from "@kn/core";
 
 
 export const APIS = {

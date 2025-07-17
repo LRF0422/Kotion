@@ -1,7 +1,7 @@
 import * as React from "react"
 import { cn } from "@ui/lib/utils"
 import { Button } from "@ui/components/ui/button"
-import { LucideIcon } from "@repo/icon"
+import { LucideIcon } from "@kn/icon"
 
 interface EmptyStateProps {
   title: string

@@ -1,6 +1,6 @@
 import React from "react"
 import { FileItem } from "./FileManager"
-import { Checkbox, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@repo/ui"
+import { Checkbox, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@kn/ui"
 
 
 export interface FileListProps {

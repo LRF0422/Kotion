@@ -3,11 +3,11 @@ import {
     DialogHeader, DialogTitle, DialogTrigger, FileUploader,
     Form, FormControl, FormField, FormItem, FormLabel, IconButton, Input,
     Step, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TagInput, Textarea, useForm, zodResolver
-} from "@repo/ui";
+} from "@kn/ui";
 import React, { PropsWithChildren } from "react";
-import { z } from "@repo/ui";
-import { CheckCircle2, PlusIcon } from "@repo/icon";
-import { EditorRender, JSONContent } from "@repo/editor";
+import { z } from "@kn/ui";
+import { CheckCircle2, PlusIcon } from "@kn/icon";
+import { EditorRender, JSONContent } from "@kn/editor";
 import { useUploadFile } from "../../../hooks";
 import { useSafeState } from "ahooks";
 

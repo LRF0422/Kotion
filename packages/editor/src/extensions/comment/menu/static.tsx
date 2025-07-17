@@ -1,9 +1,9 @@
 import { useActive } from "@editor/hooks";
-import { Toggle } from "@repo/ui";
+import { Toggle } from "@kn/ui";
 import { Editor } from "@tiptap/core";
 import React from "react";
 import Comments from "../comment";
-import { MessageCircleMore } from "@repo/icon";
+import { MessageCircleMore } from "@kn/icon";
 
 
 export const CommentStaticMenu: React.FC<{ editor: Editor }> = (props) => {

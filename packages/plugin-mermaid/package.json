@@ -1,5 +1,5 @@
 {
-  "name": "@repo/mermaid-plugin",
+  "name": "@kn/mermaid-plugin",
   "version": "0.0.0",
   "description": "",
   "main": "src/index.tsx",
@@ -8,15 +8,14 @@
     "types": "dist/index.d.ts"
   },
   "scripts": {
-    "build": "rollup -c",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@repo/common": "workspace:*",
-    "@repo/core": "workspace:*",
-    "@repo/editor": "workspace:*",
-    "@repo/icon": "workspace:*",
-    "@repo/ui": "workspace:*",
+    "@kn/common": "workspace:*",
+    "@kn/core": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/ui": "workspace:*",
     "autoprefixer": "^10.4.20",
     "mermaid": "^11.4.1",
     "postcss": "^8.4.47"
@@ -25,6 +24,6 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@repo/rollup-config": "workspace:*"
+    "@kn/rollup-config": "workspace:*"
   }
 }

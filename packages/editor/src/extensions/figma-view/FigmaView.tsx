@@ -1,11 +1,11 @@
-import { Button } from "@repo/ui";
-import { Input } from "@repo/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui";
+import { Button } from "@kn/ui";
+import { Input } from "@kn/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { useActive } from "../../hooks";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewWrapper } from "@tiptap/react";
 import { useSafeState } from "ahooks";
-import { Edit, RefreshCw, Trash2 } from "@repo/icon";
+import { Edit, RefreshCw, Trash2 } from "@kn/icon";
 import React, { useRef } from "react";
 
 

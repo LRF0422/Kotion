@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from "@repo/ui";
+import { Alert, AlertDescription, AlertTitle } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
 import React, { CSSProperties } from "react";

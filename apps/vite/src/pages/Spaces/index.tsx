@@ -1,16 +1,16 @@
 import { APIS } from "../../api";
 import { CardList } from "../../pages/components/CardList";
-import { Button } from "@repo/ui";
-import { Input } from "@repo/ui";
-import { MultiSelect } from "@repo/ui";
-import { useApi } from "@repo/core";
+import { Button } from "@kn/ui";
+import { Input } from "@kn/ui";
+import { MultiSelect } from "@kn/ui";
+import { useApi } from "@kn/core";
 import { Space } from "../../model/Space";
-import { useSafeState } from "@repo/core";
-import { Edit2, Eye, Plus, Star, UserCircle } from "@repo/icon";
+import { useSafeState } from "@kn/core";
+import { Edit2, Eye, Plus, Star, UserCircle } from "@kn/icon";
 import React, { useEffect } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
-import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@repo/ui";
-import { useNavigator } from "@repo/core";
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@kn/ui";
+import { useNavigator } from "@kn/core";
 
 export const Spaces: React.FC = () => {
 

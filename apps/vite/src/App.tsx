@@ -4,9 +4,9 @@ import { SpaceDetail } from './pages/SpaceDetail'
 import { PageViewer } from './pages/SpaceDetail/PageViewer'
 import { PageEditor } from './pages/SpaceDetail/PageEditor'
 import { SpaceSettings } from './pages/SpaceDetail/Settings'
-import { KPlugin, PluginConfig } from '@repo/common'
+import { KPlugin, PluginConfig } from '@kn/common'
 import React from 'react'
-import { LayoutGrid } from '@repo/icon'
+import { LayoutGrid } from '@kn/icon'
 import { TestExtension } from './editor-extensions/test-extension'
 
 

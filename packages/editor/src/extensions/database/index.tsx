@@ -1,6 +1,6 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { Database } from "./database";
-import { DatabaseIcon } from "@repo/icon";
+import { DatabaseIcon } from "@kn/icon";
 import { GridRow } from "./grid-row";
 import { GridCell } from "./grid-cell";
 import React from "react";

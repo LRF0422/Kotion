@@ -3,8 +3,8 @@ import React, { useCallback } from "react";
 import { TwitterPicker } from "react-color"
 import { IconFontColor } from "../../../icons";
 import { useActive } from "../../../hooks";
-import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui";
-import { Toggle } from "@repo/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
+import { Toggle } from "@kn/ui";
 
 
 export const ColorStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {

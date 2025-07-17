@@ -3,7 +3,7 @@ import { ReactNodeViewRenderer } from "@tiptap/react";
 import { DatabaseView } from "./DatabaseView";
 import { createGridView } from "./utils";
 import { TextSelection } from "@tiptap/pm/state";
-import { any } from "@repo/ui";
+import { any } from "@kn/ui";
 
 declare module "@tiptap/core" {
     interface Commands<ReturnType> {

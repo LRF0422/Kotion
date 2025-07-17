@@ -1,4 +1,4 @@
-import { API } from "@repo/core";
+import { API } from "@kn/core";
 import { method } from "lodash";
 
 

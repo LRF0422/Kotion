@@ -5,13 +5,13 @@ import moment from 'moment'
 
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { NodeViewContext } from "../DatabaseView";
-import { CalendarClock, Settings, X } from "@repo/icon";
+import { CalendarClock, Settings, X } from "@kn/icon";
 
 import 'moment/locale/zh-cn';
 import { useToggle } from "ahooks";
-import { AutoForm, Form, ZodProvider, cn, fieldConfig, z } from "@repo/ui";
-import { Button } from "@repo/ui";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Label } from "@repo/ui";
+import { AutoForm, Form, ZodProvider, cn, fieldConfig, z } from "@kn/ui";
+import { Button } from "@kn/ui";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Label } from "@kn/ui";
 moment.locale('zh-cn');
 import "./calendar.css"
 // import { useModal } from "@re";

@@ -1,6 +1,6 @@
-import { Button } from '@repo/ui'
+import { Button } from '@kn/ui'
 import axios from 'axios'
-import { toast } from '@repo/ui'
+import { toast } from '@kn/ui'
 import React from 'react'
 
 const TOKEN_KEY = 'knowledge-token'

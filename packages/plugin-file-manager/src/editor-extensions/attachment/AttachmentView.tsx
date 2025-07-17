@@ -1,4 +1,4 @@
-import { NodeViewProps, NodeViewWrapper } from "@repo/editor";
+import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import React from "react";
 
 

@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { Blockquote } from "./blockquote";
 import { BlockquoteStaticMenu } from "./menu";
 

@@ -1,7 +1,7 @@
 import React from "react";
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { PageContent } from "./page-content";
-import { List } from "@repo/icon";
+import { List } from "@kn/icon";
 
 
 export const PageContentExtension: ExtensionWrapper = {

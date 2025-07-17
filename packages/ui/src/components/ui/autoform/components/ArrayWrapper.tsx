@@ -1,6 +1,6 @@
 import React from "react";
 import { Button } from "@ui/components/ui/button";
-import { PlusIcon } from "@repo/icon";
+import { PlusIcon } from "@kn/icon";
 import { ArrayWrapperProps } from "@autoform/react";
 
 export const ArrayWrapper: React.FC<ArrayWrapperProps> = ({

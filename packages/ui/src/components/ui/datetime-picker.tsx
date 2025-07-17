@@ -2,13 +2,13 @@
 import * as React from 'react';
 import { useImperativeHandle, useRef } from 'react';
 import { add, format } from 'date-fns';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from '@repo/icon';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from '@kn/icon';
 import { cn } from '@ui/lib/utils';
 import { Input } from '@ui/components/ui/input';
 import { Button, buttonVariants } from '@ui/components/ui/button';
 import { CalendarProps } from '@ui/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@ui/components/ui/popover';
-import { Clock } from '@repo/icon';
+import { Clock } from '@kn/icon';
 import { enUS, Locale } from 'date-fns/locale';
 
 import {

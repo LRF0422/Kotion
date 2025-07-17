@@ -1,5 +1,5 @@
 import React from "react"
-import { Moon, Sun } from "@repo/icon"
+import { Moon, Sun } from "@kn/icon"
 import { Button } from "@ui/components/ui/button"
 import {
     DropdownMenu,

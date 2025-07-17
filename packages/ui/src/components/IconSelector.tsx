@@ -1,7 +1,7 @@
 import React, { forwardRef, useEffect } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { Plus } from "@repo/icon";
+import { Plus } from "@kn/icon";
 import { useSafeState } from "ahooks";
 import { CompactEmoji, fetchEmojis } from "emojibase";
 import { ScrollArea } from "./ui/scroll-area";

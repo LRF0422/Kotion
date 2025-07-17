@@ -1,4 +1,4 @@
-import { FullScreenCalendar } from "@repo/ui";
+import { FullScreenCalendar } from "@kn/ui";
 import { NodeViewProps, NodeViewWrapper } from "@tiptap/react";
 import React from "react";
 

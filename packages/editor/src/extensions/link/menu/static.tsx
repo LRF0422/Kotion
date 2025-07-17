@@ -5,7 +5,7 @@ import { IconLink } from "../../../icons";
 import { useActive } from "../../../hooks/use-active";
 import { Link as LinkExtension } from "../link";
 import { showLinkEditor } from "./edit";
-import { Toggle } from "@repo/ui";
+import { Toggle } from "@kn/ui";
 
 export const LinkStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const isLinkActive = useActive(editor, LinkExtension.name);

@@ -1,5 +1,5 @@
 import React, { ReactNode, useCallback } from "react";
-import { Select as ReactSelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui";
+import { Select as ReactSelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
 import { Editor } from "@tiptap/core";
 
 interface SelectProps {

@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import { Editor } from "..";
-import { Toggle } from "@repo/ui";
-import { SquareCheck } from "@repo/icon";
+import { Toggle } from "@kn/ui";
+import { SquareCheck } from "@kn/icon";
 
 
 export const TaskListStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {

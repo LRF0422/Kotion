@@ -1,7 +1,7 @@
 import React from "react";
 import { Editor } from "@tiptap/core";
-import { Toggle } from "@repo/ui";
-import { CircleAlert } from "@repo/icon";
+import { Toggle } from "@kn/ui";
+import { CircleAlert } from "@kn/icon";
 
 
 export const InfoPanelStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {

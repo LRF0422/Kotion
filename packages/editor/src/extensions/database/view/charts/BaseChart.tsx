@@ -1,4 +1,4 @@
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@repo/ui";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@kn/ui";
 import React from "react";
 
 

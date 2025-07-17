@@ -1,5 +1,5 @@
 {
-  "name": "@repo/file-manager",
+  "name": "@kn/file-manager",
   "version": "0.0.0",
   "description": "",
   "main": "src/index.tsx",
@@ -12,16 +12,16 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@repo/common": "workspace:*",
-    "@repo/ui": "workspace:*",
-    "@repo/icon": "workspace:*",
-    "@repo/editor": "workspace:*",
-    "@repo/core": "workspace:*"
+    "@kn/common": "workspace:*",
+    "@kn/ui": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/core": "workspace:*"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@repo/rollup-config": "workspace:*"
+    "@kn/rollup-config": "workspace:*"
   }
 }

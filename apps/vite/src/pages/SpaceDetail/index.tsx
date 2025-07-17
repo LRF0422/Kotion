@@ -1,23 +1,23 @@
 import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
-import { TreeView } from "@repo/ui";
-import { ArrowLeft, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, Package, Plus, Settings, ShareIcon, Star, Trash2, Undo2, UserCircle } from "@repo/icon";
+import { TreeView } from "@kn/ui";
+import { ArrowLeft, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, Package, Plus, Settings, ShareIcon, Star, Trash2, Undo2, UserCircle } from "@kn/icon";
 import React, { useEffect, useState } from "react";
-import { Sheet, SheetContent, SheetTitle } from "@repo/ui";
-import { useApi } from "@repo/core";
+import { Sheet, SheetContent, SheetTitle } from "@kn/ui";
+import { useApi } from "@kn/core";
 import { APIS } from "../../api";
-import { Outlet, useParams } from "@repo/core";
+import { Outlet, useParams } from "@kn/core";
 import { Space } from "../../model/Space";
-import { useNavigator } from "@repo/core";
-import { Button } from "@repo/ui";
-import { Input } from "@repo/ui";
-import { Badge } from "@repo/ui";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@repo/ui";
+import { useNavigator } from "@kn/core";
+import { Button } from "@kn/ui";
+import { Input } from "@kn/ui";
+import { Badge } from "@kn/ui";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
 import { event, ON_FAVORITE_CHANGE, ON_PAGE_REFRESH } from "../../event";
-import { Card } from "@repo/ui";
-import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@repo/ui";
-import { useToggle } from "@repo/core";
-import { Empty } from "@repo/ui";
-import { MultiSelect } from "@repo/ui";
+import { Card } from "@kn/ui";
+import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@kn/ui";
+import { useToggle } from "@kn/core";
+import { Empty } from "@kn/ui";
+import { MultiSelect } from "@kn/ui";
 
 export const SpaceDetail: React.FC = () => {
 

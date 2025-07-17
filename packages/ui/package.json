@@ -1,5 +1,5 @@
 {
-  "name": "@repo/ui",
+  "name": "@kn/ui",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
@@ -14,9 +14,9 @@
     "lint": "eslint ."
   },
   "devDependencies": {
-    "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*",
-    "@repo/rollup-config": "workspace:*"
+    "@kn/eslint-config": "workspace:*",
+    "@kn/typescript-config": "workspace:*",
+    "@kn/rollup-config": "workspace:*"
   },
   "dependencies": {
     "@autoform/react": "^3.0.0",
@@ -48,7 +48,7 @@
     "@radix-ui/react-toggle": "^1.1.0",
     "@radix-ui/react-toggle-group": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.4",
-    "@repo/icon": "workspace:*",
+    "@kn/icon": "workspace:*",
     "@tanstack/react-table": "^8.21.2",
     "@tanstack/react-virtual": "^3.8.3",
     "class-variance-authority": "^0.7.1",

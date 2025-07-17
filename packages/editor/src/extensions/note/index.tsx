@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { NoteMark } from "./note";
 import { NoteMarkStaticMenu } from "./menu/static";
 

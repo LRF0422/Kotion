@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { cn } from "@ui/lib/utils"
 import { useCopyToClipboard } from "@ui/hooks/use-copy-to-clipboard"
-import { CheckIcon, CopyIcon } from "@repo/icon"
+import { CheckIcon, CopyIcon } from "@kn/icon"
 import React from "react"
 
 interface ColorInputProps {

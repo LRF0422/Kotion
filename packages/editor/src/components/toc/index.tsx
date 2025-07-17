@@ -1,7 +1,7 @@
 import { TextSelection } from "@tiptap/pm/state"
 import React, { CSSProperties } from "react"
 import { Editor } from "@tiptap/core"
-import { Card } from "@repo/ui"
+import { Card } from "@kn/ui"
 // import { Card, Link, Typography } from "@knowledge/component"
 
 export const ToCItem = (props: any) => {

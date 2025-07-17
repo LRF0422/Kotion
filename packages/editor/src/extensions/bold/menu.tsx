@@ -4,8 +4,8 @@ import { Editor } from "@tiptap/core";
 import { useActive } from "../../hooks/use-active";
 
 import { Bold as BoldExtension } from "./bold";
-import { Bold } from "@repo/icon";
-import { Toggle } from "@repo/ui";
+import { Bold } from "@kn/icon";
+import { Toggle } from "@kn/ui";
 
 export const BoldStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const isBoldActive = useActive(editor, BoldExtension.name);

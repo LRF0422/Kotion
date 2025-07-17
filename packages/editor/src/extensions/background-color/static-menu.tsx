@@ -1,4 +1,4 @@
-import { Button, ColorInput, ColorPicker, Popover, PopoverContent, PopoverTrigger, Toggle, cn } from "@repo/ui";
+import { Button, ColorInput, ColorPicker, Popover, PopoverContent, PopoverTrigger, Toggle, cn } from "@kn/ui";
 import { Editor } from "@tiptap/core";
 import React, { useCallback } from "react";
 

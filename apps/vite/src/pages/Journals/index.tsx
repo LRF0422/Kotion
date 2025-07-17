@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { moment } from '@repo/core';
-import { cn } from "@repo/ui";
-import { Button } from "@repo/ui";
-import { ChevronLeftIcon, ChevronRightIcon } from "@repo/icon";
+import { moment } from '@kn/core';
+import { cn } from "@kn/ui";
+import { Button } from "@kn/ui";
+import { ChevronLeftIcon, ChevronRightIcon } from "@kn/icon";
 import localMoment from './moment-local'
 
 moment.locale('zh-cn', localMoment as any)

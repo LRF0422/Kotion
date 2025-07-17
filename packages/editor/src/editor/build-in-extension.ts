@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import {
 	HeadingExtension, BlockquoteExtension, BoldExtension,
 	UnderlineExtension, StrikeExtension, TableExtension, OrderListExtension,

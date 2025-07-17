@@ -1,10 +1,10 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@repo/ui";
-import { TreeView } from "@repo/ui";
-import { TreeViewElement } from "@repo/ui";
+import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@kn/ui";
+import { TreeView } from "@kn/ui";
+import { TreeViewElement } from "@kn/ui";
 import { GlobalState } from "../../store/GlobalState";
 import { useSafeState } from "ahooks";
-import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import } from "@repo/icon";
+import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import } from "@kn/icon";
 import React, { PropsWithChildren } from "react";
 import { useSelector } from "react-redux";
 import { MyAccount } from "./components/MyAccount";

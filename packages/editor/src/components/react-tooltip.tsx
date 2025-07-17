@@ -4,7 +4,7 @@ import tippy, { Instance } from "tippy.js";
 
 import { Tooltip } from "../components";
 import { createRoot } from "react-dom/client";
-import { Button } from "@repo/ui";
+import { Button } from "@kn/ui";
 
 export const _ReactTooltip: React.FC<{
   editor: Editor;

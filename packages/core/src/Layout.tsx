@@ -2,7 +2,7 @@
 import { Outlet } from "react-router-dom"
 import { SiderMenu } from "./components/SiderMenu"
 import { useEffect, useState } from "react"
-import { SparklesText, cn } from "@repo/ui"
+import { SparklesText, cn } from "@kn/ui"
 import { useApi } from "./hooks/use-api"
 import { APIS } from "./api"
 import { useDispatch } from "react-redux"
@@ -11,7 +11,7 @@ import { ErrorBoundary } from "react-error-boundary"
 // import Logo from "@/assets/logo.png"
 import { EventSourcePolyfill } from 'event-source-polyfill';
 import { BUSINESS_TOPIC, ON_MESSAGE, event } from "./event"
-import { toast } from "@repo/ui"
+import { toast } from "@kn/ui"
 import { ErrorPage } from "./components/ErrorPage"
 import React from "react"
 

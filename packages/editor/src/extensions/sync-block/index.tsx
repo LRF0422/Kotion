@@ -1,7 +1,7 @@
 import React from "react";
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { SyncBlock } from "./sync-block";
-import { BlocksIcon } from "@repo/icon";
+import { BlocksIcon } from "@kn/icon";
 import { Node, NodeType } from "@tiptap/pm/model";
 
 export const SyncBlockExtension: ExtensionWrapper = {

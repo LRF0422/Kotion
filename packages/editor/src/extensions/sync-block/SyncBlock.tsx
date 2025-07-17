@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { EditorMenu } from "../../editor/EditorMenu";
 import { PageContext } from "../../editor/context";
 import { useEditorExtension } from "../../editor/use-extension";

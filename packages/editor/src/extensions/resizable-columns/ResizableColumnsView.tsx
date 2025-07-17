@@ -2,7 +2,7 @@ import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
 import React from "react";
 import {
     ResizablePanelGroup,
-} from "@repo/ui"
+} from "@kn/ui"
 
 
 export const resizableColumnsView: React.FC = () => {

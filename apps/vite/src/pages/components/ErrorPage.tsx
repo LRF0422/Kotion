@@ -1,5 +1,5 @@
-import { Button } from "@repo/ui";
-import { useNavigator } from "@repo/core";
+import { Button } from "@kn/ui";
+import { useNavigator } from "@kn/core";
 import React from "react";
 
 export const ErrorPage: React.FC = () => {

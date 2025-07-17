@@ -1,21 +1,21 @@
 import { useNavigator } from "../hooks/use-navigator";
-import { Blocks, Inbox, LayoutDashboard, MessageCircleCodeIcon, Power, Settings, UserRoundPlus } from "@repo/icon";
+import { Blocks, Inbox, LayoutDashboard, MessageCircleCodeIcon, Power, Settings, UserRoundPlus } from "@kn/icon";
 import React, { useContext, useMemo } from "react";
-import { Empty } from "@repo/ui";
+import { Empty } from "@kn/ui";
 import { useLocation } from "react-router-dom";
-import { cn } from "@repo/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui";
+import { cn } from "@kn/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { useSelector } from "react-redux";
 import { GlobalState } from "../store/GlobalState";
-import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@repo/ui";
-import { Badge } from "@repo/ui";
+import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
+import { Badge } from "@kn/ui";
 import { useApi } from "../hooks/use-api";
 import { APIS } from "../api";
-import { Separator } from "@repo/ui";
+import { Separator } from "@kn/ui";
 import { SettingDlg } from "./settings/SeetingDlg";
-import { ModeToggle } from "@repo/ui";
-import { AppContext, SiderMenuItemProps } from "@repo/common";
+import { ModeToggle } from "@kn/ui";
+import { AppContext, SiderMenuItemProps } from "@kn/common";
 
 
 

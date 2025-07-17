@@ -1,22 +1,22 @@
 import { APIS } from "../../api"
-import { Button } from "@repo/ui"
+import { Button } from "@kn/ui"
 import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
-} from "@repo/ui"
-import { Form, FormControl, FormField, FormItem, FormLabel } from "@repo/ui"
-import { Input } from "@repo/ui"
+} from "@kn/ui"
+import { Form, FormControl, FormField, FormItem, FormLabel } from "@kn/ui"
+import { Input } from "@kn/ui"
 import { useApi } from "../../hooks/use-api"
 import { useNavigator } from "../../hooks/use-navigator"
-import { ModeToggle } from "@repo/ui"
+import { ModeToggle } from "@kn/ui"
 import { upload } from "../../utils/file-utils"
-import { zodResolver } from "@repo/ui"
-import { Plus } from "@repo/icon"
-import { useForm } from "@repo/ui"
+import { zodResolver } from "@kn/ui"
+import { Plus } from "@kn/icon"
+import { useForm } from "@kn/ui"
 import { Link } from "react-router-dom"
-import { z } from "@repo/ui"
+import { z } from "@kn/ui"
 import React from "react"
 
 export const description =

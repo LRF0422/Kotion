@@ -5,8 +5,8 @@ import { Tooltip } from "../../components/tooltip";
 import { useActive } from "../../hooks/use-active";
 
 import { Blockquote as BlockquoteExtension } from "./blockquote";
-import { QuoteIcon, TextQuote } from "@repo/icon";
-import { Toggle } from "@repo/ui";
+import { QuoteIcon, TextQuote } from "@kn/icon";
+import { Toggle } from "@kn/ui";
 
 export const BlockquoteStaticMenu: React.FC<{ editor: Editor }> = ({
   editor

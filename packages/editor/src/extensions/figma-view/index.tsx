@@ -1,6 +1,6 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { Figma } from "./figma";
-import { FigmaIcon } from "@repo/icon";
+import { FigmaIcon } from "@kn/icon";
 import { FigmaBubbleMenu } from "./menu/bubble";
 import React from "react";
 

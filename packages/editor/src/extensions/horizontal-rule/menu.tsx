@@ -2,8 +2,8 @@ import React, { useCallback } from "react";
 import { Editor } from "@tiptap/core";
 import { useActive } from "../../hooks/use-active";
 import { HorizontalRule as HorizontalRuleExtension } from "./horizontal-rule";
-import { Toggle } from "@repo/ui";
-import { RulerIcon } from "@repo/icon";
+import { Toggle } from "@kn/ui";
+import { RulerIcon } from "@kn/icon";
 
 export const HorizontalRuleStaticMenu: React.FC<{ editor: Editor }> = ({
   editor

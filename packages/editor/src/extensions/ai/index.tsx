@@ -1,7 +1,7 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { Ai } from "./ai";
 import { AiStaticMenu } from "./menu/AiStaticMenu";
-import { Sparkles } from "@repo/icon";
+import { Sparkles } from "@kn/icon";
 import { AiImage } from "./ai-image";
 import React from "react";
 

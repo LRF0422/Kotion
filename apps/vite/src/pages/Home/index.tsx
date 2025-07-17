@@ -1,13 +1,13 @@
 import { APIS } from "../../api";
 import { CardList } from "../components/CardList";
-import { Button } from "@repo/ui";
-import { useApi } from "@repo/core";
-import { useNavigator } from "@repo/core";
+import { Button } from "@kn/ui";
+import { useApi } from "@kn/core";
+import { useNavigator } from "@kn/core";
 import { Space as KSpace } from "../../model/Space";
-import { Book, Box, Clock, LayoutTemplate, Plus, UserCircle } from "@repo/icon";
+import { Book, Box, Clock, LayoutTemplate, Plus, UserCircle } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
-import { Empty } from "@repo/ui";
+import { Empty } from "@kn/ui";
 
 
 export const Home: React.FC = () => {

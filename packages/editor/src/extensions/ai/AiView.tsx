@@ -1,13 +1,13 @@
-import { Button } from "@repo/ui";
+import { Button } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
 import React from "react";
 import { aiGeneration } from "./utils";
-import { Textarea } from "@repo/ui";
+import { Textarea } from "@kn/ui";
 import { useToggle } from "ahooks";
-import { Label } from "@repo/ui";
-import { Loader2, Sparkles, Trash2 } from "@repo/icon";
-import { cn } from "@repo/ui";
+import { Label } from "@kn/ui";
+import { Loader2, Sparkles, Trash2 } from "@kn/icon";
+import { cn } from "@kn/ui";
 
 
 export const AiView: React.FC<NodeViewProps> = (props) => {

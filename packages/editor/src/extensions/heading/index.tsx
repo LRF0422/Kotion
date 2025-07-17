@@ -1,5 +1,5 @@
-import { Heading1, Heading2, Heading3, Heading4 } from "@repo/icon";
-import { ExtensionWrapper } from "@repo/common";
+import { Heading1, Heading2, Heading3, Heading4 } from "@kn/icon";
+import { ExtensionWrapper } from "@kn/common";
 import { Heading } from "./heading";
 import { HeadingStaticMenu } from "./menu";
 import React from "react";

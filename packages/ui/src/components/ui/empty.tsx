@@ -1,4 +1,4 @@
-import { Box, Package2 } from "@repo/icon";
+import { Box, Package2 } from "@kn/icon";
 import React, { ReactNode } from "react";
 import { Button } from "./button";
 import { cn } from "@ui/lib/utils";

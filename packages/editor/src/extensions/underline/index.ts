@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { UnderlineStaticMenu } from "./menu";
 import { Underline } from "./underline";
 

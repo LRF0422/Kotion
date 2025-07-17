@@ -1,8 +1,8 @@
-import { Toggle } from "@repo/ui";
+import { Toggle } from "@kn/ui";
 import { Editor } from "@tiptap/core";
 import React from "react";
 import { NoteMark } from "../note";
-import { Notebook } from "@repo/icon";
+import { Notebook } from "@kn/icon";
 
 
 export const NoteMarkStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {

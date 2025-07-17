@@ -1,6 +1,6 @@
 import { Handle, NodeProps, NodeResizer, Position, useNodeId, useReactFlow } from "@xyflow/react";
 import { useKeyPress } from "ahooks";
-import { RectangleHorizontal, TriangleIcon } from "@repo/icon";
+import { RectangleHorizontal, TriangleIcon } from "@kn/icon";
 import React, { useRef } from "react";
 
 export const Triangle_: React.FC<NodeProps> = (props) => {

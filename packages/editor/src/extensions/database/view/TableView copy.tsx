@@ -1,11 +1,11 @@
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@repo/ui";
-import { Input } from "@repo/ui";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
+import { Input } from "@kn/ui";
 import { GridColumn, DataEditor, Item, GridCellKind } from "@glideapps/glide-data-grid"
 import "@glideapps/glide-data-grid/dist/index.css";
-import { ArrowRight, Edit2, Filter, List, Lock, Plus, Settings, SortDesc, SquareStack, Table, Trash2 } from "@repo/icon";
+import { ArrowRight, Edit2, Filter, List, Lock, Plus, Settings, SortDesc, SquareStack, Table, Trash2 } from "@kn/icon";
 import { useCallback, useContext, useState } from "react";
 import { NodeViewContext } from "../DatabaseView";
-import { Button } from "@repo/ui";
+import { Button } from "@kn/ui";
 import {
     StarCell, StarCellType,
     DatePickerCell, DatePickerType,
@@ -13,9 +13,9 @@ import {
     TagsCell
 } from "@glideapps/glide-data-grid-cells"
 import { useToggle } from "ahooks";
-import { cn } from "@repo/ui";
-import { Label } from "@repo/ui";
-import { Separator } from "@repo/ui";
+import { cn } from "@kn/ui";
+import { Label } from "@kn/ui";
+import { Separator } from "@kn/ui";
 import React from "react";
 
 export interface TableViewProps {

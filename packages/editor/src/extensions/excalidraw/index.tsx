@@ -1,7 +1,7 @@
 import React from "react";
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { Excalidraw } from "./excalidraw";
-import { PaintBucket } from "@repo/icon";
+import { PaintBucket } from "@kn/icon";
 
 
 export const ExcalidrawExtension: ExtensionWrapper = {

@@ -1,9 +1,9 @@
 import React from "react";
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { Image } from "./image";
 import { ImageBubbleMenu, ImageStaticMenu } from "./menu";
 // import { uploadImage } from "../../utilities";
-import { ImageIcon } from "@repo/icon";
+import { ImageIcon } from "@kn/icon";
 
 export * from "./image";
 export * from "./menu";

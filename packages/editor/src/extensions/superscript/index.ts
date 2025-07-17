@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { SuperscriptStaticMenu } from "./menu";
 import { Superscript } from './superscript'
 export * from "./superscript";

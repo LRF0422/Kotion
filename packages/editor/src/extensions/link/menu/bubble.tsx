@@ -9,8 +9,8 @@ import { useAttributes } from "../../../hooks/use-attributes";
 import { IconEdit, IconUnlink, IconVisitlink } from "../../../icons";
 import { Link as LinkExtension } from "../link";
 import { showLinkEditor } from "./edit";
-import { Toggle } from "@repo/ui";
-import { Separator } from "@repo/ui";
+import { Toggle } from "@kn/ui";
+import { Separator } from "@kn/ui";
 
 interface IProps {
   editor: Editor;

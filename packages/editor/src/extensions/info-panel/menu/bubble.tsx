@@ -3,10 +3,10 @@ import React, { useCallback } from "react";
 import { BubbleMenu, BubbleMenuProps } from "../../../components";
 import { InfoPanel } from "../info-panel";
 import { copyNode, deleteNode, getCurrentNode } from "../../../utilities";
-import { Copy, Trash2 } from "@repo/icon";
+import { Copy, Trash2 } from "@kn/icon";
 import { Node } from "@tiptap/pm/model";
-import { Separator } from "@repo/ui";
-import { Toggle } from "@repo/ui";
+import { Separator } from "@kn/ui";
+import { Toggle } from "@kn/ui";
 
 
 export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {

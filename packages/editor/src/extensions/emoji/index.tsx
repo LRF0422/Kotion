@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import Mention from '@tiptap/extension-mention'
 import emoji_suggestion from "./emoji-suggestions"
 

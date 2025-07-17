@@ -1,10 +1,10 @@
 import { APIS } from "../../api";
-import { Sidebar, SidebarProvider } from "@repo/ui";
-import { useApi } from "@repo/core";
+import { Sidebar, SidebarProvider } from "@kn/ui";
+import { useApi } from "@kn/core";
 import { Space } from "../../model/Space";
-import { useSafeState } from "@repo/core";
+import { useSafeState } from "@kn/core";
 import React, { useEffect } from "react";
-import { useParams } from "@repo/core";
+import { useParams } from "@kn/core";
 
 
 export const SpaceViewer: React.FC = () => {

@@ -2,8 +2,8 @@ import React, { useCallback } from "react";
 import { Editor } from "@tiptap/core";
 import { useActive } from "../../hooks/use-active";
 import { Subscript as SubscriptExtension } from "./index";
-import { Toggle } from "@repo/ui";
-import { Subscript } from "@repo/icon";
+import { Toggle } from "@kn/ui";
+import { Subscript } from "@kn/icon";
 
 export const SubscriptStaticMenu: React.FC<{ editor: Editor }> = ({
   editor

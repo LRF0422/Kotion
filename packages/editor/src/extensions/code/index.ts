@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { CodeExtensions } from "./code";
 import { CodeStaticMenu } from "./menu";
 

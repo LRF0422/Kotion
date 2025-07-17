@@ -1,8 +1,8 @@
-import { FolderIcon, Trash2, UploadIcon } from "@repo/icon";
+import { FolderIcon, Trash2, UploadIcon } from "@kn/icon";
 import {
     ContextMenu, ContextMenuContent, ContextMenuItem,
     ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger
-} from "@repo/ui";
+} from "@kn/ui";
 import React, { PropsWithChildren, useContext } from "react";
 import { FileManageContext, FileManagerState } from "./FileManager";
 

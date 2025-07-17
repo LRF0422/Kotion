@@ -16,7 +16,7 @@ import {
 import { copyNode, deleteNode, isNodeActivePro } from "../../../utilities";
 
 import { Columns } from "../columns";
-import { Button, IconButton } from "@repo/ui";
+import { Button, IconButton } from "@kn/ui";
 
 export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const shouldShow = useCallback<BubbleMenuProps["shouldShow"]>(() => {

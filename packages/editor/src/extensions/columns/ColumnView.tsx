@@ -1,5 +1,5 @@
 import { Resizable } from "../../components";
-import { cn } from "@repo/ui";
+import { cn } from "@kn/ui";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper } from "@tiptap/react";
 import React, { useCallback } from "react";
 

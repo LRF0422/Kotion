@@ -2,8 +2,8 @@ import { Editor } from "@tiptap/core";
 import React, { useCallback } from "react";
 import { useActive } from "../../../hooks";
 import OrderedList from "@tiptap/extension-ordered-list";
-import { ListOrdered } from "@repo/icon";
-import { Toggle } from "@repo/ui";
+import { ListOrdered } from "@kn/icon";
+import { Toggle } from "@kn/ui";
 
 export const OrderListStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const isActive = useActive(editor, OrderedList.name);

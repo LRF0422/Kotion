@@ -1,11 +1,11 @@
-import { CollaborationEditor } from "@repo/editor";
-import { GlobalState } from "@repo/core";
-import { TiptapCollabProvider } from "@repo/editor";
-import { deepEqual } from "@repo/core";
+import { CollaborationEditor } from "@kn/editor";
+import { GlobalState } from "@kn/core";
+import { TiptapCollabProvider } from "@kn/editor";
+import { deepEqual } from "@kn/core";
 import React, { useMemo, useRef, useState } from "react";
-import { useSelector } from "@repo/core";
-import { useParams } from "@repo/core";
-import * as Y from "@repo/editor"
+import { useSelector } from "@kn/core";
+import { useParams } from "@kn/core";
+import * as Y from "@kn/editor"
 
 export const JournalEditor: React.FC = () => {
     const params = useParams()

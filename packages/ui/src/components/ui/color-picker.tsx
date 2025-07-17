@@ -7,7 +7,7 @@ import {
 } from '@ui/components/ui/popover'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@ui/components/ui/tabs'
 import { cn } from '@ui/lib/utils'
-import { Paintbrush } from '@repo/icon'
+import { Paintbrush } from '@kn/icon'
 import { useMemo, useState } from 'react'
 import React from 'react'
 import { IconButton, Toggle } from '..'

@@ -4,8 +4,8 @@ import { Editor } from "@tiptap/core";
 import { useActive } from "../../hooks/use-active";
 
 import { Underline as UnderlineExtension } from "./underline";
-import { Underline } from "@repo/icon";
-import { Toggle } from "@repo/ui";
+import { Underline } from "@kn/icon";
+import { Toggle } from "@kn/ui";
 
 export const UnderlineStaticMenu: React.FC<{ editor: Editor }> = ({
   editor

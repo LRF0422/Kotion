@@ -1,6 +1,6 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { TestExt } from "./test-extension";
-import { TestTube } from "@repo/icon";
+import { TestTube } from "@kn/icon";
 import React from "react";
 
 
@@ -11,9 +11,9 @@ export const TestExtension: ExtensionWrapper = {
         {
             text: 'test',
             slash: '/test',
-            icon: <TestTube/>,
+            icon: <TestTube />,
             action: () => {
-                
+
             }
         }
     ]

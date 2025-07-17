@@ -5,7 +5,7 @@ import { IconColumns } from "../../../icons";
 import { useActive } from "../../../hooks/use-active";
 
 import { Columns as ColumnsExtension } from "../columns";
-import { Toggle } from "@repo/ui";
+import { Toggle } from "@kn/ui";
 
 export const ColumnsStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const isColumnsActive = useActive(editor, ColumnsExtension.name);

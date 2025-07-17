@@ -4,8 +4,8 @@ import { Editor } from "@tiptap/core";
 import { useActive } from "../../hooks/use-active";
 
 import { Italic as ItalicExtension } from "./italic";
-import { Italic } from "@repo/icon";
-import { Toggle } from "@repo/ui";
+import { Italic } from "@kn/icon";
+import { Toggle } from "@kn/ui";
 
 
 export const ItalicStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {

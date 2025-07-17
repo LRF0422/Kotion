@@ -1,20 +1,20 @@
-import { useNavigator } from "@repo/core";
-import { CalendarCheck2, Inbox, LayoutDashboard, LayoutGrid, MessageCircleCodeIcon, PanelBottom, Power, Settings, ShoppingBag, UserRoundPlus } from "@repo/icon";
+import { useNavigator } from "@kn/core";
+import { CalendarCheck2, Inbox, LayoutDashboard, LayoutGrid, MessageCircleCodeIcon, PanelBottom, Power, Settings, ShoppingBag, UserRoundPlus } from "@kn/icon";
 import React, { ReactNode } from "react";
-import { Empty, EmptyProps } from "@repo/ui";
+import { Empty, EmptyProps } from "@kn/ui";
 import { useLocation } from "react-router-dom";
-import { cn } from "@repo/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui";
+import { cn } from "@kn/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { useSelector } from "react-redux";
-import { GlobalState } from "@repo/core";
-import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@repo/ui";
-import { Badge } from "@repo/ui";
-import { useApi } from "@repo/core";
+import { GlobalState } from "@kn/core";
+import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
+import { Badge } from "@kn/ui";
+import { useApi } from "@kn/core";
 import { APIS } from "../../api";
-import { Separator } from "@repo/ui";
+import { Separator } from "@kn/ui";
 import { SettingDlg } from "./settings/SeetingDlg";
-import { ModeToggle } from "@repo/ui";
+import { ModeToggle } from "@kn/ui";
 
 
 export interface SiderMenuItemProps {

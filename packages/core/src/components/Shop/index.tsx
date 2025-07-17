@@ -1,10 +1,10 @@
-import { ArrowDownToLine, BellRing, BoxIcon, BoxSelect, DownloadCloud, PlugIcon, PlusSquare, RefreshCcw, Slack, Star } from "@repo/icon";
+import { ArrowDownToLine, BellRing, BoxIcon, BoxSelect, DownloadCloud, PlugIcon, PlusSquare, RefreshCcw, Slack, Star } from "@kn/icon";
 import {
     Accordion, AccordionContent,
     AccordionItem, AccordionTrigger,
     Badge, Button, EmptyState, Input, Separator, Tooltip,
     TooltipContent, TooltipProvider, TooltipTrigger
-} from "@repo/ui";
+} from "@kn/ui";
 import React, { useEffect } from "react";
 import { useNavigator } from "../../hooks/use-navigator";
 import { Outlet } from "react-router-dom";

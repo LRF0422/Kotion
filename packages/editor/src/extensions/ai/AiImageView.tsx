@@ -1,14 +1,14 @@
-import { Button } from "@repo/ui";
-import { Label } from "@repo/ui";
-import { Textarea } from "@repo/ui";
-import { cn } from "@repo/ui";
+import { Button } from "@kn/ui";
+import { Label } from "@kn/ui";
+import { Textarea } from "@kn/ui";
+import { cn } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewWrapper } from "@tiptap/react";
 import { useToggle } from "ahooks";
-import { ImageIcon, Loader2, Sparkles, Trash2 } from "@repo/icon";
+import { ImageIcon, Loader2, Sparkles, Trash2 } from "@kn/icon";
 import React from "react";
 import { aiImageWriter } from "./utils";
-import { toast } from "@repo/ui";
+import { toast } from "@kn/ui";
 
 
 export const AiImageView: React.FC<NodeViewProps> = (props) => {

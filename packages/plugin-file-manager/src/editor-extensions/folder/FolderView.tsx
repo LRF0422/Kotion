@@ -1,9 +1,9 @@
 import React, { useEffect } from "react"
-import { NodeViewProps, NodeViewWrapper } from "@repo/editor"
+import { NodeViewProps, NodeViewWrapper } from "@kn/editor"
 import { FileManagerView } from "../component/FileManager"
-import { useModal } from "@repo/core"
-import { Button, EmptyState } from "@repo/ui"
-import { FolderOpenIcon } from "@repo/icon"
+import { useModal } from "@kn/core"
+import { Button, EmptyState } from "@kn/ui"
+import { FolderOpenIcon } from "@kn/icon"
 
 export const FolderView: React.FC<NodeViewProps> = (props) => {
 

@@ -2,8 +2,8 @@ import React, { useCallback } from "react";
 import { Editor } from "@tiptap/core";
 import { useActive } from "../../hooks/use-active";
 import { Superscript as SuperscriptExtension } from "./index";
-import { Toggle } from "@repo/ui";
-import { Superscript } from "@repo/icon";
+import { Toggle } from "@kn/ui";
+import { Superscript } from "@kn/icon";
 
 export const SuperscriptStaticMenu: React.FC<{ editor: Editor }> = ({
   editor

@@ -1,7 +1,7 @@
 
 
-import { TrendingUp } from "@repo/icon"
-import { Area, AreaChart, CartesianGrid, XAxis } from "@repo/ui"
+import { TrendingUp } from "@kn/icon"
+import { Area, AreaChart, CartesianGrid, XAxis } from "@kn/ui"
 
 import {
     Card,
@@ -10,13 +10,13 @@ import {
     CardFooter,
     CardHeader,
     CardTitle,
-} from "@repo/ui"
+} from "@kn/ui"
 import {
     ChartConfig,
     ChartContainer,
     ChartTooltip,
     ChartTooltipContent,
-} from "@repo/ui"
+} from "@kn/ui"
 import React from "react"
 import { ChartKit } from "./types"
 import { BaseChart } from "./BaseChart"

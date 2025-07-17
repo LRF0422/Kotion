@@ -1,5 +1,5 @@
 import { Editor } from "@tiptap/core";
-import { toast } from "@repo/ui";
+import { toast } from "@kn/ui";
 
 // import { Message } from "../../components";
 // import {

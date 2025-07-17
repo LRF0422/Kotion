@@ -1,5 +1,5 @@
-import { PaintRollerIcon } from "@repo/icon";
-import { Toggle } from "@repo/ui";
+import { PaintRollerIcon } from "@kn/icon";
+import { Toggle } from "@kn/ui";
 import { Editor } from "@tiptap/core";
 import { Mark } from "@tiptap/pm/model";
 import React from "react";

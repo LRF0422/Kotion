@@ -1,5 +1,5 @@
 import React from "react";
-import { cn } from "@repo/ui";
+import { cn } from "@kn/ui";
 import { Handle, NodeProps, Position } from "@xyflow/react";
 
 export const NodeWrapper = React.forwardRef<

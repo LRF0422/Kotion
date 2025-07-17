@@ -1,8 +1,8 @@
 import React from "react";
 import BulletList from "@tiptap/extension-bullet-list";
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { BulletListStaticMenu } from "./menu/static-menu";
-import { List } from "@repo/icon";
+import { List } from "@kn/icon";
 
 export * from "./bullet-list";
 export * from "./menu/static-menu"

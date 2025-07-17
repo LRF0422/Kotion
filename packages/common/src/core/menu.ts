@@ -1,4 +1,4 @@
-import { EmptyProps } from "@repo/ui";
+import { EmptyProps } from "@kn/ui";
 import { ReactNode } from "react"
 
 export interface SiderMenuProps {

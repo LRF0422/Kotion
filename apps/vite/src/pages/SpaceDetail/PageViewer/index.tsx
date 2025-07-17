@@ -1,19 +1,19 @@
 import { APIS } from "../../../api";
-import { Button } from "@repo/ui";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@repo/ui";
-import { Input } from "@repo/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui";
-import { Separator } from "@repo/ui";
-import { EditorRender } from "@repo/editor";
+import { Button } from "@kn/ui";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@kn/ui";
+import { Input } from "@kn/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
+import { Separator } from "@kn/ui";
+import { EditorRender } from "@kn/editor";
 import { event, ON_FAVORITE_CHANGE } from "../../../event";
-import { useApi } from "@repo/core";
-import { useNavigator } from "@repo/core";
-import { Editor } from "@repo/editor";
-import { useToggle } from "@repo/core";
-import { Edit, Loader, MessageCircleCode, MoreHorizontal, Plus, Share, Star } from "@repo/icon";
+import { useApi } from "@kn/core";
+import { useNavigator } from "@kn/core";
+import { Editor } from "@kn/editor";
+import { useToggle } from "@kn/core";
+import { Edit, Loader, MessageCircleCode, MoreHorizontal, Plus, Share, Star } from "@kn/icon";
 import React, { useEffect, useRef, useState } from "react";
-import { useParams } from "@repo/core";
-import { toast } from "@repo/ui";
+import { useParams } from "@kn/core";
+import { toast } from "@kn/ui";
 
 export const PageViewer: React.FC = () => {
 
@@ -111,7 +111,7 @@ export const PageViewer: React.FC = () => {
         <main className="w-full">
             <EditorRender
                 ref={editor}
-                content={ page.content? JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">")) : undefined}
+                content={page.content ? JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">")) : undefined}
                 className="h-[calc(100vh-60px)] overflow-auto"
                 id={params.pageId as string}
                 isEditable={false}

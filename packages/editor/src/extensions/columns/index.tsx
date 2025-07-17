@@ -1,6 +1,6 @@
 import { Columns } from "./columns";
 import { Column } from "./column";
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { ColumnsBubbleMenu, ColumnsStaticMenu } from "./menu";
 import { IconColumns } from "../../icons";
 import React from "react";

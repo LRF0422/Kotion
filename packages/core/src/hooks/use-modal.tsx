@@ -1,5 +1,5 @@
-import { XIcon } from "@repo/icon";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, cn } from "@repo/ui";
+import { XIcon } from "@kn/icon";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, cn } from "@kn/ui";
 import { isNumber } from "lodash";
 import React, { PropsWithChildren, ReactNode, createContext, useContext, useState } from "react";
 

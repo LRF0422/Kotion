@@ -1,5 +1,5 @@
 {
-  "name": "@repo/icon",
+  "name": "@kn/icon",
   "private": true,
   "version": "0.0.0",
   "description": "",
@@ -18,7 +18,7 @@
     "lucide-react": "^0.446.0"
   },
   "devDependencies": {
-    "@repo/rollup-config": "workspace:*"
+    "@kn/rollup-config": "workspace:*"
   },
   "files": [
     "*"

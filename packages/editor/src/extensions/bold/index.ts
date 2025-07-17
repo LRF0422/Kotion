@@ -1,5 +1,5 @@
 import Bold from "@tiptap/extension-bold";
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { BoldStaticMenu } from "./menu";
 
 export * from "./bold";

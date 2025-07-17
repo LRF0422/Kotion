@@ -1,28 +1,28 @@
 import { APIS } from "../../../api";
-import { Badge } from "@repo/ui";
-import { Button } from "@repo/ui";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuPortal, DropdownMenuLabel } from "@repo/ui";
-import { Label } from "@repo/ui";
-import { RadioGroup, RadioGroupItem } from "@repo/ui";
-import { Separator } from "@repo/ui";
-import { Switch } from "@repo/ui";
-import { CollaborationEditor } from "@repo/editor";
+import { Badge } from "@kn/ui";
+import { Button } from "@kn/ui";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuPortal, DropdownMenuLabel } from "@kn/ui";
+import { Label } from "@kn/ui";
+import { RadioGroup, RadioGroupItem } from "@kn/ui";
+import { Separator } from "@kn/ui";
+import { Switch } from "@kn/ui";
+import { CollaborationEditor } from "@kn/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
-import { useApi } from "@repo/core";
-import { useNavigator } from "@repo/core";
-import { GlobalState } from "@repo/core";
-import { Editor } from "@repo/editor";
-import { useFullscreen, useKeyPress, useToggle, useUnmount } from "@repo/core";
+import { useApi } from "@kn/core";
+import { useNavigator } from "@kn/core";
+import { GlobalState } from "@kn/core";
+import { Editor } from "@kn/editor";
+import { useFullscreen, useKeyPress, useToggle, useUnmount } from "@kn/core";
 import {
     ALargeSmall, ArrowLeft, BookTemplate, CircleArrowUp,
     Contact2, Download, FileIcon,
     FullscreenIcon, Link, Loader, LoaderCircle, LockIcon, MessageSquareText,
     Minimize2, MoreHorizontal, MoveDownRight, Plus, Save, Trash2, Upload
-} from "@repo/icon";
+} from "@kn/icon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useSelector } from "@repo/core";
-import { useParams } from "@repo/core";
-import { toast } from "@repo/ui";
+import { useSelector } from "@kn/core";
+import { useParams } from "@kn/core";
+import { toast } from "@kn/ui";
 
 export const PageEditor: React.FC = () => {
     const [page, setPage] = useState<any>()

@@ -1,10 +1,10 @@
 import { APIS } from "../../../api";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui";
-import { useApi } from "@repo/core";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
+import { useApi } from "@kn/core";
 import { Space } from "../../../model/Space";
-import { useSafeState } from "@repo/core";
+import { useSafeState } from "@kn/core";
 import React, { createContext, useEffect } from "react";
-import { useParams } from "@repo/core";
+import { useParams } from "@kn/core";
 import { Basic } from "./Basic";
 import { Archive } from "./Archive";
 import { Delete } from "./Delete";

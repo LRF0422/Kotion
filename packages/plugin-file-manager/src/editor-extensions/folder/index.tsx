@@ -1,10 +1,10 @@
-import { ExtensionWrapper } from "@repo/common"
+import { ExtensionWrapper } from "@kn/common"
 import { Folder } from "./folder"
-import { FolderIcon } from "@repo/icon"
+import { FolderIcon } from "@kn/icon"
 import React from "react"
 
 
-declare module '@repo/editor' {
+declare module '@kn/editor' {
     interface Commands<ReturnType> {
         fileManager: {
             insertFolder: () => ReturnType;

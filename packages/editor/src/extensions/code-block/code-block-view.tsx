@@ -3,8 +3,8 @@ import { NodeViewWrapper, NodeViewContent, NodeViewProps } from "@tiptap/react";
 
 import { Select } from "../../components";
 import { copy } from "../../utilities";
-import { Copy } from "@repo/icon";
-import { Button } from "@repo/ui";
+import { Copy } from "@kn/icon";
+import { Button } from "@kn/ui";
 
 export const CodeBlockView: React.FC<NodeViewProps> = ({
   editor,

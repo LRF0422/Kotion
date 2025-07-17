@@ -1,6 +1,6 @@
-import { EditorRender } from "@repo/editor";
-import { BellDotIcon, CheckCircle2, DownloadCloudIcon, Settings } from "@repo/icon";
-import { Badge, Button, Empty, Rate, Separator, Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui";
+import { EditorRender } from "@kn/editor";
+import { BellDotIcon, CheckCircle2, DownloadCloudIcon, Settings } from "@kn/icon";
+import { Badge, Button, Empty, Rate, Separator, Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
 import React from "react";
 
 

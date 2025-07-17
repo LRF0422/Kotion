@@ -1,4 +1,4 @@
-import { Button } from "@repo/ui";
+import { Button } from "@kn/ui";
 import { useNavigator } from "../hooks/use-navigator";
 import React from "react";
 

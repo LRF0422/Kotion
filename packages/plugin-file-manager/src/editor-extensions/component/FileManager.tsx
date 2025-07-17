@@ -1,12 +1,12 @@
-import { Check, DownloadIcon, FileIcon, FolderIcon, FolderOpenIcon, ListIcon, Trash2, UploadIcon, XIcon } from "@repo/icon";
-import { Button, EmptyState, Separator, TreeView, cn } from "@repo/ui";
+import { Check, DownloadIcon, FileIcon, FolderIcon, FolderOpenIcon, ListIcon, Trash2, UploadIcon, XIcon } from "@kn/icon";
+import { Button, EmptyState, Separator, TreeView, cn } from "@kn/ui";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { FileCardList } from "./FileCard";
-import { useSafeState, useUploadFile } from "@repo/core";
-import { useApi } from "@repo/core";
+import { useSafeState, useUploadFile } from "@kn/core";
+import { useApi } from "@kn/core";
 import { APIS } from "../../api";
 import { Menu } from "./Menu";
-import { toast } from "@repo/ui";
+import { toast } from "@kn/ui";
 
 
 export interface FileItem {

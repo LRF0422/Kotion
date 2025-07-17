@@ -1,5 +1,5 @@
-import { Info } from "@repo/icon";
-import { ExtensionWrapper } from "@repo/common";
+import { Info } from "@kn/icon";
+import { ExtensionWrapper } from "@kn/common";
 import { InfoPanel } from "./info-panel";
 import { InfoPanelBubbleMenu } from "./menu/bubble";
 import { InfoPanelStaticMenu } from "./menu/static";

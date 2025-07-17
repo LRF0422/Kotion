@@ -3,8 +3,8 @@ import { NodeViewWrapper } from "@tiptap/react";
 import React, { useRef } from "react";
 import { Button, Excalidraw, Footer, WelcomeScreen } from "@excalidraw/excalidraw";
 import { useFullscreen } from "ahooks";
-import { Fullscreen } from "@repo/icon";
-import { useTheme } from "@repo/ui";
+import { Fullscreen } from "@kn/icon";
+import { useTheme } from "@kn/ui";
 
 export const ExcalidrawView: React.FC<NodeViewProps> = (props) => {
 

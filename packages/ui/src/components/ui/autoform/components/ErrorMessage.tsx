@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertCircle } from "@repo/icon";
+import { AlertCircle } from "@kn/icon";
 
 import { Alert, AlertTitle } from "@ui/components/ui/alert";
 

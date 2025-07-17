@@ -4,8 +4,8 @@ import { Editor } from "@tiptap/core";
 import { useActive } from "../../../hooks/use-active";
 // import { uploadImage } from "../../../utilities";
 import { Image as ImageExtension } from "../image";
-import { Toggle } from "@repo/ui";
-import { Image } from "@repo/icon";
+import { Toggle } from "@kn/ui";
+import { Image } from "@kn/icon";
 
 export const ImageStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const isCodeActive = useActive(editor, ImageExtension.name);

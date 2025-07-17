@@ -1,6 +1,6 @@
-import { Download, FileIcon, FolderOpenIcon, XIcon } from "@repo/icon";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, cn } from "@repo/ui";
-import { useSafeState } from "@repo/core";
+import { Download, FileIcon, FolderOpenIcon, XIcon } from "@kn/icon";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, cn } from "@kn/ui";
+import { useSafeState } from "@kn/core";
 import React, { useEffect } from "react";
 import { FileItem, FileManagerState, useFileManagerState } from "./FileManager";
 

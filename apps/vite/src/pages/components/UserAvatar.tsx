@@ -1,4 +1,4 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@repo/ui";
+import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import React from "react";
 
 export interface UserAvatarProps {

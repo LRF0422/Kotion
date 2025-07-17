@@ -1,22 +1,22 @@
 import { APIS } from "../../api"
-import { Button } from "@repo/ui"
+import { Button } from "@kn/ui"
 import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
-} from "@repo/ui"
-import { Form, FormControl, FormField, FormItem, FormLabel } from "@repo/ui"
-import { Input } from "@repo/ui"
-import { useApi } from "@repo/core"
-import { useNavigator } from "@repo/core"
-import { ModeToggle } from "@repo/ui"
+} from "@kn/ui"
+import { Form, FormControl, FormField, FormItem, FormLabel } from "@kn/ui"
+import { Input } from "@kn/ui"
+import { useApi } from "@kn/core"
+import { useNavigator } from "@kn/core"
+import { ModeToggle } from "@kn/ui"
 import { upload } from "../../utils/utils"
-import { zodResolver } from "@repo/ui"
-import { Plus } from "@repo/icon"
-import { useForm } from "@repo/ui"
-import { Link } from "@repo/core"
-import { z } from "@repo/ui"
+import { zodResolver } from "@kn/ui"
+import { Plus } from "@kn/icon"
+import { useForm } from "@kn/ui"
+import { Link } from "@kn/core"
+import { z } from "@kn/ui"
 import React from "react"
 
 export const description =

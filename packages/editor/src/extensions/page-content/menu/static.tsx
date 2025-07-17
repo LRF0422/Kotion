@@ -1,8 +1,8 @@
-import { Toggle } from "@repo/ui";
+import { Toggle } from "@kn/ui";
 import { Editor } from "@tiptap/core";
 import React from "react";
 import { PageContent } from "../page-content";
-import { List } from "@repo/icon";
+import { List } from "@kn/icon";
 
 
 export const PageContentStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {

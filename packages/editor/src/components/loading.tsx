@@ -1,4 +1,4 @@
-import { Loader2 } from "@repo/icon";
+import { Loader2 } from "@kn/icon";
 import React from "react";
 
 const LoadingWrapStyle: React.CSSProperties = {

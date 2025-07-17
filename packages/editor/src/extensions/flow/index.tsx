@@ -1,7 +1,7 @@
 import React from "react";
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { Flow } from "./flow";
-import { FlowerIcon } from "@repo/icon";
+import { FlowerIcon } from "@kn/icon";
 
 
 export const FlowExtension: ExtensionWrapper = {

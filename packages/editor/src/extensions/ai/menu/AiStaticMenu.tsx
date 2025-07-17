@@ -1,7 +1,7 @@
-import { Button } from "@repo/ui";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@repo/ui";
+import { Button } from "@kn/ui";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@kn/ui";
 import { Editor } from "@tiptap/core";
-import { ChevronDown, Circle, Languages, MessageCircleMore, PencilLine, SmilePlus, Sparkles } from "@repo/icon";
+import { ChevronDown, Circle, Languages, MessageCircleMore, PencilLine, SmilePlus, Sparkles } from "@kn/icon";
 import React from "react";
 import { comp } from "../utils";
 

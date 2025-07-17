@@ -1,7 +1,7 @@
 import { ScrollArea } from "@ui/components/ui/scroll-area";
 import { cn } from "@ui/lib/utils";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
-import { ChevronDown, ChevronRight } from "@repo/icon";
+import { ChevronDown, ChevronRight } from "@kn/icon";
 import React, {
     createContext,
     forwardRef,

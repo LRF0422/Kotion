@@ -1,7 +1,7 @@
-import { NodeViewContent, NodeViewProps, NodeViewWrapper } from "@repo/editor"
+import { NodeViewContent, NodeViewProps, NodeViewWrapper } from "@kn/editor"
 import React, { useEffect, useRef, useState } from "react"
 import mermaid from 'mermaid'
-import { useAsyncEffect, useDebounce, useTheme } from "@repo/core"
+import { useAsyncEffect, useDebounce, useTheme } from "@kn/core"
 export const MermaidView: React.FC<NodeViewProps> = (props) => {
 
     const ref = useRef<HTMLPreElement>(null)

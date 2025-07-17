@@ -13,11 +13,11 @@ import nodePolyfills from "rollup-plugin-polyfill-node";
 export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   external: [
     "react",
-    "@repo/common",
-    "@repo/ui",
-    "@repo/icon",
-    "@repo/editor",
-    "@repo/core",
+    "@kn/common",
+    "@kn/ui",
+    "@kn/icon",
+    "@kn/editor",
+    "@kn/core",
   ],
   input,
   output: [
@@ -28,11 +28,11 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
       sourcemap: true,
       exports: "named",
       globals: {
-        "@repo/common": "common",
-        "@repo/ui": "ui",
-        "@repo/icon": "icon",
-        "@repo/editor": "editor",
-        "@repo/core": "core",
+        "@kn/common": "common",
+        "@kn/ui": "ui",
+        "@kn/icon": "icon",
+        "@kn/editor": "editor",
+        "@kn/core": "core",
         react: "React",
       },
     },

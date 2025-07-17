@@ -1,7 +1,7 @@
 
 
-import { TrendingUp } from "@repo/icon"
-import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "@repo/ui"
+import { TrendingUp } from "@kn/icon"
+import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "@kn/ui"
 
 import {
     Card,
@@ -10,13 +10,13 @@ import {
     CardFooter,
     CardHeader,
     CardTitle,
-} from "@repo/ui"
+} from "@kn/ui"
 import {
     ChartConfig,
     ChartContainer,
     ChartTooltip,
     ChartTooltipContent,
-} from "@repo/ui"
+} from "@kn/ui"
 import React from "react"
 const chartData = [
     { month: "January", desktop: 186 },

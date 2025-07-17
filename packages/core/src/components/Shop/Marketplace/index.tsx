@@ -1,5 +1,5 @@
-import { ArchiveIcon, ArrowUpRight, DownloadIcon, FilePlus2, PlusIcon, SearchIcon } from "@repo/icon";
-import { Avatar, Button, Card, CardDescription, CardFooter, CardHeader, CardTitle, EmptyState, IconButton, Input, ScrollArea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, cn } from "@repo/ui";
+import { ArchiveIcon, ArrowUpRight, DownloadIcon, FilePlus2, PlusIcon, SearchIcon } from "@kn/icon";
+import { Avatar, Button, Card, CardDescription, CardFooter, CardHeader, CardTitle, EmptyState, IconButton, Input, ScrollArea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, cn } from "@kn/ui";
 import React, { useState } from "react";
 import { PluginUploader } from "../PluginUploader";
 

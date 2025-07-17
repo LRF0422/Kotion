@@ -1,10 +1,10 @@
-import { Separator } from "@repo/ui";
+import { Separator } from "@kn/ui";
 import { GlobalState } from "../../../store/GlobalState";
 import React from "react";
 import { useSelector } from "react-redux";
 import { UserAvatar } from "../../UserAvatar";
-import { Input } from "@repo/ui";
-import { Button } from "@repo/ui";
+import { Input } from "@kn/ui";
+import { Button } from "@kn/ui";
 
 export const MyAccount: React.FC = () => {
 

@@ -1,6 +1,6 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { Mermaid } from "./mermaid";
-import { ChartPieIcon } from "@repo/icon";
+import { ChartPieIcon } from "@kn/icon";
 import React from "react";
 
 

@@ -1,4 +1,4 @@
-import { ResizablePanel } from "@repo/ui";
+import { ResizablePanel } from "@kn/ui";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
 import React from "react";
 

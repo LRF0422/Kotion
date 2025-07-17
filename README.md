@@ -6,7 +6,7 @@
 This repository is a monorepo starter kit utilizing [Turborepo](https://turbo.build/repo) for managing multiple
 applications with shared [shadcn/ui](https://github.com/shadcn-ui/ui) components. It includes two applications (`vite`
 and `nextjs`) in the `apps`
-directory, both of which use shared components from the `@repo/ui` package.
+directory, both of which use shared components from the `@kn/ui` package.
 
 This repository is based on https://github.com/dan5py/turborepo-shadcn-ui starter.
 

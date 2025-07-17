@@ -3,8 +3,8 @@ import { Editor } from "@tiptap/core";
 
 import { useActive } from "../../../hooks/use-active";
 import { Table } from "../index";
-import { Table2 } from "@repo/icon";
-import { Toggle } from "@repo/ui";
+import { Table2 } from "@kn/icon";
+import { Toggle } from "@kn/ui";
 
 export const TableStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const isTableActibe = useActive(editor, Table.name);

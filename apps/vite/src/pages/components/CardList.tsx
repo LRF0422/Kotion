@@ -1,7 +1,7 @@
 import React, { ReactNode } from "react";
-import { Empty, EmptyProps } from "@repo/ui";
-import { Card, CardContent, CardHeader, CardTitle } from "@repo/ui";
-import { cn } from "@repo/ui";
+import { Empty, EmptyProps } from "@kn/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@kn/ui";
+import { cn } from "@kn/ui";
 
 export interface CardListProps {
     data: any[],

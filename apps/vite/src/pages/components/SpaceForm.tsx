@@ -1,19 +1,19 @@
 import { APIS } from "../../api";
-import { IconSelector } from "@repo/ui";
-import { Button } from "@repo/ui";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@repo/ui";
-import { Form, FormControl, FormField, FormItem, FormLabel } from "@repo/ui";
-import { Input } from "@repo/ui";
-import { Textarea } from "@repo/ui";
-import { useApi } from "@repo/core";
-import { GlobalState } from "@repo/core";
+import { IconSelector } from "@kn/ui";
+import { Button } from "@kn/ui";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@kn/ui";
+import { Form, FormControl, FormField, FormItem, FormLabel } from "@kn/ui";
+import { Input } from "@kn/ui";
+import { Textarea } from "@kn/ui";
+import { useApi } from "@kn/core";
+import { GlobalState } from "@kn/core";
 import { upload } from "../../utils/utils";
-import { zodResolver } from "@repo/ui";
-import { Plus } from "@repo/icon";
+import { zodResolver } from "@kn/ui";
+import { Plus } from "@kn/icon";
 import React, { ReactNode, useState } from "react";
-import { useForm } from "@repo/ui";
-import { useSelector } from "@repo/core";
-import { z } from "@repo/ui";
+import { useForm } from "@kn/ui";
+import { useSelector } from "@kn/core";
+import { z } from "@kn/ui";
 
 export interface SpaceFormProps {
     callBack?: () => void

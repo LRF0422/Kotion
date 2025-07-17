@@ -1,6 +1,6 @@
-import { Button } from '@repo/ui'
-import { axios } from '@repo/core'
-import { toast } from '@repo/ui'
+import { Button } from '@kn/ui'
+import { axios } from '@kn/core'
+import { toast } from '@kn/ui'
 import { showWarningAlert } from './showAlertDlg'
 import React from 'react'
 

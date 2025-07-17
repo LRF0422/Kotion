@@ -1,7 +1,7 @@
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@repo/ui";
-import { CircleAlert } from "@repo/icon";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@kn/ui";
+import { CircleAlert } from "@kn/icon";
 import { ReactNode, useState } from "react";
-import { createRoot } from "@repo/core";
+import { createRoot } from "@kn/core";
 import React from "react";
 
 

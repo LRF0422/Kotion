@@ -1,10 +1,10 @@
 import React, { ElementType, memo, useCallback, useEffect } from "react";
-import { ExtensionWrapper, Group } from "@repo/common";
+import { ExtensionWrapper, Group } from "@kn/common";
 import { Editor } from "@tiptap/core";
-import { Toggle } from "@repo/ui";
-import { Separator } from "@repo/ui";
+import { Toggle } from "@kn/ui";
+import { Separator } from "@kn/ui";
 import { isArray } from "lodash";
-import { Undo2, Redo2 } from "@repo/icon";
+import { Undo2, Redo2 } from "@kn/icon";
 import { BubbleMenu as ReactBubble } from "../components";
 import { useSafeState } from "ahooks";
 import { TextSelection } from "@tiptap/pm/state";
@@ -69,7 +69,7 @@ export const EditorMenu: React.FC<{ editor: Editor, extensionWrappers: Extension
                 {renderItem(record.block, 3, editor)}
             </div>
         }
-         {renderItem(bubbleMenu, 4, editor)}
+        {renderItem(bubbleMenu, 4, editor)}
         {
             flotMenu.length > 0 && <ReactBubble
                 forNode

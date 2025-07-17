@@ -1,17 +1,17 @@
-import { Button } from "@repo/ui"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@repo/ui"
-import { Input } from "@repo/ui"
-import { Label } from "@repo/ui"
-import { useForm } from "@repo/ui"
+import { Button } from "@kn/ui"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@kn/ui"
+import { Input } from "@kn/ui"
+import { Label } from "@kn/ui"
+import { useForm } from "@kn/ui"
 import { Link } from "react-router-dom"
-import { z } from "@repo/ui"
-import { zodResolver } from '@repo/ui';
+import { z } from "@kn/ui"
+import { zodResolver } from '@kn/ui';
 import { useApi } from "../../hooks/use-api"
 import { APIS } from "../../api"
 import { useState } from "react"
 import { useNavigator } from "../../hooks/use-navigator"
-import { Loader2 } from "@repo/icon"
-import { ModeToggle } from "@repo/ui"
+import { Loader2 } from "@kn/icon"
+import { ModeToggle } from "@kn/ui"
 import React from "react"
 
 export function Login() {

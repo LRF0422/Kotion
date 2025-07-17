@@ -3,8 +3,8 @@ import { Editor } from "@tiptap/core";
 import { useActive } from "../../hooks/use-active";
 
 import { Strike as StrikeExtension } from "./strike";
-import { Strikethrough } from "@repo/icon";
-import { Toggle } from "@repo/ui";
+import { Strikethrough } from "@kn/icon";
+import { Toggle } from "@kn/ui";
 
 export const StrikeStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const isStrikeActive = useActive(editor, StrikeExtension.name);

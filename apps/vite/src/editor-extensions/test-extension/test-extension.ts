@@ -1,4 +1,4 @@
-import { Node } from "@repo/editor";
+import { Node } from "@kn/editor";
 
 
 export const TestExt = Node.create({

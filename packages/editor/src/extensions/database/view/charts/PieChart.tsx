@@ -1,8 +1,8 @@
 
 
 import * as React from "react"
-import { TrendingUp } from "@repo/icon"
-import { ChartLabel, Pie, PieChart } from "@repo/ui"
+import { TrendingUp } from "@kn/icon"
+import { ChartLabel, Pie, PieChart } from "@kn/ui"
 
 import {
     Card,
@@ -11,13 +11,13 @@ import {
     CardFooter,
     CardHeader,
     CardTitle,
-} from "@repo/ui"
+} from "@kn/ui"
 import {
     ChartConfig,
     ChartContainer,
     ChartTooltip,
     ChartTooltipContent,
-} from "@repo/ui"
+} from "@kn/ui"
 const chartData = [
     { browser: "chrome", visitors: 275, fill: "var(--color-chrome)" },
     { browser: "safari", visitors: 200, fill: "var(--color-safari)" },

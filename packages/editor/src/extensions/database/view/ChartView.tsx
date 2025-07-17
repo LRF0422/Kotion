@@ -1,14 +1,14 @@
-import { ChartArea, ChartBar, ChartColumnBig, ChartPie } from "@repo/icon"
-import { EmptyState, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@repo/ui"
+import { ChartArea, ChartBar, ChartColumnBig, ChartPie } from "@kn/icon"
+import { EmptyState, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui"
 import * as Charts from "./charts"
 
 import {
     Card,
     CardContent,
     CardHeader,
-} from "@repo/ui"
+} from "@kn/ui"
 import React, { forwardRef, useCallback, useContext } from "react"
-import { DropdownMenuContent, DropdownMenuLabel } from "@repo/ui"
+import { DropdownMenuContent, DropdownMenuLabel } from "@kn/ui"
 import { NodeViewContext } from "../DatabaseView"
 import { useToggle } from "ahooks"
 import BarChart from "./charts/BarChart"

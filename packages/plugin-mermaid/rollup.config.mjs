@@ -1,4 +1,4 @@
-import { baseConfig } from "@repo/rollup-config";
+import { baseConfig } from "@kn/rollup-config";
 import pkg from "./package.json" with { type: "json" };
 
 export default baseConfig({ input: "src/index.tsx", pkg });

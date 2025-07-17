@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Star } from "@repo/icon";
+import { Star } from "@kn/icon";
 import { cn } from "@ui/lib/utils"
 
 const ratingVariants = {

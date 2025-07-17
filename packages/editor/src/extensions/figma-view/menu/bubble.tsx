@@ -4,7 +4,7 @@ import { Editor, findParentNode, posToDOMRect } from "@tiptap/core";
 import { Node } from "@tiptap/pm/model"
 import React, { useCallback } from "react";
 import { Figma } from "../figma";
-import { Button } from "@repo/ui";
+import { Button } from "@kn/ui";
 
 export const FigmaBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
 

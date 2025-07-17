@@ -1,6 +1,6 @@
 import { APIS } from "../api";
-import { useApi } from "@repo/core";
-import { fileOpen } from "@repo/core";
+import { useApi } from "@kn/core";
+import { fileOpen } from "@kn/core";
 
 export async function upload() {
   const blob = await fileOpen({

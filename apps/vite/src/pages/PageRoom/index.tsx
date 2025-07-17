@@ -1,20 +1,20 @@
 import { APIS } from "../../api";
-import { Badge } from "@repo/ui";
-import { Button } from "@repo/ui";
-import { Separator } from "@repo/ui";
-import { CollaborationEditor } from "@repo/editor";
-import { useApi } from "@repo/core";
-import { useNavigator } from "@repo/core";
-import { GlobalState } from "@repo/core";
-import { TiptapCollabProvider } from "@repo/editor";
-import { Editor } from "@repo/editor";
-import { useToggle } from "@repo/core";
-import { deepEqual } from "@repo/core";
-import { LoaderCircle, LogOut, MessageSquareText } from "@repo/icon";
+import { Badge } from "@kn/ui";
+import { Button } from "@kn/ui";
+import { Separator } from "@kn/ui";
+import { CollaborationEditor } from "@kn/editor";
+import { useApi } from "@kn/core";
+import { useNavigator } from "@kn/core";
+import { GlobalState } from "@kn/core";
+import { TiptapCollabProvider } from "@kn/editor";
+import { Editor } from "@kn/editor";
+import { useToggle } from "@kn/core";
+import { deepEqual } from "@kn/core";
+import { LoaderCircle, LogOut, MessageSquareText } from "@kn/icon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch, useSelector } from "@repo/core";
-import { useParams } from "@repo/core";
-import * as Y from "@repo/editor"
+import { useDispatch, useSelector } from "@kn/core";
+import { useParams } from "@kn/core";
+import * as Y from "@kn/editor"
 
 export const PageRoom: React.FC = () => {
     const [page, setPage] = useState<any>()

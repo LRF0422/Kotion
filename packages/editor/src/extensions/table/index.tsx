@@ -1,5 +1,5 @@
-import { Table2 } from "@repo/icon";
-import { ExtensionWrapper } from "@repo/common";
+import { Table2 } from "@kn/icon";
+import { ExtensionWrapper } from "@kn/common";
 import { TableBubbleMenu, TableStaticMenu } from "./menu";
 import { Table } from "./table";
 import { TableCell } from "./table-cell";

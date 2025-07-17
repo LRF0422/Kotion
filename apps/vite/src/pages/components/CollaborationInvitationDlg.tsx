@@ -1,16 +1,16 @@
 import { APIS } from "../../api";
-import { Badge } from "@repo/ui";
-import { Button } from "@repo/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@repo/ui";
-import { Select } from "@repo/ui";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/ui";
-import { Tag, TagInput } from "@repo/ui";
-import { useApi } from "@repo/core";
-import { useSafeState } from "@repo/core";
-import { Check, Mail, User, X } from "@repo/icon";
+import { Badge } from "@kn/ui";
+import { Button } from "@kn/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
+import { Select } from "@kn/ui";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
+import { Tag, TagInput } from "@kn/ui";
+import { useApi } from "@kn/core";
+import { useSafeState } from "@kn/core";
+import { Check, Mail, User, X } from "@kn/icon";
 import React, { PropsWithChildren, useState } from "react";
-import { useParams } from "@repo/core";
-import { toast } from "@repo/ui";
+import { useParams } from "@kn/core";
+import { toast } from "@kn/ui";
 
 export const CollaborationInvitationDlg: React.FC<PropsWithChildren> = (props) => {
 

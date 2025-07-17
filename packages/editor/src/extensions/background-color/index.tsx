@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "@repo/common";
+import { ExtensionWrapper } from "@kn/common";
 import { BackgroundColor } from "./background-color";
 import { BackGroundColorStaticMenu } from "./static-menu";
 

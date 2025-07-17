@@ -3,8 +3,8 @@ import { Editor, findParentNode, isMarkActive, posToDOMRect } from "@tiptap/core
 import React, { useCallback, useState } from "react";
 import Comments from "../comment";
 import { Node } from "@tiptap/pm/model";
-import { Avatar, IconButton, Separator, Textarea } from "@repo/ui";
-import { CheckIcon, HeartIcon, MoreHorizontalIcon, ReplyIcon, Trash2, XIcon } from "@repo/icon";
+import { Avatar, IconButton, Separator, Textarea } from "@kn/ui";
+import { CheckIcon, HeartIcon, MoreHorizontalIcon, ReplyIcon, Trash2, XIcon } from "@kn/icon";
 import { useAttributes } from "@editor/hooks";
 
 
