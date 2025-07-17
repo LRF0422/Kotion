@@ -5,6 +5,10 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "type": "module",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts"
+  },
   "scripts": {
     "build": "rollup -c",
     "test": "echo \"Error: no test specified\" && exit 1"
