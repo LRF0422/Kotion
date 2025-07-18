@@ -1,4 +1,4 @@
-import { ArchiveIcon, ArrowUpRight, DownloadIcon, FilePlus2, PlusIcon, SearchIcon } from "@kn/icon";
+import { ArchiveIcon, ArrowUpRight, BoxIcon, DownloadIcon, FilePlus2, PlusIcon, SearchIcon } from "@kn/icon";
 import { Avatar, Button, Card, CardDescription, CardFooter, CardHeader, CardTitle, EmptyState, IconButton, Input, ScrollArea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, cn } from "@kn/ui";
 import React, { useState } from "react";
 import { PluginUploader } from "../PluginUploader";
@@ -106,8 +106,9 @@ export const Marketplace: React.FC = () => {
                 {
                     plugins.length === 0 ? (
                         <EmptyState
-                            className="h-full w-full max-w-none"
+                            className="h-[calc(100vh-160px)] hover:bg-background w-full max-w-none border-none flex flex-col justify-center"
                             title="No plugins found"
+                            icons={[BoxIcon]}
                             description="Try searching for something else"
                         />
                     ) : <div className=" grid grid-cols-3 gap-2 w-full h-full">
