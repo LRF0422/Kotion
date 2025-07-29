@@ -3,6 +3,9 @@
   "private": true,
   "license": "MIT",
   "version": "0.0.0",
+  "publishConfig": {
+    "registry": "http://localhost:8081/repository/npm-hosted/"
+  },
   "scripts": {
     "build": "turbo build",
     "build:core": "pnpm --filter @kn/core build",
