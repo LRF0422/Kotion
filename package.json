@@ -1,6 +1,6 @@
 {
   "name": "turborepo-vite-shadcn-ui",
-  "private": true,
+  "private": false,
   "license": "MIT",
   "version": "0.0.0",
   "publishConfig": {
