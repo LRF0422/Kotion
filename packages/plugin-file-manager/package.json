@@ -5,7 +5,8 @@
   "main": "src/index.tsx",
   "publishConfig": {
     "main": "dist/index.js",
-    "types": "dist/index.d.ts"
+    "types": "dist/index.d.ts",
+    "registry": "http://localhost:8081/repository/npm-hosted/"
   },
   "scripts": {
     "build": "rollup -c",
