@@ -55,7 +55,9 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   ],
   plugins: [
     commonjs(),
-    resolve(),
+    resolve({
+      browser: true,
+    }),
     json(),
     nodePolyfills(),
     babel({
