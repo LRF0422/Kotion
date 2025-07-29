@@ -6,7 +6,7 @@
   "types": "src/index.ts",
   "publishConfig": {
     "main": "dist/index.js",
-    "types": "dist/index.d.ts",
+    "types": "dist/ui/src/index.d.ts",
     "registry": "http://localhost:8081/repository/npm-hosted/"
   },
   "scripts": {

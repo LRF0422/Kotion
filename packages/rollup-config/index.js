@@ -9,6 +9,7 @@ import nested from "postcss-nested";
 import cssnext from "postcss-cssnext";
 import json from "@rollup/plugin-json";
 import nodePolyfills from "rollup-plugin-polyfill-node";
+import { dts } from "rollup-plugin-dts";
 
 export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   external: [
@@ -66,7 +67,9 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
       tsconfigOverride: {
         compilerOptions: {
           declaration: true,
-          declarationMap: true,
+          isolatedModules: false,
+          declarationDir: "./dist",
+          // declarationMap: true,
           target: "ES2018",
           paths: {
             "@ui/*": ["../ui/src/*"],
