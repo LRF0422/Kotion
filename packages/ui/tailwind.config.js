@@ -8,7 +8,7 @@ module.exports = {
     "./src/**/*.{ts,tsx}",
     "./packages/**/*.{html,js,ts,jsx,tsx}",
     "../packages/**/*.{html,js,ts,jsx,tsx}",
-    "node_modules/@kn/**/**/*.{ts,tsx}",
+    "./node_modules/@kn/**/**/*.{ts,tsx}",
   ],
   prefix: "",
   theme: {
