@@ -2,7 +2,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@kn/ui";
 import { TreeView } from "@kn/ui";
 import { TreeViewElement } from "@kn/ui";
-import { GlobalState } from "@kn/core";
+import { GlobalState, useUploadFile } from "@kn/core";
 import { useSafeState } from "@kn/core";
 import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import } from "@kn/icon";
 import React, { PropsWithChildren } from "react";
@@ -11,15 +11,12 @@ import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { Member } from "./components/Member";
 
-const moudles = import.meta.glob("./components/*.tsx")
-
 export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
-
-    console.log('moudles', moudles);
 
 
     const { userInfo } = useSelector((state: GlobalState) => state)
     const [currentKey, setCurrentKey] = useSafeState<string>()
+    const { usePath } = useUploadFile()
 
     const render = () => {
         switch (currentKey) {
@@ -51,7 +48,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                     name: "我的账号",
                     customerRender: <div className="flex items-center gap-3 bg-white p-1 rounded-sm border-secondary border">
                         <Avatar className="h-7 w-7 shadow-md">
-                            <AvatarImage src={`http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${userInfo?.avatar}`} />
+                            <AvatarImage src={usePath(userInfo?.avatar as string)} />
                             <AvatarFallback>{userInfo?.account}</AvatarFallback>
                         </Avatar>
                         <div className=" text-gray-500 text-xs flex flex-col italic">

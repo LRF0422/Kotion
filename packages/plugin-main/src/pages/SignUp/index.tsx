@@ -8,10 +8,9 @@ import {
 } from "@kn/ui"
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@kn/ui"
 import { Input } from "@kn/ui"
-import { useApi } from "@kn/core"
+import { useApi, useUploadFile } from "@kn/core"
 import { useNavigator } from "@kn/core"
 import { ModeToggle } from "@kn/ui"
-import { upload } from "../../utils/utils"
 import { zodResolver } from "@kn/ui"
 import { Plus } from "@kn/icon"
 import { useForm } from "@kn/ui"
@@ -26,7 +25,7 @@ export function SignUpForm() {
 
     const navigator = useNavigator()
 
-
+    const { upload } = useUploadFile()
     const formSchema = z.object({
         avatar: z.string(),
         account: z.string().min(1, {
@@ -68,7 +67,7 @@ export function SignUpForm() {
                                         <FormLabel>头像</FormLabel>
                                         <div className="flex justify-center items-center w-[60px] h-[60px] border border-dashed rounded-sm hover:bg-muted" onClick={() => {
                                             upload().then(res => {
-                                                field.onChange(res.data.name)
+                                                field.onChange(res.name)
                                             })
                                         }}>
                                             {

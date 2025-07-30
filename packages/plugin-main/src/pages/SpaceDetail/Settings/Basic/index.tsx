@@ -2,7 +2,6 @@ import { IconPropsProps, IconSelector } from "@kn/ui";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@kn/ui";
 import { Input } from "@kn/ui";
 import { Textarea } from "@kn/ui";
-import { upload } from "../../../../utils/utils";
 import { Plus } from "@kn/icon";
 import React, { useContext } from "react";
 import { Button } from "@kn/ui";
@@ -10,7 +9,7 @@ import { SettingContext } from "..";
 import { z } from "@kn/ui";
 import { useForm } from "@kn/ui";
 import { zodResolver } from "@kn/ui";
-import { useApi } from "@kn/core";
+import { useApi, useUploadFile } from "@kn/core";
 import { APIS } from "../../../../api";
 import { toast } from "@kn/ui";
 
@@ -18,6 +17,7 @@ import { toast } from "@kn/ui";
 export const Basic: React.FC = () => {
 
     const { space } = useContext(SettingContext)
+    const { upload } = useUploadFile()
 
     const FormSchema = z.object({
         id: z.string(),
@@ -72,7 +72,7 @@ export const Basic: React.FC = () => {
                                     }}
                                     onClick={() => {
                                         upload().then(res => {
-                                            field.onChange(res.data.name)
+                                            field.onChange(res.name)
                                         })
                                     }}
                                 >

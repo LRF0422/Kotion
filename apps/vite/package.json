@@ -16,6 +16,7 @@
     "@kn/icon": "workspace:*",
     "@kn/common": "workspace:*",
     "@kn/core": "workspace:*",
+    "@kn/plugin-main": "workspace:*",
     "@kn/file-manager": "workspace:*",
     "@kn/mermaid-plugin": "workspace:*",
     "evaluatex": "^2.2.0",

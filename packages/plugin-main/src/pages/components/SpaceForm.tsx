@@ -5,9 +5,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@kn/ui";
 import { Input } from "@kn/ui";
 import { Textarea } from "@kn/ui";
-import { useApi } from "@kn/core";
+import { useApi, useUploadFile } from "@kn/core";
 import { GlobalState } from "@kn/core";
-import { upload } from "../../utils/utils";
 import { zodResolver } from "@kn/ui";
 import { Plus } from "@kn/icon";
 import React, { ReactNode, useState } from "react";
@@ -22,6 +21,7 @@ export interface SpaceFormProps {
 export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
 
     const { userInfo } = useSelector((state: GlobalState) => state)
+    const { upload } = useUploadFile()
 
     const FormSchema = z.object({
         icon: z.instanceof(Object, { message: "Icon is required" }),
@@ -76,7 +76,7 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
                                         }}
                                         onClick={() => {
                                             upload().then(res => {
-                                                field.onChange(res.data.name)
+                                                field.onChange(res.name)
                                             })
                                         }}
                                     >

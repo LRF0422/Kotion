@@ -90,24 +90,24 @@ export const Spaces: React.FC = () => {
                     <Pagination>
                         <PaginationContent>
                             <PaginationItem>
-                                <PaginationPrevious href="#" />
+                                <PaginationPrevious size="sm" href="#" />
                             </PaginationItem>
                             <PaginationItem>
-                                <PaginationLink href="#">1</PaginationLink>
+                                <PaginationLink size="sm" href="#">1</PaginationLink>
                             </PaginationItem>
                             <PaginationItem>
-                                <PaginationLink href="#" isActive>
+                                <PaginationLink size="sm" href="#" isActive>
                                     2
                                 </PaginationLink>
                             </PaginationItem>
                             <PaginationItem>
-                                <PaginationLink href="#">3</PaginationLink>
+                                <PaginationLink size="sm" href="#">3</PaginationLink>
                             </PaginationItem>
                             <PaginationItem>
                                 <PaginationEllipsis />
                             </PaginationItem>
                             <PaginationItem>
-                                <PaginationNext href="#" />
+                                <PaginationNext size="sm" href="#" />
                             </PaginationItem>
                         </PaginationContent>
                     </Pagination>

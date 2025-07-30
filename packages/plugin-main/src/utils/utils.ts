@@ -1,16 +1,3 @@
-import { APIS } from "../api";
-import { useApi } from "@kn/core";
-import { fileOpen } from "@kn/core";
-
-export async function upload() {
-  const blob = await fileOpen({
-    mimeTypes: ["**/*"]
-  });
-  const res = await useApi(APIS.UPLOAD_FILE, null, {
-    file: blob
-  }, { 'Content-Type': 'multipart/form-data' })
-  return res
-}
 
 const importScript = (() => {
   // 自执行函数，创建一个闭包，保存 cache 结果

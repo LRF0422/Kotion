@@ -5,7 +5,7 @@ import { Empty, EmptyProps } from "@kn/ui";
 import { useLocation } from "react-router-dom";
 import { cn } from "@kn/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
-import { useSelector } from "react-redux";
+import { useSelector } from "@kn/core";
 import { GlobalState } from "@kn/core";
 import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";

@@ -1,11 +1,11 @@
 {
-  "name": "@kn/file-manager",
+  "name": "@kn/plugin-main",
   "version": "0.0.3",
   "description": "",
   "main": "src/index.tsx",
   "publishConfig": {
     "main": "dist/index.js",
-    "types": "dist/plugin-file-manager/src/index.d.ts",
+    "types": "dist/plugin-main/src/index.d.ts",
     "registry": "http://localhost:8081/repository/npm-hosted/"
   },
   "scripts": {
