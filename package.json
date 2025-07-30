@@ -2,7 +2,7 @@
   "name": "turborepo-vite-shadcn-ui",
   "private": false,
   "license": "MIT",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "publishConfig": {
     "registry": "http://localhost:8081/repository/npm-hosted/"
   },
@@ -49,6 +49,7 @@
     "uuid": "^10.0.0"
   },
   "devDependencies": {
+    "@csstools/postcss-cascade-layers": "^5.0.2",
     "@rollup/plugin-node-resolve": "^16.0.0",
     "@rollup/plugin-typescript": "^12.1.2",
     "@tailwindcss/typography": "^0.5.16",
