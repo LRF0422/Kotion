@@ -67,7 +67,7 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
     }),
     postcss({
       // tailwindcss(), autoprefixer(), nested(), cssnext(), calc()
-      plugins: [],
+      plugins: [cssnext()],
       extensions: [".css"],
       extract: false,
       minimize: true,
