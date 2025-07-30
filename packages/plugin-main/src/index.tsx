@@ -8,6 +8,7 @@ import { KPlugin, PluginConfig } from '@kn/common'
 import React from 'react'
 import { LayoutGrid } from '@kn/icon'
 import { TestExtension } from './editor-extensions/test-extension'
+import "@kn/ui/globals.css"
 
 
 interface DefaultPluginProps extends PluginConfig {

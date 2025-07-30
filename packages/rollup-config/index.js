@@ -10,6 +10,7 @@ import cssnext from "postcss-cssnext";
 import json from "@rollup/plugin-json";
 import nodePolyfills from "rollup-plugin-polyfill-node";
 import babel from "@rollup/plugin-babel";
+import calc from "postcss-calc";
 
 export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   external: [
@@ -65,7 +66,9 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
       exclude: "../../node_modules/**",
     }),
     postcss({
-      plugins: [tailwindcss(), autoprefixer(), nested(), cssnext()],
+      // tailwindcss(), autoprefixer(), nested(), cssnext(), calc()
+      plugins: [],
+      extensions: [".css"],
       extract: false,
       minimize: true,
     }),

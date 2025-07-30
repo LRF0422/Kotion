@@ -2,7 +2,7 @@
   "name": "turborepo-vite-shadcn-ui",
   "private": false,
   "license": "MIT",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "publishConfig": {
     "registry": "http://localhost:8081/repository/npm-hosted/"
   },
@@ -11,6 +11,7 @@
     "build:core": "pnpm --filter @kn/core build",
     "build:ui": "pnpm --filter @kn/ui build",
     "build:editor": "pnpm --filter @kn/editor build",
+    "build:main": "pnpm --filter @kn/plugin-main build",
     "build:app": "pnpm --filter vite build",
     "clean:packages": "rm -rf ./packages/*/dist",
     "clean:lib": "rm -rf ./packages/*/node_modules",
@@ -32,6 +33,7 @@
     "lodash.escape": "^4.0.1",
     "lodash.throttle": "^4.1.1",
     "moment": "^2.30.1",
+    "postcss-calc": "^10.1.1",
     "postcss-cssnext": "^3.1.1",
     "postcss-nested": "^7.0.2",
     "react": "^18.3.1",
