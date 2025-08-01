@@ -1,9 +1,9 @@
-import { EmojiSelector } from "@kn/ui";
+import { EmojiPicker, EmojiPickerContent, EmojiPickerSearch } from "@kn/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
 import { Clock, Image, UserCircle } from "@kn/icon";
-import React, { useEffect, useRef } from "react";
+import React from "react";
 
 
 export const TitleView: React.FC<NodeViewProps> = (props) => {
@@ -18,13 +18,21 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 						</div>
 					</div>
 				</PopoverTrigger>
-				<PopoverContent side="right" align="start">
-					<EmojiSelector onChange={(value) => {
-						props.updateAttributes({
-							...props.node.attrs,
-							icon: value
-						})
-					}} />
+				<PopoverContent side="right" align="start" className="p-0 border-none" >
+					<EmojiPicker
+						className="h-[326px] rounded-lg border shadow-md w-full"
+						onEmojiSelect={({ emoji }) => {
+							props.updateAttributes({
+								...props.node.attrs,
+								icon: {
+									type: 'EMOJI',
+									icon: emoji
+								}
+							})
+						}} >
+						<EmojiPickerSearch />
+						<EmojiPickerContent />
+					</EmojiPicker>
 				</PopoverContent>
 			</Popover>
 			<NodeViewContent className=" w-full" />

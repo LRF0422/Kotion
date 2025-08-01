@@ -8,8 +8,9 @@ import React, { PropsWithChildren } from "react";
 import { z } from "@kn/ui";
 import { CheckCircle2, PlusIcon } from "@kn/icon";
 import { EditorRender, JSONContent } from "@kn/editor";
-import { useUploadFile } from "../../../hooks";
+import { useApi, useUploadFile } from "../../../hooks";
 import { useSafeState } from "ahooks";
+import { APIS } from "src/api";
 
 interface Description {
     label: string,
@@ -52,6 +53,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
     const { upload, usePath, uploadFile } = useUploadFile()
     const [currentStep, setCurrentStep] = React.useState(1);
     const [activeTagIndex, setActiveTagIndex] = React.useState<number | null>(null);
+    const [resourcePath, setResourcePath] = useSafeState<string>("")
     const [logos, setLogos] = useSafeState(logoSize)
     const [attachments, setAttachments] = useSafeState<File[]>([])
     const [descriptions, setDescriptions] = React.useState<Description[]>([
@@ -68,10 +70,16 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
             id: z.string(),
             text: z.string()
         })),
+        logos: z.array(z.object({
+            size: z.array(z.number()),
+            label: z.string(),
+            src: z.string()
+        })),
+        resourcePath: z.string(),
         description: z.string().min(2).max(50),
         descriptions: z.array(z.object({
             label: z.string(),
-            content: z.string()
+            content: z.object({})
         }))
     })
 
@@ -101,7 +109,11 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
 
     const handleUpload = () => {
         const value = form.getValues()
-        // value.descriptions = descriptions
+        value.descriptions = descriptions
+        value.resourcePath = resourcePath
+        value.logos = logos
+        useApi(APIS.CREATE_PLUGIN, null, value).then(res => {
+        })
     }
 
     const render = () => {
@@ -211,7 +223,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                     onValueChange={(files) => setAttachments(files)}
                     onUpload={(file) => {
                         return uploadFile(file[0]).then((res) => {
-                            console.log('uploaded file => ', res);
+                            setResourcePath(res.name)
                         })
                     }} />
             </div>
@@ -219,7 +231,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                 <CheckCircle2 className="h-[200px]  w-[200px] text-green-500" />
                 <div className=" space-x-2 mt-4">
                     <Button onClick={handlePrev}>上一步</Button>
-                    <Button>提交审核</Button>
+                    <Button onClick={handleUpload}>提交审核</Button>
                 </div>
             </div>
             case 2: return <div className="flex gap-3 w-full h-[200px] justify-center">

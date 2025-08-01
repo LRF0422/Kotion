@@ -27,4 +27,8 @@ export const APIS = {
         url: '/knowledge-wiki/plugin',
         method: 'GET'
     } as API,
+    CREATE_PLUGIN: {
+        url: '/knowledge-wiki/plugin',
+        method: 'POST'
+    } as API
 }

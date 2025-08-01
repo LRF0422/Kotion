@@ -115,7 +115,7 @@ export const Marketplace: React.FC = () => {
                         {
                             plugins.map((plugin, index) => (
                                 <div key={index}>
-                                    <Card className="relative">
+                                    <Card className="relative hover:bg-muted/30 ">
                                         <div className=" w-[80px] text-center absolute right-0 top-0 text-xs p-1  rounded-bl-md rounded-tr-md bg-secondary">
                                             {plugin.category}
                                         </div>
