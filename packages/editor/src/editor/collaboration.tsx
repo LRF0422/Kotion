@@ -102,7 +102,7 @@ export const CollaborationEditor = forwardRef<
   return (editor &&
     <PageContext.Provider value={pageInfo}>
       <ThemeProvider theme={light}>
-        <div className={cn("flex flex-col w-[calc(100vw-350px)] grow z-30")}>
+        <div className={cn("w-[calc(100vw-350px)] grow z-30")}>
           <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />
           <div className={cn("w-full", props.className)}>
             <div className="flex relative w-full ">

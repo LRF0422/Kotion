@@ -64,7 +64,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
 
     const formSchema = z.object({
         name: z.string().min(2).max(50),
-        key: z.string().min(2).max(50),
+        pluginKey: z.string().min(2).max(50),
         version: z.string(),
         tags: z.array(z.object({
             id: z.string(),
@@ -113,6 +113,8 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
         value.resourcePath = resourcePath
         value.logos = logos
         useApi(APIS.CREATE_PLUGIN, null, value).then(res => {
+            console.log("res", res);
+            
         })
     }
 
@@ -135,7 +137,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                         />
                         <FormField
                             control={form.control}
-                            name="key"
+                            name="pluginKey"
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>插件Key</FormLabel>
@@ -220,6 +222,9 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
             </div>
             case 4: return <div className="flex justify-center">
                 <FileUploader value={attachments} className=" w-[100%]"
+                    accept={{
+                        "*": []
+                    }}
                     onValueChange={(files) => setAttachments(files)}
                     onUpload={(file) => {
                         return uploadFile(file[0]).then((res) => {

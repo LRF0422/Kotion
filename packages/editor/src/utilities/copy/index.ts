@@ -41,7 +41,6 @@ export const copyNode = (editor: Editor, extensionName: string) => {
 
   if (targetNode) {
     const slice = new Slice(Fragment.fromArray([targetNode]), 0, 0);
-    // @ts-ignore
     const { dom, text } = editor.view.serializeForClipboard(slice)
 
     const data = [{ format: "text/html", text: dom.innerHTML }];

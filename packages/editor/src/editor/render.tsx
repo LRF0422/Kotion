@@ -13,8 +13,7 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import { ThemeProvider } from "styled-components";
 import light from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
-import { Dialog, DialogTrigger, Tabs, TabsContent, TabsList, TabsTrigger, cn } from "@kn/ui";
-import { useSafeState } from "ahooks";
+import { cn } from "@kn/ui";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
 import { EditorMenu } from "./EditorMenu";
@@ -37,8 +36,6 @@ export interface EditorRenderProps extends EditorProvider, EditorKit {
   withTitle?: boolean
   onBlur?: (editor: Editor) => void
 }
-
-// const MemorizedToC = React.memo(ToC)
 
 export const EditorRender = forwardRef<
   Editor | null,
@@ -76,22 +73,25 @@ export const EditorRender = forwardRef<
     []
   );
 
-  const [tableOfContents, setTableOfContents] = useSafeState<any[]>()
-
   useImperativeHandle(ref, () => editor as Editor);
   return (editor &&
     <PageContext.Provider value={pageInfo}>
       <ThemeProvider theme={light}>
-        <div className={cn("w-[calc(100vw-350px)]", props.className)}>
-          <div className="flex flex-row relative w-full h-full">
-            <EditorMenu editor={editor} extensionWrappers={wrappers as ExtensionWrapper[]} toolbar={props.toolbar} />
-            <StyledEditor className="overflow-auto grow">
-              <EditorContent editor={editor} />
-            </StyledEditor>
-            {toc && <ToC editor={editor as Editor} className=" flex-none h-[calc(100vh-60px)] w-[300px] border-l sticky right-0 top-0" />}
+        <div className={cn("w-[calc(100vw-320px)] grow z-30")}>
+          <div className={cn("w-full", props.className)}>
+            <div className="flex relative w-full ">
+              <StyledEditor className="w-full grow">
+                <EditorContent editor={editor} id="editor-container" />
+              </StyledEditor>
+              {
+                <div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>
+                  <ToC editor={editor} />
+                </div>
+              }
+            </div>
           </div>
         </div>
-      </ThemeProvider>
+      </ThemeProvider >
     </PageContext.Provider>
   );
 });

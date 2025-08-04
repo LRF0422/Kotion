@@ -108,7 +108,7 @@ export const PageViewer: React.FC = () => {
                 </DropdownMenu>
             </div>
         </header>
-        <main className="w-full">
+        <main className="w-full flex flex-row justify-center">
             <EditorRender
                 ref={editor}
                 content={page.content ? JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">")) : undefined}
