@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Editor, getMarkRange, posToDOMRect } from "@tiptap/core";
-import tippy, { Instance } from "tippy.js";
+// import tippy, { Instance } from "tippy.js";
+import { computePosition } from "@floating-ui/dom";
 
 import { isMarkActive } from "../../../utilities/mark";
 import { Link as LinkExtension } from "../link";
@@ -90,7 +91,7 @@ export const showLinkEditor = (editor: Editor, dom?: HTMLElement) => {
 
   const div = document.createElement("div");
   div.className = "bubble-menu";
-  let popup: Instance[];
+  // let popup: Instance[];
 
   const root = createRoot(div)
   root.render(
@@ -106,14 +107,14 @@ export const showLinkEditor = (editor: Editor, dom?: HTMLElement) => {
         view.dispatch(view.state.tr.deleteRange(start, end));
         view.dispatch(view.state.tr.insert(start, node));
         view.dispatch(view.state.tr.scrollIntoView());
-        popup?.[0]?.hide();
+        // popup?.[0]?.hide();
         editor
           .chain()
           .focus()
           .run();
       }}
       onCancel={() => {
-        popup?.[0]?.hide();
+        // popup?.[0]?.hide();
         editor
           .chain()
           .focus()
@@ -122,16 +123,18 @@ export const showLinkEditor = (editor: Editor, dom?: HTMLElement) => {
     />
   )
 
-  popup = tippy("body", {
-    getReferenceClientRect: () =>
-      dom ? dom.getBoundingClientRect() : posToDOMRect(editor.view, start, end),
-    appendTo: () => editor.options.element,
-    content: div,
-    showOnCreate: true,
-    interactive: true,
-    trigger: "manual",
-    placement: "bottom-start",
-    theme: "",
-    arrow: false,
-  });
+  // popup = tippy("body", {
+  //   getReferenceClientRect: () =>
+  //     dom ? dom.getBoundingClientRect() : posToDOMRect(editor.view, start, end),
+  //   appendTo: () => editor.options.element,
+  //   content: div,
+  //   showOnCreate: true,
+  //   interactive: true,
+  //   trigger: "manual",
+  //   placement: "bottom-start",
+  //   theme: "",
+  //   arrow: false,
+  // });
+
+  computePosition(editor.options.element as Element, div, {})
 };

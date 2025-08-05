@@ -49,7 +49,7 @@ export const BubbleMenu = (props: BubbleMenuProps) => {
     <div
       ref={setElement}
       className={props.className}
-      style={{ visibility: "hidden" }}>
+      >
       {props.children}
     </div>
   );

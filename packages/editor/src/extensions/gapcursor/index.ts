@@ -1,9 +1,9 @@
 import { ExtensionWrapper } from "@kn/common";
-import { GapCursor } from "./gapcursor";
+import { Gapcursor } from "./gapcursor";
 
 export * from "./gapcursor";
 
 export const GapcursorExtension: ExtensionWrapper = {
-	name: GapCursor.name,
-	extendsion: GapCursor
+	name: Gapcursor.name,
+	extendsion: Gapcursor
 }

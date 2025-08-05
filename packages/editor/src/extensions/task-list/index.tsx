@@ -1,6 +1,5 @@
 import { ExtensionWrapper } from "@kn/common";
-import TaskList from '@tiptap/extension-task-list'
-import TaskItem from '@tiptap/extension-task-item'
+import {TaskList, TaskItem} from '@tiptap/extension-list'
 import { TaskListStaticMenu } from "./menu";
 
 

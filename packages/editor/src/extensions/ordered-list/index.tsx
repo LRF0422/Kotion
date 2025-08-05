@@ -1,7 +1,6 @@
-import OrderedList from "@tiptap/extension-ordered-list";
+import {OrderedList, ListItem} from "@tiptap/extension-list";
 import { ExtensionWrapper } from "@kn/common";
 import { OrderListStaticMenu } from "./menu/static-menu";
-import ListItem from "@tiptap/extension-list-item";
 import { ListOrdered } from "@kn/icon";
 import React from "react";
 

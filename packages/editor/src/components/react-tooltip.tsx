@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from "react";
 import { Editor } from "@tiptap/core";
-import tippy, { Instance } from "tippy.js";
+// import tippy, { Instance } from "tippy.js";
 
 import { Tooltip } from "../components";
 import { createRoot } from "react-dom/client";
 import { Button } from "@kn/ui";
+import { computePosition } from "@floating-ui/dom";
 
 export const _ReactTooltip: React.FC<{
   editor: Editor;
@@ -13,7 +14,7 @@ export const _ReactTooltip: React.FC<{
   content: React.ReactNode;
 }> = ({ editor, title, icon, content }) => {
   const containerRef = useRef<HTMLElement>(null);
-  const popupRef = useRef<Instance | null>(null);
+  const popupRef = useRef<any | null>(null);
 
   useEffect(() => {
     const div = document.createElement("div");
@@ -21,25 +22,27 @@ export const _ReactTooltip: React.FC<{
     const root = createRoot(div)
     root.render(<>{content}</>)
 
-    const popup: Instance[] = tippy("body", {
-      getReferenceClientRect: () => {
-        return (containerRef.current as HTMLElement).getBoundingClientRect();
-      },
-      appendTo: () => editor.options.element,
-      content: div,
-      showOnCreate: false,
-      interactive: true,
-      popperOptions: {
-        strategy: "fixed"
-      },
-      trigger: "manual",
-      placement: "top-start",
-      theme: "bubble-menu",
-      arrow: false,
-      zIndex: 10
-    });
+    // const popup: Instance[] = tippy("body", {
+    //   getReferenceClientRect: () => {
+    //     return (containerRef.current as HTMLElement).getBoundingClientRect();
+    //   },
+    //   appendTo: () => editor.options.element,
+    //   content: div,
+    //   showOnCreate: false,
+    //   interactive: true,
+    //   popperOptions: {
+    //     strategy: "fixed"
+    //   },
+    //   trigger: "manual",
+    //   placement: "top-start",
+    //   theme: "bubble-menu",
+    //   arrow: false,
+    //   zIndex: 10
+    // });
 
-    popupRef.current = popup[0];
+    computePosition(editor.options.element as Element, div, {})
+
+    // popupRef.current = popup[0];
 
     return () => {
       if (!popupRef.current) return;

@@ -3,7 +3,8 @@ import {
   BubbleMenuPluginProps
 } from "@tiptap/extension-bubble-menu";
 import { Editor, findParentNode, posToDOMRect } from "@tiptap/core";
-import tippy, { Instance } from "tippy.js";
+// import tippy, { Instance } from "tippy.js";
+import { computePosition } from "@floating-ui/dom";
 import { createRoot } from "react-dom/client";
 import React, { useCallback, useEffect, useRef } from "react";
 import { Node as PMNode } from "@tiptap/pm/model";
@@ -126,7 +127,7 @@ const predicateIsTableCell = (node: PMNode) =>
 const TableCellMenu: React.FC<React.PropsWithChildren<{
   editor: Editor;
 }>> = ({ editor }) => {
-  const popupRef = useRef<Instance | null>(null);
+  const popupRef = useRef< any | null>(null);
 
   const toggleVisible = useCallback(() => {
     popupRef.current?.state.isVisible
@@ -157,43 +158,23 @@ const TableCellMenu: React.FC<React.PropsWithChildren<{
       <div></div>
     )
 
-    const popup: Instance[] = tippy("body", {
-      getReferenceClientRect: () => {
-        const { selection } = editor.state;
-        const parent = findParentNode(predicateIsTableCell)(selection);
+    const    getReferenceClientRect = () => {
+      const { selection } = editor.state;
+      const parent = findParentNode(predicateIsTableCell)(selection);
 
-        // @ts-ignore
-        if (editor.view.docView) {
-          const dom = editor.view.nodeDOM(parent?.pos as number) as HTMLElement;
-          return dom.getBoundingClientRect();
-        } else {
-          return posToDOMRect(
-            editor.view,
-            editor.state.selection.from,
-            editor.state.selection.to
-          );
-        }
-      },
-      appendTo: () => {
-        return editor.options.element;
-      },
-      content: div,
-      showOnCreate: false,
-      interactive: true,
-      trigger: "manual",
-      placement: "right-start",
-      theme: "bubble-menu padding-0 ",
-      arrow: false,
-      zIndex: 10
-    });
-
-    popupRef.current = popup[0]!;
-
-    return () => {
-      if (!popupRef.current) return;
-      popupRef.current.destroy();
-      // root.unmount();
-    };
+      // @ts-ignore
+      if (editor.view.docView) {
+        const dom = editor.view.nodeDOM(parent?.pos as number) as HTMLElement;
+        return dom.getBoundingClientRect();
+      } else {
+        return posToDOMRect(
+          editor.view,
+          editor.state.selection.from,
+          editor.state.selection.to
+        );
+      }
+    }
+    computePosition(editor.options.element as Element, div)
   }, [editor]);
 
   useEffect(() => {

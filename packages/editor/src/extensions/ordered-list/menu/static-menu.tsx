@@ -1,7 +1,7 @@
 import { Editor } from "@tiptap/core";
 import React, { useCallback } from "react";
 import { useActive } from "../../../hooks";
-import OrderedList from "@tiptap/extension-ordered-list";
+import {OrderedList} from "@tiptap/extension-list";
 import { ListOrdered } from "@kn/icon";
 import { Toggle } from "@kn/ui";
 

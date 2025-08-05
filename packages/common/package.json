@@ -16,8 +16,8 @@
   },
   "dependencies": {
     "@kn/ui": "workspace:*",
-    "@tiptap/pm": "2.11.7",
-    "@tiptap/core": "2.11.7"
+    "@tiptap/pm": "3.0.9",
+    "@tiptap/core": "3.0.9"
   },
   "devDependencies": {
     "@kn/rollup-config": "workspace:*"

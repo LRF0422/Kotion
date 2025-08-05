@@ -1,3 +1,3 @@
-import GapCursor from "@tiptap/extension-gapcursor";
+import { Gapcursor } from "@tiptap/extensions";
 
-export { GapCursor };
+export { Gapcursor };

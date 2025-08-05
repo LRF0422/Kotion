@@ -2,8 +2,9 @@ import { ReactRenderer } from "@tiptap/react";
 import { CompactEmoji } from "emojibase";
 import { fetchEmojis } from "emojibase";
 
-import tippy from "tippy.js";
+// import tippy from "tippy.js";
 import emojiList from "./emoji-list";
+import { computePosition } from "@floating-ui/dom";
 
 interface QueryProps {
     query: string;
@@ -51,15 +52,16 @@ export default {
                     return;
                 }
 
-                popup = tippy("body", {
-                    getReferenceClientRect: props.clientRect,
-                    appendTo: () => document.body,
-                    content: component.element,
-                    showOnCreate: true,
-                    interactive: true,
-                    trigger: "manual",
-                    placement: "bottom-start",
-                });
+                // popup = tippy("body", {
+                //     getReferenceClientRect: props.clientRect,
+                //     appendTo: () => document.body,
+                //     content: component.element,
+                //     showOnCreate: true,
+                //     interactive: true,
+                //     trigger: "manual",
+                //     placement: "bottom-start",
+                // });
+                computePosition(document.body, component.element, {})
             },
 
             onUpdate(props: any) {
@@ -69,14 +71,14 @@ export default {
                     return;
                 }
 
-                popup[0].setProps({
-                    getReferenceClientRect: props.clientRect,
-                });
+                // popup[0].setProps({
+                //     getReferenceClientRect: props.clientRect,
+                // });
             },
 
             onKeyDown(props: any) {
                 if (props.event.key === "Escape") {
-                    popup[0].hide();
+                    // popup[0].hide();
 
                     return true;
                 }

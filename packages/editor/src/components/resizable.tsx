@@ -12,7 +12,7 @@ interface Props {
   aspectRatio?: number;
   minWidth?: number | string;
   editor: Editor;
-  getPos: () => number;
+  getPos: () => number | undefined;
   onResizeStop: (arg: { width: number; height: number }) => void;
   enable?: Enable | false,
   className?: string,
@@ -38,7 +38,7 @@ export const Resizable: React.FC<React.PropsWithChildren<Props>> = ({
         const { view, state } = editor;
 
         const tr = editor.state.tr;
-        const $pos = state.doc.resolve(getPos());
+        const $pos = state.doc.resolve(getPos() || 0);
         tr.setSelection(NodeSelection.near($pos));
         tr.setMeta("addToHistory", false);
         view.dispatch(tr);

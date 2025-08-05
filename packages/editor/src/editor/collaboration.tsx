@@ -4,7 +4,7 @@ import { AnyExtension, Content, Editor } from "@tiptap/core";
 import { EditorRenderProps } from "./render";
 import { TiptapCollabProvider } from "@hocuspocus/provider";
 import { Collaboration } from "@tiptap/extension-collaboration";
-import { CollaborationCursor } from "@tiptap/extension-collaboration-cursor"
+import { CollaborationCaret } from "@tiptap/extension-collaboration-caret"
 import { getUserColor } from "./utilities";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEditorExtension } from "./use-extension";
@@ -74,9 +74,6 @@ export const CollaborationEditor = forwardRef<
       //     }
       //   }
       // },
-      onTransaction(props) {
-        console.log('transaction!!!!', props);
-      },
       editorProps: {
         attributes: {
           class: "magic-editor",

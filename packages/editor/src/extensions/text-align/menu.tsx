@@ -1,19 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { Editor } from "@tiptap/core";
-import tippy, { Instance } from "tippy.js";
+// import tippy, { Instance } from "tippy.js";
 
 import { useActive } from "../../hooks/use-active";
 import { TextAlign } from "./text-align";
 import { AlignCenter, AlignJustify, AlignLeft, AlignRight } from "@kn/icon";
 import { Button, Toggle } from "@kn/ui";
+import { computePosition } from "@floating-ui/dom";
 
 const _TextAlignStaticMenu: React.FC<{
   editor: Editor;
   getPopupContainer?: () => HTMLElement;
 }> = ({ editor, getPopupContainer }) => {
   const containerRef = useRef<HTMLElement>(null);
-  const popupRef = useRef<Instance | null>(null);
+  const popupRef = useRef<any | null>(null);
   const isAlignCenter = useActive(editor, TextAlign.name, {
     textAlign: "center"
   });
@@ -62,25 +63,27 @@ const _TextAlignStaticMenu: React.FC<{
       </>,
     )
 
-    const popup: Instance[] = tippy("body", {
-      getReferenceClientRect: () => {
-        return (containerRef.current as HTMLElement).getBoundingClientRect();
-      },
-      appendTo: getPopupContainer || (() => editor.options.element),
-      content: div,
-      showOnCreate: false,
-      interactive: true,
-      popperOptions: {
-        strategy: "fixed"
-      },
-      trigger: "manual",
-      placement: "top-start",
-      theme: "bubble-menu",
-      arrow: false,
-      zIndex: 10
-    });
+    // const popup: Instance[] = tippy("body", {
+    //   getReferenceClientRect: () => {
+    //     return (containerRef.current as HTMLElement).getBoundingClientRect();
+    //   },
+    //   appendTo: getPopupContainer || (() => editor.options.element),
+    //   content: div,
+    //   showOnCreate: false,
+    //   interactive: true,
+    //   popperOptions: {
+    //     strategy: "fixed"
+    //   },
+    //   trigger: "manual",
+    //   placement: "top-start",
+    //   theme: "bubble-menu",
+    //   arrow: false,
+    //   zIndex: 10
+    // });
 
-    popupRef.current = popup[0]!;
+    computePosition(document.body, div, {})
+
+    // popupRef.current = popup[0]!;
 
     return () => {
       if (!popupRef.current) return;

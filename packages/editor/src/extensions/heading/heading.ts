@@ -1,11 +1,7 @@
-import { mergeAttributes } from "@tiptap/core";
 import { Heading as BuiltInHeading } from "@tiptap/extension-heading";
-import { FOLD_SVG } from "./constants";
-import { headingToPersistenceKey } from "./slug";
-import { handleFoldContent, findCollapsedNodes } from "./utilities";
-import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
+import { findCollapsedNodes } from "./utilities";
+import { TextSelection } from "@tiptap/pm/state";
 import { findBlockNodes } from "prosemirror-utils"
-import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { NodeType } from "@tiptap/pm/model";
 
 export type Level = 1 | 2 | 3 | 4 | 5 | 6;

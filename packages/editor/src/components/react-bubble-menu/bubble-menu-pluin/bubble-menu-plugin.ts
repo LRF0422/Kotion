@@ -6,13 +6,15 @@ import {
 } from "@tiptap/core";
 import { EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
-import tippy, { Instance, Props } from "tippy.js";
+import { autoPlacement, computePosition,hide } from '@floating-ui/dom';
+import { fn } from "moment";
+// import tippy, { Instance, Props } from "tippy.js";
 
 export interface BubbleMenuPluginProps {
   pluginKey: PluginKey | string;
   editor: Editor;
   element: HTMLElement;
-  tippyOptions?: Partial<Props>;
+  tippyOptions?: Partial<any>;
   shouldShow?:
   | ((props: {
     editor: Editor;
@@ -38,9 +40,9 @@ export class BubbleMenuView {
 
   public preventHide = false;
 
-  public tippy: Instance | undefined;
+  public tippy: any | undefined;
 
-  public tippyOptions?: Partial<Props>;
+  public tippyOptions?: Partial<any>;
 
   public shouldShow: Exclude<BubbleMenuPluginProps["shouldShow"], null> = ({
     view,
@@ -91,6 +93,52 @@ export class BubbleMenuView {
     this.element.style.visibility = "visible";
   }
 
+  updateToolTip = (view: EditorView, oldState?: EditorState) => {
+
+    const { element: editorElement } = this.editor.options;
+    const editorIsAttached = !!editorElement?.parentElement;
+    const { state, composing } = view;
+    const { selection } = state;
+    if (composing) return;
+    const { ranges } = selection;
+    const from = Math.min(...ranges.map(range => range.$from.pos));
+    const to = Math.max(...ranges.map(range => range.$to.pos));
+
+    if (this.tippy || !editorIsAttached) {
+      return;
+    }
+
+    const getReferenceClientRect =
+    this.tippyOptions?.getReferenceClientRect ||
+      (() => {
+        const editor = this.editor
+      if (isNodeSelection(editor.state.selection)) {
+        const node = editor.view.nodeDOM(from) as HTMLElement;
+
+        if (node) {
+          return node.getBoundingClientRect();
+        }
+      }
+
+      return posToDOMRect(view, from, to);
+      })
+    
+    
+    const react = getReferenceClientRect()
+      
+    computePosition(editorElement as Element, this.element, {
+      placement: "bottom",
+      middleware: [autoPlacement()]
+    }).then(({ middlewareData, x,y }) => {
+      Object.assign(this.element.style, {
+        top: react.top + "px",
+        left: react.left + "px",
+        bottom: react.bottom + "px",
+        right: react.right + "px",
+      });
+    })
+  }
+
   mousedownHandler = () => {
     this.preventHide = true;
   };
@@ -126,10 +174,6 @@ export class BubbleMenuView {
     const { selection } = state;
 
     if (composing) return;
-
-    this.createTooltip();
-
-    // support for CellSelections
     const { ranges } = selection;
     const from = Math.min(...ranges.map(range => range.$from.pos));
     const to = Math.max(...ranges.map(range => range.$to.pos));
@@ -143,59 +187,37 @@ export class BubbleMenuView {
       to
     });
 
+    console.log('showld show', shouldShow);
     if (!shouldShow) {
       this.hide();
-
       return;
     }
 
-    this.tippy?.setProps({
-      getReferenceClientRect:
-        this.tippyOptions?.getReferenceClientRect ||
-        (() => {
-          if (isNodeSelection(state.selection)) {
-            const node = view.nodeDOM(from) as HTMLElement;
-
-            if (node) {
-              return node.getBoundingClientRect();
-            }
-          }
-
-          // @ts-ignore
-          return posToDOMRect(view, from, to);
-        })
-    });
-
-    this.show();
+    this.show(view,oldState);
   };
 
-  createTooltip() {
-    const { element: editorElement } = this.editor.options;
-    const editorIsAttached = !!editorElement.parentElement;
+  createTooltip(view: EditorView, oldState?: EditorState) {
+    
 
-    if (this.tippy || !editorIsAttached) {
-      return;
-    }
-
-    this.tippy = tippy(editorElement, {
-      duration: 0,
-      getReferenceClientRect: null,
-      content: this.element,
-      interactive: true,
-      trigger: "manual",
-      hideOnClick: "toggle",
-      ...this.tippyOptions
-    });
+    // this.tippy = tippy(editorElement, {
+    //   duration: 0,
+    //   getReferenceClientRect: null,
+    //   content: this.element,
+    //   interactive: true,
+    //   trigger: "manual",
+    //   hideOnClick: "toggle",
+    //   ...this.tippyOptions
+    // });
 
     // maybe we have to hide tippy on its own blur event as well
-    if (this.tippy.popper.firstChild) {
-      (this.tippy.popper.firstChild as HTMLElement).addEventListener(
+
+      this.element.addEventListener(
         "blur",
         event => {
           this.blurHandler({ event });
         }
       );
-    }
+
   }
 
   update(view: EditorView, oldState?: EditorState) {
@@ -204,16 +226,18 @@ export class BubbleMenuView {
     }, 0);
   }
 
-  show() {
-    this.tippy?.show();
+  show(view: EditorView, oldState?: EditorState) {
+    // this.tippy?.show();
+    this.updateToolTip(view, oldState)
   }
 
   hide() {
-    this.tippy?.hide();
+    // this.tippy?.hide();
+    this.element.style.visibility = 'hidden' 
   }
 
   destroy() {
-    this.tippy?.destroy();
+    // this.tippy?.destroy();
     this.element.removeEventListener("mousedown", this.mousedownHandler, {
       capture: true
     });

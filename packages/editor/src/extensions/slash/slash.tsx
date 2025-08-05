@@ -2,10 +2,11 @@ import React, { ElementType } from "react";
 import { Editor, Node, posToDOMRect } from "@tiptap/core";
 import { ReactRenderer } from "@tiptap/react";
 import Suggestion from "@tiptap/suggestion";
-import tippy, { Instance } from "tippy.js";
+// import tippy, { Instance } from "tippy.js";
 
 import { SlashMenuView } from "./slash-menu-view";
 import { PluginKey } from "@tiptap/pm/state";
+import { computePosition } from "@floating-ui/dom";
 
 export type SlashMenuItem =
   | {
@@ -83,7 +84,7 @@ export const createSlash = (name: string, options?: SlashOptions) => {
 
           render: () => {
             let component: ReactRenderer;
-            let popup: Instance[];
+            // let popup: Instance[];
             let isEditable: boolean;
 
             const getReferenceClientRect = () => {
@@ -104,32 +105,34 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                 });
 
 
-                popup = tippy("body", {
-                  getReferenceClientRect,
-                  appendTo: () => document.body,
-                  content: component.element,
-                  showOnCreate: true,
-                  interactive: true,
-                  trigger: "manual",
-                  placement: "bottom-start",
-                  zIndex: 999
-                });
+                // popup = tippy("body", {
+                //   getReferenceClientRect,
+                //   appendTo: () => document.body,
+                //   content: component.element,
+                //   showOnCreate: true,
+                //   interactive: true,
+                //   trigger: "manual",
+                //   placement: "bottom-start",
+                //   zIndex: 999
+                // });
+
+                computePosition(document.body, component.element as HTMLElement, {})
               },
 
               onUpdate(props) {
                 if (!isEditable) return;
                 component.updateProps(props);
-                popup[0]?.setProps({
-                  // @ts-ignore
-                  getReferenceClientRect: props.clientRect
-                });
+                // popup[0]?.setProps({
+                //   // @ts-ignore
+                //   getReferenceClientRect: props.clientRect
+                // });
               },
 
               onKeyDown(props) {
                 if (!isEditable) return;
 
                 if (props.event.key === "Escape") {
-                  popup[0]?.hide();
+                  // popup[0]?.hide();
                   return true;
                 }
                 // @ts-ignore
@@ -138,10 +141,10 @@ export const createSlash = (name: string, options?: SlashOptions) => {
 
               onExit() {
                 if (!isEditable) return;
-                if (popup) {
-                  popup[0]?.destroy();
+                // if (popup) {
+                  // popup[0]?.destroy();
                   component.destroy();
-                }
+                // }
               }
             };
           }

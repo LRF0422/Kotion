@@ -1,7 +1,7 @@
 import { Editor } from "@tiptap/core";
 import React from "react";
 import { useActive } from "../../../hooks";
-import BulletList from "@tiptap/extension-bullet-list";
+import {BulletList} from "@tiptap/extension-list";
 import { List } from "@kn/icon";
 import { Toggle } from "@kn/ui";
 

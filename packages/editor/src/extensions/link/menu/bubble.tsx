@@ -50,7 +50,7 @@ export const LinkBubbleMenu: React.FC<IProps> = ({ editor }) => {
   );
 
   return (
-    <BubbleMenu editor={editor} shouldShow={shouldShow} tippyOptions={{ theme: 'light' }}>
+    <BubbleMenu editor={editor} shouldShow={shouldShow} options={{ }}>
       <div ref={containerRef}>
         <div className="flex flex-row gap-1">
           <Toggle size="sm" onClick={visitLink} pressed={false}>
