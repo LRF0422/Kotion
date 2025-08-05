@@ -71,11 +71,11 @@ export const EditorMenu: React.FC<{ editor: Editor, extensionWrappers: Extension
         {renderItem(bubbleMenu, 4, editor)}
         {
             flotMenu.length > 0 && <ReactBubble
-                // forNode
+                forNode
                 editor={editor}
                 shouldShow={shouldShow}
                 pluginKey="editor-menu"
-                options={{placement: 'top' }}>
+                options={{ placement: 'top' }}>
                 <div className="flex flex-row gap-0 items-center">
                     {flotMenu.map((Menu, index) => (
                         <Menu key={index} editor={editor} />

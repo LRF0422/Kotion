@@ -26,7 +26,7 @@ export const BubbleMenu = (props: BubbleMenuProps) => {
     const {
       pluginKey = "bubbleMenu",
       editor,
-      tippyOptions = {},
+      options = {},
       shouldShow = null
     } = props;
 
@@ -34,7 +34,7 @@ export const BubbleMenu = (props: BubbleMenuProps) => {
       pluginKey,
       editor,
       element,
-      tippyOptions,
+      options,
       shouldShow
     });
 
@@ -49,7 +49,11 @@ export const BubbleMenu = (props: BubbleMenuProps) => {
     <div
       ref={setElement}
       className={props.className}
-      >
+      style={{
+        visibility: "hidden",
+        position: "absolute",
+      }}
+    >
       {props.children}
     </div>
   );

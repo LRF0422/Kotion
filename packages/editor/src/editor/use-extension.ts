@@ -15,7 +15,7 @@ import { UniqueID } from "../extensions/unique-id"
 import { Doc } from "../extensions"
 import Document from "@tiptap/extension-document";
 import TextLoadingDecorationExtension from "../extensions/ai/text-loading"
-import History from '@tiptap/extension-history'
+import { UndoRedo } from '@tiptap/extensions'
 
 
 export const useEditorExtension = (ext?: string, withTitle?: boolean) => {
@@ -24,7 +24,7 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean) => {
 	const runtimeExtension: AnyExtension[] = [
 		withTitle ? Doc : Document,
 		Paragraph,
-		History,
+		UndoRedo,
 		Placeholder.configure({
 			placeholder: ({ node }) => {
 				if (node.type.name === 'heading') {

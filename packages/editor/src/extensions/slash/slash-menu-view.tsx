@@ -129,12 +129,12 @@ export const SlashMenuView: React.FC<IProps> = forwardRef((props, ref) => {
               editor={props.editor}
               key={index}
               className=" hover:bg-muted"
-              active={selectedIndex === index}
+              active={!!(selectedIndex == index)}
             /> : (
               <StyledItem
                 key={index}
                 className={cn(" slash-menu-item hover:bg-muted rounded-sm", (selectedIndex === index) && " bg-muted")}
-                active={selectedIndex === index}
+                active={!!(selectedIndex == index)}
                 onClick={() => selectItem(index)}>
                 <div>
                   <div className=" border p-3 rounded-sm border-dashed slash-menu-item transition-all duration-200">

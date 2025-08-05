@@ -10,7 +10,6 @@ export const EditorWrapper: React.FC<PropsWithChildren & { editor: Editor }> = (
         <div
             className=" h-[120px] w-full"
             style={{
-                backgroundImage: `url('${editor.storage?.title?.cover}')`,
                 backgroundSize: 'auto',
             }}
         />

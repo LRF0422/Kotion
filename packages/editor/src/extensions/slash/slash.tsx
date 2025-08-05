@@ -7,6 +7,7 @@ import Suggestion from "@tiptap/suggestion";
 import { SlashMenuView } from "./slash-menu-view";
 import { PluginKey } from "@tiptap/pm/state";
 import { computePosition } from "@floating-ui/dom";
+import { CellSelection } from "@tiptap/pm/tables";
 
 export type SlashMenuItem =
   | {
@@ -23,6 +24,18 @@ export interface SlashOptions {
   items: SlashMenuItem[];
   pluginKey: string;
   char: string;
+}
+
+function combineDOMRects(rect1: DOMRect, rect2: DOMRect): DOMRect {
+  const top = Math.min(rect1.top, rect2.top)
+  const bottom = Math.max(rect1.bottom, rect2.bottom)
+  const left = Math.min(rect1.left, rect2.left)
+  const right = Math.max(rect1.right, rect2.right)
+  const width = right - left
+  const height = bottom - top
+  const x = left
+  const y = top
+  return new DOMRect(x, y, width, height)
 }
 
 export const createSlash = (name: string, options?: SlashOptions) => {
@@ -84,7 +97,6 @@ export const createSlash = (name: string, options?: SlashOptions) => {
 
           render: () => {
             let component: ReactRenderer;
-            // let popup: Instance[];
             let isEditable: boolean;
 
             const getReferenceClientRect = () => {
@@ -98,25 +110,55 @@ export const createSlash = (name: string, options?: SlashOptions) => {
               onStart: props => {
                 isEditable = props.editor.isEditable;
                 if (!isEditable) return;
-
                 component = new ReactRenderer(SlashMenuView, {
                   props,
                   editor: props.editor
                 });
+                component.render()
+                const { selection } = this.editor.state
+                const { view } = this.editor
+                const domRect = posToDOMRect(view, selection.from, selection.to)
+                let virtualElement = {
+                  getBoundingClientRect: () => domRect,
+                  getClientRects: () => [domRect],
+                }
 
+                // this is a special case for cell selections
+                if (selection instanceof CellSelection) {
+                  const { $anchorCell, $headCell } = selection
+                  const from = $anchorCell ? $anchorCell.pos : $headCell!.pos
+                  const to = $headCell ? $headCell.pos : $anchorCell!.pos
+                  const fromDOM = view.nodeDOM(from)
+                  const toDOM = view.nodeDOM(to)
 
-                // popup = tippy("body", {
-                //   getReferenceClientRect,
-                //   appendTo: () => document.body,
-                //   content: component.element,
-                //   showOnCreate: true,
-                //   interactive: true,
-                //   trigger: "manual",
-                //   placement: "bottom-start",
-                //   zIndex: 999
-                // });
+                  if (!fromDOM || !toDOM) {
+                    return
+                  }
 
-                computePosition(document.body, component.element as HTMLElement, {})
+                  const clientRect =
+                    fromDOM === toDOM
+                      ? (fromDOM as HTMLElement).getBoundingClientRect()
+                      : combineDOMRects(
+                        (fromDOM as HTMLElement).getBoundingClientRect(),
+                        (toDOM as HTMLElement).getBoundingClientRect(),
+                      )
+
+                  virtualElement = {
+                    getBoundingClientRect: () => clientRect,
+                    getClientRects: () => [clientRect],
+                  }
+                }
+
+                computePosition(virtualElement, component.element as HTMLElement, {
+                  placement: "top",
+                  strategy: "absolute",
+                }).then(({ x, y, strategy }) => {
+                  console.log("finished", component.element);
+                  (component.element as HTMLElement).style.width = 'max-content';
+                  (component.element as HTMLElement).style.position = strategy;
+                  (component.element as HTMLElement).style.left = `${x}px`;
+                  (component.element as HTMLElement).style.top = `${y}px`
+                })
               },
 
               onUpdate(props) {
@@ -142,8 +184,8 @@ export const createSlash = (name: string, options?: SlashOptions) => {
               onExit() {
                 if (!isEditable) return;
                 // if (popup) {
-                  // popup[0]?.destroy();
-                  component.destroy();
+                // popup[0]?.destroy();
+                component.destroy();
                 // }
               }
             };

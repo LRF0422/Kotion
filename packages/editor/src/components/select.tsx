@@ -25,7 +25,7 @@ export function Select(props: React.PropsWithChildren<SelectProps>) {
       <SelectTrigger className={props.className}>
         <SelectValue />
       </SelectTrigger>
-      <SelectContent position="item-aligned">
+      <SelectContent>
         {
           options && options.map((it, index) => (
             <SelectItem key={index} value={it.value}>{it.label}</SelectItem>

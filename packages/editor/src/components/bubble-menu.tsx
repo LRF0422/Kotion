@@ -60,7 +60,7 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
       <NodeBubbleMenu
         editor={editor}
         className="bg-popover text-popover-foreground px-1 py-1 rounded-sm shadow-sm border"
-        tippyOptions={wrapTippyOptions}
+        options={wrapTippyOptions}
         {...rest}>
         {children}
       </NodeBubbleMenu>
