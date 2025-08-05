@@ -99,22 +99,24 @@ export const createSlash = (name: string, options?: SlashOptions) => {
             let component: ReactRenderer;
             let isEditable: boolean;
 
-            const getReferenceClientRect = () => {
-              const { ranges } = this.editor.state.selection;
-              const from = Math.min(...ranges.map(range => range.$from.pos));
-              const to = Math.max(...ranges.map(range => range.$to.pos));
-              return posToDOMRect(this.editor.view, from, to);
-            };
+            const update = () => {
+              
+            }
 
             return {
               onStart: props => {
                 isEditable = props.editor.isEditable;
                 if (!isEditable) return;
-                component = new ReactRenderer(SlashMenuView, {
-                  props,
-                  editor: props.editor
-                });
-                component.render()
+                console.log('component', component);
+                
+                if (!component || component.element.children.length === 0) {
+                  component = new ReactRenderer(SlashMenuView, {
+                    props,
+                    editor: props.editor
+                  });
+                  component.render()
+                  document.body.appendChild(component.element);
+                }
                 const { selection } = this.editor.state
                 const { view } = this.editor
                 const domRect = posToDOMRect(view, selection.from, selection.to)
@@ -148,16 +150,15 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                     getClientRects: () => [clientRect],
                   }
                 }
-
                 computePosition(virtualElement, component.element as HTMLElement, {
-                  placement: "top",
+                  placement: "right-start",
                   strategy: "absolute",
                 }).then(({ x, y, strategy }) => {
                   console.log("finished", component.element);
-                  (component.element as HTMLElement).style.width = 'max-content';
+                  (component.element as HTMLElement).style.zIndex = '1000';
                   (component.element as HTMLElement).style.position = strategy;
                   (component.element as HTMLElement).style.left = `${x}px`;
-                  (component.element as HTMLElement).style.top = `${y}px`
+                  (component.element as HTMLElement).style.top = `${y}px`;
                 })
               },
 
@@ -175,6 +176,7 @@ export const createSlash = (name: string, options?: SlashOptions) => {
 
                 if (props.event.key === "Escape") {
                   // popup[0]?.hide();
+                  document.body.removeChild(component.element);
                   return true;
                 }
                 // @ts-ignore
@@ -185,6 +187,9 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                 if (!isEditable) return;
                 // if (popup) {
                 // popup[0]?.destroy();
+                if (document.body.contains(component.element)) {
+                  document.body.removeChild(component.element);
+                }
                 component.destroy();
                 // }
               }

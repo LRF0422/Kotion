@@ -32,6 +32,7 @@ export type BubbleMenuProps = BuiltInTiptapBubbleMenuProps & {
     to: number;
   }) => boolean;
   forNode?: boolean;
+  getReferenceClientRect?: () => DOMRect
 } & { editor: Editor; children: any };
 
 export const BubbleMenu: React.FC<BubbleMenuProps> = ({
@@ -39,6 +40,7 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
   options,
   forNode,
   children,
+  getReferenceClientRect,
   ...rest
 }) => {
   const wrapTippyOptions = useMemo(() => {
@@ -46,6 +48,7 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
       return {
         ...defaultTippyOptions,
         ...options,
+        getReferenceClientRect: getReferenceClientRect,
         hide: false,
         // theme: options.theme,
         appendTo: () => editor.options.element

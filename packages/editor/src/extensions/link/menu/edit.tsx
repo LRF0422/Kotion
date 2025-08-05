@@ -136,5 +136,11 @@ export const showLinkEditor = (editor: Editor, dom?: HTMLElement) => {
   //   arrow: false,
   // });
 
-  computePosition(editor.options.element as Element, div, {})
+  computePosition(dom as HTMLElement, div, {
+    strategy: 'absolute',
+    placement: 'bottom'
+  }).then(({x,y }) => {
+    div.style.left = `${x}px`
+    div.style.top = `${y}px`
+  })
 };

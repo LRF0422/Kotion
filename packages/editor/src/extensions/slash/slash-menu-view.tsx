@@ -119,7 +119,8 @@ export const SlashMenuView: React.FC<IProps> = forwardRef((props, ref) => {
   }));
 
   return (
-    <StyledContainer ref={$container} className="p-1 bg-popover text-popover-foreground border shadow-sm py-1">
+    <StyledContainer
+      ref={$container} className="p-1 bg-popover text-popover-foreground border shadow-sm py-1">
       {props.items.length ? (
         props.items.map((item, index) => {
           return "divider" in item ? (

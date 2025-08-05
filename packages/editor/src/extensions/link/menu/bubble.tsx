@@ -9,7 +9,7 @@ import { useAttributes } from "../../../hooks/use-attributes";
 import { IconEdit, IconUnlink, IconVisitlink } from "../../../icons";
 import { Link as LinkExtension } from "../link";
 import { showLinkEditor } from "./edit";
-import { Toggle } from "@kn/ui";
+import { Popover, PopoverContent, PopoverTrigger, Toggle } from "@kn/ui";
 import { Separator } from "@kn/ui";
 
 interface IProps {
@@ -56,9 +56,16 @@ export const LinkBubbleMenu: React.FC<IProps> = ({ editor }) => {
           <Toggle size="sm" onClick={visitLink} pressed={false}>
             <IconVisitlink />
           </Toggle>
-          <Toggle size="sm" onClick={openEditLinkModal} pressed={false}>
-            <IconEdit />
+          <Popover>
+            <PopoverTrigger asChild> 
+            <Toggle size="sm"  pressed={false}>
+              <IconEdit />
           </Toggle>
+            </PopoverTrigger>
+            <PopoverContent>
+              qweqweqwe
+            </PopoverContent>
+          </Popover>
           <Separator orientation="vertical" />
           <Toggle size="sm" onClick={unsetLink} pressed={false}>
             <IconUnlink />

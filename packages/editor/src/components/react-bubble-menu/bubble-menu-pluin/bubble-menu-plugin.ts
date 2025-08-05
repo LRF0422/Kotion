@@ -125,6 +125,7 @@ export interface BubbleMenuPluginProps {
     onHide?: () => void
     onUpdate?: () => void
     onDestroy?: () => void
+    getReferenceClientRect?: () => DOMRect
   }
 }
 
@@ -335,7 +336,10 @@ export class BubbleMenuView implements PluginView {
 
   updatePosition() {
     const { selection } = this.editor.state
-    const domRect = posToDOMRect(this.view, selection.from, selection.to)
+    let domRect = posToDOMRect(this.view, selection.from, selection.to)
+    if (this.floatingUIOptions.getReferenceClientRect) {
+      domRect = this.floatingUIOptions.getReferenceClientRect()
+    }
     let virtualElement = {
       getBoundingClientRect: () => domRect,
       getClientRects: () => [domRect],

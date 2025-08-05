@@ -144,10 +144,12 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
 
   return (
     <BubbleMenu
+      forNode
       editor={editor}
       pluginKey="table-bubble-menu"
       shouldShow={shouldShow}
-      tippyOptions={{ getReferenceClientRect, offset: [0, -2] }}>
+      getReferenceClientRect={getReferenceClientRect}
+      options={{ shift: true , inline: true }}>
       <div className="flex flex-row gap-1 items-center">
         <Button variant="ghost" onClick={copyMe} size="icon" ><IconCopy /></Button>
         <Divider />
