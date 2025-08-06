@@ -25,22 +25,34 @@ export const InfoPanel = Node.create({
 		return {
 			type: {
 				info: {
-					color: '#E9F2FF',
+					color: {
+						light: '#cffafe',
+						dark: '#083344'
+					},
 					icon: CircleAlert,
 					iconColor: '#1D7AFC'
 				},
 				success: {
-					color: '#DCFFF1',
+					color: {
+						light: '#bbf7d0',
+						dark: '#052e16',
+					},
 					icon: CheckCircle2,
 					iconColor: '#22A06B'
 				},
 				file: {
-					color: '#FFF7D6',
+					color: {
+						light: '#fef3c7',
+						dark: '#451a03'
+					},
 					icon: TriangleAlert,
 					iconColor: '#E56910'
 				},
 				error: {
-					color: '#FFECEB',
+					color: {
+						light: '#fecaca',
+						dark: '#450a0a'
+					},
 					icon: XCircle,
 					iconColor: '#C9372C'
 				}

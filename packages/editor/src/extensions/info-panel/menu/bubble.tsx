@@ -31,17 +31,17 @@ export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) =>
 		copyNode(editor, InfoPanel.name)
 	}
 
-	const renderMenu = () => {
+	const renderMenu = useCallback(() => {
 		const types = InfoPanel.options.type;
 		const node = getCurrentNode(editor.state);
 		return Object.keys(types).map((it, index) => {
-			const color = types[it].color;
+			const color = types[it].iconColor;
 			const Icon = types[it].icon;
 			return <Toggle key={index} size="sm" pressed={node?.attrs?.type === it} onClick={() => handleClick(it)} >
-				<Icon className="h-4 w-4" />
+				<Icon className="h-4 w-4" style={{ color: color }} />
 			</Toggle>
 		})
-	}
+	}, [editor.state]);
 
 	const getReferenceClientRect = useCallback(() => {
 		const { selection } = editor.state;
@@ -61,13 +61,13 @@ export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) =>
 		getReferenceClientRect={getReferenceClientRect}
 		editor={editor}
 		shouldShow={shouldShow} options={{}}>
-		<div className="flex flex-row gap-1 items-center">
+		<div className="flex flex-row gap-1 items-center h-8">
 			{renderMenu()}
-			<Separator orientation="vertical" />
+			<Separator orientation="vertical" className="h-6" />
 			<Toggle size="sm" pressed={false} onClick={copyMe} >
 				<Copy className="h-4 w-4" />
 			</Toggle>
-			<Separator orientation="vertical" />
+			<Separator orientation="vertical" className="h-6" />
 			<Toggle size="sm" pressed={false} onClick={deleteMe} >
 				<Trash2 className="h-4 w-4 text-red-500" />
 			</Toggle>
