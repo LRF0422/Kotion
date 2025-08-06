@@ -11,6 +11,8 @@ import { Toggle } from "@kn/ui";
 
 export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
 
+	const types = InfoPanel.options.type;
+	const node = getCurrentNode(editor.state);
 
 	const shouldShow = useCallback<BubbleMenuProps["shouldShow"]>(
 		({ editor }) => {
@@ -32,8 +34,6 @@ export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) =>
 	}
 
 	const renderMenu = useCallback(() => {
-		const types = InfoPanel.options.type;
-		const node = getCurrentNode(editor.state);
 		return Object.keys(types).map((it, index) => {
 			const color = types[it].iconColor;
 			const Icon = types[it].icon;
