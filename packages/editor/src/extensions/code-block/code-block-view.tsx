@@ -48,7 +48,7 @@ export const CodeBlockView: React.FC<NodeViewProps> = ({
         </div>
         <div>
           <pre ref={$container} className="prose-pre:bg-slate-600">
-            <NodeViewContent as="code" className="prose-code:text-black" />
+            <NodeViewContent className="prose-code:text-black" />
           </pre>
         </div>
       </div>

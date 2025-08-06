@@ -11,7 +11,7 @@ import { Node } from "@tiptap/pm/model";
 interface CodeBlockLowlightOptions extends CodeBlockOptions {
   lowlight: any;
   defaultLanguage: string | null | undefined;
-  maxTextLength?: number
+  maxTextLength?: number;
 }
 
 const lowlight = createLowlight(all)
@@ -20,6 +20,7 @@ export const CodeBlock = BuiltInCodeBlock.extend<CodeBlockLowlightOptions>({
   draggable: true,
   priority: 1000,
 
+  // @ts-ignore
   addOptions() {
     return {
       ...this.parent?.(),
@@ -33,7 +34,6 @@ export const CodeBlock = BuiltInCodeBlock.extend<CodeBlockLowlightOptions>({
     return ReactNodeViewRenderer(CodeBlockView);
   },
 
-  // @ts-ignore
   addProseMirrorPlugins() {
     return [
       ...(this.parent?.() || []),

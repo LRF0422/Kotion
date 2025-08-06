@@ -9,6 +9,13 @@ import { generateID } from "./util/generate-id";
 import { updateEvaluation } from "./latex-evaluation/update-evaluation";
 import { DEFAULT_OPTIONS, MathExtensionOption, MathExtensionOption as MathExtensionOptions } from "./util/options";
 
+
+declare module '@tiptap/core' {
+  interface Storage {
+    inlineMath: any;
+  }
+}
+
 export const InlineMathNode = Node.create<MathExtensionOptions>({
   name: "inlineMath",
   group: "inline",
@@ -19,6 +26,7 @@ export const InlineMathNode = Node.create<MathExtensionOptions>({
   addOptions() {
     return DEFAULT_OPTIONS;
   },
+
 
   addAttributes() {
     return {
@@ -276,7 +284,7 @@ export const InlineMathNode = Node.create<MathExtensionOptions>({
             editor
               .chain()
               .command(({ tr }) => {
-                const position = getPos();
+                const position = getPos()!;
                 tr.setNodeAttribute(position, "evaluate", !showEvalResult ? "yes" : "no");
                 return true;
               })

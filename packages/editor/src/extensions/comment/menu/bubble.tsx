@@ -79,8 +79,9 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
     return <BubbleMenu
         editor={editor}
         shouldShow={shouldShow}
-        tippyOptions={{
-            getReferenceClientRect,
+        forNode
+        getReferenceClientRect={getReferenceClientRect}
+        options={{
             placement: "top"
         }}
     >

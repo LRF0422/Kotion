@@ -10,7 +10,7 @@ import { CheckCircle2, PlusIcon } from "@kn/icon";
 import { EditorRender, JSONContent } from "@kn/editor";
 import { useApi, useUploadFile } from "../../../hooks";
 import { useSafeState } from "ahooks";
-import { APIS } from "src/api";
+import { APIS } from "../../../api";
 
 interface Description {
     label: string,
@@ -114,7 +114,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
         value.logos = logos
         useApi(APIS.CREATE_PLUGIN, null, value).then(res => {
             console.log("res", res);
-            
+
         })
     }
 

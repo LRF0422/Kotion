@@ -11,7 +11,7 @@ import json from "@rollup/plugin-json";
 import nodePolyfills from "rollup-plugin-polyfill-node";
 import babel from "@rollup/plugin-babel";
 import calc from "postcss-calc";
-import postcssCascadeLayers from "@csstools/postcss-cascade-layers"
+import postcssCascadeLayers from "@csstools/postcss-cascade-layers";
 
 export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   external: [
@@ -78,6 +78,7 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
         compilerOptions: {
           declaration: true,
           isolatedModules: false,
+          moduleResolution: "bundler",
           declarationDir: "./dist",
           // declarationMap: true,
           target: "ES2018",

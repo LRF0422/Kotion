@@ -103,17 +103,17 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
     }
 
     const doAddRow = useCallback((data?: any) => {
-        addRow(props.editor, props.editor.state, props.editor.view, props.node, props.getPos(), data)
+        addRow(props.editor, props.editor.state, props.editor.view, props.node, props.getPos()!, data)
         doUpdate()
     }, [props])
 
     const onDataChange = useCallback((row: number, col: number, data: any) => {
-        updateCellData(props.editor.state, props.editor.view, props.node, props.getPos(), col, row, data)
+        updateCellData(props.editor.state, props.editor.view, props.node, props.getPos()!, col, row, data)
         doUpdate()
     }, [props])
 
     const doDelCol = useCallback((colIndex: number) => {
-        deleteColV2(props.editor.state, props.editor.view, props.node, props.getPos(), colIndex)
+        deleteColV2(props.editor.state, props.editor.view, props.node, props.getPos()!, colIndex)
         doUpdate()
     }, [props])
 
@@ -136,17 +136,17 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
             ...props.node?.attrs,
             columns: cols
         }
-        moveCol(props.editor.state, props.editor.view, props.node, props.getPos(), source, target, newVal)
+        moveCol(props.editor.state, props.editor.view, props.node, props.getPos()!, source, target, newVal)
         // props.updateAttributes(newVal)
     }, [props])
 
     const doDeleteRow = useCallback((rowIndex: string[]) => {
-        removeRow(props.editor, props.editor.state, props.editor.view, props.node, props.getPos(), rowIndex)
+        removeRow(props.editor, props.editor.state, props.editor.view, props.node, props.getPos()!, rowIndex)
         doUpdate()
     }, [props])
 
     const doUpdateCellBatch = useCallback((updateCells: UpdateCellProps[]) => {
-        updateCellDataV2(props.editor.state, props.editor.view, props.node, props.getPos(), updateCells)
+        updateCellDataV2(props.editor.state, props.editor.view, props.node, props.getPos()!, updateCells)
         doUpdate()
     }, [props])
 
@@ -169,7 +169,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
             columns: cols
         }
         props.updateAttributes(newVal)
-        addCol(props.editor.state, props.editor.view, props.node, props.getPos(), column)
+        addCol(props.editor.state, props.editor.view, props.node, props.getPos()!, column)
     }, [props.node])
 
     const getContent = (view: string) => {

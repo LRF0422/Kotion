@@ -49,10 +49,10 @@ export const ChartView: React.FC<any> = (props) => {
                     <Select defaultValue={config.type} onValueChange={(value: string) => {
                         config.type = value
                         const tr = editor.state.tr
-                        const currNode = tr.doc.nodeAt(getPos())
+                        const currNode = tr.doc.nodeAt(getPos()!)
                         if (currNode) {
                             console.log(currNode);
-                            tr.setNodeMarkup(getPos(), undefined, {
+                            tr.setNodeMarkup(getPos()!, undefined, {
                                 ...currNode.attrs,
                                 viewOptions: {
                                     ...currNode.attrs.viewOptions,

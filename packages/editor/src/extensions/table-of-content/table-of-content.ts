@@ -1,9 +1,15 @@
 import { Extension } from "@tiptap/core";
 
-
 export interface TableOfContentStorage {
     toc: any[]
 }
+
+declare module '@tiptap/core' {
+    interface Storage {
+        tableOfContent: TableOfContentStorage;
+    }
+}
+
 
 const arrToTree = (tocs: any[]) => {
     const result: any[] = [];

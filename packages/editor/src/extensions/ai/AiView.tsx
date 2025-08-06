@@ -39,15 +39,15 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
                     toggle()
                     let buff = ""
                     props.editor.commands.deleteRange({
-                        from: props.getPos() + 1,
-                        to: props.getPos() + props.node.nodeSize - 1
+                        from: props.getPos()! + 1,
+                        to: props.getPos()! + props.node.nodeSize - 1
                     })
                     aiGeneration(props.node.attrs.prompt, (res) => {
                         buff += res
-                        props.editor.chain().focus().toggleLoadingDecoration(props.getPos() + 1, buff).run()
+                        props.editor.chain().focus().toggleLoadingDecoration(props.getPos()! + 1, buff).run()
                     }).then((result) => {
                         props.editor.chain().focus()
-                            .insertContentAt(props.getPos() + 1, result, {
+                            .insertContentAt(props.getPos()! + 1, result, {
                                 applyInputRules: false,
                                 applyPasteRules: false,
                                 parseOptions: {
