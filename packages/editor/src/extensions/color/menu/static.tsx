@@ -1,32 +1,26 @@
 import { Editor } from "@tiptap/react";
 import React, { useCallback } from "react";
-import { TwitterPicker } from "react-color"
-import { IconFontColor } from "../../../icons";
 import { useActive } from "../../../hooks";
-import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
-import { Toggle } from "@kn/ui";
-
+import { ColorPicker } from "@kn/ui";
+import { BaselineIcon } from "@kn/icon";
 
 export const ColorStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
 
   const isColorActive = useActive(editor, "textStyle") && editor.isEditable;
 
   const handleColorChange = useCallback((color: any) => {
-    editor.chain().focus().setColor(color.hex).run()
+    editor.chain().focus().setColor(color).run()
   }, [editor])
 
-  return <Popover>
-    <PopoverContent asChild>
-      <div style={{ backgroundColor: '#fff' }}>
-        <TwitterPicker onChange={handleColorChange} />
-      </div>
-    </PopoverContent>
-    <PopoverTrigger>
-      <Toggle
-        pressed={isColorActive}
-        size="sm">
-        <IconFontColor style={{ color: editor.getAttributes('textStyle').color }} />
-      </Toggle>
-    </PopoverTrigger>
-  </Popover>
+  const handleUnset = useCallback(() => {
+    editor.chain().focus().unsetColor().run()
+  }, [editor])
+
+  return <ColorPicker
+    icon={<BaselineIcon className="h-4 w-4" />}
+    simple
+    handleUnSet={handleUnset}
+    background={editor.getAttributes('textStyle').color || ""}
+    setBackground={handleColorChange}
+  />
 }

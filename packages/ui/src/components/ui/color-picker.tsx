@@ -7,8 +7,8 @@ import {
 } from '@ui/components/ui/popover'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@ui/components/ui/tabs'
 import { cn } from '@ui/lib/utils'
-import { Paintbrush } from '@kn/icon'
-import { useMemo, useState } from 'react'
+import { CircleOff, Paintbrush } from '@kn/icon'
+import { ReactNode, useMemo, useState } from 'react'
 import React from 'react'
 import { IconButton, Toggle } from '..'
 
@@ -29,12 +29,16 @@ export function ColorPicker({
   background,
   setBackground,
   className,
-  simple = false
+  simple = false,
+  handleUnSet,
+  icon
 }: {
   background: string
   setBackground: (background: string) => void
   className?: string
-  simple?: boolean
+  simple?: boolean,
+  handleUnSet?: () => void,
+  icon?: ReactNode
 }) {
   const solids = [
     '#E2E2E2',
@@ -91,7 +95,7 @@ export function ColorPicker({
               {background ? <div
                 className="h-4 w-4 rounded !bg-center !bg-cover transition-all"
                 style={{ background }}
-              ></div> : <Paintbrush className="h-4 w-4" />}
+              ></div> : icon ? icon : <Paintbrush className="h-4 w-4" />}
             </Toggle>
           ) : (<Button
             variant={'outline'}
@@ -140,6 +144,11 @@ export function ColorPicker({
                 onClick={() => setBackground(s)}
               />
             ))}
+            <div
+              className="rounded-md h-6 w-6 cursor-pointer active:scale-105 bg-muted flex items-center justify-center"
+              onClick={handleUnSet}
+            >
+            </div>
           </TabsContent>
 
           <TabsContent value="gradient" className="mt-0">
