@@ -13,13 +13,13 @@ export function getCurrentNode(state: EditorState): Node | null {
   }
 
 
-  // if ($head) {
-  //   let depth = state.selection.$anchor.pos
-  //   while (!$head.node(depth)) {
-  //     node = $head.node(depth)
-  //     depth--
-  //   }
-  // }
+  if ($head) {
+    let depth = state.selection.$anchor.pos
+    while (!$head.node(depth)) {
+      node = $head.node(depth)
+      depth--
+    }
+  }
 
   return node;
 }

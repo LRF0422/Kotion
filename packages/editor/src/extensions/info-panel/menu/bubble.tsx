@@ -41,7 +41,7 @@ export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) =>
 				<Icon className="h-4 w-4" style={{ color: color }} />
 			</Toggle>
 		})
-	}, [editor.state]);
+	}, [editor]);
 
 	const getReferenceClientRect = useCallback(() => {
 		const { selection } = editor.state;
