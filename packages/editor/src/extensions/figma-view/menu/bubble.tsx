@@ -29,9 +29,13 @@ export const FigmaBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
         return posToDOMRect(editor.view, selection.from, selection.to);
     }, [editor]);
 
-    return <BubbleMenu editor={editor} shouldShow={shouldShow} tippyOptions={{
-        getReferenceClientRect
-    }}>
+    return <BubbleMenu
+        forNode
+        getReferenceClientRect={getReferenceClientRect}
+        editor={editor}
+        shouldShow={shouldShow}
+        options={{}}
+    >
         <Button size="sm" variant="secondary">123</Button>
     </BubbleMenu>
 }

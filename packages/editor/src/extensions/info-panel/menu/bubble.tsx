@@ -34,16 +34,13 @@ export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) =>
 	const renderMenu = () => {
 		const types = InfoPanel.options.type;
 		const node = getCurrentNode(editor.state);
-		if (types) {
-			return Object.keys(types).map((it, index) => {
-				const color = types[it].color;
-				const Icon = types[it].icon;
-				return <Toggle key={index} size="sm" pressed={node?.attrs?.type === it} onClick={() => handleClick(it)} >
-					<Icon className="h-4 w-4" />
-				</Toggle>
-			})
-		}
-		return <></>
+		return Object.keys(types).map((it, index) => {
+			const color = types[it].color;
+			const Icon = types[it].icon;
+			return <Toggle key={index} size="sm" pressed={node?.attrs?.type === it} onClick={() => handleClick(it)} >
+				<Icon className="h-4 w-4" />
+			</Toggle>
+		})
 	}
 
 	const getReferenceClientRect = useCallback(() => {
@@ -59,7 +56,11 @@ export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) =>
 		return posToDOMRect(editor.view, selection.from, selection.to);
 	}, [editor]);
 
-	return <BubbleMenu editor={editor} shouldShow={shouldShow} tippyOptions={{ getReferenceClientRect: getReferenceClientRect, theme: 'light' }}>
+	return <BubbleMenu
+		forNode
+		getReferenceClientRect={getReferenceClientRect}
+		editor={editor}
+		shouldShow={shouldShow} options={{}}>
 		<div className="flex flex-row gap-1 items-center">
 			{renderMenu()}
 			<Separator orientation="vertical" />

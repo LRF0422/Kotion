@@ -1,13 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { createRoot } from "react-dom/client";
+import React, { useCallback, useMemo, useRef } from "react";
 import { Editor } from "@tiptap/core";
-// import tippy, { Instance } from "tippy.js";
 
 import { useActive } from "../../hooks/use-active";
 import { TextAlign } from "./text-align";
 import { AlignCenter, AlignJustify, AlignLeft, AlignRight } from "@kn/icon";
-import { Button, Toggle } from "@kn/ui";
-import { computePosition } from "@floating-ui/dom";
+import { Popover, PopoverContent, PopoverTrigger, Toggle } from "@kn/ui";
 
 const _TextAlignStaticMenu: React.FC<{
   editor: Editor;
@@ -51,59 +48,26 @@ const _TextAlignStaticMenu: React.FC<{
     [editor]
   );
 
-  useEffect(() => {
-    const div = document.createElement("div");
-    const root = createRoot(div)
-    root.render(
-      <>
-        <Button size="sm" onClick={toggle("left")} ><AlignLeft className="h-4 w-4" /></Button>
-        <Button onClick={toggle("center")} ><AlignCenter className="h-4 w-4" /></Button>
-        <Button onClick={toggle("right")} ><AlignRight className="h-4 w-4" /></Button>
-        <Button onClick={toggle("justify")} ><AlignJustify className="h-4 w-4" /></Button>
-      </>,
-    )
-
-    // const popup: Instance[] = tippy("body", {
-    //   getReferenceClientRect: () => {
-    //     return (containerRef.current as HTMLElement).getBoundingClientRect();
-    //   },
-    //   appendTo: getPopupContainer || (() => editor.options.element),
-    //   content: div,
-    //   showOnCreate: false,
-    //   interactive: true,
-    //   popperOptions: {
-    //     strategy: "fixed"
-    //   },
-    //   trigger: "manual",
-    //   placement: "top-start",
-    //   theme: "bubble-menu",
-    //   arrow: false,
-    //   zIndex: 10
-    // });
-
-    computePosition(document.body, div, {})
-
-    // popupRef.current = popup[0]!;
-
-    return () => {
-      if (!popupRef.current) return;
-      // root.unmount();
-    };
-  }, [editor, getPopupContainer]);
-
   return (
     <span ref={containerRef}>
-      <Toggle
-        onClick={() => {
-          popupRef.current?.state.isVisible
-            ? popupRef.current.hide()
-            : popupRef.current?.show();
-        }}
-        size="sm"
-        pressed={false}
-      >
-        {current}
-      </Toggle>
+      <Popover>
+        <PopoverTrigger>
+          <Toggle
+            size="sm"
+            pressed={false}
+          >
+            {current}
+          </Toggle>
+        </PopoverTrigger>
+        <PopoverContent asChild className="w-auto p-1"  >
+          <div>
+            <Toggle size="sm" onClick={toggle("left")} ><AlignLeft className="h-4 w-4" /></Toggle>
+            <Toggle size="sm" onClick={toggle("center")} ><AlignCenter className="h-4 w-4" /></Toggle>
+            <Toggle size="sm" onClick={toggle("right")} ><AlignRight className="h-4 w-4" /></Toggle>
+            <Toggle size="sm" onClick={toggle("justify")} ><AlignJustify className="h-4 w-4" /></Toggle>
+          </div>
+        </PopoverContent>
+      </Popover>
     </span>
   );
 };

@@ -14,9 +14,9 @@ export const InfoPanelView: React.FC<NodeViewProps> = (props) => {
 		const typeInfo = extension.options.type[type]
 		const Icon = typeInfo.icon;
 
-		return <Alert style={{ backgroundColor: typeInfo.color }} className="rounded-md border-0">
+		return <Alert style={{ backgroundColor: typeInfo.color }} className="rounded-md border-0 text-popover-foreground">
 			<Icon style={{ color: typeInfo.iconColor } as CSSProperties} className="h-5 w-5" />
-			<AlertTitle>
+			<AlertTitle className="mt-1">
 				<input value={node.attrs.tips} className="text-[16px] bg-transparent outline-none leading-none" onChange={(e) => {
 					updateAttributes({ tips: e.target.value })
 				}} />

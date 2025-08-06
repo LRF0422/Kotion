@@ -62,7 +62,7 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
     return (
       <NodeBubbleMenu
         editor={editor}
-        className="bg-popover text-popover-foreground px-1 py-1 rounded-sm shadow-sm border"
+        className="bg-popover text-popover-foreground px-1 py-1 rounded-sm shadow-md border"
         options={wrapTippyOptions}
         {...rest}>
         {children}
@@ -73,7 +73,7 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
   return (
     <>
       <BuiltInTiptapBubbleMenu
-        className=" bg-popover text-popover-foreground px-1 py-1 rounded-sm shadow-sm border"
+        className=" bg-popover text-popover-foreground px-1 py-1 rounded-sm shadow-md border"
         editor={editor}
         options={wrapTippyOptions}
         {...rest}>

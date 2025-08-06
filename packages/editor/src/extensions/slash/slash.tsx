@@ -2,11 +2,10 @@ import React, { ElementType } from "react";
 import { Editor, Node, posToDOMRect } from "@tiptap/core";
 import { ReactRenderer } from "@tiptap/react";
 import Suggestion from "@tiptap/suggestion";
-// import tippy, { Instance } from "tippy.js";
 
 import { SlashMenuView } from "./slash-menu-view";
 import { PluginKey } from "@tiptap/pm/state";
-import { computePosition } from "@floating-ui/dom";
+import { computePosition, autoPlacement } from "@floating-ui/dom";
 import { CellSelection } from "@tiptap/pm/tables";
 
 export type SlashMenuItem =
@@ -80,15 +79,15 @@ export const createSlash = (name: string, options?: SlashOptions) => {
           items: ({ query }) => {
             if (!query) return this.options.items;
 
-            const filter = this.options.items.filter((item: any) => {
+            const filter: any = this.options.items.filter((item: any) => {
               if ("divider" in item) return true;
 
               return item.text.includes(query) || item.slash.includes(query);
             });
 
-            if (filter.every(item => "divider" in item)) return [];
+            if (filter.every((item: any) => "divider" in item)) return [];
 
-            return filter.filter((item, index, arr) => {
+            return filter.filter((item: any, index: any, arr: any) => {
               if (!("divider" in item)) return true;
 
               return arr[index + 1] ? !("divider" in arr[index + 1]!) : false;
@@ -99,16 +98,10 @@ export const createSlash = (name: string, options?: SlashOptions) => {
             let component: ReactRenderer;
             let isEditable: boolean;
 
-            const update = () => {
-              
-            }
-
             return {
               onStart: props => {
                 isEditable = props.editor.isEditable;
                 if (!isEditable) return;
-                console.log('component', component);
-                
                 if (!component || component.element.children.length === 0) {
                   component = new ReactRenderer(SlashMenuView, {
                     props,

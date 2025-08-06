@@ -76,9 +76,11 @@ export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
 
   return (
     <BubbleMenu
+      forNode
       editor={editor}
       shouldShow={shouldShow}
-      tippyOptions={{ getReferenceClientRect }}>
+      getReferenceClientRect={getReferenceClientRect}
+      options={{  }}>
       <div className="flex flex-row items-center gap-1">
         <IconButton onClick={copyMe} icon={<IconCopy />} />
         <IconButton

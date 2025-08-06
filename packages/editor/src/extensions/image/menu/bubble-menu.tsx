@@ -16,6 +16,7 @@ import { useAttributes } from "../../../hooks/use-attributes";
 import { deleteNode, isNodeActive } from "../../../utilities";
 import { Image as ImageExtension } from "../image";
 import { Toggle } from "@kn/ui";
+import { Trash2 } from "@kn/icon";
 
 const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const { width: currentWidth, height: currentHeight, align } = useAttributes(
@@ -80,11 +81,11 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
       editor={editor}
       pluginKey={"image-bubble-menu"}
       shouldShow={shouldShow}
-      tippyOptions={{
-        getReferenceClientRect
-      }}
-      forNode>
-      <div>
+      getReferenceClientRect={getReferenceClientRect}
+      options={{}}
+      forNode
+    >
+      <div className="flex items-center gap-1">
         <Toggle
           size="sm"
           pressed={!!(align === "left") as boolean}
@@ -108,10 +109,9 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
         >
           <IconImageAlignRight />
         </Toggle>
-
         <Divider />
         <Toggle size="sm" pressed={false} onClick={deleteMe}>
-          <IconDelete />
+          <Trash2 className="h-4 w-4" />
         </Toggle>
       </div>
     </BubbleMenu>

@@ -6,7 +6,7 @@ import {
 	DropcursorExtension, GapcursorExtension, CodeExtension, CodeblockExtension, DragableExtension, TextAlignExtension, InfoPanelExtension,
 	SubscriptExtension, SuperScriptExtension, ColumnsExtension, ColorExtension, HardBreakExtension, TitleExtension, LinkExtension, ImageExtension,
 	BulletListExtension, DateExtension, EmojiExtension, DatabaseExtension, KnowledgeMathExtension, BackGroundColorExtension, FigmaExtension, LoadingExtension, ExcalidrawExtension,
-	TaskListExtension, AIExtension, NoteMarkExtension, PageContentExtension, FlowExtension, MarkDownExtension, SyncBlockExtension, MindMapExtension, IdentExtension, LineHeightExtension, CommentExtension, FormatPainterExtension, TableOfContentExtension
+	TaskListExtension, AIExtension, NoteMarkExtension, PageContentExtension, FlowExtension, MarkDownExtension, SyncBlockExtension, MindMapExtension, IdentExtension, LineHeightExtension, CommentExtension, FormatPainterExtension, TableOfContentExtension, EventExtension
 } from "../extensions";
 
 export const buildInExtension: ExtensionWrapper[] = [
@@ -16,28 +16,21 @@ export const buildInExtension: ExtensionWrapper[] = [
 	ItalicExtension,
 	TableExtension,
 	DragableExtension,
-	// StatusExtension,
 	LinkExtension,
 	ColumnsExtension,
 	HorizontalRuleExtension,
 	StrikeExtension,
 	BoldExtension,
 	ImageExtension,
-	// MindExtension,
 	OrderListExtension,
 	BulletListExtension,
 	FlowExtension,
 	InfoPanelExtension,
-	// CommentExtension,
 	CodeblockExtension,
 	ColorExtension,
-	// SheetExtension,
 	TextAlignExtension,
 	EmojiExtension,
 	DateExtension,
-	// CarouselExtension,
-	// IFrameExtension,
-	// AiExtension,
 	BackGroundColorExtension,
 	TypographyExtension,
 	BlockquoteExtension,
@@ -55,7 +48,6 @@ export const buildInExtension: ExtensionWrapper[] = [
 	LoadingExtension,
 	ExcalidrawExtension,
 	TaskListExtension,
-	// NoteMarkExtension,
 	PageContentExtension,
 	SyncBlockExtension,
 	MindMapExtension,
@@ -63,5 +55,6 @@ export const buildInExtension: ExtensionWrapper[] = [
 	LineHeightExtension,
 	CommentExtension,
 	FormatPainterExtension,
-	TableOfContentExtension
+	TableOfContentExtension,
+	EventExtension
 ]

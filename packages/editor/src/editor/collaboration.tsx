@@ -103,7 +103,7 @@ export const CollaborationEditor = forwardRef<
           <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />
           <div className={cn("w-full", props.className)}>
             <div className="flex relative w-full ">
-              <StyledEditor className="w-full grow">
+              <StyledEditor className="w-full grow overflow-auto">
                 <EditorContent editor={editor} id="editor-container" />
               </StyledEditor>
               {

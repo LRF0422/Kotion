@@ -9,6 +9,7 @@ import { createRoot } from "react-dom/client";
 import React, { useCallback, useEffect, useRef } from "react";
 import { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
+import { Divider } from "@editor/components";
 const cellButtonsConfig = [
   {
     name: "insertRowUp",
@@ -127,7 +128,7 @@ const predicateIsTableCell = (node: PMNode) =>
 const TableCellMenu: React.FC<React.PropsWithChildren<{
   editor: Editor;
 }>> = ({ editor }) => {
-  const popupRef = useRef< any | null>(null);
+  const popupRef = useRef<any | null>(null);
 
   const toggleVisible = useCallback(() => {
     popupRef.current?.state.isVisible
@@ -139,26 +140,25 @@ const TableCellMenu: React.FC<React.PropsWithChildren<{
     const div = document.createElement("div");
 
     const root = createRoot(div)
-    root.render(
-      // <Menu
-      //   style={{
-      //     minWidth: 200,
-      //     padding: "0 !important"
-      //   }}>
-      //   {cellButtonsConfig.map((btn, index) => {
-      //     return btn.divider ? (
-      //       <Divider key={index}/>
-      //     ) : (
-      //       <Menu.Item key={btn.name} onClick={() => btn?.action?.(editor)}>
-      //         {btn.name}
-      //       </Menu.Item>
-      //     );
-      //   })}
-      // </Menu>
-      <div></div>
-    )
+    // root.render(
+    //   <Menu
+    //     style={{
+    //       minWidth: 200,
+    //       padding: "0 !important"
+    //     }}>
+    //     {cellButtonsConfig.map((btn, index) => {
+    //       return btn.divider ? (
+    //         <Divider key={index} />
+    //       ) : (
+    //         <Menu.Item key={btn.name} onClick={() => btn?.action?.(editor)}>
+    //           {btn.name}
+    //         </Menu.Item>
+    //       );
+    //     })}
+    //   </Menu>
+    // )
 
-    const    getReferenceClientRect = () => {
+    const getReferenceClientRect = () => {
       const { selection } = editor.state;
       const parent = findParentNode(predicateIsTableCell)(selection);
 
