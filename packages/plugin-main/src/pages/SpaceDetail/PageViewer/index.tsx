@@ -112,7 +112,7 @@ export const PageViewer: React.FC = () => {
             <EditorRender
                 ref={editor}
                 content={page.content ? JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">")) : undefined}
-                className="h-[calc(100vh-60px)] overflow-auto"
+                className="h-[calc(100vh-70px)] overflow-auto"
                 id={params.pageId as string}
                 isEditable={false}
                 isColl={false}

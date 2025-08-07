@@ -28,5 +28,5 @@ export type { MathExtensionOption };
 
 export const KnowledgeMathExtension: ExtensionWrapper = {
   name: 'math',
-  extendsion: MathExtension.configure({ evaluation: true, katexOptions: { macros: { "\\B": "\\mathbb{B}" } }, delimiters: "dollar" })
+  extendsion: MathExtension.configure({ evaluation: false, katexOptions: { macros: { "\\B": "\\mathbb{B}" } }, delimiters: "dollar" })
 }

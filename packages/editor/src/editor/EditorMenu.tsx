@@ -59,7 +59,7 @@ export const EditorMenu: React.FC<{ editor: Editor, extensionWrappers: Extension
 
     return <>
         {
-            toolbar && <div className="flex flex-row gap-0 w-full items-center z-20 shadow-sm border-b">
+            toolbar && <div className="flex flex-row gap-0 w-full items-center z-20 shadow-sm border-b flex-wrap">
                 <Toggle onClick={() => editor.commands.undo()} size="sm"><Undo2 className="h-4 w-4" /></Toggle>
                 <Toggle onClick={() => editor.commands.redo()} size="sm"><Redo2 className="h-4 w-4" /></Toggle>
                 <Separator orientation="vertical" />

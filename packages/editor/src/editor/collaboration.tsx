@@ -37,7 +37,7 @@ export const CollaborationEditor = forwardRef<
   Editor | null,
   React.PropsWithChildren<CollaborationEditorProps>
 >((props, ref) => {
-  const { content, user, provider, pageInfo, toc, withTitle } = props
+  const { content, user, provider, pageInfo, toc, withTitle, width = 'w-[calc(100vw-350px)]' } = props
 
   const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle)
 
@@ -99,17 +99,17 @@ export const CollaborationEditor = forwardRef<
   return (editor &&
     <PageContext.Provider value={pageInfo}>
       <ThemeProvider theme={light}>
-        <div className={cn("w-[calc(100vw-350px)] grow z-30")}>
+        <div className={cn("grow z-30", width)}>
           <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />
           <div className={cn("w-full", props.className)}>
-            <div className="flex relative w-full ">
-              <StyledEditor className="w-full grow overflow-auto">
+            <div className="flex relative w-full">
+              <StyledEditor className="w-full grow overflow-auto h-full">
                 <EditorContent editor={editor} id="editor-container" />
               </StyledEditor>
               {
-                <div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>
+                toc && (<div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>
                   <ToC editor={editor} />
-                </div>
+                </div>)
               }
             </div>
           </div>

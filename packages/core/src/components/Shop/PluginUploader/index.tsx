@@ -7,10 +7,11 @@ import {
 import React, { PropsWithChildren } from "react";
 import { z } from "@kn/ui";
 import { CheckCircle2, PlusIcon } from "@kn/icon";
-import { EditorRender, JSONContent } from "@kn/editor";
+import { CollaborationEditor, EditorRender, JSONContent } from "@kn/editor";
 import { useApi, useUploadFile } from "../../../hooks";
 import { useSafeState } from "ahooks";
 import { APIS } from "../../../api";
+import { EditorMenu } from "@kn/editor/src/editor/EditorMenu";
 
 interface Description {
     label: string,
@@ -30,23 +31,23 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
     const logoSize = [
         {
             label: '64X64',
-            size: [64, 64],
-            src: ""
+            size: 64,
+            path: ""
         },
         {
             label: '100X100',
-            size: [100, 100],
-            src: ""
+            size: 100,
+            path: ""
         },
         {
             label: '120X120',
-            size: [120, 120],
-            src: ""
+            size: 120,
+            path: ""
         },
         {
             label: '150X150',
-            size: [150, 150],
-            src: ""
+            size: 150,
+            path: ""
         }
     ]
 
@@ -71,9 +72,9 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
             text: z.string()
         })),
         logos: z.array(z.object({
-            size: z.array(z.number()),
+            size: z.number(),
             label: z.string(),
-            src: z.string()
+            path: z.string()
         })),
         resourcePath: z.string(),
         description: z.string().min(2).max(50),
@@ -198,17 +199,20 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                         ))}
                         <IconButton icon={<PlusIcon className="h-4 w-4" />} className="ml-1" />
                     </TabsList>
-                    <div className="h-[200px]">
-                        {descriptions.map((item, index) => (
-                            <TabsContent key={index} value={item.label} className=" border rounded-sm h-full overflow-auto">
-                                <EditorRender
+                    <div className="h-full">
+                        {descriptions.map((item: any, index) => (
+                            <TabsContent key={index} value={item.label} className=" border w-full rounded-sm h-full overflow-auto">
+                                <CollaborationEditor
                                     id=""
                                     content={item.content}
                                     isEditable
+                                    width="w-[550px]"
                                     withTitle={false}
                                     toc={false}
-                                    toolbar={false}
-                                    className="w-full h-full prose-sm"
+                                    toolbar={true}
+                                    user={null}
+                                    token=""
+                                    className="h-[250px] prose-sm"
                                     onBlur={(editor) => {
                                         const content = editor.getJSON();
                                         setDescriptions((data) => data.map((it, i) => i === index ? { ...it, content } : it))
@@ -242,12 +246,12 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
             case 2: return <div className="flex gap-3 w-full h-[200px] justify-center">
                 {
                     logos.map((it, index) => (
-                        it.src ? <img src={usePath(it.src)} width={it.size[0] + 'px'} height={it.size[1] + 'px'} /> :
+                        it.path ? <img src={usePath(it.path)} width={it.size + 'px'} height={it.size + 'px'} /> :
                             <div className=" space-y-1" key={index}>
                                 <div
                                     style={{
-                                        width: it.size[0],
-                                        height: it.size[1]
+                                        width: it.size,
+                                        height: it.size
                                     }}
                                     className={`flex items-center justify-center border rounded-sm bg-muted cursor-pointer`}
                                     onClick={() => {

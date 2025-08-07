@@ -7,10 +7,10 @@ import {
 } from '@ui/components/ui/popover'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@ui/components/ui/tabs'
 import { cn } from '@ui/lib/utils'
-import { CircleOff, Paintbrush } from '@kn/icon'
+import { Paintbrush } from '@kn/icon'
 import { ReactNode, useMemo, useState } from 'react'
 import React from 'react'
-import { IconButton, Toggle } from '..'
+import { Toggle } from '..'
 
 export function PickerExample() {
   const [background, setBackground] = useState('#B4D455')
@@ -42,16 +42,12 @@ export function ColorPicker({
 }) {
   const solids = [
     '#E2E2E2',
-    '#ff75c3',
-    '#ffa647',
-    '#ffe83f',
-    '#9fff5b',
-    '#70e2ff',
-    '#cd93ff',
-    '#09203f',
-    '#b83b5e',
-    '#6a2c70',
-    '#f9ed69'
+    '#ff75c3', '#ffa647', '#ffe83f', '#9fff5b', '#70e2ff',
+    '#cd93ff', '#09203f', '#b83b5e', '#6a2c70', '#f9ed69',
+    "#606c38", "#283618", "#fefae0", "#dda15e", "#bc6c25",
+    "#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51",
+    "#e63946", "#f1faee", "#a8dadc", "#457b9d", "#1d3557",
+    "#cb997e", "#ddbea9", "#ffe8d6", "#b7b7a4", "#a5a58d", "#6b705c"
   ]
 
   const gradients = [

@@ -107,13 +107,6 @@ export const StyledEditor = styled.div.attrs({
     display: none;
   }
 
-
-  hr {
-    position: relative;
-    height: 1em;
-    border: 0;
-  }
-
   iframe {
     width: 100%;
     height: 100%;

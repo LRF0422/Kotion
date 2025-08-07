@@ -30,6 +30,7 @@ export interface EditorRenderProps extends EditorProvider, EditorKit {
   provider?: HocuspocusProvider,
   className?: string,
   toolbar?: boolean,
+  width?: string,
   user?: any
   toc?: boolean
   pageInfo?: PageContextProps
@@ -48,7 +49,8 @@ export const EditorRender = forwardRef<
     toc = true,
     pageInfo,
     withTitle = true,
-    onBlur
+    onBlur,
+    width = 'w-[calc(100vw-320px)]'
   } = props;
 
   const [exts, wrappers] = useEditorExtension(undefined, withTitle)
@@ -77,16 +79,16 @@ export const EditorRender = forwardRef<
   return (editor &&
     <PageContext.Provider value={pageInfo}>
       <ThemeProvider theme={light}>
-        <div className={cn("w-[calc(100vw-320px)] grow z-30")}>
+        <div className={cn("grow z-30", width)}>
           <div className={cn("w-full", props.className)}>
             <div className="flex relative w-full ">
               <StyledEditor className="w-full grow overflow-auto">
                 <EditorContent editor={editor} id="editor-container" />
               </StyledEditor>
               {
-                <div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>
+                toc && (<div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>
                   <ToC editor={editor} />
-                </div>
+                </div>)
               }
             </div>
           </div>
