@@ -1,66 +1,45 @@
-import { ArchiveIcon, ArrowUpRight, BoxIcon, DownloadIcon, FilePlus2, PlusIcon, SearchIcon } from "@kn/icon";
-import { Avatar, Button, Card, CardDescription, CardFooter, CardHeader, CardTitle, EmptyState, IconButton, Input, ScrollArea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, cn } from "@kn/ui";
-import React, { useState } from "react";
+import { ArchiveIcon, ArrowUpRight, BoxIcon, DownloadIcon, FilePlus2, Loader2, PlusIcon, SearchIcon } from "@kn/icon";
+import {
+    Avatar, Button, Card, CardDescription, CardFooter, CardHeader, CardTitle, EmptyState, IconButton, Input,
+    ScrollArea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, cn
+} from "@kn/ui";
+import React, { useEffect, useState } from "react";
 import { PluginUploader } from "../PluginUploader";
+import { useApi, useUploadFile } from "../../../hooks";
+import { APIS } from "../../../api";
+import { useToggle } from "ahooks";
 
 export const Marketplace: React.FC = () => {
 
     const [categories, setCategories] = React.useState<string[]>([
         "All",
         "Knowledge",
-        "Project",
+        "Feature",
         "Tools",
         "Music",
         "Wiki"
     ])
 
     const [selectCategory, setSelectCategory] = useState<string>("All")
-    const [plugins, setPlugins] = useState<any[]>([
-        {
-            name: "Plugin 1",
-            category: "Knowledge"
-        },
-        {
-            name: "Plugin 2",
-            category: "Project"
-        },
-        {
-            name: "Plugin 3",
-            category: "Tools"
-        },
-        {
-            name: "Plugin 4",
-            category: "Music"
-        },
-        {
-            name: "Plugin 5",
-            category: "Wiki"
-        },
-        {
-            name: "Plugin 6",
-            category: "Wiki"
-        },
-        {
-            name: "Plugin 6",
-            category: "Wiki"
-        },
-        {
-            name: "Plugin 6",
-            category: "Wiki"
-        },
-        {
-            name: "Plugin 6",
-            category: "Wiki"
-        },
-        {
-            name: "Plugin 6",
-            category: "Wiki"
-        },
-        {
-            name: "Plugin 6",
-            category: "Wiki"
-        }
-    ])
+    const [plugins, setPlugins] = useState<any[]>([])
+    const [installing, { toggle }] = useToggle(false)
+    const { usePath } = useUploadFile()
+
+    useEffect(() => {
+        useApi(APIS.GET_PLUGIN_LIST).then(res => {
+            setPlugins(res.data.records)
+        })
+    }, [])
+
+    const installPlugin = (id: string) => {
+        toggle()
+        useApi(APIS.INSTALL_PLUGIN, {
+            versionId: id
+        }).then(res => {
+            toggle()
+        })
+
+    }
 
     return <div className="w-full">
         <div className=" flex justify-between items-start w-full px-2 py-3 border-b shadow-sm">
@@ -117,33 +96,37 @@ export const Marketplace: React.FC = () => {
                                 <div key={index}>
                                     <Card className="relative hover:bg-muted/30 ">
                                         <div className=" w-[80px] text-center absolute right-0 top-0 text-xs p-1  rounded-bl-md rounded-tr-md bg-secondary">
-                                            {plugin.category}
+                                            {plugin?.category?.value}
                                         </div>
                                         <CardHeader>
                                             <CardTitle className=" text-sm">
                                                 <div className="flex items-center gap-2">
-                                                    <Avatar className=" border rounded-sm w-[60px] h-[60px]">
-                                                        {/* <HomeIcon /> */}
+                                                    <Avatar className=" rounded-sm w-[60px] h-[60px]">
+                                                        <img src={usePath(plugin.icon)} alt="logo" />
                                                     </Avatar>
                                                     <div>
-                                                        anspire_search
-                                                        <div className="text-xs text-gray-400">
-                                                            anspire
-                                                            /
-                                                            anspire_search
+                                                        {plugin.name}
+                                                        <div className="text-xs text-gray-400 space-x-1">
+                                                            <span>{plugin.developer}</span>
+                                                            <span>/</span>
+                                                            <span>{plugin.maintainer}</span>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </CardTitle>
-                                            <CardDescription>
-                                                The next generation of real-time intelligent search engine for AI provides multi-channel and full-network content in a user-friendly format for your applications.
+                                            <CardDescription className="h-[80px] text-wrap overflow-ellipsis">
+                                                {plugin.description}
                                             </CardDescription>
                                         </CardHeader>
                                         <CardFooter className="pb-3 space-x-1">
-                                            <IconButton className="px-2 border" icon={<div className="flex items-center gap-1 text-sm">
-                                                <DownloadIcon className="w-4 h-4" />
-                                                Install
-                                            </div>} />
+                                            <IconButton
+                                                disabled={!!plugin.installedVersion}
+                                                className="px-2 border"
+                                                onClick={() => installPlugin(plugin.currentVersionId)}
+                                                icon={installing ? <Loader2 className="w-4 h-4 animate-spin" /> : <div className="flex items-center gap-1 text-sm">
+                                                    <DownloadIcon className="w-4 h-4" />
+                                                    {plugin.installedVersion ? "Installed" : "Install"}
+                                                </div>} />
                                             <IconButton className="px-2 border" icon={<div className="flex items-center gap-1 text-sm">
                                                 <ArrowUpRight className="w-4 h-4" />
                                                 Details

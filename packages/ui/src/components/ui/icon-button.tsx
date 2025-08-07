@@ -9,7 +9,18 @@ export interface IconButtonProps {
     disabled?: boolean;
 }
 export const IconButton: React.FC<IconButtonProps> = (props) => {
-    return <div className={cn("p-1 hover:bg-muted rounded-md cursor-pointer flex items-center justify-center", props.className)} onClick={props.onClick} >
+    return <div
+        className={
+            cn("p-1 hover:bg-muted rounded-md cursor-pointer flex items-center justify-center",
+                props.className,
+                props.disabled && "opacity-50 cursor-not-allowed"
+            )
+        }
+        onClick={() => {
+            if (!props.disabled) {
+                props.onClick?.()
+            }
+        }} >
         {props.icon}
     </div>
 }

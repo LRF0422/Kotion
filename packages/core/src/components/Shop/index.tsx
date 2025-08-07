@@ -2,6 +2,7 @@ import { ArrowDownToLine, BellRing, BoxIcon, BoxSelect, DownloadCloud, PlugIcon,
 import {
     Accordion, AccordionContent,
     AccordionItem, AccordionTrigger,
+    Avatar,
     Badge, Button, EmptyState, Input, Separator, Tooltip,
     TooltipContent, TooltipProvider, TooltipTrigger
 } from "@kn/ui";
@@ -10,13 +11,14 @@ import { useNavigator } from "../../hooks/use-navigator";
 import { Outlet } from "react-router-dom";
 import { PluginUploader } from "./PluginUploader";
 import { PluginManager } from "./PluginManager";
-import { useApi } from "../../hooks";
+import { useApi, useUploadFile } from "../../hooks";
 import { APIS } from "../../api";
 import { useSafeState } from "ahooks";
 
 
-const Item = ({ installed = false }) => {
+const Item: React.FC<{ item: any }> = ({ item }) => {
     const navigator = useNavigator()
+    const { usePath } = useUploadFile()
     return <TooltipProvider>
         <Tooltip>
             <TooltipTrigger>
@@ -26,22 +28,24 @@ const Item = ({ installed = false }) => {
                     })
                 }}>
                     <div >
-                        <BellRing className="h-6 w-6" />
+                        <Avatar>
+                            <img src={usePath(item.icon)} />
+                        </Avatar>
                     </div>
                     <div className="flex flex-col items-start">
                         <div className="flex items-center">
                             <div className="text-sm text-left font-medium leading-none text-nowrap w-[145px]">
-                                Push Notifications
+                                {item.name}
                             </div>
                             <div className="flex gap-1 text-[12px]">
                                 <div className="flex items-center"><DownloadCloud className="h-3 w-3" />100M</div>
                                 <div className="flex items-center"><Star className="h-3 w-3" />100M</div>
                             </div>
                         </div>
-                        <div className="text-sm text-muted-foreground text-nowrap w-[120px] text-ellipsis">
-                            Send notifications to device.
+                        <div className="text-sm text-muted-foreground w-[120px] text-ellipsis">
+                            {item.description}
                         </div>
-                        <Badge>Knowledge</Badge>
+                        <Badge>{item.developer}</Badge>
                     </div>
                     <Button variant="secondary" className=" absolute bottom-1 right-1 h-6 px-2">
                         <ArrowDownToLine className="h-3 w-3" />
@@ -69,8 +73,8 @@ export const Shop: React.FC = () => {
     const navigator = useNavigator()
 
     useEffect(() => {
-        useApi(APIS.GET_PLUGIN_LIST).then(res => {
-            setPlugins(res.data)
+        useApi(APIS.GET_INSTALLED_PLUGINS).then(res => {
+            setInstalledPlugins(res.data)
         })
     }, [])
 
@@ -110,7 +114,7 @@ export const Shop: React.FC = () => {
                         <div className="flex flex-col gap-1">
                             {
                                 installedPlugins.length > 0 ? installedPlugins.map((plugin, index) => {
-                                    return <Item key={index} installed={true} />
+                                    return <Item key={index} item={plugin} />
                                 }) : <EmptyState
                                     title="No installed plugins"
                                     className=" border-none "
@@ -126,7 +130,7 @@ export const Shop: React.FC = () => {
                         </div>
                     </AccordionContent>
                 </AccordionItem>
-                <AccordionItem value="recommended" className="p-1">
+                {/* <AccordionItem value="recommended" className="p-1">
                     <AccordionTrigger className="text-[12px] p-0 pb-1 ">RECOMMENDED</AccordionTrigger>
                     <AccordionContent>
                         <div className="flex flex-col gap-1">
@@ -134,7 +138,7 @@ export const Shop: React.FC = () => {
                             <Item />
                         </div>
                     </AccordionContent>
-                </AccordionItem>
+                </AccordionItem> */}
             </Accordion>
         </div>
         <div>

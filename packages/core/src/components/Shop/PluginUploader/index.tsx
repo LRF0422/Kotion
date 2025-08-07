@@ -7,11 +7,10 @@ import {
 import React, { PropsWithChildren } from "react";
 import { z } from "@kn/ui";
 import { CheckCircle2, PlusIcon } from "@kn/icon";
-import { CollaborationEditor, EditorRender, JSONContent } from "@kn/editor";
+import { CollaborationEditor, JSONContent } from "@kn/editor";
 import { useApi, useUploadFile } from "../../../hooks";
 import { useSafeState } from "ahooks";
 import { APIS } from "../../../api";
-import { EditorMenu } from "@kn/editor/src/editor/EditorMenu";
 
 interface Description {
     label: string,
@@ -246,7 +245,10 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
             case 2: return <div className="flex gap-3 w-full h-[200px] justify-center">
                 {
                     logos.map((it, index) => (
-                        it.path ? <img src={usePath(it.path)} width={it.size + 'px'} height={it.size + 'px'} /> :
+                        it.path ? <div style={{
+                            width: it.size,
+                            height: it.size
+                        }}> <img src={usePath(it.path)} /></div> :
                             <div className=" space-y-1" key={index}>
                                 <div
                                     style={{
@@ -256,7 +258,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                                     className={`flex items-center justify-center border rounded-sm bg-muted cursor-pointer`}
                                     onClick={() => {
                                         upload().then(res => {
-                                            setLogos(logos.map((item, i) => i === index ? { ...item, src: res.name } : item))
+                                            setLogos(logos.map((item, i) => i === index ? { ...item, path: res.name } : item))
                                         })
                                     }}
                                 >

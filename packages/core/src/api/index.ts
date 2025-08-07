@@ -22,9 +22,12 @@ export const APIS = {
         url: '/knowledge-wiki/plugin',
         method: 'GET'
     } as API,
-
+    INSTALL_PLUGIN: {
+        url: '/knowledge-wiki/plugin/install',
+        method: 'POST'
+    } as API,
     GET_INSTALLED_PLUGINS: {
-        url: '/knowledge-wiki/plugin',
+        url: '/knowledge-wiki/plugin/install/list',
         method: 'GET'
     } as API,
     CREATE_PLUGIN: {
