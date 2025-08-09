@@ -120,12 +120,12 @@ export const Marketplace: React.FC = () => {
                                         </CardHeader>
                                         <CardFooter className="pb-3 space-x-1">
                                             <IconButton
-                                                disabled={!!plugin.installedVersion}
+                                                disabled={!!(plugin.installeddVersions.length > 0)}
                                                 className="px-2 border"
                                                 onClick={() => installPlugin(plugin.currentVersionId)}
                                                 icon={installing ? <Loader2 className="w-4 h-4 animate-spin" /> : <div className="flex items-center gap-1 text-sm">
                                                     <DownloadIcon className="w-4 h-4" />
-                                                    {plugin.installedVersion ? "Installed" : "Install"}
+                                                    {plugin.installeddVersions.length > 0 ? "Installed" : "Install"}
                                                 </div>} />
                                             <IconButton className="px-2 border" icon={<div className="flex items-center gap-1 text-sm">
                                                 <ArrowUpRight className="w-4 h-4" />

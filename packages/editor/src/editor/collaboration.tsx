@@ -52,6 +52,9 @@ export const CollaborationEditor = forwardRef<
       content: content,
       immediatelyRender: true,
       shouldRerenderOnTransaction: false,
+      onBlur: ({ editor }) => {
+        props.onBlur && props.onBlur(editor)
+      },
       extensions: [
         ...extensions as AnyExtension[],
         // Collaboration.configure({

@@ -77,7 +77,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
         })),
         resourcePath: z.string(),
         description: z.string().min(2).max(50),
-        descriptions: z.array(z.object({
+        versionDescs: z.array(z.object({
             label: z.string(),
             content: z.object({})
         }))
@@ -109,12 +109,10 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
 
     const handleUpload = () => {
         const value = form.getValues()
-        value.descriptions = descriptions
+        value.versionDescs = descriptions.map(item => ({ label: item.label, content: JSON.stringify(item.content) }))
         value.resourcePath = resourcePath
         value.logos = logos
         useApi(APIS.CREATE_PLUGIN, null, value).then(res => {
-            console.log("res", res);
-
         })
     }
 

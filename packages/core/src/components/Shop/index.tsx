@@ -24,7 +24,7 @@ const Item: React.FC<{ item: any }> = ({ item }) => {
             <TooltipTrigger>
                 <div className=" flex items-center gap-2 rounded-md p-4 h-[75px] hover:bg-muted cursor-pointer relative" onClick={() => {
                     navigator.go({
-                        to: '/plugin-hub/12123132'
+                        to: `/plugin-hub/${item.id}`
                     })
                 }}>
                     <div >
@@ -42,7 +42,7 @@ const Item: React.FC<{ item: any }> = ({ item }) => {
                                 <div className="flex items-center"><Star className="h-3 w-3" />100M</div>
                             </div>
                         </div>
-                        <div className="text-sm text-muted-foreground w-[120px] text-ellipsis">
+                        <div className="text-sm text-muted-foreground w-[120px] text-nowrap overflow-ellipsis">
                             {item.description}
                         </div>
                         <Badge>{item.developer}</Badge>
@@ -54,13 +54,15 @@ const Item: React.FC<{ item: any }> = ({ item }) => {
                 </div>
             </TooltipTrigger>
             <TooltipContent side="right" className="space-y-1">
-                <div className="text-[16px]">Push Notification</div>
+                <div className="text-[16px]">{item.name}</div>
                 <div className="flex gap-1 text-[14px]">
                     <div className="flex items-center"><DownloadCloud className="h-3 w-3" />100M</div>
                     <Separator orientation="vertical" />
                     <div className="flex items-center"><Star fill="text-yellow-500" className="h-3 w-3" />100M</div>
                 </div>
-                <div className="text-[14px] text-muted-foreground">Send notifications to device.</div>
+                <div className="text-[14px] text-muted-foreground">
+                    {item.description}
+                </div>
             </TooltipContent>
         </Tooltip>
     </TooltipProvider>

@@ -43,7 +43,7 @@ window.editor = editor
 export type Plugins = common.KPlugin<any>[]
 
 export interface AppProps {
-    plugins?: Plugins
+    plugins?: Plugins,
 }
 
 const reslove = (config: common.RouteConfig) => {
@@ -71,28 +71,25 @@ export const App: React.FC<AppProps> = (props) => {
         }
 
         const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
-        installedPlugins && installedPlugins.forEach(async (plugin, index) => {
+        if (!installedPlugins || installedPlugins.length === 0) {
+            setLoadFinished(true)
+            return
+        }
+
+        Promise.all(installedPlugins.map((plugin) => {
             const path = usePath(plugin.resourcePath)
-            const js = await importScript(path)
-            console.log(Object.values(js)[0]);
-            if (js) {
-                setAllPlugins(all => [...all, Object.values(js)[0]])
-                if (index === installedPlugins.length - 1) {
-                    setLoadFinished(true)
-                }
-            }
+            return importScript(path)
+        })).then(res => {
+            setAllPlugins(all => [...all, ...res.map(it => Object.values(it)[0])])
+            setLoadFinished(true)
         })
     }, [])
 
     useEffect(() => {
         if (loadFinished) {
-            console.log("start");
-
             allPlugins.forEach(plugin => {
                 pluginManager.register(plugin)
             })
-            console.log("all plugins", allPlugins);
-
             const routeConfigs = pluginManager.resloveRoutes()
             const routes = routeConfigs.map(it => reslove(it))
             setRouter(createBrowserRouter(createRoutesFromElements(

@@ -6,7 +6,7 @@ import React, {
 import { useEditor, EditorContent } from "@tiptap/react";
 import { EditorKit } from "./kit";
 import { EditorProvider } from "./provider";
-import { AnyExtension, Content, Editor } from "@tiptap/core";
+import { AnyExtension, Content, Editor, JSONContent, getSchema, rewriteUnknownContent } from "@tiptap/core";
 import { ExtensionWrapper } from "@kn/common";
 import { useEditorExtension } from "./use-extension";
 import { HocuspocusProvider } from "@hocuspocus/provider";
@@ -16,7 +16,6 @@ import { StyledEditor } from "../styles/editor";
 import { cn } from "@kn/ui";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
-import { EditorMenu } from "./EditorMenu";
 
 export interface EditorRenderProps extends EditorProvider, EditorKit {
   content?: Content;
@@ -53,11 +52,12 @@ export const EditorRender = forwardRef<
     width = 'w-[calc(100vw-320px)]'
   } = props;
 
-  const [exts, wrappers] = useEditorExtension(undefined, withTitle)
+  const [exts] = useEditorExtension(undefined, withTitle)
 
   const editor = useEditor(
     {
-      content: content,
+      content: content ? rewriteUnknownContent(content as JSONContent,
+        getSchema([...(exts as AnyExtension[] || []), ...(extensions as AnyExtension[] || [])])).json : null,
       editable: isEditable,
       extensions: [
         ...(extensions as AnyExtension[] || []),

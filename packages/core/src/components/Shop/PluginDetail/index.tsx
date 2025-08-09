@@ -1,17 +1,35 @@
-import { CollaborationEditor, EditorRender } from "@kn/editor";
-import { BellDotIcon, CheckCircle2, DownloadCloudIcon, Settings } from "@kn/icon";
-import { Badge, Button, Empty, Rate, Separator, Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
-import React from "react";
+import { CollaborationEditor } from "@kn/editor";
+import { CheckCircle2, DownloadCloudIcon, Settings } from "@kn/icon";
+import { Avatar, Badge, Button, Empty, Rate, Separator, Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
+import { useSafeState } from "ahooks";
+import React, { useEffect } from "react";
+import { useParams } from "react-router-dom";
+import { useApi, useUploadFile } from "../../../hooks";
+import { APIS } from "../../../api";
 
 
 export const PluginDetail: React.FC = () => {
 
-    return <div className=" justify-center h-[100vh]">
-        <div className="flex gap-10 items-center justify-center shadow-sm border-b pb-2 pt-2">
-            <BellDotIcon className="h-20 w-20" strokeWidth={0.8} />
+    const [pluginDetail, setPluginDetail] = useSafeState<any>()
+    const params = useParams()
+    const { usePath } = useUploadFile()
+
+    useEffect(() => {
+        if (params.id) {
+            useApi(APIS.GET_PLUGIN, { id: params.id }).then(res => {
+                setPluginDetail(res.data)
+            })
+        }
+    }, [params.id])
+
+    return pluginDetail && <div className=" justify-center h-[100vh]">
+        <div className="flex gap-10 items-center justify-center shadow-sm border-b pb-4 pt-4">
+            <Avatar className="w-[80px] h-[80px]">
+                <img src={usePath(pluginDetail?.icon)} alt="logo" />
+            </Avatar>
             <div className=" grow-1 space-y-1">
                 <div className="text-[30px] flex items-center gap-2">
-                    <div>Push Notifications</div>
+                    <div>{pluginDetail?.name}</div>
                     <Badge variant="outline">V 0.0.1</Badge>
                 </div>
                 <div className="flex items-center gap-3 h-[30px]">
@@ -28,7 +46,7 @@ export const PluginDetail: React.FC = () => {
                         <Rate rating={5} variant="yellow" disabled />
                     </div>
                 </div>
-                <div> Send notifications to device.</div>
+                <div> {pluginDetail.description}</div>
                 <div className="gap-1 flex items-center">
                     <Button className="text-[12px] py-0.1 h-5">Install</Button>
                     <Settings className="p-1 hover:bg-muted rounded-sm cursor-pointer" />
@@ -36,7 +54,7 @@ export const PluginDetail: React.FC = () => {
             </div>
         </div>
 
-        <div className=" bg-muted/60 flex justify-center  h-[calc(100vh-150px)]">
+        <div className=" bg-muted/60 flex justify-center  h-[calc(100vh-170px)]">
             <Tabs className="mt-5 " defaultValue="Feature">
                 <TabsList>
                     <TabsTrigger value="Feature">Feature</TabsTrigger>
