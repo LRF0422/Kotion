@@ -8,5 +8,5 @@ import { fileManager } from '@kn/file-manager'
 import { mermaid } from "@kn/mermaid-plugin"
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[DefaultPluginInstance, fileManager, mermaid]} />
+  <App plugins={[ mermaid]} />
 )

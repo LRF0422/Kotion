@@ -51,7 +51,7 @@ export class PluginManager {
         if (exists) {
             console.warn("plugin " + plugin.name + "is exists")
         } else {
-            this.plugins.push(plugin)
+            this.plugins = [...this.plugins, plugin]
         }
     }
 

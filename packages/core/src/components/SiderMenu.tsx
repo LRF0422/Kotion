@@ -1,6 +1,6 @@
 import { useNavigator } from "../hooks/use-navigator";
 import { Blocks, Inbox, LayoutDashboard, MessageCircleCodeIcon, Power, Settings, UserRoundPlus } from "@kn/icon";
-import React, { useContext, useMemo } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import { Empty } from "@kn/ui";
 import { useLocation } from "react-router-dom";
 import { cn } from "@kn/ui";
@@ -16,6 +16,7 @@ import { Separator } from "@kn/ui";
 import { SettingDlg } from "./settings/SeetingDlg";
 import { ModeToggle } from "@kn/ui";
 import { AppContext, SiderMenuItemProps } from "@kn/common";
+import { event } from "src/event";
 
 
 
@@ -25,6 +26,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
     const location = useLocation()
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { pluginManager } = useContext(AppContext)
+    const [flag, setFlag] = useState(0)
 
     const handleLogout = () => {
         localStorage.removeItem("knowledge-token")
@@ -40,6 +42,12 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
         //     })
         // })
     }
+
+    useEffect(() => {
+        event.on("REFRESH_PLUSINS", () => {
+            setFlag(f => f + 1)
+        })
+    }, [])
 
 
     const menus: SiderMenuItemProps[] = useMemo(() => {
@@ -135,7 +143,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
                 }
             }
         ]
-    }, [])
+    }, [pluginManager?.plugins])
 
     return <div className="flex flex-col items-center gap-4">
         {

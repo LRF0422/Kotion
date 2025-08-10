@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createBrowserRouter, createRoutesFromElements, Route, RouterProvider } from "react-router-dom";
 import { Layout } from "./Layout";
 import { ThemeProvider, Toaster } from "@kn/ui";
@@ -20,6 +20,7 @@ import { importScript } from "./utils/utils";
 import { Marketplace } from "./components/Shop/Marketplace";
 import { APIS } from "./api";
 import { set } from "lodash";
+import { event } from "./event";
 
 
 declare global {
@@ -65,6 +66,14 @@ export const App: React.FC<AppProps> = (props) => {
     const [loadFinished, setLoadFinished] = useSafeState<boolean>(false)
     const { usePath } = core.useUploadFile()
     const pluginManager = useMemo<PluginManager>(() => new PluginManager(), [])
+    const [flag, setFlag] = useState(0)
+
+    useEffect(() => {
+        event.on("REFRESH_PLUSINS", () => {
+            setFlag(f => f+1)
+        })
+    }, [])
+
     useAsyncEffect(async () => {
         if (plugins) {
             setAllPlugins(all => [...all, ...plugins])
@@ -83,13 +92,14 @@ export const App: React.FC<AppProps> = (props) => {
             setAllPlugins(all => [...all, ...res.map(it => Object.values(it)[0])])
             setLoadFinished(true)
         })
-    }, [])
+    }, [flag])
 
     useEffect(() => {
         if (loadFinished) {
             allPlugins.forEach(plugin => {
                 pluginManager.register(plugin)
             })
+            console.log("reload")
             const routeConfigs = pluginManager.resloveRoutes()
             const routes = routeConfigs.map(it => reslove(it))
             setRouter(createBrowserRouter(createRoutesFromElements(
@@ -106,7 +116,7 @@ export const App: React.FC<AppProps> = (props) => {
                 ]
             )))
         }
-    }, [loadFinished])
+    }, [loadFinished, allPlugins])
     return router && <AppContext.Provider value={{
         pluginManager: pluginManager
     }}>

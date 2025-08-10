@@ -1,4 +1,4 @@
-import { CollaborationEditor } from "@kn/editor";
+import { CollaborationEditor, EditorRender } from "@kn/editor";
 import { CheckCircle2, DownloadCloudIcon, Settings } from "@kn/icon";
 import { Avatar, Badge, Button, Empty, Rate, Separator, Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
 import { useSafeState } from "ahooks";
@@ -55,21 +55,20 @@ export const PluginDetail: React.FC = () => {
         </div>
 
         <div className=" bg-muted/60 flex justify-center  h-[calc(100vh-170px)]">
-            <Tabs className="mt-5 " defaultValue="Feature">
+            <Tabs className="mt-5 w-[800px] " defaultValue="Feature">
                 <TabsList>
                     <TabsTrigger value="Feature">Feature</TabsTrigger>
                     <TabsTrigger value="Detail">Detail</TabsTrigger>
                     <TabsTrigger value="ChangeLog">ChangeLog</TabsTrigger>
                 </TabsList>
                 <TabsContent value="Feature" className=" overflow-auto border rounded-sm ">
-                    <CollaborationEditor
+                    <EditorRender
                         user={null}
-                        token=""
                         id="Feature"
                         toc={false}
                         toolbar={false}
-                        isEditable
-                        width="w-[90%]"
+                        isEditable={false}
+                        width="w-full"
                         className="rounded-sm prose-sm h-[calc(100vh-300px)]"
                         withTitle={false} />
                 </TabsContent>

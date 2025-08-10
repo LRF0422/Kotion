@@ -37,5 +37,9 @@ export const APIS = {
     GET_PLUGIN: {
         url: '/knowledge-wiki/plugin/:id',
         method: 'GET'
+    } as API,
+    UNINSTALL_PLUGIN: {
+        url: '/knowledge-wiki/plugin/uninstall',
+        method: 'POST'
     } as API
 }

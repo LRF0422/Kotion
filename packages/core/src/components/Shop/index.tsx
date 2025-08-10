@@ -1,4 +1,4 @@
-import { ArrowDownToLine, BellRing, BoxIcon, BoxSelect, DownloadCloud, PlugIcon, PlusSquare, RefreshCcw, Slack, Star } from "@kn/icon";
+import { BoxSelect, DownloadCloud, PlusSquare, RefreshCcw, Slack, Star, Trash2 } from "@kn/icon";
 import {
     Accordion, AccordionContent,
     AccordionItem, AccordionTrigger,
@@ -6,7 +6,7 @@ import {
     Badge, Button, EmptyState, Input, Separator, Tooltip,
     TooltipContent, TooltipProvider, TooltipTrigger
 } from "@kn/ui";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigator } from "../../hooks/use-navigator";
 import { Outlet } from "react-router-dom";
 import { PluginUploader } from "./PluginUploader";
@@ -14,15 +14,16 @@ import { PluginManager } from "./PluginManager";
 import { useApi, useUploadFile } from "../../hooks";
 import { APIS } from "../../api";
 import { useSafeState } from "ahooks";
+import { event } from "../../event";
 
 
-const Item: React.FC<{ item: any }> = ({ item }) => {
+const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void }> = ({ item, handleUnInstall }) => {
     const navigator = useNavigator()
     const { usePath } = useUploadFile()
     return <TooltipProvider>
         <Tooltip>
             <TooltipTrigger>
-                <div className=" flex items-center gap-2 rounded-md p-4 h-[75px] hover:bg-muted cursor-pointer relative" onClick={() => {
+                <div className=" flex items-center gap-2 rounded-md p-6 h-[75px] hover:bg-muted/50 cursor-pointer relative" onClick={() => {
                     navigator.go({
                         to: `/plugin-hub/${item.id}`
                     })
@@ -47,9 +48,13 @@ const Item: React.FC<{ item: any }> = ({ item }) => {
                         </div>
                         <Badge>{item.developer}</Badge>
                     </div>
-                    <Button variant="secondary" className=" absolute bottom-1 right-1 h-6 px-2">
-                        <ArrowDownToLine className="h-3 w-3" />
-                        Install
+                    <Button variant="secondary" className=" absolute bottom-1 right-1 h-6 px-2 flex items-center gap-1" onClick={(e) => {
+                        e.stopPropagation()
+                        handleUnInstall(item.activeVersionId)
+                        event.emit("REFRESH_PLUSINS")
+                    }}>
+                        <Trash2 className="h-3 w-3" />
+                        Uninstall
                     </Button>
                 </div>
             </TooltipTrigger>
@@ -70,19 +75,31 @@ const Item: React.FC<{ item: any }> = ({ item }) => {
 
 export const Shop: React.FC = () => {
 
-    const [plugins, setPlugins] = useSafeState([])
     const [installedPlugins, setInstalledPlugins] = useSafeState([])
     const navigator = useNavigator()
+    const [flag, setFlag] = useState(0)
 
     useEffect(() => {
         useApi(APIS.GET_INSTALLED_PLUGINS).then(res => {
             setInstalledPlugins(res.data)
+        })
+    }, [flag])
+
+    useEffect(() => {
+        event.on("REFRESH_PLUSINS", () => {
+            setFlag(f => f + 1)
         })
     }, [])
 
     const goToMarketplace = () => {
         navigator.go({
             to: '/plugin-hub'
+        })
+    }
+
+    const uninstall = (versionId: string) => {
+        useApi(APIS.UNINSTALL_PLUGIN, { versionId: versionId }).then(res => {
+            setFlag(f => f + 1)
         })
     }
 
@@ -116,7 +133,7 @@ export const Shop: React.FC = () => {
                         <div className="flex flex-col gap-1">
                             {
                                 installedPlugins.length > 0 ? installedPlugins.map((plugin, index) => {
-                                    return <Item key={index} item={plugin} />
+                                    return <Item key={index} item={plugin} handleUnInstall={uninstall} />
                                 }) : <EmptyState
                                     title="No installed plugins"
                                     className=" border-none "

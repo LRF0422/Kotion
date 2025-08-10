@@ -8,6 +8,7 @@ import { PluginUploader } from "../PluginUploader";
 import { useApi, useUploadFile } from "../../../hooks";
 import { APIS } from "../../../api";
 import { useToggle } from "ahooks";
+import { event } from "../../../event";
 
 export const Marketplace: React.FC = () => {
 
@@ -37,6 +38,7 @@ export const Marketplace: React.FC = () => {
             versionId: id
         }).then(res => {
             toggle()
+            event.emit("REFRESH_PLUSINS")
         })
 
     }
@@ -90,7 +92,7 @@ export const Marketplace: React.FC = () => {
                             icons={[BoxIcon]}
                             description="Try searching for something else"
                         />
-                    ) : <div className=" grid grid-cols-3 gap-2 w-full h-full">
+                    ) : <div className=" grid xl:grid-cols-4 2xl:grid-cols-4 md:grid-cols-3 gap-2 w-full h-full">
                         {
                             plugins.map((plugin, index) => (
                                 <div key={index}>
