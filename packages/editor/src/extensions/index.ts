@@ -1,3 +1,4 @@
+
 export { Bold, BoldStaticMenu, BoldExtension } from "./bold";
 export { Italic, ItalicStaticMenu, ItalicExtension } from "./italic";
 export { Underline, UnderlineStaticMenu, UnderlineExtension } from "./underline";
@@ -62,3 +63,4 @@ export { CommentExtension } from "./comment"
 export { FormatPainterExtension } from "./format-painter"
 export { TableOfContentExtension } from "./table-of-content"
 export { EventExtension } from "./event"
+export { SelectionExtension } from "./selection"

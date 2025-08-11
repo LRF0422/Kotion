@@ -21,6 +21,11 @@ export const StyledEditor = styled.div.attrs({
     cursor: pointer
   }
 
+  // .selected-node {
+  //   background-color: #eee;
+  //   select-background-color: #eee;
+  // }
+
   .ProseMirror {
     position: relative;
     outline: none;

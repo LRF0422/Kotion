@@ -35,7 +35,7 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 					</EmojiPicker>
 				</PopoverContent>
 			</Popover>
-			<NodeViewContent className=" w-full" />
+			<NodeViewContent />
 			{
 				(!props.editor.isEditable) && <div className="flex flex-row gap-2 text-sm">
 					<div className=" text-gray-500 italic flex flex-col gap-1 px-2 py-1 hover:bg-muted transition-all duration-200 rounded-sm">

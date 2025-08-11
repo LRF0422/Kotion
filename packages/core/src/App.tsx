@@ -19,7 +19,6 @@ import { PluginDetail } from "./components/Shop/PluginDetail";
 import { importScript } from "./utils/utils";
 import { Marketplace } from "./components/Shop/Marketplace";
 import { APIS } from "./api";
-import { set } from "lodash";
 import { event } from "./event";
 
 
@@ -61,20 +60,7 @@ const reslove = (config: common.RouteConfig) => {
 
 export const App: React.FC<AppProps> = (props) => {
     const { plugins } = props
-    const [router, setRouter] = useSafeState<any>(
-        createBrowserRouter(createRoutesFromElements(
-            [
-                <Route path='/' element={<Layout />} errorElement={<Login />}>
-                    <Route path="/plugin-hub" element={<Shop />}>
-                        <Route path="/plugin-hub" element={<Marketplace />} />
-                        <Route path="/plugin-hub/:id" element={<PluginDetail />} />
-                    </Route>
-                </Route>,
-                <Route path='/login' element={<Login />} />,
-                <Route path='/sign-up' element={<SignUpForm />} />
-            ]
-        )
-        ))
+    const [router, setRouter] = useSafeState<any>()
     const [allPlugins, setAllPlugins] = useSafeState<any[]>([])
     const [loadFinished, setLoadFinished] = useSafeState<boolean>(false)
     const { usePath } = core.useUploadFile()
@@ -93,8 +79,8 @@ export const App: React.FC<AppProps> = (props) => {
             setAllPlugins(all => [...all, ...plugins])
         }
 
-        console.log('enter', localStorage.getItem("token"));
-        if (localStorage.getItem("isLogin") === "false") {
+        console.log('enter', localStorage.getItem("knowledge-token"));
+        if (!!localStorage.getItem("knowledge-token")) {
             const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
             if (!installedPlugins || installedPlugins.length === 0) {
                 setLoadFinished(true)
@@ -108,6 +94,23 @@ export const App: React.FC<AppProps> = (props) => {
                 setAllPlugins(all => [...all, ...res.map(it => Object.values(it)[0])])
                 setLoadFinished(true)
             })
+        } else {
+            setRouter(createBrowserRouter(createRoutesFromElements(
+                [
+                    <Route path='/' element={<Layout />} errorElement={<Login />}>
+                        <Route path="/plugin-hub" element={<Shop />}>
+                            <Route path="/plugin-hub" element={<Marketplace />} />
+                            <Route path="/plugin-hub/:id" element={<PluginDetail />} />
+                        </Route>
+                    </Route>,
+                    <Route path='/login' element={<Login />} />,
+                    <Route path='/sign-up' element={<SignUpForm />} />
+                ]
+            )))
+            if (window.location.href.includes("red")) {
+                return
+            }
+            window.location.href = '/login?red'
         }
 
     }, [flag])

@@ -9,7 +9,7 @@ import React, { useEffect } from 'react'
 
 export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number }> = ({ item, onItemClick, index }) => {
     return (
-        <div className={cn("hover:bg-muted rounded-sm m-1 p-1 text-sm transition-all duration-300 w-full overflow-hidden text-ellipsis text-wrap")} style={{
+        <div className={cn("hover:bg-muted rounded-sm m-1 p-1 text-sm transition-all duration-300 w-[280px] overflow-hidden text-ellipsis text-nowrap")} style={{
             paddingLeft: `${10 * item.level}px`
         }}>
             <a className={`before:[content:attr(data-item-index)"."] flex gap-1`} href={`#${item.id}`} onClick={e => onItemClick(e, item)} data-item-index={index}>{item.text}</a>

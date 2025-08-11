@@ -41,7 +41,7 @@ export const getDecorations = (doc: any, selection: Selection): DecorationSet =>
     return DecorationSet.empty;
 };
 
-export const SelectionExtension = Extension.create({
+export const SelectionExt = Extension.create({
     name: 'selection',
     priority: 100,
     addProseMirrorPlugins() {

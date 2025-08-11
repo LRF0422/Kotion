@@ -153,21 +153,12 @@ importers:
 
   apps/vite:
     dependencies:
-      '@kn/common':
-        specifier: workspace:*
-        version: link:../../packages/common
       '@kn/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@kn/editor':
-        specifier: workspace:*
-        version: link:../../packages/editor
       '@kn/file-manager':
         specifier: workspace:*
         version: link:../../packages/plugin-file-manager
-      '@kn/icon':
-        specifier: workspace:*
-        version: link:../../packages/icon
       '@kn/mermaid-plugin':
         specifier: workspace:*
         version: link:../../packages/plugin-mermaid

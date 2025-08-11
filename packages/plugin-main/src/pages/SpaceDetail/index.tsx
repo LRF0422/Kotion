@@ -147,7 +147,7 @@ export const SpaceDetail: React.FC = () => {
             </div>
             <div className=" absolute right-1">
                 {treeNode.isDraft && <Badge className="py-0 px-2"  >Draft</Badge>}
-                <Button size="sm" variant="ghost" onClick={(e) => {
+                <Button size="sm" className="h-5" variant="ghost" onClick={(e) => {
                     e.stopPropagation()
                     handleCreatePage(treeNode.id)
                 }}>
@@ -155,7 +155,7 @@ export const SpaceDetail: React.FC = () => {
                 </Button>
                 <DropdownMenu>
                     <DropdownMenuTrigger>
-                        <Button size="sm" variant="ghost" onClick={(e) => {
+                        <Button size="sm" className="h-5" variant="ghost" onClick={(e) => {
                             e.stopPropagation()
                             e.preventDefault()
                         }}><MoreHorizontal className="h-3 w-3" /></Button>

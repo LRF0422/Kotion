@@ -493,7 +493,7 @@ const TreeItemGroup: React.FC<any> = (props) => {
             </div>
         </div>
         {
-            props.height ? <ScrollArea className={`max-h-[500px] overflow-y-auto max-h`}>
+            props.height ? <ScrollArea className={`h-[500px]`}>
                 {props.children}
             </ScrollArea> : props.children
         }

@@ -4,7 +4,7 @@ import React from "react";
 
 export interface IconButtonProps {
     icon: React.ReactNode;
-    onClick?: () => void;
+    onClick?: (e?: any) => void;
     className?: string;
     disabled?: boolean;
 }
@@ -16,9 +16,9 @@ export const IconButton: React.FC<IconButtonProps> = (props) => {
                 props.disabled && "opacity-50 cursor-not-allowed"
             )
         }
-        onClick={() => {
+        onClick={(e) => {
             if (!props.disabled) {
-                props.onClick?.()
+                props.onClick?.(e)
             }
         }} >
         {props.icon}
