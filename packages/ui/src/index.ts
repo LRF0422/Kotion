@@ -9,3 +9,6 @@ export {
 export { zodResolver } from "@hookform/resolvers/zod"
 export * from "zod"
 export { useForm } from "react-hook-form"
+
+import styled from "styled-components"
+export {styled}

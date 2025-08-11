@@ -224,8 +224,9 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
             case 4: return <div className="flex justify-center">
                 <FileUploader value={attachments} className=" w-[100%]"
                     accept={{
-                        "*": []
+                        "text/javascript": []
                     }}
+                    maxSize={1024 * 1024 * 10}
                     onValueChange={(files) => setAttachments(files)}
                     onUpload={(file) => {
                         return uploadFile(file[0]).then((res) => {

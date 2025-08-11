@@ -13,4 +13,6 @@ export * from "browser-fs-access"
 import deepEqual from "deep-equal"
 import moment from "moment"
 import axios from "axios"
-export { deepEqual, moment, axios }
+import { isArray, isObject } from "lodash";
+export { deepEqual, moment, axios, isArray, isObject }
+

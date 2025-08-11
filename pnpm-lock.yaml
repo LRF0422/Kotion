@@ -546,6 +546,37 @@ importers:
         specifier: workspace:*
         version: link:../rollup-config
 
+  packages/plugin-database:
+    dependencies:
+      '@kn/common':
+        specifier: workspace:*
+        version: link:../common
+      '@kn/core':
+        specifier: workspace:*
+        version: link:../core
+      '@kn/editor':
+        specifier: workspace:*
+        version: link:../editor
+      '@kn/icon':
+        specifier: workspace:*
+        version: link:../icon
+      '@kn/ui':
+        specifier: workspace:*
+        version: link:../ui
+      react-big-calendar:
+        specifier: ^1.14.0
+        version: 1.19.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react-data-grid:
+        specifier: 7.0.0-beta.47
+        version: 7.0.0-beta.47(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+    devDependencies:
+      '@kn/rollup-config':
+        specifier: workspace:*
+        version: link:../rollup-config
+      '@types/react-big-calendar':
+        specifier: ^1.8.11
+        version: 1.16.2
+
   packages/plugin-file-manager:
     dependencies:
       '@kn/common':
@@ -771,6 +802,9 @@ importers:
       sonner:
         specifier: ^1.5.0
         version: 1.7.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      styled-components:
+        specifier: ^6.1.12
+        version: 6.1.19(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       vaul:
         specifier: ^0.9.1
         version: 0.9.9(@types/react-dom@18.3.7(@types/react@18.3.23))(@types/react@18.3.23)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

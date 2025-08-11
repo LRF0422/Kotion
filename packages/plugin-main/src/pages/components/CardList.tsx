@@ -16,9 +16,8 @@ export interface CardListProps {
 export const CardList: React.FC<CardListProps> = (props) => {
     return (props.data?.length > 0 && <div className="grid grid-cols-4 gap-4 w-full">
         {props.data.map((it: any, index) => (
-            <div>
+            <div key={index}>
                 <Card className={cn(" hover:bg-muted transition-all my-0 cursor-pointer", props.config?.cover && ` bg-[url('http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${it[props.config.cover]}')]`, props.className)}
-                    key={index}
                     style={props.config?.cover ? {
                         backgroundImage: `url('http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${it[props?.config?.cover]}')`,
                         backgroundSize: 'cover'

@@ -57,27 +57,28 @@ export const PluginDetail: React.FC = () => {
         <div className=" bg-muted/60 flex justify-center  h-[calc(100vh-170px)]">
             <Tabs className="mt-5 w-[800px] " defaultValue="Feature">
                 <TabsList>
-                    <TabsTrigger value="Feature">Feature</TabsTrigger>
-                    <TabsTrigger value="Detail">Detail</TabsTrigger>
-                    <TabsTrigger value="ChangeLog">ChangeLog</TabsTrigger>
+                    {
+                        pluginDetail.currentVersion.versionDescription.map((it: any, index: number) => (
+                            <TabsTrigger key={index} value={it.label}>{it.label}</TabsTrigger>
+                        ))
+                    }
                 </TabsList>
-                <TabsContent value="Feature" className=" overflow-auto border rounded-sm ">
-                    <EditorRender
-                        user={null}
-                        id="Feature"
-                        toc={false}
-                        toolbar={false}
-                        isEditable={false}
-                        width="w-full"
-                        className="rounded-sm prose-sm h-[calc(100vh-300px)]"
-                        withTitle={false} />
-                </TabsContent>
-                <TabsContent value="Detail">
-                    <Empty />
-                </TabsContent>
-                <TabsContent value="ChangeLog">
-                    <Empty />
-                </TabsContent>
+                {
+                        pluginDetail.currentVersion.versionDescription.map((it: any, index: number) => (
+                           <TabsContent value={it.label} className=" overflow-auto border rounded-sm ">
+                                <EditorRender
+                                    content={JSON.parse(it.content)}
+                                    user={null}
+                                    id="Feature"
+                                    toc={false}
+                                    toolbar={false}
+                                    isEditable={false}
+                                    width="w-full"
+                                    className="rounded-sm prose-sm h-[calc(100vh-300px)]"
+                                    withTitle={false} />
+                            </TabsContent>
+                        ))
+                    }
             </Tabs>
         </div>
     </div>

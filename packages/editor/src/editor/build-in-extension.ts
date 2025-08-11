@@ -41,7 +41,7 @@ export const buildInExtension: ExtensionWrapper[] = [
 	GapcursorExtension,
 	DropcursorExtension,
 	MarkDownExtension,
-	DatabaseExtension,
+	// DatabaseExtension,
 	TitleExtension,
 	KnowledgeMathExtension,
 	FigmaExtension,

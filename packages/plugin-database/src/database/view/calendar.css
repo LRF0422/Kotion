@@ -1,0 +1,27 @@
+/* @import "@repo/ui/globals.css"; */
+
+.rbc-selected-cell {
+    @apply bg-muted
+}
+
+.rbc-month-view {
+    @apply border
+}
+
+.rbc-off-range-bg {
+    @apply bg-muted
+}
+
+.rbc-toolbar button {
+    @apply dark:text-popover-foreground hover:bg-muted active:bg-muted visited:bg-muted visited:text-popover
+}
+
+
+.rbc-current-time-indicator {
+    @apply bg-muted
+}
+
+.rbc-today {
+    @apply bg-muted-foreground/70
+}
+

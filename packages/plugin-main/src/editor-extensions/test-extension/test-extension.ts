@@ -1,4 +1,4 @@
-import { Node } from "@kn/editor";
+import { PMNode as Node } from "@kn/editor";
 
 
 export const TestExt = Node.create({

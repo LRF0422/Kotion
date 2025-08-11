@@ -1,0 +1,23 @@
+{
+    // "extends": "@kn/typescript-config/react-library.json",
+    "compilerOptions": {
+        "baseUrl": ".",
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "isolatedModules": true,
+        "moduleResolution": "node",
+        "preserveWatchOutput": true,
+        "skipLibCheck": true,
+        "noEmit": true,
+        "strict": true,
+        "jsx": "react",
+        "target": "ES2020",
+        "paths": {}
+    },
+    "include": [
+        "src"
+    ],
+    "exclude": [
+        "node_modules"
+    ]
+}

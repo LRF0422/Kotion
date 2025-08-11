@@ -1,4 +1,4 @@
-import { CommandProps, Node, RawCommands, ReactNodeViewRenderer, mergeAttributes } from "@kn/editor";
+import { CommandProps,PMNode as Node, RawCommands, ReactNodeViewRenderer, mergeAttributes } from "@kn/editor";
 import { FolderView } from "./FolderView";
 
 export const Folder = Node.create({

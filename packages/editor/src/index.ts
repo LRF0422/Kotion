@@ -1,7 +1,9 @@
 export * from "./editor"
+export * from "./editor/utilities"
 export * from "yjs"
 export { TiptapCollabProvider, HocuspocusProvider } from "@hocuspocus/provider"
-export { useEditor, useReactNodeView, EditorContent, type NodeViewProps, NodeViewWrapper, NodeViewContent, type NodeViewRenderer, ReactNodeViewRenderer } from "@tiptap/react"
-
-declare module '@tiptap/core' {
-}
+export { useEditor, useReactNodeView, EditorContent, type NodeViewProps, NodeViewWrapper, NodeViewContent, type NodeViewRenderer, ReactNodeViewRenderer, Node as PMNode } from "@tiptap/react"
+export { Slice, Schema, NodeType, Node } from "@tiptap/pm/model"
+export { EditorState, TextSelection } from "@tiptap/pm/state"
+export { EditorView , Decoration, DecorationSet, type DecorationSource} from "@tiptap/pm/view"
+export { findParentNode } from "prosemirror-utils"
