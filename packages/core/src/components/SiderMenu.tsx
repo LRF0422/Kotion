@@ -16,7 +16,8 @@ import { Separator } from "@kn/ui";
 import { SettingDlg } from "./settings/SeetingDlg";
 import { ModeToggle } from "@kn/ui";
 import { AppContext, SiderMenuItemProps } from "@kn/common";
-import { event } from "src/event";
+import { event } from "../event";
+import { useUploadFile } from "../hooks";
 
 
 
@@ -27,6 +28,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { pluginManager } = useContext(AppContext)
     const [flag, setFlag] = useState(0)
+    const { usePath } = useUploadFile()
 
     const handleLogout = () => {
         localStorage.removeItem("knowledge-token")
@@ -103,7 +105,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
                 icon: <DropdownMenu>
                     <DropdownMenuTrigger>
                         <Avatar className="h-9 w-9 border">
-                            <AvatarImage src={`http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${userInfo?.avatar}`} />
+                            <AvatarImage src={usePath(userInfo?.avatar as string)} />
                             <AvatarFallback>{userInfo?.account}</AvatarFallback>
                         </Avatar>
                     </DropdownMenuTrigger>
@@ -119,7 +121,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
                                     </div>
                                 </div>
                                 <Avatar className="h-9 w-9">
-                                    <AvatarImage src={`http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${userInfo?.avatar}`} />
+                                    <AvatarImage src={usePath(userInfo?.avatar as string)} />
                                     <AvatarFallback>{userInfo?.account}</AvatarFallback>
                                 </Avatar>
                             </div>

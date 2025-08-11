@@ -61,7 +61,20 @@ const reslove = (config: common.RouteConfig) => {
 
 export const App: React.FC<AppProps> = (props) => {
     const { plugins } = props
-    const [router, setRouter] = useSafeState<any>()
+    const [router, setRouter] = useSafeState<any>(
+        createBrowserRouter(createRoutesFromElements(
+            [
+                <Route path='/' element={<Layout />} errorElement={<Login />}>
+                    <Route path="/plugin-hub" element={<Shop />}>
+                        <Route path="/plugin-hub" element={<Marketplace />} />
+                        <Route path="/plugin-hub/:id" element={<PluginDetail />} />
+                    </Route>
+                </Route>,
+                <Route path='/login' element={<Login />} />,
+                <Route path='/sign-up' element={<SignUpForm />} />
+            ]
+        )
+        ))
     const [allPlugins, setAllPlugins] = useSafeState<any[]>([])
     const [loadFinished, setLoadFinished] = useSafeState<boolean>(false)
     const { usePath } = core.useUploadFile()
@@ -70,28 +83,33 @@ export const App: React.FC<AppProps> = (props) => {
 
     useEffect(() => {
         event.on("REFRESH_PLUSINS", () => {
-            setFlag(f => f+1)
+            setFlag(f => f + 1)
         })
     }, [])
 
     useAsyncEffect(async () => {
+
         if (plugins) {
             setAllPlugins(all => [...all, ...plugins])
         }
 
-        const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
-        if (!installedPlugins || installedPlugins.length === 0) {
-            setLoadFinished(true)
-            return
+        console.log('enter', localStorage.getItem("token"));
+        if (localStorage.getItem("isLogin") === "false") {
+            const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
+            if (!installedPlugins || installedPlugins.length === 0) {
+                setLoadFinished(true)
+                return
+            }
+
+            Promise.all(installedPlugins.map((plugin) => {
+                const path = usePath(plugin.resourcePath)
+                return importScript(path)
+            })).then(res => {
+                setAllPlugins(all => [...all, ...res.map(it => Object.values(it)[0])])
+                setLoadFinished(true)
+            })
         }
 
-        Promise.all(installedPlugins.map((plugin) => {
-            const path = usePath(plugin.resourcePath)
-            return importScript(path)
-        })).then(res => {
-            setAllPlugins(all => [...all, ...res.map(it => Object.values(it)[0])])
-            setLoadFinished(true)
-        })
     }, [flag])
 
     useEffect(() => {
@@ -99,12 +117,11 @@ export const App: React.FC<AppProps> = (props) => {
             allPlugins.forEach(plugin => {
                 pluginManager.register(plugin)
             })
-            console.log("reload")
             const routeConfigs = pluginManager.resloveRoutes()
             const routes = routeConfigs.map(it => reslove(it))
             setRouter(createBrowserRouter(createRoutesFromElements(
                 [
-                    <Route path='/' element={<Layout />}>
+                    <Route path='/' element={<Layout />} errorElement={<Login />}>
                         {routes}
                         <Route path="/plugin-hub" element={<Shop />}>
                             <Route path="/plugin-hub" element={<Marketplace />} />

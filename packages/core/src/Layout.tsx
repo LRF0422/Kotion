@@ -19,7 +19,10 @@ export function Layout() {
 
     const dispatch = useDispatch()
     const navigator = useNavigator()
-    const [externalPlugin, setExternalPlugin] = useState<any>()
+
+    useEffect(() => {
+        event.emit("REFRESH_PLUSINS")
+    }, [])
 
     useEffect(() => {
         useApi(APIS.GET_USER_INFO).then((res) => {

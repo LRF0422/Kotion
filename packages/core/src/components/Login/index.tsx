@@ -43,6 +43,7 @@ export function Login() {
 
             const { data } = res
             localStorage.setItem('knowledge-token', `bearer ${data.accessToken}`)
+            localStorage.setItem("isLogin", "false")
             navigator.go({
                 to: '/'
             })
