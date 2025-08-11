@@ -49,7 +49,7 @@ export const EditorRender = forwardRef<
     pageInfo,
     withTitle = true,
     onBlur,
-    width = 'w-[calc(100vw-320px)]'
+    width = 'w-[calc(100vw-350px)]'
   } = props;
 
   const [exts] = useEditorExtension(undefined, withTitle)
