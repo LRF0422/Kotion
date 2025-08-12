@@ -44,4 +44,12 @@ export const Title = Node.create({
 		return ReactNodeViewRenderer(TitleView)
 	},
 
+	addKeyboardShortcuts() {
+		return {
+			"Enter": ({ editor }) => {
+				return true;
+			}
+		}
+	},
+
 })

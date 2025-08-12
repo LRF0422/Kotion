@@ -19,7 +19,7 @@ import { PluginDetail } from "./components/Shop/PluginDetail";
 import { importScript } from "./utils/utils";
 import { Marketplace } from "./components/Shop/Marketplace";
 import { APIS } from "./api";
-import { event } from "./event";
+import { event } from "@kn/common";
 
 
 declare global {

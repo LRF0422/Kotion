@@ -14,7 +14,7 @@ import { PluginManager } from "./PluginManager";
 import { useApi, useUploadFile } from "../../hooks";
 import { APIS } from "../../api";
 import { useSafeState } from "ahooks";
-import { event } from "../../event";
+import { event } from "@kn/common";
 
 
 const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void }> = ({ item, handleUnInstall }) => {

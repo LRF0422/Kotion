@@ -1,5 +1,5 @@
 import React, { ReactNode, forwardRef, useEffect, useImperativeHandle } from "react";
-import { AnyExtension, Content, Editor } from "@tiptap/core";
+import { AnyExtension, Content, Editor, JSONContent, getSchema } from "@tiptap/core";
 
 import { EditorRenderProps } from "./render";
 import { TiptapCollabProvider } from "@hocuspocus/provider";
@@ -18,6 +18,7 @@ import { cn } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
 import { PageContext } from "./context";
 import { log } from "node:console";
+import { rewriteUnknownContent } from "./rewriteUnknowContent";
 
 
 export interface CollaborationEditorProps extends EditorRenderProps {
@@ -49,7 +50,8 @@ export const CollaborationEditor = forwardRef<
   const editor = useEditor(
     {
       editable: true,
-      content: content,
+      content: content ? rewriteUnknownContent(content as JSONContent,
+        getSchema(extensions as AnyExtension[])).json : null,
       immediatelyRender: true,
       shouldRerenderOnTransaction: false,
       onBlur: ({ editor }) => {

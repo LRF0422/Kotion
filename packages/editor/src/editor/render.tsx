@@ -6,7 +6,7 @@ import React, {
 import { useEditor, EditorContent } from "@tiptap/react";
 import { EditorKit } from "./kit";
 import { EditorProvider } from "./provider";
-import { AnyExtension, Content, Editor, JSONContent, getSchema, rewriteUnknownContent } from "@tiptap/core";
+import { AnyExtension, Content, Editor, JSONContent, getSchema } from "@tiptap/core";
 import { ExtensionWrapper } from "@kn/common";
 import { useEditorExtension } from "./use-extension";
 import { HocuspocusProvider } from "@hocuspocus/provider";
@@ -16,6 +16,7 @@ import { StyledEditor } from "../styles/editor";
 import { cn } from "@kn/ui";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
+import { rewriteUnknownContent } from "./rewriteUnknowContent";
 
 export interface EditorRenderProps extends EditorProvider, EditorKit {
   content?: Content;

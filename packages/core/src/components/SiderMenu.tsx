@@ -16,7 +16,7 @@ import { Separator } from "@kn/ui";
 import { SettingDlg } from "./settings/SeetingDlg";
 import { ModeToggle } from "@kn/ui";
 import { AppContext, SiderMenuItemProps } from "@kn/common";
-import { event } from "../event";
+import { event } from "@kn/common";
 import { useUploadFile } from "../hooks";
 
 

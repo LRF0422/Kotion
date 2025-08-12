@@ -1,4 +1,4 @@
-import { Node, ReactNodeViewRenderer, mergeAttributes } from "@kn/editor";
+import { PMNode as Node, ReactNodeViewRenderer, mergeAttributes } from "@kn/editor";
 import { AttachmentView } from "./AttachmentView";
 
 

@@ -12,6 +12,7 @@ import nodePolyfills from "rollup-plugin-polyfill-node";
 import babel from "@rollup/plugin-babel";
 import calc from "postcss-calc";
 import postcssCascadeLayers from "@csstools/postcss-cascade-layers";
+import obfuscatorPlugin from 'rollup-plugin-javascript-obfuscator'
 
 export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   external: [
@@ -57,6 +58,9 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   ],
   plugins: [
     commonjs(),
+    obfuscatorPlugin({
+			  compact: true
+		}),
     resolve({
       browser: true,
     }),
