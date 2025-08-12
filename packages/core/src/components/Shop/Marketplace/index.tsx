@@ -8,7 +8,7 @@ import { PluginUploader } from "../PluginUploader";
 import { useApi, useUploadFile } from "../../../hooks";
 import { APIS } from "../../../api";
 import { useToggle } from "ahooks";
-import { event } from "../../../event";
+import { event } from "@kn/common";
 
 export const Marketplace: React.FC = () => {
 

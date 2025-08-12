@@ -10,7 +10,7 @@ import { useNavigator } from "./hooks/use-navigator"
 import { ErrorBoundary } from "react-error-boundary"
 // import Logo from "@/assets/logo.png"
 import { EventSourcePolyfill } from 'event-source-polyfill';
-import { BUSINESS_TOPIC, ON_MESSAGE, event } from "@kn/common"
+import { BUSINESS_TOPIC, GO_TO_MARKETPLACE, ON_MESSAGE, event } from "@kn/common"
 import { toast } from "@kn/ui"
 import { ErrorPage } from "./components/ErrorPage"
 import React from "react"
@@ -22,6 +22,11 @@ export function Layout() {
 
     useEffect(() => {
         event.emit("REFRESH_PLUSINS")
+        event.on(GO_TO_MARKETPLACE, () => {
+            navigator.go({
+                to: '/plugin-hub'
+            })
+        })
     }, [])
 
     useEffect(() => {

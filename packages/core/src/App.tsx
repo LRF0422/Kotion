@@ -78,8 +78,6 @@ export const App: React.FC<AppProps> = (props) => {
         if (plugins) {
             setAllPlugins(all => [...all, ...plugins])
         }
-
-        console.log('enter', localStorage.getItem("knowledge-token"));
         if (!!localStorage.getItem("knowledge-token")) {
             const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
             if (!installedPlugins || installedPlugins.length === 0) {
@@ -117,6 +115,7 @@ export const App: React.FC<AppProps> = (props) => {
 
     useEffect(() => {
         if (loadFinished) {
+            console.debug("load plugins finished, loaded plugins: ", allPlugins)
             allPlugins.forEach(plugin => {
                 pluginManager.register(plugin)
             })

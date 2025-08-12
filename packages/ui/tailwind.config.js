@@ -3,7 +3,6 @@ module.exports = {
   mode: "jit",
   darkMode: ["class"],
   content: [
-
     "./app/**/*.{ts,tsx}",
     "./src/**/*.{ts,tsx}",
     "./packages/**/*.{html,js,ts,jsx,tsx}",
@@ -11,6 +10,12 @@ module.exports = {
     "node_modules/@kn/**/**/*.{ts,tsx}",
   ],
   prefix: "",
+  safelist: [
+    {
+      pattern:
+        /(bg|text|border)-(purple|pink|orange|yellow|green|black|gray|neutral|red|blue|white)/,
+    },
+  ],
   theme: {
     container: {
       center: "true",
