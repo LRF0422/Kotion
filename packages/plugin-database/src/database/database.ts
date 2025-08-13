@@ -5,7 +5,7 @@ import { createGridView } from "./utils";
 import { TextSelection } from "@kn/editor";
 import { any } from "@kn/ui";
 
-declare module "@kn/core" {
+declare module "@kn/editor" {
     interface Commands<ReturnType> {
         database: {
             insertDatabase: () => ReturnType

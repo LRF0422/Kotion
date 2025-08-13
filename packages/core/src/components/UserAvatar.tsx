@@ -1,5 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import React from "react";
+import { useUploadFile } from "../hooks";
 
 export interface UserAvatarProps {
     userInfo?: {
@@ -17,8 +18,11 @@ export interface UserAvatarProps {
 }
 
 export const UserAvatar: React.FC<UserAvatarProps> = (props) => {
+
+    const { usePath } = useUploadFile()
+    
     return <Avatar className={props.className} onClick={props.onClick}>
-        <AvatarImage src={`http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${props.userInfo?.avatar}`} />
+        <AvatarImage src={usePath(props.userInfo?.avatar as string)} />
         <AvatarFallback>{props.userInfo?.account}</AvatarFallback>
     </Avatar>
 }

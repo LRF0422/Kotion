@@ -10,6 +10,7 @@
     "build": "turbo build",
     "build:core": "pnpm --filter @kn/core build",
     "build:ui": "pnpm --filter @kn/ui build",
+    "build:excalidraw": "pnpm --filter @kn/plugin-excalidraw build",
     "build:editor": "pnpm --filter @kn/editor build",
     "build:main": "pnpm --filter @kn/plugin-main build",
     "build:app": "pnpm --filter vite build",
@@ -65,8 +66,10 @@
     "postcss": "^8.5.6",
     "prettier": "^3.6.2",
     "rollup": "4.45.1",
+    "rollup-plugin-exclude-dependencies-from-bundle": "^1.1.24",
     "rollup-plugin-import-css": "^3.5.8",
     "rollup-plugin-javascript-obfuscator": "^1.0.4",
+    "rollup-plugin-peer-deps-external": "^2.2.4",
     "rollup-plugin-postcss": "^4.0.2",
     "rollup-plugin-typescript-paths": "^1.5.0",
     "tailwind-merge": "^2.6.0",
@@ -81,5 +84,10 @@
   "packageManager": "pnpm@9.1.4",
   "engines": {
     "node": ">=18"
-  }
+  },
+  "browserslist": [
+    "last 2 versions",
+    "android 4",
+    "opera 12"
+  ]
 }

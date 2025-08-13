@@ -12,7 +12,9 @@ import nodePolyfills from "rollup-plugin-polyfill-node";
 import babel from "@rollup/plugin-babel";
 import calc from "postcss-calc";
 import postcssCascadeLayers from "@csstools/postcss-cascade-layers";
-import obfuscatorPlugin from 'rollup-plugin-javascript-obfuscator'
+import obfuscatorPlugin from "rollup-plugin-javascript-obfuscator";
+// import peerDepsExternal from 'rollup-plugin-peer-deps-external';
+import excludeDependenciesFromBundle from "rollup-plugin-exclude-dependencies-from-bundle";
 
 export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   external: [
@@ -39,6 +41,7 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
         "@kn/core": "core",
         react: "React",
       },
+      inlineDynamicImports: true,
     },
     // {
     //   name: pkg.name,
@@ -58,9 +61,6 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   ],
   plugins: [
     commonjs(),
-    obfuscatorPlugin({
-			  compact: true
-		}),
     resolve({
       browser: true,
     }),
@@ -85,7 +85,7 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
           moduleResolution: "bundler",
           declarationDir: "./dist",
           // declarationMap: true,
-          target: "ES2018",
+          target: "ES2020",
           paths: {
             "@ui/*": ["../ui/src/*"],
             "@editor/*": ["../editor/src/*"],

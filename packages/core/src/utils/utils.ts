@@ -1,7 +1,7 @@
 export const importScript = (() => {
     const cache: any = {}
 
-    return (url: any) => {
+    return (url: any, packageName: any) => {
         if (cache[url]) { return Promise.resolve(cache[url]) }
 
         return new Promise((resolve, reject) => {
@@ -14,16 +14,14 @@ export const importScript = (() => {
 
             script.addEventListener('load', () => {
                 document.head.removeChild(script)
-                const newLastWindowKey: any = Object.keys(window).pop()
+                // const newLastWindowKey: any = Object.keys(window).pop()
 
-                const res: any = lastWindowKey !== newLastWindowKey
-                    ? window[newLastWindowKey]
-                    : {}
+                // const res: any = lastWindowKey !== newLastWindowKey
+                //     ? window[newLastWindowKey]
+                //     : {}
 
-                const Com = res.default ? res.default : res
-
+                const Com = window[packageName]
                 cache[url] = Com
-
                 resolve(Com)
             })
             script.addEventListener('error', (error) => {

@@ -14,7 +14,7 @@ import { PluginManager } from "./PluginManager";
 import { useApi, useUploadFile } from "../../hooks";
 import { APIS } from "../../api";
 import { useSafeState } from "ahooks";
-import { event } from "@kn/common";
+import { REFRESH_PLUSINS, event } from "@kn/common";
 
 
 const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void }> = ({ item, handleUnInstall }) => {
@@ -51,7 +51,7 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void }> = ({ 
                     <Button variant="secondary" className=" absolute bottom-1 right-1 h-6 px-2 flex items-center gap-1" onClick={(e) => {
                         e.stopPropagation()
                         handleUnInstall(item.activeVersionId)
-                        event.emit("REFRESH_PLUSINS")
+                        event.emit(REFRESH_PLUSINS)
                     }}>
                         <Trash2 className="h-3 w-3" />
                         Uninstall

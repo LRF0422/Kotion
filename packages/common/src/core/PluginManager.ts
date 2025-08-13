@@ -49,10 +49,18 @@ export class PluginManager {
     register(plugin: KPlugin<any>) {
         const exists = this.plugins.find(it => it.name === plugin.name)
         if (exists) {
-            console.warn("plugin " + plugin.name + "is exists")
+            console.warn("plugin " + plugin.name + " is exists")
         } else {
             this.plugins = [...this.plugins, plugin]
         }
+    }
+
+    setPlugins(plugins: Plugins) {
+        this.plugins = plugins
+    }
+
+    remove(name: string) {
+        this.plugins = this.plugins.filter(it => it.name !== name)
     }
 
     resloveRoutes(): RouteConfig[] {

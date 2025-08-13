@@ -1,25 +1,23 @@
-import { NodeViewProps } from "@tiptap/core";
-import { NodeViewWrapper } from "@tiptap/react";
-import React, { useRef } from "react";
-import { Button, Excalidraw, Footer, WelcomeScreen } from "@excalidraw/excalidraw";
-import { useFullscreen } from "ahooks";
-import { Fullscreen } from "@kn/icon";
+import { NodeViewProps } from "@kn/editor";
+import { NodeViewWrapper } from "@kn/editor";
+import React from "react";
+import { Excalidraw, WelcomeScreen } from "@excalidraw/excalidraw";
 import { useTheme } from "@kn/ui";
+import "@excalidraw/excalidraw/index.css"
 
 export const ExcalidrawView: React.FC<NodeViewProps> = (props) => {
 
-    const ref = useRef<any>()
-    const [_, { toggleFullscreen }] = useFullscreen(ref)
     const { theme } = useTheme()
 
     return <NodeViewWrapper contentEditable={false} className="w-full h-[800px] rounded-md shadow-md p-2">
-        <div className="h-full w-full" ref={ref}>
+        <div className="h-full w-full">
             <Excalidraw
                 theme={theme === 'light' ? 'light' : 'dark'}
                 initialData={{
                     elements: props.node.attrs.elements,
                     appState: { ...props.node.attrs.appState, viewModeEnabled: !props.editor.isEditable, collaborators: new Map() },
-                    files: props.node.attrs.files
+                    files: props.node.attrs.files,
+                    libraryItems: props.node.attrs.libraryItems,
                 }}
                 onChange={(elements, appState, files) => {
                     props.updateAttributes({
@@ -28,15 +26,14 @@ export const ExcalidrawView: React.FC<NodeViewProps> = (props) => {
                         files: { ...files }
                     })
                 }}
+                onLibraryChange={(library) => {
+                    props.updateAttributes({
+                        ...props.node.attrs,
+                        libraryItems: [...library]
+                    })
+                }}
             >
                 <WelcomeScreen />
-                <Footer>
-                    <Button style={{
-                        marginLeft: "0.5rem",
-                        height: '36px',
-                        width: '36px'
-                    }} onSelect={toggleFullscreen}><Fullscreen /></Button>
-                </Footer>
             </Excalidraw>
         </div>
     </NodeViewWrapper>

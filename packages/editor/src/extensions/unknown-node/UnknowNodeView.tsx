@@ -10,7 +10,7 @@ export const UnknownNodeView: React.FC<NodeViewProps> = (props) => {
 
     return <NodeViewWrapper>
         <EmptyState
-            className="w-full max-w-none border-solid border hover:bg-background"
+            className="w-full max-w-none border-solid border hover:bg-background rounded-sm"
             title={`Unknown Node Type : ${props.node.attrs.name}`}
             description="This node type is not supported by the editor."
             icons={[Unlink]}

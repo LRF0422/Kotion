@@ -5,7 +5,7 @@ import {
 	HorizontalRuleExtension, ItalicExtension, TypographyExtension,
 	DropcursorExtension, GapcursorExtension, CodeExtension, CodeblockExtension, DragableExtension, TextAlignExtension, InfoPanelExtension,
 	SubscriptExtension, SuperScriptExtension, ColumnsExtension, ColorExtension, HardBreakExtension, TitleExtension, LinkExtension, ImageExtension,
-	BulletListExtension, DateExtension, EmojiExtension, DatabaseExtension, KnowledgeMathExtension, BackGroundColorExtension, FigmaExtension, LoadingExtension, ExcalidrawExtension,
+	BulletListExtension, DateExtension, EmojiExtension, KnowledgeMathExtension, BackGroundColorExtension, FigmaExtension, LoadingExtension,
 	TaskListExtension, AIExtension, NoteMarkExtension, PageContentExtension, FlowExtension, MarkDownExtension, SyncBlockExtension, MindMapExtension, IdentExtension, LineHeightExtension, CommentExtension, FormatPainterExtension, TableOfContentExtension, EventExtension, SelectionExtension, UnknownNodeExtension
 } from "../extensions";
 
@@ -46,7 +46,6 @@ export const buildInExtension: ExtensionWrapper[] = [
 	KnowledgeMathExtension,
 	FigmaExtension,
 	LoadingExtension,
-	ExcalidrawExtension,
 	TaskListExtension,
 	PageContentExtension,
 	SyncBlockExtension,

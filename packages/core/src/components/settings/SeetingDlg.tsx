@@ -38,7 +38,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 {
                     id: 'MyAccount',
                     name: "我的账号",
-                    customerRender: <div className="flex items-center gap-3 bg-white p-1 rounded-sm border-secondary border">
+                    customerRender: <div className="flex items-center gap-3 bg-muted p-1 rounded-sm border-secondary border">
                         <Avatar className="h-7 w-7 shadow-md">
                             <AvatarImage src={`http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${userInfo?.avatar}`} />
                             <AvatarFallback>{userInfo?.account}</AvatarFallback>

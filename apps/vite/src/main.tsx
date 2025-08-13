@@ -6,7 +6,8 @@ import React from 'react'
 import "@kn/ui/globals.css"
 import { fileManager } from '@kn/file-manager'
 import { mermaid } from "@kn/mermaid-plugin"
+import { database } from "@kn/plugin-database"
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[DefaultPluginInstance, fileManager, mermaid]} />
+  <App plugins={[DefaultPluginInstance, fileManager, mermaid, database]} />
 )

@@ -1,13 +1,13 @@
-import { Node, mergeAttributes } from "@tiptap/core";
-import { ReactNodeViewRenderer } from "@tiptap/react";
+import { PMNode as Node, mergeAttributes } from "@kn/editor";
+import { ReactNodeViewRenderer } from "@kn/editor";
 import { ExcalidrawView } from "./ExcalidrawView";
 
 
-declare module "@tiptap/core" {
+declare module "@kn/editor" {
     interface Commands<ReturnType> {
         excalidraw: {
             insertExcalidraw: () => ReturnType;
-        };
+        }
     }
 }
 
@@ -32,7 +32,13 @@ export const Excalidraw = Node.create({
                     isLoading: false
                 }
             },
-            files: null
+            files: {
+                default: null
+            },
+            libraryItems: {
+                default: null
+            }
+
         }
     },
     renderHTML({ HTMLAttributes }) {

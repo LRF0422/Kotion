@@ -226,7 +226,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                     accept={{
                         "text/javascript": []
                     }}
-                    maxSize={1024 * 1024 * 10}
+                    maxSize={1024 * 1024 * 100}
                     onValueChange={(files) => setAttachments(files)}
                     onUpload={(file) => {
                         return uploadFile(file[0]).then((res) => {

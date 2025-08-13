@@ -74,22 +74,19 @@ export const App: React.FC<AppProps> = (props) => {
     }, [])
 
     useAsyncEffect(async () => {
-
-        if (plugins) {
-            setAllPlugins(all => [...all, ...plugins])
-        }
         if (!!localStorage.getItem("knowledge-token")) {
             const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
             if (!installedPlugins || installedPlugins.length === 0) {
+                setAllPlugins([...(plugins || [])])
                 setLoadFinished(true)
                 return
             }
-
             Promise.all(installedPlugins.map((plugin) => {
                 const path = usePath(plugin.resourcePath)
-                return importScript(path)
+                return importScript(path, plugin.pluginKey)
             })).then(res => {
-                setAllPlugins(all => [...all, ...res.map(it => Object.values(it)[0])])
+                console.log('res', res);
+                setAllPlugins([...(plugins || []), ...res.map(it => Object.values(it)[0])])
                 setLoadFinished(true)
             })
         } else {
@@ -115,6 +112,7 @@ export const App: React.FC<AppProps> = (props) => {
 
     useEffect(() => {
         if (loadFinished) {
+            pluginManager.setPlugins(allPlugins)
             console.debug("load plugins finished, loaded plugins: ", allPlugins)
             allPlugins.forEach(plugin => {
                 pluginManager.register(plugin)
