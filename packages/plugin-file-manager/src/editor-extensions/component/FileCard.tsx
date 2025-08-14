@@ -2,7 +2,7 @@ import { Download, FileIcon, FolderOpenIcon, XIcon } from "@kn/icon";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, cn } from "@kn/ui";
 import { useSafeState } from "@kn/core";
 import React, { useEffect } from "react";
-import { FileItem, FileManagerState, useFileManagerState } from "./FileManager";
+import { FileItem, FileManagerState, useFileManagerState } from "./FileContext";
 
 
 export interface FileCardProps {

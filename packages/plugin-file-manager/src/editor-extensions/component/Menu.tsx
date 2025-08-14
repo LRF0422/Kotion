@@ -4,7 +4,7 @@ import {
     ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger
 } from "@kn/ui";
 import React, { PropsWithChildren, useContext } from "react";
-import { FileManageContext, FileManagerState } from "./FileManager";
+import { FileManageContext, FileManagerState } from "./FileContext";
 
 
 export const Menu: React.FC<PropsWithChildren> = (props) => {

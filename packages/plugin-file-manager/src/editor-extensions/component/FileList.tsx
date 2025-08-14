@@ -1,5 +1,5 @@
 import React from "react"
-import { FileItem } from "./FileManager"
+import { FileItem } from "./FileContext"
 import { Checkbox, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@kn/ui"
 
 

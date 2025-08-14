@@ -1,23 +1,15 @@
-import { Check, DownloadIcon, FileIcon, FolderIcon, FolderOpenIcon, ListIcon, Trash2, UploadIcon, XIcon } from "@kn/icon";
+import { Check, DownloadIcon, FileIcon, FolderIcon, FolderOpenIcon, ListIcon, LucideHome, Trash2, UploadIcon, XIcon } from "@kn/icon";
 import { Button, EmptyState, Separator, TreeView, cn } from "@kn/ui";
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { FileCardList } from "./FileCard";
 import { useSafeState, useUploadFile } from "@kn/core";
 import { useApi } from "@kn/core";
 import { APIS } from "../../api";
 import { Menu } from "./Menu";
 import { toast } from "@kn/ui";
+import { FileItem, FileManageContext } from "./FileContext";
 
 
-export interface FileItem {
-    name: string,
-    isFolder: boolean,
-    id: string,
-    children?: FileItem[]
-    type: {
-        value: 'FOLDER' | 'FILE'
-    }
-}
 
 export interface FileManagerProps {
     folderId?: string
@@ -28,22 +20,9 @@ export interface FileManagerProps {
     multiple?: boolean
     target?: 'folder' | 'file' | 'both'
 }
-export interface FileManagerState {
-    selectable?: boolean,
-    currentFolderItems: FileItem[],
-    selectedFiles: FileItem[]
-    setSelectFiles: React.Dispatch<React.SetStateAction<FileItem[]>>
-    currentFolderId: string
-    setCurrentFolderId: React.Dispatch<React.SetStateAction<string>>,
-    currentItem?: FileItem,
-    setCurrentItem: React.Dispatch<React.SetStateAction<FileItem | undefined>>
-    repoKey: string
-    handleUpload: (type: 'FOLDER' | 'FILE', name?: string) => void
-    handleDelete: (ids: string[]) => void
-}
 
-export const FileManageContext = createContext<FileManagerState | null>(null)
-export const useFileManagerState = () => useContext(FileManageContext)
+
+
 export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     const { selectable = false, onCancel, onConfirm, multiple = false, target = 'both' } = props
@@ -221,7 +200,16 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
             <div className="grid w-full grid-cols-[200px_1fr] flex-1 overflow-auto h-[calc(100%-40px)]">
                 <div className="border-r">
                     <div className=" p-1 bg-muted/80">
-                        Files
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7">
+                            <LucideHome className="w-4 h-4"
+                                onClick={() => {
+                                    setCurrentFolderId(props.folderId || "")
+                                }}
+                            />
+                        </Button>
                     </div>
                     <TreeView
                         initialSelectedId={currentFolderId}

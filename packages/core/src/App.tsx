@@ -112,11 +112,8 @@ export const App: React.FC<AppProps> = (props) => {
 
     useEffect(() => {
         if (loadFinished) {
-            pluginManager.setPlugins(allPlugins)
+            pluginManager.setPlugins(allPlugins.filter(it => !!it))
             console.debug("load plugins finished, loaded plugins: ", allPlugins)
-            allPlugins.forEach(plugin => {
-                pluginManager.register(plugin)
-            })
             const routeConfigs = pluginManager.resloveRoutes()
             const routes = routeConfigs.map(it => reslove(it))
             setRouter(createBrowserRouter(createRoutesFromElements(
