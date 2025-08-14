@@ -15,6 +15,7 @@
     "@kn/core": "workspace:*",
     "@kn/plugin-main": "workspace:*",
     "@kn/plugin-database": "workspace:*",
+    "@kn/plugin-excalidraw": "workspace:*",
     "@kn/file-manager": "workspace:*",
     "@kn/mermaid-plugin": "workspace:*",
     "evaluatex": "^2.2.0",

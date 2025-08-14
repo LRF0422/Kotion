@@ -23,7 +23,7 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void }> = ({ 
     return <TooltipProvider>
         <Tooltip>
             <TooltipTrigger>
-                <div className=" flex items-center gap-2 rounded-md p-6 h-[75px] hover:bg-muted/50 cursor-pointer relative" onClick={() => {
+                <div className=" flex items-center gap-2 rounded-md p-2 h-[75px] hover:bg-muted/50 cursor-pointer relative border-b" onClick={() => {
                     navigator.go({
                         to: `/plugin-hub/${item.id}`
                     })
@@ -33,9 +33,9 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void }> = ({ 
                             <img src={usePath(item.icon)} />
                         </Avatar>
                     </div>
-                    <div className="flex flex-col items-start">
-                        <div className="flex items-center">
-                            <div className="text-sm text-left font-medium leading-none text-nowrap w-[145px]">
+                    <div className="flex flex-col items-start gap-[2px]">
+                        <div className="flex items-center gap-6">
+                            <div className="text-sm text-left font-medium leading-none text-nowrap w-full">
                                 {item.name}
                             </div>
                             <div className="flex gap-1 text-[12px]">
@@ -43,19 +43,21 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void }> = ({ 
                                 <div className="flex items-center"><Star className="h-3 w-3" />100M</div>
                             </div>
                         </div>
-                        <div className="text-sm text-muted-foreground w-[120px] text-nowrap overflow-ellipsis">
+                        <div className="text-sm  text-left text-muted-foreground w-[120px] text-nowrap overflow-ellipsis">
                             {item.description}
                         </div>
-                        <Badge>{item.developer}</Badge>
+                        <div className="flex gap-2">
+                            <Badge>{item.developer}</Badge>
+                            <Button variant="secondary" size="sm" className="h-6 px-2 flex items-center gap-1" onClick={(e) => {
+                                e.stopPropagation()
+                                handleUnInstall(item.activeVersionId)
+                                event.emit(REFRESH_PLUSINS)
+                            }}>
+                                <Trash2 className="h-3 w-3" />
+                                Uninstall
+                            </Button>
+                        </div>
                     </div>
-                    <Button variant="secondary" className=" absolute bottom-1 right-1 h-6 px-2 flex items-center gap-1" onClick={(e) => {
-                        e.stopPropagation()
-                        handleUnInstall(item.activeVersionId)
-                        event.emit(REFRESH_PLUSINS)
-                    }}>
-                        <Trash2 className="h-3 w-3" />
-                        Uninstall
-                    </Button>
                 </div>
             </TooltipTrigger>
             <TooltipContent side="right" className="space-y-1">

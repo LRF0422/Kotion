@@ -9,32 +9,30 @@ export const ExcalidrawView: React.FC<NodeViewProps> = (props) => {
 
     const { theme } = useTheme()
 
-    return <NodeViewWrapper contentEditable={false} className="w-full h-[800px] rounded-md shadow-md p-2">
-        <div className="h-full w-full">
-            <Excalidraw
-                theme={theme === 'light' ? 'light' : 'dark'}
-                initialData={{
-                    elements: props.node.attrs.elements,
-                    appState: { ...props.node.attrs.appState, viewModeEnabled: !props.editor.isEditable, collaborators: new Map() },
-                    files: props.node.attrs.files,
-                    libraryItems: props.node.attrs.libraryItems,
-                }}
-                onChange={(elements, appState, files) => {
-                    props.updateAttributes({
-                        elements: [...elements],
-                        appState,
-                        files: { ...files }
-                    })
-                }}
-                onLibraryChange={(library) => {
-                    props.updateAttributes({
-                        ...props.node.attrs,
-                        libraryItems: [...library]
-                    })
-                }}
-            >
-                <WelcomeScreen />
-            </Excalidraw>
-        </div>
+    return <NodeViewWrapper className="w-full rounded-md shadow-md p-2 h-[800px]">
+        <Excalidraw
+            theme={theme === 'light' ? 'light' : 'dark'}
+            initialData={{
+                elements: props.node.attrs.elements,
+                appState: { ...props.node.attrs.appState, viewModeEnabled: !props.editor.isEditable, collaborators: new Map() },
+                files: props.node.attrs.files,
+                libraryItems: props.node.attrs.libraryItems,
+            }}
+            onChange={(elements, appState, files) => {
+                props.updateAttributes({
+                    elements: [...elements],
+                    appState,
+                    files: { ...files }
+                })
+            }}
+            onLibraryChange={(library) => {
+                props.updateAttributes({
+                    ...props.node.attrs,
+                    libraryItems: [...library]
+                })
+            }}
+        >
+            <WelcomeScreen />
+        </Excalidraw>
     </NodeViewWrapper>
 }

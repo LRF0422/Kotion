@@ -116,7 +116,7 @@ export const Marketplace: React.FC = () => {
                                                     </div>
                                                 </div>
                                             </CardTitle>
-                                            <CardDescription className="h-[80px] text-wrap overflow-ellipsis">
+                                            <CardDescription className="h-[80px] text-wrap overflow-hidden text-ellipsis">
                                                 {plugin.description}
                                             </CardDescription>
                                         </CardHeader>
