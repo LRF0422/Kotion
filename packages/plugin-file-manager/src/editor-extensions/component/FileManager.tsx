@@ -1,4 +1,4 @@
-import { Check, DownloadIcon, FileIcon, FolderIcon, FolderOpenIcon, ListIcon, LucideHome, Trash2, UploadIcon, XIcon } from "@kn/icon";
+import { Check, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, ListIcon, LucideHome, PlusIcon, Trash2, UploadIcon, XIcon } from "@kn/icon";
 import { Button, EmptyState, Separator, TreeView, cn } from "@kn/ui";
 import React, { useCallback, useEffect, useState } from "react";
 import { FileCardList } from "./FileCard";
@@ -35,7 +35,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const [repoKey, setRepoKey] = useState<string>("")
     const [files, setFiles] = useSafeState<any[]>([])
     const { folderId } = props
-    const { uploadedFiles, upload } = useUploadFile()
+    const { upload } = useUploadFile()
 
 
     const createFile = useCallback((type: 'FOLDER' | 'FILE', name?: string) => {
@@ -207,6 +207,26 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             <LucideHome className="w-4 h-4"
                                 onClick={() => {
                                     setCurrentFolderId(props.folderId || "")
+                                }}
+                            />
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7">
+                            <FolderPlusIcon className="w-4 h-4"
+                                onClick={() => {
+                                    createFile('FOLDER')
+                                }}
+                            />
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7">
+                            <FilePlus2Icon className="w-4 h-4"
+                                onClick={() => {
+                                    createFile('FILE')
                                 }}
                             />
                         </Button>

@@ -1,0 +1,119 @@
+import { mergeAttributes, PMNode as Node, nodeInputRule } from "@kn/editor";
+import { ReactNodeViewRenderer } from "@kn/editor";
+
+import { ImageView } from "./image-view";
+
+export const inputRegex = /(?:^|\s)(!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\))$/;
+
+declare module "@kn/editor" {
+  interface Commands<ReturnType> {
+    image: {
+      setImage: (options: {
+        src: string;
+        width?: number;
+        height?: number;
+      }) => ReturnType;
+      insertUploader: () => ReturnType;
+    };
+  }
+}
+
+export const Image = Node.create({
+  name: "image",
+  inline: false,
+  content: "",
+  marks: "",
+  group: "block",
+  selectable: true,
+  draggable: true,
+
+  addOptions() {
+    return {
+      inline: false,
+      allowBase64: false,
+      HTMLAttributes: {}
+    };
+  },
+
+  addAttributes() {
+    return {
+      src: {
+        default: null
+      },
+      alt: {
+        default: null
+      },
+      title: {
+        default: null
+      },
+      width: {
+        default: "100%"
+      },
+      height: {
+        default: "auto"
+      },
+      aspectRatio: {
+        default: 1
+      },
+      align: {
+        default: "left"
+      }
+    };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: "img[src]"
+      }
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "img",
+      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)
+    ];
+  },
+
+  addCommands() {
+    return {
+      setImage: options => ({ commands, chain }) => {
+        return chain().focus().insertContent({
+          type: this.name,
+          attrs: options
+        }).run();
+      }
+    };
+  },
+
+  addInputRules() {
+    return [
+      nodeInputRule({
+        find: inputRegex,
+        type: this.type,
+        getAttributes: match => {
+          const [, , alt, src, title] = match;
+
+          return { src, alt, title };
+        }
+      })
+    ];
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(ImageView);
+  },
+
+  // addProseMirrorPlugins() {
+  //   return [new Plugin({
+  //     key: new PluginKey("ImagePastPlugin"),
+  //     props: {
+  //       handlePaste(view, event, slice) {
+  //         console.log('clipboardData', event.clipboardData);
+  //         console.log('slice', slice)
+  //       },
+  //     }
+  //   })]
+  // },
+});

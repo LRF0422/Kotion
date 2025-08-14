@@ -35,16 +35,16 @@ export function getNodeAtPos(state: EditorState, pos: number): Node | null {
   return node;
 }
 
-export function isNodeActive(editor: Editor, extensionName: string): boolean {
-  const selection = editor.state.selection;
-  const node =
-    ((selection as unknown) as NodeSelection)?.node ||
-    selection.$head.node(selection.$head.depth);
+// export function isNodeActive(editor: Editor, extensionName: string): boolean {
+//   const selection = editor.state.selection;
+//   const node =
+//     ((selection as unknown) as NodeSelection)?.node ||
+//     selection.$head.node(selection.$head.depth);
 
-  return node
-    ? node.type.name === extensionName
-    : editor.isActive(extensionName);
-}
+//   return node
+//     ? node.type.name === extensionName
+//     : editor.isActive(extensionName);
+// }
 
 export function isNodeActivePro(
   state: EditorState,
@@ -156,23 +156,23 @@ export const findNodeByBlockId = (
   return target ? { node: target, pos } : null;
 };
 
-export const isNodeEmpty = (node: Node) => {
-  if (node.isAtom && !node.isTextblock) return false;
+// export const isNodeEmpty = (node: Node) => {
+//   if (node.isAtom && !node.isTextblock) return false;
 
-  return node.type.name === "paragraph" && node.nodeSize === 2;
-};
+//   return node.type.name === "paragraph" && node.nodeSize === 2;
+// };
 
-export function getNodeType(nameOrType: string | NodeType, schema: Schema): NodeType {
-  if (typeof nameOrType === 'string') {
-    if (!schema.nodes[nameOrType]) {
-      throw Error(`There is no node type named '${nameOrType}'. Maybe you forgot to add the extension?`);
-    }
+// export function getNodeType(nameOrType: string | NodeType, schema: Schema): NodeType {
+//   if (typeof nameOrType === 'string') {
+//     if (!schema.nodes[nameOrType]) {
+//       throw Error(`There is no node type named '${nameOrType}'. Maybe you forgot to add the extension?`);
+//     }
 
-    return schema.nodes[nameOrType] as NodeType;
-  }
+//     return schema.nodes[nameOrType] as NodeType;
+//   }
 
-  return nameOrType;
-}
+//   return nameOrType;
+// }
 
 export const isListActive = (editor: Editor) => {
   return editor.isActive('bulletList') || editor.isActive('orderedList') || editor.isActive('taskList');

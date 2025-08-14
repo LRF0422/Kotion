@@ -4,7 +4,7 @@ import {
 	UnderlineExtension, StrikeExtension, TableExtension, OrderListExtension,
 	HorizontalRuleExtension, ItalicExtension, TypographyExtension,
 	DropcursorExtension, GapcursorExtension, CodeExtension, CodeblockExtension, DragableExtension, TextAlignExtension, InfoPanelExtension,
-	SubscriptExtension, SuperScriptExtension, ColumnsExtension, ColorExtension, HardBreakExtension, TitleExtension, LinkExtension, ImageExtension,
+	SubscriptExtension, SuperScriptExtension, ColumnsExtension, ColorExtension, HardBreakExtension, TitleExtension, LinkExtension,
 	BulletListExtension, DateExtension, EmojiExtension, KnowledgeMathExtension, BackGroundColorExtension, FigmaExtension, LoadingExtension,
 	TaskListExtension, AIExtension, NoteMarkExtension, PageContentExtension, FlowExtension, MarkDownExtension, SyncBlockExtension, MindMapExtension, IdentExtension, LineHeightExtension, CommentExtension, FormatPainterExtension, TableOfContentExtension, EventExtension, SelectionExtension, UnknownNodeExtension
 } from "../extensions";
@@ -21,7 +21,6 @@ export const buildInExtension: ExtensionWrapper[] = [
 	HorizontalRuleExtension,
 	StrikeExtension,
 	BoldExtension,
-	ImageExtension,
 	OrderListExtension,
 	BulletListExtension,
 	FlowExtension,

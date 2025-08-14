@@ -1,22 +1,16 @@
 import React, { useCallback, useMemo } from "react";
-import { Editor, isNodeActive, isNodeSelection, posToDOMRect } from "@tiptap/core";
+import { Editor, isNodeSelection, posToDOMRect } from "@kn/editor";
 
 import {
   BubbleMenu,
   BubbleMenuProps,
   Divider
-} from "../../../components";
-import {
-  IconImageAlignLeft,
-  IconImageAlignCenter,
-  IconImageAlignRight,
-  IconDelete
-} from "../../../icons";
-import { useAttributes } from "../../../hooks/use-attributes";
-import { deleteNode } from "../../../utilities";
+} from "@kn/editor";
+import { useAttributes } from "@kn/editor";
+import { deleteNode, isNodeActive } from "@kn/editor";
 import { Image as ImageExtension } from "../image";
 import { Toggle } from "@kn/ui";
-import { Trash2 } from "@kn/icon";
+import { IconImageAlignCenter, IconImageAlignLeft, IconImageAlignRight, Trash2 } from "@kn/icon";
 
 const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const { width: currentWidth, height: currentHeight, align } = useAttributes(
@@ -30,7 +24,7 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   );
 
   const shouldShow = useCallback<BubbleMenuProps["shouldShow"]>(
-    ({ editor }) => {
+    ({ editor }: { editor: Editor }) => {
       return isNodeActive(editor.state, ImageExtension.name);
     },
     [editor.state.selection]

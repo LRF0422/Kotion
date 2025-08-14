@@ -32,7 +32,7 @@ export const FileCard: React.FC<FileItem> = (props) => {
             setCurrentFolderId(id)
         }}
     >
-        <Card className={cn("w-[200px] bg-muted/40 shadow-sm hover:bg-muted/90 hover:shadow-md", checked ? "outline" : "")}>
+        <Card className={cn("w-[200px] bg-muted/40 shadow-sm hover:bg-muted/50 hover:shadow-md", checked ? "outline" : "")}>
             <CardHeader className="p-0">
                 <CardTitle className="p-0 m-0">
                     <div className="flex items-center justify-between p-1">

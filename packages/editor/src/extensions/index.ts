@@ -10,7 +10,7 @@ export { CodeExtensions, CodeStaticMenu, CodeExtension } from "./code";
 export { CodeBlock, CodeBlockStaticMenu, CodeblockExtension } from "./code-block";
 export { Heading, HeadingStaticMenu, HeadingExtension } from "./heading";
 export { Link as Links, LinkStaticMenu, LinkBubbleMenu, LinkExtension } from "./link";
-export { Image, ImageStaticMenu, ImageBubbleMenu, ImageExtension } from "./image";
+// export { Image, ImageStaticMenu, ImageBubbleMenu, ImageExtension } from "./image";
 export { TableExtensions, TableStaticMenu, TableBubbleMenu, TableExtension, Table, TableCell, TableHeader, TableRow } from "./table";
 export { TextAlign, TextAlignStaticMenu, TextAlignExtension } from "./text-align";
 export { HorizontalRule, HorizontalRuleStaticMenu, HorizontalRuleExtension } from "./horizontal-rule";

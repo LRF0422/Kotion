@@ -16,7 +16,8 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "lucide-react": "^0.446.0"
+    "lucide-react": "^0.446.0",
+    "styled-components": "^6.1.19"
   },
   "devDependencies": {
     "@kn/rollup-config": "workspace:*"
