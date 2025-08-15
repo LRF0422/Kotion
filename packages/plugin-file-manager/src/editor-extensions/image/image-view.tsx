@@ -28,6 +28,13 @@ export const ImageView: React.FC<NodeViewProps> = ({
     [updateAttributes]
   );
 
+  const getSrc = (src: string) => {
+    if (src.startsWith("http") || src.startsWith("https")) {
+      return src;
+    }
+    return usePath(src);
+  }
+
   return (
     <NodeViewWrapper
       draggable
@@ -43,7 +50,7 @@ export const ImageView: React.FC<NodeViewProps> = ({
         getPos={getPos}
         aspectRatio={aspectRatio}
         onResizeStop={onResize}>
-        <img src={usePath(src)} width={"100%"} />
+        <img src={getSrc(src)} width={"100%"} />
       </Resizable>
     </NodeViewWrapper>
   );

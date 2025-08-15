@@ -15,7 +15,7 @@ import {
 } from "@kn/ui"
 import React, { useContext, useEffect } from "react"
 import { ChartKit } from "./types"
-import { NodeViewContext } from "../../DatabaseView"
+import { NodeViewContext } from "../../Context"
 import { uuidv4 } from "lib0/random"
 import { BaseChart } from "./BaseChart"
 

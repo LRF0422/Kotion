@@ -12,7 +12,7 @@ export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number }> =
         <div className={cn("hover:bg-muted rounded-sm m-1 p-1 text-sm transition-all duration-300 w-[200px]")} style={{
             paddingLeft: `${10 * item.level}px`
         }}>
-            <a className={`before:[content:attr(data-item-index)"."] text-ellipsis overflow-hidden text-nowrap flex gap-1`} href={`#${item.id}`} onClick={e => onItemClick(e, item)} data-item-index={index}>{item.text}</a>
+            <a className={`before:[content:attr(data-item-index)"."] text-ellipsis overflow-hidden text-nowrap flex gap-1`} href={`#${item.id}`} onClick={e => onItemClick(e, item)} data-item-index={index}>{item.textContent}</a>
         </div>
     )
 }
@@ -23,17 +23,11 @@ export const ToCEmptyState = () => {
     )
 }
 
-export const ToC: React.FC<{ editor: Editor, className?: string }> = ({
+export const ToC: React.FC<{ editor: Editor, className?: string, items: any[] }> = ({
     editor,
-    className
+    className,
+    items
 }) => {
-
-    const [items, setItems] = useSafeState<any[]>([])
-
-    useEffect(() => {
-        const toc = editor.storage.tableOfContent.toc
-        setItems(toc)
-    }, [editor.state])
 
     if (items.length === 0) {
         return <ToCEmptyState />
@@ -53,7 +47,7 @@ export const ToC: React.FC<{ editor: Editor, className?: string }> = ({
 
     return (
         <ScrollArea className={cn("h-full w-full p-3 overflow-auto", className)}>
-            <div className=' font-bold'>Table of contents</div>
+            <div className='font-bold'>Table of contents</div>
             {items.map((item: any, i: number) => (
                 <ToCItem onItemClick={onItemClick} key={item.id} item={item} index={i + 1} />
             ))}

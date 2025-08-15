@@ -1,11 +1,8 @@
 import React, { ReactNode, forwardRef, useEffect, useImperativeHandle } from "react";
-import { AnyExtension, Content, Editor, JSONContent, getSchema } from "@tiptap/core";
+import { AnyExtension, Editor, JSONContent, getSchema } from "@tiptap/core";
 
 import { EditorRenderProps } from "./render";
 import { TiptapCollabProvider } from "@hocuspocus/provider";
-import { Collaboration } from "@tiptap/extension-collaboration";
-import { CollaborationCaret } from "@tiptap/extension-collaboration-caret"
-import { getUserColor } from "./utilities";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEditorExtension } from "./use-extension";
 import { ThemeProvider } from "styled-components";
@@ -17,8 +14,8 @@ import { ToC } from "./ToC";
 import { cn } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
 import { PageContext } from "./context";
-import { log } from "node:console";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
+import { TableOfContents } from "@editor/extensions";
 
 
 export interface CollaborationEditorProps extends EditorRenderProps {
@@ -41,6 +38,7 @@ export const CollaborationEditor = forwardRef<
   const { content, user, provider, pageInfo, toc, withTitle, width = 'w-[calc(100vw-350px)]' } = props
 
   const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle)
+  const [items, setItems] = useSafeState<any[]>([])
 
 
   useEffect(() => {
@@ -59,6 +57,11 @@ export const CollaborationEditor = forwardRef<
       },
       extensions: [
         ...extensions as AnyExtension[],
+        TableOfContents.configure({
+          onUpdate(content) {
+            setItems(content)
+          }
+        })
         // Collaboration.configure({
         //   document: provider.document
         // }),
@@ -79,6 +82,10 @@ export const CollaborationEditor = forwardRef<
       //     }
       //   }
       // },
+      onTransaction: (transaction) => {
+        console.log("selection", transaction.editor.state.selection);
+
+      },
       editorProps: {
         attributes: {
           class: "magic-editor",
@@ -113,7 +120,7 @@ export const CollaborationEditor = forwardRef<
               </StyledEditor>
               {
                 toc && (<div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>
-                  <ToC editor={editor} />
+                  <ToC editor={editor} items={items} />
                 </div>)
               }
             </div>

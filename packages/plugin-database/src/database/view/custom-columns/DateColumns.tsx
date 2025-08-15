@@ -11,7 +11,7 @@ import { TagInput } from "@kn/ui";
 import { useHover, useToggle } from "ahooks";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@kn/ui";
 import { cn } from "@kn/ui";
-import { NodeViewContext } from "../../DatabaseView";
+import { NodeViewContext } from "../../Context";
 import { Editor } from "@kn/editor";
 import { isArray, isObject } from "@kn/core";
 import { getTitleContent } from "@kn/editor";

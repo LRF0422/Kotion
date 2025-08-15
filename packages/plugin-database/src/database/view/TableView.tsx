@@ -1,6 +1,6 @@
 import { Plus, SearchIcon, Settings, Table, Trash2 } from "@kn/icon";
 import { useContext, useMemo, useRef, useState } from "react";
-import { NodeViewContext } from "../DatabaseView";
+import { NodeViewContext } from "../Context";
 import { Button, Input } from "@kn/ui";
 import 'react-data-grid/lib/styles.css';
 
@@ -9,7 +9,7 @@ import DataGrid, { DataGridHandle, FillEvent, SelectColumn } from 'react-data-gr
 import { useToggle } from "ahooks";
 import { cn } from "@kn/ui";
 import { getCellIcon, getCellView, getEditor } from "./custom-columns/DateColumns";
-import {styled} from "@kn/ui";
+import { styled } from "@kn/ui";
 import { useTheme } from "@kn/ui";
 import { UpdateCellProps } from "../utils";
 import React from "react";

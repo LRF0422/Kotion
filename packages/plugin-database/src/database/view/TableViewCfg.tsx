@@ -1,7 +1,7 @@
 import { ArrowRight, Edit2, Filter, List, LockIcon, Plus, SortDesc, SquareStack, Trash2, XCircle } from "@kn/icon"
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Input, Label, Separator, cn } from "@kn/ui"
 import React, { useContext, useState } from "react"
-import { NodeViewContext } from "../DatabaseView"
+import { NodeViewContext } from "../Context"
 
 
 export const TableViewCfg = (props: { visible: boolean, toggle: () => void }) => {

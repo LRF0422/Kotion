@@ -17,6 +17,8 @@ import { cn } from "@kn/ui";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
+import { TableOfContentExtension, TableOfContents } from "@editor/extensions";
+import { useSafeState } from "ahooks";
 
 export interface EditorRenderProps extends EditorProvider, EditorKit {
   content?: Content;
@@ -54,6 +56,7 @@ export const EditorRender = forwardRef<
   } = props;
 
   const [exts] = useEditorExtension(undefined, withTitle)
+  const [items, setItems] = useSafeState<any[]>([])
 
   const editor = useEditor(
     {
@@ -63,6 +66,11 @@ export const EditorRender = forwardRef<
       extensions: [
         ...(extensions as AnyExtension[] || []),
         ...(exts as AnyExtension[] || []),
+        TableOfContents.configure({
+          onUpdate(content) {
+            setItems(content)
+          },
+        }),
       ],
       onBlur: ({ editor }) => { onBlur && onBlur(editor) },
       editorProps: {
@@ -88,7 +96,7 @@ export const EditorRender = forwardRef<
               </StyledEditor>
               {
                 toc && (<div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>
-                  <ToC editor={editor} />
+                  <ToC editor={editor} items={items} />
                 </div>)
               }
             </div>

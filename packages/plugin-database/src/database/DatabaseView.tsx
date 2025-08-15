@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { cloneDeep } from "lodash";
 import { ChartView } from "./view/ChartView";
 import { CalendarView } from "./view/CalendarView";
+import { NodeViewContext } from "./Context";
 
 
 
@@ -72,19 +73,6 @@ const allColumnType: ColumnType[] = [
     }
 ]
 
-export type Context = NodeViewProps & {
-    data: any[],
-    handleAddRow: (data?: any) => void,
-    handleAddCol: (column: any) => void,
-    handleDelCol: (columnIndex: number) => void,
-    handleDataChange: (row: number, col: number, data: any) => void,
-    handleDataChangeBatch: (updateCells: UpdateCellProps[]) => void,
-    handleMoveCol: (source: string, target: string) => void,
-    handleDeleteRow: (rowIndex: string[]) => void,
-    columns: any[], columnTypes: ColumnType[]
-}
-
-export const NodeViewContext = createContext<Context>({} as Context)
 export const DatabaseView: React.FC<NodeViewProps> = (props) => {
 
     const [data, setData] = useState<any[]>([])

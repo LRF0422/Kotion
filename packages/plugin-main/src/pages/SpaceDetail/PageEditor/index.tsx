@@ -33,7 +33,7 @@ export const PageEditor: React.FC = () => {
     const [synceStatus, setSyncStatus] = useState(false)
     const lastAwarenessRef = useRef<any[]>([])
     const [status, setStatus] = useState<any>({
-        status: 'connecting'
+        status: 'Ready'
     })
     const [users, setUsers] = useState<any[]>()
     const editor = useRef<Editor>(null)
@@ -80,14 +80,13 @@ export const PageEditor: React.FC = () => {
     const handleSave = (publish: boolean = false) => {
         const preStatus = status;
         setStatus({
-            status: "saving"
+            status: "Saving"
         })
         toggle()
         if (editor.current) {
             const pageContent = editor.current.getJSON()
             const title = getTitleContent(pageContent);
             const icon = getIcon(pageContent);
-            console.log('icon', icon);
 
             page.title = title
             page.icon = icon

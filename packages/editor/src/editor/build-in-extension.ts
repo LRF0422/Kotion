@@ -53,7 +53,7 @@ export const buildInExtension: ExtensionWrapper[] = [
 	LineHeightExtension,
 	CommentExtension,
 	FormatPainterExtension,
-	TableOfContentExtension,
+	// TableOfContentExtension,
 	EventExtension,
 	SelectionExtension,
 	UnknownNodeExtension

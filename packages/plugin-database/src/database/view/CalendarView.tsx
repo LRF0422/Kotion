@@ -4,7 +4,7 @@ import { Calendar, momentLocalizer } from 'react-big-calendar'
 import moment from 'moment'
 
 import "react-big-calendar/lib/css/react-big-calendar.css";
-import { NodeViewContext } from "../DatabaseView";
+import { NodeViewContext } from "../Context";
 import { CalendarClock, Settings, X } from "@kn/icon";
 
 import 'moment/locale/zh-cn';

@@ -9,7 +9,7 @@ import {
 } from "@kn/ui"
 import React, { forwardRef, useCallback, useContext } from "react"
 import { DropdownMenuContent, DropdownMenuLabel } from "@kn/ui"
-import { NodeViewContext } from "../DatabaseView"
+import { NodeViewContext } from "../Context"
 import { useToggle } from "ahooks"
 import BarChart from "./charts/BarChart"
 import AreaChart from "./charts/AreaChart"
