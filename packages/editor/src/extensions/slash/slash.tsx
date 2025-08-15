@@ -146,6 +146,7 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                 computePosition(virtualElement, component.element as HTMLElement, {
                   placement: "right-start",
                   strategy: "absolute",
+                  // middleware: [autoPlacement()]
                 }).then(({ x, y, strategy }) => {
                   console.log("finished", component.element);
                   (component.element as HTMLElement).style.zIndex = '1000';

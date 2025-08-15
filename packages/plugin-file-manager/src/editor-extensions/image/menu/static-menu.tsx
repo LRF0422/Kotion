@@ -13,16 +13,6 @@ export const ImageStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const { upload } = useUploadFile()
 
   const setImage = useCallback(() => {
-    // uploadImage(editor).then(res => {
-    //   editor
-    //     .chain()
-    //     .focus()
-    //     .setImage({
-    //       ...res,
-    //       src: res.url
-    //     })
-    //     .run();
-    // });
     upload().then(res => {
       editor
         .chain()

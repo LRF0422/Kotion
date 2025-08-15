@@ -13,7 +13,7 @@ declare module "@kn/editor" {
         width?: number;
         height?: number;
       }) => ReturnType;
-      insertUploader: () => ReturnType;
+      insertGallery: () => ReturnType;
     };
   }
 }
