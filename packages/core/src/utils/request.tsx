@@ -66,6 +66,7 @@ axiosInstance.interceptors.response.use(res => {
 
   if (status !== 200) {
     toast.error(res.data.msg)
+    window.location.href = '/login'
     return Promise.reject(res.data.msg)
   }
 
@@ -74,16 +75,13 @@ axiosInstance.interceptors.response.use(res => {
   }
 
   if (code === 401) {
-    if (isRelogin.show) {
-      isRelogin.show = true
-      toast.warning('登录状态已过期，您可以继续留在该页面，或者重新登录', {
-        position: 'top-center',
-        action: <Button onClick={() => {
-          throw new Error("no login ")
-        }}>重新登录</Button>,
-        duration: -1
-      })
-    }
+    toast.warning('登录状态已过期，您可以继续留在该页面，或者重新登录', {
+      position: 'top-center',
+      action: <Button onClick={() => {
+        throw new Error("no login ")
+      }}>重新登录</Button>,
+      duration: -1
+    })
     return Promise.reject('无效的会话，或者会话已过期，请重新登录。')
   } if (code === 500) {
     return Promise.reject(new Error(msg))

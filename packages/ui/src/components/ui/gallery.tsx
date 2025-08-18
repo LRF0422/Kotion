@@ -18,6 +18,7 @@ export interface CarouselGalleryProps {
     showThumbnails?: boolean
     onClickAdd?: () => void
     handleDelete?: (url: string) => void
+    showAddBtn?: boolean
 }
 
 export const CarouselGallery: React.FC<CarouselGalleryProps> = ({
@@ -25,7 +26,8 @@ export const CarouselGallery: React.FC<CarouselGalleryProps> = ({
     autoPlay = true,
     autoPlayInterval = 5000,
     showThumbnails = true,
-    onClickAdd
+    onClickAdd,
+    showAddBtn = true
 }) => {
     const [currentIndex, setCurrentIndex] = React.useState(0);
     const prevSlide = () => {
@@ -133,7 +135,9 @@ export const CarouselGallery: React.FC<CarouselGalleryProps> = ({
                             />
                         </button>
                     ))}
-                    <button
+                    {
+                        showAddBtn && (
+                            <button
                         className={cn(
                             "flex items-center bg-muted rounded-sm justify-center h-20 w-20  flex-shrink-0 transition-all duration-200",
                             "opacity-70 hover:opacity-100",
@@ -143,6 +147,8 @@ export const CarouselGallery: React.FC<CarouselGalleryProps> = ({
                     >
                         <PlusIcon />
                     </button>
+                        )
+                    }
                 </div>
             )}
         </div>

@@ -613,13 +613,17 @@ export const StyledEditor = styled.div.attrs({
     width: 100%;
     gap: 10px;
 
-    .column {
+    .node-column {
       min-width: 0;
-      // padding: 5px;
       box-sizing: border-box;
+      flex: 1 1 0%;
       
       p {
         margin: 0px;
+      }
+
+      * {
+        margin: 0
       }
     }
   }

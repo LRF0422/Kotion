@@ -14,14 +14,17 @@ export const ColumnView: React.FC<NodeViewProps> = (props) => {
         [updateAttributes]
     );
 
-    return <NodeViewWrapper className="prose-p:m-1 w-full">
-        <Resizable
-            className={cn("rounded-sm transition-all duration-75", editor.isEditable ? " outline" : " hover:outline")}
+    return <NodeViewWrapper className={
+        cn("prose-p:m-1 w-full ",
+            editor.isEditable ? "outline rounded-sm" : "")
+    }>
+        {/* <Resizable
+            className={cn("rounded-sm transition-all duration-75 w-full", editor.isEditable ? " outline" : " hover:outline")}
             height="100%"
-            width={width || 100}
+            width={width || '100%'}
             editor={editor}
             getPos={getPos}
-            minWidth={100}
+            minWidth={"0px"}
             hoverable={false}
             enable={editor.isEditable ? {
                 top: false,
@@ -34,8 +37,8 @@ export const ColumnView: React.FC<NodeViewProps> = (props) => {
                 right: true
             } : false}
             onResizeStop={onResize}
-        >
-            <NodeViewContent className="h-full w-auto" />
-        </Resizable>
+        > */}
+        <NodeViewContent className="h-full w-auto" />
+        {/* </Resizable> */}
     </NodeViewWrapper>
 }

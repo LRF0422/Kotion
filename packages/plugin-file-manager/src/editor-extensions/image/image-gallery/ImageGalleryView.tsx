@@ -11,7 +11,7 @@ export const ImageGalleryView: React.FC<NodeViewProps> = (props) => {
     const { uploadFile, usePath, upload } = useUploadFile()
     return <NodeViewWrapper>
         {
-            images.length > 0 ? <CarouselGallery images={images} onClickAdd={() => {
+            images.length > 0 ? <CarouselGallery showAddBtn={props.editor.isEditable} images={images} onClickAdd={() => {
                 upload().then(res => {
                     props.updateAttributes({ images: [...images, { src: usePath(res.name), alt: res.originalName }] })
                 })

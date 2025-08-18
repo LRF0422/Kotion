@@ -2,6 +2,8 @@ import { Node, mergeAttributes } from "@tiptap/core";
 
 import { createColumns, addOrDeleteCol, gotoCol } from "./utilities";
 import { TextSelection } from "@tiptap/pm/state";
+import { ReactNodeViewRenderer } from "@tiptap/react";
+import { ColumnsView } from "./ColumnsView";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -18,6 +20,7 @@ export const Columns = Node.create({
   name: "columns",
   group: "block",
   content: "column{2,}",
+  isolating: true,
 
   addOptions() {
     return {
@@ -51,6 +54,10 @@ export const Columns = Node.create({
       0
     ];
   },
+
+  // addNodeView() {
+  //   return ReactNodeViewRenderer(ColumnsView)
+  // },
 
   addCommands() {
     return {

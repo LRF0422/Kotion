@@ -74,22 +74,41 @@ export const App: React.FC<AppProps> = (props) => {
     }, [])
 
     useAsyncEffect(async () => {
-        if (!!localStorage.getItem("knowledge-token")) {
-            const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
-            if (!installedPlugins || installedPlugins.length === 0) {
-                setAllPlugins([...(plugins || [])])
-                setLoadFinished(true)
-                return
+        try {
+            if (!!localStorage.getItem("knowledge-token")) {
+                const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
+                if (!installedPlugins || installedPlugins.length === 0) {
+                    setAllPlugins([...(plugins || [])])
+                    setLoadFinished(true)
+                    return
+                }
+                Promise.all(installedPlugins.map((plugin) => {
+                    const path = usePath(plugin.resourcePath)
+                    return importScript(path, plugin.pluginKey)
+                })).then(res => {
+                    console.log('res', res);
+                    setAllPlugins([...(plugins || []), ...res.map(it => Object.values(it)[0])])
+                    setLoadFinished(true)
+                })
+            } else {
+                setRouter(createBrowserRouter(createRoutesFromElements(
+                    [
+                        <Route path='/' element={<Layout />} errorElement={<Login />}>
+                            <Route path="/plugin-hub" element={<Shop />}>
+                                <Route path="/plugin-hub" element={<Marketplace />} />
+                                <Route path="/plugin-hub/:id" element={<PluginDetail />} />
+                            </Route>
+                        </Route>,
+                        <Route path='/login' element={<Login />} />,
+                        <Route path='/sign-up' element={<SignUpForm />} />
+                    ]
+                )))
+                if (window.location.href.includes("red")) {
+                    return
+                }
+                window.location.href = '/login?red'
             }
-            Promise.all(installedPlugins.map((plugin) => {
-                const path = usePath(plugin.resourcePath)
-                return importScript(path, plugin.pluginKey)
-            })).then(res => {
-                console.log('res', res);
-                setAllPlugins([...(plugins || []), ...res.map(it => Object.values(it)[0])])
-                setLoadFinished(true)
-            })
-        } else {
+        } catch (error) {
             setRouter(createBrowserRouter(createRoutesFromElements(
                 [
                     <Route path='/' element={<Layout />} errorElement={<Login />}>

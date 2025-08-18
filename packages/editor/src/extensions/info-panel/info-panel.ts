@@ -1,12 +1,11 @@
 import { Node } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import { InfoPanelView } from "./info-panel-view";
-import { CheckCircle2, CircleAlert, MailWarning, TriangleAlert, XCircle } from "@kn/icon";
+import { CheckCircle2, CircleAlert, TriangleAlert, XCircle } from "@kn/icon";
 
 
 declare module "@tiptap/core" {
 	interface Commands<ReturnType> {
-		// @ts-ignore
 		infoPanel: {
 			insertInfoPanel: (options: {
 				type: string

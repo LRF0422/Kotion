@@ -8,6 +8,7 @@ export const Column = Node.create({
   name: "column",
   content: "block+",
   group: 'block',
+  draggable: false,
   selectable: true,
   isolating: true,
   atom: true,
@@ -16,9 +17,9 @@ export const Column = Node.create({
     return {
       HTMLAttributes: {
         class: "column",
-        style: { 
+        style: {
           flex: '1 1 0%'
-         }
+        }
       }
     };
   },

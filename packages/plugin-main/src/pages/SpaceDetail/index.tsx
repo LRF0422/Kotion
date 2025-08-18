@@ -258,7 +258,7 @@ export const SpaceDetail: React.FC = () => {
             },
             children: favorites.map((it: any, index) => ({
                 name: <div className="flex items-center">
-                    <div className="w-[200px] text-left text-ellipsis overflow-hidden">
+                    <div className="w-[200px] text-left text-nowrap text-ellipsis overflow-hidden">
                         {it.title}
                     </div>
                     <div className=" absolute right-2">

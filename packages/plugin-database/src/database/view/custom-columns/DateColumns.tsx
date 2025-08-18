@@ -3,7 +3,6 @@ import { Checkbox } from "@kn/ui";
 import { DateTimePicker } from "@kn/ui";
 import { Rate } from "@kn/ui";
 import { Slider } from "@kn/ui";
-// import { upload } from "";
 import { AppWindowIcon, CheckSquare, Clock10, ImageIcon, Link2, SlidersIcon, StarIcon, TagIcon, TextIcon, TypeIcon, Upload, XCircle } from "@kn/icon";
 import React, { useContext, useRef, useState } from "react";
 import { textEditor } from "react-data-grid";
@@ -13,7 +12,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { cn } from "@kn/ui";
 import { NodeViewContext } from "../../Context";
 import { Editor } from "@kn/editor";
-import { isArray, isObject } from "@kn/core";
+import { isArray, isObject, useUploadFile } from "@kn/core";
 import { getTitleContent } from "@kn/editor";
 import { EditorRender } from "@kn/editor";
 
@@ -119,12 +118,13 @@ export const ImageCellView: React.FC<any> = (props) => {
     const { column, row } = props
     const [visible, setVisible] = useState(false)
     const value = row[column.key]
+    const { usePath } = useUploadFile()
     return <div>
         {
             value && isArray(value) ? <div className="flex items-center gap-1">
                 {value.map((it: any, index: number) => (
                     <div className="p-1 hover:bg-muted relative w-[30px]" key={index} onClick={() => setVisible(true)}>
-                        <img src={`http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${it}`} width="100%" />
+                        <img src={usePath(it)} width="100%" />
                     </div>
                 ))}
             </div> : <div></div>
@@ -229,15 +229,15 @@ export const PageLinkEditor: React.FC<any> = (props) => {
 export const ImageEditor: React.FC<any> = (props) => {
     const { row, onRowChange, column } = props
     const value = row[column.key]
+    const { upload } = useUploadFile()
     const handleUpload = () => {
-        // upload().then(res => {
-        //     if (value) {
-        //         onRowChange({ ...row, [column.key]: [...value, res.data.name] }, false)
-        //     } else {
-        //         onRowChange({ ...row, [column.key]: [res.data.name] }, false)
-        //     }
-
-        // })
+        upload().then(res => {
+            if (value) {
+                onRowChange({ ...row, [column.key]: [...value, res.name] }, false)
+            } else {
+                onRowChange({ ...row, [column.key]: [res.name] }, false)
+            }
+        })
     }
 
     const handleDelete = (v: string) => {
