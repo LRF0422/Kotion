@@ -13,6 +13,7 @@ import { toast } from "@kn/ui";
 import _copy from "./copy-to-clipboard"
 import { Fragment, Node, Slice } from "@tiptap/pm/model";
 import { EditorState } from "@tiptap/pm/state";
+import { getCurrentNode } from "..";
 
 export function copy(text: string | { text: string; format: string }[]) {
   return _copy(text, () => toast.success("拷贝成功"));
@@ -23,8 +24,7 @@ export const copyNode = (editor: Editor, extensionName: string) => {
 
   const { state } = editor;
   const $pos = state.selection.$anchor;
-  // @ts-ignore
-  const currentNode = state.selection.node;
+  const currentNode = getCurrentNode(editor.state)
 
   if (currentNode && currentNode.type.name === extensionName) {
     targetNode = currentNode;
@@ -40,6 +40,8 @@ export const copyNode = (editor: Editor, extensionName: string) => {
   }
 
   if (targetNode) {
+    console.log('targetNode', targetNode);
+
     const slice = new Slice(Fragment.fromArray([targetNode]), 0, 0);
     const { dom, text } = editor.view.serializeForClipboard(slice)
 
