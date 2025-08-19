@@ -5,7 +5,7 @@ import Suggestion from "@tiptap/suggestion";
 
 import { SlashMenuView } from "./slash-menu-view";
 import { PluginKey } from "@tiptap/pm/state";
-import { computePosition, autoPlacement } from "@floating-ui/dom";
+import { computePosition, flip } from "@floating-ui/dom";
 import { CellSelection } from "@tiptap/pm/tables";
 
 export type SlashMenuItem =
@@ -144,9 +144,8 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                   }
                 }
                 computePosition(virtualElement, component.element as HTMLElement, {
-                  placement: "right-start",
-                  strategy: "absolute",
-                  // middleware: [autoPlacement()]
+                  placement: 'right-start',
+                  middleware: [flip()],
                 }).then(({ x, y, strategy }) => {
                   console.log("finished", component.element);
                   (component.element as HTMLElement).style.zIndex = '1000';
@@ -159,10 +158,6 @@ export const createSlash = (name: string, options?: SlashOptions) => {
               onUpdate(props) {
                 if (!isEditable) return;
                 component.updateProps(props);
-                // popup[0]?.setProps({
-                //   // @ts-ignore
-                //   getReferenceClientRect: props.clientRect
-                // });
               },
 
               onKeyDown(props) {

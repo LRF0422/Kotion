@@ -15,7 +15,7 @@ import { cn } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
 import { PageContext } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
-import { TableOfContents } from "@editor/extensions";
+import { TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
 
 
 export interface CollaborationEditorProps extends EditorRenderProps {
@@ -45,7 +45,7 @@ export const CollaborationEditor = forwardRef<
 
   }, [extensions])
 
-  const editor = useEditor(
+  const editor: Editor = useEditor(
     {
       editable: true,
       content: content ? rewriteUnknownContent(content as JSONContent,
@@ -60,7 +60,9 @@ export const CollaborationEditor = forwardRef<
         TableOfContents.configure({
           onUpdate(content) {
             setItems(content)
-          }
+          },
+          getIndex: getHierarchicalIndexes,
+          // scrollParent: () => document.querySelector("#editor-container") as HTMLElement,
         })
         // Collaboration.configure({
         //   document: provider.document
@@ -113,10 +115,10 @@ export const CollaborationEditor = forwardRef<
       <ThemeProvider theme={light}>
         <div className={cn("grow z-30", width)}>
           <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />
-          <div className={cn("w-full", props.className)}>
+          <div className={cn("w-full", props.className)} id="editor-container">
             <div className="flex relative w-full">
               <StyledEditor className="w-full grow overflow-auto h-full">
-                <EditorContent editor={editor} id="editor-container" />
+                <EditorContent editor={editor} />
               </StyledEditor>
               {
                 toc && (<div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>

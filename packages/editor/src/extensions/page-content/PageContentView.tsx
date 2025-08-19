@@ -6,9 +6,9 @@ import React from "react";
 
 export const PageContentView: React.FC<NodeViewProps> = (props) => {
 
-    console.log('init');
+    const { editor } = props
 
     return <NodeViewWrapper>
-        <ToC editor={props.editor} className=" bg-muted rounded-sm" />
+        <ToC items={editor.storage.tableOfContents.content} editor={props.editor} className=" bg-muted rounded-sm" />
     </NodeViewWrapper>
 }

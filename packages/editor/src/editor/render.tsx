@@ -17,7 +17,7 @@ import { cn } from "@kn/ui";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
-import { TableOfContentExtension, TableOfContents } from "@editor/extensions";
+import { TableOfContentExtension, TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
 import { useSafeState } from "ahooks";
 
 export interface EditorRenderProps extends EditorProvider, EditorKit {
@@ -58,7 +58,7 @@ export const EditorRender = forwardRef<
   const [exts] = useEditorExtension(undefined, withTitle)
   const [items, setItems] = useSafeState<any[]>([])
 
-  const editor = useEditor(
+  const editor: Editor = useEditor(
     {
       content: content ? rewriteUnknownContent(content as JSONContent,
         getSchema([...(exts as AnyExtension[] || []), ...(extensions as AnyExtension[] || [])])).json : null,
@@ -70,6 +70,8 @@ export const EditorRender = forwardRef<
           onUpdate(content) {
             setItems(content)
           },
+          getIndex: getHierarchicalIndexes,
+          // scrollParent: () => window,
         }),
       ],
       onBlur: ({ editor }) => { onBlur && onBlur(editor) },
@@ -89,10 +91,10 @@ export const EditorRender = forwardRef<
     <PageContext.Provider value={pageInfo}>
       <ThemeProvider theme={light}>
         <div className={cn("grow z-30", width)}>
-          <div className={cn("w-full", props.className)}>
+          <div className={cn("w-full", props.className)} id="editor-container">
             <div className="flex relative w-full ">
               <StyledEditor className="w-full grow overflow-auto">
-                <EditorContent editor={editor} id="editor-container" />
+                <EditorContent editor={editor} />
               </StyledEditor>
               {
                 toc && (<div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>

@@ -12,6 +12,10 @@ export const AIExtension: ExtensionWrapper = {
     flotMenuConfig: [AiStaticMenu],
     slashConfig: [
         {
+            divider: true,
+            title: 'Ai'
+        },
+        {
             icon: <Sparkles className="h-4 w-4" />,
             text: '续写',
             slash: '/ai',

@@ -23,16 +23,10 @@ const StyledContainer = styled.div`
   width: 254px;
   max-height: 240px;
   overflow: auto;
-
-  box-shadow: ${props => ((props.theme as any) as any).slashMenuBoxshadow};
-  // background-color: ${props => (props.theme as any).background};
-  border-radius: ${props => (props.theme as any).borderRadius};
 `;
 
 const StyledTitle = styled.div`
   padding: 8px 16px;
-
-  color: ${props => (props.theme as any).slashMenuTitleColor};
 `;
 
 const StyledItem = styled.div<{ active: boolean }>`
@@ -41,7 +35,6 @@ const StyledItem = styled.div<{ active: boolean }>`
 
   padding: 8px 16px;
   height: 60px;
-  // color: ${props => (props.theme as any).slashMenuColor};
 
   cursor: pointer;  
 
@@ -56,7 +49,6 @@ const StyledText = styled.div`
 `;
 
 const StyledSlash = styled.div`
-  // color: ${props => (props.theme as any).slashMenuTitleColor};
 `;
 
 export { StyledItem as SlashItem, StyledText as SlashText, StyledSlash as Slash }
@@ -120,11 +112,11 @@ export const SlashMenuView: React.FC<IProps> = forwardRef((props, ref) => {
 
   return (
     <StyledContainer
-      ref={$container} className="p-1 bg-popover text-popover-foreground border shadow-sm py-1">
+      ref={$container} className="p-1 bg-popover text-popover-foreground border shadow-sm py-1 rounded-sm">
       {props.items.length ? (
         props.items.map((item, index) => {
           return "divider" in item ? (
-            <StyledTitle key={index} className="slash-menu-item text-popover-foreground ">{item.title}</StyledTitle>
+            <StyledTitle key={index} className="slash-menu-item ">{item.title}</StyledTitle>
           ) : (
             item.render ? <item.render
               editor={props.editor}

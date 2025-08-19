@@ -17,4 +17,4 @@ export const TableOfContentExtension: ExtensionWrapper = {
     name: TableOfContents.name,
 }
 
-export { TableOfContents }
+export { TableOfContents, getHierarchicalIndexes }

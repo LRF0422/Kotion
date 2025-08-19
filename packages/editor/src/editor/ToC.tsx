@@ -3,8 +3,7 @@ import { ScrollArea } from '@kn/ui'
 import { cn } from '@kn/ui'
 import { Editor } from '@tiptap/core'
 import { TextSelection } from '@tiptap/pm/state'
-import { useSafeState } from 'ahooks'
-import React, { useEffect } from 'react'
+import React from 'react'
 
 
 export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number }> = ({ item, onItemClick, index }) => {
@@ -12,7 +11,7 @@ export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number }> =
         <div className={cn("hover:bg-muted rounded-sm m-1 p-1 text-sm transition-all duration-300 w-[200px]")} style={{
             paddingLeft: `${10 * item.level}px`
         }}>
-            <a className={`before:[content:attr(data-item-index)"."] text-ellipsis overflow-hidden text-nowrap flex gap-1`} href={`#${item.id}`} onClick={e => onItemClick(e, item)} data-item-index={index}>{item.textContent}</a>
+            <a className={`before:[content:attr(data-item-index)"."] text-ellipsis overflow-hidden text-nowrap flex gap-1`} href={`#${item.id}`} onClick={e => onItemClick(e, item)} data-item-index={item.itemIndex}>{item.textContent}</a>
         </div>
     )
 }
@@ -37,11 +36,20 @@ export const ToC: React.FC<{ editor: Editor, className?: string, items: any[] }>
         e.preventDefault()
 
         if (editor) {
-            const pos = item.pos
+            const element = editor.view.dom.querySelector(`[data-toc-id="${item.id}"`)
+            const pos = editor.view.posAtDOM(element as Element, 0)
+
             const tr = editor.view.state.tr
             tr.setSelection(new TextSelection(tr.doc.resolve(pos)))
                 .scrollIntoView()
             editor.view.dispatch(tr)
+            editor.view.focus()
+            console.log('element', element);
+
+            window.scrollTo({
+                top: element!.getBoundingClientRect().top + window.scrollY,
+                behavior: 'smooth',
+            })
         }
     }
 
