@@ -13,6 +13,9 @@ export const Doc = Document.extend({
             },
             cover: {
                 default: null
+            },
+            comment: {
+                default: []
             }
         }
     }

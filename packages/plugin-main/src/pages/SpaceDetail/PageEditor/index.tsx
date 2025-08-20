@@ -6,7 +6,7 @@ import { Label } from "@kn/ui";
 import { RadioGroup, RadioGroupItem } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { Switch } from "@kn/ui";
-import { CollaborationEditor } from "@kn/editor";
+import { CollaborationEditor, EditorView, printEditorContent } from "@kn/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
 import { useApi } from "@kn/core";
 import { useNavigator } from "@kn/core";
@@ -324,6 +324,12 @@ export const PageEditor: React.FC = () => {
                                             <div className="flex flex-row items-center gap-1">
                                                 <FileIcon className="h-4 w-4" />
                                                 <span>as word</span>
+                                            </div>
+                                            </DropdownMenuItem>
+                                              <DropdownMenuItem onClick={() => printEditorContent(editor.current?.view as EditorView)}>
+                                            <div className="flex flex-row items-center gap-1">
+                                                <FileIcon className="h-4 w-4" />
+                                                <span>as pdf</span>
                                             </div>
                                         </DropdownMenuItem>
                                     </DropdownMenuSubContent>
