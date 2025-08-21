@@ -7,7 +7,6 @@ import { SpaceSettings } from './pages/SpaceDetail/Settings'
 import { KPlugin, PluginConfig } from '@kn/common'
 import React from 'react'
 import { LayoutGrid } from '@kn/icon'
-import { TestExtension } from './editor-extensions/test-extension'
 import "@kn/ui/globals.css"
 
 
@@ -21,6 +20,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
   name: 'Default',
   status: 'ACTIVE',
   routes: [
+    { name: '/', path: '/', element: <Home /> },
     { name: '/home', path: '/home', element: <Home /> },
     { name: '/spaces', path: '/spaces', element: <Spaces /> },
     {
@@ -56,5 +56,27 @@ export const DefaultPluginInstance = new DefaultPlugin({
     },
   ]
   ,
-  editorExtension: [TestExtension]
+  editorExtension: [],
+  locales: {
+    "zh": {
+      translation: {
+        home: {
+          "title": "早上好",
+          "create-space": "创建空间",
+          "rs": "从最近的空间开始",
+          "all": "查看全部空间"
+        }
+      }
+    },
+    "en": {
+      translation: {
+        home: {
+          "title": "Good morning",
+          "create-space": "Create a space",
+          "rs": "Start from recent space",
+          "all": "all spaces"
+        }
+      }
+    }
+  }
 })

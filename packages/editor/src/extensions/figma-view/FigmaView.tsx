@@ -5,7 +5,7 @@ import { useActive } from "../../hooks";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewWrapper } from "@tiptap/react";
 import { useSafeState } from "ahooks";
-import { Edit, RefreshCw, Trash2 } from "@kn/icon";
+import { Edit, FigmaIcon, RefreshCw, Trash2 } from "@kn/icon";
 import React, { useRef } from "react";
 
 
@@ -30,7 +30,7 @@ export const FigmaViewComponent: React.FC<NodeViewProps> = (props) => {
 
     return <NodeViewWrapper className="leading-normal" ref={ref}>
         <Popover open={hover}>
-            <PopoverTrigger className="w-full border rounded-md shadow-sm">
+            <PopoverTrigger className="w-full rounded-md shadow-sm">
                 {
                     props.node.attrs.url ? <div className=" bg-white p-4 relative">
                         <div className="w-full h-[600px]">
@@ -39,14 +39,14 @@ export const FigmaViewComponent: React.FC<NodeViewProps> = (props) => {
                             )}`} />
                         </div>
                     </div> :
-                        <div className=" bg-white rounded-sm shadow-md p-4 w-full">
-                            <div className="flex flex-col gap-2">
-                                <div>Setup a figma url</div>
-                                <div className="flex flex-row gap-3" id="input">
-                                    <Input onChange={(e) => setUrl(e.target.value)} />
-                                    <Button onClick={handleClick}>Confirm</Button>
-                                </div>
-                            </div>
+                        <div className="flex flex-col gap-2">
+                            <Input
+                                icon={<FigmaIcon className="h-4 w-4" />}
+                                className=""
+                                placeholder="Setup a figma url"
+                                onChange={(e) => setUrl(e.target.value)}
+                            />
+                            <Button className=" block" h-6 size="sm" onClick={handleClick}>Confirm</Button>
                         </div>
                 }
             </PopoverTrigger>

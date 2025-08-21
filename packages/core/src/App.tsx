@@ -20,6 +20,8 @@ import { importScript } from "./utils/utils";
 import { Marketplace } from "./components/Shop/Marketplace";
 import { APIS } from "./api";
 import { event } from "@kn/common";
+import { i18n, initReactI18next, LanguageDetector } from "@kn/common";
+import { resources } from "./locales/resources"
 
 
 declare global {
@@ -58,6 +60,7 @@ const reslove = (config: common.RouteConfig) => {
     }
 }
 
+
 export const App: React.FC<AppProps> = (props) => {
     const { plugins } = props
     const [router, setRouter] = useSafeState<any>()
@@ -73,6 +76,28 @@ export const App: React.FC<AppProps> = (props) => {
         })
     }, [])
 
+    useEffect(() => {
+        if (loadFinished) {
+            const pluginLocales = pluginManager.resloveLocales()
+            const res = { ...resources, ...pluginLocales }
+            console.log('locales resources', res);
+            i18n.use(initReactI18next)
+                .use(LanguageDetector)
+                .init({
+                    detection: {
+                        lookupLocalStorage: 'language',
+                    },
+                    resources: res,
+                    fallbackLng: "en",
+                    debug: true,
+                    supportedLngs: common.supportedLngs,
+                    interpolation: {
+                        escapeValue: false, // not needed for react as it escapes by default
+                    }
+                })
+        }
+    }, [loadFinished, allPlugins])
+
     useAsyncEffect(async () => {
         try {
             if (!!localStorage.getItem("knowledge-token")) {
@@ -86,7 +111,6 @@ export const App: React.FC<AppProps> = (props) => {
                     const path = usePath(plugin.resourcePath)
                     return importScript(path, plugin.pluginKey)
                 })).then(res => {
-                    console.log('res', res);
                     setAllPlugins([...(plugins || []), ...res.map(it => Object.values(it)[0])])
                     setLoadFinished(true)
                 })

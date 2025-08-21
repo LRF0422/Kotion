@@ -68,8 +68,6 @@ export const PageEditor: React.FC = () => {
     const getIcon = (value: any) => {
         if (value) {
             const content = value.content[0]
-            console.log('content', content);
-
             if (content) {
                 return content.attrs?.icon
             }

@@ -1,13 +1,13 @@
 import { APIS } from "../../api";
 import { CardList } from "../components/CardList";
-import { Button } from "@kn/ui";
+import { Button, EmptyState } from "@kn/ui";
 import { useApi } from "@kn/core";
 import { useNavigator } from "@kn/core";
 import { Space as KSpace } from "../../model/Space";
-import { Book, Box, Clock, LayoutTemplate, Plus, UserCircle } from "@kn/icon";
+import { Book, Box, Clock, LayoutTemplate, Package2, Plus, UserCircle } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
-import { Empty } from "@kn/ui";
+import { useTranslation } from "@kn/common";
 
 
 export const Home: React.FC = () => {
@@ -16,6 +16,7 @@ export const Home: React.FC = () => {
     const [recentPages, setRecentPages] = useState([])
     const [flag, setFlag] = useState(0)
     const navigator = useNavigator()
+    const { t, i18n } = useTranslation()
 
 
     useEffect(() => {
@@ -30,20 +31,21 @@ export const Home: React.FC = () => {
         })
     }, [])
 
+
     return <div className="flex justify-center pb-4">
         <div className="w-[800px] flex flex-col gap-4">
             <div className=" flex items-center justify-center h-[100px]">
-                <div className="scroll-m-20 text-2xl font-semibold tracking-tight">Good Morning</div>
+                <div className="scroll-m-20 text-2xl font-semibold tracking-tight">{t("home.title")}</div>
             </div>
             <div className="flex flex-col gap-1">
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-1 py-1 font-light text-xs">
                         <Clock size={12} />
-                        <div className=" font-bold">从最近的空间开始</div>
-                        <a href="#" className=" underline ml-2 italic">查看全部空间</a>
+                        <div className=" font-bold">{t("home.rs")}</div>
+                        <a href="#" className=" underline ml-2 italic">{t("home.all")}</a>
                     </div>
                     <CreateSpaceDlg
-                        trigger={<Button size="sm" variant="ghost" className="flex flex-row gap-1"><Plus className="w-4 h-4" /> Create a space</Button>}
+                        trigger={<Button size="sm" variant="ghost" className="flex flex-row gap-1"><Plus className="w-4 h-4" />{t("home.create-space")}</Button>}
                         callBack={() => setFlag(f => f + 1)}
                     />
                 </div>
@@ -51,7 +53,7 @@ export const Home: React.FC = () => {
                     data={recentSpaces}
                     className="h-[200px]"
                     emptyProps={{
-                        button: <CreateSpaceDlg trigger={<Button>Create a space</Button>} />
+                        button: <CreateSpaceDlg trigger={<Button>{t("home.create-space")}</Button>} />
                     }}
                     config={{
                         // desc: 'description',
@@ -103,14 +105,24 @@ export const Home: React.FC = () => {
                     <LayoutTemplate size={12} />
                     <div className=" font-bold">协作空间</div>
                 </div>
-                <Empty />
+                <EmptyState
+                    title=""
+                    className="max-w-none"
+                    description="暂无数据"
+                    icons={[Package2]}
+                />
             </div>
             <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-1 py-1 font-light text-xs">
                     <Book size={12} />
                     <div className=" font-bold">学习如何使用Knowledge</div>
                 </div>
-                <Empty />
+                <EmptyState
+                    title=""
+                    className="max-w-none"
+                    description="暂无数据"
+                    icons={[Package2]}
+                />
             </div>
         </div>
     </div>

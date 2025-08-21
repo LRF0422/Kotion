@@ -16,6 +16,12 @@ export const Doc = Document.extend({
             },
             comment: {
                 default: []
+            },
+            createDate: {
+                default: null
+            },
+            updateDate: {
+                default: null
             }
         }
     }

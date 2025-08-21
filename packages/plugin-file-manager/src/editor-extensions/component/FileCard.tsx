@@ -1,5 +1,5 @@
 import { Download, FileIcon, FolderOpenIcon, XIcon } from "@kn/icon";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, cn } from "@kn/ui";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, Separator, cn } from "@kn/ui";
 import { useSafeState } from "@kn/core";
 import React, { useEffect } from "react";
 import { FileItem, FileManagerState, useFileManagerState } from "./FileContext";
@@ -24,7 +24,7 @@ export const FileCard: React.FC<FileItem> = (props) => {
     useEffect(() => {
         setChecked(!!selectedFiles.find(it => it.id === id))
     }, [selectedFiles, props])
-    return <div
+    return name && <div
         onContextMenu={() => {
             setChecked(true)
         }}
@@ -34,7 +34,7 @@ export const FileCard: React.FC<FileItem> = (props) => {
     >
         <Card className={cn("w-[200px] bg-muted/40 shadow-sm hover:bg-muted/50 hover:shadow-md", checked ? "outline" : "")}>
             <CardHeader className="p-0">
-                <CardTitle className="p-0 m-0">
+                <CardTitle className="p-0 m-0 border-b">
                     <div className="flex items-center justify-between p-1">
                         {
                             selectable && <Checkbox className="ml-1" checked={checked} onCheckedChange={(value) => {
@@ -63,7 +63,13 @@ export const FileCard: React.FC<FileItem> = (props) => {
                 }
             </CardContent>
             <CardFooter className="p-2 m-0 border-t text-sm text-nowrap overflow-hidden text-ellipsis h-[30px] select-none">
-                {name}
+                {
+                    isFolder ? name : <div className="flex justify-between h-full w-full">
+                        <div className="w-[200px] overflow-hidden">{name}</div>
+                        <Separator orientation="vertical" />
+                        <div>{name.substring(name.lastIndexOf("."), name.length - 1)}</div>
+                    </div>
+                }
             </CardFooter>
         </Card>
     </div>

@@ -22,6 +22,7 @@ type TreeViewProps = {
     icon?: ReactNode;
     onTreeSelected?: (key: string) => void;
     size?: Size;
+    loading?: boolean
 } & (
         | {
             initialExpendedItems?: string[];
@@ -43,7 +44,8 @@ export const TreeView = ({
     selectParent = false,
     indicator = false,
     onTreeSelected,
-    size
+    size,
+    loading = false
 }: TreeViewProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -65,7 +67,7 @@ export const TreeView = ({
                 className
             )}
         >
-            <Tree
+            {<Tree
                 initialSelectedId={initialSelectedId}
                 initialExpendedItems={initialExpendedItems}
                 elements={elements}
@@ -81,12 +83,10 @@ export const TreeView = ({
                         key={element.id}
                         elements={[element]}
                         indicator={indicator}
+                        loading={loading}
                     />
                 ))}
-                {/* <CollapseButton elements={elements} expandAll={expandAll}>
-                    <span>Expand All</span>
-                </CollapseButton> */}
-            </Tree>
+            </Tree>}
         </div>
     );
 };
@@ -98,65 +98,65 @@ export const TreeItem = forwardRef<
     {
         elements?: TreeViewElement[];
         indicator?: boolean;
+        loading?: boolean
     } & React.HTMLAttributes<HTMLUListElement>
->(({ className, elements, indicator, ...props }, ref) => {
-    return (
-        <ul ref={ref} className="w-full space-y-1" {...props}>
-            {elements &&
-                elements.map((element: TreeViewElement) => (
-                    <li key={element.id} className="w-full block">
-                        {element.children && element.children?.length > 0 ? (
-                            element.isGroup ? <TreeItemGroup name={element.name} key={element.id} actions={element.actions} height={element.height}>
+>(({ className, elements, indicator, loading, ...props }, ref) => {
+    return (<ul ref={ref} className="w-full space-y-1" {...props}>
+        {elements &&
+            elements.map((element: TreeViewElement) => (
+                <li key={element.id} className="w-full block">
+                    {element.children && element.children?.length > 0 ? (
+                        element.isGroup ? <TreeItemGroup name={element.name} key={element.id} actions={element.actions} height={element.height}>
+                            <TreeItem
+                                // key={element.id}
+                                aria-label={`folder ${element.name}`}
+                                elements={element.children}
+                                indicator={indicator}
+                            />
+                        </TreeItemGroup> :
+                            <Folder
+                                className={element.className}
+                                element={element.name}
+                                value={element.id}
+                                icon={element.icon}
+                                isSelectable={element.isSelectable}
+                                onClick={element.onClick}
+                            >
                                 <TreeItem
-                                    // key={element.id}
+                                    key={element.id}
                                     aria-label={`folder ${element.name}`}
                                     elements={element.children}
                                     indicator={indicator}
                                 />
-                            </TreeItemGroup> :
-                                <Folder
-                                    className={element.className}
-                                    element={element.name}
-                                    value={element.id}
-                                    icon={element.icon}
-                                    isSelectable={element.isSelectable}
-                                    onClick={element.onClick}
-                                >
-                                    <TreeItem
-                                        key={element.id}
+                            </Folder>
+                    ) : (
+                        element.isGroup ?
+                            <TreeItemGroup name={element.name} key={element.id} actions={element.actions} height={element.height}>
+                                {
+                                    (element.children && element.children.length > 0) ? <TreeItem
+                                        // key={element.id}
                                         aria-label={`folder ${element.name}`}
                                         elements={element.children}
                                         indicator={indicator}
-                                    />
-                                </Folder>
-                        ) : (
-                            element.isGroup ?
-                                <TreeItemGroup name={element.name} key={element.id} actions={element.actions} height={element.height}>
-                                    {
-                                        (element.children && element.children.length > 0) ? <TreeItem
-                                            // key={element.id}
-                                            aria-label={`folder ${element.name}`}
-                                            elements={element.children}
-                                            indicator={indicator}
-                                        /> : <Empty className=" border-none text-gray-400" {...element.emptyProps} />
-                                    }
-                                </TreeItemGroup> :
-                                element.customerRender ? element.customerRender :
-                                    <File
-                                        value={element.id}
-                                        className={element.className}
-                                        aria-label={`File ${element.name}`}
-                                        key={element.id}
-                                        fileIcon={element.icon}
-                                        isSelectable={element.isSelectable}
-                                        onClick={element.onClick}
-                                    >
-                                        <span>{element?.name}</span>
-                                    </File>
-                        )}
-                    </li>
-                ))}
-        </ul>
+                                    /> : <Empty className=" border-none text-gray-400" {...element.emptyProps} />
+                                }
+                            </TreeItemGroup> :
+                            element.customerRender ? element.customerRender :
+                                <File
+                                    value={element.id}
+                                    className={element.className}
+                                    aria-label={`File ${element.name}`}
+                                    key={element.id}
+                                    fileIcon={element.icon}
+                                    isSelectable={element.isSelectable}
+                                    onClick={element.onClick}
+                                >
+                                    <span>{element?.name}</span>
+                                </File>
+                    )}
+                </li>
+            ))}
+    </ul>
     );
 });
 

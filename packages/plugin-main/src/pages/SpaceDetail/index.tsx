@@ -35,6 +35,7 @@ export const SpaceDetail: React.FC = () => {
     const params = useParams()
     const navigator = useNavigator()
     const [searchValue, setSearchValue] = useState<string>()
+    const [loading, { toggle: toggleLoading }] = useToggle(true)
     useEffect(() => {
         useApi(APIS.SPACE_DETAIL, { id: params.id }).then((res) => {
             setSpace(res.data)
@@ -42,8 +43,10 @@ export const SpaceDetail: React.FC = () => {
     }, [])
 
     useEffect(() => {
+        toggleLoading()
         useApi(APIS.GET_PAGE_TREE, { id: params.id, searchValue: searchValue }).then((res) => {
             setPageTree(res.data)
+            toggleLoading()
         })
     }, [flag, searchValue])
 
@@ -232,9 +235,9 @@ export const SpaceDetail: React.FC = () => {
                     })
                 }}>
                     <div className=" p-2 mt-1 bg-muted rounded-sm flex-1 cursor-pointer">{space.name}</div>
-                    <Button size="icon">
+                    {/* <Button size="icon">
                         <ShareIcon className="h-4 w-4" />
-                    </Button>
+                    </Button> */}
                 </div>
         },
         {
@@ -343,6 +346,7 @@ export const SpaceDetail: React.FC = () => {
     return space && <div className="grid grid-cols-[280px_1fr] h-full w-full bg-muted/40 ">
         <div className="h-full w-full border-r border-solid overflow-auto">
             <TreeView
+                loading={loading}
                 size="sm"
                 selectParent={true}
                 className="w-full h-full"

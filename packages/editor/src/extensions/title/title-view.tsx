@@ -3,10 +3,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
 import { Clock, Image, UserCircle } from "@kn/icon";
-import React from "react";
+import React, { useContext } from "react";
+import { PageContext } from "@editor/editor/context";
 
 
 const _TitleView: React.FC<NodeViewProps> = (props) => {
+
+	const { createTime, updateTime  } = useContext(PageContext)
 
 	return <div className="flex flex-col items-start pt-[30px]">
 		<Popover>
@@ -44,7 +47,7 @@ const _TitleView: React.FC<NodeViewProps> = (props) => {
 					</a>
 					<div className="flex flex-row gap-1 items-center">
 						<Clock className="h-4 w-4" />
-						At 2024年8月19日
+						At { createTime}
 					</div>
 				</div>
 				<div className=" text-gray-500 italic flex flex-col gap-1 px-2 py-1 hover:bg-muted transition-all duration-200 rounded-sm">
@@ -54,7 +57,7 @@ const _TitleView: React.FC<NodeViewProps> = (props) => {
 					</a>
 					<div className="flex flex-row gap-1 items-center">
 						<Clock className="h-4 w-4" />
-						At 2024年8月19日
+						At { updateTime }
 					</div>
 				</div>
 			</div>

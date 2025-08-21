@@ -18,6 +18,7 @@ import { ModeToggle } from "@kn/ui";
 import { AppContext, SiderMenuItemProps } from "@kn/common";
 import { event } from "@kn/common";
 import { useUploadFile } from "../hooks";
+import { LanguageToggle } from "src/locales/LanguageToggle";
 
 
 
@@ -164,5 +165,6 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
             ))
         }
         <ModeToggle />
+        <LanguageToggle />
     </div>
 }

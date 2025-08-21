@@ -88,7 +88,7 @@ export const EditorRender = forwardRef<
 
   useImperativeHandle(ref, () => editor as Editor);
   return (editor &&
-    <PageContext.Provider value={pageInfo}>
+    <PageContext.Provider value={pageInfo as PageContextProps}>
       <ThemeProvider theme={light}>
         <div className={cn("grow z-30", width)}>
           <div className={cn("w-full", props.className)} id="editor-container">

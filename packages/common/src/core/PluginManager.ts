@@ -10,6 +10,7 @@ export interface PluginConfig {
     globalRoutes?: RouteConfig[]
     menus?: SiderMenuItemProps[]
     editorExtension?: ExtensionWrapper[]
+    locales?: any
 }
 
 export class KPlugin<T extends PluginConfig> {
@@ -19,6 +20,7 @@ export class KPlugin<T extends PluginConfig> {
     private _globalRoutes?: RouteConfig[]
     private _editorExtension?: ExtensionWrapper[]
     private _menus?: SiderMenuItemProps[]
+    private _locales?: any
 
     constructor(config: T) {
         this.name = config.name
@@ -26,6 +28,7 @@ export class KPlugin<T extends PluginConfig> {
         this._globalRoutes = config.globalRoutes
         this._editorExtension = config.editorExtension
         this._menus = config.menus
+        this._locales = config.locales
     }
 
     get routes(): RouteConfig[] {
@@ -38,6 +41,10 @@ export class KPlugin<T extends PluginConfig> {
 
     get menus(): SiderMenuItemProps[] {
         return this._menus || []
+    }
+
+    get locales(): any {
+        return this._locales
     }
 
 }
@@ -73,6 +80,16 @@ export class PluginManager {
             }
         })
         return routes;
+    }
+
+    resloveLocales(): any {
+        let locales: any = {}
+        this.plugins.forEach(plugin => {
+            if (plugin.locales) {
+                locales = { ...locales, ...plugin.locales }
+            }
+        })
+        return locales;
     }
 
     resloveEditorExtension(): ExtensionWrapper[] {

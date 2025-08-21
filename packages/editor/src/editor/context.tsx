@@ -10,4 +10,4 @@ export interface PageContextProps {
     updateTime?: string
 }
 
-export const PageContext = createContext<PageContextProps | undefined>({})
+export const PageContext = createContext<PageContextProps>({})

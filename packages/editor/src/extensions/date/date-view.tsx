@@ -8,6 +8,7 @@ export const DateView: React.FC<NodeViewProps> = (props) => {
 
 	return <NodeViewWrapper as="span">
 		<DateTimePicker
+			className="w-[200px] h-6"
 			locale={zhCN}
 			disabled={!props.editor.isEditable}
 			value={props.node.attrs.date && new Date(props.node.attrs.date)}
@@ -16,6 +17,6 @@ export const DateView: React.FC<NodeViewProps> = (props) => {
 				props.updateAttributes({
 					date: value?.toString()
 				});
-			})} weekStartsOn={undefined} showWeekNumber={undefined} showOutsideDays={undefined} />
+			})} weekStartsOn={1} showWeekNumber={true} showOutsideDays={true} />
 	</NodeViewWrapper>
 }
