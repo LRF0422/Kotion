@@ -13,7 +13,6 @@ declare module '@kn/editor' {
 export const Mermaid = Node.create({
     name: "mermaid",
     group: "block",
-    content: "block*",
     draggable: true,
     atom: true,
     isolating: true,
@@ -38,12 +37,7 @@ export const Mermaid = Node.create({
         return {
             insertMermaid: () => ({ commands }) => {
                 return commands.insertContent({
-                    type: this.name,
-                    content: [
-                        {
-                            type: "paragraph"
-                        }
-                    ]
+                    type: this.name
                 })
             }
         }

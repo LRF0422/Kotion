@@ -4,11 +4,12 @@ import { AiStaticMenu } from "./menu/AiStaticMenu";
 import { Sparkles } from "@kn/icon";
 import { AiImage } from "./ai-image";
 import React from "react";
+import TextLoadingDecorationExtension from "./text-loading";
 
 
 export const AIExtension: ExtensionWrapper = {
     name: Ai.name,
-    extendsion: [Ai, AiImage],
+    extendsion: [Ai, AiImage, TextLoadingDecorationExtension],
     flotMenuConfig: [AiStaticMenu],
     slashConfig: [
         {
@@ -17,7 +18,7 @@ export const AIExtension: ExtensionWrapper = {
         },
         {
             icon: <Sparkles className="h-4 w-4" />,
-            text: '续写',
+            text: '内容生成',
             slash: '/ai',
             action: (editor) => {
                 editor.commands.insertAIBlock()

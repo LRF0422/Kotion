@@ -39,7 +39,6 @@ export const AiImageView: React.FC<NodeViewProps> = (props) => {
                         toggle()
                         const promopt = props.node.attrs.prompt
                         aiImageWriter(promopt).then(res => {
-                            console.log('res', res);
                             if (res.error) {
                                 toast.warning(res.error.message, {
                                     position: 'top-center'

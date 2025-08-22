@@ -11,7 +11,6 @@ declare module "@kn/editor" {
     }
 }
 
-// Define and export the plugin key
 export const loadingDecorationKey = new PluginKey<LoadingDecorationState>("loadingDecoration");
 
 interface LoadingDecorationState {
@@ -19,7 +18,6 @@ interface LoadingDecorationState {
     hasDecoration: boolean;
 }
 
-// this decoration is used to display streaming content from an LLM, called withing the slash command
 const TextLoadingDecorationExtension = Extension.create({
     name: "loadingDecoration",
 
@@ -61,7 +59,6 @@ const TextLoadingDecorationExtension = Extension.create({
                                 const container = document.createElement("span");
                                 container.className = "loading-decoration";
 
-                                // Sanitize and append HTML
                                 if (loadingHtml) {
                                     container.innerHTML = loadingHtml;
                                 } else {
@@ -119,7 +116,7 @@ const TextLoadingDecorationExtension = Extension.create({
 
                 const pluginKey = this.options.pluginKey;
                 const tr = state.tr.setMeta(pluginKey, {
-                    pos: 0, // We can pass any position as it will remove the entire decoration set
+                    pos: 0,
                     type: "loadingDecoration",
                     remove: true
                 });

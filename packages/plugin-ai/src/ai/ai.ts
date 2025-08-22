@@ -40,15 +40,15 @@ export const Ai = Node.create({
     },
     addCommands() {
         return {
-            insertAIBlock: () => ({ commands }) => {
-                return commands.insertContent({
+            insertAIBlock: () => ({ chain }) => {
+                return chain().insertContent({
                     type: this.name,
                     content: [
                         {
                             type: 'paragraph'
                         }
                     ]
-                })
+                }).scrollIntoView().run()
             }
         }
     }

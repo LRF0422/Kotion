@@ -12,5 +12,5 @@ import { excalidraw } from "@kn/plugin-excalidraw"
 import { ai } from "@kn/plugin-ai"
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[ai, DefaultPluginInstance, fileManager, database, excalidraw]} />
+  <App plugins={[ai, DefaultPluginInstance, fileManager, database, excalidraw, mermaid]} />
 )

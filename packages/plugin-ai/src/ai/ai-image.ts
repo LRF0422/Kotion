@@ -9,7 +9,6 @@ export const AiImage = Node.create({
     name: 'aiImage',
     group: 'block',
 
-
     addAttributes() {
         return {
             prompt: {

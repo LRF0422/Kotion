@@ -14,7 +14,6 @@ import { Perf } from "../extensions/perf"
 import { UniqueID } from "../extensions/unique-id"
 import { Doc } from "../extensions"
 import Document from "@tiptap/extension-document";
-import TextLoadingDecorationExtension from "../extensions/ai/text-loading"
 import { UndoRedo } from '@tiptap/extensions'
 
 
@@ -43,7 +42,6 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean) => {
 		TrailingNode,
 		Perf,
 		BubbleMenu,
-		TextLoadingDecorationExtension,
 		UniqueID.configure({
 			filterTransaction: t => !isChangeOrigin(t)
 		}),
