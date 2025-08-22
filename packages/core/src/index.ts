@@ -9,6 +9,7 @@ export * from "react-dom"
 export * from "./utils/zip-util"
 export { createRoot } from "react-dom/client"
 export * from "browser-fs-access"
+export * from "./ai"
 
 import deepEqual from "deep-equal"
 import moment from "moment"

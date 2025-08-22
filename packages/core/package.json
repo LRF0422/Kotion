@@ -15,11 +15,14 @@
   },
   "type": "module",
   "dependencies": {
+    "@ai-sdk/deepseek": "^1.0.11",
+    "@ai-sdk/react": "^2.0.20",
     "@kn/common": "workspace:*",
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",
     "@types/pako": "^2.0.3",
+    "ai": "^5.0.20",
     "axios": "^1.7.7",
     "browser-fs-access": "^0.35.0",
     "event-source-polyfill": "^1.0.31",
@@ -29,9 +32,9 @@
     "zipson": "^0.2.12"
   },
   "devDependencies": {
+    "@kn/rollup-config": "workspace:*",
     "@types/event-source-polyfill": "^1.0.5",
-    "@types/react-redux": "^7.1.34",
-    "@kn/rollup-config": "workspace:*"
+    "@types/react-redux": "^7.1.34"
   },
   "keywords": [],
   "author": "",

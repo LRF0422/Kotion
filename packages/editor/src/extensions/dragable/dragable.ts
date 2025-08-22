@@ -161,7 +161,6 @@ export const Dragable = Extension.create({
           };
         },
         props: {
-          // @ts-ignore
           handleDOMEvents: {
             drop: (view, event: DragEvent) => {
               if (!view.editable || !dragHandleDOM) return false;

@@ -1,6 +1,6 @@
 import { Button } from "@kn/ui";
-import { NodeViewProps } from "@tiptap/core";
-import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
+import { NodeViewProps } from "@kn/editor";
+import { NodeViewContent, NodeViewWrapper } from "@kn/editor";
 import React from "react";
 import { aiGeneration } from "./utils";
 import { Textarea } from "@kn/ui";

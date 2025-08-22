@@ -13,6 +13,7 @@
   "dependencies": {
     "@kn/ui": "workspace:*",
     "@kn/core": "workspace:*",
+    "@kn/plugin-ai": "workspace:*",
     "@kn/plugin-main": "workspace:*",
     "@kn/plugin-database": "workspace:*",
     "@kn/plugin-excalidraw": "workspace:*",

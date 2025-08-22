@@ -1,5 +1,5 @@
-import { mergeAttributes, Node } from "@tiptap/core";
-import { ReactNodeViewRenderer } from "@tiptap/react";
+import { mergeAttributes, PMNode as Node } from "@kn/editor";
+import { ReactNodeViewRenderer } from "@kn/editor";
 import { AiImageView } from "./AiImageView";
 
 
@@ -23,12 +23,12 @@ export const AiImage = Node.create({
     addNodeView() {
         return ReactNodeViewRenderer(AiImageView)
     },
-    renderHTML({HTMLAttributes}) {
-        return ['div', mergeAttributes(HTMLAttributes, {class: 'node-ai-image'})]
+    renderHTML({ HTMLAttributes }) {
+        return ['div', mergeAttributes(HTMLAttributes, { class: 'node-ai-image' })]
     },
     addCommands() {
-        return  {
-            insertAiImage: () => ({commands}) => {
+        return {
+            insertAiImage: () => ({ commands }) => {
                 return commands.insertContent({
                     type: this.name
                 })

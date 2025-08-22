@@ -13,7 +13,7 @@ import { useSafeState, useUnmount } from "ahooks";
 import { ToC } from "./ToC";
 import { cn } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
-import { PageContext } from "./context";
+import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
 import { TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
 
@@ -111,7 +111,7 @@ export const CollaborationEditor = forwardRef<
   useImperativeHandle(ref, () => editor as Editor)
 
   return (editor &&
-    <PageContext.Provider value={pageInfo}>
+    <PageContext.Provider value={pageInfo as PageContextProps}>
       <ThemeProvider theme={light}>
         <div className={cn("grow z-30", width)}>
           <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />

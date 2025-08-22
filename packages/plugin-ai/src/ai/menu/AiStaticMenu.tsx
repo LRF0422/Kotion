@@ -1,6 +1,6 @@
 import { Button } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@kn/ui";
-import { Editor } from "@tiptap/core";
+import { Editor } from "@kn/editor";
 import { ChevronDown, Circle, Languages, MessageCircleMore, PencilLine, SmilePlus, Sparkles } from "@kn/icon";
 import React from "react";
 import { comp } from "../utils";

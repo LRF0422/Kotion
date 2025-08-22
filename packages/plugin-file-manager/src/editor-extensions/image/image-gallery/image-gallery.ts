@@ -12,13 +12,6 @@ export const ImageGallery = Node.create({
       }
     };
   },
-  parseHTML() {
-    return [
-      {
-        tag: "div",
-      }
-    ]
-  },
   renderHTML({ HTMLAttributes }) {
     return [
       "div",

@@ -1,8 +1,8 @@
-import { mergeAttributes, Node } from "@tiptap/core";
-import { ReactNodeViewRenderer } from "@tiptap/react";
+import { mergeAttributes, PMNode as Node } from "@kn/editor";
+import { ReactNodeViewRenderer } from "@kn/editor";
 import { AiView } from "./AiView";
 
-declare module "@tiptap/core" {
+declare module "@kn/editor" {
     interface Commands<ReturnType> {
         ai: {
             insertAIBlock: () => ReturnType;
@@ -44,10 +44,10 @@ export const Ai = Node.create({
                 return commands.insertContent({
                     type: this.name,
                     content: [
-						{
-							type: 'paragraph'
-						}
-					]
+                        {
+                            type: 'paragraph'
+                        }
+                    ]
                 })
             }
         }

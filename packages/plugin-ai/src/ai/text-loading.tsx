@@ -1,8 +1,8 @@
-import { Plugin, PluginKey } from "@tiptap/pm/state";
-import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { Command, Extension } from "@tiptap/core";
+import { Plugin, PluginKey } from "@kn/editor";
+import { Decoration, DecorationSet } from "@kn/editor";
+import { Command, Extension } from "@kn/editor";
 
-declare module "@tiptap/core" {
+declare module "@kn/editor" {
     interface Commands<ReturnType> {
         textLoadingDecoration: {
             toggleLoadingDecoration: (pos: number, loadingHtml?: string) => ReturnType;
