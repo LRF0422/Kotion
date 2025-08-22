@@ -2,7 +2,7 @@
   "name": "turborepo-vite-shadcn-ui",
   "private": false,
   "license": "MIT",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "publishConfig": {
     "registry": "http://localhost:8081/repository/npm-hosted/"
   },

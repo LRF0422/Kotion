@@ -1,6 +1,6 @@
 {
   "name": "@kn/mermaid-plugin",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "description": "",
   "main": "src/index.tsx",
   "publishConfig": {
@@ -19,7 +19,6 @@
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",
     "autoprefixer": "^10.4.20",
-
     "mermaid": "^11.4.1",
     "postcss": "^8.4.47"
   },
