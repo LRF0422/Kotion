@@ -35,7 +35,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
                 })
             }} />
             <div className="flex flex-row gap-1 items-center">
-                <Button onClick={() => {
+                <Button size="sm" onClick={() => {
                     toggle()
                     let buff = ""
                     props.editor.commands.deleteRange({
@@ -58,7 +58,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
                         toggle()
                         props.updateAttributes({
                             ...props.node.attrs,
-                            generateDate: new Date().toUTCString()
+                            generateDate: new Date().toLocaleString()
                         })
                     })
                 }}>{
@@ -67,7 +67,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
                     }
                     {loading ? "生成中..." : "生成"}
                 </Button>
-                <Button variant="destructive" onClick={props.deleteNode}><Trash2 className="h-4 w-4 mr-1" />删除</Button>
+                <Button size="sm" variant="destructive" onClick={props.deleteNode}><Trash2 className="h-4 w-4 mr-1" />删除</Button>
             </div>
         </div>}
     </NodeViewWrapper>

@@ -9,7 +9,7 @@ export const LanguageToggle: React.FC = () => {
 
     return <DropdownMenu>
         <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon">
+            <Button variant="outline" size="icon" className=" rounded-full">
                 <LanguagesIcon className="h-[1.2rem] w-[1.2rem]" />
                 <span className="sr-only">Toggle language</span>
             </Button>

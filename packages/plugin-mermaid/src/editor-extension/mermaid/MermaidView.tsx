@@ -1,8 +1,9 @@
-import { NodeViewContent, NodeViewProps, NodeViewWrapper } from "@kn/editor"
+import { NodeViewProps, NodeViewWrapper } from "@kn/editor"
 import React, { useEffect, useRef, useState } from "react"
 import mermaid from 'mermaid'
 import { useAsyncEffect, useDebounce, useTheme } from "@kn/core"
-import { CodeEditor } from "@kn/ui"
+import { CodeEditor, IconButton } from "@kn/ui"
+import { AiOutlineQuestionCircle } from "@kn/icon"
 export const MermaidView: React.FC<NodeViewProps> = (props) => {
 
     const divRef = useRef<HTMLDivElement>(null)
@@ -26,21 +27,22 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
                 })
             }
         }
-    }, [value])
+    }, [value, theme])
 
     return <NodeViewWrapper className="h-auto">
         <div className=" hidden" ref={divRef}></div>
         <div className="flex gap-1">
-            <CodeEditor
+            {props.editor.isEditable && <CodeEditor
                 editable={props.editor.isEditable}
                 value={code}
                 height="300px"
                 width="400px"
                 className="rounded-sm"
                 onChange={setCode}
-            />
-            <div className="flex-1 flex border rounded-sm max-h-[300px] items-center justify-center">
-                {svg && <img src={`data:image/svg+xml;base64,${svg}`} width={300} />}
+            />}
+            <div className="flex-1 flex border rounded-sm items-center justify-center p-1 relative">
+                {svg && <img src={`data:image/svg+xml;base64,${svg}`} width={props.editor.isEditable ? 300 : 500} />}
+                <IconButton icon={<AiOutlineQuestionCircle className="h-5 w-5" />} className=" absolute bottom-1 right-1" />
             </div>
         </div>
     </NodeViewWrapper>

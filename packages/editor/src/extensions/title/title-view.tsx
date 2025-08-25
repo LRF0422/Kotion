@@ -7,7 +7,7 @@ import React, { useContext } from "react";
 import { PageContext } from "@editor/editor/context";
 
 
-const _TitleView: React.FC<NodeViewProps> = (props) => {
+export const TitleView: React.FC<NodeViewProps> = (props) => {
 
 	const { createTime, updateTime  } = useContext(PageContext)
 
@@ -63,16 +63,4 @@ const _TitleView: React.FC<NodeViewProps> = (props) => {
 			</div>
 		}
 	</div>
-}
-
-const MotionTitle = MotionComponent(_TitleView)
-
-export const TitleView: React.FC<NodeViewProps> = (props) => {
-	return <NodeViewWrapper className="leading-normal" >
-		<MotionTitle
-			{...props}
-			initial={{ boxShadow: "0px 0px #000" }}
-			animate={{ boxShadow: "10px 10px #000" }}
-		/>
-	</NodeViewWrapper>
 }
