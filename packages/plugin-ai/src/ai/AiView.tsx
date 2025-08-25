@@ -8,11 +8,13 @@ import { useToggle } from "ahooks";
 import { Label } from "@kn/ui";
 import { Loader2, Sparkles, Trash2 } from "@kn/icon";
 import { cn } from "@kn/ui";
+import { useTranslation } from "@kn/common";
 
 
 export const AiView: React.FC<NodeViewProps> = (props) => {
 
     const [loading, { toggle }] = useToggle(false)
+    const { t } = useTranslation()
 
     return <NodeViewWrapper as="div" className=" relative flex flex-col w-full border border-dashed p-2 pt-9 rounded-sm text-popover-foreground">
         <div className=" absolute  right-0 top-0 border border-t-0 border-l border-r-0 border-b rounded-sm text-sm text-gray-500 p-1">
