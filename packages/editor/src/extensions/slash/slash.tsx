@@ -98,6 +98,9 @@ export const createSlash = (name: string, options?: SlashOptions) => {
             let component: ReactRenderer;
             let isEditable: boolean;
 
+            const updatePosition = (domect: any) => {
+            };
+
             return {
               onStart: props => {
                 isEditable = props.editor.isEditable;

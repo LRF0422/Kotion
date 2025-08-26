@@ -1,10 +1,10 @@
-import { ReactRenderer } from "@tiptap/react";
+import { ReactRenderer, posToDOMRect } from "@tiptap/react";
 import { CompactEmoji } from "emojibase";
 import { fetchEmojis } from "emojibase";
 
 // import tippy from "tippy.js";
 import emojiList from "./emoji-list";
-import { computePosition } from "@floating-ui/dom";
+import { computePosition, flip } from "@floating-ui/dom";
 
 interface QueryProps {
     query: string;
@@ -40,46 +40,57 @@ export default {
     render: () => {
         let component: any;
         let popup: any;
+        let rect: any
+
+        const updatePostition = () => {
+            if (rect) {
+                let virtualElement = {
+                    getBoundingClientRect: () => rect,
+                    getClientRects: () => [rect],
+                }
+                computePosition(virtualElement, component.element as HTMLElement, {
+                    placement: 'bottom-start',
+                    middleware: [flip()],
+                }).then(({ x, y, strategy }) => {
+                    console.log("finished", component.element);
+                    (component.element as HTMLElement).style.zIndex = '1000';
+                    (component.element as HTMLElement).style.position = strategy;
+                    (component.element as HTMLElement).style.left = `${x}px`;
+                    (component.element as HTMLElement).style.top = `${y}px`;
+                })
+            }
+        };
 
         return {
             onStart: (props: any) => {
-                component = new ReactRenderer(emojiList, {
-                    props,
-                    editor: props.editor,
-                });
-
-                if (!props.clientRect) {
-                    return;
+                if (!component || component.element.children.length === 0) {
+                    component = new ReactRenderer(emojiList, {
+                        props,
+                        editor: props.editor
+                    });
+                    component.render()
+                    document.body.appendChild(component.element);
                 }
 
-                // popup = tippy("body", {
-                //     getReferenceClientRect: props.clientRect,
-                //     appendTo: () => document.body,
-                //     content: component.element,
-                //     showOnCreate: true,
-                //     interactive: true,
-                //     trigger: "manual",
-                //     placement: "bottom-start",
-                // });
-                computePosition(document.body, component.element, {})
+                const { selection } = props.editor.state
+                const { view } = props.editor
+                const domRect = posToDOMRect(view, selection.from, selection.to)
+                rect = domRect
+                updatePostition()
             },
 
             onUpdate(props: any) {
                 component.updateProps(props);
-
                 if (!props.clientRect) {
                     return;
                 }
-
-                // popup[0].setProps({
-                //     getReferenceClientRect: props.clientRect,
-                // });
+                rect = props.clientRect();
+                updatePostition();
             },
 
             onKeyDown(props: any) {
                 if (props.event.key === "Escape") {
-                    // popup[0].hide();
-
+                    document.body.removeChild(component.element);
                     return true;
                 }
 
@@ -88,8 +99,8 @@ export default {
 
             onExit() {
                 setTimeout(() => {
-                    popup[0].destroy();
                     component.destroy();
+                    document.body.removeChild(component.element);
                 });
             },
         };

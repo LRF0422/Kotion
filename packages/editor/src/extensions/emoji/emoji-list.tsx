@@ -8,8 +8,7 @@ import React, {
 
 interface EmojiProps {
     items: CompactEmoji[];
-    // @ts-ignore
-    command: ({ id }) => void;
+    command: ({ id }: { id: any }) => void;
 }
 
 export default forwardRef((props: EmojiProps, ref) => {
@@ -53,8 +52,7 @@ export default forwardRef((props: EmojiProps, ref) => {
     }, [props.items]);
 
     useImperativeHandle(ref, () => ({
-        // @ts-ignore
-        onKeyDown: ({ event }) => {
+        onKeyDown: ({ event }: { event: KeyboardEvent }) => {
             if (event.key === "ArrowLeft") {
                 upHandler();
                 return true;
@@ -76,12 +74,12 @@ export default forwardRef((props: EmojiProps, ref) => {
 
     if (props.items) {
         return (
-            <div className="bg-white dark:bg-slate-700 dark:text-slate-200 text-slate-700 rounded-md shadow-md p-2 flex flex-row flex-wrap text-2x max-w-sm overflow-hidden">
+            <div className=" bg-popover rounded-md shadow-md p-2 flex flex-row flex-wrap text-2x max-w-sm overflow-hidden">
                 {props.items.length ? (
                     props.items.map((item, index) => (
                         <div
                             className={` h-6 w-6 flex items-center justify-center ${index === selectedIndex
-                                ? "border rounded-sm border-slate-400 dark:border-slate-600"
+                                ? "border rounded-sm"
                                 : ""
                                 }`}
                             key={index}
