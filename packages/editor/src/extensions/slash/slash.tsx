@@ -1,5 +1,5 @@
 import React, { ElementType } from "react";
-import { Editor, Node, posToDOMRect } from "@tiptap/core";
+import { Editor, Node, isFunction, posToDOMRect } from "@tiptap/core";
 import { ReactRenderer } from "@tiptap/react";
 import Suggestion from "@tiptap/suggestion";
 
@@ -99,6 +99,22 @@ export const createSlash = (name: string, options?: SlashOptions) => {
             let isEditable: boolean;
 
             const updatePosition = (domect: any) => {
+              console.log('updated', domect);
+              const domRect = isFunction(domect) ? domect() : domect
+              const virtualElement = {
+                getBoundingClientRect: () => domRect,
+                getClientRects: () => [domRect],
+              }
+              computePosition(virtualElement, component.element as HTMLElement, {
+                placement: 'right-start',
+                middleware: [flip()],
+              }).then(({ x, y, strategy }) => {
+                console.log("finished", component.element);
+                (component.element as HTMLElement).style.zIndex = '1000';
+                (component.element as HTMLElement).style.position = strategy;
+                (component.element as HTMLElement).style.left = `${x + 2}px`;
+                (component.element as HTMLElement).style.top = `${y}px`;
+              })
             };
 
             return {
@@ -116,10 +132,6 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                 const { selection } = this.editor.state
                 const { view } = this.editor
                 const domRect = posToDOMRect(view, selection.from, selection.to)
-                let virtualElement = {
-                  getBoundingClientRect: () => domRect,
-                  getClientRects: () => [domRect],
-                }
 
                 // this is a special case for cell selections
                 if (selection instanceof CellSelection) {
@@ -141,33 +153,21 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                         (toDOM as HTMLElement).getBoundingClientRect(),
                       )
 
-                  virtualElement = {
-                    getBoundingClientRect: () => clientRect,
-                    getClientRects: () => [clientRect],
-                  }
+                  updatePosition(clientRect)
                 }
-                computePosition(virtualElement, component.element as HTMLElement, {
-                  placement: 'right-start',
-                  middleware: [flip()],
-                }).then(({ x, y, strategy }) => {
-                  console.log("finished", component.element);
-                  (component.element as HTMLElement).style.zIndex = '1000';
-                  (component.element as HTMLElement).style.position = strategy;
-                  (component.element as HTMLElement).style.left = `${x}px`;
-                  (component.element as HTMLElement).style.top = `${y}px`;
-                })
+                updatePosition(domRect)
               },
 
               onUpdate(props) {
                 if (!isEditable) return;
                 component.updateProps(props);
+                updatePosition(props.clientRect)
               },
 
               onKeyDown(props) {
                 if (!isEditable) return;
 
                 if (props.event.key === "Escape") {
-                  // popup[0]?.hide();
                   document.body.removeChild(component.element);
                   return true;
                 }
