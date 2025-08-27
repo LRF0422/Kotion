@@ -3,14 +3,15 @@ import { NodeViewWrapper, NodeViewContent, NodeViewProps } from "@tiptap/react";
 
 import { Select } from "../../components";
 import { copy } from "../../utilities";
-import { Copy } from "@kn/icon";
+import { Copy, Trash2 } from "@kn/icon";
 import { Button } from "@kn/ui";
 
 export const CodeBlockView: React.FC<NodeViewProps> = ({
   editor,
   node: { attrs },
   updateAttributes,
-  extension
+  extension,
+  deleteNode
 }) => {
   const isEditable = editor.isEditable;
   const { language: defaultLanguage } = attrs;
@@ -41,10 +42,17 @@ export const CodeBlockView: React.FC<NodeViewProps> = ({
             options={languages}
             onChange={(value) => updateAttributes({ language: value })}
             disabled={!isEditable}></Select>
-          <Button
-            size="sm"
-            onClick={() => copy($container?.current?.innerText as string)}
-          ><Copy className="h-4 w-4" /></Button>
+          <div className="flex gap-2 items-center">
+            <Button
+              size="sm"
+              onClick={() => copy($container?.current?.innerText as string)}
+            ><Copy className="h-4 w-4" /></Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => deleteNode()}
+            ><Trash2 className="h-4 w-4" /></Button>
+          </div>
         </div>
         <div>
           <pre ref={$container} className="prose-pre:bg-slate-600">

@@ -1,6 +1,7 @@
 import { generateText } from "@kn/core";
 import { Editor } from "@kn/editor";
 import { TextSelection } from "@kn/editor";
+import { toggleVariants } from "@kn/ui";
 
 export const aiText = async (editor: Editor, tips: string) => {
     const selection = editor.state.selection;
@@ -8,8 +9,9 @@ export const aiText = async (editor: Editor, tips: string) => {
     if (selection instanceof TextSelection) {
         let from = editor.state.selection.from
         let text = editor.state.doc.textBetween(selection.from, selection.to)
-        editor.commands.deleteSelection()
         const { textStream } = generateText(`${tips}，内容如下：${text}}，请不要说多余的话`)
+        editor.commands.deleteSelection()
+        editor.commands.toggleLoadingDecoration(from, "")
         for await (const part of textStream) {
             result += part
             editor.chain().focus().toggleLoadingDecoration(from, result).run()
@@ -23,7 +25,7 @@ export const aiText = async (editor: Editor, tips: string) => {
                     preserveWhitespace: false
                 }
             }).run();
-        editor.chain().removeLoadingDecoration().run()
+    editor.chain().removeLoadingDecoration().run()
     }
 }
 

@@ -1,6 +1,8 @@
-import { Plugin, PluginKey } from "@kn/editor";
+import { Plugin, PluginKey, ReactRenderer } from "@kn/editor";
 import { Decoration, DecorationSet } from "@kn/editor";
 import { Command, Extension } from "@kn/editor";
+import { MessageLoading } from "@kn/ui";
+import React from "react";
 
 declare module "@kn/editor" {
     interface Commands<ReturnType> {
@@ -29,7 +31,7 @@ const TextLoadingDecorationExtension = Extension.create({
 
     addProseMirrorPlugins() {
         const pluginKey = this.options.pluginKey;
-
+        const editor = this.editor;
         return [
             new Plugin<LoadingDecorationState>({
                 key: pluginKey,
@@ -57,7 +59,7 @@ const TextLoadingDecorationExtension = Extension.create({
 
                             const decoration = Decoration.widget(pos, () => {
                                 const container = document.createElement("span");
-                                container.className = "loading-decoration";
+                                container.className = "loading-decoration p-1 border rounded-md outline";
 
                                 if (loadingHtml) {
                                     container.innerHTML = loadingHtml;

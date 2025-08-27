@@ -62,11 +62,10 @@ export const FileCard: React.FC<FileItem> = (props) => {
                         <FileIcon className="h-20 w-20" strokeWidth={1} />
                 }
             </CardContent>
-            <CardFooter className="p-2 m-0 border-t text-sm text-nowrap overflow-hidden text-ellipsis h-[30px] select-none">
+            <CardFooter className="p-2 m-0 border-t text-sm text-nowrap overflow-hidden text-ellipsis select-none">
                 {
                     isFolder ? name : <div className="flex justify-between h-full w-full">
                         <div className="w-[200px] overflow-hidden">{name}</div>
-                        <Separator orientation="vertical" />
                         <div>{name.substring(name.lastIndexOf("."), name.length - 1)}</div>
                     </div>
                 }

@@ -1,8 +1,14 @@
 import { ExtensionWrapper } from "@kn/common";
-import { LineHeightExt } from "./line-height";
+import { LineHeight } from "@tiptap/extension-text-style";
+import { LineHeightStaticMenu } from "./line-height-static-menu";
 
 
 export const LineHeightExtension: ExtensionWrapper = {
-    name: LineHeightExt.name,
-    extendsion: LineHeightExt
+    name: LineHeight.name,
+    extendsion: LineHeight,
+    menuConfig: {
+        group: 'mark',
+        menu: LineHeightStaticMenu
+    },
+    flotMenuConfig: [LineHeightStaticMenu]
 }

@@ -5,11 +5,12 @@ import { Sparkles } from "@kn/icon";
 import { AiImage } from "./ai-image";
 import React from "react";
 import TextLoadingDecorationExtension from "./text-loading";
+import { LoadingMark } from "./marks/loading-mark";
 
 
 export const AIExtension: ExtensionWrapper = {
     name: Ai.name,
-    extendsion: [Ai, AiImage, TextLoadingDecorationExtension],
+    extendsion: [Ai, AiImage, TextLoadingDecorationExtension, LoadingMark],
     flotMenuConfig: [AiStaticMenu],
     slashConfig: [
         {

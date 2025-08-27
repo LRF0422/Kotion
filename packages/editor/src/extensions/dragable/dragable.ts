@@ -13,7 +13,6 @@ import {
 } from '@tiptap/pm/state';
 import { findParentNodeClosestToPos } from 'prosemirror-utils';
 import { Decoration, DecorationSet, EditorView } from '@tiptap/pm/view';
-import { Node } from '@tiptap/pm/model';
 
 const DragablePluginKey = new PMPluginKey('dragable');
 
@@ -49,7 +48,7 @@ export const Dragable = Extension.create({
       dragHandleDOM?.classList?.add('hide');
     };
 
-    const renderDragHandleDOM = (view: EditorView, referenceRectDOM: HTMLElement) => {
+    const renderDragHandleDOM = (view: EditorView, referenceRectDOM: HTMLElement, activeNode: ActiveNode) => {
       const root = view.dom.parentElement;
 
       if (!root) return;
@@ -295,7 +294,7 @@ export const Dragable = Extension.create({
               }
 
               activeNode = result;
-              renderDragHandleDOM(view, result.el);
+              renderDragHandleDOM(view, result.el, activeNode);
               return false;
             },
             keydown: () => {

@@ -64,3 +64,4 @@ export { TableOfContentExtension, TableOfContents, getHierarchicalIndexes } from
 export { EventExtension } from "./event"
 export { SelectionExtension } from "./selection"
 export { UnknownNodeExtension } from "./unknown-node"
+export { HighlightExtension } from "./hightline"

@@ -5,7 +5,11 @@ export * from "./hooks"
 export * from "yjs"
 export * from "./export/pdf"
 export { TiptapCollabProvider, HocuspocusProvider } from "@hocuspocus/provider"
-export { useEditor, useReactNodeView, EditorContent, type NodeViewProps, NodeViewWrapper, NodeViewContent, type NodeViewRenderer, ReactNodeViewRenderer, Node as PMNode } from "@tiptap/react"
+export {
+    useEditor, useReactNodeView, EditorContent,
+    type NodeViewProps, NodeViewWrapper, NodeViewContent, type NodeViewRenderer, ReactNodeViewRenderer,
+    Node as PMNode, MarkViewContent, ReactMarkViewRenderer, ReactRenderer
+} from "@tiptap/react"
 export { Slice, Schema, NodeType, Node } from "@tiptap/pm/model"
 export { EditorState, TextSelection, Plugin, PluginKey } from "@tiptap/pm/state"
 export { EditorView, Decoration, DecorationSet, type DecorationSource } from "@tiptap/pm/view"
