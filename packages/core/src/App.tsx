@@ -81,26 +81,21 @@ export const App: React.FC<AppProps> = (props) => {
             const pluginLocales = pluginManager.resloveLocales()
             const res = { ...resources, ...pluginLocales }
             console.log('locales resources', res);
-            if (i18n.isInitialized) {
-                common.supportedLngs.forEach(lng => {
-                    i18n.addResourceBundle(lng, "translation", res[lng], true, true)
+            i18n.use(initReactI18next)
+                .use(LanguageDetector)
+                .init({
+                    detection: {
+                        lookupLocalStorage: 'language',
+                    },
+                    resources: res,
+                    fallbackLng: "en",
+                    debug: true,
+                    supportedLngs: common.supportedLngs,
+                    interpolation: {
+                        escapeValue: false,
+                    }
                 })
-            } else {
-                i18n.use(initReactI18next)
-                    .use(LanguageDetector)
-                    .init({
-                        detection: {
-                            lookupLocalStorage: 'language',
-                        },
-                        resources: res,
-                        fallbackLng: "en",
-                        debug: true,
-                        supportedLngs: common.supportedLngs,
-                        interpolation: {
-                            escapeValue: false, // not needed for react as it escapes by default
-                        }
-                    })
-            }
+
         }
     }, [loadFinished, allPlugins])
 

@@ -17,7 +17,7 @@ import { cn } from "@kn/ui";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
-import { TableOfContentExtension, TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
+import { TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
 import { useSafeState } from "ahooks";
 
 export interface EditorRenderProps extends EditorProvider, EditorKit {

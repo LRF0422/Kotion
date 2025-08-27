@@ -1,5 +1,4 @@
 import { ExtensionWrapper } from '@kn/common'
-import { Mark } from '@tiptap/core'
 import { Highlight } from '@tiptap/extension-highlight'
 import "./style.css"
 
