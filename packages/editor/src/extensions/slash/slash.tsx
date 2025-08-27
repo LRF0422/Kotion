@@ -109,7 +109,6 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                 placement: 'right-start',
                 middleware: [flip()],
               }).then(({ x, y, strategy }) => {
-                console.log("finished", component.element);
                 (component.element as HTMLElement).style.zIndex = '1000';
                 (component.element as HTMLElement).style.position = strategy;
                 (component.element as HTMLElement).style.left = `${x + 2}px`;
