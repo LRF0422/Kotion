@@ -18,7 +18,8 @@ import { TableViewCfg } from "./TableViewCfg";
 
 const Container = styled.div`
     .rdg-cell {
-        border: 1px solid #eee
+        border-inline-end: 1px solid rgba(255, 255, 243, 0.082);
+        border-block-end: 1px solid rgba(255, 255, 243, 0.082);
     }
 `
 
@@ -94,7 +95,7 @@ export const TableView: React.FC<any> = (props) => {
                     ...columns.map((it: any) => ({
                         name: it.title,
                         key: it.id,
-                        width: it.width || 150,
+                        // width: it.width || 150,
                         renderEditCell: getEditor(it.dataType),
                         renderCell: getCellView(it.dataType),
                         editable: editor.isEditable,

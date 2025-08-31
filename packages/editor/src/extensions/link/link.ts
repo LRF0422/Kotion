@@ -1,3 +1,5 @@
+
+// @ts-nocheck
 import { markInputRule } from "@tiptap/core";
 import { Link as BuiltInLink } from "@tiptap/extension-link";
 

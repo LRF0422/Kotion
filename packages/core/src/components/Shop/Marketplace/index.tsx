@@ -5,7 +5,7 @@ import {
 } from "@kn/ui";
 import React, { useEffect, useState } from "react";
 import { PluginUploader } from "../PluginUploader";
-import { useApi, useUploadFile } from "../../../hooks";
+import { useApi, useNavigator, useUploadFile } from "../../../hooks";
 import { APIS } from "../../../api";
 import { useToggle } from "ahooks";
 import { event } from "@kn/common";
@@ -25,6 +25,7 @@ export const Marketplace: React.FC = () => {
     const [plugins, setPlugins] = useState<any[]>([])
     const [installing, { toggle }] = useToggle(false)
     const { usePath } = useUploadFile()
+    const navigator = useNavigator()
 
     useEffect(() => {
         useApi(APIS.GET_PLUGIN_LIST).then(res => {
@@ -129,7 +130,11 @@ export const Marketplace: React.FC = () => {
                                                     <DownloadIcon className="w-4 h-4" />
                                                     {plugin.installeddVersions.length > 0 ? "Installed" : "Install"}
                                                 </div>} />
-                                            <IconButton className="px-2 border" icon={<div className="flex items-center gap-1 text-sm">
+                                            <IconButton className="px-2 border" icon={<div className="flex items-center gap-1 text-sm" onClick={() => {
+                                                                navigator.go({
+                                                                    to: `/plugin-hub/${plugin.id}`
+                                                                })
+                                            }}>
                                                 <ArrowUpRight className="w-4 h-4" />
                                                 Details
                                             </div>} />

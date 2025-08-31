@@ -29,13 +29,13 @@ export const Title = Node.create({
 	},
 
 	renderHTML({ HTMLAttributes }) {
-		return ['h1', HTMLAttributes, 0]
+		return ['h1', HTMLAttributes]
 	},
 
 	parseHTML() {
 		return [
 			{
-				tag: 'h1:first-child',
+				tag: 'h1',
 			},
 		];
 	},

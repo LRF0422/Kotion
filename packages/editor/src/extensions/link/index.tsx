@@ -17,6 +17,7 @@ export const LinkExtension: ExtensionWrapper = {
         group: 'inline',
         menu: LinkStaticMenu
     },
+    flotMenuConfig: [LinkStaticMenu],
     slashConfig: [{
         icon: <Link2 className="h-4 w-4" />,
         text: '链接',

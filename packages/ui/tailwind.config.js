@@ -15,6 +15,10 @@ module.exports = {
       pattern:
         /(bg|text|border)-(purple|pink|orange|yellow|green|black|gray|neutral|red|blue|white)/,
     },
+    {
+      pattern:
+        /(h|w|max-h|min-w)-+/,
+    },
   ],
   theme: {
     container: {

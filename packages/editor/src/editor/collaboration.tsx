@@ -90,7 +90,7 @@ export const CollaborationEditor = forwardRef<
       },
       editorProps: {
         attributes: {
-          class: "magic-editor",
+          class: "ProseMirror",
           spellcheck: "false",
           suppressContentEditableWarning: "false",
         }

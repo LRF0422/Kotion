@@ -8,7 +8,7 @@ import {
 import { useAttributes } from "../../../hooks/use-attributes";
 import { IconEdit, IconUnlink, IconVisitlink } from "../../../icons";
 import { Link as LinkExtension } from "../link";
-import { showLinkEditor } from "./edit";
+import { LinkEdit } from "./edit";
 import { Popover, PopoverContent, PopoverTrigger, Toggle } from "@kn/ui";
 import { Separator } from "@kn/ui";
 
@@ -28,16 +28,14 @@ export const LinkBubbleMenu: React.FC<IProps> = ({ editor }) => {
     editor
   ]);
 
+
+
   const visitLink = useCallback(() => {
     const tab = window.open();
     if (!tab) return;
     tab.opener = null;
     tab.location = href;
   }, [href, target]);
-
-  const openEditLinkModal = useCallback(() => {
-    showLinkEditor(editor, containerRef.current as HTMLElement);
-  }, [editor]);
 
   const unsetLink = useCallback(
     () =>
@@ -50,20 +48,20 @@ export const LinkBubbleMenu: React.FC<IProps> = ({ editor }) => {
   );
 
   return (
-    <BubbleMenu editor={editor} shouldShow={shouldShow} options={{ }}>
+    <BubbleMenu editor={editor} shouldShow={shouldShow} options={{}}>
       <div ref={containerRef}>
         <div className="flex flex-row gap-1">
           <Toggle size="sm" onClick={visitLink} pressed={false}>
             <IconVisitlink />
           </Toggle>
           <Popover>
-            <PopoverTrigger asChild> 
-            <Toggle size="sm"  pressed={false}>
-              <IconEdit />
-          </Toggle>
+            <PopoverTrigger asChild>
+              <Toggle size="sm" pressed={false}>
+                <IconEdit />
+              </Toggle>
             </PopoverTrigger>
-            <PopoverContent>
-              qweqweqwe
+            <PopoverContent className="p-1">
+              <LinkEdit className=" border-none w-full shadow-none" editor={editor} />
             </PopoverContent>
           </Popover>
           <Separator orientation="vertical" />

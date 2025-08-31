@@ -22,8 +22,8 @@ export const PluginDetail: React.FC = () => {
         }
     }, [params.id])
 
-    return pluginDetail && <div className=" justify-center h-[100vh]">
-        <div className="flex gap-10 items-center justify-center shadow-sm border-b pb-4 pt-4">
+    return pluginDetail && <div className=" flex flex-col h-[100vh]">
+        <div className="flex gap-10 items-center justify-center shadow-sm border-b pb-4 pt-4 h-[300px]">
             <Avatar className="w-[80px] h-[80px]">
                 <img src={usePath(pluginDetail?.icon)} alt="logo" />
             </Avatar>
@@ -46,7 +46,7 @@ export const PluginDetail: React.FC = () => {
                         <Rate rating={5} variant="yellow" disabled />
                     </div>
                 </div>
-                <div> {pluginDetail.description}</div>
+                <div className="w-[300px] max-h-[100px] overflow-hidden"> {pluginDetail.description}</div>
                 <div className="gap-1 flex items-center">
                     <Button className="text-[12px] py-0.1 h-5">Install</Button>
                     <Settings className="p-1 hover:bg-muted rounded-sm cursor-pointer" />
@@ -54,7 +54,7 @@ export const PluginDetail: React.FC = () => {
             </div>
         </div>
 
-        <div className=" bg-muted/60 flex justify-center  h-[calc(100vh-170px)]">
+        <div className=" bg-muted/60 flex justify-center flex-1">
             <Tabs className="mt-5 w-[800px] " defaultValue="Feature">
                 <TabsList>
                     {
@@ -65,7 +65,7 @@ export const PluginDetail: React.FC = () => {
                 </TabsList>
                 {
                         pluginDetail.currentVersion.versionDescription.map((it: any, index: number) => (
-                           <TabsContent value={it.label} className=" overflow-auto border rounded-sm ">
+                           <TabsContent value={it.label} className=" overflow-auto border rounded-sm h-[calc(100%-100px)]">
                                 <EditorRender
                                     content={JSON.parse(it.content)}
                                     user={null}
@@ -74,7 +74,7 @@ export const PluginDetail: React.FC = () => {
                                     toolbar={false}
                                     isEditable={false}
                                     width="w-full"
-                                    className="rounded-sm prose-sm h-[calc(100vh-300px)]"
+                                    className="rounded-sm prose-sm h-full "
                                     withTitle={false} />
                             </TabsContent>
                         ))

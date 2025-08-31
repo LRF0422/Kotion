@@ -11,7 +11,7 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 
 	const { createTime, updateTime  } = useContext(PageContext)
 
-	return <div className="flex flex-col items-start pt-[30px]">
+	return <NodeViewWrapper className="flex flex-col gap-1 items-start pt-[30px] w-full">
 		<Popover>
 			<PopoverTrigger disabled={!props.editor.isEditable}>
 				<div contentEditable={false} className=" flex items-center justify-center cursor-pointer h-[80px] w-[80px] hover:bg-muted bg-muted/70 rounded-md">
@@ -37,7 +37,7 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 				</EmojiPicker>
 			</PopoverContent>
 		</Popover>
-		<NodeViewContent />
+		<NodeViewContent className="w-full" />
 		{
 			(!props.editor.isEditable) && <div className="flex flex-row gap-2 text-sm">
 				<div className=" text-gray-500 italic flex flex-col gap-1 px-2 py-1 hover:bg-muted transition-all duration-200 rounded-sm">
@@ -62,5 +62,5 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 				</div>
 			</div>
 		}
-	</div>
+	</NodeViewWrapper>
 }

@@ -86,7 +86,7 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
         }}
     >
         <div className="w-[250px]">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center ">
                 <div className=" text-md h-[30px] p-1">Comments</div>
                 <div className=" flex items-center gap-1">
                     <IconButton icon={<CheckIcon className="h-4 w-4" />} onClick={() => {

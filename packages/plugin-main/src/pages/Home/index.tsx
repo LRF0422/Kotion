@@ -4,7 +4,7 @@ import { Button, EmptyState } from "@kn/ui";
 import { useApi } from "@kn/core";
 import { useNavigator } from "@kn/core";
 import { Space as KSpace } from "../../model/Space";
-import { Book, Box, Clock, LayoutTemplate, Package2, Plus, UserCircle } from "@kn/icon";
+import { BanIcon, Book, Box, Clock, LayoutTemplate, Plus, UserCircle } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { useTranslation } from "@kn/common";
@@ -108,8 +108,8 @@ export const Home: React.FC = () => {
                 <EmptyState
                     title=""
                     className="max-w-none"
-                    description="暂无数据"
-                    icons={[Package2]}
+                    description="功能暂未开放，敬请期待"
+                    icons={[BanIcon]}
                 />
             </div>
             <div className="flex flex-col gap-1">
@@ -120,8 +120,8 @@ export const Home: React.FC = () => {
                 <EmptyState
                     title=""
                     className="max-w-none"
-                    description="暂无数据"
-                    icons={[Package2]}
+                    description="功能暂未开放，敬请期待"
+                    icons={[BanIcon]}
                 />
             </div>
         </div>

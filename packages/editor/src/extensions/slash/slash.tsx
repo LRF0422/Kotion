@@ -99,7 +99,6 @@ export const createSlash = (name: string, options?: SlashOptions) => {
             let isEditable: boolean;
 
             const updatePosition = (domect: any) => {
-              console.log('updated', domect);
               const domRect = isFunction(domect) ? domect() : domect
               const virtualElement = {
                 getBoundingClientRect: () => domRect,
@@ -176,13 +175,10 @@ export const createSlash = (name: string, options?: SlashOptions) => {
 
               onExit() {
                 if (!isEditable) return;
-                // if (popup) {
-                // popup[0]?.destroy();
                 if (document.body.contains(component.element)) {
                   document.body.removeChild(component.element);
                 }
                 component.destroy();
-                // }
               }
             };
           }

@@ -2,6 +2,8 @@ import { Mark, mergeAttributes } from "@tiptap/core";
 import { v4 as uuidv4 } from "uuid";
 import { findIndex } from 'lodash'
 import { Doc } from "yjs";
+import { CommentView } from "./CommentView";
+import { ReactMarkViewRenderer } from "@tiptap/react";
 
 export interface CommentInterface {
     user: any,
@@ -50,7 +52,7 @@ const Comments = Mark.create<CommentOptionsInterface, CommentsStorageInterface>(
             user: {},
             provider: undefined,
             HTMLAttributes: {
-                class: 'bg-muted border-b border-dashed cursor-pointer'
+                class: 'bg-muted/50 cursor-pointer p-1 rounded-md hover:bg-muted outline'
             },
         }
     },
@@ -145,8 +147,7 @@ const Comments = Mark.create<CommentOptionsInterface, CommentsStorageInterface>(
     },
     onUpdate() {
 
-    }
-    ,
+    },
     renderHTML({ HTMLAttributes }) {
         return ['span', mergeAttributes(HTMLAttributes, this.options.HTMLAttributes), 0]
     },

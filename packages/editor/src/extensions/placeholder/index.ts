@@ -1,1 +1,1 @@
-export * from "./placeholder";
+export {Placeholder} from "@tiptap/extensions";
