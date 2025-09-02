@@ -1,0 +1,46 @@
+{
+  "name": "@kn/plugin-drawnix",
+  "version": "0.0.14",
+  "description": "",
+  "main": "src/index.tsx",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "registry": "http://localhost:8081/repository/npm-hosted/"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@drawnix/drawnix": "^0.1.4",
+    "@floating-ui/react": "^0.26.24",
+    "@kn/common": "workspace:*",
+    "@kn/core": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/ui": "workspace:*",
+    "@plait-board/markdown-to-drawnix": "^0.0.6",
+    "@plait-board/mermaid-to-drawnix": "^0.0.7",
+    "@plait-board/react-board": "^0.1.4",
+    "@plait-board/react-text": "^0.1.4",
+    "@plait/common": "^0.82.0",
+    "@plait/core": "^0.82.0",
+    "@plait/draw": "^0.82.0",
+    "@plait/layouts": "^0.82.0",
+    "@plait/mind": "^0.82.0",
+    "@plait/text-plugins": "^0.82.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "slate": "^0.116.0",
+    "slate-dom": "^0.116.0",
+    "slate-history": "^0.115.0",
+    "slate-react": "^0.116.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@kn/rollup-config": "workspace:*"
+  }
+}

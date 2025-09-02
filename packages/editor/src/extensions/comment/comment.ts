@@ -2,8 +2,6 @@ import { Mark, mergeAttributes } from "@tiptap/core";
 import { v4 as uuidv4 } from "uuid";
 import { findIndex } from 'lodash'
 import { Doc } from "yjs";
-import { CommentView } from "./CommentView";
-import { ReactMarkViewRenderer } from "@tiptap/react";
 
 export interface CommentInterface {
     user: any,

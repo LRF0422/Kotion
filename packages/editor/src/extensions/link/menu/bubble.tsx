@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Editor } from "@tiptap/core";
+import { Editor, getMarkRange, posToDOMRect } from "@tiptap/core";
 import { useCallback } from "react";
 
 import {
@@ -28,6 +28,16 @@ export const LinkBubbleMenu: React.FC<IProps> = ({ editor }) => {
     editor
   ]);
 
+  const getReferenceClientRect = useCallback(() => {
+    const { selection } = editor.state;
+    const range = getMarkRange(selection.$from, editor.schema.marks.link)
+    if (range) {
+      return posToDOMRect(editor.view, range.from, range.to);
+    }
+    return posToDOMRect(editor.view, selection.from, selection.to);
+  }, [editor]);
+
+
 
 
   const visitLink = useCallback(() => {
@@ -48,7 +58,12 @@ export const LinkBubbleMenu: React.FC<IProps> = ({ editor }) => {
   );
 
   return (
-    <BubbleMenu editor={editor} shouldShow={shouldShow} options={{}}>
+    <BubbleMenu
+      forNode
+      getReferenceClientRect={getReferenceClientRect}
+      editor={editor}
+      shouldShow={shouldShow}
+      options={{}}>
       <div ref={containerRef}>
         <div className="flex flex-row gap-1">
           <Toggle size="sm" onClick={visitLink} pressed={false}>

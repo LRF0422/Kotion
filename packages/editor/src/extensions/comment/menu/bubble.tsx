@@ -1,8 +1,7 @@
 import { BubbleMenu, BubbleMenuProps } from "@editor/components";
-import { Editor, findParentNode, isMarkActive, posToDOMRect } from "@tiptap/core";
+import { Editor, getMarkRange, isMarkActive, posToDOMRect } from "@tiptap/core";
 import React, { useCallback, useState } from "react";
 import Comments from "../comment";
-import { Node } from "@tiptap/pm/model";
 import { Avatar, IconButton, Separator, Textarea } from "@kn/ui";
 import { CheckIcon, HeartIcon, MoreHorizontalIcon, ReplyIcon, Trash2, XIcon } from "@kn/icon";
 import { useAttributes } from "@editor/hooks";
@@ -65,14 +64,10 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
 
     const getReferenceClientRect = useCallback(() => {
         const { selection } = editor.state;
-        const predicate = (node: Node) => node.type.name === Comments.name;
-        const parent = findParentNode(predicate)(selection);
-
-        if (parent) {
-            const dom = editor.view.nodeDOM(parent?.pos) as HTMLElement;
-            return dom.getBoundingClientRect();
+        const range = getMarkRange(selection.$from, editor.schema.marks.comment)
+        if (range) {
+            return posToDOMRect(editor.view, range.from, range.to);
         }
-
         return posToDOMRect(editor.view, selection.from, selection.to);
     }, [editor]);
 

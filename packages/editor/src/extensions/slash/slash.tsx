@@ -125,7 +125,7 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                     editor: props.editor
                   });
                   component.render()
-                  document.body.appendChild(component.element);
+                  this.editor.view.dom.parentNode?.appendChild(component.element);
                 }
                 const { selection } = this.editor.state
                 const { view } = this.editor
@@ -166,17 +166,17 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                 if (!isEditable) return;
 
                 if (props.event.key === "Escape") {
-                  document.body.removeChild(component.element);
+                  props.view.dom.parentNode?.removeChild(component.element);
                   return true;
                 }
                 // @ts-ignore
                 return component.ref?.onKeyDown(props);
               },
 
-              onExit() {
+              onExit(props) {
                 if (!isEditable) return;
-                if (document.body.contains(component.element)) {
-                  document.body.removeChild(component.element);
+                if (props.editor.view.dom.parentNode?.contains(component.element)) {
+                  props.editor.view.dom.parentNode?.removeChild(component.element);
                 }
                 component.destroy();
               }
