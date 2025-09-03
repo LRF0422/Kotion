@@ -38,6 +38,7 @@ export const OnlyMind: React.FC<OnlyMindProps> = ({
     onThemeChange,
     onValueChange,
     afterInit,
+    className,
     readonly = false
 }) => {
     const options: PlaitBoardOptions = {
@@ -62,7 +63,7 @@ export const OnlyMind: React.FC<OnlyMindProps> = ({
             onThemeChange={onThemeChange}
             onValueChange={onValueChange}
         >
-            <Board afterInit={afterInit}></Board>
+            <Board className={className} afterInit={afterInit}></Board>
         </Wrapper>
     );
 };

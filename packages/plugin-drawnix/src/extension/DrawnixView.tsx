@@ -1,6 +1,6 @@
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import React, { useEffect, useState } from "react";
-import { BoardTransforms, PlaitBoard, PlaitElement, PlaitTheme, Selection, ThemeColorMode, Viewport } from '@plait/core';
+import { BoardTransforms, PlaitBoard, ThemeColorMode } from '@plait/core';
 
 import '../../node_modules/@plait/mind/styles/styles.scss';
 import '../../node_modules/@plait-board/react-board/index.css';
@@ -8,6 +8,8 @@ import '../../node_modules/@plait-board/react-text/index.css';
 import { OnlyMind } from "./only-mind";
 import { initializeData } from "./data";
 import { useTheme } from "@kn/ui";
+import { useToggle } from "@kn/core";
+import "./style/index.css"
 
 
 export const DrawnixView: React.FC<NodeViewProps> = (props) => {
@@ -28,11 +30,18 @@ export const DrawnixView: React.FC<NodeViewProps> = (props) => {
         }
     }, [theme])
 
+    useEffect(() => {
+        if (board) {
+            BoardTransforms.fitViewport(board)
+        }
+    }, [board])
+
     return <NodeViewWrapper className="w-full h-[400px]">
         <OnlyMind
+            className="h-full w-full"
             readonly={!props.editor.isEditable}
-            value={data.children || initializeData}
-            viewport={data.viewport}
+            value={data?.children || initializeData}
+            viewport={data?.viewport}
             theme={theme === 'dark' ? { themeColorMode: ThemeColorMode.dark } : { themeColorMode: ThemeColorMode.colorful }}
             onChange={(value) => {
                 updateAttributes({
@@ -41,8 +50,8 @@ export const DrawnixView: React.FC<NodeViewProps> = (props) => {
                 });
             }}
             afterInit={(board) => {
-                setBoard(board);
                 console.log('board initialized');
+                setBoard(board);
             }}
         ></OnlyMind>
     </NodeViewWrapper>

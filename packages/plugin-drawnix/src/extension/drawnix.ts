@@ -12,6 +12,7 @@ declare module "@kn/editor" {
 export const Drawnix = Node.create({
     name: "drawnix",
     group: "block",
+    atom: true,
     addAttributes() {
         return {
             data: {
