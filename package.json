@@ -11,6 +11,7 @@
     "build:core": "pnpm --filter @kn/core build",
     "build:ui": "pnpm --filter @kn/ui build",
     "build:excalidraw": "pnpm --filter @kn/plugin-excalidraw build",
+    "build:drawnix": "pnpm --filter @kn/plugin-drawnix build",
     "build:editor": "pnpm --filter @kn/editor build",
     "build:main": "pnpm --filter @kn/plugin-main build",
     "build:app": "pnpm --filter vite build",

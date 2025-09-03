@@ -8,7 +8,7 @@ import React from "react";
 
 export const UnknownNodeView: React.FC<NodeViewProps> = (props) => {
 
-    return <NodeViewWrapper>
+    return <NodeViewWrapper className="w-full h-[400px]">
         <EmptyState
             className="w-full max-w-none border-solid border hover:bg-background rounded-sm"
             title={`Unknown Node Type : ${props.node.attrs.name}`}

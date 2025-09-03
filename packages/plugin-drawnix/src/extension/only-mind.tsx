@@ -3,8 +3,6 @@ import {
     PlaitBoard,
     PlaitBoardOptions,
     PlaitElement,
-    PlaitPlugin,
-    PlaitPointerType,
     PlaitTheme,
     Selection,
     ThemeColorMode,

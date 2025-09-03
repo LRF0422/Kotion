@@ -49,7 +49,9 @@ export const CollaborationEditor = forwardRef<
     {
       editable: true,
       content: content ? rewriteUnknownContent(content as JSONContent,
-        getSchema(extensions as AnyExtension[])).json : null,
+        getSchema(extensions as AnyExtension[]), {
+        fallbackToParagraph: true
+      }).json : null,
       immediatelyRender: true,
       shouldRerenderOnTransaction: false,
       onBlur: ({ editor }) => {

@@ -61,7 +61,9 @@ export const EditorRender = forwardRef<
   const editor: Editor = useEditor(
     {
       content: content ? rewriteUnknownContent(content as JSONContent,
-        getSchema([...(exts as AnyExtension[] || []), ...(extensions as AnyExtension[] || [])])).json : null,
+        getSchema([...(exts as AnyExtension[] || []), ...(extensions as AnyExtension[] || [])]), {
+        fallbackToParagraph: true
+      }).json : null,
       editable: isEditable,
       extensions: [
         ...(extensions as AnyExtension[] || []),

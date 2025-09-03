@@ -82,8 +82,8 @@ function rewriteUnknownContentInner({
             original: JSON.parse(JSON.stringify(json)),
             unsupported: json.type,
         })
-
-        if (json.content && Array.isArray(json.content) && options?.fallbackToParagraph !== false) {
+        // json.content && Array.isArray(json.content) &&
+        if (options?.fallbackToParagraph !== false) {
             // Just treat it like a paragraph and hope for the best
             json.attrs = { name: json.type }
             json.type = 'unknownNode'
