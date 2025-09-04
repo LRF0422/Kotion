@@ -1,3 +1,4 @@
+import { useTranslation } from '@kn/common'
 import { Empty } from '@kn/ui'
 import { ScrollArea } from '@kn/ui'
 import { cn } from '@kn/ui'
@@ -17,8 +18,11 @@ export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number }> =
 }
 
 export const ToCEmptyState = () => {
+
+    const { t } = useTranslation()
+
     return (
-        <Empty className=' h-full items-center border-none' title='Empty Content' desc='123' />
+        <Empty className=' h-full items-center border-none' title={t('toc.empty', "No Content")} desc='' />
     )
 }
 
@@ -31,6 +35,8 @@ export const ToC: React.FC<{ editor: Editor, className?: string, items: any[] }>
     if (items.length === 0) {
         return <ToCEmptyState />
     }
+
+    const { t } = useTranslation()
 
     const onItemClick = (e: Event, item: any) => {
         e.preventDefault()
@@ -55,7 +61,7 @@ export const ToC: React.FC<{ editor: Editor, className?: string, items: any[] }>
 
     return (
         <ScrollArea className={cn("h-full w-full p-3 overflow-auto", className)}>
-            <div className='font-bold'>Table of contents</div>
+            <div className='font-bold'>{ t("toc.title", "Table of contents")}</div>
             {items.map((item: any, i: number) => (
                 <ToCItem onItemClick={onItemClick} key={item.id} item={item} index={i + 1} />
             ))}

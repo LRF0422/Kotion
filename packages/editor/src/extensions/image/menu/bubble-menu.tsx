@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { Editor, isNodeActive, isNodeSelection, posToDOMRect } from "@tiptap/core";
+import { Editor, getAttributes, isNodeActive, isNodeSelection, posToDOMRect } from "@tiptap/core";
 
 import {
   BubbleMenu,
@@ -106,6 +106,17 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
           size="sm"
           pressed={(!!(align === "right")) as boolean}
           onClick={setAlignRight}
+        >
+          <IconImageAlignRight />
+        </Toggle>
+        <Divider />
+        <Toggle
+          size="sm"
+          pressed={(!!(align === "right")) as boolean}
+          onClick={() => {
+            setAlignRight()
+            editor.commands.toggleNode("image", "imageInline", getAttributes(editor.state, "image"))
+          }}
         >
           <IconImageAlignRight />
         </Toggle>

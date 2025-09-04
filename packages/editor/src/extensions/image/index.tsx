@@ -3,13 +3,14 @@ import { ExtensionWrapper } from "@kn/common";
 import { Image } from "./image";
 import { ImageBubbleMenu, ImageStaticMenu } from "./menu";
 import { ImageIcon } from "@kn/icon";
+import { ImageInline } from "./image-inline";
 
 export * from "./image";
 export * from "./menu";
 
 export const ImageExtension: ExtensionWrapper = {
 	name: Image.name,
-	extendsion: Image,
+	extendsion: [Image, ImageInline],
 	bubbleMenu: ImageBubbleMenu,
 	menuConfig: {
 		group: 'block',

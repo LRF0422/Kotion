@@ -1,29 +1,30 @@
-import { mergeAttributes, PMNode as Node, nodeInputRule } from "@kn/editor";
-import { ReactNodeViewRenderer } from "@kn/editor";
+import { mergeAttributes, Node, nodeInputRule } from "@tiptap/core";
+import { ReactNodeViewRenderer } from "@tiptap/react";
 
 import { ImageView } from "./image-view";
+import { ImageInlineView } from "./image-inline-view";
 
 export const inputRegex = /(?:^|\s)(!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\))$/;
 
-declare module "@kn/editor" {
+declare module "@tiptap/core" {
   interface Commands<ReturnType> {
+    // @ts-ignore
     image: {
       setImage: (options: {
         src: string;
         width?: number;
         height?: number;
       }) => ReturnType;
-      insertGallery: () => ReturnType;
     };
   }
 }
 
-export const Image = Node.create({
-  name: "image",
-  inline: false,
+export const ImageInline = Node.create({
+  name: "imageInline",
+  inline: true,
   content: "",
   marks: "",
-  group: "block",
+  group: "inline",
   selectable: true,
   draggable: true,
 
@@ -57,9 +58,6 @@ export const Image = Node.create({
       },
       align: {
         default: "left"
-      },
-      float: {
-        default: null
       }
     };
   },
@@ -105,7 +103,7 @@ export const Image = Node.create({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(ImageView);
+    return ReactNodeViewRenderer(ImageInlineView);
   },
 
   // addProseMirrorPlugins() {

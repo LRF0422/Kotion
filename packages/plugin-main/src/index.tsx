@@ -64,8 +64,12 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "title": "早上好",
           "create-space": "创建空间",
           "rs": "从最近的空间开始",
-          "all": "查看全部空间"
-        }
+          "all": "查看全部空间",
+        },
+        "toc": {
+           "title": "目录",
+            "empty": "没有数据"
+          }
       }
     },
     "en": {
@@ -74,7 +78,11 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "title": "Good morning",
           "create-space": "Create a space",
           "rs": "Start from recent space",
-          "all": "all spaces"
+          "all": "all spaces",
+        },
+        "toc": {
+          "title": "Table of Contents",
+          "empty": "No Content"
         }
       }
     }

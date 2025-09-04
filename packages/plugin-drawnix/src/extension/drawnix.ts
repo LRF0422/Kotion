@@ -13,6 +13,7 @@ export const Drawnix = Node.create({
     name: "drawnix",
     group: "block",
     atom: true,
+    defining: true,
     addAttributes() {
         return {
             data: {
@@ -25,7 +26,9 @@ export const Drawnix = Node.create({
         return ["div", mergeAttributes(HTMLAttributes, { class: "node-drawnix" })]
     },
     addNodeView() {
-        return ReactNodeViewRenderer(DrawnixView)
+        return ReactNodeViewRenderer(DrawnixView, {
+            stopEvent: () => true
+        })
     },
     addCommands() {
         return {

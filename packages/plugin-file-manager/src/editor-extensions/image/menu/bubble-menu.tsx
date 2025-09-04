@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { Editor, isNodeSelection, posToDOMRect } from "@kn/editor";
+import { Editor, getAttributes, isNodeSelection, posToDOMRect } from "@kn/editor";
 
 import {
   BubbleMenu,
@@ -13,13 +13,14 @@ import { Toggle } from "@kn/ui";
 import { IconImageAlignCenter, IconImageAlignLeft, IconImageAlignRight, Trash2 } from "@kn/icon";
 
 const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
-  const { width: currentWidth, height: currentHeight, align } = useAttributes(
+  const { width: currentWidth, height: currentHeight, align, float } = useAttributes(
     editor,
     ImageExtension.name,
     {
       width: 0,
       height: 0,
-      align: "left"
+      align: "left",
+      float: "none"
     }
   );
 
@@ -52,7 +53,22 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
       editor
         .chain()
         .updateAttributes(ImageExtension.name, {
-          align
+          align,
+          float: "none"
+        })
+        .setNodeSelection(editor.state.selection.from)
+        .focus()
+        .run();
+    },
+    [editor]
+  );
+
+  const setFloat = useCallback(
+    (float: string) => () => {
+      editor
+        .chain()
+        .updateAttributes(ImageExtension.name, {
+          float
         })
         .setNodeSelection(editor.state.selection.from)
         .focus()
@@ -64,6 +80,7 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const setAlignLeft = useMemo(() => setAlign("left"), [setAlign]);
   const setAlignCenter = useMemo(() => setAlign("center"), [setAlign]);
   const setAlignRight = useMemo(() => setAlign("right"), [setAlign]);
+  const setFloatRight = useMemo(() => setFloat("right"), [setAlign]);
 
   const deleteMe = useCallback(() => deleteNode(editor, ImageExtension.name), [
     editor
@@ -82,7 +99,7 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
       <div className="flex items-center gap-1">
         <Toggle
           size="sm"
-          pressed={!!(align === "left") as boolean}
+          pressed={!!(align === "left" && float === "none") as boolean}
           onClick={setAlignLeft}
         >
           <IconImageAlignLeft />
@@ -90,7 +107,7 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
 
         <Toggle
           size="sm"
-          pressed={!!(align === "center") as boolean}
+          pressed={!!(align === "center" && float === "none") as boolean}
           onClick={setAlignCenter}
         >
           <IconImageAlignCenter />
@@ -98,8 +115,16 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
 
         <Toggle
           size="sm"
-          pressed={(!!(align === "right")) as boolean}
+          pressed={(!!(align === "right" && float === "none")) as boolean}
           onClick={setAlignRight}
+        >
+          <IconImageAlignRight />
+        </Toggle>
+        <Divider />
+        <Toggle
+          size="sm"
+          pressed={(!!(float === "right")) as boolean}
+          onClick={setFloatRight}
         >
           <IconImageAlignRight />
         </Toggle>

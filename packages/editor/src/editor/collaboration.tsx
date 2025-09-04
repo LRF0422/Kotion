@@ -120,7 +120,7 @@ export const CollaborationEditor = forwardRef<
           <div className={cn("w-full", props.className)} id="editor-container">
             <div className="flex relative w-full">
               <StyledEditor className="w-full grow overflow-auto h-full">
-                <EditorContent editor={editor} />
+                <EditorContent editor={editor} className=" min-h-[600px]" />
               </StyledEditor>
               {
                 toc && (<div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>

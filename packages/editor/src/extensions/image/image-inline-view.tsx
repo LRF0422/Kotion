@@ -1,22 +1,21 @@
 import React, { useCallback, useMemo } from "react";
-import { NodeViewWrapper, NodeViewProps } from "@kn/editor";
+import { NodeViewWrapper, NodeViewProps } from "@tiptap/react";
 
-import { Resizable } from "@kn/editor";
-import { useUploadFile } from "@kn/core";
+import { Resizable } from "../../components";
 
-export const ImageView: React.FC<NodeViewProps> = ({
+export const ImageInlineView: React.FC<NodeViewProps> = ({
   editor,
   node: { attrs },
   updateAttributes,
   getPos
 }) => {
-  const { src, width, height, align, aspectRatio, float } = attrs;
+  const { src, width, height, align, aspectRatio } = attrs;
 
-  const { usePath } = useUploadFile()
 
   const flexJustifyContent = useMemo(() => {
     if (align === "center") return "center";
     if (align === "right") return "flex-end";
+
     return "flex-start";
   }, [align]);
 
@@ -27,19 +26,11 @@ export const ImageView: React.FC<NodeViewProps> = ({
     [updateAttributes]
   );
 
-  const getSrc = (src: string) => {
-    if (src.startsWith("http") || src.startsWith("https")) {
-      return src;
-    }
-    return usePath(src);
-  }
-
   return (
     <NodeViewWrapper
+      as="span"
       draggable
       style={{
-        float: float || "none",
-        margin: '5px',
         position: "relative",
         display: "flex",
         justifyContent: flexJustifyContent
@@ -51,7 +42,7 @@ export const ImageView: React.FC<NodeViewProps> = ({
         getPos={getPos}
         aspectRatio={aspectRatio}
         onResizeStop={onResize}>
-        <img src={getSrc(src)} width={"100%"} />
+        <img src={src} width={"100%"} />
       </Resizable>
     </NodeViewWrapper>
   );
