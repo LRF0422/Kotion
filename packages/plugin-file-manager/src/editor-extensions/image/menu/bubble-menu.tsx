@@ -10,7 +10,7 @@ import { useAttributes } from "@kn/editor";
 import { deleteNode, isNodeActive } from "@kn/editor";
 import { Image as ImageExtension } from "../image";
 import { Toggle } from "@kn/ui";
-import { IconImageAlignCenter, IconImageAlignLeft, IconImageAlignRight, Trash2 } from "@kn/icon";
+import { IconImageAlignCenter, IconImageAlignLeft, IconImageAlignRight, TbFloatLeft, TbFloatRight, Trash2 } from "@kn/icon";
 
 const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const { width: currentWidth, height: currentHeight, align, float } = useAttributes(
@@ -80,7 +80,8 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const setAlignLeft = useMemo(() => setAlign("left"), [setAlign]);
   const setAlignCenter = useMemo(() => setAlign("center"), [setAlign]);
   const setAlignRight = useMemo(() => setAlign("right"), [setAlign]);
-  const setFloatRight = useMemo(() => setFloat("right"), [setAlign]);
+  const setFloatRight = useMemo(() => setFloat("right"), [setFloat]);
+  const setFloatLeft = useMemo(() => setFloat("left"), [setFloat]);
 
   const deleteMe = useCallback(() => deleteNode(editor, ImageExtension.name), [
     editor
@@ -126,7 +127,14 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
           pressed={(!!(float === "right")) as boolean}
           onClick={setFloatRight}
         >
-          <IconImageAlignRight />
+          <TbFloatRight />
+        </Toggle>
+        <Toggle
+          size="sm"
+          pressed={(!!(float === "left")) as boolean}
+          onClick={setFloatLeft}
+        >
+          <TbFloatLeft />
         </Toggle>
         <Divider />
         <Toggle size="sm" pressed={false} onClick={deleteMe}>

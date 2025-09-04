@@ -2,8 +2,8 @@ import { NodeViewProps, NodeViewWrapper } from "@kn/editor"
 import React, { useEffect, useRef, useState } from "react"
 import mermaid from 'mermaid'
 import { useAsyncEffect, useDebounce, useTheme } from "@kn/core"
-import { CodeEditor, IconButton } from "@kn/ui"
-import { AiOutlineQuestionCircle } from "@kn/icon"
+import { CodeEditor, EmptyState, IconButton } from "@kn/ui"
+import { AiOutlineQuestionCircle, BoxIcon } from "@kn/icon"
 export const MermaidView: React.FC<NodeViewProps> = (props) => {
 
     const divRef = useRef<HTMLDivElement>(null)
@@ -41,8 +41,17 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
                 onChange={setCode}
             />}
             <div className="flex-1 flex border rounded-sm items-center justify-center p-1 relative">
-                {svg && <img src={`data:image/svg+xml;base64,${svg}`} width={props.editor.isEditable ? 300 : 500} />}
-                <IconButton icon={<AiOutlineQuestionCircle className="h-5 w-5" />} className=" absolute bottom-1 right-1" />
+                {
+                    code ? <>
+                        {svg && <img src={`data:image/svg+xml;base64,${svg}`} width={props.editor.isEditable ? 300 : 500} />}
+                        <IconButton icon={<AiOutlineQuestionCircle className="h-5 w-5" />} className=" absolute bottom-1 right-1" />
+                    </> : <EmptyState
+                        className="h-full w-full hover:bg-background border-none max-w-none"
+                        title="Mermaid"
+                        description="No code provided"
+                        icons={[BoxIcon]}
+                    />
+                }
             </div>
         </div>
     </NodeViewWrapper>

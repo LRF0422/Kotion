@@ -1,6 +1,6 @@
-import { Download, FileIcon, FolderOpenIcon, XIcon } from "@kn/icon";
+import { Download, FcFile, FcOpenedFolder, FileIcon, FolderOpenIcon, XIcon } from "@kn/icon";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, Separator, cn } from "@kn/ui";
-import { useSafeState } from "@kn/core";
+import { useSafeState, useTheme } from "@kn/core";
 import React, { useEffect } from "react";
 import { FileItem, FileManagerState, useFileManagerState } from "./FileContext";
 
@@ -20,6 +20,7 @@ export const FileCard: React.FC<FileItem> = (props) => {
     const { isFolder, id, name } = props
     const { selectedFiles, setSelectFiles, selectable, setCurrentFolderId } = useFileManagerState() as FileManagerState
     const [checked, setChecked] = useSafeState<boolean>(false)
+    const { theme } = useTheme()
 
     useEffect(() => {
         setChecked(!!selectedFiles.find(it => it.id === id))
@@ -56,10 +57,10 @@ export const FileCard: React.FC<FileItem> = (props) => {
                     </div>
                 </CardTitle>
             </CardHeader>
-            <CardContent className="flex items-center justify-center">
+            <CardContent className="flex items-center justify-center p-2">
                 {
-                    isFolder ? <FolderOpenIcon className="h-20 w-20 fill-sky-500 text-sky-500" strokeWidth={1} /> :
-                        <FileIcon className="h-20 w-20" strokeWidth={1} />
+                    isFolder ? <FcOpenedFolder className="h-20 w-20" /> :
+                        <FcFile className="h-20 w-20" />
                 }
             </CardContent>
             <CardFooter className="p-2 m-0 border-t text-sm text-nowrap overflow-hidden text-ellipsis select-none">
