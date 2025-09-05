@@ -13,11 +13,13 @@ import { useNavigator } from "../../hooks/use-navigator"
 import { Loader2 } from "@kn/icon"
 import { ModeToggle } from "@kn/ui"
 import React from "react"
+import { useUploadFile } from "../../hooks"
 
 export function Login() {
 
     const navigator = useNavigator()
     const [loading, setLoading] = useState(false)
+    const { usePath } = useUploadFile()
 
     const formSchema = z.object({
         account: z.string().min(1, {
@@ -60,7 +62,7 @@ export function Login() {
             </div>
             <div className="hidden bg-muted lg:block">
                 <img
-                    src="/src/assets/placeholder.svg"
+                    src={ usePath("upload/20250904/01475317e632a70f693c437f115618b5.svg") }
                     alt="Image"
                     width="1920"
                     height="1080"

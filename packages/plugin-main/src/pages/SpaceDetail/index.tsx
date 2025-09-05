@@ -419,6 +419,8 @@ export const SpaceDetail: React.FC = () => {
                         <span>Personal Space</span>
                     </CommandItem>
                 </CommandGroup>
+                <CommandGroup heading="Go to page">
+                </CommandGroup>
             </CommandList>
         </CommandDialog>
     </div>

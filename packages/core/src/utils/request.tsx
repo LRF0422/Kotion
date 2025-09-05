@@ -5,8 +5,9 @@ import React from 'react'
 
 const TOKEN_KEY = 'knowledge-token'
 
+// http://www.simple-platform.cn:88
 const axiosInstance = axios.create({
-  baseURL: "http://www.simple-platform.cn:88",
+  baseURL: "/api",
   timeout: 50000
 })
 

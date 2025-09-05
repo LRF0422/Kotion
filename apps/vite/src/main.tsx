@@ -12,6 +12,7 @@ import { drawnix } from "@kn/plugin-drawnix"
 
 import { ai } from "@kn/plugin-ai"
 
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[ai, DefaultPluginInstance, fileManager, database, excalidraw, mermaid, drawnix]} />
+  <App plugins={[]} />
 )
