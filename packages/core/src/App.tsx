@@ -80,7 +80,6 @@ export const App: React.FC<AppProps> = (props) => {
         if (loadFinished) {
             const pluginLocales = pluginManager.resloveLocales()
             const res = { ...resources, ...pluginLocales }
-            console.log('locales resources', res);
             i18n.use(initReactI18next)
                 .use(LanguageDetector)
                 .init({

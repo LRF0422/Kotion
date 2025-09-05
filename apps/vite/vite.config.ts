@@ -3,11 +3,10 @@ import react from "@vitejs/plugin-react";
 import tsconfigPaths from 'vite-tsconfig-paths'
 
 // https://vitejs.dev/config/
+const nodeEnv = process.env.NODE_ENV === 'production' ? '"production"' : '"development"';
 export default defineConfig({
   plugins: [react(), tsconfigPaths()],
-  define: {
-    'process.env': process.env
-  },
+  define: { 'process.env.NODE_ENV': nodeEnv },
   server: {
     proxy: {
       '/api': {
