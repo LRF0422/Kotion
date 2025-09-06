@@ -60,7 +60,7 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void }> = ({ 
                     </div>
                 </div>
             </TooltipTrigger>
-            <TooltipContent side="right" className="space-y-1">
+            <TooltipContent side="right" className="space-y-1 w-[300px]">
                 <div className="text-[16px]">{item.name}</div>
                 <div className="flex gap-1 text-[14px]">
                     <div className="flex items-center"><DownloadCloud className="h-3 w-3" />100M</div>
