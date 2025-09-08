@@ -2,6 +2,15 @@ import { BoxSelect, DownloadCloud, PlusSquare, RefreshCcw, Slack, Star, Trash2 }
 import {
     Accordion, AccordionContent,
     AccordionItem, AccordionTrigger,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
     Avatar,
     Badge, Button, EmptyState, Input, Separator, Tooltip,
     TooltipContent, TooltipProvider, TooltipTrigger
@@ -80,6 +89,8 @@ export const Shop: React.FC = () => {
     const [installedPlugins, setInstalledPlugins] = useSafeState([])
     const navigator = useNavigator()
     const [flag, setFlag] = useState(0)
+    const [open, setOpen] = useState(false)
+    const [currentId, setCurrentId] = useState<string | undefined>()
 
     useEffect(() => {
         useApi(APIS.GET_INSTALLED_PLUGINS).then(res => {
@@ -100,9 +111,8 @@ export const Shop: React.FC = () => {
     }
 
     const uninstall = (versionId: string) => {
-        useApi(APIS.UNINSTALL_PLUGIN, { versionId: versionId }).then(res => {
-            setFlag(f => f + 1)
-        })
+        setOpen(true)
+        setCurrentId(versionId)
     }
 
     return <div className=" grid grid-cols-[300px_1fr] w-full">
@@ -165,5 +175,30 @@ export const Shop: React.FC = () => {
         <div>
             <Outlet />
         </div>
+        <AlertDialog open={open} onOpenChange={setOpen}>
+            <AlertDialogTrigger />
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    This action cannot be undone. This will permanently remove the plugin.
+                </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => {
+                        setCurrentId(undefined)
+                        setOpen(false)
+                }}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => {
+                        if (currentId) {
+                             useApi(APIS.UNINSTALL_PLUGIN, { versionId: currentId }).then(res => {
+                                 setFlag(f => f + 1)
+                                 setOpen(false)
+                            })
+                        }
+                }}>Continue</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </div>
 }

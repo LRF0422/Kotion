@@ -108,7 +108,7 @@ export const App: React.FC<AppProps> = (props) => {
                     return
                 }
                 Promise.all(installedPlugins.map((plugin) => {
-                    const path = usePath(plugin.resourcePath)
+                    const path = usePath(plugin.resourcePath) + "&cache=true"
                     return importScript(path, plugin.pluginKey)
                 })).then(res => {
                     setAllPlugins([...(plugins || []), ...res.map(it => Object.values(it)[0])])
@@ -155,6 +155,7 @@ export const App: React.FC<AppProps> = (props) => {
 
     useEffect(() => {
         if (loadFinished) {
+            console.log('all plugins', allPlugins);
             pluginManager.setPlugins(allPlugins.filter(it => !!it))
             console.debug("load plugins finished, loaded plugins: ", allPlugins)
             const routeConfigs = pluginManager.resloveRoutes()

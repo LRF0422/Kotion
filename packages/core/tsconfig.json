@@ -14,7 +14,8 @@
     "jsx": "react",
     "lib": [
       "ES2020",
-      "DOM"
+      "DOM",
+      "webworker"
     ]
   },
   "include": [
