@@ -14,6 +14,7 @@ import { Loader2 } from "@kn/icon"
 import { ModeToggle } from "@kn/ui"
 import React from "react"
 import { useUploadFile } from "../../hooks"
+import { LanguageToggle } from "../../locales/LanguageToggle"
 
 export function Login() {
 
@@ -57,8 +58,9 @@ export function Login() {
 
     return (
         <div className="w-full lg:grid h-[100vh] lg:grid-cols-2">
-            <div className=" absolute top-2 right-2">
+            <div className=" absolute top-2 right-2 flex items-center gap-1">
                 <ModeToggle />
+                <LanguageToggle />
             </div>
             <div className="hidden bg-muted lg:block">
                 <img
@@ -70,8 +72,9 @@ export function Login() {
             </div>
             <div className="flex items-center justify-center py-12">
                 <div className="mx-auto grid w-[350px] gap-6">
-                    <div className="grid gap-2 text-center">
-                        <h1 className="text-3xl font-bold">欢迎登录</h1>
+                    <div className="grid gap-2 text-left">
+                        <h1 className="text-3xl font-bold">嗨，近来可好？</h1>
+                        <p className="text-sm text-muted-foreground">👋欢迎来到 Kn, 登录以继续</p>
                     </div>
                     <Form {...form}>
                         <form className="flex flex-col gap-4" onSubmit={form.handleSubmit(onSubmit)}>

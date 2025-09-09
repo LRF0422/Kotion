@@ -18,6 +18,7 @@ import { useForm } from "@kn/ui"
 import { Link } from "react-router-dom"
 import { z } from "@kn/ui"
 import React from "react"
+import { LanguageToggle } from "../../locales/LanguageToggle"
 
 export const description =
     "A sign up form with first name, last name, email and password inside a card. There's an option to sign up with GitHub and a link to login if you already have an account"
@@ -130,8 +131,9 @@ export function SignUpForm() {
                     </div>
                 </CardContent>
             </Card>
-            <div className=" absolute top-2 right-2">
+            <div className=" absolute top-2 right-2 flex items-center gap-1">
                 <ModeToggle />
+                <LanguageToggle />
             </div>
         </div >
     )
