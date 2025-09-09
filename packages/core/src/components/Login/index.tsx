@@ -62,10 +62,9 @@ export function Login() {
             </div>
             <div className="hidden bg-muted lg:block">
                 <img
-                    src={ usePath("upload/20250904/01475317e632a70f693c437f115618b5.svg") }
+                    src={usePath("upload/20250908/556d9cd05cb0eaa093aa2d6c1586d8f4.png")}
                     alt="Image"
-                    width="1920"
-                    height="1080"
+
                     className="h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
                 />
             </div>

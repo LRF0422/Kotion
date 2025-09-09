@@ -58,6 +58,9 @@ export const Resizable: React.FC<React.PropsWithChildren<Props>> = ({
   return (
     <ReactResizable
       className={cn(" rounded-sm hover:outline-gray-400 p-0.3", className, hoverable ? "hover:outline-dashed" : "")}
+      style={{
+        maxWidth: "100%",
+      }}
       size={{
         width,
         height,

@@ -14,5 +14,5 @@ import { ai } from "@kn/plugin-ai"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[]} />
+  <App plugins={[DefaultPluginInstance, excalidraw, fileManager, mermaid, database, ai, drawnix]} />
 )

@@ -60,8 +60,6 @@ export const Excalidraw = Node.create({
         }
     },
     addNodeView() {
-        return ReactNodeViewRenderer(ExcalidrawView, {
-            stopEvent: () => true
-        })
+        return ReactNodeViewRenderer(ExcalidrawView)
     }
 })

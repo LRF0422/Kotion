@@ -290,7 +290,7 @@ export const SpaceDetail: React.FC = () => {
             className: 'h-[400px]',
             icon: <Package />,
             actions: [
-                <Button variant="ghost" size="sm" key="1" onClick={() => handleCreatePage()}><Plus className="h-3 w-3" /></Button>
+                <Button className="h-7 w-7 ml-1" variant="ghost" size="icon" key="1" onClick={() => handleCreatePage()}><Plus className="h-3 w-3" /></Button>
             ],
             emptyProps: {
                 icon: <FolderOpen />,

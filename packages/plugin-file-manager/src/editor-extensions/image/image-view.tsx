@@ -39,16 +39,18 @@ export const ImageView: React.FC<NodeViewProps> = ({
       draggable
       style={{
         float: float || "none",
+        maxWidth: '100%',
         margin: '5px',
         position: "relative",
         display: "flex",
         justifyContent: flexJustifyContent
-      }}>
+      } as React.CSSProperties}>
       <Resizable
         width={width || 100}
         height={height || 100}
         editor={editor}
         getPos={getPos}
+        className="max-w-full"
         aspectRatio={aspectRatio}
         onResizeStop={onResize}>
         <img src={getSrc(src)} width={"100%"} />

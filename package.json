@@ -12,6 +12,7 @@
     "build:ui": "pnpm --filter @kn/ui build",
     "build:excalidraw": "pnpm --filter @kn/plugin-excalidraw build",
     "build:mermaid": "pnpm --filter @kn/mermaid-plugin build",
+    "build:file-manager": "pnpm --filter @kn/file-manager build",
     "build:drawnix": "pnpm --filter @kn/plugin-drawnix build",
     "build:editor": "pnpm --filter @kn/editor build",
     "build:main": "pnpm --filter @kn/plugin-main build",

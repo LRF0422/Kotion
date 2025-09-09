@@ -9,11 +9,14 @@ export const ExcalidrawView: React.FC<NodeViewProps> = (props) => {
 
     const { theme } = useTheme()
 
-    return <NodeViewWrapper className="rounded-md shadow-md h-[800px] w-full">
+    return <NodeViewWrapper className="rounded-md shadow-md" style={{
+        height: '800px'
+    }}>
         <Excalidraw
             theme={theme === 'light' ? 'light' : 'dark'}
             isCollaborating={false}
             initialData={{
+                scrollToContent: false,
                 elements: props.node.attrs.elements,
                 appState: { ...props.node.attrs.appState, viewModeEnabled: !props.editor.isEditable, collaborators: new Map() },
                 files: props.node.attrs.files,
