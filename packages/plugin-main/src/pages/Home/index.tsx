@@ -1,7 +1,7 @@
 import { APIS } from "../../api";
 import { CardList } from "../components/CardList";
 import { Button, EmptyState } from "@kn/ui";
-import { useApi } from "@kn/core";
+import { useApi, useService } from "@kn/core";
 import { useNavigator } from "@kn/core";
 import { Space as KSpace } from "../../model/Space";
 import { BanIcon, Book, Box, Clock, LayoutTemplate, Plus, UserCircle } from "@kn/icon";

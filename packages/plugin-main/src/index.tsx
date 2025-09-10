@@ -9,11 +9,22 @@ import React from 'react'
 import { LayoutGrid } from '@kn/icon'
 import "@kn/ui/globals.css"
 
+interface MainService {
+  getSpaceInfo: (spaceId: string) => Promise<any>
+}
+
+declare module '@kn/common' {
+
+  interface Services {
+    mainService: MainService
+  }
+
+}
+
 
 interface DefaultPluginProps extends PluginConfig {
 }
 class DefaultPlugin extends KPlugin<DefaultPluginProps> {
-
 }
 
 export const DefaultPluginInstance = new DefaultPlugin({
@@ -57,6 +68,13 @@ export const DefaultPluginInstance = new DefaultPlugin({
   ]
   ,
   editorExtension: [],
+  services: {
+    mainService: {
+      getSpaceInfo: () => {
+        return Promise.resolve({})
+      }
+    }
+  },
   locales: {
     "zh": {
       translation: {
@@ -67,9 +85,9 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "all": "查看全部空间",
         },
         "toc": {
-           "title": "目录",
-            "empty": "没有数据"
-          }
+          "title": "目录",
+          "empty": "没有数据"
+        }
       }
     },
     "en": {
@@ -85,6 +103,6 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "empty": "No Content"
         }
       }
-    }
+    },
   }
 })

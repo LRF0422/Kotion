@@ -1,5 +1,5 @@
 import { AnyExtension } from "@tiptap/core"
-import { useContext, useState } from "react"
+import { useContext } from "react"
 import { Focus } from "../extensions/focus"
 import { TrailingNode } from "../extensions/trailing-node"
 import { Text } from '@tiptap/extension-text'
@@ -42,20 +42,22 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean) => {
 		TrailingNode,
 		Perf,
 		BubbleMenu,
-		UniqueID.configure({
-			filterTransaction: t => !isChangeOrigin(t)
-		}),
 	]
 
 	const { pluginManager } = useContext(AppContext)
 	const full = [...buildInExtension, ...(pluginManager?.resloveEditorExtension() as ExtensionWrapper[])]
+	const reoloved = resolveExtesions(full);
 	let editorExtensions = [
 		...runtimeExtension,
-		...resolveExtesions(full),
+		...reoloved,
 		resloveSlash(full)
 	]
 	if (ext) {
 		editorExtensions = editorExtensions.filter(it => it.name !== ext);
 	}
+	editorExtensions.push(UniqueID.configure({
+			types: editorExtensions.filter(it => it.name !== 'text').map(it => it.name),
+			filterTransaction: t => !isChangeOrigin(t)
+		}))
 	return [editorExtensions, full]
 }

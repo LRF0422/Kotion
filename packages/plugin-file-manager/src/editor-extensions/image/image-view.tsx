@@ -31,6 +31,9 @@ export const ImageView: React.FC<NodeViewProps> = ({
     if (src.startsWith("http") || src.startsWith("https")) {
       return src;
     }
+    if (src.startsWith("data:")) {
+      return src;
+    }
     return usePath(src);
   }
 

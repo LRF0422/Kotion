@@ -32,7 +32,7 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void }> = ({ 
     return <TooltipProvider>
         <Tooltip>
             <TooltipTrigger>
-                <div className=" flex items-center gap-2 rounded-md p-2 h-[75px] hover:bg-muted/50 cursor-pointer relative border-b" onClick={() => {
+                <div className=" flex items-center gap-2 rounded-md p-2 h-[75px] hover:bg-muted/50 relative border-b" onClick={() => {
                     navigator.go({
                         to: `/plugin-hub/${item.id}`
                     })

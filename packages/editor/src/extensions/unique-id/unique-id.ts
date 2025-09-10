@@ -17,29 +17,12 @@ export interface UniqueIDOptions {
 
 export const UniqueID = Extension.create<UniqueIDOptions>({
   name: "uniqueID",
-  priority: 200,
+  priority: 1000,
 
   addOptions() {
     return {
       attributeName: "blockId",
-      types: [
-        "flow",
-        "mind",
-        "excalidraw",
-        "status",
-        "table",
-        "iframe",
-        "codeBlock",
-        "blockquote",
-        "columns",
-        "image",
-        "title",
-        "customAIBlock",
-        "syncBlock",
-        "paragraph",
-        "infoPanel",
-        "database"
-      ],
+      types: [],
       generateID: () => uuidv4(),
       filterTransaction: null
     };

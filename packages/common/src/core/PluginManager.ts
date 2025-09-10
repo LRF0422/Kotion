@@ -2,6 +2,7 @@ import { Plugins } from "../../../core/src/App";
 import { ExtensionWrapper } from "./editor";
 import { SiderMenuItemProps } from "./menu";
 import { RouteConfig } from "./route";
+import { KeysWithTypeOf, Services } from "./types";
 
 export interface PluginConfig {
     name: string
@@ -11,6 +12,7 @@ export interface PluginConfig {
     menus?: SiderMenuItemProps[]
     editorExtension?: ExtensionWrapper[]
     locales?: any
+    services?: Services
 }
 
 export class KPlugin<T extends PluginConfig> {
@@ -21,6 +23,7 @@ export class KPlugin<T extends PluginConfig> {
     private _editorExtension?: ExtensionWrapper[]
     private _menus?: SiderMenuItemProps[]
     private _locales?: any
+    private _services?: Services = {}
 
     constructor(config: T) {
         this.name = config.name
@@ -29,6 +32,7 @@ export class KPlugin<T extends PluginConfig> {
         this._editorExtension = config.editorExtension
         this._menus = config.menus
         this._locales = config.locales
+        this._services = config.services
     }
 
     get routes(): RouteConfig[] {
@@ -45,6 +49,10 @@ export class KPlugin<T extends PluginConfig> {
 
     get locales(): any {
         return this._locales
+    }
+
+    get services(): Services | undefined {
+        return this._services
     }
 
 }

@@ -5,4 +5,6 @@ export * from "./core/AppContext"
 export * from "./core/menu"
 export * from "./event"
 export * from "./locales"
+export * from "./core/types"
+
 

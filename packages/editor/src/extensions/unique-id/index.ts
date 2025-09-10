@@ -1,1 +1,1 @@
-export * from "./unique-id";
+export * from "@tiptap/extension-unique-id";

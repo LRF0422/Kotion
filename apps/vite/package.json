@@ -16,6 +16,7 @@
     "@kn/plugin-ai": "workspace:*",
     "@kn/plugin-main": "workspace:*",
     "@kn/plugin-database": "workspace:*",
+    "@kn/plugin-block-reference": "workspace:*",
     "@kn/plugin-excalidraw": "workspace:*",
     "@kn/plugin-drawnix": "workspace:*",
     "@kn/file-manager": "workspace:*",
