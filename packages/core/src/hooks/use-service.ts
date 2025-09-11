@@ -1,16 +1,15 @@
 import { AppContext, Services, ValuesOf } from "@kn/common";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 
 
-export const useService = (service: keyof Services): ValuesOf<Services> => {
+export const useService = (serviceName: keyof Services): ValuesOf<Services> => {
 
-    const [services, setServices] = useState<Services>({})
 
     const { pluginManager } = useContext(AppContext)
-    const plugins = pluginManager?.plugins
-    plugins?.forEach(it => {
-        setServices(se => ({ ...se, ...it.services }))
-    })
-    return services[service]
+    const [service, setService] = useState<ValuesOf<Services>>(pluginManager!.pluginServices[serviceName])
+    useEffect(() => {
+        setService(pluginManager!.pluginServices[serviceName])
+    }, [serviceName])
+    return service
 
 };

@@ -57,6 +57,13 @@ export const CollaborationEditor = forwardRef<
       onBlur: ({ editor }) => {
         props.onBlur && props.onBlur(editor)
       },
+      // @ts-ignore
+      onDelete: ({ editor, node, from, newFrom, partial }) => {
+       if (!partial) {
+         console.log('deleted node', node);
+         
+       }
+      },
       extensions: [
         ...extensions as AnyExtension[],
         TableOfContents.configure({

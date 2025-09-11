@@ -8,18 +8,8 @@ import { KPlugin, PluginConfig } from '@kn/common'
 import React from 'react'
 import { LayoutGrid } from '@kn/icon'
 import "@kn/ui/globals.css"
+import { spaceService } from './service/space-service'
 
-interface MainService {
-  getSpaceInfo: (spaceId: string) => Promise<any>
-}
-
-declare module '@kn/common' {
-
-  interface Services {
-    mainService: MainService
-  }
-
-}
 
 
 interface DefaultPluginProps extends PluginConfig {
@@ -69,11 +59,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
   ,
   editorExtension: [],
   services: {
-    mainService: {
-      getSpaceInfo: () => {
-        return Promise.resolve({})
-      }
-    }
+    spaceService: spaceService
   },
   locales: {
     "zh": {

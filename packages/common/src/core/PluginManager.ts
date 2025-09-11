@@ -2,7 +2,7 @@ import { Plugins } from "../../../core/src/App";
 import { ExtensionWrapper } from "./editor";
 import { SiderMenuItemProps } from "./menu";
 import { RouteConfig } from "./route";
-import { KeysWithTypeOf, Services } from "./types";
+import { Services } from "./types";
 
 export interface PluginConfig {
     name: string
@@ -60,6 +60,7 @@ export class KPlugin<T extends PluginConfig> {
 export class PluginManager {
 
     plugins: Plugins = []
+    _pluginServices: Services = {}
 
     register(plugin: KPlugin<any>) {
         if (plugin) {
@@ -74,6 +75,11 @@ export class PluginManager {
 
     setPlugins(plugins: Plugins) {
         this.plugins = plugins
+        this.plugins.forEach(it => {
+            if (it.services) {
+                this._pluginServices = { ...this._pluginServices, ...it.services }
+            }
+        })
     }
 
     remove(name: string) {
@@ -119,5 +125,9 @@ export class PluginManager {
             }
         })
         return menus;
+    }
+
+    get pluginServices(): Services {
+        return this._pluginServices
     }
 }

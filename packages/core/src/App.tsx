@@ -175,7 +175,7 @@ export const App: React.FC<AppProps> = (props) => {
             )))
         }
     }, [loadFinished, allPlugins])
-    return router && <AppContext.Provider value={{
+    return router && loadFinished &&  <AppContext.Provider value={{
         pluginManager: pluginManager
     }}>
         <core.ModalProvider>

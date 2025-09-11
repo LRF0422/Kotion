@@ -18,8 +18,8 @@ export const InfoPanel = Node.create({
 	name: 'infoPanel',
 	content: "block+",
 	group: 'block',
+	isolating: true,
 	priority: 1000,
-
 	addOptions() {
 		return {
 			type: {

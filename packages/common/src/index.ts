@@ -6,5 +6,6 @@ export * from "./core/menu"
 export * from "./event"
 export * from "./locales"
 export * from "./core/types"
+export * from "./entity"
 
 

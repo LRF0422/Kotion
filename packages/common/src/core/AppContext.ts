@@ -3,7 +3,11 @@ import { PluginManager } from "./PluginManager";
 
 
 export interface AppContextProps {
-    pluginManager?: PluginManager
+    pluginManager: PluginManager | undefined
 }
 
-export const AppContext = createContext<AppContextProps>({})
+const initalState: AppContextProps = {
+    pluginManager: undefined
+}
+
+export const AppContext = createContext<AppContextProps>(initalState)

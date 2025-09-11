@@ -3,7 +3,7 @@ import { TreeView } from "@kn/ui";
 import { ArrowLeft, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, Package, Plus, Settings, ShareIcon, Star, Trash2, Undo2, UserCircle } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@kn/ui";
-import { useApi } from "@kn/core";
+import { useApi, useService, useUploadFile } from "@kn/core";
 import { APIS } from "../../api";
 import { Outlet, useParams } from "@kn/core";
 import { Space } from "../../model/Space";
@@ -36,18 +36,27 @@ export const SpaceDetail: React.FC = () => {
     const navigator = useNavigator()
     const [searchValue, setSearchValue] = useState<string>()
     const [loading, { toggle: toggleLoading }] = useToggle(true)
+    const { usePath } = useUploadFile()
+    const spaceService = useService("spaceService")
     useEffect(() => {
-        useApi(APIS.SPACE_DETAIL, { id: params.id }).then((res) => {
-            setSpace(res.data)
-        })
-    }, [])
+        if (params.id) {
+            spaceService.getSpaceInfo(params.id).then(res => {
+                setSpace(res)
+            })
+        }
+        return () => {
+            setSpace(undefined)
+        }
+    }, [params.id])
 
     useEffect(() => {
-        toggleLoading()
-        useApi(APIS.GET_PAGE_TREE, { id: params.id, searchValue: searchValue }).then((res) => {
-            setPageTree(res.data)
+        if (params.id) {
             toggleLoading()
-        })
+            spaceService.getPageTree(params!.id, searchValue).then(res => {
+                setPageTree(res)
+                toggleLoading()
+            })
+        }
     }, [flag, searchValue])
 
     useEffect(() => {
@@ -234,10 +243,12 @@ export const SpaceDetail: React.FC = () => {
                         to: `/space-detail/${params.id}/page/${space.homePageId}`
                     })
                 }}>
-                    <div className=" p-2 mt-1 bg-muted rounded-sm flex-1 cursor-pointer">{space.name}</div>
-                    {/* <Button size="icon">
-                        <ShareIcon className="h-4 w-4" />
-                    </Button> */}
+                    <div className=" p-2 mt-1 bg-muted rounded-sm flex-1 cursor-pointer">
+                        <div className="flex items-center gap-1">
+                            <div>{space?.icon?.icon}</div>
+                            {space.name}
+                        </div>
+                    </div>
                 </div>
         },
         {
@@ -382,7 +393,7 @@ export const SpaceDetail: React.FC = () => {
                             yourTemplates.map((item: any, index) => (
                                 <div className="flex flex-col gap-1">
                                     <Card key={index} className="border hover:bg-muted h-[200px]" style={{
-                                        backgroundImage: `url('http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${item.cover}')`,
+                                        backgroundImage: `url('${usePath(item.cover)}&cache=true')`,
                                         backgroundSize: 'cover'
                                     }} >
                                     </Card>
