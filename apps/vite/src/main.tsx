@@ -9,10 +9,11 @@ import { mermaid } from "@kn/mermaid-plugin"
 import { database } from "@kn/plugin-database"
 import { excalidraw } from "@kn/plugin-excalidraw"
 import { drawnix } from "@kn/plugin-drawnix"
+import { blockReference } from "@kn/plugin-block-reference"
 
 import { ai } from "@kn/plugin-ai"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[DefaultPluginInstance, excalidraw, fileManager, mermaid, database, ai, drawnix]} />
+  <App plugins={[DefaultPluginInstance, excalidraw, fileManager, mermaid, database, ai, drawnix, blockReference]} />
 )

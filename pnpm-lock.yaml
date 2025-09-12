@@ -648,6 +648,9 @@ importers:
       '@kn/icon':
         specifier: workspace:*
         version: link:../icon
+      '@kn/plugin-main':
+        specifier: workspace:*
+        version: link:../plugin-main
       '@kn/ui':
         specifier: workspace:*
         version: link:../ui

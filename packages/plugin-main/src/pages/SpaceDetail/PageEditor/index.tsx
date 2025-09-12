@@ -8,7 +8,7 @@ import { Separator } from "@kn/ui";
 import { Switch } from "@kn/ui";
 import { CollaborationEditor, EditorView, printEditorContent } from "@kn/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
-import { useApi } from "@kn/core";
+import { useApi, useService } from "@kn/core";
 import { useNavigator } from "@kn/core";
 import { GlobalState } from "@kn/core";
 import { Editor } from "@kn/editor";
@@ -40,11 +40,12 @@ export const PageEditor: React.FC = () => {
     const navigator = useNavigator()
     const ref = useRef<any>()
     const [fullScreen, { toggleFullscreen }] = useFullscreen(ref)
+    const spaceService = useService("spaceService")
 
     useEffect(() => {
         toggleLoading()
-        useApi(APIS.GET_PAGE_CONTENT, { id: params.pageId }).then((res) => {
-            setPage(res.data)
+        spaceService.getPage(params.pageId!).then((res) => {
+            setPage(res)
             toggleLoading()
         })
 
@@ -323,8 +324,8 @@ export const PageEditor: React.FC = () => {
                                                 <FileIcon className="h-4 w-4" />
                                                 <span>as word</span>
                                             </div>
-                                            </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => printEditorContent(editor.current?.view as EditorView)}>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => printEditorContent(editor.current?.view as EditorView)}>
                                             <div className="flex flex-row items-center gap-1">
                                                 <FileIcon className="h-4 w-4" />
                                                 <span>as pdf</span>

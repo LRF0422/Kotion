@@ -9,12 +9,15 @@ import React from 'react'
 import { LayoutGrid } from '@kn/icon'
 import "@kn/ui/globals.css"
 import { spaceService } from './service/space-service'
+export * from "./service"
 
 
 
 interface DefaultPluginProps extends PluginConfig {
+
 }
 class DefaultPlugin extends KPlugin<DefaultPluginProps> {
+
 }
 
 export const DefaultPluginInstance = new DefaultPlugin({
