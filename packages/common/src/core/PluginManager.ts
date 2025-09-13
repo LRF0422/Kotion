@@ -23,7 +23,7 @@ export class KPlugin<T extends PluginConfig> {
     private _editorExtension?: ExtensionWrapper[]
     private _menus?: SiderMenuItemProps[]
     private _locales?: any
-    private _services?: Services = {}
+    private _services?: Services
 
     constructor(config: T) {
         this.name = config.name
@@ -60,7 +60,7 @@ export class KPlugin<T extends PluginConfig> {
 export class PluginManager {
 
     plugins: Plugins = []
-    _pluginServices: Services = {}
+    _pluginServices: Services = {} as Services
 
     register(plugin: KPlugin<any>) {
         if (plugin) {

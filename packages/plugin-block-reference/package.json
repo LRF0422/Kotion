@@ -19,7 +19,6 @@
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",
-    "@kn/plugin-main": "workspace:*",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47"
   },

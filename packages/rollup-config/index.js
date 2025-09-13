@@ -1,20 +1,14 @@
-// import babel from '@rollup/plugin-babel'
 import commonjs from "@rollup/plugin-commonjs";
 import resolve from "@rollup/plugin-node-resolve";
 import typescript from "rollup-plugin-typescript2";
 import postcss from "rollup-plugin-postcss";
-import tailwindcss from "tailwindcss";
-import autoprefixer from "autoprefixer";
 import nested from "postcss-nested";
 import cssnext from "postcss-cssnext";
 import json from "@rollup/plugin-json";
 import nodePolyfills from "rollup-plugin-polyfill-node";
 import babel from "@rollup/plugin-babel";
-import calc from "postcss-calc";
 import postcssCascadeLayers from "@csstools/postcss-cascade-layers";
-import obfuscatorPlugin from "rollup-plugin-javascript-obfuscator";
-// import peerDepsExternal from 'rollup-plugin-peer-deps-external';
-import excludeDependenciesFromBundle from "rollup-plugin-exclude-dependencies-from-bundle";
+import { terser } from "rollup-plugin-terser";
 
 export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   external: [
@@ -66,6 +60,7 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
     }),
     json(),
     nodePolyfills(),
+    terser(),
     babel({
       babelHelpers: "bundled",
       exclude: "../../node_modules/**",
@@ -84,6 +79,7 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
           isolatedModules: false,
           moduleResolution: "bundler",
           declarationDir: "./dist",
+          noImplicitAny: true,
           // declarationMap: true,
           target: "ES2020",
           paths: {

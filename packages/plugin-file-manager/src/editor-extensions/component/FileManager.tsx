@@ -1,5 +1,5 @@
 import { Check, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, ListIcon, LucideHome, PlusIcon, Trash2, UploadIcon, XIcon } from "@kn/icon";
-import { Button, EmptyState, Separator, TreeView, cn } from "@kn/ui";
+import { Button, EmptyState, ScrollArea, Separator, TreeView, cn } from "@kn/ui";
 import React, { useCallback, useEffect, useState } from "react";
 import { FileCardList } from "./FileCard";
 import { useSafeState, useUploadFile } from "@kn/core";
@@ -198,8 +198,8 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 </div>
             </div>
             <div className="grid w-full grid-cols-[200px_1fr] flex-1 overflow-auto h-[calc(100%-40px)]">
-                <div className="border-r">
-                    <div className="bg-muted/80 border-b h-[40px] flex items-center">
+                <div className="border-r overflow-y-auto h-full">
+                    <div className="bg-muted/80 border-b h-[40px] flex items-center gap-1">
                         <Button
                             variant="outline"
                             size="sm"

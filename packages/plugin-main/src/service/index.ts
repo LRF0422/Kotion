@@ -6,7 +6,7 @@ import { SpaceService } from "./space-service";
 
 declare module '@kn/common' {
 
-    export interface Services {
+    interface Services {
         spaceService: SpaceService
     }
 
