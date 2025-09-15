@@ -7,6 +7,7 @@ import { SlashMenuView } from "./slash-menu-view";
 import { PluginKey } from "@tiptap/pm/state";
 import { computePosition, flip } from "@floating-ui/dom";
 import { CellSelection } from "@tiptap/pm/tables";
+import { event } from "@kn/common";
 
 export type SlashMenuItem =
   | {

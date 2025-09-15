@@ -19,7 +19,7 @@ export const FolderExtension: ExtensionWrapper = {
         {
             text: '文件夹',
             slash: '/folder',
-            icon: <FolderIcon />,
+            icon: <FolderIcon  className="h-4 w-4"/>,
             action: (editor) => {
                 editor.commands.insertFolder()
             }

@@ -4,6 +4,7 @@ export * from "./utilities"
 export * from "./hooks"
 export * from "yjs"
 export * from "./export/pdf"
+export * from "@floating-ui/dom"
 export { TiptapCollabProvider, HocuspocusProvider } from "@hocuspocus/provider"
 export {
     useEditor, useReactNodeView, EditorContent,

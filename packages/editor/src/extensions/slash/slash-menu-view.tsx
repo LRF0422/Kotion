@@ -20,7 +20,7 @@ interface IProps {
 }
 
 const StyledContainer = styled.div`
-  width: 254px;
+  width: 300px;
   max-height: 240px;
   overflow: auto;
 `;
@@ -33,8 +33,8 @@ const StyledItem = styled.div<{ active: boolean }>`
   display: flex;
   justify-content: space-between;
 
-  padding: 8px 16px;
-  height: 60px;
+  padding: 5px;
+  // height: 60px;
 
   cursor: pointer;  
 
@@ -116,7 +116,7 @@ export const SlashMenuView: React.FC<IProps> = forwardRef((props, ref) => {
       {props.items.length ? (
         props.items.map((item, index) => {
           return "divider" in item ? (
-            <StyledTitle key={index} className="slash-menu-item ">{item.title}</StyledTitle>
+            <StyledTitle key={index} className="slash-menu-item border-b mb-2 ">{item.title}</StyledTitle>
           ) : (
             item.render ? <item.render
               editor={props.editor}
@@ -126,11 +126,11 @@ export const SlashMenuView: React.FC<IProps> = forwardRef((props, ref) => {
             /> : (
               <StyledItem
                 key={index}
-                className={cn(" slash-menu-item hover:bg-muted/50 rounded-sm", (selectedIndex === index) && " bg-muted")}
+                className={cn(" slash-menu-item hover:bg-muted/50 rounded-sm text-sm", (selectedIndex === index) && " bg-muted")}
                 active={!!(selectedIndex == index)}
                 onClick={() => selectItem(index)}>
                 <div>
-                  <div className=" border p-3 rounded-sm slash-menu-item transition-all duration-200">
+                  <div className="rounded-sm slash-menu-item transition-all duration-200">
                     {item.icon}
                   </div>
                   <StyledText>{item.text}</StyledText>

@@ -71,6 +71,8 @@ export const App: React.FC<AppProps> = (props) => {
     const [flag, setFlag] = useState(0)
 
     useEffect(() => {
+        console.log("init");
+
         event.on("REFRESH_PLUSINS", () => {
             setFlag(f => f + 1)
         })
@@ -99,8 +101,11 @@ export const App: React.FC<AppProps> = (props) => {
     }, [loadFinished, allPlugins])
 
     useAsyncEffect(async () => {
+        console.log("init");
+
         try {
             if (!!localStorage.getItem("knowledge-token")) {
+                console.log('load installed plugins');
                 const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
                 if (!installedPlugins || installedPlugins.length === 0) {
                     setAllPlugins([...(plugins || [])])
@@ -113,8 +118,10 @@ export const App: React.FC<AppProps> = (props) => {
                 })).then(res => {
                     setAllPlugins([...(plugins || []), ...res.map(it => Object.values(it)[0])])
                     setLoadFinished(true)
+                    console.log('load installed plugins finished');
                 })
             } else {
+                console.log("no login");
                 setRouter(createBrowserRouter(createRoutesFromElements(
                     [
                         <Route path='/' element={<Layout />} errorElement={<Login />}>
@@ -133,6 +140,7 @@ export const App: React.FC<AppProps> = (props) => {
                 window.location.href = '/login?red'
             }
         } catch (error) {
+            console.log("login expire");
             setRouter(createBrowserRouter(createRoutesFromElements(
                 [
                     <Route path='/' element={<Layout />} errorElement={<Login />}>
@@ -175,7 +183,7 @@ export const App: React.FC<AppProps> = (props) => {
             )))
         }
     }, [loadFinished, allPlugins])
-    return router && loadFinished &&  <AppContext.Provider value={{
+    return router && <AppContext.Provider value={{
         pluginManager: pluginManager
     }}>
         <core.ModalProvider>

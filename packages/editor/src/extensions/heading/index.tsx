@@ -20,7 +20,7 @@ export const HeadingExtension: ExtensionWrapper = {
 			title: "标题"
 		},
 		{
-			icon: <Heading1 />,
+			icon: <Heading1 className="h-4 w-4" />,
 			text: "标题一",
 			slash: "/h1",
 			action: editor =>
@@ -32,7 +32,7 @@ export const HeadingExtension: ExtensionWrapper = {
 		},
 
 		{
-			icon: <Heading2 />,
+			icon: <Heading2 className="h-4 w-4" />,
 			text: "标题二",
 			slash: "/h2",
 			action: editor =>
@@ -44,7 +44,7 @@ export const HeadingExtension: ExtensionWrapper = {
 		},
 
 		{
-			icon: <Heading3 />,
+			icon: <Heading3 className="h-4 w-4" />,
 			text: "标题三",
 			slash: "/h3",
 			action: editor =>
@@ -56,7 +56,7 @@ export const HeadingExtension: ExtensionWrapper = {
 		},
 
 		{
-			icon: <Heading4 />,
+			icon: <Heading4 className="h-4 w-4" />,
 			text: "标题四",
 			slash: "/h4",
 			action: editor =>

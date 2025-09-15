@@ -48,8 +48,9 @@ export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
     }, [])
 
 
-    return <NodeViewWrapper as="span" className="select-none inline-flex items-center gap-1 underline hover:shadow-md" onDoubleClick={(e: any) => {
+    return <NodeViewWrapper as="span" className=" inline-flex items-center gap-1 align-middle cursor-pointer hover:underline" onClick={(e: any) => {
         e.preventDefault()
+        e.stopPropagation()
         navigator.go({
             to: `/space-detail/${pageInfo.spaceId}/page/${pageId}`
         })
