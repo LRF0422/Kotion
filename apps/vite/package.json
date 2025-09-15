@@ -20,6 +20,7 @@
     "@kn/plugin-block-reference": "workspace:*",
     "@kn/plugin-excalidraw": "workspace:*",
     "@kn/plugin-drawnix": "workspace:*",
+    "@kn/plugin-drawio": "workspace:*",
     "@kn/file-manager": "workspace:*",
     "@kn/mermaid-plugin": "workspace:*",
     "evaluatex": "^2.2.0",

@@ -183,6 +183,9 @@ importers:
       '@kn/plugin-database':
         specifier: workspace:*
         version: link:../../packages/plugin-database
+      '@kn/plugin-drawio':
+        specifier: workspace:*
+        version: link:../../packages/plugin-drawio
       '@kn/plugin-drawnix':
         specifier: workspace:*
         version: link:../../packages/plugin-drawnix
@@ -695,6 +698,43 @@ importers:
       '@types/react-big-calendar':
         specifier: ^1.8.11
         version: 1.16.2
+
+  packages/plugin-drawio:
+    dependencies:
+      '@drawnix/drawnix':
+        specifier: ^0.1.4
+        version: 0.1.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@floating-ui/react':
+        specifier: ^0.26.24
+        version: 0.26.28(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@kn/common':
+        specifier: workspace:*
+        version: link:../common
+      '@kn/core':
+        specifier: workspace:*
+        version: link:../core
+      '@kn/editor':
+        specifier: workspace:*
+        version: link:../editor
+      '@kn/icon':
+        specifier: workspace:*
+        version: link:../icon
+      '@kn/ui':
+        specifier: workspace:*
+        version: link:../ui
+      '@tiptap/extension-image':
+        specifier: ^3.4.3
+        version: 3.4.3(@tiptap/core@3.0.9(@tiptap/pm@3.0.9))
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.4.21(postcss@8.5.6)
+      postcss:
+        specifier: ^8.4.47
+        version: 8.5.6
+    devDependencies:
+      '@kn/rollup-config':
+        specifier: workspace:*
+        version: link:../rollup-config
 
   packages/plugin-drawnix:
     dependencies:
@@ -3171,6 +3211,11 @@ packages:
     peerDependencies:
       '@tiptap/core': ^3.0.9
       '@tiptap/pm': ^3.0.9
+
+  '@tiptap/extension-image@3.4.3':
+    resolution: {integrity: sha512-SP2ZbF/DUpmTYmbDlVnUV3MBD6a8Tblzljp6rf7IwWyMQ2UsRh5re3fNggYpuzTpnGDimfeJiCAIhgrQXQgSaw==}
+    peerDependencies:
+      '@tiptap/core': ^3.4.3
 
   '@tiptap/extension-italic@2.26.1':
     resolution: {integrity: sha512-pOs6oU4LyGO89IrYE4jbE8ZYsPwMMIiKkYfXcfeD9NtpGNBnjeVXXF5I9ndY2ANrCAgC8k58C3/powDRf0T2yA==}
@@ -10984,6 +11029,10 @@ snapshots:
     dependencies:
       '@tiptap/core': 3.0.9(@tiptap/pm@3.0.9)
       '@tiptap/pm': 3.0.9
+
+  '@tiptap/extension-image@3.4.3(@tiptap/core@3.0.9(@tiptap/pm@3.0.9))':
+    dependencies:
+      '@tiptap/core': 3.0.9(@tiptap/pm@3.0.9)
 
   '@tiptap/extension-italic@2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))':
     dependencies:

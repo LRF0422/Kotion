@@ -1,0 +1,33 @@
+{
+  "name": "@kn/plugin-drawio",
+  "version": "0.0.14",
+  "description": "",
+  "main": "src/index.tsx",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/plugin-drawnix/src/index.d.ts",
+    "registry": "http://localhost:8081/repository/npm-hosted/"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@drawnix/drawnix": "^0.1.4",
+    "@floating-ui/react": "^0.26.24",
+    "@kn/common": "workspace:*",
+    "@kn/core": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/ui": "workspace:*",
+    "@tiptap/extension-image": "^3.4.3",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@kn/rollup-config": "workspace:*"
+  }
+}

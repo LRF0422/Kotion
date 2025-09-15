@@ -153,8 +153,9 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                       )
 
                   updatePosition(clientRect)
+                } else {
+                  updatePosition(domRect)
                 }
-                updatePosition(domRect)
               },
 
               onUpdate(props) {
