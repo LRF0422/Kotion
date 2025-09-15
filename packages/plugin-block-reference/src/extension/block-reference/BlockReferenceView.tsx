@@ -42,10 +42,10 @@ export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
                 } else {
                     setTitle("该页面已经被删除")
                 }
-            toggle()
+                toggle()
             })
         }
-    }, [])
+    }, [pageId])
 
 
     return <NodeViewWrapper as="span" className=" inline-flex items-center gap-1 align-middle cursor-pointer hover:underline" onClick={(e: any) => {
@@ -59,7 +59,7 @@ export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
             loading ? <Loader2 className="h-4 w-4 animate-spin" /> :
                 <>
                     <SquareArrowOutUpRight className="h-4 w-4" />
-        {title}
+                    {title}
                 </>
         }
     </NodeViewWrapper>

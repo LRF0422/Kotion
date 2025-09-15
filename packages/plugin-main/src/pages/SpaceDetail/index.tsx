@@ -357,6 +357,7 @@ export const SpaceDetail: React.FC = () => {
     return space && <div className="grid grid-cols-[280px_1fr] h-full w-full bg-muted/40 ">
         <div className="h-full w-full border-r border-solid overflow-auto">
             <TreeView
+                initialSelectedId={params.pageId}
                 loading={loading}
                 size="sm"
                 selectParent={true}

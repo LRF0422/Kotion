@@ -134,6 +134,7 @@ const Tree = forwardRef<HTMLDivElement, TreeViewProps>(
                     const newPath = [...currentPath, currentElement.id];
                     if (currentElement.id === selectId) {
                         if (isSelectable) {
+                            setSelectedId(selectId);
                             setExpendedItems((prev) => [...(prev ?? []), ...newPath]);
                         } else {
                             if (newPath.includes(currentElement.id)) {

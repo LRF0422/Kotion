@@ -10,7 +10,7 @@ export const FigmaExtension: ExtensionWrapper = {
     // bubbleMenu: FigmaBubbleMenu,
     slashConfig: [
         {
-            icon: <FigmaIcon />,
+            icon: <FigmaIcon className="h-4 w-4" />,
             text: 'Figma',
             slash: '/figma',
             action: (editor) => {

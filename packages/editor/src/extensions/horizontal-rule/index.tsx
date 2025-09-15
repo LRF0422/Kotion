@@ -1,4 +1,4 @@
-import { RulerIcon } from "@kn/icon";
+import { RulerDimensionLine, RulerIcon } from "@kn/icon";
 import { ExtensionWrapper } from "@kn/common";
 import { HorizontalRule } from "./horizontal-rule";
 import { HorizontalRuleStaticMenu } from "./menu";
@@ -16,7 +16,7 @@ export const HorizontalRuleExtension: ExtensionWrapper = {
 	},
 	slashConfig: [
 		{
-			icon: <RulerIcon />,
+			icon: <RulerDimensionLine className="h-4 w-4" />,
 			text: "分割线",
 			slash: '/horizontalRule',
 			action: (editor) => {
