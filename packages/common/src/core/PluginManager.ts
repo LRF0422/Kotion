@@ -1,3 +1,4 @@
+import { merge } from "lodash";
 import { Plugins } from "../../../core/src/App";
 import { ExtensionWrapper } from "./editor";
 import { SiderMenuItemProps } from "./menu";
@@ -100,9 +101,10 @@ export class PluginManager {
         let locales: any = {}
         this.plugins.forEach(plugin => {
             if (plugin.locales) {
-                locales = { ...locales, ...plugin.locales }
+                locales = merge(locales, plugin.locales)
             }
         })
+        console.log('pluginlocals', locales);
         return locales;
     }
 

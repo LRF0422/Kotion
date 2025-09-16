@@ -66,43 +66,18 @@ export const App: React.FC<AppProps> = (props) => {
     const [router, setRouter] = useSafeState<any>()
     const [allPlugins, setAllPlugins] = useSafeState<any[]>([])
     const [loadFinished, setLoadFinished] = useSafeState<boolean>(false)
+    const [init, setInit] = useState<boolean>(false)
     const { usePath } = core.useUploadFile()
     const pluginManager = useMemo<PluginManager>(() => new PluginManager(), [])
     const [flag, setFlag] = useState(0)
 
     useEffect(() => {
-        console.log("init");
-
         event.on("REFRESH_PLUSINS", () => {
             setFlag(f => f + 1)
         })
     }, [])
 
-    useEffect(() => {
-        if (loadFinished) {
-            const pluginLocales = pluginManager.resloveLocales()
-            const res = { ...resources, ...pluginLocales }
-            i18n.use(initReactI18next)
-                .use(LanguageDetector)
-                .init({
-                    detection: {
-                        lookupLocalStorage: 'language',
-                    },
-                    resources: res,
-                    fallbackLng: "en",
-                    debug: true,
-                    supportedLngs: common.supportedLngs,
-                    interpolation: {
-                        escapeValue: false,
-                    }
-                })
-
-        }
-    }, [loadFinished, allPlugins])
-
     useAsyncEffect(async () => {
-        console.log("init");
-
         try {
             if (!!localStorage.getItem("knowledge-token")) {
                 console.log('load installed plugins');
@@ -121,7 +96,6 @@ export const App: React.FC<AppProps> = (props) => {
                     console.log('load installed plugins finished');
                 })
             } else {
-                console.log("no login");
                 setRouter(createBrowserRouter(createRoutesFromElements(
                     [
                         <Route path='/' element={<Layout />} errorElement={<Login />}>
@@ -138,6 +112,7 @@ export const App: React.FC<AppProps> = (props) => {
                     return
                 }
                 window.location.href = '/login?red'
+                setInit(true)
             }
         } catch (error) {
             console.log("login expire");
@@ -157,6 +132,7 @@ export const App: React.FC<AppProps> = (props) => {
                 return
             }
             window.location.href = '/login?red'
+            setInit(true)
         }
 
     }, [flag])
@@ -166,6 +142,33 @@ export const App: React.FC<AppProps> = (props) => {
             console.log('all plugins', allPlugins);
             pluginManager.setPlugins(allPlugins.filter(it => !!it))
             console.debug("load plugins finished, loaded plugins: ", allPlugins)
+            const pluginLocales = pluginManager.resloveLocales()
+            const res = { ...resources, ...pluginLocales }
+            console.log('res', res);
+
+            if (i18n.isInitialized) {
+                console.log("refresh i18n");
+                Object.keys(res).forEach(it => {
+                    i18n.addResourceBundle(it, "translation", pluginLocales[it].translation, true, true)
+                })
+                console.log("i18n refreshed", i18n);
+            } else {
+                i18n.use(initReactI18next)
+                    .use(LanguageDetector)
+                    .init({
+                        detection: {
+                            lookupLocalStorage: 'language',
+                        },
+                        resources: res,
+                        fallbackLng: "en",
+                        debug: false,
+                        supportedLngs: common.supportedLngs,
+                        interpolation: {
+                            escapeValue: false,
+                        }
+                    })
+                console.log('1i8n inited', i18n);
+            }
             const routeConfigs = pluginManager.resloveRoutes()
             const routes = routeConfigs.map(it => reslove(it))
             setRouter(createBrowserRouter(createRoutesFromElements(
@@ -181,9 +184,10 @@ export const App: React.FC<AppProps> = (props) => {
                     <Route path='/sign-up' element={<SignUpForm />} />
                 ]
             )))
+            setInit(true)
         }
     }, [loadFinished, allPlugins])
-    return router && <AppContext.Provider value={{
+    return router && init && <AppContext.Provider value={{
         pluginManager: pluginManager
     }}>
         <core.ModalProvider>
