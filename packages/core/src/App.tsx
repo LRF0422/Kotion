@@ -80,7 +80,6 @@ export const App: React.FC<AppProps> = (props) => {
     useAsyncEffect(async () => {
         try {
             if (!!localStorage.getItem("knowledge-token")) {
-                console.log('load installed plugins');
                 const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
                 if (!installedPlugins || installedPlugins.length === 0) {
                     setAllPlugins([...(plugins || [])])
@@ -115,7 +114,6 @@ export const App: React.FC<AppProps> = (props) => {
                 setInit(true)
             }
         } catch (error) {
-            console.log("login expire");
             setRouter(createBrowserRouter(createRoutesFromElements(
                 [
                     <Route path='/' element={<Layout />} errorElement={<Login />}>
@@ -139,13 +137,10 @@ export const App: React.FC<AppProps> = (props) => {
 
     useEffect(() => {
         if (loadFinished) {
-            console.log('all plugins', allPlugins);
             pluginManager.setPlugins(allPlugins.filter(it => !!it))
             console.debug("load plugins finished, loaded plugins: ", allPlugins)
             const pluginLocales = pluginManager.resloveLocales()
             const res = { ...resources, ...pluginLocales }
-            console.log('res', res);
-
             if (i18n.isInitialized) {
                 console.log("refresh i18n");
                 Object.keys(res).forEach(it => {
@@ -167,7 +162,6 @@ export const App: React.FC<AppProps> = (props) => {
                             escapeValue: false,
                         }
                     })
-                console.log('1i8n inited', i18n);
             }
             const routeConfigs = pluginManager.resloveRoutes()
             const routes = routeConfigs.map(it => reslove(it))
