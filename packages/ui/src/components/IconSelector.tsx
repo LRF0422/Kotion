@@ -6,6 +6,7 @@ import { useSafeState } from "ahooks";
 import { CompactEmoji, fetchEmojis } from "emojibase";
 import { ScrollArea } from "./ui/scroll-area";
 import { Input } from "./ui/input";
+import { EmojiPicker, EmojiPickerContent, EmojiPickerFooter, EmojiPickerSearch } from "./ui/emoji-picker";
 
 export type IconType = 'IMAGE' | 'EMOJI'
 
@@ -94,10 +95,20 @@ export const IconSelector = forwardRef<HTMLDivElement, IconSelectorProps>((props
                     <TabsTrigger value="image">Image</TabsTrigger>
                 </TabsList>
                 <TabsContent value="emoji" className="w-full flex flex-col gap-1">
-                    <EmojiSelector onChange={(value) => {
-                        setIcon(value)
-                        props.onChange && props.onChange(value)
-                    }} />
+                    <EmojiPicker className="w-full h-[300px]" onEmojiSelect={(value) => {
+                        setIcon({
+                            type: 'EMOJI',
+                            icon: value.emoji
+                        })
+                        props.onChange && props.onChange({
+                            type: 'EMOJI',
+                            icon: value.emoji
+                        })
+                    }} >
+                        <EmojiPickerSearch />
+                        <EmojiPickerContent />
+                        <EmojiPickerFooter/>
+                    </EmojiPicker>
                 </TabsContent>
                 <TabsContent value="image">
                     FileUpload

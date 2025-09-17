@@ -22,6 +22,7 @@ import { APIS } from "./api";
 import { event } from "@kn/common";
 import { i18n, initReactI18next, LanguageDetector } from "@kn/common";
 import { resources } from "./locales/resources"
+import { merge } from "lodash";
 
 
 declare global {
@@ -140,11 +141,11 @@ export const App: React.FC<AppProps> = (props) => {
             pluginManager.setPlugins(allPlugins.filter(it => !!it))
             console.debug("load plugins finished, loaded plugins: ", allPlugins)
             const pluginLocales = pluginManager.resloveLocales()
-            const res = { ...resources, ...pluginLocales }
+            const res = merge(resources, pluginLocales)
             if (i18n.isInitialized) {
                 console.log("refresh i18n");
                 Object.keys(res).forEach(it => {
-                    i18n.addResourceBundle(it, "translation", pluginLocales[it].translation, true, true)
+                    i18n.addResourceBundle(it, "translation", res[it], true, true)
                 })
                 console.log("i18n refreshed", i18n);
             } else {
@@ -181,7 +182,7 @@ export const App: React.FC<AppProps> = (props) => {
             setInit(true)
         }
     }, [loadFinished, allPlugins])
-    return router && init && <AppContext.Provider value={{
+    return (router ? <AppContext.Provider value={{
         pluginManager: pluginManager
     }}>
         <core.ModalProvider>
@@ -192,5 +193,9 @@ export const App: React.FC<AppProps> = (props) => {
                 </Provider>
             </ThemeProvider>
         </core.ModalProvider>
-    </AppContext.Provider>
+    </AppContext.Provider> : <ThemeProvider>
+        <div className="h-screen w-screen flex items-center justify-center">
+            Loading <icon.Loader2 className="ml-2 animate-spin" />
+        </div>
+    </ThemeProvider>)
 }
