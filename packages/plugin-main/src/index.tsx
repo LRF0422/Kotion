@@ -73,6 +73,9 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "rs": "从最近的空间开始",
           "all": "查看全部空间",
         },
+        "space-hub": {
+           "all-space": "所有空间"
+         },
         "toc": {
           "title": "目录",
           "empty": "没有数据"
@@ -87,6 +90,9 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "rs": "Start from recent space",
           "all": "all spaces",
         },
+        "space-hub": {
+           "all-space": "All Spaces"
+         },
         "toc": {
           "title": "Table of Contents",
           "empty": "No Content"

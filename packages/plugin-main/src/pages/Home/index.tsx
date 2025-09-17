@@ -3,16 +3,17 @@ import { CardList } from "../components/CardList";
 import { Button, EmptyState } from "@kn/ui";
 import { useApi, useService } from "@kn/core";
 import { useNavigator } from "@kn/core";
-import { Space as KSpace } from "../../model/Space";
+import { Space } from "../../model/Space";
 import { BanIcon, Book, Box, Clock, LayoutTemplate, Plus, UserCircle } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { useTranslation } from "@kn/common";
+import { SpaceHub } from "../SpaceHub";
 
 
 export const Home: React.FC = () => {
 
-    const [recentSpaces, setRecentSpaces] = useState<KSpace[]>([])
+    const [recentSpaces, setRecentSpaces] = useState<Space[]>([])
     const [recentPages, setRecentPages] = useState([])
     const [flag, setFlag] = useState(0)
     const navigator = useNavigator()
@@ -42,7 +43,9 @@ export const Home: React.FC = () => {
                     <div className="flex items-center gap-1 py-1 font-light text-xs">
                         <Clock size={12} />
                         <div className=" font-bold">{t("home.rs")}</div>
-                        <a href="#" className=" underline ml-2 italic">{t("home.all")}</a>
+                        <SpaceHub>
+                            <a href="#" className=" underline ml-2 italic">{t("home.all")}</a>
+                        </SpaceHub>
                     </div>
                     <CreateSpaceDlg
                         trigger={<Button size="sm" variant="ghost" className="flex flex-row gap-1"><Plus className="w-4 h-4" />{t("home.create-space")}</Button>}

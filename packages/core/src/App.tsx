@@ -194,7 +194,7 @@ export const App: React.FC<AppProps> = (props) => {
             </ThemeProvider>
         </core.ModalProvider>
     </AppContext.Provider> : <ThemeProvider>
-        <div className="h-screen w-screen flex items-center justify-center">
+        <div className="h-screen w-screen flex items-center justify-center text-lg">
             Loading <icon.Loader2 className="ml-2 animate-spin" />
         </div>
     </ThemeProvider>)
