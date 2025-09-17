@@ -9,6 +9,7 @@
   "scripts": {
     "build": "turbo build",
     "build:core": "pnpm --filter @kn/core build",
+    "build:icon": "pnpm --filter @kn/icon build",
     "build:ui": "pnpm --filter @kn/ui build",
     "build:excalidraw": "pnpm --filter @kn/plugin-excalidraw build",
     "build:mermaid": "pnpm --filter @kn/mermaid-plugin build",
