@@ -76,7 +76,7 @@ export const EditorMenu: React.FC<{ editor: Editor, extensionWrappers: Extension
                 shouldShow={shouldShow}
                 pluginKey="editor-menu"
                 options={{ placement: 'top' }}>
-                <div className="flex flex-row gap-0 items-center">
+                <div className="flex flex-row gap-0 items-center flex-wrap">
                     {flotMenu.map((Menu, index) => (
                         <Menu key={index} editor={editor} />
                     ))}

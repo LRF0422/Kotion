@@ -4,4 +4,5 @@ export interface Space {
     homePageId?: string,
     icon?: any
     cover?: string
+    description?: string
 }

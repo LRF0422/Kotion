@@ -5,11 +5,7 @@ export type Group = 'block' | 'inline' | 'mark' | 'custom'
 export interface ExtensionWrapper {
     extendsion: AnyExtension | AnyExtension[] | any
     name: string
-    icon?: ReactNode
-    desc?: ReactNode
     bubbleMenu?: ElementType | ElementType[]
-    selectionMenu?: ElementType
-    listView?: any
     menuConfig?: {
         group: Group
         menu: ElementType

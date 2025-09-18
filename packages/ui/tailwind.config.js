@@ -7,7 +7,7 @@ module.exports = {
     "./src/**/*.{ts,tsx}",
     "./packages/**/*.{html,js,ts,jsx,tsx}",
     "../packages/**/*.{html,js,ts,jsx,tsx}",
-    "node_modules/@kn/**/**/*.{ts,tsx}",
+    "./node_modules/@kn/**/*.{ts,tsx}",
   ],
   prefix: "",
   safelist: [
@@ -16,8 +16,7 @@ module.exports = {
         /(bg|text|border)-(purple|pink|orange|yellow|green|black|gray|neutral|red|blue|white)/,
     },
     {
-      pattern:
-        /(h|w|max-h|min-w)-+/,
+      pattern: /(h|w|max-h|min-w)-+/,
     },
   ],
   theme: {

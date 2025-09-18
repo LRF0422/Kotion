@@ -7,6 +7,8 @@ export const BlockReference = Node.create({
     name: "blockReference",
     group: "inline",
     inline: true,
+    draggable: true,
+    atom: true,
 
     addAttributes() {
         return {

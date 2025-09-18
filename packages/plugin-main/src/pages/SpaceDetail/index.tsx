@@ -18,6 +18,7 @@ import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, C
 import { useToggle } from "@kn/core";
 import { Empty } from "@kn/ui";
 import { MultiSelect } from "@kn/ui";
+import { SpaceHub } from "../SpaceHub";
 
 export const SpaceDetail: React.FC = () => {
 
@@ -430,8 +431,6 @@ export const SpaceDetail: React.FC = () => {
                         <LayoutDashboard className="mr-2 h-4 w-4" />
                         <span>Personal Space</span>
                     </CommandItem>
-                </CommandGroup>
-                <CommandGroup heading="Go to page">
                 </CommandGroup>
             </CommandList>
         </CommandDialog>

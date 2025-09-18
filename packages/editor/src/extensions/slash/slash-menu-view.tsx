@@ -21,7 +21,7 @@ interface IProps {
 
 const StyledContainer = styled.div`
   width: 300px;
-  max-height: 240px;
+  max-height: 400px;
   overflow: auto;
 `;
 
@@ -32,10 +32,7 @@ const StyledTitle = styled.div`
 const StyledItem = styled.div<{ active: boolean }>`
   display: flex;
   justify-content: space-between;
-
-  padding: 5px;
-  // height: 60px;
-
+  padding: 6px;
   cursor: pointer;  
 
   > div {
@@ -112,11 +109,11 @@ export const SlashMenuView: React.FC<IProps> = forwardRef((props, ref) => {
 
   return (
     <StyledContainer
-      ref={$container} className="p-1 bg-popover text-popover-foreground border shadow-sm py-1 rounded-sm">
+      ref={$container} className="p-1 bg-popover text-popover-foreground border shadow-sm dark:shadow-lg py-1 rounded-md">
       {props.items.length ? (
         props.items.map((item, index) => {
           return "divider" in item ? (
-            <StyledTitle key={index} className="slash-menu-item border-b mb-2 ">{item.title}</StyledTitle>
+            <StyledTitle key={index} className="slash-menu-item text-sm border-b mb-2 ">{item.title}</StyledTitle>
           ) : (
             item.render ? <item.render
               editor={props.editor}

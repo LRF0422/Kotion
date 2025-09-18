@@ -1,12 +1,11 @@
 import { useTranslation } from "@kn/common";
-import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, Input, Label, Select, SelectTrigger, SelectValue } from "@kn/ui";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, Input, Label, Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
 import React, { PropsWithChildren, useEffect, useState } from "react";
 import { CardList } from "../components/CardList";
-import { SearchIcon, UserCircle } from "@kn/icon";
+import { SearchIcon } from "@kn/icon";
 import { Space } from "../../model/Space";
 import { useApi, useNavigator } from "@kn/core";
 import { APIS } from "../../api";
-import { CreateSpaceDlg } from "../components/SpaceForm";
 
 
 
@@ -19,9 +18,9 @@ export const SpaceHub: React.FC<PropsWithChildren> = (props) => {
 
 
     useEffect(() => {
-            useApi(APIS.QUERY_SPACE, { template: false, pageSize: 100 }).then(res => {
-                setRecentSpaces(res.data.records)
-            })
+        useApi(APIS.QUERY_SPACE, { template: false, pageSize: 100 }).then(res => {
+            setRecentSpaces(res.data.records)
+        })
     }, [])
 
     return <Dialog>
@@ -33,43 +32,74 @@ export const SpaceHub: React.FC<PropsWithChildren> = (props) => {
             </DialogHeader>
             <Label>Favorites</Label>
             <CardList
+                cols={5}
+                config={{
+                    name: 'name',
+                    desc: 'description',
+                }}
                 data={recentSpaces}
-                    className="h-[200px]"
-                    emptyProps={{
-                        button: <CreateSpaceDlg trigger={<Button>{t("home.create-space")}</Button>} />
-                    }}
-                    config={{
-                        // desc: 'description',
-                        cover: 'cover',
-                        // name: 'name'
-                    }}
-                    // icon={(data) => data?.icon?.icon || data.name}
-                    onClick={(data: any) => {
-                        navigator.go({
-                            to: `/space-detail/${data.id}`
-                        })
-                    }}
-                    footer={(data: any) => <div className="text-sm mt-1">
-                        <div className="flex flex-row items-center gap-1">
-                            {data.icon.icon} {data.name}
-                        </div>
-                        <a className="flex flex-row items-center italic gap-1 underline  text-gray-500">
-                            <UserCircle className="h-3 w-3" />Last update by Leong
-                        </a>
-                    </div>}
+                icon={(space) => space.icon.icon}
+                onClick={(space) => {
+                    navigator.go({
+                        to: `/space-detail/${space.id}`
+                    })
+                }}
+
             />
             <div className="flex items-center gap-2">
-                <div>All Spaces</div>
-                <Input className="h-7" icon={<SearchIcon className="h-4 w-4" />} />
+                <Input className="h-9" icon={<SearchIcon className="h-4 w-4" />} placeholder="Search" />
                 <Select>
-                    <SelectTrigger className="h-7 w-[200px]">
+                    <SelectTrigger className="h-9 w-[200px]">
                         <SelectValue placeholder="Category" />
                     </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="APP">App</SelectItem>
+                        <SelectItem value="FEATURE">Feature</SelectItem>
+                        <SelectItem value="CONNECTOR">Connector</SelectItem>
+                    </SelectContent>
                 </Select>
             </div>
-            <CardList
-                data={[]}
-            />
+            <div className="flex flex-col gap-1 border rounded-sm p-1">
+                {recentSpaces.map((space, index) => (<div
+                    className="flex items-center cursor-pointer gap-2 bg-muted/55 hover:bg-muted p-1 rounded-sm transition-all" key={index}
+                    onClick={() => {
+                        navigator.go({
+                            to: `/space-detail/${space.id}`
+                        })
+                    }}
+                >
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <div className="text-[30px]">{space.icon.icon}</div>
+                            <div>{space.name}</div>
+                        </div>
+                    </div>
+                </div>))}
+            </div>
+            <Pagination>
+                <PaginationContent>
+                    <PaginationItem>
+                        <PaginationPrevious size="sm" href="#" />
+                    </PaginationItem>
+                    <PaginationItem>
+                        <PaginationLink size="sm" href="#">1</PaginationLink>
+                    </PaginationItem>
+                    <PaginationItem>
+                        <PaginationLink size="sm" href="#" isActive>
+                            2
+                        </PaginationLink>
+                    </PaginationItem>
+                    <PaginationItem>
+                        <PaginationLink size="sm" href="#">3</PaginationLink>
+                    </PaginationItem>
+                    <PaginationItem>
+                        <PaginationEllipsis />
+                    </PaginationItem>
+                    <PaginationItem>
+                        <PaginationNext size="sm" href="#" />
+                    </PaginationItem>
+                </PaginationContent>
+            </Pagination>
         </DialogContent>
     </Dialog>
 }
