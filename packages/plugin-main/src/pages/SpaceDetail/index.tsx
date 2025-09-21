@@ -1,6 +1,6 @@
 import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
 import { TreeView } from "@kn/ui";
-import { ArrowLeft, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, Package, Plus, Settings, ShareIcon, Star, Trash2, Undo2, UserCircle } from "@kn/icon";
+import { ArrowLeft, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, Package, Plus, Settings, ShareIcon, Star, StarIcon, Trash2, Undo2, UserCircle } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@kn/ui";
 import { useApi, useService, useUploadFile } from "@kn/core";
@@ -239,16 +239,17 @@ export const SpaceDetail: React.FC = () => {
             id: '/space/:id/overView',
             className: 'h-10 gap-3 px-2 bg-muted-foreground/10',
             customerRender:
-                <div className="flex flex-row gap-1 items-center justify-between" onClick={() => {
-                    navigator.go({
-                        to: `/space-detail/${params.id}/page/${space.homePageId}`
-                    })
-                }}>
-                    <div className=" p-2 mt-1 bg-muted rounded-sm flex-1 cursor-pointer">
-                        <div className="flex items-center gap-1">
+                <div className="flex flex-row gap-1 items-center justify-between">
+                    <div className=" p-2 mt-1 bg-muted rounded-sm flex-1 flex justify-between items-center">
+                        <div className="flex items-center gap-1 cursor-pointer" onClick={() => {
+                                navigator.go({
+                                    to: `/space-detail/${params.id}/page/${space.homePageId}`
+                                })
+                        }}>
                             <div>{space?.icon?.icon}</div>
                             {space.name}
                         </div>
+                           <StarIcon className="h-4 w-4" />
                     </div>
                 </div>
         },
