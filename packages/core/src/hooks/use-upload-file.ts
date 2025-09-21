@@ -21,7 +21,7 @@ export const useUploadFile = () => {
 
     const [files, setFiles] = useState<KnowledgeFile[]>([])
 
-    const downloadPath = "http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName="
+    const downloadPath = "https://kotion.top:888/api/knowledge-resource/oss/endpoint/download?fileName="
     const remove = (path: string) => {
         setFiles(files.filter(file => file.name !== path))
     }

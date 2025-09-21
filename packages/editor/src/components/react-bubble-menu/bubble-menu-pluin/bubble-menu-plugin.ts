@@ -445,8 +445,8 @@ export class BubbleMenuView implements PluginView {
 
   updateHandler = (view: EditorView, selectionChanged: boolean, docChanged: boolean, oldState?: EditorState) => {
     const { composing } = view
-
-    const isSame = !selectionChanged && !docChanged
+    
+    const isSame = !selectionChanged && !docChanged    
 
     if (composing || isSame) {
       return

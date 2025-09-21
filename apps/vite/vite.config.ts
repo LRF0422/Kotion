@@ -10,9 +10,10 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://www.simple-platform.cn:88',
+        target: 'https://kotion.top:888/api',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        rewrite: (path) => path.replace(/^\/api/, ''),
+        secure: true
       }
     }
   }

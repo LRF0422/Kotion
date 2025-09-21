@@ -13,16 +13,14 @@ declare module '@kn/editor' {
 export const Mermaid = Node.create({
     name: "mermaid",
     group: "block",
-    draggable: true,
-    atom: true,
-    isolating: true,
-    allowGapCursor: true,
     renderHTML() {
         return ["div", { class: "node-mermaid" }, 0];
     },
 
     addNodeView() {
-        return ReactNodeViewRenderer(MermaidView)
+        return ReactNodeViewRenderer(MermaidView, {
+            stopEvent: () => true
+        })
     },
 
     addAttributes() {

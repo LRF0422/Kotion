@@ -10,11 +10,13 @@ import { useSelector } from "react-redux";
 import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { Member } from "./components/Member";
+import { useUploadFile } from "../../hooks";
 
 export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
 
     const { userInfo } = useSelector((state: GlobalState) => state)
     const [currentKey, setCurrentKey] = useSafeState<string>()
+    const { usePath } = useUploadFile()
 
     const render = () => {
         switch (currentKey) {
@@ -40,7 +42,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                     name: "我的账号",
                     customerRender: <div className="flex items-center gap-3 bg-muted p-1 rounded-sm border-secondary border">
                         <Avatar className="h-7 w-7 shadow-md">
-                            <AvatarImage src={`http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${userInfo?.avatar}`} />
+                            <AvatarImage src={usePath(userInfo?.avatar as string)} />
                             <AvatarFallback>{userInfo?.account}</AvatarFallback>
                         </Avatar>
                         <div className=" text-gray-500 text-xs flex flex-col italic">

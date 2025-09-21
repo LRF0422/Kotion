@@ -6,7 +6,6 @@ import { CodeEditor, EmptyState, IconButton } from "@kn/ui"
 import { AiOutlineQuestionCircle, BoxIcon } from "@kn/icon"
 export const MermaidView: React.FC<NodeViewProps> = (props) => {
 
-    const divRef = useRef<HTMLDivElement>(null)
     const [svg, setSvg] = useState<string>()
     const [code, setCode] = useState<string>(props.node.attrs.data || "")
     const value = useDebounce(code, { wait: 500 })
@@ -14,7 +13,7 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
 
     useEffect(() => {
         mermaid.initialize({ startOnLoad: false, theme: theme === "dark" ? "dark" : "default", suppressErrorRendering: false })
-    }, [theme])
+    }, [])
 
     useAsyncEffect(async () => {
         if (value && value.trim()) {
@@ -30,7 +29,6 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
     }, [value, theme])
 
     return <NodeViewWrapper className="h-auto">
-        <div className=" hidden" ref={divRef}></div>
         <div className="flex gap-1">
             {props.editor.isEditable && <CodeEditor
                 editable={props.editor.isEditable}
@@ -38,7 +36,10 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
                 height="300px"
                 width="400px"
                 className="rounded-sm"
-                onChange={setCode}
+                onChange={(value) => {
+                    console.log('changed');
+                    setCode(value)
+                }}
             />}
             <div className="flex-1 flex border rounded-sm items-center justify-center p-1 relative">
                 {

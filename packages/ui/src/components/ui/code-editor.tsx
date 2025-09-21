@@ -1,7 +1,8 @@
-import CodeMirror, { ReactCodeMirrorProps } from '@uiw/react-codemirror';
+import CodeMirror, { ReactCodeMirrorProps, EditorView } from '@uiw/react-codemirror';
 import React from 'react';
 import { abcdef } from "@uiw/codemirror-theme-abcdef"
 import { useTheme } from '../theme';
+import { update } from 'lodash';
 
 
 interface CodeEditorProps extends ReactCodeMirrorProps {
@@ -17,6 +18,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = (props) => {
     return <CodeMirror
         theme={theme === 'dark' ? abcdef : "light"}
         className={props.className}
+        onUpdate={() => {
+            console.log("update")
+        }}
         onChange={props.onChange}
         {...props}
     />
