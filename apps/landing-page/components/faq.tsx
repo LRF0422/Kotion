@@ -54,7 +54,7 @@ const FAQ = () => {
     >
       <div className="max-w-screen-lg">
         <h2 className="text-3xl xs:text-4xl md:text-5xl !leading-[1.15] font-bold tracking-tight text-center">
-          Frequently Asked Questions
+          常见问题
         </h2>
         <p className="mt-3 xs:text-lg text-center text-muted-foreground">
           Quick answers to common questions about our products and services.

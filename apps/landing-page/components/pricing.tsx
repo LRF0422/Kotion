@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { CircleCheck, CircleHelp } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 
 const tooltipContent = {
   styles: "Choose from a variety of styles to suit your preferences.",
@@ -23,7 +23,7 @@ const YEARLY_DISCOUNT = 20;
 const plans = [
   {
     name: "Starter",
-    price: 20,
+    price: 0,
     description:
       "Get 20 AI-generated portraits with 2 unique styles and filters.",
     features: [
@@ -37,7 +37,7 @@ const plans = [
   },
   {
     name: "Advanced",
-    price: 40,
+    price: 0,
     isRecommended: true,
     description:
       "Get 50 AI-generated portraits with 5 unique styles and filters.",
@@ -53,7 +53,7 @@ const plans = [
   },
   {
     name: "Premium",
-    price: 80,
+    price: 0,
     description:
       "Get 100 AI-generated portraits with 10 unique styles and filters.",
     features: [
@@ -76,7 +76,7 @@ const Pricing = () => {
       className="flex flex-col items-center justify-center py-12 xs:py-20 px-6"
     >
       <h1 className="text-3xl xs:text-4xl md:text-5xl font-bold text-center tracking-tight">
-        Pricing
+        定价
       </h1>
       <Tabs
         value={selectedBillingPeriod}
