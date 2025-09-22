@@ -17,7 +17,7 @@ function SingleCalendar({ className, classNames, showOutsideDays = true, selecte
       showOutsideDays={showOutsideDays}
       month={currentMonth}
       onMonthChange={setCurrentMonth}
-      className={cn("p-3", className)}
+      className={cn("p-3 not-prose", className)}
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",

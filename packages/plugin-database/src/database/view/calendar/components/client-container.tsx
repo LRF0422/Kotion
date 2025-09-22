@@ -18,11 +18,11 @@ import type { TCalendarView } from "../types";
 import React from "react";
 
 interface IProps {
-  view: TCalendarView;
+  // view: TCalendarView;
 }
 
-export function ClientContainer({ view }: IProps) {
-  const { selectedDate, selectedUserId, events } = useCalendar();
+export function ClientContainer() {
+  const { selectedDate, selectedUserId, events, view } = useCalendar();
 
   const filteredEvents = useMemo(() => {
     return events.filter(event => {
@@ -91,7 +91,7 @@ export function ClientContainer({ view }: IProps) {
   }, [filteredEvents]);
 
   return (
-    <div className="overflow-hidden rounded-xl border">
+    <div className="overflow-hidden rounded-xl border not-prose">
       <CalendarHeader view={view} events={filteredEvents} />
 
       <DndProviderWrapper>

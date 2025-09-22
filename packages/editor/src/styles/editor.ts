@@ -16,16 +16,6 @@ export const StyledEditor = styled.div.attrs({
     position: relative;
   }
 
-  .comment {
-    background-color: #eee;
-    cursor: pointer
-  }
-
-  // .selected-node {
-  //   background-color: #eee;
-  //   select-background-color: #eee;
-  // }
-
   .ProseMirror {
     position: relative;
     outline: none;
@@ -47,69 +37,6 @@ export const StyledEditor = styled.div.attrs({
   .has-focus {
     border-radius: 3px;
     box-shadow: 0 0 0 1px #0C66E4;
-  }
-
-  .heading-anchor,
-  .heading-fold {
-    display: inline-block;
-    color: ${props => ((props.theme as any) as any).text};
-    opacity: 0.75;
-    cursor: pointer;
-    background: none;
-    outline: none;
-    border: 0;
-    margin: 0;
-    padding: 0;
-    text-align: left;
-    font-family: ${props => ((props.theme as any) as any).fontFamilyMono};
-    font-size: 14px;
-    line-height: 0;
-    width: 12px;
-    height: 24px;
-
-    &:focus,
-    &:hover {
-      opacity: 1;
-    }
-  }
-
-  .heading-actions {
-    opacity: 0;
-    background: ${props => ((props.theme as any) as any).background};
-    flex-direction: row;
-    display: inline-flex;
-    position: absolute;
-    top: -2px;
-    left: -16px;
-    height: 24px;
-
-    &.collapsed {
-      opacity: 1;
-    }
-
-    &.collapsed .heading-anchor {
-      opacity: 0;
-    }
-
-    &.collapsed .heading-fold {
-      opacity: 1;
-    }
-  }
-
-  .heading-fold {
-    display: inline-block;
-    transform-origin: center;
-    padding: 0;
-
-    &.collapsed {
-      transform: rotate(-90deg);
-      transition-delay: 0.1s;
-      opacity: 1;
-    }
-  }
-
-  .folded-content {
-    display: none;
   }
 
   iframe {
@@ -223,7 +150,7 @@ export const StyledEditor = styled.div.attrs({
 
         > div {
           p {
-            text-decoration: line-through;
+            // text-decoration: line-through;
           }
         }
       }

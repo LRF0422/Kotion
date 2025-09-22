@@ -17,7 +17,8 @@ import "./calendar.css"
 import { CalendarProvider } from "./calendar/contexts/calendar-context";
 import { ClientContainer } from "./calendar/components/client-container";
 import { ChangeBadgeVariantInput } from "./calendar/components/change-badge-variant-input";
-// import { useModal } from "@re";
+import { AppContext } from "@kn/common";
+import { GlobalState, useSelector, useUploadFile } from "@kn/core";
 const localizer = momentLocalizer(moment) // or globalizeLocalizer
 
 
@@ -25,54 +26,24 @@ const localizer = momentLocalizer(moment) // or globalizeLocalizer
 export const CalendarView: React.FC<any> = (props) => {
 
     const { data, editor, handleAddRow, columns, node, updateAttributes } = useContext(NodeViewContext)
+    const { userInfo } = useSelector((state: GlobalState) => state)
     const [visible, { toggle }] = useToggle(false)
     const [flag, { toggle: t }] = useToggle(false)
     const config = node.attrs.viewOptions[props.viewKey] || {}
-    // const { openModal, closeModal } = useModal()
-
-    const { defaultDate } = useMemo(() => ({
-        defaultDate: new Date()
-    }), [])
-
-    const mySchema = z.object({
-        name: z.string().superRefine(
-            fieldConfig({
-                label: '事件名称'
-            })
-        ),
-        startDate: z.date().superRefine(
-            fieldConfig({
-                label: '开始时间'
-            })
-        ),
-        endDate: z.date().superRefine(
-            fieldConfig({
-                label: '结束时间'
-            })
-        ),
-        people: z.enum(["张三", "李四", "王五"]).superRefine(
-            fieldConfig({
-                label: '执行人'
-            })
-        ),
-        color: z.string().superRefine(
-            fieldConfig({
-                label: '颜色',
-                fieldType: 'color'
-            })
-        ),
-    });
-    const schemaProvider = new ZodProvider(mySchema);
+    const { usePath } = useUploadFile()
 
     return <NodeViewWrapper className="w-full h-[700px] relative flex flex-col gap-1 text-popover-foreground">
         <div>
             <Button size="sm" variant="ghost" onClick={toggle}><Settings className="h-3 w-3" /></Button>
         </div>
-        <CalendarProvider events={[]} users={[]}>
-            <div className="mx-auto flex max-w-screen-2xl flex-col gap-4 p-4">
-                <ClientContainer view="month" />
-                <ChangeBadgeVariantInput />
-            </div>
+        <CalendarProvider events={[]} users={[
+            {
+                id: userInfo?.id!,
+                name: userInfo?.name!,
+                picturePath: usePath(userInfo?.avatar!)
+            }
+        ]}>
+            <ClientContainer />
         </CalendarProvider>
         <div className={cn("absolute p-2 inset-y-0 right-0 h-full w-[250px] border rounded-sm transition ease-in-out bg-popover text-popover-foreground z-50 text-sm ", visible ? " visible slide-in-from-right animate-in fade-in-0 " : " invisible slide-out-to-right animate-out fade-out-0")}>
             <div className=" flex flex-col gap-1" id="config">

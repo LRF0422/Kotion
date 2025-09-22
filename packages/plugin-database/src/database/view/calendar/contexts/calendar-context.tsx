@@ -2,7 +2,7 @@ import { createContext, useContext, useState } from "react";
 
 import type { Dispatch, SetStateAction } from "react";
 import type { IEvent, IUser } from "../interfaces";
-import type { TBadgeVariant, TVisibleHours, TWorkingHours } from "../types";
+import type { TBadgeVariant, TCalendarView, TVisibleHours, TWorkingHours } from "../types";
 import React from "react";
 
 interface ICalendarContext {
@@ -19,6 +19,8 @@ interface ICalendarContext {
   setVisibleHours: Dispatch<SetStateAction<TVisibleHours>>;
   events: IEvent[];
   setLocalEvents: Dispatch<SetStateAction<IEvent[]>>;
+  view: TCalendarView;
+  setView: Dispatch<SetStateAction<TCalendarView>>;
 }
 
 const CalendarContext = createContext({} as ICalendarContext);
@@ -48,6 +50,7 @@ export function CalendarProvider({ children, users, events }: { children: React.
   // In a real scenario, the events would be updated in the backend
   // and the request that fetches the events should be refetched
   const [localEvents, setLocalEvents] = useState<IEvent[]>(events);
+  const [view, setView] = useState<TCalendarView>("month")
 
   const handleSelectDate = (date: Date | undefined) => {
     if (!date) return;
@@ -71,6 +74,8 @@ export function CalendarProvider({ children, users, events }: { children: React.
         // If you go to the refetch approach, you can remove the localEvents and pass the events directly
         events: localEvents,
         setLocalEvents,
+        view,
+        setView
       }}
     >
       {children}

@@ -42,7 +42,7 @@ export function CalendarDayView({ singleDayEvents, multiDayEvents }: IProps) {
   const groupedEvents = groupEvents(dayEvents);
 
   return (
-    <div className="flex">
+    <div className="flex not-prose">
       <div className="flex flex-1 flex-col">
         <div>
           <DayViewMultiDayEventsRow selectedDate={selectedDate} multiDayEvents={multiDayEvents} />
@@ -141,7 +141,6 @@ export function CalendarDayView({ singleDayEvents, multiDayEvents }: IProps) {
 
       <div className="hidden w-64 divide-y border-l md:block">
         <SingleCalendar className="mx-auto w-fit" mode="single" selected={selectedDate} onSelect={setSelectedDate} initialFocus />
-
         <div className="flex-1 space-y-3">
           {currentEvents.length > 0 ? (
             <div className="flex items-start gap-2 px-4 pt-4">

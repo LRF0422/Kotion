@@ -10,6 +10,7 @@ import { AddEventDialog } from "../../components/dialogs/add-event-dialog";
 import type { IEvent } from "../../interfaces";
 import type { TCalendarView } from "../../types";
 import React from "react";
+import { useCalendar } from "../../contexts/calendar-context";
 
 interface IProps {
   view: TCalendarView;
@@ -17,6 +18,9 @@ interface IProps {
 }
 
 export function CalendarHeader({ view, events }: IProps) {
+
+  const { setView } = useCalendar()
+
   return (
     <div className="flex flex-col gap-4 border-b p-4 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex items-center gap-3">
@@ -28,7 +32,9 @@ export function CalendarHeader({ view, events }: IProps) {
         <div className="flex w-full items-center gap-1.5">
           <div className="inline-flex first:rounded-r-none last:rounded-l-none [&:not(:first-child):not(:last-child)]:rounded-none">
             <Button asChild aria-label="View by day" size="icon" variant={view === "day" ? "default" : "outline"} className="rounded-r-none [&_svg]:size-5">
-              <a href="/day-view">
+              <a href="#" onClick={() => {
+                setView("day")
+              }}>
                 <List strokeWidth={1.8} />
               </a>
             </Button>
@@ -37,10 +43,13 @@ export function CalendarHeader({ view, events }: IProps) {
               asChild
               aria-label="View by week"
               size="icon"
+              onClick={() => {
+                setView("week")
+              }}
               variant={view === "week" ? "default" : "outline"}
               className="-ml-px rounded-none [&_svg]:size-5"
             >
-              <a href="/week-view">
+              <a href="#">
                 <Columns strokeWidth={1.8} />
               </a>
             </Button>
@@ -49,10 +58,13 @@ export function CalendarHeader({ view, events }: IProps) {
               asChild
               aria-label="View by month"
               size="icon"
+              onClick={() => {
+                setView("month")
+              }}
               variant={view === "month" ? "default" : "outline"}
               className="-ml-px rounded-none [&_svg]:size-5"
             >
-              <a href="/month-view">
+              <a href="#">
                 <Grid2x2 strokeWidth={1.8} />
               </a>
             </Button>
@@ -61,10 +73,13 @@ export function CalendarHeader({ view, events }: IProps) {
               asChild
               aria-label="View by year"
               size="icon"
+              onClick={() => {
+                setView("year")
+              }}
               variant={view === "year" ? "default" : "outline"}
               className="-ml-px rounded-none [&_svg]:size-5"
             >
-              <a href="/year-view">
+              <a href="#">
                 <Grid3x3 strokeWidth={1.8} />
               </a>
             </Button>
@@ -73,10 +88,13 @@ export function CalendarHeader({ view, events }: IProps) {
               asChild
               aria-label="View by agenda"
               size="icon"
+              onClick={() => {
+                setView("agenda")
+              }}
               variant={view === "agenda" ? "default" : "outline"}
               className="-ml-px rounded-l-none [&_svg]:size-5"
             >
-              <a href="/agenda-view">
+              <a href="#">
                 <CalendarRange strokeWidth={1.8} />
               </a>
             </Button>
