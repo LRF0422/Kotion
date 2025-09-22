@@ -10,7 +10,7 @@ export function UserSelect() {
 
   return (
     <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-      <SelectTrigger className="flex-1 md:w-48">
+      <SelectTrigger className="flex-1 w-[150px]">
         <SelectValue />
       </SelectTrigger>
 

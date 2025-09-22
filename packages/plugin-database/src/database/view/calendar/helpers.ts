@@ -32,7 +32,7 @@ import type { TCalendarView, TVisibleHours, TWorkingHours } from "./types";
 // ================ Header helper functions ================ //
 
 export function rangeText(view: TCalendarView, date: Date) {
-  const formatString = "MMM d, yyyy";
+  const formatString = "yyyy-MM-dd";
   let start: Date;
   let end: Date;
 
