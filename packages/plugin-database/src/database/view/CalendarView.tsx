@@ -14,6 +14,9 @@ import { Button } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Label } from "@kn/ui";
 moment.locale('zh-cn');
 import "./calendar.css"
+import { CalendarProvider } from "./calendar/contexts/calendar-context";
+import { ClientContainer } from "./calendar/components/client-container";
+import { ChangeBadgeVariantInput } from "./calendar/components/change-badge-variant-input";
 // import { useModal } from "@re";
 const localizer = momentLocalizer(moment) // or globalizeLocalizer
 
@@ -65,65 +68,12 @@ export const CalendarView: React.FC<any> = (props) => {
         <div>
             <Button size="sm" variant="ghost" onClick={toggle}><Settings className="h-3 w-3" /></Button>
         </div>
-        <Calendar
-            messages={{
-                today: "今日",
-                next: "前进",
-                previous: "后退",
-                month: "月",
-                week: "周",
-                day: "日",
-                agenda: "日程表",
-            }}
-            components={{
-            }}
-            defaultDate={defaultDate}
-            localizer={localizer}
-            events={data}
-            showMultiDayTimes
-            selectable={editor.isEditable}
-            onSelectSlot={(info) => {
-                if (info.action === "select") {
-                    console.log('info', info);
-                    // openModal({
-                    //     title: '新增事件',
-                    //     height: 'auto',
-                    //     content: <div className=" p-2">
-                    //         <AutoForm
-                    //             schema={schemaProvider}
-                    //             withSubmit
-                    //             onSubmit={() => {
-                    //                 handleAddRow({
-                    //                     test2: info.start.toISOString(),
-                    //                     test3: info.end.toISOString(),
-                    //                     test: "Test"
-                    //                 })
-                    //                 closeModal()
-                    //             }}
-                    //         />
-                    //     </div>
-                    // })
-                }
-            }}
-            titleAccessor={(e: any) => {
-                if (config.titleAccessor) {
-                    return e[config.titleAccessor.id]
-                }
-                return ""
-            }}
-            startAccessor={(e) => {
-                if (config.startAccessor) {
-                    return new Date(e[config.startAccessor.id])
-                }
-                return new Date()
-            }}
-            endAccessor={(e) => {
-                if (config.endAccessor) {
-                    return new Date(e[config.endAccessor.id])
-                }
-                return new Date()
-            }}
-        />
+        <CalendarProvider events={[]} users={[]}>
+            <div className="mx-auto flex max-w-screen-2xl flex-col gap-4 p-4">
+                <ClientContainer view="month" />
+                <ChangeBadgeVariantInput />
+            </div>
+        </CalendarProvider>
         <div className={cn("absolute p-2 inset-y-0 right-0 h-full w-[250px] border rounded-sm transition ease-in-out bg-popover text-popover-foreground z-50 text-sm ", visible ? " visible slide-in-from-right animate-in fade-in-0 " : " invisible slide-out-to-right animate-out fade-out-0")}>
             <div className=" flex flex-col gap-1" id="config">
                 <Label htmlFor="config" className="mb-1 flex flex-row justify-between">配置 <Button size="sm" variant="ghost" onClick={() => toggle()}><X className="h-3 w-3" /></Button></Label>

@@ -1,13 +1,14 @@
 import { useMemo } from "react";
-import { CalendarX2 } from "lucide-react";
+import { CalendarX2 } from "@kn/icon";
 import { parseISO, format, endOfDay, startOfDay, isSameMonth } from "date-fns";
 
-import { useCalendar } from "@/calendar/contexts/calendar-context";
+import { useCalendar } from "../../contexts/calendar-context";
 
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { AgendaDayGroup } from "@/calendar/components/agenda-view/agenda-day-group";
+import { ScrollArea } from "@kn/ui";
+import { AgendaDayGroup } from "../../components/agenda-view/agenda-day-group";
 
-import type { IEvent } from "@/calendar/interfaces";
+import type { IEvent } from "../../interfaces";
+import React from "react";
 
 interface IProps {
   singleDayEvents: IEvent[];

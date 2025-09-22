@@ -1,15 +1,16 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { cva } from "class-variance-authority";
-import { Clock, Text, User } from "lucide-react";
+import { cva } from "@kn/ui";
+import { Clock, Text, User } from "@kn/icon";
 
-import { useCalendar } from "@/calendar/contexts/calendar-context";
+import { useCalendar } from "../../contexts/calendar-context";
 
-import { EventDetailsDialog } from "@/calendar/components/dialogs/event-details-dialog";
+import { EventDetailsDialog } from "../../components/dialogs/event-details-dialog";
 
-import type { IEvent } from "@/calendar/interfaces";
-import type { VariantProps } from "class-variance-authority";
+import type { IEvent } from "../../interfaces";
+import type { VariantProps } from "@kn/ui";
+import React from "react";
 
 const agendaEventCardVariants = cva(
   "flex select-none items-center justify-between gap-3 rounded-md border p-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
