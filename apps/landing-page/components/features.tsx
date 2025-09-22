@@ -11,7 +11,7 @@ import React from "react";
 const features = [
   {
     icon: Settings2,
-    title: "任务管理",
+    title: "知识沉淀",
     description:
       "Design your space with drag-and-drop simplicity—create grids, lists, or galleries in seconds.",
   },
@@ -29,7 +29,7 @@ const features = [
   },
   {
     icon: Film,
-    title: "协同编辑",
+    title: "日常办公",
     description:
       "Connect with Spotify, Instagram, or your own media library for dynamic visuals and sound.",
   },

@@ -1,4 +1,4 @@
-import React, { ElementType, memo, useCallback, useEffect } from "react";
+import React, { ElementType, useCallback, useEffect } from "react";
 import { ExtensionWrapper, Group } from "@kn/common";
 import { Editor } from "@tiptap/core";
 import { Toggle } from "@kn/ui";

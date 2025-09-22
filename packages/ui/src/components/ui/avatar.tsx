@@ -45,10 +45,4 @@ const AvatarFallback = React.forwardRef<
 ))
 AvatarFallback.displayName = AvatarPrimitive.Fallback.displayName
 
-export const AvatarGroup: React.FC<React.PropsWithChildren> = ({ children }) => {
-  return <div className="flex flex-row" >
-    {children}
-  </div>
-}
-
 export { Avatar, AvatarImage, AvatarFallback }

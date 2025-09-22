@@ -71,6 +71,7 @@
     "lucide-react": "^0.541.0",
     "motion": "^12.23.12",
     "re-resizable": "^6.9.17",
+    "react-aria-components": "^1.12.2",
     "react-day-picker": "^8.10.1",
     "react-dropzone": "^14.2.3",
     "react-easy-sort": "^1.6.0",
