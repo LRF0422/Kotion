@@ -16,12 +16,14 @@ import { CalendarWeekView } from "../components/week-and-day-view/calendar-week-
 
 import type { TCalendarView } from "../types";
 import React from "react";
+import { IEvent } from "../interfaces";
 
 interface IProps {
   // view: TCalendarView;
+  onEventAdd?: (event: IEvent) => void;
 }
 
-export function ClientContainer() {
+export const ClientContainer: React.FC<IProps> = (props) => {
   const { selectedDate, selectedUserId, events, view } = useCalendar();
 
   const filteredEvents = useMemo(() => {

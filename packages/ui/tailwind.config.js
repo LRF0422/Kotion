@@ -24,7 +24,12 @@ module.exports = {
       center: "true",
       padding: "2rem",
       screens: {
-        "2xl": "1400px",
+        xs: "460px",
+        sm: "576px",
+        md: "768px",
+        lg: "1024px",
+        xl: "1280px",
+        "2xl": "1440px",
       },
     },
     extend: {
@@ -99,6 +104,9 @@ module.exports = {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      backgroundImage: {
+        "calendar-disabled-hour": "repeating-linear-gradient(-60deg, hsl(var(--border)) 0 0.5px, transparent 0.5px 8px)",
       },
       keyframes: {
         "accordion-down": {

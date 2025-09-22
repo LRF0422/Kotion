@@ -150,7 +150,7 @@ export const StyledEditor = styled.div.attrs({
 
         > div {
           p {
-            text-decoration: line-through;
+            // text-decoration: line-through;
           }
         }
       }
@@ -168,24 +168,9 @@ export const StyledEditor = styled.div.attrs({
         // margin-top: -20px;
       }
     }
-  }
 
-  .scrollWrapper {
-    overflow-y: hidden;
-    overflow-x: auto;
-    padding-left: 28px;
-    padding-top: 9px;
-    // padding-bottom: 8px;
-    margin-left: -28px;
-    margin-top: -20px;
-    // margin-bottom: -8px;
-    border-left: 1px solid transparent;
-    border-right: 1px solid transparent;
-    -webkit-transition: border 250ms ease-in-out 0s;
-    transition: border 250ms ease-in-out 0s;
-  }
 
-  table {
+      table {
     width: 100%;
     border-collapse: collapse;
     border-radius: 4px;
@@ -409,6 +394,24 @@ export const StyledEditor = styled.div.attrs({
       }
     }
   }
+  }
+
+  .scrollWrapper {
+    overflow-y: hidden;
+    overflow-x: auto;
+    padding-left: 28px;
+    padding-top: 9px;
+    // padding-bottom: 8px;
+    margin-left: -28px;
+    margin-top: -20px;
+    // margin-bottom: -8px;
+    border-left: 1px solid transparent;
+    border-right: 1px solid transparent;
+    -webkit-transition: border 250ms ease-in-out 0s;
+    transition: border 250ms ease-in-out 0s;
+  }
+
+
 
   .column-resize-handle {
     position: absolute;

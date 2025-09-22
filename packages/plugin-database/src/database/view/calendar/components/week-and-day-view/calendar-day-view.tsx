@@ -1,9 +1,9 @@
-import { Calendar, Clock, User } from "@kn/icon";
+import { CalendarIcon, Clock, User } from "@kn/icon";
 import { parseISO, areIntervalsOverlapping, format } from "date-fns";
 
 import { useCalendar } from "../../contexts/calendar-context";
 
-import { ScrollArea } from "@kn/ui";
+import { Calendar, ScrollArea } from "@kn/ui";
 import { SingleCalendar } from "@kn/ui";
 
 import { AddEventDialog } from "../../components/dialogs/add-event-dialog";
@@ -173,7 +173,7 @@ export function CalendarDayView({ singleDayEvents, multiDayEvents }: IProps) {
                       )}
 
                       <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <Calendar className="size-3.5" />
+                        <CalendarIcon className="size-3.5" />
                         <span className="text-sm">{format(new Date(), "MMM d, yyyy")}</span>
                       </div>
 

@@ -57,6 +57,7 @@ export function CalendarProvider({ children, users, events }: { children: React.
     setSelectedDate(date);
   };
 
+
   return (
     <CalendarContext.Provider
       value={{

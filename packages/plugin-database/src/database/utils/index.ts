@@ -82,6 +82,7 @@ export function isInGrid(state: EditorState): boolean {
 	return false;
 }
 
+// FIXME 这里效率太低了
 export const addRow = (editor: Editor, state: EditorState, view: EditorView, node: Node, pos: number, data?: any) => {
 
 	if (node) {
