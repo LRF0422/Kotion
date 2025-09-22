@@ -3,7 +3,6 @@ import {
   BubbleMenuPluginProps
 } from "@tiptap/extension-bubble-menu";
 import { Editor, findParentNode, posToDOMRect } from "@tiptap/core";
-// import tippy, { Instance } from "tippy.js";
 import { computePosition } from "@floating-ui/dom";
 import { createRoot } from "react-dom/client";
 import React, { useCallback, useEffect, useRef } from "react";
@@ -17,7 +16,6 @@ const cellButtonsConfig = [
       editor
         .chain()
         .focus()
-        // @ts-ignore
         .addRowBefore()
         .run()
   },
@@ -27,7 +25,6 @@ const cellButtonsConfig = [
       editor
         .chain()
         .focus()
-        // @ts-ignore
         .addRowAfter()
         .run()
   },
@@ -37,7 +34,6 @@ const cellButtonsConfig = [
       editor
         .chain()
         .focus()
-        // @ts-ignore
         .deleteRow()
         .run()
   },
@@ -50,7 +46,6 @@ const cellButtonsConfig = [
       editor
         .chain()
         .focus()
-        // @ts-ignore
         .addColumnBefore()
         .run()
   },
@@ -60,7 +55,6 @@ const cellButtonsConfig = [
       editor
         .chain()
         .focus()
-        // @ts-ignore
         .addColumnAfter()
         .run()
   },
@@ -70,7 +64,6 @@ const cellButtonsConfig = [
       editor
         .chain()
         .focus()
-        // @ts-ignore
         .deleteColumn()
         .run()
   },
@@ -83,7 +76,6 @@ const cellButtonsConfig = [
       editor
         .chain()
         .focus()
-        // @ts-ignore
         .toggleHeaderRow()
         .run()
   },
@@ -93,7 +85,6 @@ const cellButtonsConfig = [
       editor
         .chain()
         .focus()
-        // @ts-ignore
         .toggleHeaderColumn()
         .run()
   },
@@ -103,7 +94,6 @@ const cellButtonsConfig = [
       editor
         .chain()
         .focus()
-        // @ts-ignore
         .toggleHeaderCell()
         .run()
   },
@@ -213,13 +203,6 @@ export const TableCellMenuPlugin = (editor: Editor): Plugin<BubbleMenuPluginProp
     editor,
     element: div,
     tippyOptions: {
-      appendTo: () => editor.options.element,
-      duration: 200,
-      animation: "shift-toward-subtle",
-      moveTransition: "transform 0.2s ease-in-out",
-      zIndex: 10,
-      arrow: false,
-      theme: "bubble-menu padding-0 hidden",
       getReferenceClientRect: () => {
         const { selection } = editor.state;
 

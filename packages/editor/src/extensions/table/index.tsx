@@ -17,7 +17,7 @@ export * from "./menu";
 
 export const TableExtension: ExtensionWrapper = {
     extendsion: [Table.configure({
-        resizable: false
+        resizable: true
     }), TableCell, TableHeader, TableRow],
     name: Table.name,
     bubbleMenu: TableBubbleMenu,

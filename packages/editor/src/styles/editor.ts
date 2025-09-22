@@ -445,19 +445,6 @@ export const StyledEditor = styled.div.attrs({
     line-height: 1.3;
     // background-color: rgb(64 64 64/var(--tw-bg-opacity));
     counter-reset: line 0;
-
-    // code {
-    //   width: 100%;
-    //   padding: 0;
-    //   margin: 12px;
-    //   overflow: auto;
-    //   font-size: 0.875rem;
-    //   line-height: 1.5rem;
-    //   color: inherit;
-    //   white-space: pre;
-    //   background-color: transparent;
-    //   overscroll-behavior: contain;
-    // }
   }
   /* E Code */
 

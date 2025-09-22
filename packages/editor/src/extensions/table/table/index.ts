@@ -1,4 +1,4 @@
-import { Table as BuiltInTable} from "@tiptap/extension-table";
+import { Table as BuiltInTable } from "@tiptap/extension-table";
 
 import { TableCellMenuPlugin } from "../cell-menu-plugin";
 import { TableView } from "./table-view";
