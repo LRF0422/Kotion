@@ -42,24 +42,24 @@ export function Layout() {
         })
     }, [])
 
-    useEffect(() => {
-        const eventSource = new EventSourcePolyfill('http://www.simple-platform.cn:88/knowledge-message/sse/connect', {
-            headers: {
-                'Knowledge-Auth': localStorage.getItem("knowledge-token") as string,
-                'Authorization': `Basic ${window.btoa(`${'wiki'}:${'wiki_secret'}`)}`
-            },
-            withCredentials: false
-        });
-        eventSource.addEventListener("open", () => {
-            console.log('connected');
-        })
-        eventSource.addEventListener('message', (e) => {
-            event.emit(ON_MESSAGE, JSON.parse(e.data))
-        })
-        return () => {
-            eventSource.close()
-        }
-    }, [])
+    // useEffect(() => {
+    //     const eventSource = new EventSourcePolyfill('http://www.simple-platform.cn:88/knowledge-message/sse/connect', {
+    //         headers: {
+    //             'Knowledge-Auth': localStorage.getItem("knowledge-token") as string,
+    //             'Authorization': `Basic ${window.btoa(`${'wiki'}:${'wiki_secret'}`)}`
+    //         },
+    //         withCredentials: false
+    //     });
+    //     eventSource.addEventListener("open", () => {
+    //         console.log('connected');
+    //     })
+    //     eventSource.addEventListener('message', (e) => {
+    //         event.emit(ON_MESSAGE, JSON.parse(e.data))
+    //     })
+    //     return () => {
+    //         eventSource.close()
+    //     }
+    // }, [])
 
     useEffect(() => {
         event.on(ON_MESSAGE, (message: any) => {

@@ -28,9 +28,7 @@ const localizer = momentLocalizer(moment) // or globalizeLocalizer
 
 function isValidDate(dateString: string): boolean {
     const timestamp = Date.parse(dateString);
-    console.log("timestamp", timestamp);
-    
-  return !isNaN(timestamp);
+    return !isNaN(timestamp);
 }
 
 export const CalendarView: React.FC<any> = (props) => {
@@ -38,11 +36,10 @@ export const CalendarView: React.FC<any> = (props) => {
     const { data, editor, handleAddRow, columns, node, updateAttributes } = useContext(NodeViewContext)
     const { userInfo } = useSelector((state: GlobalState) => state)
     const [visible, { toggle }] = useToggle(false)
-    const [flag, { toggle: t }] = useToggle(false)
     const config = node.attrs.viewOptions[props.viewKey] || {}
     const { usePath } = useUploadFile()
 
-    const resloveData = useCallback((): IEvent[] => { 
+    const resloveData = useCallback((): IEvent[] => {
 
         console.log('config', config);
         if (Object.keys(config).length === 0) {
@@ -50,12 +47,12 @@ export const CalendarView: React.FC<any> = (props) => {
         }
 
         return data.map(it => {
-            const res: IEvent =  ({
+            const res: IEvent = ({
                 id: it.id,
                 title: config.titleAccessor ? it[config.titleAccessor.id] : "",
                 description: config.descAccessor ? it[config.descAccessor.id] : "",
-                startDate: config.startAccessor ? (isValidDate(it[config.startAccessor.id]+"") ? it[config.startAccessor.id] : new Date().toISOString()): new Date().toISOString(),
-                endDate: config.endAccessor ? (isValidDate(it[config.endAccessor.id]+"") ?  it[config.endAccessor.id] : new Date().toISOString()): new Date().toISOString(),
+                startDate: config.startAccessor ? (isValidDate(it[config.startAccessor.id] + "") ? it[config.startAccessor.id] : new Date().toISOString()) : new Date().toISOString(),
+                endDate: config.endAccessor ? (isValidDate(it[config.endAccessor.id] + "") ? it[config.endAccessor.id] : new Date().toISOString()) : new Date().toISOString(),
                 color: "red",
                 user: {
                     id: userInfo?.id!,
@@ -63,27 +60,40 @@ export const CalendarView: React.FC<any> = (props) => {
                     picturePath: usePath(userInfo?.avatar!)
                 }
             })
-
-            console.log('res', res);
-            
-        
             return res;
         })
     }, [data, config])
-    
+
+
+    const unresloveData = (data: any) => {
+        return {
+            [config.titleAccessor?.id]: data.title,
+            [config.descAccessor?.id]: data.description,
+            [config.startAccessor?.id]: (data.startDate as Date).toISOString(),
+            [config.endAccessor?.id]: (data.endDate as Date).toISOString(),
+        }
+    }
+
 
     return <NodeViewWrapper className="w-full min-h-[700px] relative flex flex-col gap-1 text-popover-foreground">
         <div>
             <Button size="sm" variant="ghost" onClick={toggle}><Settings className="h-3 w-3" /></Button>
         </div>
-        <CalendarProvider events={resloveData()}
-         users={[
-            {
-                id: userInfo?.id!,
-                name: userInfo?.name!,
-                picturePath: usePath(userInfo?.avatar!)
-            }
-        ]}>
+        <CalendarProvider
+            events={resloveData()}
+            users={[
+                {
+                    id: userInfo?.id!,
+                    name: userInfo?.name!,
+                    picturePath: usePath(userInfo?.avatar!)
+                }
+            ]}
+            onEventAdd={(event) => {
+                const data = unresloveData(event)
+                console.log('final data', data);
+                handleAddRow(data)
+            }}
+        >
             <ClientContainer />
             {/* <ChangeWorkingHoursInput/> */}
         </CalendarProvider>
@@ -105,7 +115,6 @@ export const CalendarView: React.FC<any> = (props) => {
                                             [props.viewKey]: { ...config }
                                         }
                                     })
-                                    t()
                                 }} key={index}>{column.title}</DropdownMenuItem>
                             ))}
                         </DropdownMenuContent>
@@ -126,7 +135,6 @@ export const CalendarView: React.FC<any> = (props) => {
                                             [props.viewKey]: { ...config }
                                         }
                                     })
-                                    t()
                                 }} key={index}>{column.title}</DropdownMenuItem>
                             ))}
                         </DropdownMenuContent>
@@ -147,7 +155,6 @@ export const CalendarView: React.FC<any> = (props) => {
                                             [props.viewKey]: { ...config }
                                         }
                                     })
-                                    t()
                                 }} key={index}>{column.title}</DropdownMenuItem>
                             ))}
                         </DropdownMenuContent>
@@ -168,7 +175,6 @@ export const CalendarView: React.FC<any> = (props) => {
                                             [props.viewKey]: { ...config }
                                         }
                                     })
-                                    t() // rerender the page
                                 }} key={index}>{column.title}</DropdownMenuItem>
                             ))}
                         </DropdownMenuContent>

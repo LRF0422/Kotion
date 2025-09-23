@@ -1,7 +1,7 @@
 import { Button, IconButton } from "@kn/ui";
 import { NodeViewProps } from "@kn/editor";
 import { NodeViewWrapper } from "@kn/editor";
-import React, { createContext, ElementType, useCallback, useEffect, useRef, useState } from "react";
+import React, { ElementType, useCallback, useEffect, useRef, useState } from "react";
 import { TableView } from "./view/TableView";
 import { addCol, addRow, deleteColV2, getDatabaseData, moveCol, removeRow, updateCellData, updateCellDataV2, UpdateCellProps } from "./utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
@@ -76,34 +76,22 @@ const allColumnType: ColumnType[] = [
 export const DatabaseView: React.FC<NodeViewProps> = (props) => {
 
     const [data, setData] = useState<any[]>([])
-    const columnsRef = useRef<any[]>(props.node.attrs.columns)
 
     useEffect(() => {
         setData(getDatabaseData(props.node))
-        columnsRef.current = props.node.attrs.columns
-    }, [props])
-
-    const doUpdate = () => {
-        props.updateAttributes({
-            ...props.node.attrs,
-            updateFlag: props.node.attrs.updateFlag + 1
-        })
-    }
+    }, [props.editor.state])
 
     const doAddRow = useCallback((data?: any) => {
         addRow(props.editor, props.editor.state, props.editor.view, props.node, props.getPos()!, data)
-        doUpdate()
-    }, [props])
+    }, [])
 
     const onDataChange = useCallback((row: number, col: number, data: any) => {
         updateCellData(props.editor.state, props.editor.view, props.node, props.getPos()!, col, row, data)
-        doUpdate()
-    }, [props])
+    }, [])
 
     const doDelCol = useCallback((colIndex: number) => {
         deleteColV2(props.editor.state, props.editor.view, props.node, props.getPos()!, colIndex)
-        doUpdate()
-    }, [props])
+    }, [])
 
     const doMoveCol = useCallback((source: string, target: string) => {
         const columns = props.node.attrs.columns as any[]
@@ -126,17 +114,15 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
         }
         moveCol(props.editor.state, props.editor.view, props.node, props.getPos()!, source, target, newVal)
         // props.updateAttributes(newVal)
-    }, [props])
+    }, [])
 
     const doDeleteRow = useCallback((rowIndex: string[]) => {
         removeRow(props.editor, props.editor.state, props.editor.view, props.node, props.getPos()!, rowIndex)
-        doUpdate()
-    }, [props])
+    }, [])
 
     const doUpdateCellBatch = useCallback((updateCells: UpdateCellProps[]) => {
         updateCellDataV2(props.editor.state, props.editor.view, props.node, props.getPos()!, updateCells)
-        doUpdate()
-    }, [props])
+    }, [])
 
     const onUpdateColumnSize = useCallback((columnIndex: number, newSize: number) => {
         const columns = props.node.attrs.columns
@@ -145,7 +131,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
             ...props.node.attrs,
             columns: columns
         })
-    }, [props])
+    }, [])
 
     const handleAddColumn = useCallback((column: any) => {
         const cols = [
@@ -158,7 +144,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
         }
         props.updateAttributes(newVal)
         addCol(props.editor.state, props.editor.view, props.node, props.getPos()!, column)
-    }, [props.node])
+    }, [])
 
     const getContent = (view: string) => {
         switch (view) {
@@ -200,7 +186,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
             ...props.node.attrs,
             views: views
         })
-    }, [props])
+    }, [])
 
     const handleRemoveView = (key: string) => {
         props.updateAttributes({

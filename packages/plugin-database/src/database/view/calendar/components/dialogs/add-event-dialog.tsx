@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "@kn/ui";
 import { zodResolver } from "@kn/ui";
 
@@ -20,6 +20,7 @@ import { eventSchema } from "../../schemas";
 import type { TimeValue } from "@kn/ui";
 import type { TEventFormData } from "../../schemas";
 import React from "react";
+import { set } from "lodash";
 
 interface IProps {
   children: React.ReactNode;
@@ -28,9 +29,8 @@ interface IProps {
 }
 
 export function AddEventDialog({ children, startDate, startTime }: IProps) {
-  const { users } = useCalendar();
-
-  const { isOpen, onClose, onToggle } = useDisclosure();
+  const { users, onEventAdd, events } = useCalendar();
+  const [isOpen, setIsOpen] = useState(false)
 
   const form = useForm<TEventFormData>({
     resolver: zodResolver(eventSchema),
@@ -44,7 +44,9 @@ export function AddEventDialog({ children, startDate, startTime }: IProps) {
 
   const onSubmit = (_values: TEventFormData) => {
     // TO DO: Create use-add-event hook
-    onClose();
+    onEventAdd && onEventAdd(_values)
+    // events.push(_values)
+    setIsOpen(false)
     form.reset();
   };
 
@@ -56,7 +58,7 @@ export function AddEventDialog({ children, startDate, startTime }: IProps) {
   }, [startDate, startTime, form.reset]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={onToggle}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
 
       <DialogContent>

@@ -57,10 +57,6 @@ export const TableView: React.FC<any> = (props) => {
 
     const handleColumnResize = (index: number, width: number) => {
         columns[index].width = width
-        updateAttributes({
-            ...node.attrs,
-            columns: columns
-        })
     }
 
     return <div className="relative space-y-2 ">

@@ -55,7 +55,6 @@ export const getDatabaseData = (node: Node) => {
 	}
 	const columns = node.attrs.columns
 	console.log('loaded columns', columns);
-	console.log('loaded node', node);
 	const data: any[] = []
 	node.forEach((row) => {
 		const d: any = {}
@@ -82,12 +81,30 @@ export function isInGrid(state: EditorState): boolean {
 	return false;
 }
 
-// FIXME 这里效率太低了
-export const addRow = (editor: Editor, state: EditorState, view: EditorView, node: Node, pos: number, data?: any) => {
+export const addRow = (editor: Editor, state: EditorState, view: EditorView, node: Node, tableStart: number, data?: any) => {
 
 	if (node) {
-		const json = node.toJSON() as JSONContent
-		const rows = json.content || []
+		// const json = node.toJSON() as JSONContent
+		// const rows = json.content || []
+		// const colCount = node.attrs.columns.length
+		// const columns = node.attrs.columns
+		// const cols = []
+		// for (let i = 0; i < colCount; i++) {
+		// 	const id = columns[i].id
+		// 	const fieldValue = data && (data[id] || undefined)
+		// 	cols.push(
+		// 		(state.schema.nodes['gridCell'] as NodeType).createAndFill({ isHeader: false, dataType: node.attrs.columns[i].dataType, data: fieldValue || creatDefaultData(node.attrs.columns[i].dataType) })
+		// 	)
+		// }
+		// const row = (state.schema.nodes['gridRow'] as NodeType).createChecked({ id: cols[0]?.attrs.data }, cols as Node[]).toJSON()
+		// rows.push(row)
+		// json.content = rows
+		// const tr = state.tr.replaceRangeWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
+		// view.dispatch(tr)
+		let rowPos = tableStart
+		node.forEach((row) => {
+			rowPos += row.nodeSize
+		})
 		const colCount = node.attrs.columns.length
 		const columns = node.attrs.columns
 		const cols = []
@@ -98,12 +115,8 @@ export const addRow = (editor: Editor, state: EditorState, view: EditorView, nod
 				(state.schema.nodes['gridCell'] as NodeType).createAndFill({ isHeader: false, dataType: node.attrs.columns[i].dataType, data: fieldValue || creatDefaultData(node.attrs.columns[i].dataType) })
 			)
 		}
-		const row = (state.schema.nodes['gridRow'] as NodeType).createChecked({ id: cols[0]?.attrs.data }, cols as Node[]).toJSON()
-		rows.push(row)
-		json.content = rows
-		const tr = state.tr.replaceRangeWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
-
-		// const tr = state.tr.insert(insertPos, (state.schema.nodes['gridRow'] as NodeType).createChecked({ id: cols[0]?.attrs.data }, cols as Node[]))
+		const row = (state.schema.nodes['gridRow'] as NodeType).createChecked({ id: cols[0]?.attrs.data }, cols as Node[])
+		const tr = state.tr.insert(rowPos, row)
 		view.dispatch(tr)
 	}
 
@@ -133,6 +146,7 @@ export const addCol = (state: EditorState, view: EditorView, node: Node, pos: nu
 		tr.replaceWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
 		view.dispatch(tr)
 	}
+	console.log("addCol");
 
 }
 
@@ -168,33 +182,27 @@ export const deleteColV2 = (state: EditorState, view: EditorView, node: Node, po
 	json.content?.forEach((row) => {
 		row.content = row.content?.filter((_, index) => index !== colIndex)
 	})
-
-	console.log('json', json);
 	const columns = (json.attrs?.columns as any[]).filter((_, index) => index !== colIndex)
 	json.attrs!.columns = columns
-
-	console.log('json', json);
 
 	const newNode = Node.fromJSON(state.schema, json)
 	const tr = state.tr
 	tr.replaceWith(pos, pos + node.nodeSize, newNode)
 	view.dispatch(tr)
+	console.log('deleteColV2');
+
 }
 
 export const moveCol = (state: EditorState, view: EditorView, node: Node, pos: number, source: string, target: string, attrs: any) => {
 	const json = node.toJSON() as JSONContent
 	const columns = cloneDeep(json.attrs?.columns) as any[]
-	const sourceItem = columns.find(it => it.id === source)
-	const targetItem = columns.find(it => it.id === target)
 	let sourceIndex = 0;
 	let targetIndex = 0;
 	columns.forEach((it, index) => {
 		if (it.id === source) {
 			sourceIndex = index
-			// json.attrs!.columns[index] = targetItem
 		}
 		if (it.id === target) {
-			// json.attrs!.columns[index] = sourceItem
 			targetIndex = index
 		}
 	})
@@ -220,9 +228,8 @@ export const moveCol = (state: EditorState, view: EditorView, node: Node, pos: n
 	const tr = state.tr
 	tr.replaceWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
 	tr.setNodeMarkup(pos, undefined, attrs)
-	// tr.replaceWith
 	view.dispatch(tr)
-
+	console.log('moveCol');
 
 }
 
@@ -245,21 +252,6 @@ export const removeRow = (editor: Editor, state: EditorState, view: EditorView, 
 	const grid = node
 	// const tr = state.tr
 	if (grid) {
-		// rowIndex.forEach(row => {
-		// 	let start = pos + 1
-		// 	let end = start;
-		// 	for (let i = 0; i <= (row); i++) {
-		// 		end = end + grid.child(i).nodeSize
-
-		// 	}
-		// 	start = end - grid.child(row).nodeSize
-		// 	console.log('start', start);
-		// 	console.log('end', end);
-		// 	console.log(editor.$node('gridCell', {
-		// 		data: 'b49dd5c2-2273-4ed1-aac4-c1dbb3b47ede'
-		// 	}))
-		// 	tr.deleteRange(start, end)
-		// })
 		const json = node.toJSON() as JSONContent
 		const res = editor.$node('database', {
 			blockId: node.attrs.blockId
@@ -271,19 +263,8 @@ export const removeRow = (editor: Editor, state: EditorState, view: EditorView, 
 			const tr = state.tr.replaceWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
 			view.dispatch(tr)
 		}
+		console.log("removeRow");
 
-
-		// rowIndex.forEach(key => {
-		// 	const res = editor.$node("gridRow", {
-		// 		id: key
-		// 	})
-		// 	if (res) {
-		// 		console.log('res', res);
-		// 		tr.delete(res.from, res.to)
-		// 	}
-		// })
-
-		// view.dispatch(tr)
 	}
 }
 
