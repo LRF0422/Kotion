@@ -85,45 +85,37 @@ export function CalendarDayView({ singleDayEvents, multiDayEvents }: IProps) {
                       {index !== 0 && <div className="pointer-events-none absolute inset-x-0 top-0 border-b"></div>}
 
                       <DroppableTimeBlock date={selectedDate} hour={hour} minute={0}>
-                        {/* <AddEventDialog startDate={selectedDate} startTime={{ hour, minute: 0 }}> */}
                         <div className="absolute inset-x-0 top-0 h-[24px] cursor-pointer transition-colors hover:bg-accent" onClick={() => {
                           setCurrentSelectedDate(selectedDate)
                           setCurrentSelectTime({ hour, minute: 0 })
                           ref.current && ref.current.open()
                         }} />
-                        {/* </AddEventDialog> */}
                       </DroppableTimeBlock>
 
                       <DroppableTimeBlock date={selectedDate} hour={hour} minute={15}>
-                        {/* <AddEventDialog startDate={selectedDate} startTime={{ hour, minute: 15 }}> */}
                         <div className="absolute inset-x-0 top-[24px] h-[24px] cursor-pointer transition-colors hover:bg-accent" onClick={() => {
                           setCurrentSelectedDate(selectedDate)
                           setCurrentSelectTime({ hour, minute: 15 })
                           ref.current && ref.current.open()
                         }} />
-                        {/* </AddEventDialog> */}
                       </DroppableTimeBlock>
 
                       <div className="pointer-events-none absolute inset-x-0 top-1/2 border-b border-dashed"></div>
 
                       <DroppableTimeBlock date={selectedDate} hour={hour} minute={30}>
-                        {/* <AddEventDialog startDate={selectedDate} startTime={{ hour, minute: 30 }}> */}
                         <div className="absolute inset-x-0 top-[48px] h-[24px] cursor-pointer transition-colors hover:bg-accent" onClick={() => {
                           setCurrentSelectedDate(selectedDate)
                           setCurrentSelectTime({ hour, minute: 30 })
                           ref.current && ref.current.open()
                         }} />
-                        {/* </AddEventDialog> */}
                       </DroppableTimeBlock>
 
                       <DroppableTimeBlock date={selectedDate} hour={hour} minute={45}>
-                        {/* <AddEventDialog startDate={selectedDate} startTime={{ hour, minute: 45 }}> */}
                         <div className="absolute inset-x-0 top-[72px] h-[24px] cursor-pointer transition-colors hover:bg-accent" onClick={() => {
                           setCurrentSelectedDate(selectedDate)
                           setCurrentSelectTime({ hour, minute: 45 })
                           ref.current && ref.current.open()
                         }} />
-                        {/* </AddEventDialog> */}
                       </DroppableTimeBlock>
                     </div>
                   );
