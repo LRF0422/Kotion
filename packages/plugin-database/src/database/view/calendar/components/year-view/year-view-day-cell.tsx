@@ -15,15 +15,14 @@ interface IProps {
 }
 
 export function YearViewDayCell({ day, date, events }: IProps) {
-  // const { push } = useRouter();
-  const { setSelectedDate } = useCalendar();
+  const { setSelectedDate, setView } = useCalendar();
 
   const maxIndicators = 3;
   const eventCount = events.length;
 
   const handleClick = () => {
     setSelectedDate(date);
-    // push("/day-view");
+    setView("day");
   };
 
   return (

@@ -20,7 +20,6 @@ import { eventSchema } from "../../schemas";
 import type { TimeValue } from "@kn/ui";
 import type { TEventFormData } from "../../schemas";
 import React from "react";
-import { set } from "lodash";
 
 interface IProps {
   children: React.ReactNode;
@@ -32,7 +31,7 @@ export const AddEventDialog = forwardRef<{
   open: () => void,
   close: () => void
 }, IProps>(({ startDate, startTime, children }, ref) => {
-  const { users, onEventAdd, events } = useCalendar();
+  const { users, onEventAdd } = useCalendar();
   const [isOpen, setIsOpen] = useState(false)
 
   const form = useForm<TEventFormData>({
@@ -46,9 +45,7 @@ export const AddEventDialog = forwardRef<{
   });
 
   const onSubmit = (_values: TEventFormData) => {
-    // TO DO: Create use-add-event hook
     onEventAdd && onEventAdd(_values)
-    // events.push(_values)
     setIsOpen(false)
     form.reset();
   };
@@ -73,7 +70,7 @@ export const AddEventDialog = forwardRef<{
     close,
   }))
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen} modal={true}>
       <DialogTrigger asChild>{children}</DialogTrigger>
 
       <DialogContent>

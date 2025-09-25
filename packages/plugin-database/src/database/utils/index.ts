@@ -1,4 +1,4 @@
-import { Node, NodeType, Schema, Slice } from "@kn/editor";
+import { Node, NodeType, Range, Schema, Slice } from "@kn/editor";
 import { EditorState } from "@kn/editor";
 import { Decoration, DecorationSet, DecorationSource, EditorView } from "@kn/editor";
 import { findParentNode } from "@kn/editor";
@@ -54,6 +54,7 @@ export const getDatabaseData = (node: Node) => {
 		throw new Error("current node is not a database node")
 	}
 	const columns = node.attrs.columns
+	console.log('loaded node', node);
 	console.log('loaded columns', columns);
 	const data: any[] = []
 	node.forEach((row) => {
@@ -63,6 +64,7 @@ export const getDatabaseData = (node: Node) => {
 		}
 		data.push(d)
 	})
+	console.log('loaded data', data);
 	return data;
 }
 
@@ -116,8 +118,12 @@ export const addRow = (editor: Editor, state: EditorState, view: EditorView, nod
 			)
 		}
 		const row = (state.schema.nodes['gridRow'] as NodeType).createChecked({ id: cols[0]?.attrs.data }, cols as Node[])
-		const tr = state.tr.insert(rowPos, row)
-		view.dispatch(tr)
+		// const tr = state.tr.insert(rowPos, row)
+		// view.dispatch(tr)
+		console.log('table', tableStart + node.nodeSize);
+		console.log('table2', rowPos);
+
+		editor.chain().insertContentAt(rowPos + 1, row).run()
 	}
 
 }
@@ -249,23 +255,24 @@ export function drawCellSelection(state: EditorState): DecorationSource | null {
 }
 
 export const removeRow = (editor: Editor, state: EditorState, view: EditorView, node: Node, pos: number, rowIndex: string[]) => {
-	const grid = node
-	// const tr = state.tr
-	if (grid) {
-		const json = node.toJSON() as JSONContent
-		const res = editor.$node('database', {
-			blockId: node.attrs.blockId
+	const deleteRanges: Range[] = []
+	let rowPos = pos + 1
+	console.log('index', rowIndex);
+	if (node) {
+		node.forEach((row, index) => {
+			console.log('row', row);
+			if (rowIndex.includes(row.attrs.id)) {
+				deleteRanges.push({
+					from: rowPos,
+					to: rowPos + row.nodeSize
+				})
+			}
+			rowPos = rowPos + row.nodeSize
 		})
-		console.log('res', res);
-
-		if (res) {
-			json.content = json.content?.filter(it => !rowIndex.includes(it?.attrs?.id))
-			const tr = state.tr.replaceWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
-			view.dispatch(tr)
-		}
-		console.log("removeRow");
-
 	}
+	const tr = editor.state.tr;
+	deleteRanges.forEach(range => tr.deleteRange(range.from, range.to))
+	editor.view.dispatch(tr)
 }
 
 export const getCellPos = (node: Node, pos: number, colIndex: number, rowIndex: number) => {

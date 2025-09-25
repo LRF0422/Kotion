@@ -3,7 +3,7 @@ import { PMNode as Node, mergeAttributes } from "@kn/editor";
 
 export const GridCell = Node.create({
 	name: 'gridCell',
-	isolating: true,
+	group: 'gridRow',
 
 	addOptions() {
 		return {

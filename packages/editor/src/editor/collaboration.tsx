@@ -87,7 +87,7 @@ export const CollaborationEditor = forwardRef<
       //   }
       // },
       onTransaction: (transaction) => {
-        console.debug("selection", transaction.editor.state.selection);
+        console.log("transaction", transaction.transaction);
 
       },
       editorProps: {

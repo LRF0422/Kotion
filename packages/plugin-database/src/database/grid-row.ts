@@ -2,6 +2,7 @@ import { PMNode as Node, mergeAttributes } from "@kn/editor";
 
 export const GridRow = Node.create({
 	name: 'gridRow',
+	group: 'database',
 	content: 'gridCell*',
 	selectable: true,
 	draggable: true,

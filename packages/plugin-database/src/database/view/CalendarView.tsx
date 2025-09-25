@@ -81,6 +81,7 @@ export const CalendarView: React.FC<any> = (props) => {
             <Button size="sm" variant="ghost" onClick={toggle}><Settings className="h-3 w-3" /></Button>
         </div>
         <CalendarProvider
+            editor={editor}
             events={resloveData()}
             users={[
                 {
@@ -91,7 +92,6 @@ export const CalendarView: React.FC<any> = (props) => {
             ]}
             onEventAdd={(event) => {
                 const data = unresloveData(event)
-                console.log('final data', data);
                 handleAddRow(data)
             }}
         >

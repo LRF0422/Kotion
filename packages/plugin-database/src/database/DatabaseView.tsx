@@ -84,15 +84,15 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
 
     const doAddRow = useCallback((data?: any) => {
         addRow(props.editor, props.editor.state, props.editor.view, props.node, props.getPos()!, data)
-    }, [])
+    }, [props])
 
     const onDataChange = useCallback((row: number, col: number, data: any) => {
         updateCellData(props.editor.state, props.editor.view, props.node, props.getPos()!, col, row, data)
-    }, [])
+    }, [props])
 
     const doDelCol = useCallback((colIndex: number) => {
         deleteColV2(props.editor.state, props.editor.view, props.node, props.getPos()!, colIndex)
-    }, [])
+    }, [props])
 
     const doMoveCol = useCallback((source: string, target: string) => {
         const columns = props.node.attrs.columns as any[]
@@ -115,15 +115,15 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
         }
         moveCol(props.editor.state, props.editor.view, props.node, props.getPos()!, source, target, newVal)
         // props.updateAttributes(newVal)
-    }, [])
+    }, [props])
 
     const doDeleteRow = useCallback((rowIndex: string[]) => {
         removeRow(props.editor, props.editor.state, props.editor.view, props.node, props.getPos()!, rowIndex)
-    }, [])
+    }, [props])
 
     const doUpdateCellBatch = useCallback((updateCells: UpdateCellProps[]) => {
         updateCellDataV2(props.editor.state, props.editor.view, props.node, props.getPos()!, updateCells)
-    }, [])
+    }, [props])
 
     const onUpdateColumnSize = useCallback((columnIndex: number, newSize: number) => {
         const columns = props.node.attrs.columns
@@ -145,7 +145,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
         }
         props.updateAttributes(newVal)
         addCol(props.editor.state, props.editor.view, props.node, props.getPos()!, column)
-    }, [])
+    }, [props])
 
     const getContent = (view: string) => {
         switch (view) {

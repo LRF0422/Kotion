@@ -88,7 +88,7 @@ export const TableView: React.FC<any> = (props) => {
                 onSelectedRowsChange={setSelectedRows}
                 columns={[
                     SelectColumn,
-                    ...columns.map((it: any) => ({
+                    ...columns.filter(it => !!it.isShow).map((it: any) => ({
                         name: it.title,
                         key: it.id,
                         // width: it.width || 150,

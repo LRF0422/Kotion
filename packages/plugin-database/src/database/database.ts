@@ -3,7 +3,6 @@ import { ReactNodeViewRenderer } from "@kn/editor";
 import { DatabaseView } from "./DatabaseView";
 import { createGridView } from "./utils";
 import { TextSelection } from "@kn/editor";
-import { any } from "@kn/ui";
 
 declare module "@kn/editor" {
     interface Commands<ReturnType> {
@@ -16,10 +15,7 @@ export const Database = Node.create({
     name: 'database',
     group: 'block',
     content: 'gridRow*',
-    draggable: true,
-    selectable: true,
     isolating: true,
-    atom: true,
     addOptions() {
         return {
             defaultViewConfig: {
@@ -29,27 +25,32 @@ export const Database = Node.create({
                         {
                             title: 'ID',
                             id: 'id',
-                            dataType: 'id'
+                            dataType: 'id',
+                            isShow: true
                         },
                         {
                             title: 'Test',
                             id: 'test',
-                            dataType: 'text'
+                            dataType: 'text',
+                            isShow: true
                         },
                         {
                             title: 'Test1',
                             id: 'test1',
-                            dataType: 'star-cell'
+                            dataType: 'star-cell',
+                            isShow: true
                         },
                         {
                             title: 'Test2',
                             id: 'test2',
-                            dataType: 'date-picker-cell'
+                            dataType: 'date-picker-cell',
+                            isShow: true
                         },
                         {
                             title: 'Test3',
                             id: 'test3',
-                            dataType: 'date-picker-cell'
+                            dataType: 'date-picker-cell',
+                            isShow: true
                         }
                     ]
                 },
