@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { useForm } from "@kn/ui";
 import { zodResolver } from "@kn/ui";
 
@@ -28,7 +28,10 @@ interface IProps {
   startTime?: { hour: number; minute: number };
 }
 
-export function AddEventDialog({ children, startDate, startTime }: IProps) {
+export const AddEventDialog = forwardRef<{
+  open: () => void,
+  close: () => void
+}, IProps>(({ startDate, startTime, children }, ref) => {
   const { users, onEventAdd, events } = useCalendar();
   const [isOpen, setIsOpen] = useState(false)
 
@@ -57,6 +60,18 @@ export function AddEventDialog({ children, startDate, startTime }: IProps) {
     });
   }, [startDate, startTime, form.reset]);
 
+  const open = () => {
+    setIsOpen(true)
+  }
+
+  const close = () => {
+    setIsOpen(false)
+  }
+
+  useImperativeHandle(ref, () => ({
+    open,
+    close,
+  }))
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
@@ -299,3 +314,4 @@ export function AddEventDialog({ children, startDate, startTime }: IProps) {
     </Dialog>
   );
 }
+)

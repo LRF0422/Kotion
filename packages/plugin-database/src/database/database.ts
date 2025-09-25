@@ -18,6 +18,8 @@ export const Database = Node.create({
     content: 'gridRow*',
     draggable: true,
     selectable: true,
+    isolating: true,
+    atom: true,
     addOptions() {
         return {
             defaultViewConfig: {

@@ -11,6 +11,7 @@ import { cloneDeep } from "lodash";
 import { ChartView } from "./view/ChartView";
 import { CalendarView } from "./view/CalendarView";
 import { NodeViewContext } from "./Context";
+import { useDeepCompareEffect, useTrackedEffect } from "ahooks";
 
 
 
@@ -77,7 +78,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
 
     const [data, setData] = useState<any[]>([])
 
-    useEffect(() => {
+    useDeepCompareEffect(() => {
         setData(getDatabaseData(props.node))
     }, [props.editor.state])
 
@@ -208,7 +209,7 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
             handleDataChangeBatch: doUpdateCellBatch,
             columns: [...props.node.attrs.columns], columnTypes: allColumnType
         }} >
-            <div className="h-min-[300px] w-full rounded-md">
+            <div className="h-min-[300px] h-auto w-full rounded-md">
                 <Tabs defaultValue="table" className="min-h-[300px]">
                     <div className="flex justify-between">
                         <TabsList className="">

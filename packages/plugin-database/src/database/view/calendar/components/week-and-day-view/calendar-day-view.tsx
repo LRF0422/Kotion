@@ -42,7 +42,7 @@ export function CalendarDayView({ singleDayEvents, multiDayEvents }: IProps) {
   const groupedEvents = groupEvents(dayEvents);
 
   return (
-    <div className="flex not-prose">
+    <div className="flex not-prose" contentEditable={false}>
       <div className="flex flex-1 flex-col">
         <div>
           <DayViewMultiDayEventsRow selectedDate={selectedDate} multiDayEvents={multiDayEvents} />
@@ -56,7 +56,7 @@ export function CalendarDayView({ singleDayEvents, multiDayEvents }: IProps) {
           </div>
         </div>
 
-        <ScrollArea className="h-[800px]" type="always">
+        <ScrollArea className="h-[736px]" type="always">
           <div className="flex">
             {/* Hours column */}
             <div className="relative w-18">

@@ -51,7 +51,7 @@ export function CalendarProvider({ children, users, events, onEventAdd }: { chil
   // In a real scenario, the events would be updated in the backend
   // and the request that fetches the events should be refetched
   const [localEvents, setLocalEvents] = useState<IEvent[]>(events);
-  const [view, setView] = useState<TCalendarView>("month")
+  const [view, setView] = useState<TCalendarView>("day")
 
   const handleSelectDate = (date: Date | undefined) => {
     if (!date) return;

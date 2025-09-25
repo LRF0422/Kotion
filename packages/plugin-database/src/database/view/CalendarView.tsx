@@ -1,4 +1,4 @@
-import { NodeViewWrapper } from "@kn/editor";
+import { NodeViewWrapper, getNodeAttributes, useAttributes } from "@kn/editor";
 import React, { useCallback, useContext, useEffect, useMemo } from "react";
 import { Calendar, momentLocalizer } from 'react-big-calendar'
 import moment from 'moment'
@@ -37,6 +37,7 @@ export const CalendarView: React.FC<any> = (props) => {
     const { userInfo } = useSelector((state: GlobalState) => state)
     const [visible, { toggle }] = useToggle(false)
     const config = node.attrs.viewOptions[props.viewKey] || {}
+
     const { usePath } = useUploadFile()
 
     const resloveData = useCallback((): IEvent[] => {
