@@ -31,7 +31,7 @@ export const AddEventDialog = forwardRef<{
   open: () => void,
   close: () => void
 }, IProps>(({ startDate, startTime, children }, ref) => {
-  const { users, onEventAdd } = useCalendar();
+  const { users, onEventAdd, editor } = useCalendar();
   const [isOpen, setIsOpen] = useState(false)
 
   const form = useForm<TEventFormData>({
@@ -70,7 +70,7 @@ export const AddEventDialog = forwardRef<{
     close,
   }))
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen} modal={true}>
+    <Dialog open={isOpen && editor.isEditable} onOpenChange={setIsOpen} modal={true}>
       <DialogTrigger asChild>{children}</DialogTrigger>
 
       <DialogContent>

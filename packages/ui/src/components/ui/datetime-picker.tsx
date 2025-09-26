@@ -447,9 +447,12 @@ const TimePickerInput = React.forwardRef<HTMLInputElement, TimePickerInputProps>
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Tab') return;
       e.preventDefault();
+      e.stopPropagation();
       if (e.key === 'ArrowRight') onRightFocus?.();
       if (e.key === 'ArrowLeft') onLeftFocus?.();
       if (['ArrowUp', 'ArrowDown'].includes(e.key)) {
+        console.log('key', e.key);
+
         const step = e.key === 'ArrowUp' ? 1 : -1;
         const newValue = getArrowByType(calculatedValue, step, picker);
         if (flag) setFlag(false);
@@ -473,7 +476,7 @@ const TimePickerInput = React.forwardRef<HTMLInputElement, TimePickerInputProps>
         id={id || picker}
         name={name || picker}
         className={cn(
-          'w-[48px] text-center font-mono text-base tabular-nums caret-transparent focus:bg-accent focus:text-accent-foreground [&::-webkit-inner-spin-button]:appearance-none',
+          ' w-[80px] text-center font-mono text-base tabular-nums caret-transparent [&::-webkit-inner-spin-button]:appearance-none',
           className,
         )}
         value={value || calculatedValue}
@@ -484,6 +487,8 @@ const TimePickerInput = React.forwardRef<HTMLInputElement, TimePickerInputProps>
         type={type}
         inputMode="decimal"
         onKeyDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
           onKeyDown?.(e);
           handleKeyDown(e);
         }}

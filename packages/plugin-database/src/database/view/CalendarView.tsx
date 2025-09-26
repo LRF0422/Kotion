@@ -1,6 +1,5 @@
-import { NodeViewWrapper, getNodeAttributes, useAttributes } from "@kn/editor";
-import React, { useCallback, useContext, useEffect, useMemo } from "react";
-import { Calendar, momentLocalizer } from 'react-big-calendar'
+import { NodeViewWrapper } from "@kn/editor";
+import React, { useCallback, useContext } from "react";
 import moment from 'moment'
 
 import "react-big-calendar/lib/css/react-big-calendar.css";
@@ -9,22 +8,15 @@ import { CalendarClock, Settings, X } from "@kn/icon";
 
 import 'moment/locale/zh-cn';
 import { useToggle } from "ahooks";
-import { AutoForm, Form, ZodProvider, cn, fieldConfig, z } from "@kn/ui";
+import { cn } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Label } from "@kn/ui";
 moment.locale('zh-cn');
 import "./calendar.css"
 import { CalendarProvider } from "./calendar/contexts/calendar-context";
 import { ClientContainer } from "./calendar/components/client-container";
-import { ChangeBadgeVariantInput } from "./calendar/components/change-badge-variant-input";
-import { AppContext } from "@kn/common";
 import { GlobalState, useSelector, useUploadFile } from "@kn/core";
-import { ChangeWorkingHoursInput } from "./calendar/components/change-working-hours-input";
-import { description } from "@kn/core/src/components/SignUp";
 import { IEvent } from "./calendar/interfaces";
-import { getISODay } from "date-fns";
-const localizer = momentLocalizer(moment) // or globalizeLocalizer
-
 
 function isValidDate(dateString: string): boolean {
     const timestamp = Date.parse(dateString);
@@ -66,21 +58,19 @@ export const CalendarView: React.FC<any> = (props) => {
     }, [data, config])
 
 
-    const unresloveData = (data: any) => {
+    const unresloveData = useCallback((data: any) => {
         return {
             [config.titleAccessor?.id]: data.title,
             [config.descAccessor?.id]: data.description,
             [config.startAccessor?.id]: (data.startDate as Date).toISOString(),
             [config.endAccessor?.id]: (data.endDate as Date).toISOString(),
         }
-    }
+    }, [config])
 
 
     return <NodeViewWrapper className="w-full min-h-[700px] relative flex flex-col gap-1 text-popover-foreground">
-        <div>
-            <Button size="sm" variant="ghost" onClick={toggle}><Settings className="h-3 w-3" /></Button>
-        </div>
         <CalendarProvider
+            toggleSettings={toggle}
             editor={editor}
             events={resloveData()}
             users={[

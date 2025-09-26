@@ -20,7 +20,6 @@
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",
-    "@tiptap/extension-image": "^3.4.3",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47"
   },

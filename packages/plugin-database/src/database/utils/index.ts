@@ -3,7 +3,7 @@ import { EditorState } from "@kn/editor";
 import { Decoration, DecorationSet, DecorationSource, EditorView } from "@kn/editor";
 import { findParentNode } from "@kn/editor";
 import { uuidv4 } from "lib0/random";
-import { Content, Editor, JSONContent } from "@kn/editor";
+import { Editor, JSONContent } from "@kn/editor";
 import { cloneDeep } from "lodash";
 
 export interface Column {
@@ -86,23 +86,6 @@ export function isInGrid(state: EditorState): boolean {
 export const addRow = (editor: Editor, state: EditorState, view: EditorView, node: Node, tableStart: number, data?: any) => {
 
 	if (node) {
-		// const json = node.toJSON() as JSONContent
-		// const rows = json.content || []
-		// const colCount = node.attrs.columns.length
-		// const columns = node.attrs.columns
-		// const cols = []
-		// for (let i = 0; i < colCount; i++) {
-		// 	const id = columns[i].id
-		// 	const fieldValue = data && (data[id] || undefined)
-		// 	cols.push(
-		// 		(state.schema.nodes['gridCell'] as NodeType).createAndFill({ isHeader: false, dataType: node.attrs.columns[i].dataType, data: fieldValue || creatDefaultData(node.attrs.columns[i].dataType) })
-		// 	)
-		// }
-		// const row = (state.schema.nodes['gridRow'] as NodeType).createChecked({ id: cols[0]?.attrs.data }, cols as Node[]).toJSON()
-		// rows.push(row)
-		// json.content = rows
-		// const tr = state.tr.replaceRangeWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
-		// view.dispatch(tr)
 		let rowPos = tableStart
 		node.forEach((row) => {
 			rowPos += row.nodeSize
@@ -118,11 +101,6 @@ export const addRow = (editor: Editor, state: EditorState, view: EditorView, nod
 			)
 		}
 		const row = (state.schema.nodes['gridRow'] as NodeType).createChecked({ id: cols[0]?.attrs.data }, cols as Node[])
-		// const tr = state.tr.insert(rowPos, row)
-		// view.dispatch(tr)
-		console.log('table', tableStart + node.nodeSize);
-		console.log('table2', rowPos);
-
 		editor.chain().insertContentAt(rowPos + 1, row).run()
 	}
 
@@ -168,9 +146,6 @@ export const deleteCol = (state: EditorState, view: EditorView, node: Node, pos:
 
 			if (index === colIndex) {
 				end = start + col.nodeSize
-				console.log('colSize', col.nodeSize)
-				console.log('start', start)
-				console.log('end', end)
 				tr.deleteRange(start, end)
 			} else {
 				start = start + col.nodeSize
@@ -255,24 +230,12 @@ export function drawCellSelection(state: EditorState): DecorationSource | null {
 }
 
 export const removeRow = (editor: Editor, state: EditorState, view: EditorView, node: Node, pos: number, rowIndex: string[]) => {
-	const deleteRanges: Range[] = []
-	let rowPos = pos + 1
-	console.log('index', rowIndex);
+	const json = node.toJSON() as JSONContent
 	if (node) {
-		node.forEach((row, index) => {
-			console.log('row', row);
-			if (rowIndex.includes(row.attrs.id)) {
-				deleteRanges.push({
-					from: rowPos,
-					to: rowPos + row.nodeSize
-				})
-			}
-			rowPos = rowPos + row.nodeSize
-		})
+		json.content = json.content?.filter(it => it.content && !rowIndex.includes(it.content[0].attrs?.data))
+		const tr = state.tr.replaceWith(pos, pos + node.nodeSize, Node.fromJSON(state.schema, json))
+		view.dispatch(tr)
 	}
-	const tr = editor.state.tr;
-	deleteRanges.forEach(range => tr.deleteRange(range.from, range.to))
-	editor.view.dispatch(tr)
 }
 
 export const getCellPos = (node: Node, pos: number, colIndex: number, rowIndex: number) => {

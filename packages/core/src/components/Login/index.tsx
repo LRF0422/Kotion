@@ -16,6 +16,7 @@ import React from "react"
 import { useUploadFile } from "../../hooks"
 import { LanguageToggle } from "../../locales/LanguageToggle"
 
+
 export function Login() {
 
     const navigator = useNavigator()
@@ -31,7 +32,6 @@ export function Login() {
         }),
         grantType: z.string().default('password'),
         type: z.string().default('account'),
-        // tenantId: z.string().default('849448'),
         scope: z.string().default("all")
     })
 

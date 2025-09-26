@@ -1,4 +1,4 @@
-import { Columns, Grid3x3, List, Plus, Grid2x2, CalendarRange } from "@kn/icon";
+import { Columns, Grid3x3, List, Plus, Grid2x2, CalendarRange, Settings2, Settings } from "@kn/icon";
 
 import { Button } from "@kn/ui";
 
@@ -19,7 +19,7 @@ interface IProps {
 
 export function CalendarHeader({ view, events }: IProps) {
 
-  const { setView } = useCalendar()
+  const { setView, toggleSettings, editor } = useCalendar()
 
   return (
     <div className="flex flex-col gap-4 border-b p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -102,13 +102,20 @@ export function CalendarHeader({ view, events }: IProps) {
 
           <UserSelect />
         </div>
-
-        <AddEventDialog>
-          <Button className="w-full sm:w-auto">
-            <Plus />
-            Add Event
-          </Button>
-        </AddEventDialog>
+        {
+          editor.isEditable &&
+          <>
+            <AddEventDialog>
+              <Button className="w-full sm:w-auto">
+                <Plus />
+                Add Event
+              </Button>
+            </AddEventDialog>
+            <Button className="w-full sm:w-auto" onClick={toggleSettings}>
+              <Settings className="h-4 w-4" />
+            </Button>
+          </>
+        }
       </div>
     </div>
   );

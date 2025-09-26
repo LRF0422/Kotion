@@ -14,3 +14,4 @@ export { type TimeValue } from "react-aria-components"
 
 import styled from "styled-components"
 export { styled }
+export { motion } from "framer-motion"
