@@ -17,7 +17,7 @@ export interface ExtensionWrapper {
         icon?: ReactNode,
         text?: string,
         slash?: string
-        action?: (editor: Editor) => void,
+        action?: (editor: Editor, props?: any) => void,
         render?: ElementType
     } | { divider: true; title: string })[],
     flotMenuConfig?: ElementType[]

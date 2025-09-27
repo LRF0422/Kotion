@@ -1,66 +1,60 @@
-import { NodeViewContent, NodeViewProps, NodeViewWrapper } from "@kn/editor";
+import { AnyExtension, Content, EditorContent, NodeViewContent, NodeViewProps, NodeViewWrapper, resolveExtensions, resolveExtesions, StyledEditor, useEditor, useEditorExtension } from "@kn/editor";
 import React, { useContext, useEffect, useState } from "react";
 import { useNavigator, useParams, useService, useToggle } from "@kn/core";
 import { PageContext } from "@kn/editor";
-import { event } from "@kn/common";
+import { AppContext, event } from "@kn/common";
 import { Loader2, SquareArrowOutUpRight, SquareArrowUpRight } from "@kn/icon";
 
 
 export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
 
-    const params = useParams()
-    const pageInfo = useContext(PageContext)
-    const { pageId, type } = props.node.attrs
-    const [title, setTitle] = useState<string>()
+    const [content, setContent] = useState<Content>(null)
+    const [blockInfo, setBlockInfo] = useState<any>(null)
     const navigator = useNavigator()
     const [loading, { toggle }] = useToggle(false)
+    const { blockId } = props.node.attrs
     // @ts-ignore
     const spaceService = useService("spaceService") as any
 
     useEffect(() => {
         toggle()
-        if (!pageId) {
-            if (params.id) {
-                spaceService.createPage({
-                    spaceId: params.id,
-                    parentId: type === "CHILD" ? pageInfo.id : pageInfo.parentId,
-                    title: '未命名'
-                }).then((res: any) => {
-                    props.updateAttributes({
-                        pageId: res.id,
-                        spaceId: pageInfo.spaceId
-                    })
-                    event.emit("ON_PAGE_REFRESH")
-                    setTitle("未命名")
-                    toggle()
-                })
-            }
-        } else {
-            spaceService.getPage(pageId).then((res: any) => {
-                if (res) {
-                    setTitle(res.title)
-                } else {
-                    setTitle("该页面已经被删除")
-                }
+        spaceService && blockId && spaceService.getBlockInfo(blockId).then((res: any) => {
+            if (res) {
+                setBlockInfo(res)
+                setContent(JSON.parse(res.content))
                 toggle()
-            })
-        }
-    }, [pageId])
-
-
-    return <NodeViewWrapper as="span" className=" inline-flex items-center gap-1 align-middle cursor-pointer hover:underline" onClick={(e: any) => {
-        e.preventDefault()
-        e.stopPropagation()
-        navigator.go({
-            to: `/space-detail/${pageInfo.spaceId}/page/${pageId}`
+                console.log('content', res.content);
+            }
+            
         })
+    }, [spaceService, blockId])
+
+    const [extensions, _] = useEditorExtension('trailingNode')
+    const editor = useEditor({
+        editable: false,
+        content: { type: "doc", content: [content] } as Content,
+        extensions: extensions as AnyExtension[],
+        editorProps: {
+            attributes: {
+                class: "magic-editor",
+                spellcheck: "false",
+                suppressContentEditableWarning: "false",
+            }
+        }
+    }, [content])
+
+
+    return <NodeViewWrapper as="div" className=" border border-dashed rounded-sm relative" onClick={(e: any) => {
     }} >
         {
-            loading ? <Loader2 className="h-4 w-4 animate-spin" /> :
-                <>
-                    <SquareArrowOutUpRight className="h-4 w-4" />
-                    {title}
-                </>
+            content ? <StyledEditor className="px-0" style={{ padding: "5px" }}>
+                <EditorContent editor={editor} />
+            </StyledEditor> : "The block is not exist"
+        }
+        {
+            blockInfo && <div className=" absolute right-0 top-0">
+                From: { blockInfo?.spaceName }
+            </div>
         }
     </NodeViewWrapper>
 };

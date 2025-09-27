@@ -15,7 +15,8 @@ export interface SpaceService {
         pageId?: string
         pageTitle?: string
         spaceId?: string
-    }) => Promise<any>
+    }) => Promise<any>,
+    getBlockInfo: (blockId: string) => Promise<any>
 }
 
 export const spaceService: SpaceService = {
@@ -44,6 +45,10 @@ export const spaceService: SpaceService = {
     },
     queryBlocks: async (params) => {
         const res = await useApi(APIS.QUERY_BLOCKS, params)
+        return res.data
+    },
+    getBlockInfo: async (blockId: string) => {
+        const res = await useApi(APIS.GET_BLOCK_INFO, { id: blockId })
         return res.data
     },
 }

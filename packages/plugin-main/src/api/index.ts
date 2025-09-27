@@ -105,4 +105,8 @@ export const APIS = {
         url: '/knowledge-wiki/space/page/blocks',
         method: 'GET'
     } as API,
+    GET_BLOCK_INFO: {
+          url: '/knowledge-wiki/space/page/block',
+        method: 'GET'
+    } as API
 }

@@ -29,7 +29,7 @@ export const PageSelector: React.FC<{ onCancel: () => void, editor: Editor }> = 
         })
     }, [value])
 
-    return <div className="w-[300px] z-50 p-1 bg-popover shadow-md rounded-sm relative" ref={ref}>
+    return <div className="w-[300px] z-50 p-1 bg-popover shadow-md rounded-sm relative border" ref={ref}>
         <Input onChange={(e) => setSearchValue(e.target.value)} icon={<SearchIcon className="h-4 w-4" />} placeholder="请输入页面名称" />
         <ScrollArea className="h-[300px]">
             {

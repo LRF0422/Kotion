@@ -73,7 +73,7 @@ export const createSlash = (name: string, options?: SlashOptions) => {
 
             const tr = state.tr.deleteRange(from, end);
             dispatch(tr);
-            props?.action?.(editor);
+            props?.action?.(editor,props);
             editor?.view?.focus();
           },
 
