@@ -1,6 +1,6 @@
 import { AnyExtension, Content, EditorContent, NodeViewContent, NodeViewProps, NodeViewWrapper, resolveExtensions, resolveExtesions, StyledEditor, useEditor, useEditorExtension } from "@kn/editor";
-import React, { useContext, useEffect, useState } from "react";
-import { useNavigator, useParams, useService, useToggle } from "@kn/core";
+import React, { useContext, useEffect, useRef, useState } from "react";
+import { useHover, useNavigator, useParams, useService, useToggle } from "@kn/core";
 import { PageContext } from "@kn/editor";
 import { AppContext, event } from "@kn/common";
 import { Loader2, SquareArrowOutUpRight, SquareArrowUpRight } from "@kn/icon";
@@ -13,6 +13,8 @@ export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
     const navigator = useNavigator()
     const [loading, { toggle }] = useToggle(false)
     const { blockId } = props.node.attrs
+    const ref = useRef<any>()
+    const hover = useHover(ref)
     // @ts-ignore
     const spaceService = useService("spaceService") as any
 
@@ -44,7 +46,7 @@ export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
     }, [content])
 
 
-    return <NodeViewWrapper as="div" className=" border border-dashed rounded-sm relative" onClick={(e: any) => {
+    return <NodeViewWrapper as="div" ref={ref } className=" border border-dashed rounded-sm relative" onClick={(e: any) => {
     }} >
         {
             content ? <StyledEditor className="px-0" style={{ padding: "5px" }}>
@@ -52,7 +54,7 @@ export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
             </StyledEditor> : "The block is not exist"
         }
         {
-            blockInfo && <div className=" absolute right-0 top-0">
+           hover && <div className=" absolute right-0 top-0 transition-all duration-300">
                 From: { blockInfo?.spaceName }
             </div>
         }
