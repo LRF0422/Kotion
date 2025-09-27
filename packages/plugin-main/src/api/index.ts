@@ -100,5 +100,9 @@ export const APIS = {
     CREATE_INVITATION: {
         url: '/knowledge-wiki/space/collaborationInvitation',
         method: 'POST'
-    } as API
+    } as API,
+    QUERY_BLOCKS: {
+        url: '/knowledge-wiki/space/page/blocks',
+        method: 'GET'
+    } as API,
 }

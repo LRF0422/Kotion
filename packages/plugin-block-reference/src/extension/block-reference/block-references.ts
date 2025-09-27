@@ -1,12 +1,16 @@
+
+
+
 import { PMNode as Node, ReactNodeViewRenderer, mergeAttributes } from "@kn/editor";
+import { PageReferenceView } from "./PageReferenceView";
 import { BlockReferenceView } from "./BlockReferenceView";
 
 
 
 export const BlockReference = Node.create({
-    name: "blockReference",
-    group: "inline",
-    inline: true,
+    name: "BlockReference",
+    group: "block",
+    inline: false,
     draggable: true,
     atom: true,
 
@@ -20,12 +24,15 @@ export const BlockReference = Node.create({
             },
             type: {
                 default: "CHILD"
+            },
+            blockId: {
+                default: null
             }
         }
     },
 
     renderHTML({ HTMLAttributes }) {
-        return ["span", mergeAttributes(HTMLAttributes, { class: "block-reference" }), 0]
+        return ["div", mergeAttributes(HTMLAttributes, { class: "block-reference" }), 0]
     },
     addNodeView() {
         return ReactNodeViewRenderer(BlockReferenceView)

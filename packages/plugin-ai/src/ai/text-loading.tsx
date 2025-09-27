@@ -1,8 +1,8 @@
+import { useTranslation } from "@kn/common";
 import { Plugin, PluginKey, ReactRenderer } from "@kn/editor";
 import { Decoration, DecorationSet } from "@kn/editor";
 import { Command, Extension } from "@kn/editor";
 import { Loader2 } from "@kn/icon";
-import { cn, MessageLoading } from "@kn/ui";
 import React from "react";
 
 declare module "@kn/editor" {
@@ -66,9 +66,14 @@ const TextLoadingDecorationExtension = Extension.create({
                                     container.innerHTML = loadingHtml;
                                 } else {
                                     const span = document.createElement("span");
-                                    const component = new ReactRenderer(() => (<span>
-                                        <Loader2 className=" w-4 h-4 animate-spin inline" />
-                                    </span>), {
+                                    const component = new ReactRenderer(() => {
+
+                                        const { t } = useTranslation()
+
+                                        return (<span>{t('ai.generate')}
+                                            < Loader2 className=" w-4 h-4 animate-spin inline" />
+                                        </span>)
+                                    }, {
                                         editor,
                                         as: 'span'
                                     })

@@ -1,5 +1,5 @@
 import { event, ExtensionWrapper } from "@kn/common";
-import { BlockReference } from "./block-reference";
+import { PageReference } from "./page-reference";
 import { FilePlus2 } from "@kn/icon";
 import React from "react";
 import { computePosition, posToDOMRect, ReactRenderer } from "@kn/editor";
@@ -8,7 +8,7 @@ import { PageSelector } from "./PageSelector";
 
 export const BlockReferenceExtension: ExtensionWrapper = {
     name: "blockReference",
-    extendsion: BlockReference,
+    extendsion: PageReference,
     slashConfig: [
         {
             divider: true,
@@ -20,7 +20,7 @@ export const BlockReferenceExtension: ExtensionWrapper = {
             slash: '/createPage',
             action: (editor) => {
                 editor.commands.insertContent({
-                    type: BlockReference.name,
+                    type: PageReference.name,
                     attrs: {
                         type: "BORTHER"
                     }
@@ -33,7 +33,7 @@ export const BlockReferenceExtension: ExtensionWrapper = {
             slash: '/createSubPage',
             action: (editor) => {
                 editor.commands.insertContent({
-                    type: BlockReference.name,
+                    type: PageReference.name,
                     attrs: {
                         type: "CHILD"
                     }

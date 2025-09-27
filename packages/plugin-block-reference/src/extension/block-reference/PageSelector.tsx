@@ -36,7 +36,7 @@ export const PageSelector: React.FC<{ onCancel: () => void, editor: Editor }> = 
                 pages.map((page) => {
                     return <div key={page.id} className="rounded-sm hover:bg-muted cursor-pointer flex items-center gap-1 p-1" onClick={() => {
                         editor.commands.insertContent({
-                            type: "blockReference",
+                            type: "PageReference",
                             attrs: {
                                 pageId: page.id,
                                 type: "LINK"
