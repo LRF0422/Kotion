@@ -97,7 +97,7 @@ export class TableView implements NodeView {
     }
 
     this.node = node;
-    this.dom.dataset["blockId"] = node.attrs["blockId"];
+    this.dom.dataset["data-id"] = node.attrs["id"];
     updateColumns(node, this.colgroup, this.table, this.cellMinWidth);
 
     return true;
