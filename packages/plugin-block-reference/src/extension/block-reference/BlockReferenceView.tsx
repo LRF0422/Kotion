@@ -1,9 +1,8 @@
-import { AnyExtension, Content, EditorContent, NodeViewContent, NodeViewProps, NodeViewWrapper, resolveExtensions, resolveExtesions, StyledEditor, useEditor, useEditorExtension } from "@kn/editor";
-import React, { useContext, useEffect, useRef, useState } from "react";
-import { useHover, useNavigator, useParams, useService, useToggle } from "@kn/core";
-import { PageContext } from "@kn/editor";
-import { AppContext, event } from "@kn/common";
-import { Loader2, SquareArrowOutUpRight, SquareArrowUpRight } from "@kn/icon";
+import { AnyExtension, Content, EditorContent, NodeViewProps, NodeViewWrapper, StyledEditor, useEditor, useEditorExtension } from "@kn/editor";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useHover, useNavigator, useService, useToggle } from "@kn/core";
+import { ArrowUpRight, RefreshCcw, Trash2 } from "@kn/icon";
+import { cn, IconButton } from "@kn/ui";
 
 
 export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
@@ -12,24 +11,33 @@ export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
     const [blockInfo, setBlockInfo] = useState<any>(null)
     const navigator = useNavigator()
     const [loading, { toggle }] = useToggle(false)
-    const { blockId } = props.node.attrs
+    const { blockId, spaceId, pageId } = props.node.attrs
     const ref = useRef<any>()
     const hover = useHover(ref)
+    const [flag, { toggle: toggleFlag }] = useToggle(false)
     // @ts-ignore
     const spaceService = useService("spaceService") as any
 
     useEffect(() => {
-        toggle()
-        spaceService && blockId && spaceService.getBlockInfo(blockId).then((res: any) => {
-            if (res) {
-                setBlockInfo(res)
-                setContent(JSON.parse(res.content))
-                toggle()
-                console.log('content', res.content);
-            }
-            
-        })
-    }, [spaceService, blockId])
+        if (spaceService && blockId) {
+            toggle()
+            spaceService.getBlockInfo(blockId).then((res: any) => {
+                if (res) {
+                    setBlockInfo(res)
+                    setContent(JSON.parse(res.content))
+                    toggle()
+                }
+            })
+        }
+    }, [spaceService, blockId, flag])
+
+    const goToDetail = useCallback(() => {
+        if (spaceId && pageId) {
+            navigator.go({
+                to: `/space-detail/${spaceId}/page/${pageId}?blockId=${blockId}`
+            })
+        }
+    }, [blockId])
 
     const [extensions, _] = useEditorExtension('trailingNode')
     const editor = useEditor({
@@ -46,7 +54,7 @@ export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
     }, [content])
 
 
-    return <NodeViewWrapper as="div" ref={ref } className=" border border-dashed rounded-sm relative" onClick={(e: any) => {
+    return <NodeViewWrapper as="div" ref={ref} className=" border border-dashed rounded-sm relative" onClick={(e: any) => {
     }} >
         {
             content ? <StyledEditor className="px-0" style={{ padding: "5px" }}>
@@ -54,8 +62,10 @@ export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
             </StyledEditor> : "The block is not exist"
         }
         {
-           hover && <div className=" absolute right-0 top-0 transition-all duration-300">
-                From: { blockInfo?.spaceName }
+            <div className={cn("absolute right-1 flex items-center gap-1 text-sm top-1 p-1 bg-muted/70 rounded-sm ", hover ? 'visible opacity-100 transition-opacity duration-500' : 'invisible opacity-0 transition-opacity duration-500')}>
+                <IconButton icon={<RefreshCcw className={cn("w-4 h-4", loading ? 'animate-spin' : '')} />} onClick={toggleFlag} />
+                <IconButton icon={<ArrowUpRight className={cn("w-4 h-4")} />} onClick={goToDetail} />
+                <IconButton icon={<Trash2 className={cn("w-4 h-4")} />} onClick={props.deleteNode} />
             </div>
         }
     </NodeViewWrapper>

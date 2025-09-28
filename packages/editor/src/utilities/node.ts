@@ -133,24 +133,24 @@ export function isListNode(node: Node): boolean {
 
 export const findNodeByBlockId = (
   state: EditorState,
-  nodeType: string,
-  blockId: string
+  blockId: string,
+  nodeType?: string,
 ): { node: Node; pos: number } | null => {
   let target: Node | null = null;
   let pos = -1;
 
   state.doc.nodesBetween(0, state.doc.content.size, (node, p) => {
-    if (node.type.name === nodeType) {
-      if (node.attrs.blockId === blockId) {
-        target = node;
-        pos = p;
-        return true;
-      }
-
-      return false;
-    } else {
-      return false;
+    // if (node.type.name === nodeType) {
+    if (node.attrs.id === blockId) {
+      target = node;
+      pos = p;
+      return true;
     }
+
+    return false;
+    // } else {
+    //   return false;
+    // }
   });
 
   return target ? { node: target, pos } : null;

@@ -338,6 +338,9 @@ importers:
       react-i18next:
         specifier: ^15.7.0
         version: 15.7.3(i18next@25.5.2(typescript@5.9.2))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.2)
+      smooth-scroll-into-view-if-needed:
+        specifier: ^2.0.2
+        version: 2.0.2
     devDependencies:
       '@kn/rollup-config':
         specifier: workspace:*
@@ -9159,6 +9162,9 @@ packages:
   smart-buffer@4.2.0:
     resolution: {integrity: sha512-94hK0Hh8rPqQl2xXc3HsaBoOXKV20MToPkcXvwbISWLEs+64sBq5kFgn2kJDHb1Pry9yrP0dxrCI9RRci7RXKg==}
     engines: {node: '>= 6.0.0', npm: '>= 3.0.0'}
+
+  smooth-scroll-into-view-if-needed@2.0.2:
+    resolution: {integrity: sha512-z54WzUSlM+xHHvJu3lMIsh+1d1kA4vaakcAtQvqzeGJ5Ffau7EKjpRrMHh1/OBo5zyU2h30ZYEt77vWmPHqg7Q==}
 
   socks-proxy-agent@6.2.1:
     resolution: {integrity: sha512-a6KW9G+6B3nWZ1yB8G7pJwL3ggLy1uTzKAgCb7ttblwqdz9fMGJUuTy3uFzEP48FAs9FLILlmzDlE2JJhVQaXQ==}
@@ -19631,6 +19637,10 @@ snapshots:
 
   smart-buffer@4.2.0:
     optional: true
+
+  smooth-scroll-into-view-if-needed@2.0.2:
+    dependencies:
+      scroll-into-view-if-needed: 3.1.0
 
   socks-proxy-agent@6.2.1:
     dependencies:

@@ -351,7 +351,7 @@ export const PageEditor: React.FC = () => {
                     token={params.pageId as string}
                     toc={true}
                     withTitle={true}
-                    content={JSON.parse(page.content)}
+                    content={page.content ? JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">")) : undefined}
                 />
             }
         </main>

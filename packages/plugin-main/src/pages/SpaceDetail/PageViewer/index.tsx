@@ -4,22 +4,26 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from "@kn/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { Separator } from "@kn/ui";
-import { EditorRender } from "@kn/editor";
+import { EditorRender, findNodeByBlockId } from "@kn/editor";
 import { event, ON_FAVORITE_CHANGE } from "../../../event";
-import { useApi } from "@kn/core";
+import { useApi, useLocation } from "@kn/core";
 import { useNavigator } from "@kn/core";
 import { Editor } from "@kn/editor";
 import { useToggle } from "@kn/core";
 import { Edit, Loader, MessageCircleCode, MoreHorizontal, Plus, Share, Star } from "@kn/icon";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams } from "@kn/core";
 import { toast } from "@kn/ui";
+import { smoothScrollIntoViewIfNeeded } from '@kn/common';
 
 export const PageViewer: React.FC = () => {
 
     const [page, setPage] = useState<any>()
     const params = useParams()
-    const editor = useRef<Editor>(null)
+    const [editor, setEditor] = useState<Editor | null>()
+    const { search } = useLocation(); // 获取查询字符串
+    const queryParams = new URLSearchParams(search); // 解析查询参数
+    const blockId = queryParams.get('blockId'); //
     const navigator = useNavigator()
     const [loading, { toggle }] = useToggle(false)
 
@@ -37,6 +41,27 @@ export const PageViewer: React.FC = () => {
             setPage(null)
         }
     }, [params.pageId])
+
+    useEffect(() => {
+        if (blockId && editor && page) {
+            const res = findNodeByBlockId(editor.state, blockId)
+            console.log('res', res);
+
+            if (res) {
+                const dom = editor.view.nodeDOM(res.pos) as HTMLElement
+                console.log('dom', dom);
+                if (dom) {
+                    smoothScrollIntoViewIfNeeded(dom, { scrollMode: 'if-needed' })
+                }
+            }
+        }
+
+    }, [blockId, editor, page])
+
+    useEffect(() => {
+        console.log('editor', editor);
+
+    }, [editor])
 
     const goToEditor = () => {
         navigator.go({
@@ -110,7 +135,7 @@ export const PageViewer: React.FC = () => {
         </header>
         <main className="w-full flex flex-row justify-center">
             <EditorRender
-                ref={editor}
+                ref={(ed) => setEditor(ed)}
                 content={page.content ? JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">")) : undefined}
                 className="h-[calc(100vh-70px)] overflow-auto"
                 id={params.pageId as string}

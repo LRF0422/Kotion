@@ -170,7 +170,7 @@ export const StyledEditor = styled.div.attrs({
     }
 
 
-      table {
+  table {
     width: 100%;
     border-collapse: collapse;
     border-radius: 4px;
@@ -194,6 +194,7 @@ export const StyledEditor = styled.div.attrs({
 
     th {
       // background: ${props => (props.theme as any).tableHeaderBgColor};
+      @apply bu-muted
     }
 
     td,

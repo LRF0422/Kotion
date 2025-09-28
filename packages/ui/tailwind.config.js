@@ -1,6 +1,5 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  mode: "jit",
   darkMode: ["class"],
   content: [
     "./app/**/*.{ts,tsx}",
@@ -106,7 +105,8 @@ module.exports = {
         sm: "calc(var(--radius) - 4px)",
       },
       backgroundImage: {
-        "calendar-disabled-hour": "repeating-linear-gradient(-60deg, hsl(var(--border)) 0 0.5px, transparent 0.5px 8px)",
+        "calendar-disabled-hour":
+          "repeating-linear-gradient(-60deg, hsl(var(--border)) 0 0.5px, transparent 0.5px 8px)",
       },
       keyframes: {
         "accordion-down": {

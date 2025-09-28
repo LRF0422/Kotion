@@ -88,7 +88,7 @@ export const EditorRender = forwardRef<
     []
   );
 
-  useImperativeHandle(ref, () => editor as Editor);
+  useImperativeHandle(ref, () => editor, [editor]);
   return (editor &&
     <PageContext.Provider value={pageInfo as PageContextProps}>
       <ThemeProvider theme={light}>

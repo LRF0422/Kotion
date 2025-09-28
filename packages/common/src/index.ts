@@ -7,5 +7,6 @@ export * from "./event"
 export * from "./locales"
 export * from "./core/types"
 export * from "./entity"
-
+import smoothScrollIntoViewIfNeeded from 'smooth-scroll-into-view-if-needed';
+export { smoothScrollIntoViewIfNeeded }
 

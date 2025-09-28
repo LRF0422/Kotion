@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { Button, IconButton, Input, ScrollArea, Separator } from "@kn/ui"
-import { useClickAway, useDebounce, useService, useToggle } from "@kn/core";
+import { useClickAway, useDebounce, useNavigator, useService, useToggle } from "@kn/core";
 import { createNodeFromContent, Editor, getText, Node, PageContext } from "@kn/editor";
 import { ArrowRight, ArrowRightIcon, Loader2, SearchIcon, X } from "@kn/icon";
 
@@ -25,14 +25,14 @@ export const BlockSelector: React.FC<{ onCancel: () => void, editor: Editor }> =
 
     useEffect(() => {
         toggle()
-       spaceService &&  spaceService.queryBlocks({ spaceId: pageInfo.spaceId, searchValue: value }).then((res: any) => {
-           setBlocks(res.records)
-           toggle()
+        spaceService && spaceService.queryBlocks({ spaceId: pageInfo.spaceId, searchValue: value }).then((res: any) => {
+            setBlocks(res.records)
+            toggle()
         })
     }, [value, spaceService])
 
     return <div className="w-[400px] z-50 p-2 bg-popover shadow-md rounded-lg relative border" ref={ref}>
-        <Input className="mb-2 h-7" onChange={(e) => setSearchValue(e.target.value)} icon={ loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <SearchIcon className="h-4 w-4" />} placeholder="请输入页面名称" />
+        <Input className="mb-2 h-7" onChange={(e) => setSearchValue(e.target.value)} icon={loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <SearchIcon className="h-4 w-4" />} placeholder="请输入页面名称" />
         <ScrollArea className="h-[300px] pr-3">
             {
                 blocks.map((block) => {
@@ -40,7 +40,9 @@ export const BlockSelector: React.FC<{ onCancel: () => void, editor: Editor }> =
                         editor.commands.insertContent({
                             type: "BlockReference",
                             attrs: {
-                                blockId: block.id
+                                blockId: block.id,
+                                spaceId: block.spaceId,
+                                pageId: block.pageId
                             }
                         })
                         props.onCancel()
@@ -53,9 +55,9 @@ export const BlockSelector: React.FC<{ onCancel: () => void, editor: Editor }> =
                             <div className="text-muted-foreground text-sm italic"> {block.type}</div>
                         </div>
                         <div className="text-nowrap text-ellipsis overflow-hidden w-[350px] text-muted-foreground text-sm italic">
-                        {
-                            block.content && getText(createNodeFromContent(JSON.parse(block.content), editor.schema) as Node)
-                        }
+                            {
+                                block.content && getText(createNodeFromContent(JSON.parse(block.content), editor.schema) as Node)
+                            }
                         </div>
 
                     </div>
