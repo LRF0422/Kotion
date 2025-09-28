@@ -1,8 +1,8 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
-import { Button, IconButton, Input, Popover, PopoverContent, PopoverTrigger, ScrollArea, Separator } from "@kn/ui"
-import { useClickAway, useDebounce, useKeyPress, useNavigator, useService, useToggle } from "@kn/core";
-import { AnyExtension, computePosition, Content, createNodeFromContent, Editor, EditorContent, flip, getCurrentNode, getText, Node, PageContext, posToDOMRect, resolveExtensions, resolveExtesions, StyledEditor, useEditor, useEditorExtension } from "@kn/editor";
-import { ArrowRight, ArrowRightIcon, Loader2, SearchIcon, X } from "@kn/icon";
+import { HoverCard, HoverCardContent, HoverCardTrigger, ScrollArea, Separator } from "@kn/ui"
+import { useClickAway, useDebounce, useKeyPress, useService, useToggle } from "@kn/core";
+import { AnyExtension, computePosition, Content, createNodeFromContent, Editor, EditorContent, flip, getText, Node, PageContext, posToDOMRect, StyledEditor, useEditor, useEditorExtension } from "@kn/editor";
+import { ArrowRightIcon } from "@kn/icon";
 
 export const BlockSelector: React.FC<{ onCancel: () => void, editor: Editor }> = (props) => {
 
@@ -16,9 +16,9 @@ export const BlockSelector: React.FC<{ onCancel: () => void, editor: Editor }> =
         wait: 500,
     })
 
-    useClickAway(() => {
-        props.onCancel()
-    }, ref)
+    // useClickAway(() => {
+    //     props.onCancel()
+    // }, ref)
 
     useKeyPress(["Esc"], () => {
         props.onCancel()
@@ -73,14 +73,14 @@ export const BlockSelector: React.FC<{ onCancel: () => void, editor: Editor }> =
         <ScrollArea className="h-[300px] pr-3">
             {
                 blocks.map((block, index) => {
-                    return <Popover key={index} onOpenChange={(open) => {
-                        if (open) {
+                    return <HoverCard key={index} onOpenChange={(open) => {
+                        if (open ) {
                             innerEditor.commands.setContent(
-                                block.type === 'doc' ? JSON.parse(block.content) : { type: "doc", content: [JSON.parse(block.content)] } as Content
+                                block.type === 'doc' ? (block.content ? JSON.parse(block.content) : {}) : { type: "doc", content: block.content ? [JSON.parse(block.content)] : [] } as Content
                             )
                         }
                     }}>
-                        <PopoverTrigger asChild>
+                        <HoverCardTrigger asChild>
                                 <div key={block.id} className="rounded-sm hover:bg-muted p-1" onClick={() => {
                                 editor.chain().deleteNode("paragraph").insertContent({
                                     type: "BlockReference",
@@ -106,13 +106,13 @@ export const BlockSelector: React.FC<{ onCancel: () => void, editor: Editor }> =
                                 </div>
 
                             </div>
-                        </PopoverTrigger>
-                        <PopoverContent>
+                        </HoverCardTrigger>
+                        <HoverCardContent side="right" className="w-[400px]" asChild>
                             <StyledEditor>
                                 <EditorContent editor={innerEditor}/>
                             </StyledEditor>
-                        </PopoverContent>
-                    </Popover>
+                        </HoverCardContent>
+                    </HoverCard>
                 })
             }
         </ScrollArea>
