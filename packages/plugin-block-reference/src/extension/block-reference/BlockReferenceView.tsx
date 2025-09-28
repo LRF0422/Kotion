@@ -42,7 +42,7 @@ export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
     const [extensions, _] = useEditorExtension('trailingNode')
     const editor = useEditor({
         editable: false,
-        content: { type: "doc", content: [content] } as Content,
+        content: blockInfo?.type === 'doc' ? content : { type: "doc", content: [content] } as Content,
         extensions: extensions as AnyExtension[],
         editorProps: {
             attributes: {
@@ -51,7 +51,7 @@ export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
                 suppressContentEditableWarning: "false",
             }
         }
-    }, [content])
+    }, [content, blockInfo])
 
 
     return <NodeViewWrapper as="div" ref={ref} className=" border border-dashed rounded-sm relative" onClick={(e: any) => {
