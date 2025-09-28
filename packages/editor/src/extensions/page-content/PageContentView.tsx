@@ -9,6 +9,6 @@ export const PageContentView: React.FC<NodeViewProps> = (props) => {
     const { editor } = props
 
     return <NodeViewWrapper>
-        <ToC items={editor.storage.tableOfContents.content} editor={props.editor} className=" bg-muted rounded-sm" />
+        <ToC items={editor.storage.tableOfContents ? editor.storage.tableOfContents.content : []} editor={props.editor} className=" bg-muted rounded-sm" />
     </NodeViewWrapper>
 }
