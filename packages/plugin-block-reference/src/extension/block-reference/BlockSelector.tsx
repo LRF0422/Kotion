@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { HoverCard, HoverCardContent, HoverCardTrigger, Label, ScrollArea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator } from "@kn/ui"
-import { useClickAway, useDebounce, useKeyPress, useService, useToggle } from "@kn/core";
+import { useDebounce, useKeyPress, useService, useToggle } from "@kn/core";
 import { AnyExtension, computePosition, Content, createNodeFromContent, Editor, EditorContent, flip, getText, Node, PageContext, posToDOMRect, StyledEditor, useEditor, useEditorExtension } from "@kn/editor";
 import { ArrowRightIcon } from "@kn/icon";
 
@@ -18,9 +18,6 @@ export const BlockSelector: React.FC<{ onCancel: () => void, editor: Editor }> =
         wait: 500,
     })
 
-    // useClickAway(() => {
-    //     props.onCancel()
-    // }, ref)
 
     useKeyPress(["Esc"], () => {
         props.onCancel()
@@ -76,11 +73,11 @@ export const BlockSelector: React.FC<{ onCancel: () => void, editor: Editor }> =
         extensions: extensions as AnyExtension[]
     })
 
-    return <div className="w-[400px] z-50 p-2 bg-popover shadow-md rounded-lg relative border" ref={ref}>
+    return <div className="w-[400px] z-50 p-2 bg-popover shadow-md rounded-lg flex flex-col gap-1 relative border" ref={ref}>
         <Label htmlFor="spaceSelector" className="mb-1">Spaces</Label>
         <Select defaultValue={pageInfo.spaceId} onValueChange={(value) => setSpaceId(value)}>
             <SelectTrigger>
-                <SelectValue className="mb-2" id="spaceSelector" />
+                <SelectValue id="spaceSelector" />
             </SelectTrigger>
             <SelectContent>
                 {
