@@ -46,7 +46,7 @@ export const BlockSelector: React.FC<{ onCancel: () => void, editor: Editor }> =
                 const currentNode = editor.state.selection.$head.parent;
                 if (currentNode) {
                     const text = getText(currentNode)
-                    setSearchValue(text)
+                    setSearchValue(text.replace("(", ""))
                 }
                 const domRect = posToDOMRect(editor.view, editor.state.selection.from, editor.state.selection.to)
                 const virtualElement = {
@@ -99,7 +99,19 @@ export const BlockSelector: React.FC<{ onCancel: () => void, editor: Editor }> =
                     }}>
                         <HoverCardTrigger asChild>
                             <div key={block.id} className="rounded-sm hover:bg-muted p-1" onClick={() => {
-                                editor.chain().deleteNode("paragraph").insertContent({
+
+                                const { state, dispatch } = editor.view;
+                                const { $head, $from } = state.selection;
+
+                                const end = $from.pos;
+                                const from = $head?.nodeBefore?.text
+                                    ? end -
+                                    $head.nodeBefore.text.substring(
+                                        $head.nodeBefore.text.indexOf("(")
+                                    ).length
+                                    : $from.start();
+
+                                editor.chain().deleteRange({ from, to: end }).insertContent({
                                     type: "BlockReference",
                                     attrs: {
                                         blockId: block.id,

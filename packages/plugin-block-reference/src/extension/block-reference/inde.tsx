@@ -78,12 +78,13 @@ export const BlockReferenceExtension: ExtensionWrapper = {
                 })
             }
         },
-             {
+        {
             icon: <FilePlus2 className="h-4 w-4" />,
             text: "关联块",
             slash: '/linkBlock',
-                action: (editor, props) => {
+            action: (editor, props) => {
                 console.log('props', props);
+                editor.view.dispatch(editor.state.tr.insertText("("))
                 const component = new ReactRenderer(BlockSelector, {
                     editor: editor,
                     props: {

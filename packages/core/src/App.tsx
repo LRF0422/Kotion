@@ -143,11 +143,9 @@ export const App: React.FC<AppProps> = (props) => {
             const pluginLocales = pluginManager.resloveLocales()
             const res = merge(resources, pluginLocales)
             if (i18n.isInitialized) {
-                console.log("refresh i18n");
                 Object.keys(res).forEach(it => {
                     i18n.addResourceBundle(it, "translation", res[it], true, true)
                 })
-                console.log("i18n refreshed", i18n);
             } else {
                 i18n.use(initReactI18next)
                     .use(LanguageDetector)
