@@ -24,8 +24,8 @@ export const spaceService: SpaceService = {
         return (await useApi(APIS.SPACE_DETAIL, { id: spaceId })).data
     },
     querySpaces: async () => {
-        const res = await fetch('/knowledge-wiki/space/list')
-        return res.json()
+        const res = await useApi(APIS.QUERY_SPACE)
+        return res.data
     },
     getPageTree: async (spaceId: string, searchValue?: string) => {
         const res = await useApi(APIS.GET_PAGE_TREE, { id: spaceId, searchValue })

@@ -65,7 +65,9 @@ export const BlockReferenceView: React.FC<NodeViewProps> = (props) => {
             <div className={cn("absolute right-1 flex items-center gap-1 text-sm top-1 p-1 bg-muted/70 rounded-sm ", hover ? ' opacity-100 transition-opacity duration-500' : 'opacity-0 transition-opacity duration-500')}>
                 <IconButton icon={<RefreshCcw className={cn("w-4 h-4", loading ? 'animate-spin' : '')} />} onClick={toggleFlag} />
                 <IconButton icon={<ArrowUpRight className={cn("w-4 h-4")} />} onClick={goToDetail} />
-                <IconButton icon={<Trash2 className={cn("w-4 h-4")} />} onClick={props.deleteNode} />
+                {
+                    props.editor.isEditable && <IconButton icon={<Trash2 className={cn("w-4 h-4")} />} onClick={props.deleteNode} />
+                }
             </div>
         }
     </NodeViewWrapper>

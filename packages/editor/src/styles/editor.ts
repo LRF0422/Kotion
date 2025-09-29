@@ -137,11 +137,7 @@ export const StyledEditor = styled.div.attrs({
       }
 
       &[data-checked="true"] {
-        color: var(--semi-color-text-2);
-
         > label {
-          background-color: var(--semi-color-primary);
-
           &::after {
             opacity: 1;
             transform: rotate(45deg) scale(1);
