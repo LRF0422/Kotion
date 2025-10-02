@@ -26,10 +26,17 @@ export const Marketplace: React.FC = () => {
     const [installing, { toggle }] = useToggle(false)
     const { usePath } = useUploadFile()
     const navigator = useNavigator()
+    const [flag, setFlag] = useState(0)
 
     useEffect(() => {
         useApi(APIS.GET_PLUGIN_LIST).then(res => {
             setPlugins(res.data.records)
+        })
+    }, [flag])
+
+    useEffect(() => {
+        event.on("REFRESH_PLUSINS", () => {
+            setFlag(f => f + 1)
         })
     }, [])
 

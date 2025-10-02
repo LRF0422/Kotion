@@ -100,7 +100,7 @@ export const BlockSelector: React.FC<{ onCancel: () => void, editor: Editor }> =
                         <HoverCardTrigger asChild>
                             <div key={block.id} className="rounded-sm hover:bg-muted p-1" onClick={() => {
 
-                                const { state, dispatch } = editor.view;
+                                const { state } = editor.view;
                                 const { $head, $from } = state.selection;
 
                                 const end = $from.pos;

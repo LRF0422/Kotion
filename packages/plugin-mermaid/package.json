@@ -18,6 +18,7 @@
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",
+    "@monaco-editor/react": "^4.7.0",
     "autoprefixer": "^10.4.20",
     "mermaid": "^11.4.1",
     "postcss": "^8.4.47"

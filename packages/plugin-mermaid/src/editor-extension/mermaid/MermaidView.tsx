@@ -1,19 +1,23 @@
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor"
 import React, { useEffect, useRef, useState } from "react"
 import mermaid from 'mermaid'
-import { useAsyncEffect, useDebounce, useTheme } from "@kn/core"
-import { CodeEditor, EmptyState, IconButton } from "@kn/ui"
+import { useAsyncEffect, useDebounce } from "@kn/core"
+import { EmptyState, IconButton, useTheme } from "@kn/ui"
+import Editor,{ Monaco} from '@monaco-editor/react';
 import { AiOutlineQuestionCircle, BoxIcon } from "@kn/icon"
 export const MermaidView: React.FC<NodeViewProps> = (props) => {
 
     const [svg, setSvg] = useState<string>()
-    const [code, setCode] = useState<string>(props.node.attrs.data || "")
+    const [code, setCode] = useState<string | undefined >(props.node.attrs.data || "")
     const value = useDebounce(code, { wait: 500 })
+    const editorRef = useRef<Monaco>();
     const { theme } = useTheme()
+    const [needFresh, setNeedFresh] = useState(0)
 
     useEffect(() => {
         mermaid.initialize({ startOnLoad: false, theme: theme === "dark" ? "dark" : "default", suppressErrorRendering: false })
-    }, [])
+        setNeedFresh(needFresh + 1)
+    }, [theme])
 
     useAsyncEffect(async () => {
         if (value && value.trim()) {
@@ -26,16 +30,22 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
                 })
             }
         }
-    }, [value, theme])
+    }, [value, theme, needFresh])
 
     return <NodeViewWrapper className="h-auto">
-        <div className="flex gap-1">
-            {props.editor.isEditable && <CodeEditor
-                editable={props.editor.isEditable}
-                value={code}
-                height="300px"
+        <div className="flex gap-1 p-1">
+            {props.editor.isEditable && <Editor
+                defaultValue={code}
                 width="400px"
+                theme={theme === "dark" ? "vs-dark" : "light"}
+                height="300px"
                 className="rounded-sm"
+                options={{
+                    minimap: { enabled: false }
+                }}
+                onMount={(editor, monaco) => {
+                  editorRef.current = monaco
+                }}
                 onChange={(value) => {
                     console.log('changed');
                     setCode(value)

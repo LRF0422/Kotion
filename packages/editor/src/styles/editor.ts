@@ -393,6 +393,237 @@ export const StyledEditor = styled.div.attrs({
   }
   }
 
+  .view-table {
+  
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    border-radius: 4px;
+    overflow: auto;
+    margin-top: 0;
+
+    box-sizing: border-box;
+
+    * {
+      box-sizing: border-box;
+    }
+
+    p {
+      margin: 0
+    }
+
+    tr {
+      position: relative;
+      border-bottom: 1px solid ${props => ((props.theme as any) as any).tableBorderColor};
+    }
+
+    th {
+      // background: ${props => (props.theme as any).tableHeaderBgColor};
+      @apply bu-muted
+    }
+
+    td,
+    th {
+      position: relative;
+      vertical-align: top;
+      border: 1px solid ${props => (props.theme as any).tableBorderColor};
+      position: relative;
+      padding: 4px 8px !important;
+      text-align: left;
+      min-width: 100px;
+    }
+
+    .selectedCell {
+      position: relative;
+      border: 1px solid ${props => (props.theme as any).tableSelectedBorderColor};
+      background-color: ${props => (props.theme as any).tableSelectedCellBgColor};
+
+      &::after {
+        box-sizing: content-box;
+        height: 100%;
+        width: 100%;
+        border: 1px solid ${props => (props.theme as any).tableSelectedBorderColor};
+        content: "";
+        position: absolute;
+        left: -1px;
+        top: -1px;
+        bottom: 0px;
+        z-index: 12;
+        display: inline-block;
+        pointer-events: none;
+      }
+    }
+
+    .grip-column {
+      position: absolute;
+      top: -12px;
+      left: -1px;
+      width: 100%;
+
+      font-size: 0;
+
+      > span {
+        position: absolute;
+        top: -18px;
+        left: 100%;
+        transform: translateX(-8px);
+
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+      }
+
+      &::before {
+        content: "";
+        position: absolute;
+        left: 100%;
+        bottom: 4px;
+        transform: translateX(-1px);
+
+        width: 4px;
+        height: 4px;
+        background-color: ${props => (props.theme as any).tableBorderColor};
+        border-radius: 50%;
+        display: block;
+      }
+
+      &::after {
+        box-sizing: content-box;
+        content: "";
+        cursor: pointer;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 10px;
+        background: ${props => (props.theme as any).tableHeaderBgColor};
+        border: 1px solid ${props => (props.theme as any).tableBorderColor};
+        display: block;
+      }
+
+      &:hover {
+        font-size: 14px;
+        color: ${props => (props.theme as any).tableSelectedBorderColor};
+
+        &::before {
+          display: none;
+        }
+
+        &::after {
+          background: ${props => (props.theme as any).tableSelectedControlBgColor};
+          border-color: ${props => (props.theme as any).tableSelectedControlBgColor};
+        }
+      }
+
+      &.last::after {
+        border-top-right-radius: 3px;
+      }
+
+      &.selected::after {
+        background: ${props => (props.theme as any).tableSelectedControlBgColor};
+        border-color: ${props => (props.theme as any).tableSelectedControlBgColor};
+      }
+    }
+
+    .grip-row {
+      position: absolute;
+      left: -12px;
+      top: -1px;
+      height: 100%;
+      font-size: 0;
+
+      > span {
+        transform: translateY(8px);
+        position: absolute;
+        left: -16px;
+        bottom: 4px;
+
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+      }
+
+      &::before {
+        content: "";
+        position: absolute;
+        left: -10px;
+        bottom: -2px;
+        width: 4px;
+        height: 4px;
+        background-color: ${props => (props.theme as any).tableBorderColor};
+        border-radius: 50%;
+        display: block;
+      }
+
+      &::after {
+        box-sizing: content-box;
+        content: "";
+        cursor: pointer;
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 10px;
+        background: ${props => (props.theme as any).tableHeaderBgColor};
+        border: 1px solid ${props => (props.theme as any).tableBorderColor};
+        display: block;
+      }
+
+      &:hover {
+        font-size: 14px;
+        color: ${props => (props.theme as any).tableSelectedBorderColor};
+
+        &::before {
+          display: none;
+        }
+
+        &::after {
+          background: ${props => (props.theme as any).tableSelectedControlBgColor};
+          border-color: ${props => (props.theme as any).tableSelectedBorderColor};
+        }
+      }
+
+      &.last::after {
+        border-bottom-left-radius: 3px;
+      }
+
+      &.selected::after {
+        background: ${props => (props.theme as any).tableSelectedControlBgColor};
+        border-color: ${props => (props.theme as any).tableSelectedBorderColor};
+      }
+    }
+
+    .grip-table {
+      &::after {
+        box-sizing: content-box;
+        content: "";
+        cursor: pointer;
+        position: absolute;
+        top: -12px;
+        left: -12px;
+        display: block;
+        background: ${props => (props.theme as any).tableHeaderBgColor};
+        width: 10px;
+        height: 10px;
+        border: 1px solid ${props => (props.theme as any).tableBorderColor};
+        border-top-left-radius: 3px;
+      }
+      
+      &:hover::after {
+        background: ${props => (props.theme as any).tableSelectedControlBgColor};
+        border-color: ${props => (props.theme as any).tableSelectedBorderColor};
+      }
+
+      &.selected::after {
+        background: ${props => (props.theme as any).tableSelectedControlBgColor};
+        border-color: ${props => (props.theme as any).tableSelectedBorderColor};
+      }
+    }
+  }
+  
+  }
+
   .scrollWrapper {
     overflow-y: hidden;
     overflow-x: auto;

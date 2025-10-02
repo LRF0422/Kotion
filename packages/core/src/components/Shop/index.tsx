@@ -26,15 +26,15 @@ import { useSafeState } from "ahooks";
 import { REFRESH_PLUSINS, event } from "@kn/common";
 
 
-const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void }> = ({ item, handleUnInstall }) => {
+const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void, handleUpdate: (id: string) => void }> = ({ item, handleUnInstall, handleUpdate }) => {
     const navigator = useNavigator()
     const { usePath } = useUploadFile()
     return <TooltipProvider>
         <Tooltip>
             <TooltipTrigger>
-                <div className=" flex items-center gap-2 rounded-md p-2 h-[75px] hover:bg-muted/50 relative border-b" onClick={() => {
+                <div className=" flex items-center gap-2 rounded-md p-4 h-[75px] hover:bg-muted/50 relative border" onClick={() => {
                     navigator.go({
-                        to: `/plugin-hub/${item.id}`
+                        to: `/plugin-hub/${item.subjectId}`
                     })
                 }}>
                     <div >
@@ -42,7 +42,7 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void }> = ({ 
                             <img src={usePath(item.icon)} />
                         </Avatar>
                     </div>
-                    <div className="flex flex-col items-start gap-[2px]">
+                    <div className="flex flex-col items-start w-full gap-[2px]">
                         <div className="flex items-center gap-6">
                             <div className="text-sm text-left font-medium leading-none text-nowrap w-full">
                                 {item.name}
@@ -52,19 +52,28 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void }> = ({ 
                                 <div className="flex items-center"><Star className="h-3 w-3" />100M</div>
                             </div>
                         </div>
-                        <div className="text-sm  text-left text-muted-foreground w-[120px] text-nowrap overflow-ellipsis">
+                        <div className="text-sm  text-left text-muted-foreground w-[80%] text-nowrap text-ellipsis overflow-hidden">
                             {item.description}
                         </div>
                         <div className="flex gap-2">
-                            <Badge>{item.developer}</Badge>
                             <Button variant="secondary" size="sm" className="h-6 px-2 flex items-center gap-1" onClick={(e) => {
                                 e.stopPropagation()
-                                handleUnInstall(item.activeVersionId)
+                                handleUnInstall(item.id)
                                 event.emit(REFRESH_PLUSINS)
                             }}>
                                 <Trash2 className="h-3 w-3" />
                                 Uninstall
                             </Button>
+                                                  {
+                            item.activeVersionId !== item.id &&
+                                <Button variant="secondary" size="sm" className="h-6 px-2 flex items-center gap-1" onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleUpdate(item.id)
+                                }}>
+                                    Update
+                                </Button>
+        
+                        }
                         </div>
                     </div>
                 </div>
@@ -115,6 +124,11 @@ export const Shop: React.FC = () => {
         setCurrentId(versionId)
     }
 
+    const handleUpdate = (id: string) => {
+        useApi(APIS.UPDATE_PLUGIN, { versionId: id })
+        event.emit(REFRESH_PLUSINS)
+    }
+
     return <div className=" grid grid-cols-[300px_1fr] w-full">
         <div className=" border-r w-full h-screen">
             <div className="text-[12px] flex flex-row justify-between items-center p-2">
@@ -145,7 +159,7 @@ export const Shop: React.FC = () => {
                         <div className="flex flex-col gap-1">
                             {
                                 installedPlugins.length > 0 ? installedPlugins.map((plugin, index) => {
-                                    return <Item key={index} item={plugin} handleUnInstall={uninstall} />
+                                    return <Item key={index} item={plugin} handleUnInstall={uninstall} handleUpdate={handleUpdate} />
                                 }) : <EmptyState
                                     title="No installed plugins"
                                     className=" border-none "

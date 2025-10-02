@@ -25,7 +25,7 @@ export const DrawnixView: React.FC<NodeViewProps> = (props) => {
             if (theme === 'dark') {
                 BoardTransforms.updateThemeColor(board, ThemeColorMode.dark);
             } else {
-                BoardTransforms.updateThemeColor(board, ThemeColorMode.default);
+                BoardTransforms.updateThemeColor(board, ThemeColorMode.colorful);
             }
         }
     }, [theme])
