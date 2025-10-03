@@ -6,12 +6,12 @@ import { Columns } from "./columns";
 import { EditorState, TextSelection } from "@tiptap/pm/state";
 import { findParentNode } from "prosemirror-utils";
 
-export function createColumn(colType: NodeType, index: number, colContent = null) {
+export function createColumn(colType: NodeType, index: number, colContent = null, type: string, cols: number) {
   if (colContent) {
     return colType.createChecked({ index }, colContent);
   }
 
-  return colType.createAndFill({ index });
+  return colType.createAndFill({ index, type, cols });
 }
 
 export function getColumnsNodeTypes(schema: Schema) {
@@ -29,12 +29,12 @@ export function getColumnsNodeTypes(schema: Schema) {
   return roles;
 }
 
-export function createColumns(schema: Schema, colsCount: number, colContent = null) {
+export function createColumns(schema: Schema, colsCount: number, colContent = null, type: string) {
   const types = getColumnsNodeTypes(schema);
   const cols = [];
 
   for (let index = 0; index < colsCount; index += 1) {
-    const col = createColumn(types.column, index, colContent);
+    const col = createColumn(types.column, index, colContent,type, colsCount);
 
     if (col) {
       // @ts-ignore
@@ -115,6 +115,31 @@ export function addOrDeleteCol({
         action: ` ${type} column`
       })
     );
+  }
+
+  return true;
+}
+
+export function toOtherColumns({
+  state,
+  dispatch,
+  type,
+  cols,
+}: {
+  state: EditorState;
+  dispatch: any;
+  type: "left" | "none" | "right" | "center";
+  cols: number;
+}) {
+  const maybeColumns = findParentNode(
+    (node: Node) => node.type.name === Columns.name
+  )(state.selection);
+
+  if (dispatch && maybeColumns) {
+    const newNode = createColumns(state.schema, cols, null, type)
+    dispatch(
+      state.tr.replaceRangeWith(maybeColumns.pos, maybeColumns.pos + maybeColumns.node.nodeSize, newNode)
+    )
   }
 
   return true;

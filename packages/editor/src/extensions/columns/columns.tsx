@@ -12,6 +12,7 @@ declare module "@tiptap/core" {
       addColBefore: () => ReturnType;
       addColAfter: () => ReturnType;
       deleteCol: () => ReturnType;
+      setColumnsType: (type: 'none' | 'left' | 'middle' | 'right') => ReturnType;
     };
   }
 }
@@ -19,14 +20,15 @@ declare module "@tiptap/core" {
 export const Columns = Node.create({
   name: "columns",
   group: "block",
-  content: "column{2,}",
-  isolating: true,
+  content: "column*",
+  atom: false,
+  defining: true,
 
   addOptions() {
     return {
       HTMLAttributes: {
         class: "columns",
-      }
+      },
     };
   },
 
@@ -35,6 +37,9 @@ export const Columns = Node.create({
       cols: {
         default: 2,
         parseHTML: element => element.getAttribute("cols")
+      },
+      type: {
+        default: 'none'
       }
     };
   },
@@ -62,7 +67,7 @@ export const Columns = Node.create({
   addCommands() {
     return {
       insertColumns: attrs => ({ tr, dispatch, editor }) => {
-        const node = createColumns(editor.schema, (attrs && attrs.cols) || 3);
+        const node = createColumns(editor.schema, (attrs && attrs.cols) || 3, null,'none',);
 
         if (dispatch) {
           const offset = tr.selection.anchor + 1;
@@ -82,6 +87,20 @@ export const Columns = Node.create({
       },
       deleteCol: () => ({ dispatch, state }) => {
         return addOrDeleteCol({ dispatch, state, type: "delete" });
+      },
+      setColumnsType: type => ({ dispatch, state }) => {
+        const { selection } = state;
+        const node = state.doc.nodeAt(selection.from);
+        if (dispatch && node) {
+          dispatch(
+            state.tr.setNodeMarkup(selection.from, undefined, {
+              ...node.attrs,
+              type
+            })
+          );
+        }
+
+        return true;
       }
     };
   },
@@ -89,20 +108,20 @@ export const Columns = Node.create({
   addKeyboardShortcuts() {
     return {
       "Mod-Alt-G": () => this.editor.commands.insertColumns(),
-      // Tab: () => {
-      //   return gotoCol({
-      //     state: this.editor.state,
-      //     dispatch: this.editor.view.dispatch,
-      //     type: "after"
-      //   });
-      // },
-      // "Shift-Tab": () => {
-      //   return gotoCol({
-      //     state: this.editor.state,
-      //     dispatch: this.editor.view.dispatch,
-      //     type: "before"
-      //   });
-      // }
+      Tab: () => {
+        return gotoCol({
+          state: this.editor.state,
+          dispatch: this.editor.view.dispatch,
+          type: "after"
+        });
+      },
+      "Shift-Tab": () => {
+        return gotoCol({
+          state: this.editor.state,
+          dispatch: this.editor.view.dispatch,
+          type: "before"
+        });
+      }
     };
   },
 });

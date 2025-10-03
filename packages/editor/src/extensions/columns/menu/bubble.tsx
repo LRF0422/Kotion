@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { Editor, findParentNode, posToDOMRect } from "@tiptap/core";
+import { Editor, findParentNode, getAttributes, posToDOMRect } from "@tiptap/core";
 import { Node as PMNode } from "@tiptap/pm/model";
 
 import {
@@ -7,16 +7,28 @@ import {
   IconAddColumnBefore,
   IconAddColumnAfter,
   IconDeleteColumn,
-  IconDelete
-} from "../../../icons";
+  IconDelete,
+  RiLayoutRightFill,
+  RiLayoutLeftFill,
+  IconThreeColumns,
+  IconThreeColumnsMiddle,
+  IconThreeColumnsLeft,
+  IconThreeColumnsRight,
+  Trash2,
+  IconTwoColumns,
+  IconTwoColumnsLeft,
+  IconTwoColumnsRight
+} from "@kn/icon";
 import {
   BubbleMenu,
-  BubbleMenuProps
+  BubbleMenuProps,
+  Divider
 } from "../../../components";
 import { copyNode, deleteNode, isNodeActivePro } from "../../../utilities";
 
 import { Columns } from "../columns";
-import { Button, IconButton } from "@kn/ui";
+import { Button, IconButton, Separator } from "@kn/ui";
+import { toOtherColumns } from "../utilities";
 
 export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const shouldShow = useCallback<BubbleMenuProps["shouldShow"]>(() => {
@@ -27,7 +39,6 @@ export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
     const { selection } = editor.state;
     const predicate = (node: PMNode) => node.type.name === Columns.name;
     const parent = findParentNode(predicate)(selection);
-
     if (parent) {
       const dom = editor.view.nodeDOM(parent?.pos) as HTMLElement;
       return dom.getBoundingClientRect();
@@ -83,7 +94,7 @@ export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
       options={{  }}>
       <div className="flex flex-row items-center gap-1">
         <IconButton onClick={copyMe} icon={<IconCopy />} />
-        <IconButton
+        {/* <IconButton
           onClick={addColBefore}
           icon={<IconAddColumnBefore />}
         />
@@ -94,8 +105,70 @@ export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
         <IconButton
           onClick={deleteCol}
           icon={<IconDeleteColumn />}
-        />
-        <IconButton icon={<IconDelete />} onClick={deleteMe} />
+        /> */}
+        <Divider/>
+        <IconButton icon={<IconThreeColumnsMiddle className="h-4 w-4" />} onClick={() => {
+          toOtherColumns({
+            state: editor.state,
+            dispatch: editor.view.dispatch,
+            type: "center",
+            cols: 3
+          })
+        }} />
+
+        <IconButton icon={<IconThreeColumns className="h-4 w-4" />} onClick={() => {
+          toOtherColumns({
+            state: editor.state,
+            dispatch: editor.view.dispatch,
+            type: "none",
+            cols: 3
+          })
+        }} />
+
+        <IconButton icon={<IconThreeColumnsLeft className="h-4 w-4" />} onClick={() => {
+          toOtherColumns({
+            state: editor.state,
+            dispatch: editor.view.dispatch,
+            type: "left",
+            cols: 3
+          })
+        }} />
+        <IconButton icon={<IconThreeColumnsRight className="h-4 w-4" />} onClick={() => {
+          toOtherColumns({
+            state: editor.state,
+            dispatch: editor.view.dispatch,
+            type: "right",
+            cols: 3
+          })
+        }} />
+        <Divider />
+        <IconButton icon={<IconTwoColumns className="h-4 w-4" />} onClick={() => {
+          toOtherColumns({
+            state: editor.state,
+            dispatch: editor.view.dispatch,
+            type: "none",
+            cols: 2
+          })
+        }} />
+
+        <IconButton icon={<IconTwoColumnsLeft className="h-4 w-4" />} onClick={() => {
+          toOtherColumns({
+            state: editor.state,
+            dispatch: editor.view.dispatch,
+            type: "left",
+            cols: 2
+          })
+        }} />
+        <IconButton icon={<IconTwoColumnsRight className="h-4 w-4" />} onClick={() => {
+          toOtherColumns({
+            state: editor.state,
+            dispatch: editor.view.dispatch,
+            type: "right",
+            cols: 2
+          })
+        }} />
+        <Divider/>
+        <IconButton icon={<Trash2 className="h-4 w-4" />} onClick={deleteMe} />
       </div>
     </BubbleMenu>
   );

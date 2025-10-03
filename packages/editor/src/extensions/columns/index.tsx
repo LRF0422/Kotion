@@ -5,6 +5,7 @@ import { ColumnsBubbleMenu, ColumnsStaticMenu } from "./menu";
 import { IconColumns } from "../../icons";
 import React from "react";
 export * from "./menu";
+import "./style/index.css"
 
 export const ColumnsExtensions = [Columns, Column];
 

@@ -766,41 +766,6 @@ export const StyledEditor = styled.div.attrs({
     user-select: none;
   }
 
-  .columns {
-    display: flex;
-    width: 100%;
-    gap: 10px;
-
-    .node-column {
-      min-width: 0;
-      box-sizing: border-box;
-      flex: 1 1 0%;
-      
-      p {
-        margin: 0px;
-      }
-
-      * {
-        margin: 0
-      }
-    }
-  }
-
-  .columns-view {
-    display: flex;
-    width: 100%;
-    gap: 8px;
-
-    .column-view {
-      min-width: 0;
-      padding: 0px;
-      border: none;
-      border-radius: ${props => (props.theme as any).borderRadius};
-      flex: 1 1 0%;
-      box-sizing: border-box;
-    }
-  }
-
   /* S highlight */
   .hljs {
     color: #24292e;

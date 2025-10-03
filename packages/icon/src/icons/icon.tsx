@@ -5,6 +5,7 @@ export type IconProps = {
   style?: React.CSSProperties;
   onClick?: () => void;
   svg: React.ReactNode;
+  className?: string;
 };
 
 const DEFAULT_EMPTY_STYLE = {};
@@ -18,9 +19,9 @@ const StyledSpan = styled.span`
 `;
 
 export const Icon = forwardRef<HTMLSpanElement, IconProps>(
-  ({ style = DEFAULT_EMPTY_STYLE, svg }, ref) => {
+  ({ style = DEFAULT_EMPTY_STYLE, svg, className }, ref) => {
     return (
-      <StyledSpan ref={ref} style={style}>
+      <StyledSpan ref={ref} style={style} className={className}>
         {svg}
       </StyledSpan>
     );
