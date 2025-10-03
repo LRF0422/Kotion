@@ -11,12 +11,8 @@ module.exports = {
   prefix: "",
   safelist: [
     {
-      pattern:
-        /(bg|text|border)-(purple|pink|orange|yellow|green|black|gray|neutral|red|blue|white)/,
-    },
-    {
-      pattern: /(h|w|max-h|min-w)-+/,
-    },
+      pattern: /grid-cols-+/,
+    }
   ],
   theme: {
     container: {

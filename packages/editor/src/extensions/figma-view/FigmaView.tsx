@@ -1,4 +1,4 @@
-import { Button } from "@kn/ui";
+import { Button, useTheme } from "@kn/ui";
 import { Input } from "@kn/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { useActive } from "../../hooks";
@@ -15,6 +15,7 @@ export const FigmaViewComponent: React.FC<NodeViewProps> = (props) => {
     const ref = useRef<any>(null)
     const iframeRef = useRef<HTMLIFrameElement>(null)
     const hover = useActive(props.editor, "figmaView")
+    const { theme } = useTheme()
 
     const handleClick = () => {
         props.updateAttributes({
@@ -34,8 +35,8 @@ export const FigmaViewComponent: React.FC<NodeViewProps> = (props) => {
                 {
                     props.node.attrs.url ? <div className=" bg-white p-4 relative">
                         <div className="w-full h-[600px]">
-                            <iframe className="rounded-sm" ref={iframeRef} allowFullScreen src={`https://www.figma.com/embed?embed_host=knowledge&url=${encodeURIComponent(
-                                props.node.attrs.url
+                            <iframe className="rounded-sm" ref={iframeRef} allowFullScreen src={`https://www.figma.com/embed?&embed_host=knowledge&url=${encodeURIComponent(
+                                props.node.attrs.url + `theme=${theme}`
                             )}`} />
                         </div>
                     </div> :

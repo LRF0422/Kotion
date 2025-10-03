@@ -1,6 +1,7 @@
-import { ArchiveIcon, ArrowUpRight, BoxIcon, DownloadIcon, FilePlus2, Loader2, PlusIcon, SearchIcon } from "@kn/icon";
+import { ArchiveIcon, ArrowUpRight, BoxIcon, Dot, DownloadIcon, FilePlus2, Loader2, PlusIcon, SearchIcon } from "@kn/icon";
 import {
     Avatar, Button, Card, CardDescription, CardFooter, CardHeader, CardTitle, EmptyState, IconButton, Input,
+    Rate,
     ScrollArea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, cn
 } from "@kn/ui";
 import React, { useEffect, useState } from "react";
@@ -8,7 +9,7 @@ import { PluginUploader } from "../PluginUploader";
 import { useApi, useNavigator, useUploadFile } from "../../../hooks";
 import { APIS } from "../../../api";
 import { useToggle } from "ahooks";
-import { event } from "@kn/common";
+import { event, useTranslation } from "@kn/common";
 
 export const Marketplace: React.FC = () => {
 
@@ -27,6 +28,7 @@ export const Marketplace: React.FC = () => {
     const { usePath } = useUploadFile()
     const navigator = useNavigator()
     const [flag, setFlag] = useState(0)
+    const { t } = useTranslation()
 
     useEffect(() => {
         useApi(APIS.GET_PLUGIN_LIST).then(res => {
@@ -77,6 +79,14 @@ export const Marketplace: React.FC = () => {
             </div>
         </div>
         <div className="bg-muted/40 w-full rounded-sm px-10  space-y-3 py-2">
+            <div className="">
+                 <div className="text-[40px]">
+                    Enhance your Kotion experience
+                </div>
+                <div className="text-[30px]">
+                    Discover plugins that extend Kotion's capabilities and help you work more efficiently.
+                </div>
+           </div>
             <div className="flex gap-2 items-center h-[30px] text-sm">
                 <span>Result</span>
                 <Separator orientation="vertical" />
@@ -91,7 +101,7 @@ export const Marketplace: React.FC = () => {
                     </SelectContent>
                 </Select>
             </div>
-            <ScrollArea className="w-full h-[calc(100vh-160px)] rounded-sm">
+            <ScrollArea className="w-full h-[calc(100vh-280px)] rounded-sm">
                 {
                     plugins.length === 0 ? (
                         <EmptyState
@@ -100,7 +110,7 @@ export const Marketplace: React.FC = () => {
                             icons={[BoxIcon]}
                             description="Try searching for something else"
                         />
-                    ) : <div className=" grid xl:grid-cols-4 2xl:grid-cols-4 md:grid-cols-3 gap-2 w-full h-full">
+                    ) : <div className=" grid xl:grid-cols-5 2xl:grid-cols-5 md:grid-cols-4 gap-2 w-full h-full">
                         {
                             plugins.map((plugin, index) => (
                                 <div key={index}>
@@ -114,12 +124,19 @@ export const Marketplace: React.FC = () => {
                                                     <Avatar className=" rounded-sm w-[60px] h-[60px]">
                                                         <img src={usePath(plugin.icon)} alt="logo" />
                                                     </Avatar>
-                                                    <div>
+                                                    <div className="flex flex-col gap-1">
                                                         {plugin.name}
                                                         <div className="text-xs text-gray-400 space-x-1">
                                                             <span>{plugin.developer}</span>
                                                             <span>/</span>
                                                             <span>{plugin.maintainer}</span>
+                                                        </div>
+                                                        <div className=" flex items-center text-gray-500 italic">
+                                                            <Rate rating={5} variant="yellow" disabled size={15} />
+                                                            <Dot />
+                                                            <div className="text-xs flex items-center gap-1">
+                                                                    <DownloadIcon className="h-3 w-3" />1000,00
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -145,9 +162,6 @@ export const Marketplace: React.FC = () => {
                                                 <ArrowUpRight className="w-4 h-4" />
                                                 Details
                                             </div>} />
-                                            <div className="text-xs text-gray-500 flex items-center gap-1">
-                                                <DownloadIcon className="h-3 w-3" />1000,00
-                                            </div>
                                         </CardFooter>
                                     </Card>
                                 </div>
@@ -155,6 +169,19 @@ export const Marketplace: React.FC = () => {
                         }
                     </div>
                 }
+                
+                <div className="w-full flex justify-center">
+                    <div className="flex justify-center items-center w-full p-10 gap-3 bg-muted/70 border rounded-md mt-[30px]">
+                                    <div>
+                            <div className=" text-[30px] font-bold">{ t("marketplace.create-your-own-plugin") }</div>
+                                        <div>Create plugins for Kotion and reach thousands of users worldwide.</div>
+                                    </div>
+                                    <div className="flex items-center justify-center gap-3">
+                                        <Button>{ t("marketplace.get-started")}</Button>
+                                        <Button variant="secondary">{ t("marketplace.doc")}</Button>
+                                    </div>
+                    </div>
+                </div>
             </ScrollArea>
         </div>
     </div>

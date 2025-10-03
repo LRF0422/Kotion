@@ -125,8 +125,9 @@ export const Shop: React.FC = () => {
     }
 
     const handleUpdate = (id: string) => {
-        useApi(APIS.UPDATE_PLUGIN, { versionId: id })
-        event.emit(REFRESH_PLUSINS)
+        useApi(APIS.UPDATE_PLUGIN, { versionId: id }).then(() => {
+            setFlag(f => f + 1)
+        })
     }
 
     return <div className=" grid grid-cols-[300px_1fr] w-full">

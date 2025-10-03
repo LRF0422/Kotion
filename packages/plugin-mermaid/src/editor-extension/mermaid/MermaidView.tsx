@@ -38,8 +38,8 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
                 defaultValue={code}
                 width="400px"
                 theme={theme === "dark" ? "vs-dark" : "light"}
-                height="300px"
-                className="rounded-sm"
+                // height="300px"
+                className="rounded-sm min-h-[300px]"
                 options={{
                     minimap: { enabled: false }
                 }}
@@ -60,7 +60,13 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
                         className="h-full w-full hover:bg-background border-none max-w-none"
                         title="Mermaid"
                         description="No code provided"
-                        icons={[BoxIcon]}
+                            icons={[BoxIcon]}
+                            action={{
+                                label: "How to create mermaid ? ",
+                                onClick: () => {
+                                    window.open("https://mermaid.js.org/intro/", "_blank")
+                                 }
+                            }}
                     />
                 }
             </div>

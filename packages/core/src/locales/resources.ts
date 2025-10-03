@@ -5,7 +5,13 @@ export const resources = {
         translation: { ...zh }
     },
     en: {
-        translation: {}
+        translation: {
+                "marketplace": {
+                    "create-your-own-plugin": "Build your own plugin",
+                    "get-started": "Get Started",
+                    "doc": "Developer Docs"
+                },
+        }
     }
 
 }
