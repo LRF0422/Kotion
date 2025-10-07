@@ -43,7 +43,8 @@ export const TableViewCfg = (props: { visible: boolean, toggle: () => void }) =>
                                                 handleAddCol({
                                                     title: fieldName,
                                                     id: fieldName,
-                                                    dataType: type.value
+                                                    dataType: type.value,
+                                                    isShow: true
                                                 })
                                             }
                                         }}>

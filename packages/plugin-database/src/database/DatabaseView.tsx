@@ -272,9 +272,11 @@ export const DatabaseView: React.FC<NodeViewProps> = (props) => {
                                 </DropdownMenu>
                             </div>
                         </TabsList>
-                        <div>
+                        {
+                            props.editor.isEditable && <div>
                             <Button size="sm" variant="ghost" onClick={() => props.deleteNode()}><Trash2 className="w-4 h-4" /></Button>
                         </div>
+                        }
                     </div>
                     {
                         props.node.attrs.views && props.node.attrs.views.map((v: string, index: number) => (

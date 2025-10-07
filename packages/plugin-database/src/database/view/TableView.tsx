@@ -78,9 +78,12 @@ export const TableView: React.FC<any> = (props) => {
                 }
             </div>
         }
-        <Container>
+        <Container className="">
             <DataGrid
                 ref={gridRef}
+                style={{
+                    height: 'auto'
+                }}
                 rowClass={() => ''}
                 onFill={handleFill}
                 rowKeyGetter={(row: any) => row.id}
@@ -114,7 +117,7 @@ export const TableView: React.FC<any> = (props) => {
                         </div>
                     }))
                 ]}
-                className={cn("fill-grid", theme === 'dark' ? 'rdg-dark' : 'rdg-light')}
+                className={cn("", theme === 'dark' ? 'rdg-dark' : 'rdg-light')}
                 rows={data}
                 onColumnResize={handleColumnResize}
                 bottomSummaryRows={editor.isEditable ? summaryRows : undefined}

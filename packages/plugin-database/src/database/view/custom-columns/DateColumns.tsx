@@ -74,7 +74,11 @@ export const RateEditor: React.FC<any> = (props) => {
         rating={data}
         className="w-full h-full flex items-center"
         totalStars={5}
-        onRatingChange={(rate) => onRowChange({ ...row, [column.key]: rate }, true)}
+        onRatingChange={(rate) => {
+            console.log('change', props);
+            
+            onRowChange({ ...row, [column.key]: rate }, true)
+        }}
     />
 }
 
@@ -136,7 +140,7 @@ export const SliderView: React.FC<any> = (props) => {
     const { column, row } = props
     const value = row[column.key] || 0
 
-    return <div className="flex flex-row gap-1 items-center">
+    return <div className="flex flex-row gap-1 items-center w-[200px]">
         <Slider defaultValue={[value]} disabled />
         {value} %
     </div>

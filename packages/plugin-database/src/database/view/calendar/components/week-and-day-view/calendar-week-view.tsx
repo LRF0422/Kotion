@@ -46,7 +46,7 @@ export function CalendarWeekView({ singleDayEvents, multiDayEvents }: IProps) {
 
           {/* Week header */}
           <div className="relative z-20 flex border-b">
-            <div className="w-18"></div>
+            <div className="w-[96px]"></div>
             <div className="grid flex-1 grid-cols-7 divide-x border-l">
               {weekDays.map((day, index) => (
                 <span key={index} className="py-2 text-center text-xs font-medium text-muted-foreground">
@@ -57,10 +57,10 @@ export function CalendarWeekView({ singleDayEvents, multiDayEvents }: IProps) {
           </div>
         </div>
 
-        <ScrollArea className="h-[736px]" type="always">
+        <ScrollArea className="h-[800px]" type="always">
           <div className="flex overflow-hidden">
             {/* Hours column */}
-            <div className="relative w-18">
+            <div className="relative w-[96px]">
               {hours.map((hour, index) => (
                 <div key={hour} className="relative" style={{ height: "96px" }}>
                   <div className="absolute -top-3 right-2 flex h-6 items-center">

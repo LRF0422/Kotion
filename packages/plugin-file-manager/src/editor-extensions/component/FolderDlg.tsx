@@ -12,13 +12,12 @@ export const FolderDlg: React.FC<FolderDlgProps> = (props) => {
 
     return <Dialog open={props.open}>
         <DialogTrigger></DialogTrigger>
-        <DialogContent className="max-w-none w-[80%]">
-            <DialogHeader>
+        <DialogContent className=" max-w-none w-[80%]">
+            <DialogHeader className="">
                 <DialogTitle>请选择文件</DialogTitle>
                 <DialogDescription></DialogDescription>
             </DialogHeader>
-            <FileManagerView {...props} />
-            <DialogClose onClick={props.onCancel} />
+            <FileManagerView {...props} className="w-full h-[calc(100vh*0.8)]" />
         </DialogContent>
     </Dialog>
 }
