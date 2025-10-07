@@ -23,6 +23,15 @@
     pointer-events: none;
     font-style: italic;
   }
+
+        .is-empty > h1::before {
+          color: #888;
+          content: attr(data-placeholder);
+          float: left;
+          height: 0;
+          pointer-events: none;
+          font-style: italic;
+        }
 }
 
 .ProseMirror-hideselection *::selection {

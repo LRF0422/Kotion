@@ -16,6 +16,7 @@ import { EditorMenu } from "./EditorMenu";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
 import { TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
+import "../styles/editor.css"
 
 
 export interface CollaborationEditorProps extends EditorRenderProps {

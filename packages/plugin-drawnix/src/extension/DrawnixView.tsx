@@ -36,7 +36,7 @@ export const DrawnixView: React.FC<NodeViewProps> = (props) => {
         }
     }, [board])
 
-    return <NodeViewWrapper className="w-full h-[400px]">
+    return <NodeViewWrapper className="w-full h-[400px] shadow-md">
         <OnlyMind
             className="h-full w-full"
             readonly={!props.editor.isEditable}

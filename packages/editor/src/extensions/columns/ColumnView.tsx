@@ -1,16 +1,15 @@
-import { useAttributes } from "@editor/hooks";
 import { EraserIcon } from "@kn/icon";
 import { IconButton, cn } from "@kn/ui";
-import { getAttributes, NodeViewContent, NodeViewProps, NodeViewWrapper } from "@tiptap/react";
-import React, { useEffect, useRef } from "react";
+import { NodeViewContent, NodeViewProps, NodeViewWrapper } from "@tiptap/react";
+import React, { useRef } from "react";
 
 export const ColumnView: React.FC<NodeViewProps> = (props) => {
 
     const { editor, getPos } = props
-
-    return <NodeViewWrapper className={
+    const ref = useRef<HTMLDivElement>(null)
+    return <NodeViewWrapper ref={ref} className={
         cn("prose-p:m-1 w-full relative p-1 ",
-            editor.isEditable ? "outline rounded-sm" : " border-r h-full")
+            editor.isEditable ? "outline rounded-sm" : " h-full")
     }>
         {editor.isEditable && <IconButton
             onClick={() => {

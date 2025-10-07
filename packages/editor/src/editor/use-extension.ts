@@ -26,7 +26,9 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean) => {
 		UndoRedo,
 		Placeholder.configure({
 			placeholder: ({ node }) => {
-				if (node.type.name === 'heading') {
+				console.log('node', node);
+				
+				if (node.type.name === 'title') {
 					return 'What’s the title?'
 				}
 				if (node.type.name === 'codeBlock') {

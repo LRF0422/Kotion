@@ -20,9 +20,11 @@ declare module "@tiptap/core" {
 export const Columns = Node.create({
   name: "columns",
   group: "block",
-  content: "column*",
+  content: "column{2,}",
   atom: false,
-  defining: true,
+  isolating: true,
+  selectable: true,
+  allowGapCursor: true,
 
   addOptions() {
     return {
