@@ -9,7 +9,7 @@ import { PageContext } from "@editor/editor/context";
 
 export const TitleView: React.FC<NodeViewProps> = (props) => {
 
-	const { createTime, updateTime  } = useContext(PageContext)
+	const { createTime, updateTime } = useContext(PageContext)
 
 	return <NodeViewWrapper className="flex flex-col gap-1 items-start pt-[30px] w-full">
 		<Popover>
@@ -41,23 +41,23 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 		{
 			(!props.editor.isEditable) && <div className="flex flex-row gap-2 text-sm">
 				<div className=" text-gray-500 italic flex flex-col gap-1 px-2 py-1 hover:bg-muted transition-all duration-200 rounded-sm">
-					<a href="#" className="flex flex-row gap-1 items-center cursor-pointer text-gray-500">
+					{/* <a href="#" className="flex flex-row gap-1 items-center cursor-pointer text-gray-500">
 						<UserCircle className="h-4 w-4" />
-						Create by Leong
-					</a>
+						 by Leong
+					</a> */}
 					<div className="flex flex-row gap-1 items-center">
 						<Clock className="h-4 w-4" />
-						At { createTime}
+						Create at {createTime}
 					</div>
 				</div>
 				<div className=" text-gray-500 italic flex flex-col gap-1 px-2 py-1 hover:bg-muted transition-all duration-200 rounded-sm">
-					<a href="#" className="flex flex-row gap-1 items-center cursor-pointer text-gray-500">
+					{/* <a href="#" className="flex flex-row gap-1 items-center cursor-pointer text-gray-500">
 						<UserCircle className="h-4 w-4" />
 						Last update by Leong
-					</a>
+					</a> */}
 					<div className="flex flex-row gap-1 items-center">
 						<Clock className="h-4 w-4" />
-						At { updateTime }
+						Last update at {updateTime}
 					</div>
 				</div>
 			</div>

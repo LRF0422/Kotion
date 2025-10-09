@@ -12,7 +12,7 @@ module.exports = {
   safelist: [
     {
       pattern: /grid-cols-+/,
-    }
+    },
   ],
   theme: {
     container: {
@@ -25,6 +25,7 @@ module.exports = {
         lg: "1024px",
         xl: "1280px",
         "2xl": "1440px",
+        "3xl": "1990px",
       },
     },
     extend: {

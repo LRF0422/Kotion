@@ -180,7 +180,7 @@ export const App: React.FC<AppProps> = (props) => {
             setInit(true)
         }
     }, [loadFinished, allPlugins])
-    return (router ? <AppContext.Provider value={{
+    return (router && (init ? <AppContext.Provider value={{
         pluginManager: pluginManager
     }}>
         <core.ModalProvider>
@@ -195,5 +195,5 @@ export const App: React.FC<AppProps> = (props) => {
         <div className="h-screen w-screen flex items-center justify-center text-lg">
             Loading <icon.Loader2 className="ml-2 animate-spin" />
         </div>
-    </ThemeProvider>)
+    </ThemeProvider>))
 }

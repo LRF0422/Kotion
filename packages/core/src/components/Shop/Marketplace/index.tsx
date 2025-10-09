@@ -2,7 +2,7 @@ import { ArchiveIcon, ArrowUpRight, BoxIcon, Dot, DownloadIcon, FilePlus2, Loade
 import {
     Avatar, Button, Card, CardDescription, CardFooter, CardHeader, CardTitle, EmptyState, IconButton, Input,
     Rate,
-    ScrollArea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, cn
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, cn
 } from "@kn/ui";
 import React, { useEffect, useState } from "react";
 import { PluginUploader } from "../PluginUploader";
@@ -31,7 +31,7 @@ export const Marketplace: React.FC = () => {
     const { t } = useTranslation()
 
     useEffect(() => {
-        useApi(APIS.GET_PLUGIN_LIST).then(res => {
+        useApi(APIS.GET_PLUGIN_LIST, { pageSize: 8 }).then(res => {
             setPlugins(res.data.records)
         })
     }, [flag])
@@ -78,13 +78,13 @@ export const Marketplace: React.FC = () => {
                 </PluginUploader>
             </div>
         </div>
-        <div className="bg-muted/40 w-full rounded-sm px-10  space-y-3 py-2">
+        <div className="bg-muted/40 w-full rounded-sm px-10  space-y-3 py-2 h-[calc(100vh-102px)] overflow-auto">
             <div className="w-full">
-                <div className="text-[40px]">
-                    Enhance your Kotion experience
+                <div className="text-[40px] font-bold font-serif">
+                    {t("marketplace.title", "Enhance your Kotion experience")}
                 </div>
-                <div className="text-[30px] w-full text-ellipsis overflow-hidden">
-                    Discover plugins that extend Kotion's capabilities and help you work more efficiently.
+                <div className="text-[30px] w-full text-ellipsis overflow-hidden font-serif">
+                    {t("marketplace.description", "Discover plugins that extend Kotion's capabilities and help you work more efficiently.")}
                 </div>
             </div>
             <div className="flex gap-2 items-center h-[30px] text-sm">
@@ -101,88 +101,85 @@ export const Marketplace: React.FC = () => {
                     </SelectContent>
                 </Select>
             </div>
-            <ScrollArea className="w-full h-[calc(100vh-280px)] rounded-sm">
-                {
-                    plugins.length === 0 ? (
-                        <EmptyState
-                            className="h-[calc(100vh-160px)] hover:bg-background w-full max-w-none border-none flex flex-col justify-center"
-                            title="No plugins found"
-                            icons={[BoxIcon]}
-                            description="Try searching for something else"
-                        />
-                    ) : <div className=" grid xl:grid-cols-4 2xl:grid-cols-5 md:grid-cols-4 gap-2 w-full h-full">
-                        {
-                            plugins.map((plugin, index) => (
-                                <div key={index}>
-                                    <Card className="relative hover:bg-muted/30 ">
-                                        <div className=" w-[80px] text-center absolute right-0 top-0 text-xs p-1  rounded-bl-md rounded-tr-md bg-secondary">
-                                            {plugin?.category?.value}
-                                        </div>
-                                        <CardHeader>
-                                            <CardTitle className=" text-sm">
-                                                <div className="flex items-center gap-2">
-                                                    <Avatar className=" rounded-sm w-[60px] h-[60px]">
-                                                        <img src={usePath(plugin.icon)} alt="logo" />
-                                                    </Avatar>
-                                                    <div className="flex flex-col gap-1">
-                                                        {plugin.name}
-                                                        <div className="text-xs text-gray-400 space-x-1">
-                                                            <span>{plugin.developer}</span>
-                                                            <span>/</span>
-                                                            <span>{plugin.maintainer}</span>
-                                                        </div>
-                                                        <div className=" flex items-center text-gray-500 italic">
-                                                            <Rate rating={5} variant="yellow" disabled size={15} />
-                                                            <Dot />
-                                                            <div className="text-xs flex items-center gap-1">
-                                                                <DownloadIcon className="h-3 w-3" />1000,00
-                                                            </div>
+            {
+                plugins.length === 0 ? (
+                    <EmptyState
+                        className="h-[calc(100vh-160px)] hover:bg-background w-full max-w-none border-none flex flex-col justify-center"
+                        title="No plugins found"
+                        icons={[BoxIcon]}
+                        description="Try searching for something else"
+                    />
+                ) : <div className=" grid xl:grid-cols-4 2xl:grid-cols-4 3xl:grid-clos-5 md:grid-cols-4  gap-2 w-full">
+                    {
+                        plugins.map((plugin, index) => (
+                            <div key={index}>
+                                <Card className="relative hover:bg-muted/30 ">
+                                    <div className=" w-[80px] text-center absolute right-0 top-0 text-xs p-1  rounded-bl-md rounded-tr-md bg-secondary">
+                                        {plugin?.category?.value}
+                                    </div>
+                                    <CardHeader>
+                                        <CardTitle className=" text-sm">
+                                            <div className="flex items-center gap-2">
+                                                <Avatar className=" rounded-sm w-[60px] h-[60px]">
+                                                    <img src={usePath(plugin.icon)} alt="logo" />
+                                                </Avatar>
+                                                <div className="flex flex-col gap-1">
+                                                    {plugin.name}
+                                                    <div className="text-xs text-gray-400 space-x-1">
+                                                        <span>{plugin.developer}</span>
+                                                        <span>/</span>
+                                                        <span>{plugin.maintainer}</span>
+                                                    </div>
+                                                    <div className=" flex items-center text-gray-500 italic">
+                                                        <Rate rating={5} variant="yellow" disabled size={15} />
+                                                        <Dot />
+                                                        <div className="text-xs flex items-center gap-1">
+                                                            <DownloadIcon className="h-3 w-3" />1000,00
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </CardTitle>
-                                            <CardDescription className="h-[80px] text-wrap overflow-hidden text-ellipsis">
-                                                {plugin.description}
-                                            </CardDescription>
-                                        </CardHeader>
-                                        <CardFooter className="pb-3 space-x-1">
-                                            <IconButton
-                                                disabled={!!(plugin.installeddVersions.length > 0)}
-                                                className="px-2 border"
-                                                onClick={() => installPlugin(plugin.currentVersionId)}
-                                                icon={installing ? <Loader2 className="w-4 h-4 animate-spin" /> : <div className="flex items-center gap-1 text-sm">
-                                                    <DownloadIcon className="w-4 h-4" />
-                                                    {plugin.installeddVersions.length > 0 ? "Installed" : "Install"}
-                                                </div>} />
-                                            <IconButton className="px-2 border" icon={<div className="flex items-center gap-1 text-sm" onClick={() => {
-                                                navigator.go({
-                                                    to: `/plugin-hub/${plugin.id}`
-                                                })
-                                            }}>
-                                                <ArrowUpRight className="w-4 h-4" />
-                                                Details
+                                            </div>
+                                        </CardTitle>
+                                        <CardDescription className="h-[80px] text-wrap overflow-hidden text-ellipsis">
+                                            {plugin.description}
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardFooter className="pb-3 space-x-1">
+                                        <IconButton
+                                            disabled={!!(plugin.installeddVersions.length > 0)}
+                                            className="px-2 border"
+                                            onClick={() => installPlugin(plugin.currentVersionId)}
+                                            icon={installing ? <Loader2 className="w-4 h-4 animate-spin" /> : <div className="flex items-center gap-1 text-sm">
+                                                <DownloadIcon className="w-4 h-4" />
+                                                {plugin.installeddVersions.length > 0 ? "Installed" : "Install"}
                                             </div>} />
-                                        </CardFooter>
-                                    </Card>
-                                </div>
-                            ))
-                        }
+                                        <IconButton className="px-2 border" icon={<div className="flex items-center gap-1 text-sm" onClick={() => {
+                                            navigator.go({
+                                                to: `/plugin-hub/${plugin.id}`
+                                            })
+                                        }}>
+                                            <ArrowUpRight className="w-4 h-4" />
+                                            Details
+                                        </div>} />
+                                    </CardFooter>
+                                </Card>
+                            </div>
+                        ))
+                    }
+                </div>
+            }
+            <div className="w-full flex justify-center">
+                <div className="flex justify-center items-center w-full p-10 gap-3 bg-muted/70 border rounded-md mt-[30px]">
+                    <div>
+                        <div className=" text-[30px] font-bold">{t("marketplace.create-your-own-plugin")}</div>
+                        <div>Create plugins for Kotion and reach thousands of users worldwide.</div>
                     </div>
-                }
-
-                <div className="w-full flex justify-center">
-                    <div className="flex justify-center items-center w-full p-10 gap-3 bg-muted/70 border rounded-md mt-[30px]">
-                        <div>
-                            <div className=" text-[30px] font-bold">{t("marketplace.create-your-own-plugin")}</div>
-                            <div>Create plugins for Kotion and reach thousands of users worldwide.</div>
-                        </div>
-                        <div className="flex items-center justify-center gap-3">
-                            <Button>{t("marketplace.get-started")}</Button>
-                            <Button variant="secondary">{t("marketplace.doc")}</Button>
-                        </div>
+                    <div className="flex items-center justify-center gap-3">
+                        <Button>{t("marketplace.get-started")}</Button>
+                        <Button variant="secondary">{t("marketplace.doc")}</Button>
                     </div>
                 </div>
-            </ScrollArea>
+            </div>
         </div>
     </div>
 }

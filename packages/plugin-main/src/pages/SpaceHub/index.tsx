@@ -18,27 +18,36 @@ export const SpaceHub: React.FC<PropsWithChildren> = (props) => {
 
 
     useEffect(() => {
-        useApi(APIS.QUERY_SPACE, { template: false, pageSize: 100 }).then(res => {
+        useApi(APIS.QUERY_SPACE, { template: false, pageSize: 5 }).then(res => {
             setRecentSpaces(res.data.records)
         })
     }, [])
 
     return <Dialog>
         <DialogTrigger>{props.children}</DialogTrigger>
-        <DialogContent className="max-w-none w-[70%]">
+        <DialogContent className="max-w-none w-[70%] overflow-auto">
             <DialogHeader>
                 <DialogTitle>{t('space-hub.all-space', 'All Spaces')}</DialogTitle>
                 <DialogDescription />
             </DialogHeader>
             <Label>Favorites</Label>
             <CardList
+                className="h-[200px]"
                 cols={5}
+                // config={{
+                //     name: 'name',
+                //     desc: 'description',
+                // }}
                 config={{
-                    name: 'name',
-                    desc: 'description',
+                    // desc: 'description',
+                    cover: 'cover',
+                    // name: 'name'
                 }}
                 data={recentSpaces}
-                icon={(space) => space.icon.icon}
+                footer={(data) => <div className="text-sm italic text-gray-500">
+                    {data.name}
+                </div>}
+                // icon={(space) => space.icon.icon}
                 onClick={(space) => {
                     navigator.go({
                         to: `/space-detail/${space.id}`

@@ -17,7 +17,7 @@ import { toast } from "@kn/ui";
 export const Basic: React.FC = () => {
 
     const { space } = useContext(SettingContext)
-    const { upload } = useUploadFile()
+    const { upload, usePath } = useUploadFile()
 
     const FormSchema = z.object({
         id: z.string(),
@@ -67,7 +67,7 @@ export const Basic: React.FC = () => {
                             <div>
                                 <div className="flex items-center justify-center h-[200px] w-[150px] border border-dashed rounded-sm hover:bg-muted cursor-pointer"
                                     style={{
-                                        backgroundImage: `url('http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${field.value}')`,
+                                        backgroundImage: `url('${usePath(field.value)}')`,
                                         backgroundSize: 'cover'
                                     }}
                                     onClick={() => {
