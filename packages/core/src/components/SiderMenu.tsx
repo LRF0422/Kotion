@@ -10,8 +10,6 @@ import { GlobalState } from "../store/GlobalState";
 import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
 import { Badge } from "@kn/ui";
-import { useApi } from "../hooks/use-api";
-import { APIS } from "../api";
 import { Separator } from "@kn/ui";
 import { SettingDlg } from "./settings/SeetingDlg";
 import { ModeToggle } from "@kn/ui";

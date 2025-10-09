@@ -6,7 +6,7 @@ import {
 	DropcursorExtension, GapcursorExtension, CodeExtension, CodeblockExtension, DragableExtension, TextAlignExtension, InfoPanelExtension,
 	SubscriptExtension, SuperScriptExtension, ColumnsExtension, ColorExtension, HardBreakExtension, TitleExtension, LinkExtension,
 	BulletListExtension, DateExtension, EmojiExtension, KnowledgeMathExtension, BackGroundColorExtension, FigmaExtension, LoadingExtension,
-	TaskListExtension, PageContentExtension, FlowExtension, MarkDownExtension, SyncBlockExtension, MindMapExtension, IdentExtension, LineHeightExtension, CommentExtension, FormatPainterExtension, TableOfContentExtension, EventExtension, SelectionExtension, UnknownNodeExtension, HighlightExtension
+	TaskListExtension, PageContentExtension, MarkDownExtension, SyncBlockExtension, IdentExtension, LineHeightExtension, CommentExtension, FormatPainterExtension, TableOfContentExtension, EventExtension, SelectionExtension, UnknownNodeExtension, HighlightExtension
 } from "../extensions";
 
 export const buildInExtension: ExtensionWrapper[] = [
@@ -23,7 +23,6 @@ export const buildInExtension: ExtensionWrapper[] = [
 	BoldExtension,
 	OrderListExtension,
 	BulletListExtension,
-	FlowExtension,
 	InfoPanelExtension,
 	CodeblockExtension,
 	ColorExtension,
@@ -48,7 +47,6 @@ export const buildInExtension: ExtensionWrapper[] = [
 	TaskListExtension,
 	PageContentExtension,
 	SyncBlockExtension,
-	MindMapExtension,
 	IdentExtension,
 	LineHeightExtension,
 	CommentExtension,

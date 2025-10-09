@@ -12,22 +12,19 @@ export interface CardListProps {
     icon?: (data: any) => ReactNode
     footer?: (data: any) => ReactNode
     extra?: (data: any) => ReactNode
+    containerClassName?: string
     className?: string
     config?: { desc?: string, cover?: string, name?: string }
 }
 
 export const CardList: React.FC<CardListProps> = (props) => {
-    const { cols = 4 } = props;
+    const { cols = 4, containerClassName } = props;
     const { usePath } = useUploadFile()
     return (props.data?.length > 0 &&
-        <div className={cn("grid gap-4 w-full")} style={
-            {
-                gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`
-            }
-        }>
+        <div className={cn("grid gap-4 w-full grid-cols-4", containerClassName)}>
             {props.data.map((it: any, index) => (
                 <div key={index}>
-                    <Card className={cn(" hover:bg-muted transition-all my-0 cursor-pointer", props.config?.cover && ` bg-[url('http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${it[props.config.cover]}')]`, props.className)}
+                    <Card className={cn(" hover:bg-muted transition-all my-0 cursor-pointer", props.className)}
                         style={props.config?.cover ? {
                             backgroundImage: `url('${usePath(it[props.config.cover])}')`,
                             backgroundSize: 'cover'

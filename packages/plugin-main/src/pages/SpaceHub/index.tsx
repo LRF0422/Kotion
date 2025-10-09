@@ -33,11 +33,7 @@ export const SpaceHub: React.FC<PropsWithChildren> = (props) => {
             <Label>Favorites</Label>
             <CardList
                 className="h-[200px]"
-                cols={5}
-                // config={{
-                //     name: 'name',
-                //     desc: 'description',
-                // }}
+                containerClassName="grid-cols-6"
                 config={{
                     // desc: 'description',
                     cover: 'cover',

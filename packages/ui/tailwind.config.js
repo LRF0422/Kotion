@@ -3,7 +3,7 @@ module.exports = {
   darkMode: ["class"],
   content: [
     "./app/**/*.{ts,tsx}",
-    "./src/**/*.{ts,tsx}",
+    // "./src/**/*.{ts,tsx}",
     "./packages/**/*.{html,js,ts,jsx,tsx}",
     "../packages/**/*.{html,js,ts,jsx,tsx}",
     "./node_modules/@kn/**/*.{ts,tsx}",
@@ -25,10 +25,13 @@ module.exports = {
         lg: "1024px",
         xl: "1280px",
         "2xl": "1440px",
-        "3xl": "1990px",
+        "3xl": "1900px",
       },
     },
     extend: {
+      screens: {
+        "3xl": "1600px",
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
