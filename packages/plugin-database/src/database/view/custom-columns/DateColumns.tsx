@@ -15,14 +15,17 @@ import { Editor } from "@kn/editor";
 import { isArray, isObject, useUploadFile } from "@kn/core";
 import { getTitleContent } from "@kn/editor";
 import { EditorRender } from "@kn/editor";
+import { formatDate } from "date-fns";
+import { zhCN } from "date-fns/locale";
 
 
 export const DateColumnEditor: React.FC<any> = (props) => {
     const { row, onRowChange, column } = props
     return <DateTimePicker
+        className="p-0 h-full"
         value={new Date(row[column.key])}
         onChange={(date) => onRowChange({ ...row, [column.key]: date?.toISOString() }, true)}
-        locale={undefined}
+        locale={zhCN}
         weekStartsOn={undefined}
         showWeekNumber={undefined}
         showOutsideDays={undefined}
@@ -123,17 +126,13 @@ export const ImageCellView: React.FC<any> = (props) => {
     const [visible, setVisible] = useState(false)
     const value = row[column.key]
     const { usePath } = useUploadFile()
-    return <div>
-        {
-            value && isArray(value) ? <div className="flex items-center gap-1">
+    return value && isArray(value) ? <div className="flex items-center gap-1 min-w-[200px]">
                 {value.map((it: any, index: number) => (
                     <div className="p-1 hover:bg-muted relative w-[30px]" key={index} onClick={() => setVisible(true)}>
                         <img src={usePath(it)} width="100%" />
                     </div>
                 ))}
             </div> : <div></div>
-        }
-    </div>
 }
 
 export const SliderView: React.FC<any> = (props) => {
@@ -180,6 +179,17 @@ export const PageLinkView: React.FC<any> = (props) => {
     return <a>
         {value.label}
     </a>
+}
+
+export const DatePickerView: React.FC<any> = (props) => {
+    const { column, row } = props
+    const value = row[column.key]
+    return <div>
+        {
+            value && formatDate(value, "yyyy-MM-dd HH:mm:ss")
+        }
+    </div>
+
 }
 
 export const MarkdownView: React.FC<any> = (props) => {
@@ -234,6 +244,7 @@ export const ImageEditor: React.FC<any> = (props) => {
     const { row, onRowChange, column } = props
     const value = row[column.key]
     const { upload } = useUploadFile()
+    const { usePath } = useUploadFile()
     const handleUpload = () => {
         upload().then(res => {
             if (value) {
@@ -248,22 +259,21 @@ export const ImageEditor: React.FC<any> = (props) => {
         const newValue = (value as string[]).filter(it => it !== v)
         onRowChange({ ...row, [column.key]: newValue }, false)
     }
-    return <div className=" flex flex-row items-center justify-between">
-        <div>
+    return <div className="min-w-[200px] relative">
             {
-                value ? <div className="flex items-center gap-1">
+                value ? <div className="flex items-center gap-1 w-full">
                     {value.map((it: any, index: number) => (
                         <div className="p-1 hover:bg-muted relative w-[30px]" key={index}>
                             <XCircle className="h-2 w-2 top-0 right-0 absolute" onClick={() => {
                                 handleDelete(it)
                             }} />
-                            <img src={`http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${it}`} width="100%" />
+                            <img src={usePath(it)} width="100%" />
                         </div>
                     ))}
                 </div> : <div></div>
             }
-        </div>
-        <Button size="sm" onClick={handleUpload}><Upload className="h-4 w-4" /></Button>
+
+        <Button className="absolute right-0 top-0 h-8 w-8" size="icon" onClick={handleUpload}><Upload className="h-4 w-4" /></Button>
     </div>
 }
 
@@ -283,6 +293,8 @@ export const getCellView = (dataType: string) => {
             return MarkdownView
         case 'pageLink':
             return PageLinkView
+        case 'date-picker-cell':
+            return DatePickerView
         default:
             return TextCellView
     }

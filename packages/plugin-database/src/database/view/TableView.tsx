@@ -17,10 +17,10 @@ import { TableViewCfg } from "./TableViewCfg";
 
 
 const Container = styled.div`
-    .rdg-cell {
-        border-inline-end: 1px solid rgba(255, 255, 243, 0.082);
-        border-block-end: 1px solid rgba(255, 255, 243, 0.082);
-    }
+    // .rdg-cell {
+    //     border-inline-end: 1px solid rgba(255, 255, 243, 0.082);
+    //     border-block-end: 1px solid rgba(255, 255, 243, 0.082);
+    // }
 `
 
 export const TableView: React.FC<any> = (props) => {

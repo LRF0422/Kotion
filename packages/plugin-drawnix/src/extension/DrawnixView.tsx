@@ -8,7 +8,6 @@ import '../../node_modules/@plait-board/react-text/index.css';
 import { OnlyMind } from "./only-mind";
 import { initializeData } from "./data";
 import { useTheme } from "@kn/ui";
-import { useToggle } from "@kn/core";
 import "./style/index.css"
 
 
@@ -50,7 +49,6 @@ export const DrawnixView: React.FC<NodeViewProps> = (props) => {
                 });
             }}
             afterInit={(board) => {
-                console.log('board initialized');
                 setBoard(board);
             }}
         ></OnlyMind>

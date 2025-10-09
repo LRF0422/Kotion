@@ -1,5 +1,5 @@
 import { APIS } from "../../api"
-import { Button } from "@kn/ui"
+import { Button, CardDescription } from "@kn/ui"
 import {
     Card,
     CardContent,
@@ -19,6 +19,7 @@ import { Link } from "react-router-dom"
 import { z } from "@kn/ui"
 import React from "react"
 import { LanguageToggle } from "../../locales/LanguageToggle"
+import { useUploadFile } from "../../hooks"
 
 export const description =
     "A sign up form with first name, last name, email and password inside a card. There's an option to sign up with GitHub and a link to login if you already have an account"
@@ -26,6 +27,7 @@ export const description =
 export function SignUpForm() {
 
     const navigator = useNavigator()
+    const { usePath } = useUploadFile()
 
 
     const formSchema = z.object({
@@ -53,33 +55,20 @@ export function SignUpForm() {
     }
 
     return (
-        <div className="h-screen w-screen flex items-center justify-center">
+        <div className="h-screen w-screen flex flex-col gap-1 items-center justify-center bg-muted">
+            <div className="text-left w-[400px]">
+                <div className="text-2xl font-bold">Hi👋，欢迎使用</div>
+            </div>
             <Card className="mx-auto w-[400px]">
-                <CardHeader>
-                    <CardTitle className="text-xl">注册</CardTitle>
+                <CardHeader className=" text-center">
+                    <CardTitle className="text-xl">Welcome</CardTitle>
+                    <CardDescription>
+                        Sign up with your email and password
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Form {...form}>
                         <form onSubmit={form.handleSubmit(handleSubmit)}>
-                            <FormField
-                                control={form.control}
-                                name="avatar"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>头像</FormLabel>
-                                        <div className="flex justify-center items-center w-[60px] h-[60px] border border-dashed rounded-sm hover:bg-muted" onClick={() => {
-                                            upload().then(res => {
-                                                field.onChange(res.data.name)
-                                            })
-                                        }}>
-                                            {
-                                                field.value ?
-                                                    <img src={`http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${field.value}`} /> : <Plus />
-                                            }
-                                        </div>
-                                    </FormItem>
-                                )}
-                            />
                             <FormField
                                 control={form.control}
                                 name="name"

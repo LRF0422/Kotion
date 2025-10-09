@@ -10,7 +10,7 @@ export const TableViewCfg = (props: { visible: boolean, toggle: () => void }) =>
     const [fieldName, setFieldName] = useState<string>()
 
     return <div
-        className={cn("absolute p-1 inset-y-0 right-0 w-[250px] border rounded-sm transition ease-in-out bg-popover text-popover-foreground z-50 text-sm shadow-sm ", visible ? " visible slide-in-from-right animate-in fade-in-0 " : " invisible slide-out-to-right animate-out fade-out-0")}
+        className={cn("absolute p-1 inset-y-0 right-0 w-[250px] border rounded-sm  bg-popover text-popover-foreground z-50 text-sm shadow-md ", visible ? " slide-in-from-right animate-in transition-all duration-1000 visible" : " invisible slide-out-to-right transition-all duration-1000  animate-out opacity-0")}
     >
         <div className="flex flex-col gap-1" id="container">
             <Label className="mb-1 font-bold p-2 flex justify-between items-center">表格设置 <XCircle className="h-4 w-4 cursor-pointer" onClick={toggle} /></Label>
