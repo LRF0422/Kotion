@@ -11,7 +11,7 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 
 	const { createTime, updateTime } = useContext(PageContext)
 
-	return <NodeViewWrapper className="flex flex-col gap-1 items-start pt-[30px] w-full">
+	return <NodeViewWrapper className="flex flex-col gap-1 items-start pt-[30px] w-full node-title">
 		<Popover>
 			<PopoverTrigger disabled={!props.editor.isEditable}>
 				<div contentEditable={false} className=" flex items-center justify-center cursor-pointer h-[80px] w-[80px] hover:bg-muted bg-muted/70 rounded-md">
