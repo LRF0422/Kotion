@@ -85,6 +85,7 @@ export const App: React.FC<AppProps> = (props) => {
                 if (!installedPlugins || installedPlugins.length === 0) {
                     setAllPlugins([...(plugins || [])])
                     setLoadFinished(true)
+                    setInit(true)
                     return
                 }
                 Promise.all(installedPlugins.map((plugin) => {
@@ -93,6 +94,7 @@ export const App: React.FC<AppProps> = (props) => {
                 })).then(res => {
                     setAllPlugins([...(plugins || []), ...res.map(it => Object.values(it)[0])])
                     setLoadFinished(true)
+                    setInit(true)
                     console.log('load installed plugins finished');
                 })
             } else {

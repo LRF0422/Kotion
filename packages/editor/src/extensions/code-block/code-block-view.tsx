@@ -33,7 +33,7 @@ export const CodeBlockView: React.FC<NodeViewProps> = ({
 
   return (
     <NodeViewWrapper style={{ position: "relative" }}>
-      <div className="border rounded-sm p-2 flex flex-col gap-2">
+      <div className="rounded-sm p-2 flex flex-col gap-2">
         <div className="flex flex-row justify-between items-center">
           <Select
             className="w-[120px]"
@@ -55,8 +55,8 @@ export const CodeBlockView: React.FC<NodeViewProps> = ({
           </div>
         </div>
         <div>
-          <pre ref={$container} className="prose-pre:bg-slate-600">
-            <NodeViewContent className="prose-code:text-black" />
+          <pre ref={$container} >
+            <NodeViewContent />
           </pre>
         </div>
       </div>

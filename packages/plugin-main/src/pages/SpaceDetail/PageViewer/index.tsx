@@ -87,7 +87,7 @@ export const PageViewer: React.FC = () => {
     return loading ? <div className="w-full h-full flex items-center justify-center">
         <div className="flex flex-row gap-2 items-center">
             Loading...
-            <Loader className=" animate-spin h-5 w-5" />
+            <Loader className="animate-spin h-5 w-5" />
         </div>
     </div> : (page && <div className="w-full h-full">
         <header className="h-11 w-full flex flex-row justify-between px-1 border-b ">
