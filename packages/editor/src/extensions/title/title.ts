@@ -31,7 +31,7 @@ export const Title = Node.create({
 	},
 
 	renderHTML({ HTMLAttributes }) {
-		return ['h1', mergeAttributes(HTMLAttributes, {class: 'node-title'})]
+		return ['h1', HTMLAttributes]
 	},
 
 	parseHTML() {
@@ -50,40 +50,40 @@ export const Title = Node.create({
 		return [new Plugin({
 			key: new PluginKey('title'),
 			props: {
-				   handleKeyDown(view, evt) {
-            const { state, dispatch } = view;
+				handleKeyDown(view, evt) {
+					const { state, dispatch } = view;
 
-            // closeSelectTitleNode();
+					// closeSelectTitleNode();
 
-            if (isInTitle(view.state) && evt.code === 'Enter') {
-              evt.preventDefault();
+					if (isInTitle(view.state) && evt.code === 'Enter') {
+						evt.preventDefault();
 
-              const paragraph = state.schema.nodes.paragraph;
+						const paragraph = state.schema.nodes.paragraph;
 
-              if (!paragraph) {
-                return true;
-              }
+						if (!paragraph) {
+							return true;
+						}
 
-              const $head = state.selection.$head;
-				const titleNode = $head.node($head.depth);
-				if (!titleNode.firstChild) {
-					return true;
-				}
-              const endPos = ((titleNode && titleNode.nodeSize) || 0) + 1;
+						const $head = state.selection.$head;
+						const titleNode = $head.node($head.depth);
+						if (!titleNode.firstChild) {
+							return true;
+						}
+						const endPos = ((titleNode && titleNode.nodeSize) || 0) + 1;
 
-              const nextNode = getNodeAtPos(state, endPos + 2);
+						// const nextNode = getNodeAtPos(state, endPos + 2);
 
-            //   if (!nextNode) {
-                dispatch(state.tr.insert(endPos, paragraph.create()));
-            //   }
+						//   if (!nextNode) {
+						dispatch(state.tr.insert(endPos, paragraph.create()));
+						//   }
 
-              const newState = view.state;
-              const next = new TextSelection(newState.doc.resolve(endPos + 2));
-              dispatch(newState.tr.setSelection(next));
+						const newState = view.state;
+						const next = new TextSelection(newState.doc.resolve(endPos + 2));
+						dispatch(newState.tr.setSelection(next));
 
-              return true;
-            }
-          },
+						return true;
+					}
+				},
 			}
 		})]
 	}

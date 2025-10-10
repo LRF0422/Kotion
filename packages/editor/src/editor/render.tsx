@@ -79,7 +79,7 @@ export const EditorRender = forwardRef<
       onBlur: ({ editor }) => { onBlur && onBlur(editor) },
       editorProps: {
         attributes: {
-          class: "magic-editor",
+          class: "ProseMirror",
           spellcheck: "false",
           suppressContentEditableWarning: "true",
         }

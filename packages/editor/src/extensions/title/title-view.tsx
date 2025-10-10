@@ -11,7 +11,7 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 
 	const { createTime, updateTime } = useContext(PageContext)
 
-	return <NodeViewWrapper className="flex flex-col gap-1 items-start pt-[30px] w-full node-title">
+	return <NodeViewWrapper className="flex flex-col gap-1 items-start pt-[30px] w-full">
 		<Popover>
 			<PopoverTrigger disabled={!props.editor.isEditable}>
 				<div contentEditable={false} className=" flex items-center justify-center cursor-pointer h-[80px] w-[80px] hover:bg-muted bg-muted/70 rounded-md">
@@ -40,7 +40,7 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 		<NodeViewContent className="w-full prose-h1:mb-2" />
 		{
 			(!props.editor.isEditable) && <div className="flex flex-row gap-2 text-sm">
-				<div className=" text-gray-500 italic flex flex-col gap-1 px-2 py-1 hover:bg-muted transition-all duration-200 rounded-sm">
+				<div className=" text-gray-500 italic flex flex-col gap-1 py-1 hover:bg-muted transition-all duration-200 rounded-sm">
 					{/* <a href="#" className="flex flex-row gap-1 items-center cursor-pointer text-gray-500">
 						<UserCircle className="h-4 w-4" />
 						 by Leong

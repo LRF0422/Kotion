@@ -393,10 +393,8 @@ export const StyledEditor = styled.div.attrs({
   }
   }
 
-  .view-table {
-  
 
-  table {
+  table.view-table {
     width: 100%;
     border-collapse: collapse;
     border-radius: 4px;
@@ -620,8 +618,6 @@ export const StyledEditor = styled.div.attrs({
         border-color: ${props => (props.theme as any).tableSelectedBorderColor};
       }
     }
-  }
-  
   }
 
   .scrollWrapper {

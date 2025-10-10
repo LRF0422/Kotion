@@ -7,7 +7,9 @@ export const Table = BuiltInTable.extend({
   // @ts-ignore
   addOptions() {
     return {
-      HTMLAttributes: {},
+      HTMLAttributes: {
+        class: "view-table"
+      },
       resizable: false,
       handleWidth: 5,
       cellMinWidth: 25,
