@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+           .text-notion {
+               @apply text-gray-800 dark:text-gray-100;
+           }
+
+           .text-notion-light {
+               @apply text-gray-500 dark:text-gray-400;
+           }
+
+           .bg-notion {
+               /* @apply bg-white; */
+           }
+
+           .bg-notion-hover {
+               @apply hover:bg-gray-50 transition-colors duration-200;
+           }
+
+           .border-notion {
+               @apply border border-gray-200 dark:border-gray-700;
+           }
+
+           .notion-block {
+               @apply p-4 rounded-md bg-notion border-notion mb-3 transition-all duration-200;
+           }
+
+           .notion-heading {
+               @apply font-bold text-notion mb-2;
+           }
+
+           .notion-text {
+               @apply text-notion mb-2;
+           }
+
+           .notion-quote {
+               @apply border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-notion-light my-4;
+           }
+
+           .notion-list {
+               @apply list-disc pl-6 text-notion my-4;
+           }    
+
+           .notion-toggle {
+               @apply cursor-pointer;
+           }
+
+           .notion-toggle-content {
+               @apply pl-6 overflow-hidden transition-all duration-300;
+           }
+
+           .notion-callout {
+               @apply flex items-start p-4 bg-gray-50 dark:bg-dark-100 rounded-md my-4;
+           }
+
+           .notion-callout-icon {
+               @apply mr-3 text-xl;
+           }
+
+           .notion-divider {
+               @apply border-t border-gray-200 dark:border-gray-700 my-6;
+           }
+       }
