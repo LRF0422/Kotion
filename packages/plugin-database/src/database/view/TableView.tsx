@@ -23,8 +23,9 @@ const Container = styled.div`
     // }
 `
 
-export const TableView: React.FC<any> = (props) => {
+export const TableView: React.FC<any> = (props: {pageSize?: number}) => {
 
+    const { pageSize = 20 } = props
     const { theme } = useTheme()
     const { editor,
         columns,
@@ -78,13 +79,13 @@ export const TableView: React.FC<any> = (props) => {
                 }
             </div>
         }
-        <Container className="">
+        <Container>
             <DataGrid
                 ref={gridRef}
-                style={{
-                    height: 'auto'
-                }}
                 rowClass={() => ''}
+                style={{
+                    height: `${(pageSize + 2)*35}px`
+                }}
                 onFill={handleFill}
                 rowKeyGetter={(row: any) => row.id}
                 selectedRows={selectedRows}
