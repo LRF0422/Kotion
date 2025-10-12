@@ -1,0 +1,34 @@
+# 依赖目录
+node_modules
+.pnp
+.pnp.js
+
+# 构建产物
+.next/
+out/
+
+# 环境变量文件
+.env*
+!.env.production  # 仅保留生产环境变量模板（可选）
+
+# 日志和缓存
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.cache/
+
+# 版本控制
+.git
+.gitignore
+
+# Docker相关
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 编辑器配置
+.idea
+.vscode
+*.swp
+*.swo

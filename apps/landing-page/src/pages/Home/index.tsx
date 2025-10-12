@@ -1,11 +1,13 @@
 "use client"
 import React from "react";
-import { Button, ModeToggle, ThemeProvider } from "@kn/ui"
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@kn/ui"
+import { Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 
-export const Home: React.FC = () => {
+export default () => {
+    const { setTheme  } = useTheme()
     return <>
-        <ThemeProvider>
-            <nav className="sticky bg-popover top-0 z-50 shadow-sm">
+            <nav className="sticky bg-popover top-0 z-50 shadow-sm border-b">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between h-16">
                         <div className="flex items-center">
@@ -19,13 +21,33 @@ export const Home: React.FC = () => {
                                 <a href="#testimonials" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Testimonials</a>
                                 <a href="#pricing" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Pricing</a>
                                 <a href="#" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Templates</a>
+                                <a href="#" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Plugins</a>
                             </div>
                         </div>
                         <div className="flex items-center">
-                            <ModeToggle />
-                            <div className="ml-4 flex items-center gap-3 md:ml-6">
-                                <Button>Log in</Button>
-                                <Button variant="outline">Sign up</Button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" size="icon" className=" rounded-full">
+                                        <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                                        <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                                        <span className="sr-only">Toggle theme</span>
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                    <DropdownMenuItem onClick={() => setTheme("light")}>
+                                        Light
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setTheme("dark")}>
+                                        Dark
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setTheme("system")}>
+                                        System
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <div className="ml-4 flex items-center gap-2 md:ml-6">
+                                <Button size="sm">Log in</Button>
+                                <Button size="sm" variant="outline">Sign up</Button>
                             </div>
                         </div>
                     </div>
@@ -43,10 +65,10 @@ export const Home: React.FC = () => {
 
             <section className="py-16 md:py-24">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex flex-col md:flex-row items-center">
+                    <div className="flex flex-col md:flex-row items-center gap-2">
                         <div className="md:w-1/2 mb-8 md:mb-0">
                             <h1 className="text-4xl md:text-5xl font-bold text-notion mb-4">All-in-one workspace for your notes, tasks, wikis, and databases.</h1>
-                            <p className="text-lg text-notion-light mb-8">Customize Notion to work the way you do. Write, plan, collaborate, and get organized—all in one place.</p>
+                            <p className="text-lg text-notion-light mb-8">Customize Kotion to work the way you do. Write, plan, collaborate, and get organized—all in one place.</p>
                             <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
                                 <Button>Get started for free</Button>
                                 <Button variant="outline">View templates</Button>
@@ -171,7 +193,7 @@ export const Home: React.FC = () => {
                     </div>
 
                     <div className="text-center mt-10">
-                        <button className=" dark:bg-dark-100 text-notion hover:bg-gray-50 dark:hover:bg-dark-100 px-6 py-3 border  rounded-md text-base font-medium">Browse all templates</button>
+                        <Button className="px-6 py-3 border  rounded-md text-base font-medium">Browse all templates</Button>
                     </div>
                 </div>
             </section>
@@ -444,7 +466,6 @@ export const Home: React.FC = () => {
                     </div>
                 </div>
             </footer>
-        </ThemeProvider>
     </>
 
 };

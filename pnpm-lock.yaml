@@ -165,12 +165,27 @@ importers:
 
   apps/landing-page:
     dependencies:
+      '@kn/icon':
+        specifier: workspace:*
+        version: link:../../packages/icon
       '@kn/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@tailwindcss/typography':
+        specifier: ^0.5.16
+        version: 0.5.19(tailwindcss@3.4.17)
+      lucide-react:
+        specifier: ^0.541.0
+        version: 0.541.0(react@18.3.1)
       next:
         specifier: 15.5.4
         version: 15.5.4(@babel/core@7.28.4)(@opentelemetry/api@1.9.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sass@1.51.0)
+      next-themes:
+        specifier: ^0.3.0
+        version: 0.3.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      tailwindcss-animate:
+        specifier: ^1.0.7
+        version: 1.0.7(tailwindcss@3.4.17)
     devDependencies:
       '@eslint/eslintrc':
         specifier: ^3
@@ -178,12 +193,21 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.17
+      autoprefixer:
+        specifier: ^10.4.21
+        version: 10.4.21(postcss@8.5.6)
       eslint:
         specifier: ^9
         version: 9.36.0(jiti@1.21.7)
       eslint-config-next:
         specifier: 15.5.4
         version: 15.5.4(eslint@9.36.0(jiti@1.21.7))(typescript@5.9.2)
+      postcss:
+        specifier: ^8.5.6
+        version: 8.5.6
+      tailwindcss:
+        specifier: ^3.4.17
+        version: 3.4.17
       typescript:
         specifier: ^5
         version: 5.9.2
