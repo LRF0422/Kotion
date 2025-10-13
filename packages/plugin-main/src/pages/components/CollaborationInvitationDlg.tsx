@@ -9,7 +9,7 @@ import { useApi } from "@kn/core";
 import { useSafeState } from "@kn/core";
 import { Check, Mail, User, X } from "@kn/icon";
 import React, { PropsWithChildren, useState } from "react";
-import { useParams } from "@kn/core";
+import { useParams } from "@kn/common";
 import { toast } from "@kn/ui";
 
 export const CollaborationInvitationDlg: React.FC<PropsWithChildren> = (props) => {

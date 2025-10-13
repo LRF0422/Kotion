@@ -1,15 +1,13 @@
 
 import { Outlet } from "react-router-dom"
 import { SiderMenu } from "./components/SiderMenu"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { SparklesText, cn } from "@kn/ui"
 import { useApi } from "./hooks/use-api"
 import { APIS } from "./api"
-import { useDispatch } from "react-redux"
+import { useDispatch } from "@kn/common"
 import { useNavigator } from "./hooks/use-navigator"
 import { ErrorBoundary } from "react-error-boundary"
-// import Logo from "@/assets/logo.png"
-import { EventSourcePolyfill } from 'event-source-polyfill';
 import { BUSINESS_TOPIC, GO_TO_MARKETPLACE, ON_MESSAGE, event } from "@kn/common"
 import { toast } from "@kn/ui"
 import { ErrorPage } from "./components/ErrorPage"
@@ -41,25 +39,6 @@ export function Layout() {
             })
         })
     }, [])
-
-    // useEffect(() => {
-    //     const eventSource = new EventSourcePolyfill('http://www.simple-platform.cn:88/knowledge-message/sse/connect', {
-    //         headers: {
-    //             'Knowledge-Auth': localStorage.getItem("knowledge-token") as string,
-    //             'Authorization': `Basic ${window.btoa(`${'wiki'}:${'wiki_secret'}`)}`
-    //         },
-    //         withCredentials: false
-    //     });
-    //     eventSource.addEventListener("open", () => {
-    //         console.log('connected');
-    //     })
-    //     eventSource.addEventListener('message', (e) => {
-    //         event.emit(ON_MESSAGE, JSON.parse(e.data))
-    //     })
-    //     return () => {
-    //         eventSource.close()
-    //     }
-    // }, [])
 
     useEffect(() => {
         event.on(ON_MESSAGE, (message: any) => {

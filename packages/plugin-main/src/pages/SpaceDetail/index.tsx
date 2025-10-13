@@ -5,7 +5,7 @@ import React, { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@kn/ui";
 import { useApi, useService, useUploadFile } from "@kn/core";
 import { APIS } from "../../api";
-import { Outlet, useParams } from "@kn/core";
+import { Outlet, useParams } from "@kn/common";
 import { Space } from "../../model/Space";
 import { useNavigator } from "@kn/core";
 import { Button } from "@kn/ui";
@@ -242,14 +242,14 @@ export const SpaceDetail: React.FC = () => {
                 <div className="flex flex-row gap-1 items-center justify-between">
                     <div className=" p-2 mt-1 bg-muted rounded-sm flex-1 flex justify-between items-center">
                         <div className="flex items-center gap-1 cursor-pointer" onClick={() => {
-                                navigator.go({
-                                    to: `/space-detail/${params.id}/page/${space.homePageId}`
-                                })
+                            navigator.go({
+                                to: `/space-detail/${params.id}/page/${space.homePageId}`
+                            })
                         }}>
                             <div>{space?.icon?.icon}</div>
                             {space.name}
                         </div>
-                           <StarIcon className="h-4 w-4" />
+                        <StarIcon className="h-4 w-4" />
                     </div>
                 </div>
         },

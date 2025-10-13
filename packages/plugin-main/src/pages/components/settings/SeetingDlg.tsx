@@ -6,7 +6,7 @@ import { GlobalState, useUploadFile } from "@kn/core";
 import { useSafeState } from "@kn/core";
 import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import } from "@kn/icon";
 import React, { PropsWithChildren } from "react";
-import { useSelector } from "@kn/core";
+import { useSelector } from "@kn/common";
 import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { Member } from "./components/Member";

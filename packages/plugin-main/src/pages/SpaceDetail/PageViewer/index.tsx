@@ -6,13 +6,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { EditorRender, findNodeByBlockId } from "@kn/editor";
 import { event, ON_FAVORITE_CHANGE } from "../../../event";
-import { useApi, useLocation } from "@kn/core";
-import { useNavigator } from "@kn/core";
+import { useLocation } from "@kn/common";
+import { useNavigator, useApi } from "@kn/core";
 import { Editor } from "@kn/editor";
 import { useToggle } from "@kn/core";
 import { Edit, Loader, MessageCircleCode, MoreHorizontal, Plus, Share, Star } from "@kn/icon";
 import React, { useEffect, useState } from "react";
-import { useParams } from "@kn/core";
+import { useParams } from "@kn/common";
 import { toast } from "@kn/ui";
 import { smoothScrollIntoViewIfNeeded } from '@kn/common';
 

@@ -11,7 +11,7 @@ import { zodResolver } from "@kn/ui";
 import { Plus } from "@kn/icon";
 import React, { ReactNode, useState } from "react";
 import { useForm } from "@kn/ui";
-import { useSelector } from "@kn/core";
+import { useSelector } from "@kn/common";
 import { z } from "@kn/ui";
 
 export interface SpaceFormProps {

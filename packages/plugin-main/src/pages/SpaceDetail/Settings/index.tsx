@@ -4,7 +4,7 @@ import { useApi } from "@kn/core";
 import { Space } from "../../../model/Space";
 import { useSafeState } from "@kn/core";
 import React, { createContext, useEffect } from "react";
-import { useParams } from "@kn/core";
+import { useParams } from "@kn/common";
 import { Basic } from "./Basic";
 import { Archive } from "./Archive";
 import { Delete } from "./Delete";

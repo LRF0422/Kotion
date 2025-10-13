@@ -20,8 +20,8 @@ import {
     Minimize2, MoreHorizontal, MoveDownRight, Plus, Save, Trash2, Upload
 } from "@kn/icon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useSelector } from "@kn/core";
-import { useParams } from "@kn/core";
+import { useSelector } from "@kn/common";
+import { useParams } from "@kn/common";
 import { toast } from "@kn/ui";
 
 export const PageEditor: React.FC = () => {

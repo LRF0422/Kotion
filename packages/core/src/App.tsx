@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { createBrowserRouter, createRoutesFromElements, Route, RouterProvider } from "react-router-dom";
+import { createBrowserRouter, createRoutesFromElements, Route, RouterProvider } from "@kn/common";
 import { Layout } from "./Layout";
 import { ThemeProvider, Toaster } from "@kn/ui";
-import { Provider } from "react-redux";
+import { Provider } from "@kn/common";
 import store from './store'
 import { Login } from "./components/Login";
 import { SignUpForm } from "./components/SignUp";

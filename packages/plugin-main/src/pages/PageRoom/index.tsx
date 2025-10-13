@@ -12,8 +12,8 @@ import { useToggle } from "@kn/core";
 import { deepEqual } from "@kn/core";
 import { LoaderCircle, LogOut, MessageSquareText } from "@kn/icon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch, useSelector } from "@kn/core";
-import { useParams } from "@kn/core";
+import { useDispatch, useSelector } from "@kn/common";
+import { useParams } from "@kn/common";
 import * as Y from "@kn/editor"
 
 export const PageRoom: React.FC = () => {

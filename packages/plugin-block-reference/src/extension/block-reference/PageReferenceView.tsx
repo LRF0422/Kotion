@@ -1,8 +1,8 @@
 import { NodeViewContent, NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import React, { useContext, useEffect, useState } from "react";
-import { useNavigator, useParams, useService, useToggle } from "@kn/core";
+import { useNavigator, useService, useToggle } from "@kn/core";
 import { PageContext } from "@kn/editor";
-import { event } from "@kn/common";
+import { event, useParams } from "@kn/common";
 import { Loader2, SquareArrowOutUpRight, SquareArrowUpRight } from "@kn/icon";
 
 

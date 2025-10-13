@@ -3,8 +3,8 @@ import { GlobalState } from "@kn/core";
 import { TiptapCollabProvider } from "@kn/editor";
 import { deepEqual } from "@kn/core";
 import React, { useMemo, useRef, useState } from "react";
-import { useSelector } from "@kn/core";
-import { useParams } from "@kn/core";
+import { useSelector } from "@kn/common";
+import { useParams } from "@kn/common";
 import * as Y from "@kn/editor"
 
 export const JournalEditor: React.FC = () => {

@@ -1,0 +1,37 @@
+{
+  "name": "@kn/landing-page-vite",
+  "private": true,
+  "version": "0.0.16",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "NODE_OPTIONS='--max-old-space-size=8192' NODE_ENV=production vite build  ",
+    "build:docker": "docker build -t kn:latest .",
+    "build-plugin": "rollup -c",
+    "lint": "eslint . --ext ts,tsx --fix --report-unused-disable-directives --max-warnings 100",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@kn/ui": "workspace:*",
+    "@kn/common": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "evaluatex": "^2.2.0",
+    "event-source-polyfill": "^1.0.31",
+    "lodash": "^4.17.21",
+    "lodash.escape": "^4.0.1",
+    "lodash.throttle": "^4.1.1",
+    "next-themes": "^0.3.0"
+  },
+  "devDependencies": {
+    "@types/event-source-polyfill": "^1.0.5",
+    "@typescript-eslint/eslint-plugin": "^7.10.0",
+    "@typescript-eslint/parser": "^7.10.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "eslint-plugin-react-refresh": "^0.4.7",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "vite-tsconfig-paths": "^5.1.4"
+  }
+}

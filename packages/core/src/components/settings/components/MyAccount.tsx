@@ -1,7 +1,7 @@
 import { Separator } from "@kn/ui";
 import { GlobalState } from "../../../store/GlobalState";
 import React from "react";
-import { useSelector } from "react-redux";
+import { useSelector } from "@kn/common";
 import { UserAvatar } from "../../UserAvatar";
 import { Input } from "@kn/ui";
 import { Button } from "@kn/ui";

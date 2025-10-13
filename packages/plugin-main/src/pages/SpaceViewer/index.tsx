@@ -4,7 +4,7 @@ import { useApi } from "@kn/core";
 import { Space } from "../../model/Space";
 import { useSafeState } from "@kn/core";
 import React, { useEffect } from "react";
-import { useParams } from "@kn/core";
+import { useParams } from "@kn/common";
 
 
 export const SpaceViewer: React.FC = () => {

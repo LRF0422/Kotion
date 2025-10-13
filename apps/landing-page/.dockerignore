@@ -1,10 +1,9 @@
 # 依赖目录
-node_modules
+# node_modules
 .pnp
 .pnp.js
 
 # 构建产物
-.next/
 out/
 
 # 环境变量文件

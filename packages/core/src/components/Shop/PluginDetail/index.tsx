@@ -3,7 +3,7 @@ import { CheckCircle2, DownloadCloudIcon, Settings } from "@kn/icon";
 import { Avatar, Badge, Button, Empty, Rate, Separator, Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
 import { useSafeState } from "ahooks";
 import React, { useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams } from "@kn/common";
 import { useApi, useUploadFile } from "../../../hooks";
 import { APIS } from "../../../api";
 
@@ -64,21 +64,21 @@ export const PluginDetail: React.FC = () => {
                     }
                 </TabsList>
                 {
-                        pluginDetail.currentVersion.versionDescription.map((it: any, index: number) => (
-                           <TabsContent value={it.label} className=" overflow-auto border rounded-sm h-[calc(100%-100px)]">
-                                <EditorRender
-                                    content={JSON.parse(it.content)}
-                                    user={null}
-                                    id="Feature"
-                                    toc={false}
-                                    toolbar={false}
-                                    isEditable={false}
-                                    width="w-full"
-                                    className="rounded-sm prose-sm h-full "
-                                    withTitle={false} />
-                            </TabsContent>
-                        ))
-                    }
+                    pluginDetail.currentVersion.versionDescription.map((it: any, index: number) => (
+                        <TabsContent value={it.label} className=" overflow-auto border rounded-sm h-[calc(100%-100px)]">
+                            <EditorRender
+                                content={JSON.parse(it.content)}
+                                user={null}
+                                id="Feature"
+                                toc={false}
+                                toolbar={false}
+                                isEditable={false}
+                                width="w-full"
+                                className="rounded-sm prose-sm h-full "
+                                withTitle={false} />
+                        </TabsContent>
+                    ))
+                }
             </Tabs>
         </div>
     </div>
