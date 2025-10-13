@@ -1,5 +1,6 @@
 import React from "react";
 import { Button, ModeToggle } from "@kn/ui"
+import { ArrowLeft, ArrowRight, FaDatabase, FaFile, FaFileWord, FaLink, FaPlug, FaTasks, FaUsers, FileText, Github } from "@kn/icon";
 
 export default () => {
     return <>
@@ -13,7 +14,7 @@ export default () => {
                             <Button>Get started for free</Button>
                             <Button variant="outline">View templates</Button>
                             <Button variant="outline" className="flex items-center gap-1">
-                                <i className="fa fa-brands fa-github text-[30px]"></i>
+                                <Github className="w-4 h-4" />
                                 Github
                             </Button>
                         </div>
@@ -36,7 +37,7 @@ export default () => {
                     <div className="notion-block" draggable="true">
                         <div className="flex items-center mb-4">
                             <div className="bg-blue-100 dark:bg-blue-900 p-2 rounded-md mr-3">
-                                <i className="fa fa-file-text-o text-primary" aria-hidden="true"></i>
+                                <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                             </div>
                             <h3 className="text-xl font-semibold text-notion">Write & Edit</h3>
                         </div>
@@ -46,7 +47,8 @@ export default () => {
                     <div className="notion-block" draggable="true">
                         <div className="flex items-center mb-4">
                             <div className="bg-green-100 dark:bg-green-900 p-2 rounded-md mr-3">
-                                <i className="fa fa-tasks text-green-600 dark:text-green-400" aria-hidden="true"></i>
+                                {/* <i className="fa fa-tasks text-green-600 dark:text-green-400" aria-hidden="true"></i> */}
+                                <FaTasks className="text-green-600 dark:text-green-400 w-4 h-4" />
                             </div>
                             <h3 className="text-xl font-semibold text-notion">Tasks & Projects</h3>
                         </div>
@@ -56,7 +58,8 @@ export default () => {
                     <div className="notion-block" draggable="true">
                         <div className="flex items-center mb-4">
                             <div className="bg-purple-100 dark:bg-purple-900 p-2 rounded-md mr-3">
-                                <i className="fa fa-database text-purple-600 dark:text-purple-400" aria-hidden="true"></i>
+                                {/* <i className="fa fa-database text-purple-600 dark:text-purple-400" aria-hidden="true"></i> */}
+                                <FaDatabase className=" text-purple-600 dark:text-purple-400 w-4 h-4" />
                             </div>
                             <h3 className="text-xl font-semibold text-notion">Databases</h3>
                         </div>
@@ -66,7 +69,8 @@ export default () => {
                     <div className="notion-block" draggable="true">
                         <div className="flex items-center mb-4">
                             <div className="bg-yellow-100 dark:bg-yellow-900 p-2 rounded-md mr-3">
-                                <i className="fa fa-users text-yellow-600 dark:text-yellow-400" aria-hidden="true"></i>
+                                {/* <i className="fa fa-users text-yellow-600 dark:text-yellow-400" aria-hidden="true"></i> */}
+                                <FaUsers className="text-yellow-600 dark:text-yellow-400 w-4 h-4" />
                             </div>
                             <h3 className="text-xl font-semibold text-notion">Collaborate</h3>
                         </div>
@@ -76,7 +80,8 @@ export default () => {
                     <div className="notion-block" draggable="true">
                         <div className="flex items-center mb-4">
                             <div className="bg-red-100 dark:bg-red-900 p-2 rounded-md mr-3">
-                                <i className="fa fa-link text-red-600 dark:text-red-400" aria-hidden="true"></i>
+                                {/* <i className="fa fa-link text-red-600 dark:text-red-400" aria-hidden="true"></i> */}
+                                <FaLink className="text-red-600 dark:text-red-400 w-4 h-4" />
                             </div>
                             <h3 className="text-xl font-semibold text-notion">Connect Everything</h3>
                         </div>
@@ -86,7 +91,8 @@ export default () => {
                     <div className="notion-block" draggable="true">
                         <div className="flex items-center mb-4">
                             <div className="bg-indigo-100 dark:bg-indigo-900 p-2 rounded-md mr-3">
-                                <i className="fa fa-plug text-indigo-600 dark:text-indigo-400" aria-hidden="true"></i>
+                                {/* <i className="fa fa-plug text-indigo-600 dark:text-indigo-400" aria-hidden="true"></i> */}
+                                <FaPlug className="text-indigo-600 dark:text-indigo-400 w-4 h-4" />
                             </div>
                             <h3 className="text-xl font-semibold text-notion">Integrate</h3>
                         </div>
@@ -109,7 +115,7 @@ export default () => {
                         <h3 className="text-xl font-semibold text-notion mb-2">Project Management</h3>
                         <p className="text-notion-light mb-4">Track tasks, deadlines, and progress for your projects. Perfect for teams and individuals.</p>
                         <Button variant="outline">
-                            Use template <i className="fa fa-arrow-right ml-2" aria-hidden="true"></i>
+                            Use template <ArrowRight className="w-4 h-4 ml-1" />
                         </Button>
                     </div>
 
@@ -118,7 +124,7 @@ export default () => {
                         <h3 className="text-xl font-semibold text-notion mb-2">Team Collaboration</h3>
                         <p className="text-notion-light mb-4">Create a central hub for your team. Share documents, assign tasks, and track progress together.</p>
                         <Button variant="outline">
-                            Use template <i className="fa fa-arrow-right ml-2" aria-hidden="true"></i>
+                            Use template <ArrowRight className="w-4 h-4 ml-1" />
                         </Button>
                     </div>
 
@@ -127,7 +133,7 @@ export default () => {
                         <h3 className="text-xl font-semibold text-notion mb-2">Personal Wiki</h3>
                         <p className="text-notion-light mb-4">Build a personal knowledge base. Organize your notes, ideas, and resources in one place.</p>
                         <Button variant="outline">
-                            Use template <i className="fa fa-arrow-right ml-2" aria-hidden="true"></i>
+                            Use template <ArrowRight className="w-4 h-4 ml-1" />
                         </Button>
                     </div>
                 </div>
@@ -397,7 +403,7 @@ export default () => {
                 </div>
 
                 <div className="border-t border-gray-200 dark:border-gray-700 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
-                    <p className="text-notion-light text-sm mb-4 md:mb-0">© 2025 Notion. All rights reserved.</p>
+                    <p className="text-notion-light text-sm mb-4 md:mb-0">© 2025 Kotion. All rights reserved.</p>
                     <div className="flex space-x-6">
                         <a href="#" className="text-notion-light hover:text-notion text-sm">Terms of Service</a>
                         <a href="#" className="text-notion-light hover:text-notion text-sm">Privacy Policy</a>

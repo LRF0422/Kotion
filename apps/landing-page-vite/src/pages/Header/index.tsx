@@ -1,8 +1,13 @@
 import { Button, ModeToggle } from "@kn/ui";
 import React from "react";
+import { LanguageToggle } from "../../locales/LanguageToggle";
+import { useTranslation } from "@kn/common";
 
 
 export const Header: React.FC = () => {
+
+    const { t } = useTranslation()
+
     return <nav className="sticky bg-popover top-0 z-50 shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-16">
@@ -12,17 +17,18 @@ export const Header: React.FC = () => {
                         <span className="ml-2 text-xl font-semibold text-notion">Kotion</span>
                     </div>
                     <div className="hidden md:ml-6 md:flex md:space-x-8 ">
-                        <a href="#features" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Features</a>
-                        <a href="#templates" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Templates</a>
+                        <a href="#features" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">{t("header.feature")}</a>
+                        <a href="#templates" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">{t("header.template")}</a>
                         <a href="#testimonials" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Testimonials</a>
                         <a href="#pricing" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Pricing</a>
                         <a href="#" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Templates</a>
                         <a href="#" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Plugins</a>
                     </div>
                 </div>
-                <div className="flex items-center">
+                <div className="flex items-center gap-1">
                     <ModeToggle />
-                    <div className="ml-4 flex items-center gap-2 md:ml-6">
+                    <LanguageToggle />
+                    <div className="ml-3 flex items-center gap-2 md:ml-6">
                         <Button size="sm">Log in</Button>
                         <Button size="sm" variant="outline">Sign up</Button>
                     </div>
