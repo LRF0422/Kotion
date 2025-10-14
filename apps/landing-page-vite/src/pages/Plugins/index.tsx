@@ -1,7 +1,7 @@
-import { Button, Rate, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, IconButton, Rate, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
 import React from "react";
 import Creator from "../../assets/creator.png"
-import { PlusIcon } from "@kn/icon";
+import { DownloadIcon, FaHeart, HeartIcon, PlusIcon } from "@kn/icon";
 
 
 export const Plugins: React.FC = () => {
@@ -205,25 +205,23 @@ export const Plugins: React.FC = () => {
         <div className="grid grid-cols-4 gap-4">
             {
                 plugins.map((plugin, index) => (
-                    <div className="p-6 shadow-sm border transition-shadow rounded-sm " key={index}>
+                    <div className="p-6 shadow-md border transition-colors rounded-md hover:bg-muted/50" key={index}>
                         <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center">
                                 <img src={plugin.icon} alt={plugin.name} className="w-10 h-10 mr-3 rounded-md" />
                                 <div>
-                                    <h3 className="font-semibold text-neutral-800">{plugin.name}</h3>
-                                    <p className="text-xs text-neutral-500">By {plugin.author}</p>
+                                    <h3 className="font-semibold text-nowrap text-ellipsis overflow-hidden">{plugin.name}</h3>
+                                    <p className="text-xs">By {plugin.author}</p>
                                 </div>
                             </div>
-                            <button className="text-neutral-400 hover:text-neutral-600 transition-all-200">
-                                <i className="fa fa-heart-o"></i>
-                            </button>
+                            <IconButton icon={<FaHeart className="h-4 w-4" />} className="transition-all-200" />
                         </div>
 
-                        <p className="text-neutral-600 text-sm mb-4 line-clamp-2">${plugin.description}</p>
+                        <p className=" text-gray-500 text-sm mb-4 line-clamp-2">{plugin.description}</p>
 
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center">
-                                <div className="flex items-center text-yellow-400 mr-1">
+                                <div className="flex items-center mr-1">
                                     {renderStars(plugin.rating)}
                                 </div>
                                 <span className="text-xs text-neutral-500">{plugin.rating.toFixed(1)} ({plugin.reviews})</span>
@@ -232,16 +230,86 @@ export const Plugins: React.FC = () => {
                         </div>
 
                         <div className="flex flex-wrap gap-2 mb-4">
-                            <span className="px-2 py-1 bg-neutral-100 text-neutral-700 rounded-full text-xs">{plugin.category}</span>
+                            <span className="px-2 py-1 rounded-full text-xs bg-muted">{plugin.category}</span>
                         </div>
 
                         <div className="flex space-x-2">
-                            <button className="view-plugin flex-1 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-all-200 text-sm">
-                                View Details
-                            </button>
-                            <button className="px-3 py-2 border border-neutral-300 rounded-md hover:bg-neutral-50 transition-all-200">
-                                <PlusIcon className="h-4 w-4" />
-                            </button>
+                            <Dialog>
+                                <DialogTrigger asChild>
+                                    <Button className="h-9">
+                                        View Details
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent className="w-[1000px] max-w-none">
+                                    <DialogHeader>
+                                        <DialogTitle>{plugin.name}</DialogTitle>
+                                        <DialogDescription />
+                                    </DialogHeader>
+                                    <div className="modal-content transform w-full max-w-4xl overflow-hidden">
+                                        <div className="p-6">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div>
+                                                    <img id="modal-screenshot" src={plugin.screenshot} alt="Plugin Preview" className="w-full h-auto rounded-lg shadow-md" />
+                                                </div>
+
+                                                <div>
+                                                    <div className="flex items-center mb-4">
+                                                        <img id="modal-icon" src={plugin.icon} alt="Plugin Icon" className="w-12 h-12 mr-4 rounded-md" />
+                                                        <div>
+                                                            <div className="flex items-center">
+                                                                <div id="modal-rating" className="flex items-center text-yellow-400 mr-2">
+                                                                    {renderStars(plugin.rating)}
+                                                                </div>
+                                                                <span id="modal-rating-text" className="text-neutral-600"></span>
+                                                            </div>
+                                                            <div className="text-sm text-neutral-500">
+                                                                <span id="modal-downloads">{plugin.downloads}</span> downloads
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mb-6">
+                                                        <h4 className="font-semibold text-neutral-800 mb-2">Description</h4>
+                                                        <p id="modal-description" className="text-neutral-600">
+                                                            {plugin.description}
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="mb-6">
+                                                        <h4 className="font-semibold text-neutral-800 mb-2">Features</h4>
+                                                        <ul id="modal-features" className="list-disc list-inside text-neutral-600 space-y-1">
+                                                            {plugin.features.map((feature, index) => (
+                                                                <li key={index}>{feature}</li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+
+                                                    <div className="flex flex-wrap gap-2 mb-6">
+                                                        <span id="modal-category" className="px-3 py-1 bg-neutral-100 text-neutral-700 rounded-full text-sm">
+                                                            {plugin.category}
+                                                        </span>
+                                                        <span id="modal-author" className="px-3 py-1 bg-neutral-100 text-neutral-700 rounded-full text-sm">
+                                                            By <span className="font-medium">{plugin.author}</span>
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="flex space-x-4">
+                                                        <Button className="h-9">
+                                                            Add to Notion
+                                                        </Button>
+                                                        <Button className="h-9">
+                                                            <HeartIcon className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                            <Button className="h-9">
+                                <DownloadIcon className="h-4 w-4" />
+                            </Button>
                         </div>
                     </div>
                 ))
