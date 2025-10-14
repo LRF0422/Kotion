@@ -1,7 +1,7 @@
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, IconButton, Rate, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
 import React from "react";
 import Creator from "../../assets/creator.png"
-import { DownloadIcon, FaHeart, HeartIcon, PlusIcon } from "@kn/icon";
+import { DownloadIcon, FaHeart, HeartIcon } from "@kn/icon";
 
 
 export const Plugins: React.FC = () => {
