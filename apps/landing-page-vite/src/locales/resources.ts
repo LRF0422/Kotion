@@ -4,9 +4,11 @@ export const resources = {
         translation: {
             header: {
                 feature: "功能",
-                template: "模板",
+                template: "页面模板",
                 price: "价格",
-                plugins: "插件",
+                plugins: "插件超市",
+                "template-market": "模板超市",
+                doc: "文档"
             },
             home: {
                 hero: "一体化工作空间， 集笔记、任务、Wiki、AI和数据库于一身",
@@ -20,9 +22,11 @@ export const resources = {
         translation: {
             header: {
                 feature: "Features",
-                template: "Templates",
+                template: "Page Templates",
                 price: "Pricing",
-                plugins: "Plugins"
+                plugins: "Plugin Market",
+                "template-market": "Template Market",
+                doc: "Docs"
             },
             home: {
                 hero: "All-in-one workspace for your notes, tasks, wikis, and databases.",

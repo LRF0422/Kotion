@@ -14,16 +14,15 @@ export const Header: React.FC = () => {
             <div className="flex justify-between h-16">
                 <div className="flex items-center">
                     <div className="flex-shrink-0 flex items-center" onClick={() => navigator("/")}>
-                        {/* <img className="h-8 w-auto" src="https://p3-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/db52835a91294c1995afd744e9c2df91~tplv-a9rns2rl98-image.image?rcl=20251011093920F1590232204D8A60C141&rk3s=8e244e95&rrcfp=f06b921b&x-expires=1762738781&x-signature=%2FxikC6RAqb%2FUZ8aGUsDWvEvIUxc%3D" alt="Notion Logo" /> */}
                         <span className="ml-2 text-xl font-semibold text-notion">Kotion</span>
                     </div>
                     <div className="hidden md:ml-6 md:flex md:space-x-8 ">
                         <a href="#features" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">{t("header.feature")}</a>
                         <a href="#templates" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">{t("header.template")}</a>
-                        <a href="#testimonials" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Testimonials</a>
                         <a href="#pricing" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">{t("header.price")}</a>
-                        <Link to="/templates" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Templates</Link>
-                        <a href="/plugins" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">{t("header.plugins")}</a>
+                        <Link to="/doc" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">{t("header.doc")}</Link>
+                        <Link to="/templates" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">{t("header.template-market")}</Link>
+                        <Link to="/plugins" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">{t("header.plugins")}</Link>
                     </div>
                 </div>
                 <div className="flex items-center gap-1">
