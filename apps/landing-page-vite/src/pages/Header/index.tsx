@@ -23,7 +23,7 @@ export const Header: React.FC = () => {
                         <a href="#testimonials" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Testimonials</a>
                         <a href="#pricing" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">{t("header.price")}</a>
                         <Link to="/templates" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Templates</Link>
-                        <a href="#" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">{t("header.plugins")}</a>
+                        <a href="/plugins" className="border-transparent text-notion-light hover:text-notion inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">{t("header.plugins")}</a>
                     </div>
                 </div>
                 <div className="flex items-center gap-1">

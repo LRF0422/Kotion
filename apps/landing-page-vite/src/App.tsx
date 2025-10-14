@@ -7,6 +7,7 @@ import "@kn/ui/globals.css"
 import "./index.css"
 import { resources } from "./locales/resources";
 import { Templates } from "./pages/Templates";
+import { Plugins } from "./pages/Plugins";
 
 i18n.use(initReactI18next)
     .use(LanguageDetector)
@@ -31,6 +32,7 @@ export const App: React.FC = () => {
             <Route path="/" element={<Layout />}>
                 <Route path="/" element={<Home />} />
                 <Route path="/templates" element={<Templates />} />
+                <Route path="/plugins" element={<Plugins />} />
             </Route>
         )
     )

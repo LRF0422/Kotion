@@ -1,5 +1,6 @@
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
 import React, { useState } from "react";
+import Creator from "../../assets/creator.png"
 
 
 export const Templates: React.FC = () => {
@@ -16,11 +17,10 @@ export const Templates: React.FC = () => {
     ]
 
     const [templates, setTemplates] = useState<any>([{}, {}, {}, {}, {}, {}])
-
     const [selectedKey, setSelectedKey] = React.useState<string>("All Templates")
 
     return <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
-        <div className="text-3xl md:text-4xl font-bold mb-4">Discover Notion Templates</div>
+        <div className="text-3xl md:text-4xl font-bold mb-4">Discover Kotion Templates</div>
         <div className="text-gray-600 text-lg max-w-3xl mb-8 text-balance">Find and use the best templates created by the community to boost your productivity and organize your life.</div>
 
         <div className="flex flex-wrap gap-2 mb-8">
@@ -38,10 +38,10 @@ export const Templates: React.FC = () => {
         </div>
         <div className="flex justify-between items-center mb-6">
             <h3 className="text-xl font-semibold">Popular Templates</h3>
-            <div className="flex items-center gap-1">
-                <div className="text-sm text-gray-500">Sort by:</div>
+            <div className="flex items-center gap-2">
+                <div className="text-sm text-gray-500 text-nowrap">Sort by :</div>
                 <Select defaultValue="recent">
-                    <SelectTrigger>
+                    <SelectTrigger className="w-[100px] h-9">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -80,7 +80,7 @@ export const Templates: React.FC = () => {
                 ))
             }
         </div>
-        <section className=" bg-muted rounded-xl p-8 text-center mb-16 mt-10">
+        <section className=" bg-muted/50 rounded-xl p-8 text-center mb-16 mt-10">
             <h3 className="text-2xl font-bold mb-4">Can't find what you're looking for?</h3>
             <p className="text-gray-600 mb-6 max-w-2xl mx-auto">Request a specific template or create and share your own to help the community.</p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
@@ -90,6 +90,18 @@ export const Templates: React.FC = () => {
                 <Button variant="outline">
                     Share Your Template
                 </Button>
+            </div>
+        </section>
+        <section className=" bg-muted/50 rounded-xl p-8 flex items-center justify-center mb-16 gap-2">
+            <img src={Creator} width={244} />
+            <div>
+                <h3 className="text-2xl font-bold mb-4">Become a creator</h3>
+                <p className="text-gray-600 mb-6 max-w-md mx-auto">Submit your template to the Notion template gallery, get featured, and even get paid – all in just a few clicks.</p>
+                <div className="flex flex-col sm:flex-row gap-4">
+                    <Button variant="outline">
+                        Get started
+                    </Button>
+                </div>
             </div>
         </section>
     </div>
