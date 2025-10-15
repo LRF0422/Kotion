@@ -1,7 +1,8 @@
-import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, IconButton, Rate, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, IconButton, Rate, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
 import React from "react";
 import Creator from "../../assets/creator.png"
-import { DownloadIcon, FaHeart, HeartIcon } from "@kn/icon";
+import { ArrowRight, DownloadIcon, Heart, HeartIcon } from "@kn/icon";
+// import Structure from "../../assets/structure.png"
 
 
 export const Plugins: React.FC = () => {
@@ -82,6 +83,10 @@ export const Plugins: React.FC = () => {
             reviews: 634,
             downloads: 12876,
             features: [
+                "Advanced text formatting",
+                "AI-powered summarization",
+                "Smart tagging system",
+                "Note linking and backlinks",
                 "Advanced text formatting",
                 "AI-powered summarization",
                 "Smart tagging system",
@@ -171,37 +176,44 @@ export const Plugins: React.FC = () => {
     }
 
     return <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
-        <div className="text-3xl md:text-4xl font-bold mb-4">Discover Kotion Plugins</div>
-        <div className="text-gray-600 text-lg max-w-3xl mb-8 text-balance">Find and use the best plugins created by the community to boost your productivity and organize your life.</div>
-        <div className="flex flex-wrap gap-2 mb-8">
-            {
-                filterItems.map((item, index) => (
-                    <Button
-                        variant={selectedKey === item ? "default" : "secondary"}
-                        className="px-4 py-2 rounded-md text-sm transition-colors"
-                        key={index}
-                        onClick={() => setSelectedKey(item)}>
-                        {item}
-                    </Button>
-                ))
-            }
+        <div className="flex items-start">
+            <div>
+                <div className="text-3xl md:text-4xl font-bold mb-4">Discover Kotion Plugins</div>
+                <div className="text-gray-600 text-lg max-w-3xl mb-8 text-balance">Find and use the best plugins created by the community to boost your productivity and organize your life.</div>
+                <div className="flex flex-wrap gap-2 mb-8">
+                    {
+                        filterItems.map((item, index) => (
+                            <Button
+                                variant={selectedKey === item ? "default" : "secondary"}
+                                className="px-4 py-2 rounded-md text-sm transition-colors"
+                                key={index}
+                                onClick={() => setSelectedKey(item)}>
+                                {item}
+                            </Button>
+                        ))
+                    }
+                </div>
+            </div>
+            <div className="">
+                 {/* <img src={Structure } width="150px" height="100%" /> */}
+           </div>
         </div>
         <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-semibold">Popular Plugins</h3>
-            <div className="flex items-center gap-2">
-                <div className="text-sm text-gray-500 text-nowrap">Sort by :</div>
-                <Select defaultValue="recent">
-                    <SelectTrigger className="w-[100px] h-9">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="recent">Recent</SelectItem>
-                        <SelectItem value="popular">Popular</SelectItem>
-                        <SelectItem value="trending">Trending</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-        </div>
+                    <h3 className="text-xl font-semibold">Popular Plugins</h3>
+                    <div className="flex items-center gap-2">
+                        <div className="text-sm text-gray-500 text-nowrap">Sort by :</div>
+                        <Select defaultValue="recent">
+                            <SelectTrigger className="w-[100px] h-9">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="recent">Recent</SelectItem>
+                                <SelectItem value="popular">Popular</SelectItem>
+                                <SelectItem value="trending">Trending</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
         <div className="grid grid-cols-4 gap-4">
             {
                 plugins.map((plugin, index) => (
@@ -214,7 +226,7 @@ export const Plugins: React.FC = () => {
                                     <p className="text-xs">By {plugin.author}</p>
                                 </div>
                             </div>
-                            <IconButton icon={<FaHeart className="h-4 w-4" />} className="transition-all-200" />
+                            <IconButton icon={<Heart className="h-4 w-4" />} className="transition-all-200" />
                         </div>
 
                         <p className=" text-gray-500 text-sm mb-4 line-clamp-2">{plugin.description}</p>
@@ -260,7 +272,7 @@ export const Plugins: React.FC = () => {
                                                                 <div id="modal-rating" className="flex items-center text-yellow-400 mr-2">
                                                                     {renderStars(plugin.rating)}
                                                                 </div>
-                                                                <span id="modal-rating-text" className="text-neutral-600"></span>
+                                                                <span id="modal-rating-text" className="text-neutral-600">{ plugin.rating }</span>
                                                             </div>
                                                             <div className="text-sm text-neutral-500">
                                                                 <span id="modal-downloads">{plugin.downloads}</span> downloads
@@ -269,33 +281,33 @@ export const Plugins: React.FC = () => {
                                                     </div>
 
                                                     <div className="mb-6">
-                                                        <h4 className="font-semibold text-neutral-800 mb-2">Description</h4>
-                                                        <p id="modal-description" className="text-neutral-600">
+                                                        <h4 className="font-semibold mb-2">Description</h4>
+                                                        <p id="modal-description" className="text-gray-400">
                                                             {plugin.description}
                                                         </p>
                                                     </div>
 
                                                     <div className="mb-6">
-                                                        <h4 className="font-semibold text-neutral-800 mb-2">Features</h4>
-                                                        <ul id="modal-features" className="list-disc list-inside text-neutral-600 space-y-1">
+                                                        <h4 className="font-semibold mb-2">Features</h4>
+                                                        <ul id="modal-features" className="list-disc list-inside text-gray-400 space-y-1">
                                                             {plugin.features.map((feature, index) => (
                                                                 <li key={index}>{feature}</li>
                                                             ))}
                                                         </ul>
                                                     </div>
 
-                                                    <div className="flex flex-wrap gap-2 mb-6">
-                                                        <span id="modal-category" className="px-3 py-1 bg-neutral-100 text-neutral-700 rounded-full text-sm">
+                                                    <div className="flex flex-wrap gap-2 mb-6 ">
+                                                        <Badge id="modal-category" className="text-sm" >
                                                             {plugin.category}
-                                                        </span>
-                                                        <span id="modal-author" className="px-3 py-1 bg-neutral-100 text-neutral-700 rounded-full text-sm">
-                                                            By <span className="font-medium">{plugin.author}</span>
-                                                        </span>
+                                                        </Badge>
+                                                        <Badge id="modal-author"  className="text-sm">
+                                                            By&nbsp;<span className="font-medium">{plugin.author}</span>
+                                                        </Badge>
                                                     </div>
 
-                                                    <div className="flex space-x-4">
+                                                    <div className="flex space-x-1">
                                                         <Button className="h-9">
-                                                            Add to Notion
+                                                            Add to Kotion
                                                         </Button>
                                                         <Button className="h-9">
                                                             <HeartIcon className="h-4 w-4" />
@@ -327,14 +339,14 @@ export const Plugins: React.FC = () => {
                 </Button>
             </div>
         </section>
-        <section className=" bg-muted/50 rounded-xl p-8 flex items-center justify-center mb-16 gap-2">
+        <section className=" rounded-xl p-8 flex items-center justify-center mb-16 gap-2">
             <img src={Creator} width={244} />
             <div>
                 <h3 className="text-2xl font-bold mb-4">Become a creator</h3>
                 <p className="text-gray-600 mb-6 max-w-md mx-auto">Submit your plugin to the Kotion plugin gallery, get featured, and even get paid – all in just a few clicks.</p>
                 <div className="flex flex-col sm:flex-row gap-4">
-                    <Button variant="outline">
-                        Get started
+                     <Button variant="outline" className="flex items-center gap-1">
+                        Get started <ArrowRight className="h-4 w-4" />
                     </Button>
                 </div>
             </div>

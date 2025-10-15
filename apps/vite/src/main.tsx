@@ -11,7 +11,6 @@ import { excalidraw } from "@kn/plugin-excalidraw"
 import { drawnix } from "@kn/plugin-drawnix"
 import { drawio } from "@kn/plugin-drawio"
 import { blockReference } from "@kn/plugin-block-reference"
-
 import { ai } from "@kn/plugin-ai"
 
 

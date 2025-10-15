@@ -26,8 +26,6 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean) => {
 		UndoRedo,
 		Placeholder.configure({
 			placeholder: ({ node }) => {
-				console.log('node', node);
-				
 				if (node.type.name === 'title') {
 					return 'What’s the title?'
 				}
@@ -38,9 +36,9 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean) => {
 			},
 		}),
 		Text,
-		Focus.configure({
-			mode: 'shallowest'
-		}),
+		// Focus.configure({
+		// 	mode: 'shallowest'
+		// }),
 		TrailingNode,
 		Perf,
 		BubbleMenu,
@@ -58,8 +56,8 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean) => {
 		editorExtensions = editorExtensions.filter(it => it.name !== ext);
 	}
 	editorExtensions.push(UniqueID.configure({
-			types: editorExtensions.filter(it => it.name !== 'text').map(it => it.name),
-			filterTransaction: t => !isChangeOrigin(t)
-		}))
+		types: editorExtensions.filter(it => it.name !== 'text').map(it => it.name),
+		filterTransaction: t => !isChangeOrigin(t)
+	}))
 	return [editorExtensions, full]
 }

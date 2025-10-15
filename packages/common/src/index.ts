@@ -9,6 +9,7 @@ export * from "./core/types"
 export * from "./entity"
 export * from "react-redux"
 export * from "react-router-dom"
+import axios from "axios";
 import smoothScrollIntoViewIfNeeded from 'smooth-scroll-into-view-if-needed';
-export { smoothScrollIntoViewIfNeeded }
+export { smoothScrollIntoViewIfNeeded, axios }
 

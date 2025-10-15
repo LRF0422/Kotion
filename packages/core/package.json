@@ -23,7 +23,6 @@
     "@kn/ui": "workspace:*",
     "@types/pako": "^2.0.3",
     "ai": "^5.0.20",
-    "axios": "^1.7.7",
     "browser-fs-access": "^0.35.0",
     "event-source-polyfill": "^1.0.31",
     "json-hpack": "^0.0.2",

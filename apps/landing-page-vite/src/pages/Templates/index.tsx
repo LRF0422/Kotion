@@ -1,6 +1,7 @@
-import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
+import { Badge, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
 import React, { useState } from "react";
 import Creator from "../../assets/creator.png"
+import { ArrowRight, DownloadIcon } from "@kn/icon";
 
 
 export const Templates: React.FC = () => {
@@ -16,7 +17,7 @@ export const Templates: React.FC = () => {
         "More"
     ]
 
-    const [templates, setTemplates] = useState<any>([{}, {}, {}, {}, {}, {}])
+    const [templates, setTemplates] = useState([{}, {}, {}, {}, {}, {}])
     const [selectedKey, setSelectedKey] = React.useState<string>("All Templates")
 
     return <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
@@ -61,8 +62,8 @@ export const Templates: React.FC = () => {
                         </div>
                         <div className="p-4">
                             <div className="flex items-center space-x-2 mb-2">
-                                <span className="px-2 py-1 bg-notion-tag text-xs rounded-md">Work</span>
-                                <span className="text-xs text-gray-500"><i className="fa fa-download mr-1"></i> 2.4k</span>
+                                <Badge className="px-2 py-1 text-xs rounded-md">Work</Badge>
+                                <span className="text-xs text-gray-400 flex items-center gap-1"><DownloadIcon className="w-4 h-4"/> 2.4k</span>
                             </div>
                             <h4 className="font-medium text-lg mb-2">Project Management</h4>
                             <p className="text-gray-600 text-sm mb-4 line-clamp-2">Organize your projects, tasks, and team members with this comprehensive management template.</p>
@@ -92,14 +93,14 @@ export const Templates: React.FC = () => {
                 </Button>
             </div>
         </section>
-        <section className=" bg-muted/50 rounded-xl p-8 flex items-center justify-center mb-16 gap-2">
+        <section className=" rounded-xl p-8 flex items-center justify-center mb-16 gap-2">
             <img src={Creator} width={244} />
             <div>
                 <h3 className="text-2xl font-bold mb-4">Become a creator</h3>
                 <p className="text-gray-600 mb-6 max-w-md mx-auto">Submit your template to the Notion template gallery, get featured, and even get paid – all in just a few clicks.</p>
                 <div className="flex flex-col sm:flex-row gap-4">
-                    <Button variant="outline">
-                        Get started
+                    <Button variant="outline" className="flex items-center gap-1">
+                        Get started <ArrowRight className="h-4 w-4" />
                     </Button>
                 </div>
             </div>

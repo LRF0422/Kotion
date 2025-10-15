@@ -1,5 +1,5 @@
 import { Button } from '@kn/ui'
-import axios from 'axios'
+import { axios } from '@kn/common'
 import { toast } from '@kn/ui'
 import React from 'react'
 

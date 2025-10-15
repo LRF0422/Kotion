@@ -1,7 +1,7 @@
 import React from "react";
-import { Button } from "@kn/ui"
-import { ArrowRight, FaDatabase, FaLink, FaPlug, FaTasks, FaUsers, FileText, Github } from "@kn/icon";
-import { useTranslation } from "@kn/common";
+import { Button, Rate } from "@kn/ui"
+import { ArrowRight, FaCheck, FaDatabase, FaLink, FaPlug, FaTasks, FaTimes, FaUsers, FileText, Github } from "@kn/icon";
+import { Link, useTranslation } from "@kn/common";
 
 export const Home: React.FC = () => {
 
@@ -145,7 +145,9 @@ export const Home: React.FC = () => {
                 </div>
 
                 <div className="text-center mt-10">
-                    <Button className="px-6 py-3 border  rounded-md text-base font-medium">Browse all templates</Button>
+                    <Link to="/templates">
+                        <Button className="px-6 py-3 border  rounded-md text-base font-medium">Browse all templates</Button>
+                    </Link>
                 </div>
             </div>
         </section>
@@ -160,13 +162,7 @@ export const Home: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="notion-block">
                         <div className="flex items-center mb-4">
-                            <div className="text-yellow-400 flex">
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                            </div>
+                            <Rate rating={5} disabled variant="yellow" />
                         </div>
                         <p className="text-notion-light mb-6">"Notion has completely transformed how my team works. We've replaced multiple tools with a single workspace that adapts to our needs."</p>
                         <div className="flex items-center">
@@ -180,13 +176,7 @@ export const Home: React.FC = () => {
 
                     <div className="notion-block">
                         <div className="flex items-center mb-4">
-                            <div className="text-yellow-400 flex">
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                            </div>
+                            <Rate rating={5} disabled variant="yellow" />
                         </div>
                         <p className="text-notion-light mb-6">"I use Notion for everything—from managing my personal projects to organizing my thoughts. It's flexible, intuitive, and beautiful."</p>
                         <div className="flex items-center">
@@ -200,13 +190,7 @@ export const Home: React.FC = () => {
 
                     <div className="notion-block">
                         <div className="flex items-center mb-4">
-                            <div className="text-yellow-400 flex">
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                                <i className="fa fa-star" aria-hidden="true"></i>
-                                <i className="fa fa-star-half-o" aria-hidden="true"></i>
-                            </div>
+                            <Rate rating={5} disabled variant="yellow" />
                         </div>
                         <p className="text-notion-light mb-6">"Notion has become the backbone of our company's knowledge base. It's easy to use, and the ability to customize everything is a game-changer."</p>
                         <div className="flex items-center">
@@ -246,23 +230,23 @@ export const Home: React.FC = () => {
                         </div>
                         <ul className="mb-8">
                             <li className="flex items-start mb-3">
-                                <i className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span className="text-notion-light">Unlimited blocks</span>
                             </li>
                             <li className="flex items-start mb-3">
-                                <i className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span className="text-notion-light">Up to 5 guests</span>
                             </li>
                             <li className="flex items-start mb-3">
-                                <i className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span className="text-notion-light">Basic templates</span>
                             </li>
                             <li className="flex items-start text-gray-400">
-                                <i className="fa fa-times mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span>Advanced databases</span>
                             </li>
                             <li className="flex items-start text-gray-400">
-                                <i className="fa fa-times mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span>Team collaboration</span>
                             </li>
                         </ul>
@@ -282,23 +266,23 @@ export const Home: React.FC = () => {
                         </div>
                         <ul className="mb-8">
                             <li className="flex items-start mb-3">
-                                <i className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span className="text-notion-light">Everything in Personal</span>
                             </li>
                             <li className="flex items-start mb-3">
-                                <i className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span className="text-notion-light">Unlimited guests</span>
                             </li>
                             <li className="flex items-start mb-3">
-                                <i className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span className="text-notion-light">Advanced databases</span>
                             </li>
                             <li className="flex items-start mb-3">
-                                <i className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span className="text-notion-light">Custom templates</span>
                             </li>
                             <li className="flex items-start text-gray-400">
-                                <i className="fa fa-times mt-1 mr-2" aria-hidden="true"></i>
+                                <FaTimes className="fa fa-times mt-1 mr-2" aria-hidden="true" />
                                 <span>Team analytics</span>
                             </li>
                         </ul>
@@ -315,23 +299,23 @@ export const Home: React.FC = () => {
                         </div>
                         <ul className="mb-8">
                             <li className="flex items-start mb-3">
-                                <i className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span className="text-notion-light">Everything in Plus</span>
                             </li>
                             <li className="flex items-start mb-3">
-                                <i className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span className="text-notion-light">Team collaboration</span>
                             </li>
                             <li className="flex items-start mb-3">
-                                <i className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span className="text-notion-light">Admin controls</span>
                             </li>
                             <li className="flex items-start mb-3">
-                                <i className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span className="text-notion-light">Security features</span>
                             </li>
                             <li className="flex items-start mb-3">
-                                <i className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true"></i>
+                                <FaCheck className="fa fa-check text-green-500 mt-1 mr-2" aria-hidden="true" />
                                 <span className="text-notion-light">Team analytics</span>
                             </li>
                         </ul>
