@@ -6,7 +6,8 @@ import { Footer } from "../Footer";
 
 
 export const Layout: React.FC = () => {
-    return <div>
+    return <div className=" font-serif">
+        <div className=" absolute" id="ref"></div>
         <header>
             <Header />
         </header>

@@ -29,8 +29,8 @@ export const Header: React.FC = () => {
                     <ModeToggle />
                     <LanguageToggle />
                     <div className="ml-3 flex items-center gap-2 md:ml-6">
-                        <Button size="sm">Log in</Button>
-                        <Button size="sm" variant="outline">Sign up</Button>
+                        <Button variant="ghost" size="sm">{t("header.login")}</Button>
+                        <Button size="sm">{t("header.get-for-free")}</Button>
                     </div>
                 </div>
             </div>

@@ -11,7 +11,7 @@ export { type GlobalState } from "./store"
 
 import deepEqual from "deep-equal"
 import moment from "moment"
-import axios from "axios"
+import { axios } from "@kn/common"
 import { isArray, isObject } from "lodash";
 export { deepEqual, moment, axios, isArray, isObject }
 

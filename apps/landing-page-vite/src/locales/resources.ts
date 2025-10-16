@@ -8,7 +8,9 @@ export const resources = {
                 price: "价格",
                 plugins: "插件超市",
                 "template-market": "模板超市",
-                doc: "文档"
+                doc: "文档",
+                login: "登录",
+                "get-for-free": "免费获取Kotion"
             },
             home: {
                 hero: "一体化工作空间， 集笔记、任务、Wiki、AI和数据库于一身",
@@ -26,7 +28,9 @@ export const resources = {
                 price: "Pricing",
                 plugins: "Plugin Market",
                 "template-market": "Template Market",
-                doc: "Docs"
+                doc: "Docs",
+                login: "Login",
+                "get-for-free": "Get Kotion for free"
             },
             home: {
                 hero: "All-in-one workspace for your notes, tasks, wikis, and databases.",
