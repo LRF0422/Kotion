@@ -3,6 +3,15 @@ import { Drawio } from "./drawio";
 import { ChartNetworkIcon } from "@kn/icon";
 import React from "react";
 
+declare module "@kn/editor" {
+    interface Commands<ReturnType> {
+        drawio: {
+            insertDrawIo: () => ReturnType;
+
+            update: (image: string) => ReturnType
+        };
+    }
+}
 
 export const DrawioExtension: ExtensionWrapper = {
     name: "drawio",

@@ -14,7 +14,6 @@ export const DatabaseExtension: ExtensionWrapper = {
             slash: '/database',
             text: 'database',
             action: (editor) => {
-                console.log('123123');
                 editor.commands.insertDatabase()
             }
         }
