@@ -117,19 +117,18 @@ export const Plugins: React.FC = () => {
                                         View Details
                                     </Button>
                                 </DialogTrigger>
-                                <DialogContent className="w-[1000px] max-w-none">
+                                <DialogContent className="w-[900px] max-w-none">
                                     <DialogHeader>
                                         <DialogTitle>{plugin.name}</DialogTitle>
                                         <DialogDescription />
                                     </DialogHeader>
                                     <div className="modal-content transform w-full max-w-4xl overflow-hidden">
                                         <div className="p-6">
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                <div>
+                                            <div className="grid grid-cols-12 md:grid-cols-12 gap-6">
+                                                <div className="col-span-7">
                                                     <img id="modal-screenshot" src={usePath(plugin.screenShot)} alt="Plugin Preview" className="w-full h-auto rounded-lg shadow-md" />
                                                 </div>
-
-                                                <div>
+                                                <div className="col-span-5">
                                                     <div className="flex items-center mb-4">
                                                         <img id="modal-icon" src={usePath(plugin.icon)} alt="Plugin Icon" className="w-12 h-12 mr-4 rounded-md" />
                                                         <div>
@@ -166,7 +165,7 @@ export const Plugins: React.FC = () => {
                                                             {plugin.category.value}
                                                         </Badge>
                                                         <Badge id="modal-author" className="text-sm">
-                                                            By&nbsp;<span className="font-medium">{plugin.developer}</span>
+                                                            By&nbsp;<span className="">{plugin.developer}</span>
                                                         </Badge>
                                                     </div>
 

@@ -1,17 +1,12 @@
 import { axios } from '@kn/common'
-import { Dialog, DialogTrigger, toast } from '@kn/ui'
-import React from 'react'
-import { createReactElement, showDlg } from './create-portal'
+import { toast } from '@kn/ui'
+import { showDlg } from './create-portal'
 
 const TOKEN_KEY = 'knowledge-token'
-
-// http://www.simple-platform.cn:88
 const axiosInstance = axios.create({
     baseURL: "/api",
     timeout: 50000
 })
-
-export const isRelogin = { show: false }
 
 function tansParams(params: Record<string, string>) {
     let result = ''
@@ -41,7 +36,7 @@ function tansParams(params: Record<string, string>) {
 axiosInstance.interceptors.request.use(config => {
 
     config.headers['Knowledge-Auth'] = localStorage.getItem(TOKEN_KEY)
-    // config.headers.Authorization = `Basic ${window.btoa(`${'wiki'}:${'wiki_secret'}`)}`
+    config.headers.Authorization = `Basic ${window.btoa(`${'wiki'}:${'wiki_secret'}`)}`
 
     if (config.method === 'get' && config.params) {
         let url = `${config.url}?${tansParams(config.params)}`
@@ -56,14 +51,8 @@ axiosInstance.interceptors.request.use(config => {
 
 axiosInstance.interceptors.response.use(res => {
 
-    console.log('res', res);
-
     const status = res.status
     if (status === 401) {
-        const dialog = <Dialog open={true}>
-            <DialogTrigger />
-        </Dialog>
-        createReactElement(dialog)
         return Promise.reject('无效的会话，或者会话已过期，请重新登录。')
     }
 
@@ -80,8 +69,6 @@ axiosInstance.interceptors.response.use(res => {
 
 }, error => {
     const { response } = error
-    console.log('error', response);
-
     let { message } = error
     if (response.status === 401) {
         showDlg('登录状态已过期', '您可以继续留在该页面，或者重新登录', () => { }, () => { })

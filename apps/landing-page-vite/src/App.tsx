@@ -1,4 +1,4 @@
-import { ThemeProvider } from "@kn/ui"
+import { ThemeProvider, Toaster } from "@kn/ui"
 import React from "react"
 import { createBrowserRouter, createRoutesFromElements, i18n, initReactI18next, LanguageDetector, Route, RouterProvider, supportedLngs } from "@kn/common";
 import { Layout } from "./pages/Layout";
@@ -32,9 +32,9 @@ export const App: React.FC = () => {
         createRoutesFromElements(
             [
                 <Route path="/" element={<Layout />}>
-                        <Route path="/" element={<Home />} />
-                        <Route path="/templates" element={<Templates />} />
-                        <Route path="/plugins" element={<Plugins />} />
+                    <Route path="/" element={<Home />} />
+                    <Route path="/templates" element={<Templates />} />
+                    <Route path="/plugins" element={<Plugins />} />
                 </Route>,
                 <Route path="/doc" element={<Docs />} />
             ]
@@ -43,5 +43,6 @@ export const App: React.FC = () => {
 
     return <ThemeProvider>
         <RouterProvider router={router} />
+        <Toaster />
     </ThemeProvider>
 }

@@ -17,13 +17,9 @@ import { TableViewCfg } from "./TableViewCfg";
 
 
 const Container = styled.div`
-    // .rdg-cell {
-    //     border-inline-end: 1px solid rgba(255, 255, 243, 0.082);
-    //     border-block-end: 1px solid rgba(255, 255, 243, 0.082);
-    // }
 `
 
-export const TableView: React.FC<any> = (props: {pageSize?: number}) => {
+export const TableView: React.FC<any> = (props: { pageSize?: number }) => {
 
     const { pageSize = 20 } = props
     const { theme } = useTheme()
@@ -84,7 +80,7 @@ export const TableView: React.FC<any> = (props: {pageSize?: number}) => {
                 ref={gridRef}
                 rowClass={() => ''}
                 style={{
-                    height: `${(pageSize + 2)*35}px`
+                    height: `${(pageSize + 2) * 35}px`
                 }}
                 onFill={handleFill}
                 rowKeyGetter={(row: any) => row.id}
