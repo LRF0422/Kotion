@@ -8,7 +8,7 @@ import {
   Divider,
   Tooltip
 } from "../../../components";
-import { copyNode, deleteNode } from "../../../utilities";
+import { copyNode, deleteNodeInner } from "../../../utilities";
 
 import { Table } from "../table";
 import { IconAddColumnAfter, IconAddColumnBefore, IconAddRowAfter, IconAddRowBefore, IconCopy, IconDeleteColumn, IconDeleteRow, IconDeleteTable, IconMergeCell, IconSplitCell, IconTableHeaderCell, IconTableHeaderColumn, IconTableHeaderRow } from "../../../icons";
@@ -24,9 +24,9 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
     const predicate = (node: PMNode) => node.type.name === Table.name;
     const parent = findParentNode(predicate)(selection);
     console.log('parent', parent);
-    
+
     if (parent) {
-      
+
       const dom = editor.view.nodeDOM(parent?.pos) as HTMLElement;
       // @ts-ignore
       return dom.firstElementChild.getBoundingClientRect();
@@ -40,7 +40,7 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   }, [editor]);
 
   const deleteMe = useCallback(() => {
-    deleteNode(editor, Table.name);
+    deleteNodeInner(editor, Table.name);
   }, [editor]);
 
   const addColumnBefore = useCallback(
@@ -150,7 +150,7 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
       pluginKey="table-bubble-menu"
       shouldShow={shouldShow}
       getReferenceClientRect={getReferenceClientRect}
-      options={{ shift: true , inline: true }}>
+      options={{ shift: true, inline: true }}>
       <div className="flex flex-row gap-1 items-center">
         <Button variant="ghost" onClick={copyMe} size="icon" ><IconCopy /></Button>
         <Divider />

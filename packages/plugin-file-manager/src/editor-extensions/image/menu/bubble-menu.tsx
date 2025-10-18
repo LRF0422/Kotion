@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { Editor, getAttributes, isNodeSelection, posToDOMRect } from "@kn/editor";
+import { Editor, deleteNodeInner, getAttributes, isNodeSelection, posToDOMRect } from "@kn/editor";
 
 import {
   BubbleMenu,
@@ -83,7 +83,7 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const setFloatRight = useMemo(() => setFloat("right"), [setFloat]);
   const setFloatLeft = useMemo(() => setFloat("left"), [setFloat]);
 
-  const deleteMe = useCallback(() => deleteNode(editor, ImageExtension.name), [
+  const deleteMe = useCallback(() => deleteNodeInner(editor, ImageExtension.name), [
     editor
   ]);
 

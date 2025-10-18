@@ -126,7 +126,7 @@ export function insertNewLine() {
 export const createNewParagraphAbove = (state: EditorState, dispatch: any) => {
   const append = false;
   if (!canMoveUp(state) && canCreateParagraphNear(state)) {
-    createParagraphNear(append)(state, dispatch);
+    createParagraphNearInner(append)(state, dispatch);
     return true;
   }
 
@@ -136,7 +136,7 @@ export const createNewParagraphAbove = (state: EditorState, dispatch: any) => {
 export const createNewParagraphBelow = (state: EditorState, dispatch: any) => {
   const append = true;
   if (!canMoveDown(state) && canCreateParagraphNear(state)) {
-    createParagraphNear(append)(state, dispatch);
+    createParagraphNearInner(append)(state, dispatch);
     return true;
   }
 
@@ -153,7 +153,7 @@ function canCreateParagraphNear(state: EditorState): boolean {
   return $from.depth > 1 || isNodeSelection || insideCodeBlock;
 }
 
-export function createParagraphNear(append = true) {
+export function createParagraphNearInner(append = true) {
   return function (state: EditorState, dispatch: (arg0: any) => void) {
     const paragraph = state.schema.nodes.paragraph;
 

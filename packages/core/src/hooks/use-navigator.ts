@@ -1,4 +1,4 @@
-import { useDispatch } from "react-redux"
+import { useDispatch } from "@kn/common"
 import { NavigateOptions, To, useNavigate } from "react-router-dom"
 
 export interface NavigatorProps {

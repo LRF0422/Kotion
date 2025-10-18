@@ -24,7 +24,7 @@ import {
   BubbleMenuProps,
   Divider
 } from "../../../components";
-import { copyNode, deleteNode, isNodeActivePro } from "../../../utilities";
+import { copyNode, deleteNodeInner, isNodeActivePro } from "../../../utilities";
 
 import { Columns } from "../columns";
 import { Button, IconButton, Separator } from "@kn/ui";
@@ -52,7 +52,7 @@ export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   }, [editor]);
 
   const deleteMe = useCallback(() => {
-    deleteNode(editor, Columns.name);
+    deleteNodeInner(editor, Columns.name);
   }, [editor]);
 
   const addColBefore = useCallback(
@@ -91,7 +91,7 @@ export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
       editor={editor}
       shouldShow={shouldShow}
       getReferenceClientRect={getReferenceClientRect}
-      options={{  }}>
+      options={{}}>
       <div className="flex flex-row items-center gap-1">
         <IconButton onClick={copyMe} icon={<IconCopy />} />
         {/* <IconButton
@@ -106,7 +106,7 @@ export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
           onClick={deleteCol}
           icon={<IconDeleteColumn />}
         /> */}
-        <Divider/>
+        <Divider />
         <IconButton icon={<IconThreeColumnsMiddle className="h-4 w-4" />} onClick={() => {
           toOtherColumns({
             state: editor.state,
@@ -167,7 +167,7 @@ export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
             cols: 2
           })
         }} />
-        <Divider/>
+        <Divider />
         <IconButton icon={<Trash2 className="h-4 w-4" />} onClick={deleteMe} />
       </div>
     </BubbleMenu>

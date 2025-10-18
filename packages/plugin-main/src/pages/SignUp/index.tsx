@@ -14,7 +14,7 @@ import { ModeToggle } from "@kn/ui"
 import { zodResolver } from "@kn/ui"
 import { Plus } from "@kn/icon"
 import { useForm } from "@kn/ui"
-import { Link } from "@kn/core"
+import { Link } from "@kn/common"
 import { z } from "@kn/ui"
 import React from "react"
 

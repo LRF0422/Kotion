@@ -1,28 +1,27 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { createBrowserRouter, createRoutesFromElements, Route, RouterProvider } from "@kn/common";
+
 import { Layout } from "./Layout";
 import { ThemeProvider, Toaster } from "@kn/ui";
-import { Provider } from "@kn/common";
 import store from './store'
 import { Login } from "./components/Login";
 import { SignUpForm } from "./components/SignUp";
-
 import * as ui from "@kn/ui"
 import * as common from "@kn/common"
 import * as core from "./index"
 import * as icon from "@kn/icon"
 import * as editor from "@kn/editor"
 import { useAsyncEffect, useSafeState } from "ahooks";
-import { AppContext, PluginManager } from "@kn/common";
 import { Shop } from "./components/Shop";
 import { PluginDetail } from "./components/Shop/PluginDetail";
 import { importScript } from "./utils/utils";
 import { Marketplace } from "./components/Shop/Marketplace";
 import { APIS } from "./api";
-import { event } from "@kn/common";
-import { i18n, initReactI18next, LanguageDetector } from "@kn/common";
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
+
+const { createBrowserRouter,
+    createRoutesFromElements, Route, RouterProvider, Provider,
+    AppContext, i18n, initReactI18next, LanguageDetector, event } = common;
 
 
 declare global {
@@ -69,7 +68,7 @@ export const App: React.FC<AppProps> = (props) => {
     const [loadFinished, setLoadFinished] = useSafeState<boolean>(false)
     const [init, setInit] = useState<boolean>(false)
     const { usePath } = core.useUploadFile()
-    const pluginManager = useMemo<PluginManager>(() => new PluginManager(), [])
+    const pluginManager = useMemo<common.PluginManager>(() => new common.PluginManager(), [])
     const [flag, setFlag] = useState(0)
 
     useEffect(() => {
@@ -90,7 +89,7 @@ export const App: React.FC<AppProps> = (props) => {
                 }
                 Promise.all(installedPlugins.map((plugin) => {
                     const path = usePath(plugin.resourcePath) + "&cache=true"
-                    return importScript(path, plugin.pluginKey)
+                    return importScript(path, plugin.pluginKey, plugin.name)
                 })).then(res => {
                     setAllPlugins([...(plugins || []), ...res.map(it => Object.values(it)[0])])
                     setLoadFinished(true)
@@ -110,10 +109,10 @@ export const App: React.FC<AppProps> = (props) => {
                         <Route path='/sign-up' element={<SignUpForm />} />
                     ]
                 )))
-                if (window.location.href.includes("red")) {
+                if (window.location.href.includes("login")) {
                     return
                 }
-                window.location.href = '/login?red'
+                window.location.href = '/login'
                 setInit(true)
             }
         } catch (error) {

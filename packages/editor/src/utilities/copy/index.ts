@@ -40,7 +40,6 @@ export const copyNode = (editor: Editor, extensionName: string) => {
   }
 
   if (targetNode) {
-    console.log('targetNode', targetNode);
 
     const slice = new Slice(Fragment.fromArray([targetNode]), 0, 0);
     const { dom, text } = editor.view.serializeForClipboard(slice)
@@ -104,7 +103,7 @@ export const currentNodeByState = (state: EditorState, extensionName: string) =>
   return targetNode
 }
 
-export const deleteNode = (editor: Editor, extensionName: string) => {
+export const deleteNodeInner = (editor: Editor, extensionName: string) => {
   const { state } = editor;
   const $pos = state.selection.$anchor;
   let done = false;

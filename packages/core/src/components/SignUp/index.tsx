@@ -55,7 +55,7 @@ export function SignUpForm() {
     }
 
     return (
-        <div className="h-screen w-screen flex flex-col gap-1 items-center justify-center bg-muted">
+        <div className="h-screen w-screen flex flex-col gap-1 items-center justify-center">
             <div className="text-left w-[400px]">
                 <div className="text-2xl font-bold">Hi👋，欢迎使用</div>
             </div>

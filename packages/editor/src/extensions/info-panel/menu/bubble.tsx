@@ -2,7 +2,7 @@ import { Editor, findParentNode, isNodeActive, posToDOMRect } from "@tiptap/core
 import React, { useCallback } from "react";
 import { BubbleMenu, BubbleMenuProps } from "../../../components";
 import { InfoPanel } from "../info-panel";
-import { copyNode, deleteNode } from "../../../utilities";
+import { copyNode, deleteNodeInner } from "../../../utilities";
 import { Copy, Trash2 } from "@kn/icon";
 import { Node } from "@tiptap/pm/model";
 import { Separator } from "@kn/ui";
@@ -27,7 +27,7 @@ export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) =>
 	}
 
 	const deleteMe = () => {
-		deleteNode(editor, InfoPanel.name)
+		deleteNodeInner(editor, InfoPanel.name)
 	}
 
 	const copyMe = () => {

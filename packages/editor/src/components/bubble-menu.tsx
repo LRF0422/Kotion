@@ -50,16 +50,15 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
         ...options,
         getReferenceClientRect: getReferenceClientRect,
         hide: false,
-        // theme: options.theme,
-        appendTo: () => editor.options.element
       };
     }
 
-    return { ...defaultTippyOptions, appendTo: () => editor.options.element };
+    return { ...defaultTippyOptions };
   }, [editor, options]);
 
   if (forNode) {
     return (
+      // @ts-ignore
       <NodeBubbleMenu
         editor={editor}
         className="bg-popover text-popover-foreground px-1 py-1 rounded-sm shadow-md border"

@@ -1,6 +1,6 @@
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import { ChartArea } from "@kn/icon";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, EmptyState } from "@kn/ui";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, EmptyState, useTheme } from "@kn/ui";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -10,6 +10,7 @@ export const DrawioView: React.FC<NodeViewProps> = (props) => {
     const { extension, updateAttributes, node } = props
     const [open, setOpen] = useState(false)
     const iframe = useRef<HTMLIFrameElement>(null)
+    const { theme } = useTheme()
     const ref = useRef(null)
 
     const receive = useCallback((event: any) => {
@@ -58,25 +59,11 @@ export const DrawioView: React.FC<NodeViewProps> = (props) => {
         };
     }, []);
 
-    const showDlg = () => {
-        if (ref.current) {
-            const root = createRoot(ref.current)
-            root.render(<Dialog open={open} onOpenChange={setOpen}>
-                <DialogContent className="max-w-none w-screen">
-                    <DialogHeader>
-                        <DialogTitle>Drawio</DialogTitle>
-                        <DialogDescription></DialogDescription>
-                    </DialogHeader>
-                    <iframe ref={iframe} src={extension.options.drawIoLink} className="w-full h-[calc(100vh-50px)]" />
-                </DialogContent>
-            </Dialog>)
-        }
-    }
 
-    return <NodeViewWrapper ref={ref}>
+    return <NodeViewWrapper ref={ref} className=" bg-white w-full p-2 rounded-sm">
         {node.attrs.src ? <img src={node.attrs.src} onDoubleClick={() => {
+            iframe.current?.contentWindow?.location.reload()
             setOpen(true)
-            showDlg()
         }} /> :
             <EmptyState
                 title="No Data"
@@ -85,10 +72,19 @@ export const DrawioView: React.FC<NodeViewProps> = (props) => {
                 action={{
                     label: "Create Drawio Diagram",
                     onClick: () => {
+                        iframe.current?.contentWindow?.location.reload()
                         setOpen(true)
-                        showDlg()
                     }
                 }}
             />}
+        <Dialog open={open} onOpenChange={setOpen}>
+                <DialogContent className="max-w-none w-screen">
+                    <DialogHeader>
+                        <DialogTitle>Drawio</DialogTitle>
+                        <DialogDescription></DialogDescription>
+                    </DialogHeader>
+                    <iframe ref={iframe} src={extension.options.drawIoLink + (theme === 'light' ? '&ui=kennedy' : '&ui=dark')} className="w-full h-[calc(100vh-80px)]" />
+                </DialogContent>
+            </Dialog>
     </NodeViewWrapper>
 }

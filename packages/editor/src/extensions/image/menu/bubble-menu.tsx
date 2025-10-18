@@ -13,7 +13,7 @@ import {
   IconDelete
 } from "../../../icons";
 import { useAttributes } from "../../../hooks/use-attributes";
-import { deleteNode } from "../../../utilities";
+import { deleteNodeInner } from "../../../utilities";
 import { Image as ImageExtension } from "../image";
 import { Toggle } from "@kn/ui";
 import { Trash2 } from "@kn/icon";
@@ -71,7 +71,7 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const setAlignCenter = useMemo(() => setAlign("center"), [setAlign]);
   const setAlignRight = useMemo(() => setAlign("right"), [setAlign]);
 
-  const deleteMe = useCallback(() => deleteNode(editor, ImageExtension.name), [
+  const deleteMe = useCallback(() => deleteNodeInner(editor, ImageExtension.name), [
     editor
   ]);
 
