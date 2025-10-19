@@ -40,6 +40,10 @@ export const Plugins: React.FC = () => {
         return <Rate disabled variant="yellow" rating={rating} />;
     }
 
+    function gotoInstall(requestPluginId: string) {
+        window.open(`https://kotion.top:888?requestPluginId=${requestPluginId}`, "_blank")
+    }
+
     return <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
         <div className="flex items-start">
             <div>
@@ -183,7 +187,9 @@ export const Plugins: React.FC = () => {
                                     </div>
                                 </DialogContent>
                             </Dialog>
-                            <Button className="h-9">
+                            <Button className="h-9" onClick={() => {
+                                gotoInstall(plugin.id)
+                            }}>
                                 <DownloadIcon className="h-4 w-4" />
                             </Button>
                         </div>

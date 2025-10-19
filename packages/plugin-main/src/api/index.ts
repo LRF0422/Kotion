@@ -108,5 +108,9 @@ export const APIS = {
     GET_BLOCK_INFO: {
           url: '/knowledge-wiki/space/page/block',
         method: 'GET'
+    } as API,
+    SAVE_SPACE_AS_TEMPLATE: {
+          url: '/knowledge-wiki/space/:id/template',
+        method: 'POST'
     } as API
 }

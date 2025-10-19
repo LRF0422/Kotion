@@ -1,6 +1,6 @@
 import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
-import { TreeView } from "@kn/ui";
-import { ArrowLeft, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, Package, Plus, Settings, ShareIcon, Star, StarIcon, Trash2, Undo2, UserCircle } from "@kn/icon";
+import { IconButton, TreeView } from "@kn/ui";
+import { ArrowLeft, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, MoreVertical, Package, Plus, Settings, ShareIcon, Star, StarIcon, Trash2, Undo2, UserCircle } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@kn/ui";
 import { useApi, useService, useUploadFile } from "@kn/core";
@@ -237,10 +237,10 @@ export const SpaceDetail: React.FC = () => {
             key: '/space/:id/overView',
             icon: space?.icon?.icon || '',
             id: '/space/:id/overView',
-            className: 'h-10 gap-3 px-2 bg-muted-foreground/10',
+            className: 'h-10 gap-3 px-2 bg-muted/10',
             customerRender:
                 <div className="flex flex-row gap-1 items-center justify-between">
-                    <div className=" p-2 mt-1 bg-muted rounded-sm flex-1 flex justify-between items-center">
+                    <div className=" p-2 mt-1 border rounded-sm flex-1 flex justify-between items-center">
                         <div className="flex items-center gap-1 cursor-pointer" onClick={() => {
                             navigator.go({
                                 to: `/space-detail/${params.id}/page/${space.homePageId}`
@@ -249,7 +249,24 @@ export const SpaceDetail: React.FC = () => {
                             <div>{space?.icon?.icon}</div>
                             {space.name}
                         </div>
-                        <StarIcon className="h-4 w-4" />
+                        <div className="flex items-center gap-1">
+                            <IconButton icon={ <StarIcon className="h-4 w-4" />} />
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild> 
+                                   <MoreVertical className="h-4 w-4" />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent side="bottom" align="start">
+                                    <DropdownMenuItem onClick={() => {
+                                        spaceService.saveAsTemplate(space.id)
+                                    }}>
+                                        Save as template
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem>
+                                        Create page
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
                     </div>
                 </div>
         },

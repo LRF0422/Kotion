@@ -16,7 +16,8 @@ export interface SpaceService {
         pageTitle?: string
         spaceId?: string
     }) => Promise<any>,
-    getBlockInfo: (blockId: string) => Promise<any>
+    getBlockInfo: (blockId: string) => Promise<any>,
+    saveAsTemplate: (spaceId: string) => Promise<any>,
 }
 
 export const spaceService: SpaceService = {
@@ -51,4 +52,8 @@ export const spaceService: SpaceService = {
         const res = await useApi(APIS.GET_BLOCK_INFO, { id: blockId })
         return res.data
     },
+    saveAsTemplate: async (spaceId: string) => {
+        const res = await useApi(APIS.SAVE_SPACE_AS_TEMPLATE, { id: spaceId })
+        return res.data
+    }
 }
