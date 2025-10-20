@@ -8,7 +8,7 @@ import { APIS } from "./api"
 import { useDispatch } from "@kn/common"
 import { useNavigator } from "./hooks/use-navigator"
 import { ErrorBoundary } from "react-error-boundary"
-import { BUSINESS_TOPIC, GO_TO_MARKETPLACE, ON_MESSAGE, event } from "@kn/common"
+import { GO_TO_MARKETPLACE, event } from "@kn/common"
 import { toast } from "@kn/ui"
 import { ErrorPage } from "./components/ErrorPage"
 import React from "react"
@@ -56,32 +56,6 @@ export function Layout() {
         })
     }, [])
 
-    useEffect(() => {
-        event.on(ON_MESSAGE, (message: any) => {
-            if (message.data) {
-                if (message.data && message.data.topic === BUSINESS_TOPIC.PAGE_COOPERATION_INVITE) {
-                    toast(message.data.title, {
-                        position: 'top-right',
-                        closeButton: true,
-                        duration: Infinity,
-                        description: message.data.message,
-                        action: {
-                            label: '接受',
-                            onClick: () => { }
-                        },
-                        cancel: {
-                            label: '拒绝',
-                            onClick: () => { }
-                        }
-                    })
-                }
-            }
-        })
-        return () => {
-            event.off(ON_MESSAGE)
-        }
-    }, [])
-
     const install = (versionId: string) => {
         useApi(APIS.INSTALL_PLUGIN, {
             versionId
@@ -108,39 +82,39 @@ export function Layout() {
                     <Outlet />
                 </main>
                 <AlertDialog open={open} onOpenChange={setOpen}>
-                <AlertDialogTrigger />
-                <AlertDialogContent>
-                    <AlertDialogTitle>Sure to install ?</AlertDialogTitle>
+                    <AlertDialogTrigger />
+                    <AlertDialogContent>
+                        <AlertDialogTitle>Sure to install ?</AlertDialogTitle>
                         <AlertDialogDescription className=" hidden" />
                         {requestPlugin &&
-                                <Item variant="muted" className=" hover:shadow-sm transition-shadow duration-300">
-                                    <ItemContent>
-                                        <ItemTitle className="flex gap-2">
+                            <Item variant="muted" className=" hover:shadow-sm transition-shadow duration-300">
+                                <ItemContent>
+                                    <ItemTitle className="flex gap-2">
                                         <img src={usePath(requestPlugin.icon)} className="w-10 h-10" />
                                         <div>
                                             <div>
-                                                   {requestPlugin.name}
-                                                  <Badge className=" ml-2">{  requestPlugin.category.value}</Badge>
+                                                {requestPlugin.name}
+                                                <Badge className=" ml-2">{requestPlugin.category.value}</Badge>
                                             </div>
 
                                             <div className="text-xs italic text-gray-400">
                                                 {requestPlugin.developer} / {requestPlugin.maintainer}
                                             </div>
-                                            <Rate rating={requestPlugin.rating} disabled  variant="yellow"/>
+                                            <Rate rating={requestPlugin.rating} disabled variant="yellow" />
                                         </div>
-                                        </ItemTitle>
-                                        <ItemDescription>{requestPlugin.description}</ItemDescription>
-                                    </ItemContent>
-                                </Item>
+                                    </ItemTitle>
+                                    <ItemDescription>{requestPlugin.description}</ItemDescription>
+                                </ItemContent>
+                            </Item>
                         }
-                    <AlertDialogFooter>
+                        <AlertDialogFooter>
                             <AlertDialogAction onClick={() => {
                                 install(requestPlugin.currentVersion.id)
-                        }}>Confirm</AlertDialogAction>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                            }}>Confirm</AlertDialogAction>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </div>
         </ErrorBoundary>
     )

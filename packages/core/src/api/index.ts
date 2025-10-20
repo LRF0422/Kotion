@@ -42,7 +42,7 @@ export const APIS = {
         url: '/knowledge-wiki/plugin/uninstall',
         method: 'POST'
     } as API,
-     UPDATE_PLUGIN: {
+    UPDATE_PLUGIN: {
         url: '/knowledge-wiki/plugin/update',
         method: 'POST'
     } as API

@@ -1,6 +1,6 @@
 import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
 import { IconButton, TreeView } from "@kn/ui";
-import { ArrowLeft, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, MoreVertical, Package, Plus, Settings, ShareIcon, Star, StarIcon, Trash2, Undo2, UserCircle } from "@kn/icon";
+import { ArrowLeft, CircleArrowUp, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, MoreVertical, Package, Plus, Settings, ShareIcon, Star, StarIcon, Trash2, Undo2, UserCircle } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@kn/ui";
 import { useApi, useService, useUploadFile } from "@kn/core";
@@ -19,6 +19,7 @@ import { useToggle } from "@kn/core";
 import { Empty } from "@kn/ui";
 import { MultiSelect } from "@kn/ui";
 import { SpaceHub } from "../SpaceHub";
+import { TemplateCreator } from "./TemplateCreator";
 
 export const SpaceDetail: React.FC = () => {
 
@@ -249,23 +250,11 @@ export const SpaceDetail: React.FC = () => {
                             <div>{space?.icon?.icon}</div>
                             {space.name}
                         </div>
-                        <div className="flex items-center gap-1">
-                            <IconButton icon={ <StarIcon className="h-4 w-4" />} />
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild> 
-                                   <MoreVertical className="h-4 w-4" />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent side="bottom" align="start">
-                                    <DropdownMenuItem onClick={() => {
-                                        spaceService.saveAsTemplate(space.id)
-                                    }}>
-                                        Save as template
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem>
-                                        Create page
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                        <div className="flex items-center gap-1 text-muted">
+                            <IconButton icon={<StarIcon className="h-4 w-4" />} />
+                            <TemplateCreator space={space}>
+                                <CircleArrowUp className="h-4 w-4" />
+                            </TemplateCreator>
                         </div>
                     </div>
                 </div>

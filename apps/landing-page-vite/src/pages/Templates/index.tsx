@@ -1,7 +1,8 @@
 import { Badge, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Creator from "../../assets/creator.png"
 import { ArrowRight, DownloadIcon } from "@kn/icon";
+import request from "../../utils/request"
 
 
 export const Templates: React.FC = () => {
@@ -17,8 +18,17 @@ export const Templates: React.FC = () => {
         "More"
     ]
 
-    const [templates, setTemplates] = useState([{}, {}, {}, {}, {}, {}])
+    const [templates, setTemplates] = useState([])
     const [selectedKey, setSelectedKey] = React.useState<string>("All Templates")
+
+    useEffect(() => {
+        request({
+            url: '/knowledge-wiki/space/public/templates',
+            method: 'GET'
+        }).then(res => {
+            setTemplates(res.data.records)
+        })
+    }, [])
 
     return <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
         <div className="text-3xl md:text-4xl font-bold mb-4">Discover Kotion Templates</div>
@@ -63,10 +73,10 @@ export const Templates: React.FC = () => {
                         <div className="p-4">
                             <div className="flex items-center space-x-2 mb-2">
                                 <Badge className="px-2 py-1 text-xs rounded-md">Work</Badge>
-                                <span className="text-xs text-gray-400 flex items-center gap-1"><DownloadIcon className="w-4 h-4"/> 2.4k</span>
+                                <span className="text-xs text-gray-400 flex items-center gap-1"><DownloadIcon className="w-4 h-4" /> 2.4k</span>
                             </div>
-                            <h4 className="font-medium text-lg mb-2">Project Management</h4>
-                            <p className="text-gray-600 text-sm mb-4 line-clamp-2">Organize your projects, tasks, and team members with this comprehensive management template.</p>
+                            <h4 className="font-medium text-lg mb-2">{template.name}</h4>
+                            <p className="text-gray-600 text-sm mb-4 line-clamp-2">{template.description}</p>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-2">
                                     <div className="h-6 w-6 rounded-full overflow-hidden">
