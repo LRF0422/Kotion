@@ -1,5 +1,5 @@
 import { APIS } from "../../api";
-import { IconSelector } from "@kn/ui";
+import { Carousel, CarouselContent, CarouselGallery, CarouselItem, CarouselNext, CarouselPrevious, DialogDescription, IconSelector } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@kn/ui";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@kn/ui";
@@ -11,7 +11,7 @@ import { zodResolver } from "@kn/ui";
 import { Plus } from "@kn/icon";
 import React, { ReactNode, useState } from "react";
 import { useForm } from "@kn/ui";
-import { useSelector } from "@kn/common";
+import { useSelector, useTranslation } from "@kn/common";
 import { z } from "@kn/ui";
 
 export interface SpaceFormProps {
@@ -21,10 +21,14 @@ export interface SpaceFormProps {
 export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
 
     const { userInfo } = useSelector((state: GlobalState) => state)
-    const { upload } = useUploadFile()
+    const { upload, usePath } = useUploadFile()
+    const { t } = useTranslation()
 
     const FormSchema = z.object({
-        icon: z.instanceof(Object, { message: "Icon is required" }),
+        icon: z.object({
+            type: z.enum(["EMOJI", "IMAGE"]),
+            icon: z.string()
+        }),
         name: z.string({
             required_error: "You need to type a space name"
         }),
@@ -36,6 +40,15 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
 
     const form = useForm<z.infer<typeof FormSchema>>({
         resolver: zodResolver(FormSchema),
+        defaultValues: {
+            icon: {
+                type: "EMOJI",
+                icon: "🚀"
+            },
+            cover: "upload/20251022/2c9402c970f95483446ded792b32ac22.png",
+            nickName: userInfo?.name,
+            userId: userInfo?.id
+        }
     })
 
     function onSubmit(values: z.infer<typeof FormSchema>) {
@@ -52,10 +65,10 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
                     name="icon"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>图标</FormLabel>
+                            <FormLabel>{t("creation.icon")}</FormLabel>
                             <FormControl>
                                 <div>
-                                    <IconSelector onChange={field.onChange} />
+                                    <IconSelector onChange={field.onChange} value={field.value} />
                                 </div>
                             </FormControl>
                         </FormItem>
@@ -66,12 +79,12 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
                     name="cover"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>封面</FormLabel>
+                            <FormLabel>{t("creation.cover")}</FormLabel>
                             <FormControl>
-                                <div>
-                                    <div className="flex items-center justify-center h-[200px] w-[150px] border border-dashed rounded-sm hover:bg-muted cursor-pointer"
+                                <div className="flex items-center gap-5">
+                                    <div className="flex items-center justify-center h-[200px] w-[150px] rounded-sm bg-muted/50  hover:bg-muted cursor-pointer"
                                         style={{
-                                            backgroundImage: `url('http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${field.value}')`,
+                                            backgroundImage: `url('${usePath(field.value)}')`,
                                             backgroundSize: 'cover'
                                         }}
                                         onClick={() => {
@@ -81,6 +94,28 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
                                         }}
                                     >
                                         {!field.value && <Plus />}
+                                    </div>
+                                    <div className="w-[300px]">
+                                        <Carousel
+                                            opts={{
+                                                align: "start",
+                                            }}
+                                            className="w-full ml-[50px] mr-[50px]"
+                                        >
+                                            <CarouselContent>
+                                                <CarouselItem className=" basis-1/2">
+                                                    <img src={usePath(field.value)} className="h-[200px] w-[150px]" alt="" />
+                                                </CarouselItem>
+                                                <CarouselItem className=" basis-1/2">
+                                                    <img src={usePath(field.value)} className="h-[200px] w-[150px]" alt="" />
+                                                </CarouselItem>
+                                                <CarouselItem className=" basis-1/2">
+                                                    <img src={usePath(field.value)} className="h-[200px] w-[150px]" alt="" />
+                                                </CarouselItem>
+                                            </CarouselContent>
+                                            <CarouselPrevious />
+                                            <CarouselNext />
+                                        </Carousel>
                                     </div>
                                 </div>
                             </FormControl>
@@ -92,9 +127,9 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
                     name="name"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>名称</FormLabel>
+                            <FormLabel>{t("creation.name")}</FormLabel>
                             <FormControl>
-                                <Input autoComplete="off" {...field} />
+                                <Input autoComplete="off" {...field} placeholder="Name for the space" />
                             </FormControl>
                         </FormItem>
                     )}
@@ -104,9 +139,9 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
                     name="description"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>描述</FormLabel>
+                            <FormLabel>{t("creation.desc")}</FormLabel>
                             <FormControl>
-                                <Textarea {...field} />
+                                <Textarea {...field} placeholder="Description for the space" autoComplete="off" />
                             </FormControl>
                         </FormItem>
                     )}
@@ -121,12 +156,14 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
 export const CreateSpaceDlg = (props: { trigger: ReactNode, callBack?: () => void }) => {
 
     const [visible, setVisible] = useState(false)
+    const { t } = useTranslation()
 
     return <Dialog open={visible} onOpenChange={setVisible}>
         <DialogTrigger onClick={() => setVisible(true)}>{props.trigger}</DialogTrigger>
-        <DialogContent className="h-auto">
+        <DialogContent className="h-auto max-w-none w-[700pxpx]">
             <DialogHeader>
-                <DialogTitle>新建空间</DialogTitle>
+                <DialogTitle>{t("creation.title")}</DialogTitle>
+                <DialogDescription></DialogDescription>
                 <SpaceForm callBack={() => {
                     props.callBack && props.callBack()
                     setVisible(false)

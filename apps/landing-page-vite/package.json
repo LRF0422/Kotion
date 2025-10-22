@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "brand-logos": "^0.1.1",
     "@kn/ui": "workspace:*",
     "@kn/common": "workspace:*",
     "@kn/icon": "workspace:*",

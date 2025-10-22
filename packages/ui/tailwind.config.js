@@ -2,10 +2,8 @@
 module.exports = {
   darkMode: ["class"],
   content: [
-    "./app/**/*.{ts,tsx}",
     "./src/**/*.{ts,tsx}",
-    "./packages/**/*.{html,js,ts,jsx,tsx}",
-    "../packages/**/*.{html,js,ts,jsx,tsx}",
+    // "./packages/**/*.{html,js,ts,jsx,tsx}",
     "./node_modules/@kn/**/*.{ts,tsx}",
   ],
   prefix: "",
@@ -30,7 +28,7 @@ module.exports = {
     },
     extend: {
       screens: {
-        "3xl": "1600px",
+        "3xl": "1900px",
       },
       colors: {
         border: "hsl(var(--border))",

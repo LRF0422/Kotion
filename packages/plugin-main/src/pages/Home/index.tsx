@@ -54,7 +54,7 @@ export const Home: React.FC = () => {
                 </div>
                 <CardList
                     data={recentSpaces}
-                    className="h-[200px]"
+                    className="h-[250px]"
                     emptyProps={{
                         button: <CreateSpaceDlg trigger={<Button>{t("home.create-space")}</Button>} />
                     }}

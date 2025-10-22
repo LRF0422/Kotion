@@ -2,6 +2,7 @@ import React from "react";
 import { Button, Rate } from "@kn/ui"
 import { ArrowRight, FaCheck, FaDatabase, FaLink, FaPlug, FaTasks, FaTimes, FaUsers, FileText, Github } from "@kn/icon";
 import { Link, useTranslation } from "@kn/common";
+import { AlpinejsIcon, CloudflareIcon, GithubIcon } from 'brand-logos';
 
 export const Home: React.FC = () => {
 
@@ -19,8 +20,10 @@ export const Home: React.FC = () => {
                                 window.open('https://kotion.top:888', '_blank')
                             }}>{t("home.get-started")}</Button>
                             <Button variant="outline">{t("home.view-templates")}</Button>
-                            <Button variant="outline" className="flex items-center gap-1">
-                                <Github className="w-4 h-4" />
+                            <Button variant="outline" className="flex items-center gap-2" onClick={() => {
+                                window.open("https://github.com/LRF0422/knowledge-repo.git", "_blank")
+                            }}>
+                                <Github className="h-4 w-4" />
                                 Github
                             </Button>
                         </div>

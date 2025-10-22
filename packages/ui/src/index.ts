@@ -9,7 +9,7 @@ export {
 } from "recharts"
 export { zodResolver } from "@hookform/resolvers/zod"
 export * from "zod"
-export { useForm } from "react-hook-form"
+export { useForm, Controller } from "react-hook-form"
 export { type TimeValue } from "react-aria-components"
 
 import styled from "styled-components"

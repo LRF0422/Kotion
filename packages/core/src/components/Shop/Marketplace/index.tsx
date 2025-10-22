@@ -168,8 +168,8 @@ export const Marketplace: React.FC = () => {
                     }
                 </div>
             }
-            <div className="w-full flex justify-center">
-                <div className="flex justify-center items-center w-full p-10 gap-3 bg-muted/70 border rounded-md mt-[30px]">
+            <div className="w-full">
+                <div className="flex justify-center items-center w-full p-10 gap-3 bg-muted/70 border rounded-md mt-[30px] mb-[30px]    ">
                     <div>
                         <div className=" text-[30px] font-bold">{t("marketplace.create-your-own-plugin")}</div>
                         <div>Create plugins for Kotion and reach thousands of users worldwide.</div>

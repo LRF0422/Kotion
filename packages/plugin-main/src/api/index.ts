@@ -110,7 +110,7 @@ export const APIS = {
         method: 'GET'
     } as API,
     SAVE_SPACE_AS_TEMPLATE: {
-          url: '/knowledge-wiki/space/:id/template',
+          url: '/knowledge-wiki/space/template',
         method: 'POST'
     } as API
 }

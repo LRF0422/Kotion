@@ -1,27 +1,65 @@
 import { useSelector } from "@kn/common";
-import { GlobalState, useUploadFile } from "@kn/core";
-import { Alert, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, Avatar, Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet, FileUploader, Input, Item, ItemContent, ItemDescription, ItemTitle, ScrollArea, Textarea } from "@kn/ui";
-import React, { PropsWithChildren } from "react";
+import { GlobalState, useApi, useUploadFile } from "@kn/core";
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel,
+    AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+    AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, Avatar, Button, Controller, Field,
+    FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet, FileUploader, Input, ScrollArea, TagInput, Textarea, cn, toast, useForm, z, zodResolver
+} from "@kn/ui";
+import React, { PropsWithChildren, useRef } from "react";
+import { APIS } from "../../../api";
 
 
 export interface TemplateCreatorProps extends PropsWithChildren {
-    space: any
+    space: any,
+    className?: string
 }
 
+const formSchema = z.object({
+    spaceId: z.string(),
+    name: z.string(),
+    description: z.string(),
+    cover: z.array(z.string()),
+    categories: z.array(z.object({
+        id: z.string(),
+        text: z.string()
+    })),
+})
+
 export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
-    const { space } = props
+    const { space, className } = props
     const { userInfo } = useSelector((state: GlobalState) => state)
-    const { usePath } = useUploadFile()
+    const { usePath, uploadFile } = useUploadFile()
+    const ref = useRef<HTMLFormElement>(null)
+
+    const form = useForm<z.infer<typeof formSchema>>({
+        resolver: zodResolver(formSchema),
+        defaultValues: {
+            name: space.name,
+            spaceId: space.id,
+            description: space.description,
+            cover: space.cover,
+            categories: space.categories
+        }
+    })
+
+    const onSubmit = (values: z.infer<typeof formSchema>) => {
+        console.log(values)
+        useApi(APIS.SAVE_SPACE_AS_TEMPLATE, null, values).then(() => {
+            toast.success("创建成功")
+        })
+    }
+
     return <AlertDialog>
-        <AlertDialogTrigger>{props.children}</AlertDialogTrigger>
-        <AlertDialogContent className=" max-w-none w-[80%] max-h-[80%]">
+        <AlertDialogTrigger className={className}>{props.children}</AlertDialogTrigger>
+        <AlertDialogContent className={cn(" max-w-none w-[80%] max-h-[90%] 3xl:w-[60%]")}>
             <AlertDialogHeader>
                 <AlertDialogTitle>Save as template</AlertDialogTitle>
                 <AlertDialogDescription />
-                <ScrollArea className="h-[80%-200px]">
-                    <form>
+                <ScrollArea className="h-[90%]">
+                    <form ref={ref} action="#" onSubmit={form.handleSubmit(onSubmit)} id="template-form">
                         <FieldGroup>
-                            <FieldSet>
+                            <FieldSet className="p-2">
                                 <FieldLegend>Payment Method</FieldLegend>
                                 <FieldDescription>
                                     All transactions are secure and encrypted
@@ -33,25 +71,55 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                                             <img src={usePath(userInfo?.avatar as string)} alt="" />
                                         </Avatar>
                                     </Field>
-                                    <Field>
-                                        <FieldLabel>Template Name</FieldLabel>
-                                        <Input value={space.name} />
-                                    </Field>
-                                    <Field>
-                                        <FieldLabel>Cover</FieldLabel>
-                                        <FileUploader />
-                                    </Field>
-                                    <Field>
-                                        <FieldLabel>Full Description</FieldLabel>
-                                        <Textarea />
-                                    </Field>
+                                    <Controller
+                                        name="name"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <Field>
+                                                <FieldLabel>Template Nane</FieldLabel>
+                                                <Input {...field} />
+                                            </Field>
+                                        )}
+                                    />
+                                    <Controller
+                                        name="cover"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <Field>
+                                                <FieldLabel>Cover</FieldLabel>
+                                                <FileUploader multiple maxFileCount={5} onUpload={(files) => {
+                                                    return Promise.all(files.map(it => {
+                                                        return uploadFile(it).then(res => {
+                                                            return usePath(res.name)
+                                                        })
+                                                    })).then(res => {
+                                                        field.onChange(res)
+                                                    })
+                                                }} />
+                                            </Field>
+                                        )}
+                                    />
+                                    <Controller
+                                        name="description"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <Field>
+                                                <FieldLabel>Description</FieldLabel>
+                                                <Textarea {...field} />
+                                            </Field>
+                                        )}
+                                    />
                                 </FieldGroup>
                             </FieldSet>
                         </FieldGroup>
                     </form>
                 </ScrollArea>
                 <AlertDialogFooter>
-                    <AlertDialogAction>Confirm</AlertDialogAction>
+                    <AlertDialogAction onClick={() => {
+                        ref.current?.submit()
+                    }}>
+                        Confirm
+                    </AlertDialogAction>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                 </AlertDialogFooter>
             </AlertDialogHeader>

@@ -74,12 +74,19 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "all": "查看全部空间",
         },
         "space-hub": {
-           "all-space": "所有空间"
-         },
+          "all-space": "所有空间"
+        },
         "toc": {
           "title": "目录",
           "empty": "没有数据"
-        }
+        },
+        creation: {
+          title: "创建空间",
+          name: "名称",
+          desc: "描述",
+          cover: "封面 ",
+          icon: "图标"
+        },
       }
     },
     "en": {
@@ -91,12 +98,19 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "all": "all spaces",
         },
         "space-hub": {
-           "all-space": "All Spaces"
-         },
+          "all-space": "All Spaces"
+        },
         "toc": {
           "title": "Table of Contents",
           "empty": "No Content"
-        }
+        },
+        creation: {
+          title: "Create a space",
+          name: "Name",
+          desc: "Description",
+          cover: "Cover ",
+          icon: "Icon"
+        },
       }
     },
   }

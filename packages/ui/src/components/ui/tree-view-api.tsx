@@ -494,7 +494,7 @@ const TreeItemGroup: React.FC<any> = (props) => {
             </div>
         </div>
         {
-            props.height ? <ScrollArea className={`h-[500px]`}>
+            props.height ? <ScrollArea className="h-[450px]">
                 {props.children}
             </ScrollArea> : props.children
         }

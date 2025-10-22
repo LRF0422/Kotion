@@ -250,11 +250,8 @@ export const SpaceDetail: React.FC = () => {
                             <div>{space?.icon?.icon}</div>
                             {space.name}
                         </div>
-                        <div className="flex items-center gap-1 text-muted">
+                        <div className="flex items-center gap-1">
                             <IconButton icon={<StarIcon className="h-4 w-4" />} />
-                            <TemplateCreator space={space}>
-                                <CircleArrowUp className="h-4 w-4" />
-                            </TemplateCreator>
                         </div>
                     </div>
                 </div>
@@ -305,8 +302,8 @@ export const SpaceDetail: React.FC = () => {
             isGroup: true,
             key: 'page',
             id: 'page',
-            height: 350,
-            className: 'h-[400px]',
+            height: 300,
+            className: 'h-[300px]',
             icon: <Package />,
             actions: [
                 <Button className="h-7 w-7 ml-1" variant="ghost" size="icon" key="1" onClick={() => handleCreatePage()}><Plus className="h-3 w-3" /></Button>
@@ -359,6 +356,15 @@ export const SpaceDetail: React.FC = () => {
             icon: <Trash2 className="h-4 w-4" />,
             key: '/space/:id/trash',
             className: 'text-red-500'
+        }, {
+            name: "Save as Template",
+            id: "",
+            key: "",
+            icon: <></>,
+            customerRender: <TemplateCreator space={space} className="flex flex-row gap-2 items-center w-full px-1 py-1 rounded-sm text-sm hover:bg-muted">
+                <CircleArrowUp className="h-4 w-4" />
+                <div>Save as Template</div>
+            </TemplateCreator>
         }
     ] : []
 

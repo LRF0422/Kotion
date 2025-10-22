@@ -82,7 +82,7 @@ export const IconSelector = forwardRef<HTMLDivElement, IconSelectorProps>((props
 
     return <Popover modal>
         <PopoverTrigger>
-            <div ref={ref} className="flex h-[80px] w-[80px] border-dashed border rounded-sm justify-center items-center hover:bg-muted">
+            <div ref={ref} className="flex h-[80px] w-[80px] rounded-sm justify-center items-center bg-muted/50 hover:bg-muted">
                 {
                     praseIcon()
                 }
@@ -107,7 +107,7 @@ export const IconSelector = forwardRef<HTMLDivElement, IconSelectorProps>((props
                     }} >
                         <EmojiPickerSearch />
                         <EmojiPickerContent />
-                        <EmojiPickerFooter/>
+                        <EmojiPickerFooter />
                     </EmojiPicker>
                 </TabsContent>
                 <TabsContent value="image">
