@@ -1,5 +1,5 @@
 import { APIS } from "../../api";
-import { Carousel, CarouselContent, CarouselGallery, CarouselItem, CarouselNext, CarouselPrevious, DialogDescription, IconSelector } from "@kn/ui";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious, DialogDescription, IconSelector } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@kn/ui";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@kn/ui";
@@ -57,7 +57,14 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
         })
     }
 
-    return <div>
+    const covers: any[] = [
+        "upload/20251022/2c9402c970f95483446ded792b32ac22.png",
+        "upload/20251023/5d372ef092428d58e995d1b910173641.png",
+        "upload/20251023/05508f818232fd72e08caff65669d014.png",
+        "upload/20251024/e409eaacdbab8e9fa9ed6d40181ca911.png"
+    ]
+
+    return <div className="w-full">
         <Form {...form}  >
             <form className="flex flex-col gap-2" onSubmit={form.handleSubmit(onSubmit)}>
                 <FormField
@@ -100,17 +107,22 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
                                             opts={{
                                                 align: "start",
                                             }}
-                                            className="w-full ml-[50px] mr-[50px]"
+                                            className="w-full ml-[50px] mr-[50px] max-w-sm"
                                         >
-                                            <CarouselContent>
+                                            <CarouselContent className="p-1">
+                                                {
+                                                    covers.map((cover, index) => (
+                                                        <CarouselItem key={index} className="basis-1/2" onClick={() => {
+                                                            field.onChange(cover)
+                                                        }}>
+                                                            <img src={usePath(cover)} alt="cover" className="hover:shadow-md hover:outline cursor-pointer rounded-sm transition-[outline] duration-75 w-full h-[200px]" />
+                                                        </CarouselItem>
+                                                    ))
+                                                }
                                                 <CarouselItem className=" basis-1/2">
-                                                    <img src={usePath(field.value)} className="h-[200px] w-[150px]" alt="" />
-                                                </CarouselItem>
-                                                <CarouselItem className=" basis-1/2">
-                                                    <img src={usePath(field.value)} className="h-[200px] w-[150px]" alt="" />
-                                                </CarouselItem>
-                                                <CarouselItem className=" basis-1/2">
-                                                    <img src={usePath(field.value)} className="h-[200px] w-[150px]" alt="" />
+                                                    <div className="h-[200px] w-full rounded-sm cursor-pointer duration-75 flex items-center justify-center ">
+                                                        <Button size="sm">More Cover</Button>
+                                                    </div>
                                                 </CarouselItem>
                                             </CarouselContent>
                                             <CarouselPrevious />
@@ -160,7 +172,7 @@ export const CreateSpaceDlg = (props: { trigger: ReactNode, callBack?: () => voi
 
     return <Dialog open={visible} onOpenChange={setVisible}>
         <DialogTrigger onClick={() => setVisible(true)}>{props.trigger}</DialogTrigger>
-        <DialogContent className="h-auto max-w-none w-[700pxpx]">
+        <DialogContent className="h-auto max-w-none w-[650px]">
             <DialogHeader>
                 <DialogTitle>{t("creation.title")}</DialogTitle>
                 <DialogDescription></DialogDescription>

@@ -14,7 +14,7 @@ export const UnknownNode = Node.create({
 
     addAttributes() {
         return {
-            name: {
+            nodeType: {
                 default: null
             }
         }

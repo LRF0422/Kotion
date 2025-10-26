@@ -1,4 +1,4 @@
-import { ArchiveIcon, ArrowUpRight, BoxIcon, Dot, DownloadIcon, FilePlus2, Loader2, PlusIcon, SearchIcon } from "@kn/icon";
+import { ArchiveIcon, ArrowUpRight, BoxIcon, Dot, DownloadIcon, FilePlus2, Loader2, PlusIcon, RiNftFill, SearchIcon } from "@kn/icon";
 import {
     Avatar, Button, Card, CardDescription, CardFooter, CardHeader, CardTitle, EmptyState, IconButton, Input,
     Rate,
@@ -15,40 +15,45 @@ export const Marketplace: React.FC = () => {
 
     const [categories, setCategories] = React.useState<string[]>([
         "All",
-        "Knowledge",
+        "App",
         "Feature",
-        "Tools",
-        "Music",
-        "Wiki"
+        "Connector"
     ])
 
     const [selectCategory, setSelectCategory] = useState<string>("All")
     const [plugins, setPlugins] = useState<any[]>([])
     const [installing, { toggle }] = useToggle(false)
+    const [installingPluginId, setInstallingPluginId] = useState<string>()
     const { usePath } = useUploadFile()
     const navigator = useNavigator()
     const [flag, setFlag] = useState(0)
     const { t } = useTranslation()
 
     useEffect(() => {
-        useApi(APIS.GET_PLUGIN_LIST, { pageSize: 8 }).then(res => {
+        useApi(APIS.GET_PLUGIN_LIST, { pageSize: 10, category: selectCategory === "All" ? null : selectCategory.toLocaleUpperCase() }).then(res => {
             setPlugins(res.data.records)
         })
-    }, [flag])
+    }, [flag, selectCategory])
 
     useEffect(() => {
         event.on("REFRESH_PLUSINS", () => {
             setFlag(f => f + 1)
         })
+
+        return () => {
+            event.off("REFRESH_PLUSINS")
+        }
     }, [])
 
     const installPlugin = (id: string) => {
         toggle()
+        setInstallingPluginId(id)
         useApi(APIS.INSTALL_PLUGIN, {
             versionId: id
-        }).then(res => {
+        }).then(() => {
             toggle()
             event.emit("REFRESH_PLUSINS")
+            setInstallingPluginId(undefined)
         })
 
     }
@@ -64,7 +69,7 @@ export const Marketplace: React.FC = () => {
                     {
                         categories.map((it, index) => <div
                             onClick={() => setSelectCategory(it)}
-                            className={cn("rounded-sm px-3 py-1 hover:bg-muted cursor-pointer", selectCategory === it ? "bg-muted outline" : "")}
+                            className={cn("rounded-sm px-3 py-1 hover:bg-muted cursor-pointer transition-colors duration-75", selectCategory === it ? "bg-muted outline  " : "")}
                             key={index}>
                             {it}
                         </div>)
@@ -131,10 +136,10 @@ export const Marketplace: React.FC = () => {
                                                         <span>{plugin.maintainer}</span>
                                                     </div>
                                                     <div className=" flex items-center text-gray-500 italic">
-                                                        <Rate rating={5} variant="yellow" disabled size={15} />
+                                                        <Rate rating={plugin.rating} variant="yellow" disabled size={15} />
                                                         <Dot />
                                                         <div className="text-xs flex items-center gap-1">
-                                                            <DownloadIcon className="h-3 w-3" />1000,00
+                                                            <DownloadIcon className="h-3 w-3" /> {plugin.downloads}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -149,7 +154,7 @@ export const Marketplace: React.FC = () => {
                                             disabled={!!(plugin.installeddVersions.length > 0)}
                                             className="px-2 border"
                                             onClick={() => installPlugin(plugin.currentVersionId)}
-                                            icon={installing ? <Loader2 className="w-4 h-4 animate-spin" /> : <div className="flex items-center gap-1 text-sm">
+                                            icon={(installing && installingPluginId === plugin.currentVersionId) ? <Loader2 className="w-4 h-4 animate-spin" /> : <div className="flex items-center gap-1 text-sm">
                                                 <DownloadIcon className="w-4 h-4" />
                                                 {plugin.installeddVersions.length > 0 ? "Installed" : "Install"}
                                             </div>} />

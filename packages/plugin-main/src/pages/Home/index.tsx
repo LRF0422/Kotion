@@ -93,14 +93,14 @@ export const Home: React.FC = () => {
                             to: `/space-detail/${data.spaceId}/page/${data.id}`
                         })
                     }}
-                    footer={() => <div className="text-sm italic text-gray-500">
-                        <a className="flex flex-row items-center gap-1 underline">
-                            <UserCircle className="h-3 w-3" />Last update by Leong
-                        </a>
-                        <div className="flex flex-row items-center gap-1">
-                            <Clock className="h-3 w-3" />At 2024年8月19日
-                        </div>
-                    </div>}
+                    // footer={() => <div className="text-sm italic text-gray-500">
+                    //     <a className="flex flex-row items-center gap-1 underline">
+                    //         <UserCircle className="h-3 w-3" />Last update by Leong
+                    //     </a>
+                    //     <div className="flex flex-row items-center gap-1">
+                    //         <Clock className="h-3 w-3" />At 2024年8月19日
+                    //     </div>
+                    // </div>}
                 />
             </div>
             <div className="flex flex-col gap-1">

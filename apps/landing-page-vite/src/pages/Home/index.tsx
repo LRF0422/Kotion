@@ -2,7 +2,6 @@ import React from "react";
 import { Button, Rate } from "@kn/ui"
 import { ArrowRight, FaCheck, FaDatabase, FaLink, FaPlug, FaTasks, FaTimes, FaUsers, FileText, Github } from "@kn/icon";
 import { Link, useTranslation } from "@kn/common";
-import { AlpinejsIcon, CloudflareIcon, GithubIcon } from 'brand-logos';
 
 export const Home: React.FC = () => {
 

@@ -152,6 +152,12 @@ export const SpaceDetail: React.FC = () => {
         })
     }
 
+    const handleFavorite = () => {
+        useApi(APIS.ADD_SPACE_FAVORITE, { id: params.id}).then(() => {
+            setFlag(f => f + 1)
+        })
+    }
+
 
     const resolve = (treeNode: any) => {
 
@@ -251,7 +257,7 @@ export const SpaceDetail: React.FC = () => {
                             {space.name}
                         </div>
                         <div className="flex items-center gap-1">
-                            <IconButton icon={<StarIcon className="h-4 w-4" />} />
+                            <IconButton icon={<StarIcon className="h-4 w-4"  />} onClick={handleFavorite} />
                         </div>
                     </div>
                 </div>

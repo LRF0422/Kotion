@@ -1,6 +1,6 @@
-import { CollaborationEditor, EditorRender } from "@kn/editor";
-import { CheckCircle2, DownloadCloudIcon, Settings } from "@kn/icon";
-import { Avatar, Badge, Button, Empty, Rate, Separator, Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
+import { EditorRender } from "@kn/editor";
+import { CheckCircle2, DownloadIcon, Settings } from "@kn/icon";
+import { Avatar, Badge, Button, Rate, Separator, Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
 import { useSafeState } from "ahooks";
 import React, { useEffect } from "react";
 import { useParams } from "@kn/common";
@@ -23,7 +23,7 @@ export const PluginDetail: React.FC = () => {
     }, [params.id])
 
     return pluginDetail && <div className=" flex flex-col h-[100vh]">
-        <div className="flex gap-10 items-center justify-center shadow-sm border-b pb-4 pt-4 h-[300px]">
+        <div className="flex gap-10 items-center justify-center shadow-sm border-b pb-4 pt-4 h-[250px]">
             <Avatar className="w-[80px] h-[80px]">
                 <img src={usePath(pluginDetail?.icon)} alt="logo" />
             </Avatar>
@@ -34,19 +34,19 @@ export const PluginDetail: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3 h-[30px]">
                     <div>
-                        <Badge><CheckCircle2 className="h-4 w-4 mr-2" />Knowledge</Badge>
+                        <Badge><CheckCircle2 className="h-4 w-4 mr-2" />{ pluginDetail.developer }</Badge>
                     </div>
                     <Separator orientation="vertical" className="" />
-                    <div className="gap-1 flex">
-                        <DownloadCloudIcon />
-                        100M
+                    <div className="gap-1 flex items-center">
+                        <DownloadIcon className="h-4 w-4 mr-2" />
+                        { pluginDetail.downloads }
                     </div>
                     <Separator orientation="vertical" />
                     <div className="gap-1 flex">
-                        <Rate rating={5} variant="yellow" disabled />
+                        <Rate rating={pluginDetail.rating} variant="yellow" disabled />
                     </div>
                 </div>
-                <div className="w-[300px] max-h-[100px] overflow-hidden"> {pluginDetail.description}</div>
+                <div className="w-[600px] max-h-[100px] overflow-hidden"> {pluginDetail.description}</div>
                 <div className="gap-1 flex items-center">
                     <Button className="text-[12px] py-0.1 h-5">Install</Button>
                     <Settings className="p-1 hover:bg-muted rounded-sm cursor-pointer" />
@@ -54,7 +54,7 @@ export const PluginDetail: React.FC = () => {
             </div>
         </div>
 
-        <div className=" bg-muted/60 flex justify-center flex-1">
+        <div className=" bg-muted/60 flex justify-center flex-1 h-[calc(100%-200px)] overflow-auto">
             <Tabs className="mt-5 w-[800px] " defaultValue="Feature">
                 <TabsList>
                     {
@@ -65,7 +65,7 @@ export const PluginDetail: React.FC = () => {
                 </TabsList>
                 {
                     pluginDetail.currentVersion.versionDescription.map((it: any, index: number) => (
-                        <TabsContent value={it.label} className=" overflow-auto border rounded-sm h-[calc(100%-100px)]">
+                        <TabsContent value={it.label} className=" overflow-auto border rounded-sm h-[calc(100%-200px)]">
                             <EditorRender
                                 content={JSON.parse(it.content)}
                                 user={null}
@@ -74,7 +74,7 @@ export const PluginDetail: React.FC = () => {
                                 toolbar={false}
                                 isEditable={false}
                                 width="w-full"
-                                className="rounded-sm prose-sm h-full "
+                                className="rounded-sm prose-sm "
                                 withTitle={false} />
                         </TabsContent>
                     ))

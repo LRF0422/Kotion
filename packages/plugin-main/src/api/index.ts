@@ -112,5 +112,9 @@ export const APIS = {
     SAVE_SPACE_AS_TEMPLATE: {
           url: '/knowledge-wiki/space/template',
         method: 'POST'
-    } as API
+    } as API,
+    ADD_SPACE_FAVORITE: {
+        url: '/knowledge-wiki/space/:id/favorite',
+        method: 'POST'
+    } as API,
 }

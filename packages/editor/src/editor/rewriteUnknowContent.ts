@@ -85,8 +85,28 @@ function rewriteUnknownContentInner({
         // json.content && Array.isArray(json.content) &&
         if (options?.fallbackToParagraph !== false) {
             // Just treat it like a paragraph and hope for the best
-            json.attrs = { name: json.type }
+            json.attrs = {...json.attrs, nodeType: json.type }
             json.type = 'unknownNode'
+
+            return {
+                json,
+                rewrittenContent,
+            }
+        }
+
+        // or just omit it entirely
+        return {
+            json: null,
+            rewrittenContent,
+        }
+    }
+
+        if (json.type && json.type === "unknownNode" && validNodes.has(json.attrs?.nodeType)) {
+        // json.content && Array.isArray(json.content) &&
+        if (options?.fallbackToParagraph !== false) {
+            // Just treat it like a paragraph and hope for the best
+            // json.attrs = { name: json.type }
+            json.type = json.attrs?.nodeType
 
             return {
                 json,
