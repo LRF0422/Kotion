@@ -1,5 +1,5 @@
 import { APIS } from "../../api";
-import { Sidebar, SidebarProvider } from "@kn/ui";
+import { Sidebar, SidebarProvider, TreeView } from "@kn/ui";
 import { useApi } from "@kn/core";
 import { Space } from "../../model/Space";
 import { useSafeState } from "@kn/core";
@@ -23,8 +23,5 @@ export const SpaceViewer: React.FC = () => {
     }, [params?.spaceId])
 
     return space && <div className="grid grid-cols-[280px_1fr] h-full w-full bg-muted/40 ">
-        <SidebarProvider>
-            <Sidebar></Sidebar>
-        </SidebarProvider>
     </div>
 }
