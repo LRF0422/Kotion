@@ -6,8 +6,6 @@ import { UnknownNodeView } from "./UnknowNodeView";
 export const UnknownNode = Node.create({
     name: 'unknownNode',
     group: 'block',
-    atom: true,
-    isolating: true,
     addNodeView() {
         return ReactNodeViewRenderer(UnknownNodeView)
     },
@@ -15,6 +13,9 @@ export const UnknownNode = Node.create({
     addAttributes() {
         return {
             nodeType: {
+                default: null
+            },
+            data: {
                 default: null
             }
         }

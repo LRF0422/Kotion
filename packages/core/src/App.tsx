@@ -73,6 +73,7 @@ export const App: React.FC<AppProps> = (props) => {
 
     useEffect(() => {
         event.on("REFRESH_PLUSINS", () => {
+            console.log('app refresh event');
             setFlag(f => f + 1)
         })
     }, [])
@@ -99,17 +100,12 @@ export const App: React.FC<AppProps> = (props) => {
             } else {
                 setRouter(createBrowserRouter(createRoutesFromElements(
                     [
-                        <Route path='/' element={<Layout />} errorElement={<Login />}>
-                            <Route path="/plugin-hub" element={<Shop />}>
-                                <Route path="/plugin-hub" element={<Marketplace />} />
-                                <Route path="/plugin-hub/:id" element={<PluginDetail />} />
-                            </Route>
-                        </Route>,
                         <Route path='/login' element={<Login />} />,
                         <Route path='/sign-up' element={<SignUpForm />} />
                     ]
                 )))
                 if (window.location.href.includes("login")) {
+                    setInit(true)
                     return
                 }
                 window.location.href = '/login'
@@ -128,10 +124,10 @@ export const App: React.FC<AppProps> = (props) => {
                     <Route path='/sign-up' element={<SignUpForm />} />
                 ]
             )))
-            if (window.location.href.includes("red")) {
+            if (window.location.href.includes("login")) {
                 return
             }
-            window.location.href = '/login?red'
+            window.location.href = '/login'
             setInit(true)
         }
 
@@ -140,7 +136,7 @@ export const App: React.FC<AppProps> = (props) => {
     useEffect(() => {
         if (loadFinished) {
             pluginManager.setPlugins(allPlugins.filter(it => !!it))
-            console.debug("load plugins finished, loaded plugins: ", allPlugins)
+            console.info("load plugins finished, loaded plugins: ", allPlugins)
             const pluginLocales = pluginManager.resloveLocales()
             const res = merge(resources, pluginLocales)
             if (i18n.isInitialized) {

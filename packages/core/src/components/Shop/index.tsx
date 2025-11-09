@@ -209,6 +209,7 @@ export const Shop: React.FC = () => {
                              useApi(APIS.UNINSTALL_PLUGIN, { versionId: currentId }).then(res => {
                                  setFlag(f => f + 1)
                                  setOpen(false)
+                                 event.emit("REFRESH_PLUSINS")
                             })
                         }
                 }}>Continue</AlertDialogAction>

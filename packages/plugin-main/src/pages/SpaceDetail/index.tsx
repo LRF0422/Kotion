@@ -107,7 +107,26 @@ export const SpaceDetail: React.FC = () => {
     const handleCreatePage = (parentId: string = "0") => {
         const param = {
             spaceId: params.id,
-            parentId: parentId
+            parentId: parentId,
+            content: JSON.stringify({
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "title",
+                        "content": [
+                            {
+                                "type": "heading",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": "Untitled"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            })
         }
         useApi(APIS.CREATE_OR_SAVE_PAGE, null, param).then(res => {
             const page = res.data

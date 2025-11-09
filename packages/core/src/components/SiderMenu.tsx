@@ -48,12 +48,22 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
         event.on("REFRESH_PLUSINS", () => {
             setFlag(f => f + 1)
         })
+        return () => {
+            event.off("REFRESH_PLUSINS")
+        }
     }, [])
 
 
     const menus: SiderMenuItemProps[] = useMemo(() => {
         return [
             ...pluginManager?.resloveMenus() as SiderMenuItemProps[],
+            {
+                name: 'Shop',
+                icon: <Blocks className="h-5 w-5" />,
+                key: '/plugin-hub',
+                attachTabs: true,
+                id: '/plugin-hub',
+            },
             {
                 name: 'Message',
                 icon: <Popover>
@@ -80,13 +90,6 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
                 attachTabs: true,
                 id: '/message',
                 onClick: () => { }
-            },
-            {
-                name: 'Shop',
-                icon: <Blocks className="h-5 w-5" />,
-                key: '/plugin-hub',
-                attachTabs: true,
-                id: '/plugin-hub',
             },
             {
                 name: 'Setting',
@@ -144,7 +147,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
                 }
             }
         ]
-    }, [pluginManager?.plugins])
+    }, [pluginManager?.plugins, flag])
 
     return <div className="flex flex-col items-center gap-4">
         {
