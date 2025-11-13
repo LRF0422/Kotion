@@ -59,7 +59,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
             ...pluginManager?.resloveMenus() as SiderMenuItemProps[],
             {
                 name: 'Shop',
-                icon: <Blocks className="h-5 w-5" />,
+                icon: <Blocks className="h-5 w-5" id="welcome-title"  />,
                 key: '/plugin-hub',
                 attachTabs: true,
                 id: '/plugin-hub',
@@ -67,7 +67,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
             {
                 name: 'Message',
                 icon: <Popover>
-                    <PopoverTrigger><Inbox className="h-5 w-5" /></PopoverTrigger>
+                    <PopoverTrigger><Inbox className="h-5 w-5"  id="message-box"/></PopoverTrigger>
                     <PopoverContent side="right" align="start" className="p-1 w-[250px] h-max-[400px]" sideOffset={10}>
                         <div className="flex flex-row gap-1 items-center font-bold p-2">
                             <MessageCircleCodeIcon className="h-5 w-5" />

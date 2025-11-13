@@ -11,15 +11,12 @@ import { Input } from "@kn/ui"
 import { useApi } from "../../hooks/use-api"
 import { useNavigator } from "../../hooks/use-navigator"
 import { ModeToggle } from "@kn/ui"
-import { upload } from "../../utils/file-utils"
 import { zodResolver } from "@kn/ui"
-import { Plus } from "@kn/icon"
 import { useForm } from "@kn/ui"
 import { Link } from "react-router-dom"
 import { z } from "@kn/ui"
 import React from "react"
 import { LanguageToggle } from "../../locales/LanguageToggle"
-import { useUploadFile } from "../../hooks"
 
 export const description =
     "A sign up form with first name, last name, email and password inside a card. There's an option to sign up with GitHub and a link to login if you already have an account"
@@ -27,8 +24,6 @@ export const description =
 export function SignUpForm() {
 
     const navigator = useNavigator()
-    const { usePath } = useUploadFile()
-
 
     const formSchema = z.object({
         avatar: z.string(),
@@ -39,6 +34,11 @@ export function SignUpForm() {
             message: 'password is required'
         }),
         name: z.string()
+    }).default({
+        avatar: 'upload/20241029/4d04038680ea9dce94495ad5c226e3c0.png',
+        account: '',
+        password: '',
+        name: ''
     })
 
     const form = useForm<z.infer<typeof formSchema>>({

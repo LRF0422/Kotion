@@ -2,7 +2,7 @@
 import { Outlet } from "react-router-dom"
 import { SiderMenu } from "./components/SiderMenu"
 import { useEffect, useState } from "react"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Rate, SparklesText, cn } from "@kn/ui"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Onboarding, OnboardingStep, Rate, SparklesText, cn } from "@kn/ui"
 import { useApi } from "./hooks/use-api"
 import { APIS } from "./api"
 import { useDispatch } from "@kn/common"
@@ -24,6 +24,30 @@ export function Layout() {
     const [open, setOpen] = useState(false)
     const [requestPlugin, setRequestPlugin] = useState<any>()
     const { usePath } = useUploadFile()
+    const [showOnboarding, setShowOnboarding] = useState(false);
+
+    const onboardingSteps: OnboardingStep[] = [
+        {
+        id: 'welcome',
+        targetSelector: '#welcome-title',
+        title: '欢迎使用',
+        description: '这是我们的新功能，让我们快速了解一下如何使用吧！',
+        actionText: '开始探索',
+        position: 'right'
+        },
+          {
+        id: 'message',
+        targetSelector: '#message-box',
+        title: '信箱',
+        description: '这是我们的新功能，让我们快速了解一下如何使用吧！',
+        actionText: '开始探索',
+        position: 'right'
+        }
+    ];
+    
+    useEffect(() => {
+        setShowOnboarding(true);
+    }, []);
 
     useEffect(() => {
         event.emit("REFRESH_PLUSINS")
@@ -69,7 +93,7 @@ export function Layout() {
 
     return (
         <ErrorBoundary fallback={<ErrorPage />}>
-            <div className={cn("grid min-h-screen w-full transition-all grid-cols-[70px_1fr]")}>
+            <div className={cn("grid min-h-screen w-full transition-all grid-cols-[70px_1fr]")} >
                 <div className="border-r md:block">
                     <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4">
                         <SparklesText className=" text-[30px]" sparklesCount={5} text="KN" />
@@ -116,6 +140,15 @@ export function Layout() {
                     </AlertDialogContent>
                 </AlertDialog>
             </div>
+            <Onboarding
+                steps={onboardingSteps}
+                isOpen={showOnboarding}
+                onClose={() => setShowOnboarding(false)}
+                onComplete={() => {
+                console.log('引导完成');
+                // 可以在这里记录用户已完成引导
+                }}
+            />
         </ErrorBoundary>
     )
 }

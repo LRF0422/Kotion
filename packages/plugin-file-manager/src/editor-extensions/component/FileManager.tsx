@@ -1,5 +1,5 @@
-import { Check, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, ListIcon, LucideHome, PlusIcon, Trash2, UploadIcon, XIcon } from "@kn/icon";
-import { Button, EmptyState, ScrollArea, Separator, TreeView, cn } from "@kn/ui";
+import { Check, ClockIcon, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, HomeIcon, ListIcon, LucideHome, PlusIcon, StarIcon, Trash2, UploadIcon, XIcon } from "@kn/icon";
+import { Button, EmptyState, Input, ScrollArea, Separator, TreeView, cn } from "@kn/ui";
 import React, { useCallback, useEffect, useState } from "react";
 import { FileCardList } from "./FileCard";
 import { useSafeState, useUploadFile } from "@kn/core";
@@ -36,6 +36,50 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const [files, setFiles] = useSafeState<any[]>([])
     const { folderId } = props
     const { upload } = useUploadFile()
+
+    const defaultMenus = [
+        {
+            isGroup: true,
+            name: <div className="flex flex-row items-center gap-2 text-nowrap">
+                导航
+                <Input onChange={(e) => { }} className="h-7" placeholder="Search..." />
+            </div>,
+            children: [
+                {
+                    name: "Home",
+                    id: "home",
+                    key: 'home',
+                    icon: <HomeIcon className="h-4 w-4" />,
+                    onClick: () => {
+                    }
+                },
+                {
+                    name: "Recent",
+                    id: "recent",
+                    key: 'recent',
+                    icon: <ClockIcon className="h-4 w-4" />,
+                    onClick: () => {
+                    }
+                },
+                {
+                    name: "Favorites",
+                    id: "Favorites",
+                    key: 'Favorites',
+                    icon: <StarIcon className="h-4 w-4" />,
+                    onClick: () => {
+                    }
+                },
+                {
+                    name: "Trash",
+                    id: "Trash",
+                    key: 'Trash',
+                    icon: <Trash2 className="h-4 w-4" />,
+                    onClick: () => {
+                    }
+                }
+            ]
+        }
+    ]
 
 
     const createFile = useCallback((type: 'FOLDER' | 'FILE', name?: string) => {
@@ -104,15 +148,25 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     }
     useEffect(() => {
         if (!folderId) {
-            useApi(APIS.GET_ROOT_FOLDER).then(res => {
+            useApi(APIS.GET_ROOT_FOLDER).then((res) => {
                 const items = res.data.map((item: any) => reslove(item))
-                setFiles(items)
+                setFiles([...defaultMenus, {
+                    isGroup: true,
+                    name: "文件夹",
+                    children: [...items],
+                    height: 500
+                }])
                 setCurrentFolderItems(items)
             })
         } else {
             useApi(APIS.GET_CHILDREN, { folderId }).then(res => {
                 const items = res.data.map((item: any) => reslove(item))
-                setFiles(items)
+                setFiles([...defaultMenus, {
+                    isGroup: true,
+                    name: "文件夹",
+                    children: [...items],
+                    height: 700
+                }])
                 setCurrentFolderItems(items)
             })
         }
@@ -197,7 +251,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                     </Button>
                 </div>
             </div>
-            <div className="grid w-full grid-cols-[200px_1fr] flex-1 overflow-auto h-[calc(100%-40px)]">
+            <div className="grid w-full grid-cols-[220px_1fr] flex-1 overflow-auto h-[calc(100%-40px)]">
                 <div className="border-r overflow-y-auto h-full">
                     <div className="bg-muted/80 border-b h-[40px] flex items-center gap-1">
                         <Button

@@ -1,6 +1,6 @@
-import { Download, FcFile, FcOpenedFolder, FileIcon, FolderOpenIcon, XIcon } from "@kn/icon";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, Separator, cn } from "@kn/ui";
-import { useSafeState, useTheme } from "@kn/core";
+import { Download, FcFile, FcOpenedFolder, XIcon } from "@kn/icon";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, cn } from "@kn/ui";
+import { useSafeState } from "@kn/core";
 import React, { useEffect } from "react";
 import { FileItem, FileManagerState, useFileManagerState } from "./FileContext";
 
@@ -20,16 +20,17 @@ export const FileCard: React.FC<FileItem> = (props) => {
     const { isFolder, id, name } = props
     const { selectedFiles, setSelectFiles, selectable, setCurrentFolderId } = useFileManagerState() as FileManagerState
     const [checked, setChecked] = useSafeState<boolean>(false)
-    const { theme } = useTheme()
 
     useEffect(() => {
         setChecked(!!selectedFiles.find(it => it.id === id))
     }, [selectedFiles, props])
     return name && <div
         onContextMenu={() => {
-            setChecked(true)
+            selectable && setChecked(true)
         }}
-        onDoubleClick={() => {
+        onDoubleClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
             setCurrentFolderId(id)
         }}
     >
@@ -63,12 +64,9 @@ export const FileCard: React.FC<FileItem> = (props) => {
                         <FcFile className="h-20 w-20" />
                 }
             </CardContent>
-            <CardFooter className="p-2 m-0 border-t text-sm text-nowrap overflow-hidden text-ellipsis select-none">
+            <CardFooter className="p-2 m-0 border-t text-sm">
                 {
-                    isFolder ? name : <div className="flex justify-between h-full w-full">
-                        <div className="w-[200px] overflow-hidden">{name}</div>
-                        <div>{name.substring(name.lastIndexOf("."), name.length - 1)}</div>
-                    </div>
+                    name
                 }
             </CardFooter>
         </Card>
