@@ -26,28 +26,31 @@ export function Layout() {
     const { usePath } = useUploadFile()
     const [showOnboarding, setShowOnboarding] = useState(false);
 
+    useEffect(() => {
+        const flag = localStorage.getItem("showOnboarding");
+        if (!flag) {
+            setShowOnboarding(true);
+        }
+    }, [])
+
     const onboardingSteps: OnboardingStep[] = [
         {
-        id: 'welcome',
-        targetSelector: '#welcome-title',
-        title: '欢迎使用',
-        description: '这是我们的新功能，让我们快速了解一下如何使用吧！',
-        actionText: '开始探索',
-        position: 'right'
+            id: 'welcome',
+            targetSelector: '#welcome-title',
+            title: '欢迎使用',
+            description: '这是我们的新功能，让我们快速了解一下如何使用吧！',
+            actionText: '开始探索',
+            position: 'right'
         },
-          {
-        id: 'message',
-        targetSelector: '#message-box',
-        title: '信箱',
-        description: '这是我们的新功能，让我们快速了解一下如何使用吧！',
-        actionText: '开始探索',
-        position: 'right'
+        {
+            id: 'message',
+            targetSelector: '#message-box',
+            title: '信箱',
+            description: '这是我们的新功能，让我们快速了解一下如何使用吧！',
+            actionText: '开始探索',
+            position: 'right'
         }
     ];
-    
-    useEffect(() => {
-        setShowOnboarding(true);
-    }, []);
 
     useEffect(() => {
         event.emit("REFRESH_PLUSINS")
@@ -145,8 +148,7 @@ export function Layout() {
                 isOpen={showOnboarding}
                 onClose={() => setShowOnboarding(false)}
                 onComplete={() => {
-                console.log('引导完成');
-                // 可以在这里记录用户已完成引导
+                    localStorage.setItem("showOnboarding", "false");
                 }}
             />
         </ErrorBoundary>

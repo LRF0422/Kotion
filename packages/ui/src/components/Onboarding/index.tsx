@@ -33,26 +33,27 @@ export function Onboarding({
 
     const updatePosition = () => {
       const currentStep = steps[currentStepIndex];
-        const targetElement = document.querySelector(currentStep.targetSelector);
-        
-        console.log('targetElement', targetElement);
-        
-      
+      const targetElement = document.querySelector(currentStep.targetSelector);
+
+      console.log('targetElement', targetElement);
+
+
       if (!targetElement || !highLightRef.current) return;
 
       // 获取目标元素位置信息
       const targetRect = targetElement.getBoundingClientRect();
-      
+
       // 设置高亮区域位置和大小
       highLightRef.current.style.width = `${targetRect.width}px`;
       highLightRef.current.style.height = `${targetRect.height}px`;
       highLightRef.current.style.left = `${targetRect.left}px`;
       highLightRef.current.style.top = `${targetRect.top}px`;
+      highLightRef.current.classList.add("outline")
     };
 
     updatePosition();
     window.addEventListener('resize', updatePosition);
-    
+
     return () => {
       window.removeEventListener('resize', updatePosition);
     };
@@ -64,7 +65,7 @@ export function Onboarding({
   // 计算提示框位置
   const getDialogPosition = () => {
     if (!currentStep) return {};
-    
+
     const targetElement = document.querySelector(currentStep.targetSelector);
     if (!targetElement) return {};
 
@@ -145,15 +146,15 @@ export function Onboarding({
 
   const dialogPosition = getDialogPosition();
 
-  return ( isOpen &&
+  return (isOpen && dialogPosition &&
     <div className="fixed inset-0 z-[999]" ref={maskRef}>
       {/* 遮罩层 */}
-      <div 
-        className="fixed inset-0" 
+      <div
+        className="fixed inset-0"
         // style={{ backgroundColor: maskColor }}
         onClick={handleSkip}
       />
-      
+
       {/* 高亮区域 */}
       <div
         ref={highLightRef}
@@ -164,47 +165,47 @@ export function Onboarding({
           borderRadius: '4px',
         }}
       />
-      
+
       {/* 提示框 */}
-        <div 
-          className={cn("max-w-md w-auto p-0 overflow-hidden bg-popover rounded-sm border-none", className)}
-          style={{
-            position: 'fixed',
-            zIndex: dialogZIndex,
-            ...dialogPosition,
-            margin: 0,
-            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          <div className="p-6">
-            <div className="text-xl font-bold">
-              {currentStep.title}
-            </div>
-            <div className="mt-2 text-base">
-              {currentStep.description}
-            </div>
+      <div
+        className={cn("max-w-md w-auto p-0 overflow-hidden bg-popover rounded-sm border-none", className)}
+        style={{
+          position: 'fixed',
+          zIndex: dialogZIndex,
+          ...dialogPosition,
+          margin: 0,
+          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+        }}
+      >
+        <div className="p-6">
+          <div className="text-xl font-bold">
+            {currentStep.title}
           </div>
-          
-          <div className="flex justify-between items-center p-6">
-            {currentStep.skipable !== false && (
-              <Button 
-                variant="ghost" 
-                onClick={handleSkip}
-                className="text-sm"
-              >
-                跳过
-              </Button>
-            )}
-            
-            <Button 
-              onClick={handleNext}
-              className="px-6"
-            >
-              {currentStep.actionText || 
-                (currentStepIndex === steps.length - 1 ? '完成' : '下一步')}
-            </Button>
+          <div className="mt-2 text-base">
+            {currentStep.description}
           </div>
         </div>
+
+        <div className="flex justify-between items-center p-6">
+          {currentStep.skipable !== false && (
+            <Button
+              variant="ghost"
+              onClick={handleSkip}
+              className="text-sm"
+            >
+              跳过
+            </Button>
+          )}
+
+          <Button
+            onClick={handleNext}
+            className="px-6"
+          >
+            {currentStep.actionText ||
+              (currentStepIndex === steps.length - 1 ? '完成' : '下一步')}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
