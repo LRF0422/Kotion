@@ -3,7 +3,6 @@ export const importScript = (() => {
 
     return (url: any, packageName: any, name: string) => {
         if (cache[url]) { return Promise.resolve(cache[url]) }
-
         return new Promise((resolve, reject) => {
             const script = document.createElement('script')
 

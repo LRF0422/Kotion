@@ -18,7 +18,7 @@ class FileManager extends KPlugin<FileManagerPluginConfig> {
 
 export const fileManager = new FileManager({
     status: '',
-    name: 'test',
+    name: 'File Manager',
     editorExtension: [FolderExtension, ImageExtension],
     routes: [
         {

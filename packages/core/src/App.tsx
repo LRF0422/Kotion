@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { Layout } from "./Layout";
 import { ThemeProvider, Toaster } from "@kn/ui";
@@ -13,11 +13,11 @@ import * as editor from "@kn/editor"
 import { useAsyncEffect, useSafeState } from "ahooks";
 import { Shop } from "./components/Shop";
 import { PluginDetail } from "./components/Shop/PluginDetail";
-import { importScript } from "./utils/utils";
 import { Marketplace } from "./components/Shop/Marketplace";
 import { APIS } from "./api";
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
+import { ErrorPage } from "./components/ErrorPage";
 
 const { createBrowserRouter,
     createRoutesFromElements, Route, RouterProvider, Provider,
@@ -62,56 +62,44 @@ const reslove = (config: common.RouteConfig) => {
 
 
 export const App: React.FC<AppProps> = (props) => {
-    const { plugins } = props
+    const { plugins = [] } = props
     const [router, setRouter] = useSafeState<any>()
-    const [allPlugins, setAllPlugins] = useSafeState<any[]>([])
-    const [loadFinished, setLoadFinished] = useSafeState<boolean>(false)
-    const [init, setInit] = useState<boolean>(false)
     const { usePath } = core.useUploadFile()
-    const pluginManager = useMemo<common.PluginManager>(() => new common.PluginManager(), [])
-    const [flag, setFlag] = useState(0)
+    const pluginManager = useMemo(() => new common.PluginManager(usePath, plugins), [])
+    const [inited, setInited] = useSafeState(false)
+    const [refreshFlag, setRefreshFlag] = useState(0)
 
     useEffect(() => {
         event.on("REFRESH_PLUSINS", () => {
-            console.log('app refresh event');
-            setFlag(f => f + 1)
+            setRefreshFlag(f => f + 1)
         })
+        return () => {
+            event.off("REFRESH_PLUSINS")
+        }
     }, [])
 
     useAsyncEffect(async () => {
         try {
             if (!!localStorage.getItem("knowledge-token")) {
                 const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
-                if (!installedPlugins || installedPlugins.length === 0) {
-                    setAllPlugins([...(plugins || [])])
-                    setLoadFinished(true)
-                    setInit(true)
-                    return
-                }
-                Promise.all(installedPlugins.map((plugin) => {
-                    const path = usePath(plugin.resourcePath) + "&cache=true"
-                    return importScript(path, plugin.pluginKey, plugin.name)
-                })).then(res => {
-                    setAllPlugins([...(plugins || []), ...res.map(it => Object.values(it)[0])])
-                    setLoadFinished(true)
-                    setInit(true)
-                    console.log('load installed plugins finished');
-                })
+                await pluginManager.init(installedPlugins)
+                setInited(true)
             } else {
+                pluginManager.init([])
                 setRouter(createBrowserRouter(createRoutesFromElements(
                     [
                         <Route path='/login' element={<Login />} />,
                         <Route path='/sign-up' element={<SignUpForm />} />
                     ]
                 )))
+                setInited(false)
                 if (window.location.href.includes("login")) {
-                    setInit(true)
                     return
                 }
                 window.location.href = '/login'
-                setInit(true)
             }
         } catch (error) {
+            pluginManager.init([])
             setRouter(createBrowserRouter(createRoutesFromElements(
                 [
                     <Route path='/' element={<Layout />} errorElement={<Login />}>
@@ -124,19 +112,18 @@ export const App: React.FC<AppProps> = (props) => {
                     <Route path='/sign-up' element={<SignUpForm />} />
                 ]
             )))
+            setInited(false)
             if (window.location.href.includes("login")) {
                 return
             }
             window.location.href = '/login'
-            setInit(true)
         }
 
-    }, [flag])
+    }, [])
 
     useEffect(() => {
-        if (loadFinished) {
-            pluginManager.setPlugins(allPlugins.filter(it => !!it))
-            console.info("load plugins finished, loaded plugins: ", allPlugins)
+        if (inited) {
+            console.log("load plugins finished, loaded plugins: ", pluginManager.plugins)
             const pluginLocales = pluginManager.resloveLocales()
             const res = merge(resources, pluginLocales)
             if (i18n.isInitialized) {
@@ -163,7 +150,7 @@ export const App: React.FC<AppProps> = (props) => {
             const routes = routeConfigs.map(it => reslove(it))
             setRouter(createBrowserRouter(createRoutesFromElements(
                 [
-                    <Route path='/' element={<Layout />} errorElement={<Login />}>
+                    <Route path='/' element={<Layout />} errorElement={<ErrorPage />}>
                         {routes}
                         <Route path="/plugin-hub" element={<Shop />}>
                             <Route path="/plugin-hub" element={<Marketplace />} />
@@ -174,9 +161,8 @@ export const App: React.FC<AppProps> = (props) => {
                     <Route path='/sign-up' element={<SignUpForm />} />
                 ]
             )))
-            setInit(true)
         }
-    }, [loadFinished, allPlugins])
+    }, [pluginManager.plugins, inited, refreshFlag])
     return (router ? <AppContext.Provider value={{
         pluginManager: pluginManager
     }}>

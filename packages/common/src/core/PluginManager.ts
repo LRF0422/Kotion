@@ -1,9 +1,10 @@
 import { merge } from "lodash";
-import { Plugins } from "../../../core/src/App";
 import { ExtensionWrapper } from "./editor";
 import { SiderMenuItemProps } from "./menu";
 import { RouteConfig } from "./route";
 import { Services } from "./types";
+import { importScript } from "../utils/import-util";
+import { event } from "../event";
 
 export interface PluginConfig {
     name: string
@@ -15,6 +16,7 @@ export interface PluginConfig {
     locales?: any
     services?: Services
 }
+
 
 export class KPlugin<T extends PluginConfig> {
 
@@ -60,31 +62,57 @@ export class KPlugin<T extends PluginConfig> {
 
 export class PluginManager {
 
-    plugins: Plugins = []
+    plugins: KPlugin<any>[] = []
+    _initialPlugins: KPlugin<any>[] = []
     _pluginServices: Services = {} as Services
+    _pluginStore: (path: string) => string
+    _init: boolean = false
 
-    register(plugin: KPlugin<any>) {
-        if (plugin) {
-            const exists = this.plugins.find(it => it.name === plugin?.name)
-            if (exists) {
-                console.warn("plugin " + plugin.name + " is exists")
-            } else {
-                this.plugins = [...this.plugins, plugin]
-            }
-        }
+    constructor(pluginStore: (path: string) => string, initalPlugins: KPlugin<any>[]) {
+        this._pluginStore = pluginStore
+        this._initialPlugins = initalPlugins
+        console.log('initalPlugins', this._initialPlugins);
+
     }
 
-    setPlugins(plugins: Plugins) {
-        this.plugins = plugins
-        this.plugins.forEach(it => {
-            if (it.services) {
-                this._pluginServices = { ...this._pluginServices, ...it.services }
-            }
-        })
+    public async init(remotePlugins: any[]) {
+        console.log('remote Plugins', remotePlugins);
+        if (!remotePlugins || remotePlugins.length === 0) {
+            this.plugins = ([...(this._initialPlugins || [])])
+            return
+        }
+        const res = await Promise.all(remotePlugins.map(async (plugin) => {
+            const path = this._pluginStore(plugin.resourcePath) + "&cache=true"
+            return await importScript(path, plugin.pluginKey, plugin.name)
+        }))
+        this.plugins = [...this._initialPlugins, ...(res.map(it => Object.values(it)[0]) as KPlugin<any>[])]
+        this._pluginServices = merge(this.pluginServices, ...this.plugins.map(it => it.services))
+        this._init = true
+        console.log('plugins loaded ', this.plugins);
+    }
+
+    uninstallPlugin(key: string) {
+        this.plugins = this.plugins.filter(it => it.name !== key)
+        console.log('plugins uninstalled ', key);
+
+        event.emit("REFRESH_PLUSINS")
+    }
+
+    async installPlugin(plugin: any, callBack?: () => void) {
+        const path = this._pluginStore(plugin.resourcePath) + "&cache=true"
+        const pluginInstance = await importScript(path, plugin.pluginKey, plugin.name)
+        this.plugins = [...this.plugins, Object.values(pluginInstance)[0] as KPlugin<any>]
+        this._pluginServices = merge(this._pluginServices, pluginInstance[Object.keys(pluginInstance)[0]].services)
+        event.emit("REFRESH_PLUSINS")
+        callBack && callBack()
     }
 
     remove(name: string) {
         this.plugins = this.plugins.filter(it => it.name !== name)
+    }
+
+    get initStatus() {
+        return this._init
     }
 
     resloveRoutes(): RouteConfig[] {

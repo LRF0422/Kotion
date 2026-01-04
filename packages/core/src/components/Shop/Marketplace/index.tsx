@@ -4,12 +4,12 @@ import {
     Rate,
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, cn
 } from "@kn/ui";
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { PluginUploader } from "../PluginUploader";
 import { useApi, useNavigator, useUploadFile } from "../../../hooks";
 import { APIS } from "../../../api";
 import { useToggle } from "ahooks";
-import { event, useTranslation } from "@kn/common";
+import { AppContext, event, useTranslation } from "@kn/common";
 
 export const Marketplace: React.FC = () => {
 
@@ -28,6 +28,7 @@ export const Marketplace: React.FC = () => {
     const navigator = useNavigator()
     const [flag, setFlag] = useState(0)
     const { t } = useTranslation()
+    const { pluginManager } = useContext(AppContext)
 
     useEffect(() => {
         useApi(APIS.GET_PLUGIN_LIST, { pageSize: 10, category: selectCategory === "All" ? null : selectCategory.toLocaleUpperCase() }).then(res => {
@@ -45,15 +46,16 @@ export const Marketplace: React.FC = () => {
         }
     }, [])
 
-    const installPlugin = (id: string) => {
+    const installPlugin = (plugin: any) => {
         toggle()
-        setInstallingPluginId(id)
+        setInstallingPluginId(plugin.currentVersionId)
         useApi(APIS.INSTALL_PLUGIN, {
-            versionId: id
+            versionId: plugin.currentVersionId
         }).then(() => {
-            toggle()
-            event.emit("REFRESH_PLUSINS")
-            setInstallingPluginId(undefined)
+            pluginManager?.installPlugin(plugin).then(() => {
+                setInstallingPluginId(undefined)
+                toggle()
+            })
         })
 
     }
@@ -153,7 +155,7 @@ export const Marketplace: React.FC = () => {
                                         <IconButton
                                             disabled={!!(plugin.installeddVersions.length > 0)}
                                             className="px-2 border"
-                                            onClick={() => installPlugin(plugin.currentVersionId)}
+                                            onClick={() => installPlugin(plugin)}
                                             icon={(installing && installingPluginId === plugin.currentVersionId) ? <Loader2 className="w-4 h-4 animate-spin" /> : <div className="flex items-center gap-1 text-sm">
                                                 <DownloadIcon className="w-4 h-4" />
                                                 {plugin.installeddVersions.length > 0 ? "Installed" : "Install"}

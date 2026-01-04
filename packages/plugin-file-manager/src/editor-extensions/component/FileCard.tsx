@@ -1,4 +1,4 @@
-import { Download, FcFile, FcOpenedFolder, XIcon } from "@kn/icon";
+import { Download, EyeIcon, FcFile, FcOpenedFolder, XIcon } from "@kn/icon";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, cn } from "@kn/ui";
 import { useSafeState } from "@kn/core";
 import React, { useEffect } from "react";
@@ -52,6 +52,9 @@ export const FileCard: React.FC<FileItem> = (props) => {
                                 <Download className="h-4 w-4" />
                             </div>
                             <div className="p-1 hover:bg-muted cursor-pointer rounded-sm">
+                                <EyeIcon className="h-4 w-4" />
+                            </div>
+                            <div className="p-1 hover:bg-muted cursor-pointer rounded-sm">
                                 <XIcon className="h-4 w-4" />
                             </div>
                         </div>
@@ -64,7 +67,7 @@ export const FileCard: React.FC<FileItem> = (props) => {
                         <FcFile className="h-20 w-20" />
                 }
             </CardContent>
-            <CardFooter className="p-2 m-0 border-t text-sm">
+            <CardFooter className="p-2 m-0 text-sm">
                 {
                     name
                 }

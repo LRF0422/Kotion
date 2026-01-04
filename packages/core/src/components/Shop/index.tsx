@@ -15,7 +15,7 @@ import {
     Badge, Button, EmptyState, Input, Separator, Tooltip,
     TooltipContent, TooltipProvider, TooltipTrigger
 } from "@kn/ui";
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { useNavigator } from "../../hooks/use-navigator";
 import { Outlet } from "react-router-dom";
 import { PluginUploader } from "./PluginUploader";
@@ -23,7 +23,7 @@ import { PluginManager } from "./PluginManager";
 import { useApi, useUploadFile } from "../../hooks";
 import { APIS } from "../../api";
 import { useSafeState } from "ahooks";
-import { REFRESH_PLUSINS, event } from "@kn/common";
+import { AppContext, REFRESH_PLUSINS, event } from "@kn/common";
 
 
 const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void, handleUpdate: (id: string) => void }> = ({ item, handleUnInstall, handleUpdate }) => {
@@ -58,22 +58,21 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void, handleU
                         <div className="flex gap-2">
                             <Button variant="secondary" size="sm" className="h-6 px-2 flex items-center gap-1" onClick={(e) => {
                                 e.stopPropagation()
-                                handleUnInstall(item.id)
-                                event.emit(REFRESH_PLUSINS)
+                                handleUnInstall(item)
                             }}>
                                 <Trash2 className="h-3 w-3" />
                                 Uninstall
                             </Button>
-                                                  {
-                            item.activeVersionId !== item.id &&
+                            {
+                                item.activeVersionId !== item.id &&
                                 <Button variant="secondary" size="sm" className="h-6 px-2 flex items-center gap-1" onClick={(e) => {
                                     e.stopPropagation()
                                     handleUpdate(item.id)
                                 }}>
                                     Update
                                 </Button>
-        
-                        }
+
+                            }
                         </div>
                     </div>
                 </div>
@@ -99,7 +98,8 @@ export const Shop: React.FC = () => {
     const navigator = useNavigator()
     const [flag, setFlag] = useState(0)
     const [open, setOpen] = useState(false)
-    const [currentId, setCurrentId] = useState<string | undefined>()
+    const { pluginManager } = useContext(AppContext)
+    const [currentPlugin, setCurrentPlugin] = useState<any | undefined>()
 
     useEffect(() => {
         useApi(APIS.GET_INSTALLED_PLUGINS).then(res => {
@@ -119,9 +119,9 @@ export const Shop: React.FC = () => {
         })
     }
 
-    const uninstall = (versionId: string) => {
+    const uninstall = (plugin: any) => {
         setOpen(true)
-        setCurrentId(versionId)
+        setCurrentPlugin(plugin)
     }
 
     const handleUpdate = (id: string) => {
@@ -194,25 +194,25 @@ export const Shop: React.FC = () => {
             <AlertDialogTrigger />
             <AlertDialogContent>
                 <AlertDialogHeader>
-                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                <AlertDialogDescription>
-                    This action cannot be undone. This will permanently remove the plugin.
-                </AlertDialogDescription>
+                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This action cannot be undone. This will permanently remove the plugin.
+                    </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel onClick={() => {
-                        setCurrentId(undefined)
+                        setCurrentPlugin(undefined)
                         setOpen(false)
-                }}>Cancel</AlertDialogCancel>
+                    }}>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={() => {
-                        if (currentId) {
-                             useApi(APIS.UNINSTALL_PLUGIN, { versionId: currentId }).then(res => {
-                                 setFlag(f => f + 1)
-                                 setOpen(false)
-                                 event.emit("REFRESH_PLUSINS")
+                        if (currentPlugin) {
+                            useApi(APIS.UNINSTALL_PLUGIN, { versionId: currentPlugin.id }).then(res => {
+                                setFlag(f => f + 1)
+                                pluginManager?.uninstallPlugin(currentPlugin.name)
+                                setOpen(false)
                             })
                         }
-                }}>Continue</AlertDialogAction>
+                    }}>Continue</AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
