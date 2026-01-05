@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 import { Layout } from "./Layout";
 import { ThemeProvider, Toaster } from "@kn/ui";
@@ -79,15 +79,39 @@ export const App: React.FC<AppProps> = (props) => {
     }, [])
 
     useAsyncEffect(async () => {
-        try {
-            if (!!localStorage.getItem("knowledge-token")) {
-                const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
-                await pluginManager.init(installedPlugins)
-                setInited(true)
-            } else {
+        if (!inited) {
+            try {
+                if (!!localStorage.getItem("knowledge-token")) {
+                    const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
+                    pluginManager.init(installedPlugins).then(() => {
+                        setInited(true)
+                    })
+                } else {
+                    pluginManager.init([])
+                    setRouter(createBrowserRouter(createRoutesFromElements(
+                        [
+                            <Route path='/' element={<Layout />} errorElement={<ErrorPage />}>
+                            </Route>,
+                            <Route path='/login' element={<Login />} />,
+                            <Route path='/sign-up' element={<SignUpForm />} />
+                        ]
+                    )))
+                    setInited(false)
+                    if (window.location.href.includes("login")) {
+                        return
+                    }
+                    window.location.href = '/login'
+                }
+            } catch (error) {
                 pluginManager.init([])
                 setRouter(createBrowserRouter(createRoutesFromElements(
                     [
+                        <Route path='/' element={<Layout />} errorElement={<Login />}>
+                            <Route path="/plugin-hub" element={<Shop />}>
+                                <Route path="/plugin-hub" element={<Marketplace />} />
+                                <Route path="/plugin-hub/:id" element={<PluginDetail />} />
+                            </Route>
+                        </Route>,
                         <Route path='/login' element={<Login />} />,
                         <Route path='/sign-up' element={<SignUpForm />} />
                     ]
@@ -98,32 +122,12 @@ export const App: React.FC<AppProps> = (props) => {
                 }
                 window.location.href = '/login'
             }
-        } catch (error) {
-            pluginManager.init([])
-            setRouter(createBrowserRouter(createRoutesFromElements(
-                [
-                    <Route path='/' element={<Layout />} errorElement={<Login />}>
-                        <Route path="/plugin-hub" element={<Shop />}>
-                            <Route path="/plugin-hub" element={<Marketplace />} />
-                            <Route path="/plugin-hub/:id" element={<PluginDetail />} />
-                        </Route>
-                    </Route>,
-                    <Route path='/login' element={<Login />} />,
-                    <Route path='/sign-up' element={<SignUpForm />} />
-                ]
-            )))
-            setInited(false)
-            if (window.location.href.includes("login")) {
-                return
-            }
-            window.location.href = '/login'
         }
 
-    }, [])
+    }, [refreshFlag])
 
     useEffect(() => {
         if (inited) {
-            console.log("load plugins finished, loaded plugins: ", pluginManager.plugins)
             const pluginLocales = pluginManager.resloveLocales()
             const res = merge(resources, pluginLocales)
             if (i18n.isInitialized) {
@@ -161,6 +165,7 @@ export const App: React.FC<AppProps> = (props) => {
                     <Route path='/sign-up' element={<SignUpForm />} />
                 ]
             )))
+            event.emit("PLUGIN_INIT_SUCCESS")
         }
     }, [pluginManager.plugins, inited, refreshFlag])
     return (router ? <AppContext.Provider value={{

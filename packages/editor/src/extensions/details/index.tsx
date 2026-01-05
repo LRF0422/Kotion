@@ -3,6 +3,7 @@ import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-detai
 import "./index.css"
 import { AArrowDownIcon } from "@kn/icon";
 import React from "react";
+import { DetailsBubbleMenu } from "./menu/bubble";
 
 
 
@@ -14,6 +15,7 @@ export const DetailsExtension: ExtensionWrapper = {
             class: 'details'
         }
     }), DetailsContent, DetailsSummary],
+    bubbleMenu: DetailsBubbleMenu,
     slashConfig: [
         {
             text: "details",

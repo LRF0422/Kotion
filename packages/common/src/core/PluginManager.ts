@@ -79,6 +79,10 @@ export class PluginManager {
         console.log('remote Plugins', remotePlugins);
         if (!remotePlugins || remotePlugins.length === 0) {
             this.plugins = ([...(this._initialPlugins || [])])
+            this._pluginServices = merge(this.pluginServices, ...this.plugins.map(it => it.services))
+            console.log('plugins loaded ', this.plugins);
+            console.log('services loaded ', this._pluginServices);
+            this._init = true
             return
         }
         const res = await Promise.all(remotePlugins.map(async (plugin) => {
@@ -89,6 +93,7 @@ export class PluginManager {
         this._pluginServices = merge(this.pluginServices, ...this.plugins.map(it => it.services))
         this._init = true
         console.log('plugins loaded ', this.plugins);
+        console.log('services loaded ', this._pluginServices);
     }
 
     uninstallPlugin(key: string) {
@@ -132,7 +137,6 @@ export class PluginManager {
                 locales = merge(locales, plugin.locales)
             }
         })
-        console.log('pluginlocals', locales);
         return locales;
     }
 

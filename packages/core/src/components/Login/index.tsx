@@ -15,6 +15,7 @@ import { ModeToggle } from "@kn/ui"
 import React from "react"
 import { useUploadFile } from "../../hooks"
 import { LanguageToggle } from "../../locales/LanguageToggle"
+import { event } from "@kn/common"
 
 
 export function Login() {
@@ -47,8 +48,11 @@ export function Login() {
             const { data } = res
             localStorage.setItem('knowledge-token', `bearer ${data.accessToken}`)
             localStorage.setItem("isLogin", "false")
-            navigator.go({
-                to: '/'
+            event.emit("REFRESH_PLUSINS")
+            event.on("PLUGIN_INIT_SUCCESS", () => {
+                navigator.go({
+                    to: '/'
+                })
             })
         }).catch(e => {
         }).finally(() => setLoading(false))
