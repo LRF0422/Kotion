@@ -1,3 +1,4 @@
+import { z } from "@kn/ui";
 import { AnyExtension, Editor } from "@tiptap/core";
 import { ElementType, ReactNode } from "react";
 
@@ -20,5 +21,10 @@ export interface ExtensionWrapper {
         action?: (editor: Editor, props?: any) => void,
         render?: ElementType
     } | { divider: true; title: string })[],
-    flotMenuConfig?: ElementType[]
+    flotMenuConfig?: ElementType[],
+    tools?: {
+        description: string,
+        inputSechem: any,
+        execute: (params: any) => any
+    }[]
 }

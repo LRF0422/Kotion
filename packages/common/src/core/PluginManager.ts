@@ -99,7 +99,6 @@ export class PluginManager {
     uninstallPlugin(key: string) {
         this.plugins = this.plugins.filter(it => it.name !== key)
         console.log('plugins uninstalled ', key);
-
         event.emit("REFRESH_PLUSINS")
     }
 
@@ -128,6 +127,10 @@ export class PluginManager {
             }
         })
         return routes;
+    }
+
+    resloveTools() {
+        return this.resloveEditorExtension().filter(it => it.tools).map(it => it.tools).flat()
     }
 
     resloveLocales(): any {
