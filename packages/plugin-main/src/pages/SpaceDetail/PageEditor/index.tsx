@@ -1,5 +1,5 @@
 import { APIS } from "../../../api";
-import { Badge } from "@kn/ui";
+import { Badge, ExpandableChat } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuPortal, DropdownMenuLabel } from "@kn/ui";
 import { Label } from "@kn/ui";

@@ -1,4 +1,4 @@
-import { Button } from "@kn/ui";
+import { Button, ExpandableChat } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@kn/ui";
 import { Editor } from "@kn/editor";
 import { ChevronDown, Circle, Languages, MessageCircleMore, PencilLine, SmilePlus, Sparkles } from "@kn/icon";
@@ -9,8 +9,6 @@ import { useEditorAgent } from "@kn/core";
 
 
 export const AiStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
-
-    const agent = useEditorAgent(editor)
 
     return <DropdownMenu>
         <DropdownMenuTrigger>
@@ -24,9 +22,6 @@ export const AiStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
             <DropdownMenuItem className="flex flex-row gap-1 items-center"
                 onClick={() => aiText(editor, "为给出的内容添加emoji表情")}
             ><SmilePlus className="h-4 w-4" /> 插入表情</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => agent.generateText("总结一下这篇文章")}>总结</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => agent.generateText("找出错别字的位置，并标记出来")}>查错</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => agent.generateText("阅读整篇文章，根据你的理解在合适的地方给文章插入表情")}>表情</DropdownMenuItem>
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger className="flex flex-row gap-1 items-center">
                     <MessageCircleMore className="h-4 w-4" /> 改变语气

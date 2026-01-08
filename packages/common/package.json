@@ -16,8 +16,8 @@
   },
   "dependencies": {
     "@kn/ui": "workspace:*",
-    "@tiptap/core": "3.7.0",
-    "@tiptap/pm": "3.7.0",
+    "@tiptap/core": "3.15.3",
+    "@tiptap/pm": "3.15.3",
     "i18next": "^25.4.0",
     "axios": "^1.7.7",
     "i18next-browser-languagedetector": "^8.2.0",
