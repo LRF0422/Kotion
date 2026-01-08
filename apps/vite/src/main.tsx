@@ -12,8 +12,9 @@ import { drawnix } from "@kn/plugin-drawnix"
 import { drawio } from "@kn/plugin-drawio"
 import { blockReference } from "@kn/plugin-block-reference"
 import { ai } from "@kn/plugin-ai"
+import { mindmapCanvas } from "@kn/plugin-mindmap-canvas"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[DefaultPluginInstance, fileManager, mermaid, database, excalidraw, drawnix, drawio, blockReference, ai]} />
+  <App plugins={[DefaultPluginInstance, fileManager, mermaid, database, excalidraw, drawnix, drawio, blockReference, ai, mindmapCanvas]} />
 )

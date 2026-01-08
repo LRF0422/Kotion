@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "node",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "types": ["react", "react-dom", "node"],
+    "paths": {
+      "@kn/common": ["../common/src"],
+      "@kn/core": ["../core/src"],
+      "@kn/editor": ["../editor/src"],
+      "@kn/icon": ["../icon/src"],
+      "@kn/ui": ["../ui/src"],
+      "@kn/*": ["../*/src"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}

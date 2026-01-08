@@ -12,7 +12,7 @@ This repository is based on https://github.com/dan5py/turborepo-shadcn-ui starte
 
 The goal of this repository is to provide up-to-date starters for vite-react and Next.js, and probably something else.
 
-### Prerequisitesvite
+### Prerequisites
 
 Make sure you have the following installed:
 
