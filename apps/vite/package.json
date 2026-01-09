@@ -23,6 +23,7 @@
     "@kn/plugin-drawio": "workspace:*",
     "@kn/file-manager": "workspace:*",
     "@kn/mermaid-plugin": "workspace:*",
+    "@kn/plugin-mindmap-canvas": "workspace:*",
     "evaluatex": "^2.2.0",
     "event-source-polyfill": "^1.0.31",
     "lodash": "^4.17.21",

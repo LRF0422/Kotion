@@ -1,5 +1,4 @@
-import { PMNode as Node, ReactNodeViewRenderer } from "@kn/editor";
-import { mergeAttributes } from "@tiptap/core";
+import { PMNode as Node, ReactNodeViewRenderer, mergeAttributes } from "@kn/editor";
 import { MindmapCanvasView } from "../views/MindmapCanvasView";
 import { createDefaultMindmap } from "./default-data";
 

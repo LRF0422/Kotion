@@ -13,6 +13,7 @@ export {
     type NodeViewProps, NodeViewWrapper, NodeViewContent, type NodeViewRenderer, ReactNodeViewRenderer,
     Node as PMNode, MarkViewContent, ReactMarkViewRenderer, ReactRenderer
 } from "@tiptap/react"
+export { mergeAttributes } from "@tiptap/core"
 export { Slice, Schema, NodeType, Node } from "@tiptap/pm/model"
 export { EditorState, TextSelection, NodeSelection, Plugin, PluginKey } from "@tiptap/pm/state"
 export { EditorView, Decoration, DecorationSet, type DecorationSource } from "@tiptap/pm/view"
