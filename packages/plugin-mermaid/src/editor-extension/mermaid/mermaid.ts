@@ -5,7 +5,7 @@ import { MermaidView } from "./MermaidView";
 declare module '@kn/editor' {
     interface Commands<ReturnType> {
         mermaid: {
-            insertMermaid: () => ReturnType;
+            insertMermaid: (code?: string) => ReturnType;
         };
     }
 }
@@ -33,9 +33,12 @@ export const Mermaid = Node.create({
 
     addCommands() {
         return {
-            insertMermaid: () => ({ commands }) => {
+            insertMermaid: (code) => ({ commands }) => {
                 return commands.insertContent({
-                    type: this.name
+                    type: this.name,
+                    attrs: {
+                        data: code
+                    }
                 })
             }
         }

@@ -5,6 +5,7 @@ import { RouteConfig } from "./route";
 import { Services } from "./types";
 import { importScript } from "../utils/import-util";
 import { event } from "../event";
+import { Editor } from "@tiptap/core";
 
 export interface PluginConfig {
     name: string
@@ -129,8 +130,14 @@ export class PluginManager {
         return routes;
     }
 
-    resloveTools() {
-        return this.resloveEditorExtension().filter(it => it.tools).map(it => it.tools).flat()
+    resloveTools(editor: Editor) {
+        const res: any = {}
+        this.resloveEditorExtension().filter(it => it.tools).map(it => it.tools).flat().forEach((it: any) => {
+            res[it.name] = it
+            res[it.name].execute = it.execute(editor)
+        })
+        console.log('res', res);
+        return res;
     }
 
     resloveLocales(): any {

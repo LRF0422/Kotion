@@ -23,8 +23,9 @@ export interface ExtensionWrapper {
     } | { divider: true; title: string })[],
     flotMenuConfig?: ElementType[],
     tools?: {
+        name: string,
         description: string,
-        inputSechem: any,
-        execute: (params: any) => any
+        inputSchema: any,
+        execute: (editor: Editor) => (params: any) => any
     }[]
 }

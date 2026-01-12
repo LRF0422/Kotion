@@ -113,32 +113,6 @@ export const DrawnixView: React.FC<NodeViewProps> = (props) => {
     };
 
     return <NodeViewWrapper className="w-full shadow-md">
-        {isEditable && (
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 bg-slate-50">
-                <span className="text-sm font-medium text-slate-700">思维导图</span>
-                <div className="ml-auto flex items-center gap-2">
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={addChildNode}
-                        className="h-7 text-xs"
-                    >
-                        <IconPlus className="h-3 w-3 mr-1" />
-                        添加子节点
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={deleteNode}
-                        disabled={!selectedNode || (selectedNode as any).id === (board?.children[0] as any)?.id}
-                        className="h-7 text-xs"
-                    >
-                        <IconDelete className="h-3 w-3 mr-1" />
-                        删除节点
-                    </Button>
-                </div>
-            </div>
-        )}
         <div className="w-full h-[400px]">
             <OnlyMind
                 className="h-full w-full"
@@ -153,22 +127,7 @@ export const DrawnixView: React.FC<NodeViewProps> = (props) => {
                     });
                 }}
                 onSelectionChange={(selection) => {
-                    if (board && selection && selection.length > 0) {
-                        // Track the selected node from board's children
-                        const findNodeById = (nodes: PlaitElement[], path: number[]): PlaitElement | null => {
-                            if (path.length === 0) return null;
-                            let current = nodes[path[0]];
-                            for (let i = 1; i < path.length; i++) {
-                                if (!current || !(current as any).children) return null;
-                                current = (current as any).children[path[i]];
-                            }
-                            return current;
-                        };
-                        const node = findNodeById(board.children, selection as number[]);
-                        setSelectedNode(node);
-                    } else {
-                        setSelectedNode(null);
-                    }
+
                 }}
                 afterInit={(board) => {
                     setBoard(board);

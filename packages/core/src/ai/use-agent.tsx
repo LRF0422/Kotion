@@ -18,6 +18,7 @@ interface NodeInfo {
     position: number
     type: string
     attrs: Record<string, any>
+    marks: any
     textPos: string[]
 }
 
@@ -35,6 +36,7 @@ const buildNodeInfo = (node: Node, pos: number): NodeInfo => {
         position: pos,
         type: node.type.name,
         attrs: node.attrs,
+        marks: node.marks,
         textPos
     }
 }
@@ -50,10 +52,13 @@ const calculateOffset = (offsets: PosOffset[], pos: number): number => {
 
 export const useEditorAgent = (editor: Editor) => {
     const { pluginManager } = useContext(AppContext)
+    const tools = useMemo(() => pluginManager?.resloveTools(editor), [pluginManager?.plugins])
     const posOffsetRef = useRef<PosOffset[]>([])
     const agent = useMemo(() => new ToolLoopAgent({
         model: deepseek("deepseek-chat"),
-        instructions: "你是一个助手，你需要根据用户输入的指令，完成用户所请求的任务。执行任务前，应该调用readRange方法，查看全文，然后根据用户所请求的任务，调用其他方法。",
+        instructions: "你是一个助手，你需要根据用户输入的指令，完成用户所请求的任务。请注意以下几点" + "\n" +
+            "1. 插入文本的时候要一段一段插入,不要一次性插入所有内容" + "\n"
+        ,
         tools: {
             readRange: {
                 description: '查看所给位置到文档结束处的内容',
@@ -75,18 +80,29 @@ export const useEditorAgent = (editor: Editor) => {
                     return { nodes: result, count: result.length }
                 }
             },
-            readDocument: {
-                description: '阅读全文',
+            getDocumentSize: {
+                description: '获取文档大小',
                 inputSchema: z.object({}),
                 execute: async () => {
-                    const result: NodeInfo[] = []
-                    editor.state.doc.descendants((node, pos) => {
-                        result.push(buildNodeInfo(node, pos))
-                    })
-                    console.log('Reading document...', result)
-                    return { nodes: result, count: result.length }
+                    return {
+                        size: editor.state.doc.nodeSize,
+                        from: 0,
+                        to: editor.state.doc.nodeSize - 2
+                    }
                 }
             },
+            // readDocument: {
+            //     description: '阅读全文',
+            //     inputSchema: z.object({}),
+            //     execute: async () => {
+            //         const result: NodeInfo[] = []
+            //         editor.state.doc.descendants((node, pos) => {
+            //             result.push(buildNodeInfo(node, pos))
+            //         })
+            //         console.log('Reading document...', result)
+            //         return { nodes: result, count: result.length }
+            //     }
+            // },
             write: {
                 description: '插入内容',
                 inputSchema: z.object({
@@ -182,10 +198,11 @@ export const useEditorAgent = (editor: Editor) => {
                         return { error: `Invalid range: ${range.from}-${range.to}. Document size: ${editor.state.doc.nodeSize}` }
                     }
 
-                    editor.chain().setTextSelection(range).setHighlight().run()
+                    editor.chain().setTextSelection(range).scrollIntoView().setHighlight().run()
                     return { success: true, from: range.from, to: range.to }
                 }
-            }
+            },
+            ...tools
         },
         onFinish: () => {
             posOffsetRef.current = []

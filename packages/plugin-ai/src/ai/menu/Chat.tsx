@@ -2,7 +2,7 @@
 
 import { useState, FormEvent } from "react"
 import { Send, Bot, Paperclip, Mic, CornerDownLeft } from "@kn/icon"
-import { Button } from "@kn/ui"
+import { Button, Streamdown } from "@kn/ui"
 import {
     ChatBubble,
     ChatBubbleAvatar,
@@ -118,9 +118,10 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                 fallback={message.sender === "user" ? "US" : "AI"}
                             />
                             <ChatBubbleMessage
+                                className=""
                                 variant={message.sender === "user" ? "sent" : "received"}
                             >
-                                {message.content}
+                                <Streamdown>{message.content}</Streamdown>
                             </ChatBubbleMessage>
                         </ChatBubble>
 
@@ -133,8 +134,8 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                     src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=64&h=64&q=80&crop=faces&fit=crop"
                                     fallback="AI"
                                 />
-                                <ChatBubbleMessage>
-                                    {currentMessage}
+                                <ChatBubbleMessage className="">
+                                    <Streamdown isAnimating>{currentMessage}</Streamdown>
                                 </ChatBubbleMessage>
                             </ChatBubble>
                         )
