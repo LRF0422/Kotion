@@ -91,18 +91,6 @@ export const useEditorAgent = (editor: Editor) => {
                     }
                 }
             },
-            // readDocument: {
-            //     description: '阅读全文',
-            //     inputSchema: z.object({}),
-            //     execute: async () => {
-            //         const result: NodeInfo[] = []
-            //         editor.state.doc.descendants((node, pos) => {
-            //             result.push(buildNodeInfo(node, pos))
-            //         })
-            //         console.log('Reading document...', result)
-            //         return { nodes: result, count: result.length }
-            //     }
-            // },
             write: {
                 description: '插入内容',
                 inputSchema: z.object({

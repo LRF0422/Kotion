@@ -134,7 +134,7 @@ export class PluginManager {
         const res: any = {}
         this.resloveEditorExtension().filter(it => it.tools).map(it => it.tools).flat().forEach((it: any) => {
             res[it.name] = it
-            res[it.name].execute = it.execute(editor)
+            res[it.name].execute = it?.execute(editor)
         })
         console.log('res', res);
         return res;

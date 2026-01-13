@@ -10,7 +10,6 @@ import { OnlyMind } from "./only-mind";
 import { initializeData } from "./data";
 import { useTheme, Button } from "@kn/ui";
 import "./style/index.css";
-import { IconPlus, IconDelete } from "@kn/icon";
 import { nanoid } from "nanoid"
 
 
