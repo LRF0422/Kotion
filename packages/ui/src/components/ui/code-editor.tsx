@@ -19,7 +19,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = (props) => {
         theme={theme === 'dark' ? abcdef : "light"}
         className={props.className}
         onUpdate={() => {
-            console.log("update")
+            // CodeMirror update handler
         }}
         onChange={props.onChange}
         {...props}

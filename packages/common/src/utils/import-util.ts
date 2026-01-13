@@ -11,7 +11,12 @@ export const importScript = (() => {
 
             script.addEventListener('load', () => {
                 document.head.removeChild(script)
-                const Com = window[packageName]
+                // Access plugin from scoped namespace
+                const Com = (window as any)[packageName] || window.__KN__?.[packageName]
+                if (!Com) {
+                    reject(new Error(`Plugin ${packageName} not found in window scope`))
+                    return
+                }
                 cache[url] = Com
                 resolve(Com)
             })

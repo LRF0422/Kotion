@@ -6,6 +6,7 @@ import { Services } from "./types";
 import { importScript } from "../utils/import-util";
 import { event } from "../event";
 import { Editor } from "@tiptap/core";
+import { logger } from "../utils/logger";
 
 export interface PluginConfig {
     name: string
@@ -72,17 +73,16 @@ export class PluginManager {
     constructor(pluginStore: (path: string) => string, initalPlugins: KPlugin<any>[]) {
         this._pluginStore = pluginStore
         this._initialPlugins = initalPlugins
-        console.log('initalPlugins', this._initialPlugins);
-
+        logger.debug('Initial plugins loaded:', this._initialPlugins);
     }
 
     public async init(remotePlugins: any[]) {
-        console.log('remote Plugins', remotePlugins);
+        logger.info('Initializing remote plugins:', remotePlugins);
         if (!remotePlugins || remotePlugins.length === 0) {
             this.plugins = ([...(this._initialPlugins || [])])
             this._pluginServices = merge(this.pluginServices, ...this.plugins.map(it => it.services))
-            console.log('plugins loaded ', this.plugins);
-            console.log('services loaded ', this._pluginServices);
+            logger.info('Plugins loaded:', this.plugins.length);
+            logger.debug('Services loaded:', this._pluginServices);
             this._init = true
             return
         }
@@ -93,13 +93,13 @@ export class PluginManager {
         this.plugins = [...this._initialPlugins, ...(res.map(it => Object.values(it)[0]) as KPlugin<any>[])]
         this._pluginServices = merge(this.pluginServices, ...this.plugins.map(it => it.services))
         this._init = true
-        console.log('plugins loaded ', this.plugins);
-        console.log('services loaded ', this._pluginServices);
+        logger.info('All plugins loaded:', this.plugins.length);
+        logger.debug('All services loaded:', this._pluginServices);
     }
 
     uninstallPlugin(key: string) {
         this.plugins = this.plugins.filter(it => it.name !== key)
-        console.log('plugins uninstalled ', key);
+        logger.info('Plugin uninstalled:', key);
         event.emit("REFRESH_PLUSINS")
     }
 
@@ -136,7 +136,7 @@ export class PluginManager {
             res[it.name] = it
             res[it.name].execute = it?.execute(editor)
         })
-        console.log('res', res);
+        logger.debug('Resolved tools:', Object.keys(res));
         return res;
     }
 

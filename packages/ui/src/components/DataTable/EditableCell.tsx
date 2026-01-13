@@ -19,7 +19,7 @@ interface EditableCellProps<TData, TValue> extends CellContext<TData, TValue> {
 
 export function _EditableCell<TData, TValue>({
     getValue,
-    row: { index: rowId }, // TODO: better to use id instead of index because if we want row DnD, index will change. This is hard to do because we can't iterate over rows as easily.
+    row: { index: rowId }, // Note: Using index for simplicity. Consider using unique ID for drag-and-drop support.
     column: { id: colId },
     table,
     renderInput,

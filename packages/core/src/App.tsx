@@ -26,20 +26,26 @@ const { createBrowserRouter,
 
 declare global {
     interface Window {
-        ui: any,
-        common: any,
-        core: any,
-        icon: any,
-        editor: any
+        __KN__: {
+            React: typeof React;
+            ui: typeof ui;
+            common: typeof common;
+            core: typeof core;
+            icon: typeof icon;
+            editor: typeof editor;
+        }
     }
 }
 
-window.React = React
-window.ui = ui
-window.common = common
-window.core = core
-window.icon = icon
-window.editor = editor
+// Initialize scoped namespace for plugin access
+window.__KN__ = {
+    React,
+    ui,
+    common,
+    core,
+    icon,
+    editor
+};
 
 
 export type Plugins = common.KPlugin<any>[]
