@@ -1,0 +1,39 @@
+{
+  "name": "@kn/plugin-bitable",
+  "version": "0.0.1",
+  "description": "Bitable plugin - Multi-dimensional table similar to Feishu Bitable",
+  "main": "src/index.tsx",
+  "types": "src/index.tsx",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "registry": "http://localhost:8081/repository/npm-hosted/"
+  },
+  "scripts": {
+    "build": "rollup -c rollup.config.mjs"
+  },
+  "dependencies": {
+    "@kn/common": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/ui": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/core": "workspace:*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-data-grid": "^7.0.0-beta.46",
+    "react-beautiful-dnd": "^13.1.1",
+    "lodash": "^4.17.21",
+    "ahooks": "^3.8.1",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.469.0"
+  },
+  "devDependencies": {
+    "@kn/eslint-config": "workspace:*",
+    "@kn/rollup-config": "workspace:*",
+    "@kn/typescript-config": "workspace:*",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/lodash": "^4.17.13",
+    "@types/react-beautiful-dnd": "^13.1.8"
+  }
+}

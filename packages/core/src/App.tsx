@@ -24,18 +24,6 @@ const { createBrowserRouter,
     AppContext, i18n, initReactI18next, LanguageDetector, event } = common;
 
 
-declare global {
-    interface Window {
-        __KN__: {
-            React: typeof React;
-            ui: typeof ui;
-            common: typeof common;
-            core: typeof core;
-            icon: typeof icon;
-            editor: typeof editor;
-        }
-    }
-}
 
 // Initialize scoped namespace for plugin access
 window.__KN__ = {

@@ -6,9 +6,9 @@ import tsconfigPaths from 'vite-tsconfig-paths'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiBaseUrl = env.VITE_API_BASE_URL || 'https://kotion.top:888/api';
-  
+
   const nodeEnv = process.env.NODE_ENV === 'production' ? '"production"' : '"development"';
-  
+
   return {
     plugins: [react(), tsconfigPaths()],
     define: { 'process.env.NODE_ENV': nodeEnv },

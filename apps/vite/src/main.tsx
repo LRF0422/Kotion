@@ -13,8 +13,9 @@ import { drawio } from "@kn/plugin-drawio"
 import { blockReference } from "@kn/plugin-block-reference"
 import { ai } from "@kn/plugin-ai"
 import { mindmapCanvas } from "@kn/plugin-mindmap-canvas"
+import { bitable } from "@kn/plugin-bitable"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[DefaultPluginInstance, fileManager, mermaid, database, excalidraw, drawnix, drawio, blockReference, ai, mindmapCanvas]} />
+  <App plugins={[DefaultPluginInstance, fileManager, mermaid, database, excalidraw, drawnix, drawio, blockReference, ai, mindmapCanvas, bitable]} />
 )

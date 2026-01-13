@@ -1,3 +1,10 @@
+// Extend Window interface to include custom __KN__ property
+declare global {
+    interface Window {
+        __KN__?: Record<string, any>
+    }
+}
+
 export const importScript = (() => {
     const cache: any = {}
 
