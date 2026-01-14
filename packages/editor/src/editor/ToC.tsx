@@ -7,19 +7,20 @@ import { List } from '@kn/icon'
 
 
 export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number, isActive: boolean }> = ({ item, onItemClick, index, isActive }) => {
+    // Light and dark mode color variants for different heading levels
     const levelColors = [
-        'text-slate-900',
-        'text-slate-700',
-        'text-slate-600',
-        'text-slate-500',
+        'text-slate-900 dark:text-slate-100',
+        'text-slate-700 dark:text-slate-300',
+        'text-slate-600 dark:text-slate-400',
+        'text-slate-500 dark:text-slate-500',
     ]
 
     return (
         <div
             className={cn(
                 "group relative rounded-md transition-all duration-200 cursor-pointer",
-                "hover:bg-accent/50",
-                isActive && "bg-accent/70"
+                "hover:bg-accent/50 dark:hover:bg-accent/30",
+                isActive && "bg-accent/70 dark:bg-accent/50 shadow-sm"
             )}
             style={{
                 paddingLeft: `${Math.min(item.level - 1, 3) * 12 + 8}px`,
@@ -34,13 +35,13 @@ export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number, isA
                     "flex items-start gap-2 w-full no-underline",
                     "text-sm leading-relaxed",
                     levelColors[Math.min(item.level - 1, 3)],
-                    "hover:text-primary transition-colors",
-                    isActive && "text-primary font-medium"
+                    "hover:text-primary dark:hover:text-primary transition-colors",
+                    isActive && "text-primary dark:text-primary font-medium"
                 )}
                 href={`#${item.id}`}
                 onClick={e => onItemClick(e, item)}
             >
-                <span className="text-xs opacity-60 min-w-[24px] font-mono">
+                <span className="text-xs opacity-60 dark:opacity-50 min-w-[24px] font-mono">
                     {item.itemIndex}.
                 </span>
                 <span className="flex-1 overflow-hidden text-ellipsis">
@@ -48,7 +49,7 @@ export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number, isA
                 </span>
             </a>
             {isActive && (
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r" />
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary dark:bg-primary rounded-r shadow-sm" />
             )}
         </div>
     )
@@ -131,17 +132,19 @@ export const ToC: React.FC<{ editor: Editor, className?: string, items: any[] }>
     }
 
     return (
-        <div className={cn("h-full w-full flex flex-col", className)}>
-            <div className="sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-10 border-b px-4 py-3">
+        <div className={cn("h-full w-full flex flex-col bg-background dark:bg-background", className)}>
+            <div className="sticky top-0 bg-background/95 dark:bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 dark:supports-[backdrop-filter]:bg-background/60 z-10 border-b dark:border-border px-4 py-3 shadow-sm">
                 <div className="flex items-center gap-2">
-                    <List className="h-4 w-4 text-muted-foreground" />
-                    <h3 className="font-semibold text-sm">{t("toc.title", "Table of Contents")}</h3>
+                    <div className="p-1.5 rounded-md bg-primary/10 dark:bg-primary/20">
+                        <List className="h-4 w-4 text-primary dark:text-primary" />
+                    </div>
+                    <h3 className="font-semibold text-sm text-foreground dark:text-foreground">{t("toc.title", "Table of Contents")}</h3>
                 </div>
-                <Badge variant="secondary" className="mt-2 text-xs">
+                <Badge variant="secondary" className="mt-2 text-xs bg-muted dark:bg-muted hover:bg-muted/80 dark:hover:bg-muted/80 text-foreground dark:text-foreground">
                     {items.length} {items.length === 1 ? 'section' : 'sections'}
                 </Badge>
             </div>
-            <ScrollArea className="flex-1 px-3 py-2">
+            <ScrollArea className="flex-1 px-3 py-2 bg-background dark:bg-background">
                 <div className="space-y-1">
                     {items.map((item: any, i: number) => (
                         <ToCItem

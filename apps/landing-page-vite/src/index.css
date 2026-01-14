@@ -1,3 +1,5 @@
+@tailwind base;
+@tailwind components;
 @tailwind utilities;
 
 @layer utilities {
@@ -10,7 +12,7 @@
     }
 
     .bg-notion {
-        /* @apply bg-white; */
+        @apply bg-background;
     }
 
     .bg-notion-hover {
@@ -18,8 +20,7 @@
     }
 
     .border-notion {
-        @apply border;
-        /* @apply border */
+        @apply border border-border;
     }
 
     .notion-block {

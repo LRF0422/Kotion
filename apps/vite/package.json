@@ -26,6 +26,7 @@
     "@kn/plugin-drawio-v2": "workspace:*",
     "@kn/plugin-mindmap-canvas": "workspace:*",
     "@kn/plugin-bitable": "workspace:*",
+    "@kn/plugin-weaver-oa": "workspace:*",
     "evaluatex": "^2.2.0",
     "event-source-polyfill": "^1.0.31",
     "lodash": "^4.17.21",

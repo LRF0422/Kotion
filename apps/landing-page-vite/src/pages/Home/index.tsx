@@ -18,7 +18,9 @@ export const Home: React.FC = () => {
                             <Button onClick={() => {
                                 window.open('https://kotion.top:888', '_blank')
                             }}>{t("home.get-started")}</Button>
-                            <Button variant="outline">{t("home.view-templates")}</Button>
+                            <Button variant="outline" onClick={() => {
+                                window.location.href = '/templates'
+                            }}>{t("home.view-templates")}</Button>
                             <Button variant="outline" className="flex items-center gap-2" onClick={() => {
                                 window.open("https://github.com/LRF0422/knowledge-repo.git", "_blank")
                             }}>
@@ -28,7 +30,7 @@ export const Home: React.FC = () => {
                         </div>
                     </div>
                     <div className="md:w-1/2">
-                        <img src="https://p3-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/ac7e6d3084d048938800c34c1aa3127c~tplv-a9rns2rl98-image.image?rcl=20251011093920F1590232204D8A60C141&rk3s=8e244e95&rrcfp=f06b921b&x-expires=1762738771&x-signature=oLogESkc%2Fuv7VCvgrbWCwXMeXQQ%3D" alt="Notion Interface" className="rounded-lg shadow-lg w-full" />
+                        <img src="https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1200&h=800&fit=crop" alt="Workspace Interface" className="rounded-lg shadow-lg w-full" />
                     </div>
                 </div>
             </div>
@@ -37,12 +39,12 @@ export const Home: React.FC = () => {
         <section id="features" className="py-16 bg-muted/50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="text-center mb-12">
-                    <h2 className="text-3xl font-bold text-notion mb-4">Build your workflow</h2>
+                    <h2 className="text-3xl font-bold text-notion mb-4">{t("home.build-workflow") || "Build your workflow"}</h2>
                     <p className="text-lg text-notion-light max-w-3xl mx-auto">Create custom tools to manage any project or workflow. From simple to-do lists to complex databases, Notion adapts to your needs.</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6" id="features-container">
-                    <div className="notion-block" draggable="true">
+                    <div className="notion-block">
                         <div className="flex items-center mb-4">
                             <div className="bg-blue-100 dark:bg-blue-900 p-2 rounded-md mr-3">
                                 <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -52,7 +54,7 @@ export const Home: React.FC = () => {
                         <p className="text-notion-light">Create beautiful documents with rich text, images, tables, and more. Format your notes with headings, lists, and quotes.</p>
                     </div>
 
-                    <div className="notion-block" draggable="true">
+                    <div className="notion-block">
                         <div className="flex items-center mb-4">
                             <div className="bg-green-100 dark:bg-green-900 p-2 rounded-md mr-3">
                                 {/* <i className="fa fa-tasks text-green-600 dark:text-green-400" aria-hidden="true"></i> */}
@@ -63,7 +65,7 @@ export const Home: React.FC = () => {
                         <p className="text-notion-light">Manage your tasks with checkboxes, due dates, and priorities. Create project timelines and track progress with visual tools.</p>
                     </div>
 
-                    <div className="notion-block" draggable="true">
+                    <div className="notion-block">
                         <div className="flex items-center mb-4">
                             <div className="bg-purple-100 dark:bg-purple-900 p-2 rounded-md mr-3">
                                 {/* <i className="fa fa-database text-purple-600 dark:text-purple-400" aria-hidden="true"></i> */}
@@ -74,7 +76,7 @@ export const Home: React.FC = () => {
                         <p className="text-notion-light">Build custom databases to organize anything—from contacts to inventory. Use tables, boards, calendars, and galleries to visualize your data.</p>
                     </div>
 
-                    <div className="notion-block" draggable="true">
+                    <div className="notion-block">
                         <div className="flex items-center mb-4">
                             <div className="bg-yellow-100 dark:bg-yellow-900 p-2 rounded-md mr-3">
                                 {/* <i className="fa fa-users text-yellow-600 dark:text-yellow-400" aria-hidden="true"></i> */}
@@ -85,7 +87,7 @@ export const Home: React.FC = () => {
                         <p className="text-notion-light">Work together in real-time with your team. Comment on documents, assign tasks, and share your workspace with others.</p>
                     </div>
 
-                    <div className="notion-block" draggable="true">
+                    <div className="notion-block">
                         <div className="flex items-center mb-4">
                             <div className="bg-red-100 dark:bg-red-900 p-2 rounded-md mr-3">
                                 {/* <i className="fa fa-link text-red-600 dark:text-red-400" aria-hidden="true"></i> */}
@@ -96,7 +98,7 @@ export const Home: React.FC = () => {
                         <p className="text-notion-light">Link pages together to create a knowledge base. Turn any text into a link to another page, making it easy to navigate your workspace.</p>
                     </div>
 
-                    <div className="notion-block" draggable="true">
+                    <div className="notion-block">
                         <div className="flex items-center mb-4">
                             <div className="bg-indigo-100 dark:bg-indigo-900 p-2 rounded-md mr-3">
                                 {/* <i className="fa fa-plug text-indigo-600 dark:text-indigo-400" aria-hidden="true"></i> */}
@@ -119,28 +121,28 @@ export const Home: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <div className="notion-block">
-                        <img src="https://p3-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/5ceb61273e4a4a06bbfb9dd9f04d9dc2~tplv-a9rns2rl98-image.image?rcl=20251011093920F1590232204D8A60C141&rk3s=8e244e95&rrcfp=f06b921b&x-expires=1762738785&x-signature=hRoPfUYkt6QwmzFiCT7ctRqhYUk%3D" alt="Project Management Template" className="w-full h-48 object-cover rounded-md mb-4" />
+                        <img src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=600&h=400&fit=crop" alt="Project Management Template" className="w-full h-48 object-cover rounded-md mb-4" />
                         <h3 className="text-xl font-semibold text-notion mb-2">Project Management</h3>
                         <p className="text-notion-light mb-4">Track tasks, deadlines, and progress for your projects. Perfect for teams and individuals.</p>
-                        <Button variant="outline">
+                        <Button variant="outline" onClick={() => window.location.href = '/templates'}>
                             Use template <ArrowRight className="w-4 h-4 ml-1" />
                         </Button>
                     </div>
 
                     <div className="notion-block">
-                        <img src="https://p3-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/4c69cb924add43e8af9ccd811451be1c~tplv-a9rns2rl98-image.image?rcl=20251011093920F1590232204D8A60C141&rk3s=8e244e95&rrcfp=f06b921b&x-expires=1762738788&x-signature=b2bfQRxYl5ipzk3dshgzKCVn2LM%3D" alt="Team Collaboration Template" className="w-full h-48 object-cover rounded-md mb-4" />
+                        <img src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&h=400&fit=crop" alt="Team Collaboration Template" className="w-full h-48 object-cover rounded-md mb-4" />
                         <h3 className="text-xl font-semibold text-notion mb-2">Team Collaboration</h3>
                         <p className="text-notion-light mb-4">Create a central hub for your team. Share documents, assign tasks, and track progress together.</p>
-                        <Button variant="outline">
+                        <Button variant="outline" onClick={() => window.location.href = '/templates'}>
                             Use template <ArrowRight className="w-4 h-4 ml-1" />
                         </Button>
                     </div>
 
                     <div className="notion-block">
-                        <img src="https://p3-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/ac7e6d3084d048938800c34c1aa3127c~tplv-a9rns2rl98-image.image?rcl=20251011093920F1590232204D8A60C141&rk3s=8e244e95&rrcfp=f06b921b&x-expires=1762738771&x-signature=oLogESkc%2Fuv7VCvgrbWCwXMeXQQ%3D" alt="Personal Wiki Template" className="w-full h-48 object-cover rounded-md mb-4" />
+                        <img src="https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=600&h=400&fit=crop" alt="Personal Wiki Template" className="w-full h-48 object-cover rounded-md mb-4" />
                         <h3 className="text-xl font-semibold text-notion mb-2">Personal Wiki</h3>
                         <p className="text-notion-light mb-4">Build a personal knowledge base. Organize your notes, ideas, and resources in one place.</p>
-                        <Button variant="outline">
+                        <Button variant="outline" onClick={() => window.location.href = '/templates'}>
                             Use template <ArrowRight className="w-4 h-4 ml-1" />
                         </Button>
                     </div>
@@ -331,7 +333,7 @@ export const Home: React.FC = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
                 <h2 className="text-3xl font-bold text-notion mb-4">Ready to transform how you work?</h2>
                 <p className="text-lg text-notion-light max-w-3xl mx-auto mb-8">Join millions of users who are using Notion to organize their work and life.</p>
-                <Button className="">Get started for free</Button>
+                <Button onClick={() => window.open('https://kotion.top:888', '_blank')}>Get started for free</Button>
             </div>
         </section>
     </>

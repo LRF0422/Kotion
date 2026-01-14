@@ -320,6 +320,9 @@ importers:
       '@kn/plugin-mindmap-canvas':
         specifier: workspace:*
         version: link:../../packages/plugin-mindmap-canvas
+      '@kn/plugin-weaver-oa':
+        specifier: workspace:*
+        version: link:../../packages/plugin-weaver-oa
       '@kn/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -1189,6 +1192,43 @@ importers:
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
+
+  packages/plugin-weaver-oa:
+    dependencies:
+      '@kn/common':
+        specifier: workspace:*
+        version: link:../common
+      '@kn/core':
+        specifier: workspace:*
+        version: link:../core
+      '@kn/editor':
+        specifier: workspace:*
+        version: link:../editor
+      '@kn/icon':
+        specifier: workspace:*
+        version: link:../icon
+      '@kn/ui':
+        specifier: workspace:*
+        version: link:../ui
+      axios:
+        specifier: ^1.6.0
+        version: 1.12.2
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@kn/rollup-config':
+        specifier: workspace:*
+        version: link:../rollup-config
+      '@types/react':
+        specifier: ^18.2.0
+        version: 18.3.26
+      '@types/react-dom':
+        specifier: ^18.2.0
+        version: 18.3.7(@types/react@18.3.26)
 
   packages/rollup-config: {}
 

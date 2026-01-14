@@ -116,7 +116,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
             )}
 
             {/* 数据表格 */}
-            <div className={cn("rdg-wrapper", theme === 'dark' ? 'rdg-dark' : 'rdg-light')}>
+            <div>
                 <DataGrid
                     columns={columns}
                     rows={filteredData}
@@ -131,7 +131,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                             });
                         }
                     }}
-                    className="fill-grid"
+                    className={cn("fill-grid", theme === 'dark' ? 'rdg-dark' : 'rdg-light')}
                     style={{ height: 'auto', minHeight: 400 }}
                 />
             </div>

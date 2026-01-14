@@ -9,6 +9,8 @@ import nodePolyfills from "rollup-plugin-polyfill-node";
 import babel from "@rollup/plugin-babel";
 import postcssCascadeLayers from "@csstools/postcss-cascade-layers";
 import { terser } from "rollup-plugin-terser";
+import tailwindcss from "tailwindcss";
+import autoprefixer from "autoprefixer";
 
 export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   external: [
@@ -52,8 +54,8 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
       exclude: "../../node_modules/**",
     }),
     postcss({
-      // tailwindcss(), autoprefixer(), nested(), cssnext(), calc()
-      plugins: [cssnext(), nested(), postcssCascadeLayers()],
+      // Process Tailwind CSS and other PostCSS plugins
+      plugins: [tailwindcss(), autoprefixer(), cssnext(), nested(), postcssCascadeLayers()],
       extensions: [".css"],
       extract: false,
       minimize: true,

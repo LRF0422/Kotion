@@ -63,24 +63,34 @@ export const Templates: React.FC = () => {
                 </Select>
             </div>
         </div>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {
                 templates.map((template, index) => (
                     <div className="border hover:shadow-md rounded-lg overflow-hidden transition-shadow cursor-pointer" key={index} data-id="1">
                         <div className="h-48 bg-notion-lightgray overflow-hidden">
-                            <img src="https://picsum.photos/id/26/600/400" alt="Project Management Template" className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" />
+                            <img
+                                src={`https://images.unsplash.com/photo-${1454165804606 + index}?w=600&h=400&fit=crop`}
+                                alt="Template Preview"
+                                className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                            />
                         </div>
                         <div className="p-4">
                             <div className="flex items-center space-x-2 mb-2">
                                 <Badge className="px-2 py-1 text-xs rounded-md">Work</Badge>
-                                <span className="text-xs text-gray-400 flex items-center gap-1"><DownloadIcon className="w-4 h-4" /> 2.4k</span>
+                                <span className="text-xs text-gray-400 flex items-center gap-1">
+                                    <DownloadIcon className="w-4 h-4" /> 2.4k
+                                </span>
                             </div>
                             <h4 className="font-medium text-lg mb-2">{template.name}</h4>
                             <p className="text-gray-600 text-sm mb-4 line-clamp-2">{template.description}</p>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-2">
                                     <div className="h-6 w-6 rounded-full overflow-hidden">
-                                        <img src="https://picsum.photos/id/64/100/100" alt="Creator" className="h-full w-full object-cover" />
+                                        <img
+                                            src={`https://i.pravatar.cc/100?img=${(index % 70) + 1}`}
+                                            alt="Creator Avatar"
+                                            className="h-full w-full object-cover"
+                                        />
                                     </div>
                                     <span className="text-xs text-gray-500">Alex Morgan</span>
                                 </div>

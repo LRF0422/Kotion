@@ -27,16 +27,14 @@ export const Plugins: React.FC = () => {
         })
     }, [])
 
-    function formatNumber(num) {
-        console.log('num', num);
-
+    function formatNumber(num: number | undefined): string {
         if (num) {
             return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
         }
         return "0"
     }
 
-    function renderStars(rating) {
+    function renderStars(rating: number) {
         return <Rate disabled variant="yellow" rating={rating} />;
     }
 
@@ -83,9 +81,9 @@ export const Plugins: React.FC = () => {
                 </Select>
             </div>
         </div>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {
-                plugins.map((plugin, index) => (
+                plugins.map((plugin: any, index: number) => (
                     <div className="p-6 shadow-md border bg-muted transition-colors rounded-md hover:bg-muted/50" key={index}>
                         <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center">

@@ -53,7 +53,7 @@ axiosInstance.interceptors.response.use(res => {
 
     const status = res.status
     if (status === 401) {
-        return Promise.reject('无效的会话，或者会话已过期，请重新登录。')
+        return Promise.reject('Invalid session or session expired, please login again.')
     }
 
     if (status !== 200) {
@@ -70,21 +70,23 @@ axiosInstance.interceptors.response.use(res => {
 }, error => {
     const { response } = error
     let { message } = error
-    if (response.status === 401) {
-        showDlg('登录状态已过期', '您可以继续留在该页面，或者重新登录', () => { }, () => { })
+    if (response?.status === 401) {
+        showDlg('Login session expired', 'You can continue to stay on this page, or login again', () => { }, () => { })
         return Promise.reject(error)
     }
     if (message === 'Network Error') {
-        message = '后端接口连接异常'
+        message = 'Backend interface connection exception'
     } else if (message.includes('timeout')) {
-        message = '系统接口请求超时'
+        message = 'System interface request timeout'
     } else if (message.includes('Request failed with status code')) {
-        message = `系统接口${message.substr(message.length - 3)}异常`
+        message = `System interface ${message.substr(message.length - 3)} exception`
     }
-    toast.error(response.data.msg, {
-        position: 'top-right',
-        duration: 2 * 1000
-    })
+    if (response?.data?.msg) {
+        toast.error(response.data.msg, {
+            position: 'top-right',
+            duration: 2 * 1000
+        })
+    }
     return Promise.reject(error)
 })
 

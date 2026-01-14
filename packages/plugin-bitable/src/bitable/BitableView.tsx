@@ -34,7 +34,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const { node, updateAttributes, deleteNode, editor } = props;
     const attrs = node.attrs as BitableAttrs;
 
-    const [data, setData] = useState<RecordData[]>(attrs.records || []);
+    const [data, setData] = useState<RecordData[]>(attrs.data || []);
     const [currentViewId, setCurrentViewId] = useState(attrs.currentView);
     const [fieldConfigOpen, setFieldConfigOpen] = useState(false);
 
