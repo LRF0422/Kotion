@@ -85,7 +85,19 @@ export const DefaultPluginInstance = new DefaultPlugin({
           name: "名称",
           desc: "描述",
           cover: "封面 ",
-          icon: "图标"
+          icon: "图标",
+          submit: "创建空间",
+          submitting: "创建中...",
+          success: "空间创建成功",
+          error: "创建空间失败",
+          nameRequired: "请输入空间名称",
+          nameTooLong: "空间名称过长（最多100个字符）",
+          iconRequired: "请选择图标",
+          coverRequired: "请选择封面",
+          uploadError: "上传失败",
+          namePlaceholder: "请输入空间名称",
+          descPlaceholder: "请输入空间描述",
+          moreCover: "更多封面"
         },
       }
     },
@@ -109,7 +121,19 @@ export const DefaultPluginInstance = new DefaultPlugin({
           name: "Name",
           desc: "Description",
           cover: "Cover ",
-          icon: "Icon"
+          icon: "Icon",
+          submit: "Create Space",
+          submitting: "Creating...",
+          success: "Space created successfully",
+          error: "Failed to create space",
+          nameRequired: "Space name is required",
+          nameTooLong: "Name is too long (max 100 characters)",
+          iconRequired: "Icon is required",
+          coverRequired: "Cover is required",
+          uploadError: "Failed to upload cover",
+          namePlaceholder: "Name for the space",
+          descPlaceholder: "Description for the space",
+          moreCover: "More Cover"
         },
       }
     },
