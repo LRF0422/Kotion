@@ -199,26 +199,20 @@ const Tree = memo(forwardRef<HTMLDivElement, TreeViewProps>(
 
         return (
             <TreeContext.Provider value={contextValue}>
-                <div className={cn("size-full", className)}>
-                    <ScrollArea
-                        ref={ref}
-                        className="h-full relative px-2"
+                <div ref={ref} className={cn("w-full px-2", className)} dir={dir as Direction}>
+                    <AccordionPrimitive.Root
+                        {...props}
+                        type="multiple"
+                        defaultValue={expendedItems}
+                        value={expendedItems}
+                        className="flex flex-col gap-1"
+                        onValueChange={(value) =>
+                            setExpendedItems((prev) => [...(prev ?? []), value[0]!])
+                        }
                         dir={dir as Direction}
                     >
-                        <AccordionPrimitive.Root
-                            {...props}
-                            type="multiple"
-                            defaultValue={expendedItems}
-                            value={expendedItems}
-                            className="flex flex-col gap-1"
-                            onValueChange={(value) =>
-                                setExpendedItems((prev) => [...(prev ?? []), value[0]!])
-                            }
-                            dir={dir as Direction}
-                        >
-                            {children}
-                        </AccordionPrimitive.Root>
-                    </ScrollArea>
+                        {children}
+                    </AccordionPrimitive.Root>
                 </div>
             </TreeContext.Provider>
         );
@@ -535,18 +529,8 @@ CollapseButton.displayName = "CollapseButton";
  * - useMemo for conditional scroll area rendering
  */
 const TreeItemGroup: React.FC<any> = memo((props) => {
-    // Memoize content to avoid re-creating scroll area on every render
-    const groupContent = useMemo(() => {
-        if (props.height) {
-            return <ScrollArea className="h-[450px] pr-3">
-                {props.children}
-            </ScrollArea>;
-        }
-        return props.children;
-    }, [props.height, props.children]);
-
-    return <div>
-        <div className={`p-1 text-xs text-gray-500 flex justify-between items-center`}>
+    return <div className={props.className || ""}>
+        <div className={`p-1 text-xs text-gray-500 flex justify-between items-center flex-shrink-0`}>
             <div>
                 {props.name}
             </div>
@@ -554,7 +538,7 @@ const TreeItemGroup: React.FC<any> = memo((props) => {
                 {props.actions}
             </div>
         </div>
-        {groupContent}
+        {props.children}
     </div>
 });
 TreeItemGroup.displayName = "TreeItemGroup"

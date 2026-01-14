@@ -1,5 +1,5 @@
 import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
-import { IconButton, TreeView } from "@kn/ui";
+import { IconButton, TreeView, cn } from "@kn/ui";
 import { ArrowLeft, CircleArrowUp, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, MoreVertical, Package, Plus, Settings, ShareIcon, Star, StarIcon, Trash2, Undo2, UserCircle, AlertCircle } from "@kn/icon";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@kn/ui";
@@ -398,8 +398,7 @@ export const SpaceDetail: React.FC = () => {
             isGroup: true,
             key: 'page',
             id: 'page',
-            height: 300,
-            className: 'h-[300px] mt-2',
+            className: 'mt-2',
             icon: <Package className="h-4 w-4" />,
             actions: [
                 <div key="search-actions" className="flex items-center gap-1">
@@ -521,8 +520,8 @@ export const SpaceDetail: React.FC = () => {
         }
     ] : [], [space, favorites, pageTree, trash, params.id, navigator, toggle, handleFavorite, handleCreatePage, handleRestorePage, resolve])
 
-    return space && <div className="grid grid-cols-[280px_1fr] h-full w-full bg-muted/40 ">
-        <div className="h-full w-full border-r border-solid overflow-auto">
+    return space && <div className="grid grid-cols-[280px_1fr] h-screen w-full bg-muted/40">
+        <div className="h-screen w-full border-r border-solid overflow-y-auto overflow-x-hidden">
             {error && (
                 <Alert variant="destructive" className="m-2">
                     <AlertCircle className="h-4 w-4" />
@@ -534,10 +533,10 @@ export const SpaceDetail: React.FC = () => {
                 loading={loading}
                 size="sm"
                 selectParent={true}
-                className="w-full h-full"
+                className="w-full"
                 elements={elements} />
         </div>
-        <div className="w-full h-screen">
+        <div className="w-full h-full overflow-auto">
             <Outlet />
         </div>
         <Sheet

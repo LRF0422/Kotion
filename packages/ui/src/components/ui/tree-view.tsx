@@ -142,9 +142,9 @@ export const TreeItem = memo(forwardRef<
         if (!elements) return null;
 
         return elements.map((element: TreeViewElement) => (
-            <li key={element.id} className="w-full block">
+            <li key={element.id} className={element.isGroup ? element.className : "w-full block"}>
                 {element.children && element.children?.length > 0 ? (
-                    element.isGroup ? <TreeItemGroup name={element.name} key={element.id} actions={element.actions} height={element.height}>
+                    element.isGroup ? <TreeItemGroup name={element.name} key={element.id} actions={element.actions} height={element.height} className={element.className}>
                         <TreeItem
                             aria-label={`folder ${element.name}`}
                             elements={element.children}
@@ -168,7 +168,7 @@ export const TreeItem = memo(forwardRef<
                         </Folder>
                 ) : (
                     element.isGroup ?
-                        <TreeItemGroup name={element.name} key={element.id} actions={element.actions} height={element.height}>
+                        <TreeItemGroup name={element.name} key={element.id} actions={element.actions} height={element.height} className={element.className}>
                             {
                                 (element.children && element.children.length > 0) ? <TreeItem
                                     aria-label={`folder ${element.name}`}
