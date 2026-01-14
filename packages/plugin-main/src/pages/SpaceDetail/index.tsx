@@ -1,7 +1,7 @@
 import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
 import { IconButton, TreeView } from "@kn/ui";
-import { ArrowLeft, CircleArrowUp, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, MoreVertical, Package, Plus, Settings, ShareIcon, Star, StarIcon, Trash2, Undo2, UserCircle } from "@kn/icon";
-import React, { useEffect, useState } from "react";
+import { ArrowLeft, CircleArrowUp, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, MoreVertical, Package, Plus, Settings, ShareIcon, Star, StarIcon, Trash2, Undo2, UserCircle, AlertCircle } from "@kn/icon";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@kn/ui";
 import { useApi, useService, useUploadFile } from "@kn/core";
 import { APIS } from "../../api";
@@ -11,6 +11,7 @@ import { useNavigator } from "@kn/core";
 import { Button } from "@kn/ui";
 import { Input } from "@kn/ui";
 import { Badge } from "@kn/ui";
+import { Alert, AlertDescription } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
 import { event, ON_FAVORITE_CHANGE, ON_PAGE_REFRESH } from "../../event";
 import { Card } from "@kn/ui";
@@ -38,12 +39,17 @@ export const SpaceDetail: React.FC = () => {
     const navigator = useNavigator()
     const [searchValue, setSearchValue] = useState<string>()
     const [loading, { toggle: toggleLoading }] = useToggle(true)
+    const [error, setError] = useState<string | null>(null)
     const { usePath } = useUploadFile()
     const spaceService = useService("spaceService")
     useEffect(() => {
         if (params.id) {
             spaceService.getSpaceInfo(params.id).then(res => {
                 setSpace(res)
+                setError(null)
+            }).catch(err => {
+                setError('Failed to load space information')
+                console.error('Error loading space:', err)
             })
         }
         return () => {
@@ -51,26 +57,53 @@ export const SpaceDetail: React.FC = () => {
         }
     }, [params.id])
 
+    // Debounce search to avoid excessive API calls
     useEffect(() => {
-        if (params.id) {
+        if (!params.id) return
+
+        const timeoutId = setTimeout(() => {
             toggleLoading()
-            spaceService.getPageTree(params!.id, searchValue).then(res => {
-                setPageTree(res)
-                toggleLoading()
-            })
-        }
-    }, [flag, searchValue])
+            spaceService.getPageTree(params.id!, searchValue)
+                .then(res => {
+                    setPageTree(res)
+                    setError(null)
+                })
+                .catch(err => {
+                    setError('Failed to load page tree')
+                    console.error('Error loading page tree:', err)
+                })
+                .finally(() => {
+                    toggleLoading()
+                })
+        }, 300) // 300ms debounce
+
+        return () => clearTimeout(timeoutId)
+    }, [flag, searchValue, params.id])
 
     useEffect(() => {
-        useApi(APIS.QUERY_PAGE, { spaceId: params.id, status: 'TRASH', pageSize: 20 }).then((res) => {
-            setTrash(res.data.records)
-        })
-    }, [restoreFlag])
+        if (!params.id) return
+
+        useApi(APIS.QUERY_PAGE, { spaceId: params.id, status: 'TRASH', pageSize: 20 })
+            .then((res) => {
+                setTrash(res.data.records)
+                setError(null)
+            })
+            .catch(err => {
+                console.error('Error loading trash:', err)
+            })
+    }, [restoreFlag, params.id])
     useEffect(() => {
-        useApi(APIS.QUERY_FAVORITE, { scope: params.id, pageSize: 5 }).then(res => {
-            setFavorites(res.data)
-        })
-    }, [favoriteFlag])
+        if (!params.id) return
+
+        useApi(APIS.QUERY_FAVORITE, { scope: params.id, pageSize: 5 })
+            .then(res => {
+                setFavorites(res.data)
+                setError(null)
+            })
+            .catch(err => {
+                console.error('Error loading favorites:', err)
+            })
+    }, [favoriteFlag, params.id])
 
     useEffect(() => {
         if (visible) {
@@ -104,7 +137,7 @@ export const SpaceDetail: React.FC = () => {
         }
     }, [space])
 
-    const handleCreatePage = (parentId: string = "0") => {
+    const handleCreatePage = useCallback((parentId: string = "0") => {
         const param = {
             spaceId: params.id,
             parentId: parentId,
@@ -135,9 +168,9 @@ export const SpaceDetail: React.FC = () => {
             })
             setFlag(f => f + 1)
         })
-    }
+    }, [params.id, navigator])
 
-    const handleCreateByTemplate = (id: string) => {
+    const handleCreateByTemplate = useCallback((id: string) => {
         useApi(APIS.CREATE_OR_SAVE_PAGE, null, {
             templateId: id,
             spaceId: params.id,
@@ -146,39 +179,39 @@ export const SpaceDetail: React.FC = () => {
             setFlag(f => f + 1)
             setVisible(false)
         })
-    }
+    }, [params.id, params.pageId])
 
-    const handleGoToPersonalSpace = () => {
+    const handleGoToPersonalSpace = useCallback(() => {
         useApi(APIS.PERSONAL_SPACE).then((res) => {
             navigator.go({
                 to: `/space-detail/${res.data.id}`
             })
             toggle()
         })
-    }
+    }, [navigator, toggle])
 
-    const handleMoveToTrash = (pageId: string) => {
+    const handleMoveToTrash = useCallback((pageId: string) => {
         useApi(APIS.MOVE_TO_TRASH, { id: pageId }).then(() => {
             setFlag(flag => flag + 1)
             setRestoreFlag(f => f + 1)
         })
-    }
+    }, [])
 
-    const handleRestorePage = (pageId: string) => {
+    const handleRestorePage = useCallback((pageId: string) => {
         useApi(APIS.RESTORE_PAGE, { id: pageId }).then(() => {
             setFlag(f => f + 1)
             setRestoreFlag(f => f + 1)
         })
-    }
+    }, [])
 
-    const handleFavorite = () => {
-        useApi(APIS.ADD_SPACE_FAVORITE, { id: params.id}).then(() => {
+    const handleFavorite = useCallback(() => {
+        useApi(APIS.ADD_SPACE_FAVORITE, { id: params.id }).then(() => {
             setFlag(f => f + 1)
         })
-    }
+    }, [params.id])
 
 
-    const resolve = (treeNode: any) => {
+    const resolve = useCallback((treeNode: any): SiderMenuItemProps => {
 
         const name = <div className="flex flex-row gap-1 items-center">
             <div className="text-left text-ellipsis text-nowrap overflow-hidden w-[140px]">
@@ -227,6 +260,7 @@ export const SpaceDetail: React.FC = () => {
 
         if (!treeNode.children) {
             return {
+                icon: treeNode.icon ? treeNode.icon.icon : null,
                 name: name,
                 key: treeNode.id,
                 id: treeNode.id,
@@ -244,6 +278,7 @@ export const SpaceDetail: React.FC = () => {
             }
         } else {
             return {
+                icon: treeNode.icon ? treeNode.icon.icon : null,
                 name: name,
                 key: treeNode.id,
                 id: treeNode.id,
@@ -255,9 +290,9 @@ export const SpaceDetail: React.FC = () => {
                 }
             }
         }
-    }
+    }, [params.id, navigator, handleCreatePage, handleMoveToTrash])
 
-    const elements: SiderMenuItemProps[] = space ? [
+    const elements: SiderMenuItemProps[] = useMemo(() => space ? [
         {
             name: space.name,
             key: '/space/:id/overView',
@@ -276,7 +311,7 @@ export const SpaceDetail: React.FC = () => {
                             {space.name}
                         </div>
                         <div className="flex items-center gap-1">
-                            <IconButton icon={<StarIcon className="h-4 w-4"  />} onClick={handleFavorite} />
+                            <IconButton icon={<StarIcon className="h-4 w-4" />} onClick={handleFavorite} />
                         </div>
                     </div>
                 </div>
@@ -391,10 +426,16 @@ export const SpaceDetail: React.FC = () => {
                 <div>Save as Template</div>
             </TemplateCreator>
         }
-    ] : []
+    ] : [], [space, favorites, pageTree, trash, params.id, navigator, toggle, handleFavorite, handleCreatePage, handleRestorePage, resolve])
 
     return space && <div className="grid grid-cols-[280px_1fr] h-full w-full bg-muted/40 ">
         <div className="h-full w-full border-r border-solid overflow-auto">
+            {error && (
+                <Alert variant="destructive" className="m-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                </Alert>
+            )}
             <TreeView
                 initialSelectedId={params.pageId}
                 loading={loading}

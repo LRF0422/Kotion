@@ -14,10 +14,10 @@ export { Menu } from './editor-extensions/component/Menu';
 
 // Export context and types
 export {
-  FileManageContext,
-  useFileManagerState,
-  type FileItem,
-  type FileManagerState,
+    FileManageContext,
+    useFileManagerState,
+    type FileItem,
+    type FileManagerState,
 } from './editor-extensions/component/FileContext';
 
 // Export APIs
