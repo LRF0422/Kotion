@@ -3,35 +3,52 @@ import {
     ContextMenu, ContextMenuContent, ContextMenuItem,
     ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger
 } from "@kn/ui";
-import React, { PropsWithChildren, useContext } from "react";
+import React, { PropsWithChildren, useContext, useCallback } from "react";
 import { FileManageContext, FileManagerState } from "./FileContext";
 
 
-export const Menu: React.FC<PropsWithChildren> = (props) => {
+export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
 
-    const { handleUpload } = useContext(FileManageContext) as FileManagerState
+    const { handleUpload, handleDelete, selectedFiles, loading } = useContext(FileManageContext) as FileManagerState
+
+    const handleCreateFolder = useCallback(() => {
+        handleUpload('FOLDER', 'New Folder')
+    }, [handleUpload])
+
+    const handleUploadFile = useCallback(() => {
+        handleUpload('FILE')
+    }, [handleUpload])
+
+    const handleDeleteSelected = useCallback(() => {
+        if (selectedFiles.length > 0) {
+            handleDelete(selectedFiles.map(f => f.id))
+        }
+    }, [handleDelete, selectedFiles])
 
     return <ContextMenu>
         <ContextMenuTrigger className="h-full w-full">
             {props.children}
         </ContextMenuTrigger>
         <ContextMenuContent className="w-[200px]">
-            <ContextMenuItem onClick={() => {
-                handleUpload('FOLDER', 'Test')
-            }}>Create Folder
+            <ContextMenuItem onClick={handleCreateFolder} disabled={loading}>
+                Create Folder
                 <ContextMenuShortcut>
                     <FolderIcon className="h-4 w-4" />
                 </ContextMenuShortcut>
             </ContextMenuItem>
-            <ContextMenuItem onClick={() => {
-                handleUpload('FILE')
-            }}>Upload File
+            <ContextMenuItem onClick={handleUploadFile} disabled={loading}>
+                Upload File
                 <ContextMenuShortcut>
                     <UploadIcon className="h-4 w-4" />
                 </ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuSeparator />
-            <ContextMenuItem>Delete
+            <ContextMenuItem
+                onClick={handleDeleteSelected}
+                disabled={loading || selectedFiles.length === 0}
+                className="text-destructive"
+            >
+                Delete {selectedFiles.length > 0 ? `(${selectedFiles.length})` : ''}
                 <ContextMenuShortcut>
                     <Trash2 className="h-4 w-4" />
                 </ContextMenuShortcut>
@@ -39,4 +56,4 @@ export const Menu: React.FC<PropsWithChildren> = (props) => {
         </ContextMenuContent>
     </ContextMenu>
 
-}
+})

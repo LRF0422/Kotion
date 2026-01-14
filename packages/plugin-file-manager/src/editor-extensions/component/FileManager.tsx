@@ -1,13 +1,13 @@
 import { Check, ClockIcon, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, HomeIcon, ListIcon, LucideHome, PlusIcon, StarIcon, Trash2, UploadIcon, XIcon } from "@kn/icon";
-import { Button, EmptyState, Input, ScrollArea, Separator, TreeView, cn } from "@kn/ui";
-import React, { useCallback, useEffect, useState } from "react";
+import { Button, EmptyState, Input, ScrollArea, Separator, TreeView, cn, Skeleton } from "@kn/ui";
+import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { FileCardList } from "./FileCard";
-import { useSafeState, useUploadFile } from "@kn/core";
+import { useSafeState } from "@kn/core";
 import { useApi } from "@kn/core";
 import { APIS } from "../../api";
 import { Menu } from "./Menu";
-import { toast } from "@kn/ui";
 import { FileItem, FileManageContext } from "./FileContext";
+import { useFileManager } from "../../hooks/useFileManager";
 
 
 
@@ -28,14 +28,23 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const { selectable = false, onCancel, onConfirm, multiple = false, target = 'both' } = props
 
     const [selectedFiles, setSelectFiles] = useSafeState<FileItem[]>([])
-    const [currentFolderId, setCurrentFolderId] = useSafeState<string>(props.folderId || "")
-    const [currentItem, setCurrentItem] = useState<FileItem>()
-    const [updateFlag, setUpdateFlag] = useState(0)
-    const [currentFolderItems, setCurrentFolderItems] = useState<FileItem[]>([])
     const [repoKey, setRepoKey] = useState<string>("")
     const [files, setFiles] = useSafeState<any[]>([])
     const { folderId } = props
-    const { upload } = useUploadFile()
+
+    const {
+        currentFolderId,
+        setCurrentFolderId,
+        currentItem,
+        setCurrentItem,
+        currentFolderItems,
+        loading,
+        error,
+        createFolder,
+        uploadFile,
+        deleteFiles,
+        refreshFolder
+    } = useFileManager({ initialFolderId: props.folderId || "" })
 
     const defaultMenus = [
         {
@@ -82,119 +91,63 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     ]
 
 
-    const createFile = useCallback((type: 'FOLDER' | 'FILE', name?: string) => {
+    const handleCreateFile = useCallback((type: 'FOLDER' | 'FILE', name?: string) => {
         if (type === 'FOLDER') {
-            useApi(APIS.CREATE_FOLDER, null, {
-                name: name || "New Folder",
-                parentId: currentFolderId,
-                type: type,
-                repositoryKey: repoKey,
-            }).then(() => {
-                setUpdateFlag(updateFlag + 1)
-            })
+            createFolder(name || "New Folder", repoKey)
         } else {
-            upload().then((res) => {
-                const promise = useApi(APIS.CREATE_FOLDER, null, {
-                    name: res.originalName,
-                    parentId: currentFolderId,
-                    type: type,
-                    repositoryKey: repoKey,
-                    path: res.name
-                }).then(() => {
-                    setUpdateFlag(updateFlag + 1)
-                })
-                toast.promise(promise, {
-                    loading: 'Uploading...',
-                    success: 'Uploaded',
-                    error: 'Upload failed',
-                })
-            })
+            uploadFile(repoKey)
         }
-    }, [currentFolderId])
+    }, [createFolder, uploadFile, repoKey])
 
     const handleDelete = useCallback((ids: string[]) => {
-    }, [])
+        deleteFiles(ids)
+    }, [deleteFiles])
 
 
-    const reslove = (file: any) => {
-        if (!file.children) {
-            return {
-                id: file.id,
-                name: file.name,
-                isFolder: file.type.value === 'FOLDER',
-                icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />,
-                onClick: () => {
-                    if (file.type.value === 'FOLDER') {
-                        setCurrentFolderId(file.id)
-                    }
-                    setCurrentItem(file)
+    const reslove = useCallback((file: any) => {
+        const baseItem = {
+            id: file.id,
+            name: file.name,
+            isFolder: file.type.value === 'FOLDER',
+            icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />,
+            onClick: () => {
+                if (file.type.value === 'FOLDER') {
+                    setCurrentFolderId(file.id)
                 }
-            }
-        } else {
-            return {
-                id: file.id,
-                name: file.name,
-                isFolder: file.type.value === 'FOLDER',
-                children: file.children.map((item: any) => reslove(item)),
-                icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />,
-                onClick: () => {
-                    if (file.type.value === 'FOLDER') {
-                        setCurrentFolderId(file.id)
-                    }
-                    setCurrentItem(file)
-                }
+                setCurrentItem(file)
             }
         }
-    }
+
+        if (file.children) {
+            return {
+                ...baseItem,
+                children: file.children.map((item: any) => reslove(item))
+            }
+        }
+
+        return baseItem
+    }, [setCurrentFolderId, setCurrentItem])
     useEffect(() => {
-        if (!folderId) {
-            useApi(APIS.GET_ROOT_FOLDER).then((res) => {
+        const fetchData = async () => {
+            try {
+                const api = folderId ? APIS.GET_CHILDREN : APIS.GET_ROOT_FOLDER
+                const params = folderId ? { folderId } : undefined
+                const res = await useApi(api, params)
                 const items = res.data.map((item: any) => reslove(item))
                 setFiles([...defaultMenus, {
                     isGroup: true,
-                    name: "文件夹",
+                    name: "Folders",
                     children: [...items],
-                    height: 500
+                    height: folderId ? 700 : 500
                 }])
-                setCurrentFolderItems(items)
-            })
-        } else {
-            useApi(APIS.GET_CHILDREN, { folderId }).then(res => {
-                const items = res.data.map((item: any) => reslove(item))
-                setFiles([...defaultMenus, {
-                    isGroup: true,
-                    name: "文件夹",
-                    children: [...items],
-                    height: 700
-                }])
-                setCurrentFolderItems(items)
-            })
+            } catch (err) {
+                console.error('Failed to load folders:', err)
+            }
         }
-    }, [folderId])
+        fetchData()
+    }, [folderId, reslove])
 
-    useEffect(() => {
-        if (!currentFolderId) {
-            useApi(APIS.GET_ROOT_FOLDER).then(res => {
-                const items = res.data.map((item: any) => reslove(item))
-                setCurrentFolderItems(items)
-            })
-        } else {
-            useApi(APIS.GET_CHILDREN, { folderId: currentFolderId }).then(res => {
-                const items = res.data.map((item: any) => reslove(item))
-                setCurrentFolderItems(items)
-            })
-        }
-    }, [currentFolderId, updateFlag])
-
-    // useEffect(() => {
-    //     if (currentItem && currentItem.type.value === 'FOLDER') {
-    //         useApi(APIS.GET_CHILDREN, { folderId: currentItem.id }).then(res => {
-    //             setCurrentFolderItems(res.data.map((item: any) => reslove(item)))
-    //         })
-    //     }
-    // }, [currentItem, updateFlag])
-
-    return <FileManageContext.Provider value={{
+    const contextValue = useMemo(() => ({
         selectedFiles,
         setSelectFiles,
         currentFolderId,
@@ -204,24 +157,25 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         selectable,
         setCurrentItem,
         repoKey,
-        handleUpload: createFile,
-        handleDelete: handleDelete
+        handleUpload: handleCreateFile,
+        handleDelete: handleDelete,
+        loading,
+        error
+    }), [selectedFiles, currentFolderId, currentFolderItems, currentItem, selectable, repoKey, handleCreateFile, handleDelete, loading, error])
 
-    }}>
+    return <FileManageContext.Provider value={contextValue}>
         <div className={cn("rounded-sm flex flex-col border not-prose", props.className)}>
             <div className="w-full bg-muted border-b flex items-center justify-between h-[40px]">
                 <div className="flex items-center h-full gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => {
-                        createFile('FILE')
-                    }}>
+                    <Button size="sm" variant="ghost" onClick={() => handleCreateFile('FILE')} disabled={loading}>
                         <UploadIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
                         Upload
                     </Button>
-                    <Button size="sm" variant="ghost">
+                    <Button size="sm" variant="ghost" onClick={() => handleDelete(selectedFiles.map(f => f.id))} disabled={selectedFiles.length === 0 || loading}>
                         <Trash2 className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
                         Delete
                     </Button>
-                    <Button size="sm" variant="ghost">
+                    <Button size="sm" variant="ghost" disabled={selectedFiles.length === 0 || loading}>
                         <DownloadIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
                         Download
                     </Button>
@@ -267,22 +221,18 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                         <Button
                             variant="outline"
                             size="sm"
-                            className="h-7">
-                            <FolderPlusIcon className="w-4 h-4"
-                                onClick={() => {
-                                    createFile('FOLDER')
-                                }}
-                            />
+                            className="h-7"
+                            onClick={() => handleCreateFile('FOLDER')}
+                            disabled={loading}>
+                            <FolderPlusIcon className="w-4 h-4" />
                         </Button>
                         <Button
                             variant="outline"
                             size="sm"
-                            className="h-7">
-                            <FilePlus2Icon className="w-4 h-4"
-                                onClick={() => {
-                                    createFile('FILE')
-                                }}
-                            />
+                            className="h-7"
+                            onClick={() => handleCreateFile('FILE')}
+                            disabled={loading}>
+                            <FilePlus2Icon className="w-4 h-4" />
                         </Button>
                     </div>
                     <TreeView
@@ -301,11 +251,30 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                     </div>
                     <div className="flex-1 overflow-auto h-[calc(100%-45px)]">
                         {
-                            currentFolderItems.length > 0 ? (
+                            loading ? (
+                                <div className="p-6 space-y-4">
+                                    <div className="flex flex-wrap gap-2">
+                                        {[...Array(6)].map((_, i) => (
+                                            <Skeleton key={i} className="w-[200px] h-[180px]" />
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : error ? (
+                                <EmptyState
+                                    icons={[FolderOpenIcon]}
+                                    title="Error loading files"
+                                    description={error}
+                                    className=" h-full w-full max-w-none border-none rounded-none"
+                                    action={{
+                                        label: 'Retry',
+                                        onClick: refreshFolder
+                                    }}
+                                />
+                            ) : currentFolderItems.length > 0 ? (
                                 <Menu>
                                     <FileCardList />
                                 </Menu>
-                            ) :
+                            ) : (
                                 <EmptyState
                                     icons={[FolderOpenIcon]}
                                     title="No files"
@@ -313,11 +282,10 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                     className=" h-full w-full max-w-none border-none rounded-none"
                                     action={{
                                         label: 'Upload Files',
-                                        onClick: () => {
-                                            createFile('FILE')
-                                        }
+                                        onClick: () => handleCreateFile('FILE')
                                     }}
                                 />
+                            )
                         }
                     </div>
                 </div>

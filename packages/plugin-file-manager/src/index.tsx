@@ -9,11 +9,15 @@ import { ImageExtension } from "./editor-extensions/image"
 // import "@kn/ui/globals.css"
 
 interface FileManagerPluginConfig extends PluginConfig {
-
-
-
+    // Add custom configuration options here if needed
+    defaultView?: 'grid' | 'list'
+    maxUploadSize?: number
 }
+
 class FileManager extends KPlugin<FileManagerPluginConfig> {
+    constructor(config: FileManagerPluginConfig) {
+        super(config)
+    }
 }
 
 export const fileManager = new FileManager({
@@ -31,7 +35,7 @@ export const fileManager = new FileManager({
         {
             id: 'fileManager',
             name: 'fileManager',
-            key: '文件管理',
+            key: 'File Manager',
             icon: <Folder className="h-5 w-5" />
         }
     ]

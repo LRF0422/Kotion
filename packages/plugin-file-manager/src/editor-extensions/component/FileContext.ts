@@ -8,6 +8,12 @@ export interface FileItem {
     type: {
         value: 'FOLDER' | 'FILE'
     }
+    path?: string
+    size?: number
+    createdAt?: string
+    updatedAt?: string
+    icon?: React.ReactNode
+    onClick?: () => void
 }
 
 export interface FileManagerState {
@@ -22,7 +28,16 @@ export interface FileManagerState {
     repoKey: string
     handleUpload: (type: 'FOLDER' | 'FILE', name?: string) => void
     handleDelete: (ids: string[]) => void
+    loading?: boolean
+    error?: string | null
 }
 
 export const FileManageContext = createContext<FileManagerState | null>(null)
-export const useFileManagerState = () => useContext(FileManageContext)
+
+export const useFileManagerState = () => {
+    const context = useContext(FileManageContext)
+    if (!context) {
+        throw new Error('useFileManagerState must be used within FileManageContext.Provider')
+    }
+    return context
+}

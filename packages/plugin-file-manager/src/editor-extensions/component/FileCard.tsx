@@ -1,7 +1,7 @@
 import { Download, EyeIcon, FcFile, FcOpenedFolder, XIcon } from "@kn/icon";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, cn } from "@kn/ui";
 import { useSafeState } from "@kn/core";
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo, useCallback } from "react";
 import { FileItem, FileManagerState, useFileManagerState } from "./FileContext";
 
 
@@ -16,36 +16,58 @@ export interface FileCardProps {
 }
 
 
-export const FileCard: React.FC<FileItem> = (props) => {
+export const FileCard: React.FC<FileItem> = React.memo((props) => {
     const { isFolder, id, name } = props
-    const { selectedFiles, setSelectFiles, selectable, setCurrentFolderId } = useFileManagerState() as FileManagerState
+    const { selectedFiles, setSelectFiles, selectable, setCurrentFolderId, loading } = useFileManagerState() as FileManagerState
     const [checked, setChecked] = useSafeState<boolean>(false)
 
     useEffect(() => {
         setChecked(!!selectedFiles.find(it => it.id === id))
-    }, [selectedFiles, props])
-    return name && <div
-        onContextMenu={() => {
-            selectable && setChecked(true)
-        }}
-        onDoubleClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
+    }, [selectedFiles, id])
+
+    const handleCheckChange = useCallback((value: boolean) => {
+        if (value) {
+            setSelectFiles([...selectedFiles, props])
+        } else {
+            setSelectFiles(selectedFiles.filter(it => it.id !== id))
+        }
+    }, [selectedFiles, props, id, setSelectFiles])
+
+    const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        if (isFolder) {
             setCurrentFolderId(id)
-        }}
+        }
+    }, [isFolder, id, setCurrentFolderId])
+
+    const handleContextMenu = useCallback(() => {
+        if (selectable) {
+            setChecked(true)
+        }
+    }, [selectable])
+
+    if (!name) return null
+
+    return <div
+        onContextMenu={handleContextMenu}
+        onDoubleClick={handleDoubleClick}
     >
-        <Card className={cn("w-[200px] bg-muted/40 shadow-sm hover:bg-muted/50 hover:shadow-md", checked ? "outline" : "")}>
+        <Card className={cn(
+            "w-[200px] bg-muted/40 shadow-sm hover:bg-muted/50 hover:shadow-md transition-all",
+            checked && "outline",
+            loading && "opacity-50 pointer-events-none"
+        )}>
             <CardHeader className="p-0">
                 <CardTitle className="p-0 m-0 border-b">
                     <div className="flex items-center justify-between p-1">
                         {
-                            selectable && <Checkbox className="ml-1" checked={checked} onCheckedChange={(value) => {
-                                if (value) {
-                                    setSelectFiles([...selectedFiles, props])
-                                } else {
-                                    setSelectFiles(selectedFiles.filter(it => it.id !== id))
-                                }
-                            }} />
+                            selectable && <Checkbox
+                                className="ml-1"
+                                checked={checked}
+                                onCheckedChange={handleCheckChange}
+                                disabled={loading}
+                            />
                         }
                         <div className="flex items-center gap-1">
                             <div className="p-1 hover:bg-muted cursor-pointer rounded-sm">
@@ -67,27 +89,26 @@ export const FileCard: React.FC<FileItem> = (props) => {
                         <FcFile className="h-20 w-20" />
                 }
             </CardContent>
-            <CardFooter className="p-2 m-0 text-sm">
-                {
-                    name
-                }
+            <CardFooter className="p-2 m-0 text-sm truncate" title={name}>
+                {name}
             </CardFooter>
         </Card>
     </div>
-}
+})
 
-export const FileCardList: React.FC = (props) => {
+export const FileCardList: React.FC = React.memo(() => {
     const { currentFolderItems } = useFileManagerState() as FileManagerState
+
     return <div className="h-full w-full overflow-auto max-h-full">
         <div className="flex flex-wrap w-full gap-2 p-6">
             {
-                currentFolderItems.map((it, index) => (
+                currentFolderItems.map((it) => (
                     <FileCard
-                        key={index}
+                        key={it.id}
                         {...it}
                     />
                 ))
             }
         </div>
     </div>
-}
+})
