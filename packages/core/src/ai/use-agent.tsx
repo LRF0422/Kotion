@@ -67,7 +67,7 @@ export const useEditorAgent = (editor: Editor) => {
     // Memoize plugin tools to avoid recreation on every render
     const pluginTools = useMemo(() => {
         return pluginManager?.resloveTools(editor) || {}
-    }, [pluginManager, editor])
+    }, [])
 
     // Reset position offsets callback
     const resetOffsets = useCallback(() => {

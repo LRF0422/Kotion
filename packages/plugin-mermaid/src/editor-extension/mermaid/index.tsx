@@ -25,7 +25,7 @@ export const MermaidExtension: ExtensionWrapper = {
             inputSchema: z.object({
                 code: z.string().describe("Mermaid 代码"),
             }),
-            execute: (editor) => async (params: { code: string }) => {
+            execute: (editor) => (params: { code: string }) => {
                 editor.commands.insertMermaid(params.code)
             }
         },

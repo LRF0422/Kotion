@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { Editor, findParentNode, getAttributes, posToDOMRect } from "@tiptap/core";
 import { Node as PMNode } from "@tiptap/pm/model";
 
@@ -30,7 +30,7 @@ import { Columns } from "../columns";
 import { Button, IconButton, Separator } from "@kn/ui";
 import { toOtherColumns } from "../utilities";
 
-export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
+export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ editor }) => {
   const shouldShow = useCallback<BubbleMenuProps["shouldShow"]>(() => {
     return isNodeActivePro(editor.state, "column") && editor.isEditable
   }, [editor]);
@@ -85,6 +85,70 @@ export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
     [editor]
   );
 
+  // Memoize column layout handlers to prevent re-creation on each render
+  const handleThreeColumnsMiddle = useCallback(() => {
+    toOtherColumns({
+      state: editor.state,
+      dispatch: editor.view.dispatch,
+      type: "center",
+      cols: 3
+    })
+  }, [editor]);
+
+  const handleThreeColumns = useCallback(() => {
+    toOtherColumns({
+      state: editor.state,
+      dispatch: editor.view.dispatch,
+      type: "none",
+      cols: 3
+    })
+  }, [editor]);
+
+  const handleThreeColumnsLeft = useCallback(() => {
+    toOtherColumns({
+      state: editor.state,
+      dispatch: editor.view.dispatch,
+      type: "left",
+      cols: 3
+    })
+  }, [editor]);
+
+  const handleThreeColumnsRight = useCallback(() => {
+    toOtherColumns({
+      state: editor.state,
+      dispatch: editor.view.dispatch,
+      type: "right",
+      cols: 3
+    })
+  }, [editor]);
+
+  const handleTwoColumns = useCallback(() => {
+    toOtherColumns({
+      state: editor.state,
+      dispatch: editor.view.dispatch,
+      type: "none",
+      cols: 2
+    })
+  }, [editor]);
+
+  const handleTwoColumnsLeft = useCallback(() => {
+    toOtherColumns({
+      state: editor.state,
+      dispatch: editor.view.dispatch,
+      type: "left",
+      cols: 2
+    })
+  }, [editor]);
+
+  const handleTwoColumnsRight = useCallback(() => {
+    toOtherColumns({
+      state: editor.state,
+      dispatch: editor.view.dispatch,
+      type: "right",
+      cols: 2
+    })
+  }, [editor]);
+
   return (
     <BubbleMenu
       forNode
@@ -107,69 +171,20 @@ export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
           icon={<IconDeleteColumn />}
         /> */}
         <Divider />
-        <IconButton icon={<IconThreeColumnsMiddle className="h-4 w-4" />} onClick={() => {
-          toOtherColumns({
-            state: editor.state,
-            dispatch: editor.view.dispatch,
-            type: "center",
-            cols: 3
-          })
-        }} />
-
-        <IconButton icon={<IconThreeColumns className="h-4 w-4" />} onClick={() => {
-          toOtherColumns({
-            state: editor.state,
-            dispatch: editor.view.dispatch,
-            type: "none",
-            cols: 3
-          })
-        }} />
-
-        <IconButton icon={<IconThreeColumnsLeft className="h-4 w-4" />} onClick={() => {
-          toOtherColumns({
-            state: editor.state,
-            dispatch: editor.view.dispatch,
-            type: "left",
-            cols: 3
-          })
-        }} />
-        <IconButton icon={<IconThreeColumnsRight className="h-4 w-4" />} onClick={() => {
-          toOtherColumns({
-            state: editor.state,
-            dispatch: editor.view.dispatch,
-            type: "right",
-            cols: 3
-          })
-        }} />
+        <IconButton icon={<IconThreeColumnsMiddle className="h-4 w-4" />} onClick={handleThreeColumnsMiddle} />
+        <IconButton icon={<IconThreeColumns className="h-4 w-4" />} onClick={handleThreeColumns} />
+        <IconButton icon={<IconThreeColumnsLeft className="h-4 w-4" />} onClick={handleThreeColumnsLeft} />
+        <IconButton icon={<IconThreeColumnsRight className="h-4 w-4" />} onClick={handleThreeColumnsRight} />
         <Divider />
-        <IconButton icon={<IconTwoColumns className="h-4 w-4" />} onClick={() => {
-          toOtherColumns({
-            state: editor.state,
-            dispatch: editor.view.dispatch,
-            type: "none",
-            cols: 2
-          })
-        }} />
-
-        <IconButton icon={<IconTwoColumnsLeft className="h-4 w-4" />} onClick={() => {
-          toOtherColumns({
-            state: editor.state,
-            dispatch: editor.view.dispatch,
-            type: "left",
-            cols: 2
-          })
-        }} />
-        <IconButton icon={<IconTwoColumnsRight className="h-4 w-4" />} onClick={() => {
-          toOtherColumns({
-            state: editor.state,
-            dispatch: editor.view.dispatch,
-            type: "right",
-            cols: 2
-          })
-        }} />
+        <IconButton icon={<IconTwoColumns className="h-4 w-4" />} onClick={handleTwoColumns} />
+        <IconButton icon={<IconTwoColumnsLeft className="h-4 w-4" />} onClick={handleTwoColumnsLeft} />
+        <IconButton icon={<IconTwoColumnsRight className="h-4 w-4" />} onClick={handleTwoColumnsRight} />
         <Divider />
         <IconButton icon={<Trash2 className="h-4 w-4" />} onClick={deleteMe} />
       </div>
     </BubbleMenu>
   );
-};
+}, (prevProps, nextProps) => {
+  // Prevent re-render if editor hasn't changed
+  return prevProps.editor === nextProps.editor;
+});

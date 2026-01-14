@@ -1,15 +1,79 @@
-  .columns {
-      display: flex;
-      width: 100%;
-      gap: 10px;
+.columns {
+    display: flex;
+    width: 100%;
+    gap: 10px;
+    contain: layout style;
+    position: relative;
 
-      .node-column {
-          min-width: 0;
-          /* height: 100%; */
-          flex: 1 1 0%;
+    .node-column {
+        min-width: 0;
+        flex: 1 1 0%;
+        will-change: flex-basis;
+        contain: layout;
+        position: relative;
 
-          p {
-              margin: 0px;
-          }
-      }
-  }
+        p {
+            margin: 0;
+        }
+    }
+}
+
+/* Optimize column-view decorations */
+.column-view {
+    transition: flex-basis 0.2s ease-in-out;
+}
+
+/* Resize handle styles */
+.resize-handle {
+    position: absolute;
+    top: 0;
+    right: -5px;
+    width: 10px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 10;
+    background: transparent;
+    transition: background-color 0.2s ease;
+}
+
+.resize-handle::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 3px;
+    height: 40px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.resize-handle:hover::before,
+.resize-handle.resizing::before {
+    opacity: 1;
+    background-color: rgba(0, 123, 255, 0.5);
+}
+
+.resize-handle.resizing {
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+/* Prevent text selection during resize */
+.select-none {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Active resizing state */
+body.is-resizing-column {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+body.is-resizing-column * {
+    cursor: col-resize !important;
+}
