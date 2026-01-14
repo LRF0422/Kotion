@@ -486,3 +486,10 @@ export const IconSyncBlock = buildIcon(
     <path d="M5.463 4.433A9.961 9.961 0 0 1 12 2c5.523 0 10 4.477 10 10 0 2.136-.67 4.116-1.81 5.74L17 12h3A8 8 0 0 0 6.46 6.228l-.997-1.795zm13.074 15.134A9.961 9.961 0 0 1 12 22C6.477 22 2 17.523 2 12c0-2.136.67-4.116 1.81-5.74L7 12H4a8 8 0 0 0 13.54 5.772l.997 1.795z" />
   </svg>
 );
+
+export const IconImport = buildIcon(
+  <svg width="1em" height="1em" fill="currentColor" viewBox="0 0 24 24">
+    <path fill="none" d="M0 0h24v24H0z" />
+    <path d="M4 19h16v-7h2v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-8h2v7zm9-10v7h-2V9H6l6-6 6 6h-5z" />
+  </svg>
+);

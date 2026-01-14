@@ -9,9 +9,10 @@ import {
   Tooltip
 } from "../../../components";
 import { copyNode, deleteNodeInner } from "../../../utilities";
+import { triggerExcelImport } from "../utilities/excel-import";
 
 import { Table } from "../table";
-import { IconAddColumnAfter, IconAddColumnBefore, IconAddRowAfter, IconAddRowBefore, IconCopy, IconDeleteColumn, IconDeleteRow, IconDeleteTable, IconMergeCell, IconSplitCell, IconTableHeaderCell, IconTableHeaderColumn, IconTableHeaderRow } from "../../../icons";
+import { IconAddColumnAfter, IconAddColumnBefore, IconAddRowAfter, IconAddRowBefore, IconCopy, IconDeleteColumn, IconDeleteRow, IconDeleteTable, IconMergeCell, IconSplitCell, IconTableHeaderCell, IconTableHeaderColumn, IconTableHeaderRow, IconImport } from "../../../icons";
 import { Button } from "@kn/ui";
 
 export const TableBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
@@ -141,6 +142,10 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
     [editor]
   );
 
+  const importExcel = useCallback(() => {
+    triggerExcelImport(editor);
+  }, [editor]);
+
   return (
     <BubbleMenu
       forNode
@@ -150,6 +155,9 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
       getReferenceClientRect={getReferenceClientRect}
       options={{ shift: true, inline: true }}>
       <div className="flex flex-row gap-1 items-center">
+        <Tooltip content="Import from Excel">
+          <Button variant="ghost" onClick={importExcel} size="icon" ><IconImport /></Button>
+        </Tooltip>
         <Button variant="ghost" onClick={copyMe} size="icon" ><IconCopy /></Button>
         <Divider />
         <Button
