@@ -31,9 +31,10 @@ export const BitableExtension: ExtensionWrapper = {
             description: '插入多维表格（类似飞书多维表格）',
             inputSchema: z.object({
                 fields: z.array(z.string()).optional().describe("字段名称列表"),
+                data: z.array(z.any()).optional().describe("数据列表"),
             }),
-            execute: (editor) => async (params: { fields?: string[] }) => {
-                editor.commands.insertBitable(params.fields);
+            execute: (editor) => async (params: { fields?: string[], data?: any[] }) => {
+                editor.commands.insertBitable(params.fields, params.data);
             }
         },
     ]

@@ -6,7 +6,7 @@ import { uuidv4 } from "lib0/random";
 declare module '@kn/editor' {
     interface Commands<ReturnType> {
         bitable: {
-            insertBitable: (fields?: string[]) => ReturnType;
+            insertBitable: (fields?: string[], data?: any[]) => ReturnType;
         };
     }
 }
@@ -130,6 +130,24 @@ const getDefaultViews = () => [
             fitType: 'cover',
             cardSize: 'medium',
         }
+    },
+    {
+        id: uuidv4(),
+        name: '甘特图视图',
+        type: ViewType.TIMELINE,
+        filters: [],
+        sorts: [],
+        groups: [],
+        hiddenFields: [],
+        fieldOrder: [],
+        timelineConfig: {
+            startDateField: 'dueDate',
+            endDateField: undefined,
+            titleField: 'name',
+            progressField: 'progress',
+            groupByField: 'status',
+            scaleUnit: 'day',
+        }
     }
 ];
 
@@ -147,7 +165,7 @@ export const Bitable = Node.create({
                 default: getDefaultViews(),
             },
             currentView: {
-                default: getDefaultViews()[0].id,
+                default: getDefaultViews()[0]?.id,
             },
             data: {
                 default: [],
@@ -175,14 +193,14 @@ export const Bitable = Node.create({
 
     addCommands() {
         return {
-            insertBitable: (customFields?: string[]) => ({ commands }) => {
+            insertBitable: (customFields?: string[], data: any[] = []) => ({ commands }) => {
                 return commands.insertContent({
                     type: this.name,
                     attrs: {
                         fields: getDefaultFields(customFields),
                         views: getDefaultViews(),
-                        currentView: getDefaultViews()[0].id,
-                        data: []
+                        currentView: getDefaultViews()[0]?.id,
+                        data: data
                     }
                 });
             }

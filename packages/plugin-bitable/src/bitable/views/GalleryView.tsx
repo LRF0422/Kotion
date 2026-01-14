@@ -1,14 +1,14 @@
 import React from "react";
 import { Card, CardContent } from "@kn/ui";
 import { ImageIcon } from "@kn/icon";
-import { FieldConfig, Record, ViewConfig } from "../../types";
+import { FieldConfig, RecordData, ViewConfig } from "../../types";
 import { getFieldRenderer } from "../fields/FieldRenderers";
 import { cn } from "@kn/ui";
 
 interface GalleryViewProps {
     view: ViewConfig;
     fields: FieldConfig[];
-    data: Record[];
+    data: RecordData[];
     editable: boolean;
 }
 

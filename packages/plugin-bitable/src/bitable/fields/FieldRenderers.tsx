@@ -138,6 +138,9 @@ export const DateEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
             value={value ? new Date(value) : undefined}
             onChange={(date) => onChange(date?.toISOString())}
             locale={zhCN}
+            weekStartsOn={1}
+            showWeekNumber={true}
+            showOutsideDays={true}
             className="h-full"
         />
     );

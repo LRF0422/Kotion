@@ -2,15 +2,15 @@ import React, { useMemo } from "react";
 import { Card, CardContent, CardHeader } from "@kn/ui";
 import { Button, Badge } from "@kn/ui";
 import { Plus } from "@kn/icon";
-import { FieldConfig, Record, ViewConfig, SelectOption } from "../../types";
+import { FieldConfig, RecordData, ViewConfig, SelectOption } from "../../types";
 import { getFieldRenderer } from "../fields/FieldRenderers";
 
 interface KanbanViewProps {
     view: ViewConfig;
     fields: FieldConfig[];
-    data: Record[];
+    data: RecordData[];
     onAddRecord: () => void;
-    onUpdateRecord: (recordId: string, updates: Partial<Record>) => void;
+    onUpdateRecord: (recordId: string, updates: Partial<RecordData>) => void;
     onDeleteRecord: (recordIds: string[]) => void;
     editable: boolean;
 }
@@ -26,7 +26,7 @@ export const KanbanView: React.FC<KanbanViewProps> = (props) => {
             return {};
         }
 
-        const groups: Record<string, Record[]> = {};
+        const groups: Record<string, RecordData[]> = {};
 
         // 初始化分组
         (groupByField.options || []).forEach((option: SelectOption) => {
@@ -42,7 +42,7 @@ export const KanbanView: React.FC<KanbanViewProps> = (props) => {
             if (groupValue && groups[groupValue]) {
                 groups[groupValue].push(record);
             } else {
-                groups['unassigned'].push(record);
+                groups['unassigned']?.push(record);
             }
         });
 

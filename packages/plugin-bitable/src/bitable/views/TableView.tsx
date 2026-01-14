@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { Button, Input } from "@kn/ui";
 import { Plus, Search, Settings, Trash2 } from "@kn/icon";
-import { FieldConfig, Record, ViewConfig } from "../../types";
+import { FieldConfig, RecordData, ViewConfig } from "../../types";
 import DataGrid, { SelectColumn } from 'react-data-grid';
 import 'react-data-grid/lib/styles.css';
 import { useTheme, cn } from "@kn/ui";
@@ -10,9 +10,9 @@ import { getFieldRenderer, getFieldEditor } from "../fields/FieldRenderers";
 interface TableViewProps {
     view: ViewConfig;
     fields: FieldConfig[];
-    data: Record[];
+    data: RecordData[];
     onAddRecord: () => void;
-    onUpdateRecord: (recordId: string, updates: Partial<Record>) => void;
+    onUpdateRecord: (recordId: string, updates: Partial<RecordData>) => void;
     onDeleteRecord: (recordIds: string[]) => void;
     onAddField: (field: FieldConfig) => void;
     onUpdateField: (fieldId: string, updates: Partial<FieldConfig>) => void;
@@ -126,7 +126,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                     onRowsChange={(rows, changes) => {
                         if (changes.indexes.length > 0) {
                             changes.indexes.forEach((index) => {
-                                const row = rows[index];
+                                const row: any = rows[index];
                                 onUpdateRecord(row.id, row);
                             });
                         }

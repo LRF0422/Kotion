@@ -101,6 +101,15 @@ export interface ViewConfig {
         endDateField?: string;
         titleField?: string;
     };
+    // 时间线/甘特图视图特有配置
+    timelineConfig?: {
+        startDateField: string;
+        endDateField?: string;
+        titleField?: string;
+        progressField?: string;
+        groupByField?: string;
+        scaleUnit?: 'day' | 'week' | 'month';
+    };
 }
 
 // 筛选配置
@@ -141,7 +150,7 @@ export interface GroupConfig {
 }
 
 // 记录数据
-export interface Record {
+export interface RecordData {
     id: string;
     [key: string]: any;
     createdTime?: string;
@@ -155,5 +164,5 @@ export interface BitableAttrs {
     fields: FieldConfig[];
     views: ViewConfig[];
     currentView: string;
-    records?: Record[];
+    records?: RecordData[];
 }

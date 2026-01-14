@@ -19,29 +19,33 @@ import {
     LayoutGrid,
     Calendar,
     KanbanSquare,
-    ImageIcon
+    ImageIcon,
+    GanttChartSquare
 } from "@kn/icon";
-import { BitableAttrs, ViewType, ViewConfig, FieldConfig, Record } from "../types";
+import { BitableAttrs, ViewType, ViewConfig, FieldConfig, RecordData } from "../types";
 import { TableView } from "./views/TableView";
 import { KanbanView } from "./views/KanbanView";
 import { GalleryView } from "./views/GalleryView";
+import { TimelineView } from "./views/TimelineView";
+import { FieldConfigPanel } from "./components/FieldConfigPanel";
 import { uuidv4 } from "lib0/random";
 
 export const BitableView: React.FC<NodeViewProps> = (props) => {
     const { node, updateAttributes, deleteNode, editor } = props;
     const attrs = node.attrs as BitableAttrs;
 
-    const [data, setData] = useState<Record[]>(attrs.data || []);
+    const [data, setData] = useState<RecordData[]>(attrs.records || []);
     const [currentViewId, setCurrentViewId] = useState(attrs.currentView);
+    const [fieldConfigOpen, setFieldConfigOpen] = useState(false);
 
     // 获取当前视图
-    const currentView = useMemo(() => {
+    const currentView: any = useMemo(() => {
         return attrs.views.find(v => v.id === currentViewId) || attrs.views[0];
     }, [attrs.views, currentViewId]);
 
     // 添加记录
     const handleAddRecord = useCallback(() => {
-        const newRecord: Record = {
+        const newRecord: RecordData = {
             id: uuidv4(),
             createdTime: new Date().toISOString(),
             updatedTime: new Date().toISOString(),
@@ -75,7 +79,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     }, [data, attrs, updateAttributes]);
 
     // 更新记录
-    const handleUpdateRecord = useCallback((recordId: string, updates: Partial<Record>) => {
+    const handleUpdateRecord = useCallback((recordId: string, updates: Partial<RecordData>) => {
         const newData = data.map(record =>
             record.id === recordId
                 ? { ...record, ...updates, updatedTime: new Date().toISOString() }
@@ -110,13 +114,18 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const handleDeleteField = useCallback((fieldId: string) => {
         const newFields = attrs.fields.filter(field => field.id !== fieldId);
         // 同时从数据中删除该字段
-        const newData = data.map(record => {
+        const newData: RecordData[] = data.map(record => {
             const { [fieldId]: _, ...rest } = record;
             return rest;
-        });
+        }) as RecordData[];
         setData(newData);
         updateAttributes({ ...attrs, fields: newFields, data: newData });
     }, [attrs, data, updateAttributes]);
+
+    // 重新排列字段
+    const handleReorderFields = useCallback((newOrder: FieldConfig[]) => {
+        updateAttributes({ ...attrs, fields: newOrder });
+    }, [attrs, updateAttributes]);
 
     // 添加视图
     const handleAddView = useCallback((viewType: ViewType) => {
@@ -133,13 +142,22 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
         if (viewType === ViewType.KANBAN) {
             newView.kanbanConfig = {
-                groupByField: attrs.fields.find(f => f.type === 'select')?.id || attrs.fields[0].id
+                groupByField: attrs.fields.find(f => f.type === 'select')?.id || attrs.fields[0]!.id
             };
         } else if (viewType === ViewType.GALLERY) {
             newView.galleryConfig = {
                 coverField: '',
                 fitType: 'cover',
                 cardSize: 'medium'
+            };
+        } else if (viewType === ViewType.TIMELINE) {
+            newView.timelineConfig = {
+                startDateField: attrs.fields.find(f => f.type === 'date')?.id || 'dueDate',
+                endDateField: undefined,
+                titleField: attrs.fields.find(f => f.type === 'text')?.id,
+                progressField: attrs.fields.find(f => f.type === 'progress')?.id,
+                groupByField: attrs.fields.find(f => f.type === 'select')?.id,
+                scaleUnit: 'day'
             };
         }
 
@@ -155,7 +173,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             // 至少保留一个视图
             return;
         }
-        const newCurrentView = currentViewId === viewId ? newViews[0].id : currentViewId;
+        const newCurrentView = currentViewId === viewId ? newViews[0]!.id : currentViewId;
         setCurrentViewId(newCurrentView);
         updateAttributes({ ...attrs, views: newViews, currentView: newCurrentView });
     }, [attrs, currentViewId, updateAttributes]);
@@ -184,13 +202,15 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             editable: editor.isEditable,
         };
 
-        switch (currentView.type) {
+        switch (currentView?.type) {
             case ViewType.TABLE:
                 return <TableView {...viewProps} />;
             case ViewType.KANBAN:
                 return <KanbanView {...viewProps} />;
             case ViewType.GALLERY:
                 return <GalleryView {...viewProps} />;
+            case ViewType.TIMELINE:
+                return <TimelineView {...viewProps} />;
             default:
                 return <TableView {...viewProps} />;
         }
@@ -207,6 +227,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 return <ImageIcon className="h-4 w-4" />;
             case ViewType.CALENDAR:
                 return <Calendar className="h-4 w-4" />;
+            case ViewType.TIMELINE:
+                return <GanttChartSquare className="h-4 w-4" />;
             default:
                 return <Table2 className="h-4 w-4" />;
         }
@@ -222,8 +244,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                             <div
                                 key={view.id}
                                 className={`flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer transition-colors ${currentViewId === view.id
-                                        ? 'bg-primary text-primary-foreground'
-                                        : 'hover:bg-muted'
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'hover:bg-muted'
                                     }`}
                                 onClick={() => {
                                     setCurrentViewId(view.id);
@@ -252,7 +274,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                         {editor.isEditable && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <IconButton icon={<Plus className="h-4 w-4" />} size="sm" variant="ghost" />
+                                    <IconButton icon={<Plus className="h-4 w-4" />} />
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent>
                                     <DropdownMenuLabel>添加视图</DropdownMenuLabel>
@@ -269,6 +291,10 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                                         <ImageIcon className="h-4 w-4 mr-2" />
                                         画廊视图
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleAddView(ViewType.TIMELINE)}>
+                                        <GanttChartSquare className="h-4 w-4 mr-2" />
+                                        甘特图视图
+                                    </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         )}
@@ -277,6 +303,10 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                     {/* 操作按钮 */}
                     {editor.isEditable && (
                         <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline" onClick={() => setFieldConfigOpen(true)}>
+                                <Settings className="h-4 w-4 mr-1" />
+                                配置列
+                            </Button>
                             <Button size="sm" variant="outline" onClick={handleAddRecord}>
                                 <Plus className="h-4 w-4 mr-1" />
                                 添加记录
@@ -298,6 +328,17 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                     共 {data.length} 条记录
                 </div>
             </div>
+
+            {/* 字段配置面板 */}
+            <FieldConfigPanel
+                open={fieldConfigOpen}
+                onOpenChange={setFieldConfigOpen}
+                fields={attrs.fields}
+                onUpdateField={handleUpdateField}
+                onDeleteField={handleDeleteField}
+                onAddField={handleAddField}
+                onReorderFields={handleReorderFields}
+            />
         </NodeViewWrapper>
     );
 };
@@ -313,6 +354,8 @@ function getViewTypeName(type: ViewType): string {
             return '画廊视图';
         case ViewType.CALENDAR:
             return '日历视图';
+        case ViewType.TIMELINE:
+            return '甘特图视图';
         default:
             return '视图';
     }
