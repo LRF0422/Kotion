@@ -133,6 +133,7 @@ export class PluginManager {
     resloveTools(editor: Editor) {
         const res: any = {}
         this.resloveEditorExtension().filter(it => it.tools).map(it => it.tools).flat().forEach((it: any) => {
+            logger.info('Resolved tool:', it);
             res[it.name] = it
             res[it.name].execute = it?.execute(editor)
         })

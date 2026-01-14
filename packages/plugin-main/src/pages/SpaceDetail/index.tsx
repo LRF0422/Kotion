@@ -213,44 +213,70 @@ export const SpaceDetail: React.FC = () => {
 
     const resolve = useCallback((treeNode: any): SiderMenuItemProps => {
 
-        const name = <div className="flex flex-row gap-1 items-center">
-            <div className="text-left text-ellipsis text-nowrap overflow-hidden w-[140px]">
-                {treeNode.icon && treeNode.icon.icon} {treeNode.name}
+        const name = <div className="flex flex-row gap-1 items-center group">
+            <div className="text-left text-ellipsis text-nowrap overflow-hidden flex-1 flex items-center gap-1">
+                {treeNode.icon && <span className="text-sm">{treeNode.icon.icon}</span>}
+                <span className="text-sm">{treeNode.name}</span>
             </div>
-            <div className=" absolute right-1">
-                {treeNode.isDraft && <Badge className="py-0 px-2"  >Draft</Badge>}
-                <Button size="sm" className="h-5" variant="ghost" onClick={(e) => {
-                    e.stopPropagation()
-                    handleCreatePage(treeNode.id)
-                }}>
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                {treeNode.isDraft && <Badge variant="outline" className="py-0 px-1.5 text-xs h-5">Draft</Badge>}
+                <Button
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    variant="ghost"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        handleCreatePage(treeNode.id)
+                    }}
+                    title="Add subpage"
+                >
                     <Plus className="h-3 w-3" />
                 </Button>
                 <DropdownMenu>
-                    <DropdownMenuTrigger>
-                        <Button size="sm" className="h-5" variant="ghost" onClick={(e) => {
-                            e.stopPropagation()
-                            e.preventDefault()
-                        }}><MoreHorizontal className="h-3 w-3" /></Button>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            variant="ghost"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                e.preventDefault()
+                            }}
+                        >
+                            <MoreHorizontal className="h-3 w-3" />
+                        </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent side="right" align="start" className="w-[200px]">
-                        <DropdownMenuItem className="flex flex-row gap-1">
-                            <Star className="h-4 w-4" /> Add to favorite
+                    <DropdownMenuContent side="right" align="start" className="w-[220px]">
+                        <DropdownMenuItem className="flex flex-row gap-2">
+                            <Star className="h-4 w-4" /> Add to favorites
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem className="flex flex-row gap-1">
+                        <DropdownMenuItem className="flex flex-row gap-2">
                             <Copy className="h-4 w-4" />Duplicate
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="flex flex-row gap-1">
-                            <ArrowLeft className="h-4 w-4" /> Move
+                        <DropdownMenuItem className="flex flex-row gap-2">
+                            <ArrowLeft className="h-4 w-4" /> Move to
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="flex flex-row gap-1" onClick={() => handleMoveToTrash(treeNode.id)}>
+                        <DropdownMenuItem
+                            className="flex flex-row gap-2 text-red-600 focus:text-red-600"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleMoveToTrash(treeNode.id);
+                            }}
+                        >
                             <Trash2 className="h-4 w-4" /> Move to trash
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuLabel>
-                            <div className=" text-gray-500 text-xs flex flex-col gap-1">
-                                <div className="flex flex-row gap-1 items-center"> <Clock className="w-3 h-3" />Last update by Leong</div>
-                                <div className="flex flex-row gap-1 items-center"> <UserCircle className="w-3 h-3" />2024年8月19日</div>
+                            <div className="text-gray-500 text-xs flex flex-col gap-1.5 font-normal">
+                                <div className="flex flex-row gap-1.5 items-center">
+                                    <Clock className="w-3 h-3" />
+                                    <span>Last updated by Leong</span>
+                                </div>
+                                <div className="flex flex-row gap-1.5 items-center">
+                                    <UserCircle className="w-3 h-3" />
+                                    <span>2024年8月19日</span>
+                                </div>
                             </div>
                         </DropdownMenuLabel>
                     </DropdownMenuContent>
@@ -298,55 +324,68 @@ export const SpaceDetail: React.FC = () => {
             key: '/space/:id/overView',
             icon: space?.icon?.icon || '',
             id: '/space/:id/overView',
-            className: 'h-10 gap-3 px-2 bg-muted/10',
+            className: 'px-0 mb-2',
             customerRender:
-                <div className="flex flex-row gap-1 items-center justify-between">
-                    <div className=" p-2 mt-1 border rounded-sm flex-1 flex justify-between items-center">
-                        <div className="flex items-center gap-1 cursor-pointer" onClick={() => {
+                <div className="flex flex-col gap-2 p-3 border-b">
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => {
                             navigator.go({
                                 to: `/space-detail/${params.id}/page/${space.homePageId}`
                             })
                         }}>
-                            <div>{space?.icon?.icon}</div>
-                            {space.name}
+                            <div className="text-2xl flex-shrink-0">{space?.icon?.icon}</div>
+                            <div className="flex flex-col min-w-0 flex-1">
+                                <h2 className="font-semibold text-base truncate">{space.name}</h2>
+                                <p className="text-xs text-muted-foreground truncate">Personal Space</p>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                            <IconButton icon={<StarIcon className="h-4 w-4" />} onClick={handleFavorite} />
-                        </div>
+                        <IconButton icon={<StarIcon className="h-4 w-4" />} onClick={handleFavorite} />
+                    </div>
+                    <div className="relative">
+                        <Input
+                            placeholder="Search pages..."
+                            className="h-9 pl-3 pr-8"
+                            onFocus={toggle}
+                        />
                     </div>
                 </div>
         },
         {
-            name: 'customerRender',
-            key: 'customerRender',
-            id: 'customerRender',
-            icon: '',
-            customerRender: <div className="px-1 mt-2 mb-2">
-                <Input placeholder="search" onFocus={toggle} />
-            </div>
-        },
-        {
-            name: 'Favorite',
+            name: 'Favorites',
             key: 'favorite',
             id: 'favorite',
-            icon: <Star className="h-4 2-4" />,
+            icon: <Star className="h-4 w-4" />,
             isGroup: true,
+            className: 'mt-2',
             emptyProps: {
-                icon: <FolderOpen />,
-                title: 'No Favorites'
+                icon: <Star className="h-8 w-8 text-muted-foreground/50" />,
+                title: 'No favorites yet',
+                description: 'Star pages to quick access'
             },
             children: favorites.map((it: any, index) => ({
-                name: <div className="flex items-center">
-                    <div className="w-[200px] text-left text-nowrap text-ellipsis overflow-hidden">
+                name: <div className="flex items-center gap-2 pr-8">
+                    <div className="flex-1 text-left text-nowrap text-ellipsis overflow-hidden">
+                        {it.icon?.icon && <span className="mr-1">{it.icon.icon}</span>}
                         {it.title}
                     </div>
-                    <div className=" absolute right-2">
-                        <Trash2 className="h-4 w-4 text-red-500" />
+                    <div className="absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                // Remove from favorites
+                            }}
+                        >
+                            <Trash2 className="h-3 w-3 text-muted-foreground hover:text-red-500" />
+                        </Button>
                     </div>
                 </div>,
                 key: it.id + index,
                 id: it.id + index,
                 icon: null,
+                className: 'group',
                 onClick: () => {
                     navigator.go({
                         to: `/space-detail/${params.id}/page/${it.id}`
@@ -355,40 +394,65 @@ export const SpaceDetail: React.FC = () => {
             }))
         },
         {
-            name: <div className="flex flex-row items-center gap-2">
-                Page
-                <Input onChange={(e) => setSearchValue(e.target.value)} className="h-7" placeholder="Search..." />
-            </div>,
+            name: 'Pages',
             isGroup: true,
             key: 'page',
             id: 'page',
             height: 300,
-            className: 'h-[300px]',
-            icon: <Package />,
+            className: 'h-[300px] mt-2',
+            icon: <Package className="h-4 w-4" />,
             actions: [
-                <Button className="h-7 w-7 ml-1" variant="ghost" size="icon" key="1" onClick={() => handleCreatePage()}><Plus className="h-3 w-3" /></Button>
+                <div key="search-actions" className="flex items-center gap-1">
+                    <Input
+                        onChange={(e) => setSearchValue(e.target.value)}
+                        className="h-7 w-32"
+                        placeholder="Filter..."
+                    />
+                    <Button
+                        className="h-7 w-7"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleCreatePage()}
+                        title="New page"
+                    >
+                        <Plus className="h-4 w-4" />
+                    </Button>
+                </div>
             ],
             emptyProps: {
-                icon: <FolderOpen />,
-                title: 'No Pages',
-                button: <Button size="sm" onClick={() => handleCreatePage()}>create a page</Button>
+                icon: <Package className="h-8 w-8 text-muted-foreground/50" />,
+                title: 'No pages yet',
+                description: 'Create your first page',
+                button: <Button size="sm" onClick={() => handleCreatePage()}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Create Page
+                </Button>
             },
             children: pageTree?.length > 0 ? pageTree.map(it => resolve(it)) as SiderMenuItemProps[] : []
+        },
+        {
+            name: 'Separator',
+            key: 'separator-1',
+            id: 'separator-1',
+            icon: '',
+            customerRender: <div className="border-t my-2"></div>
         },
         {
             name: 'Templates',
             id: '/space/:id/templates',
             icon: <LayoutTemplate className="h-4 w-4" />,
             key: '/space/:id/templates',
+            className: 'hover:bg-muted',
             onClick: () => {
                 setVisible(true)
             }
         },
         {
-            name: 'Space Setting',
+            name: 'Settings',
             id: '/space/:id/settings',
             icon: <Settings className="h-4 w-4" />,
             key: '/space/:id/settings',
+            className: 'hover:bg-muted',
             onClick: () => {
                 navigator.go({
                     to: `/space-detail/${params.id}/settings`
@@ -398,30 +462,59 @@ export const SpaceDetail: React.FC = () => {
         {
             name: 'Trash',
             customerRender: <DropdownMenu>
-                <DropdownMenuTrigger className="flex flex-row gap-2 items-center w-full px-1 py-1 rounded-sm text-sm hover:bg-muted"><Trash2 className="h-4 w-4" /> Trash</DropdownMenuTrigger>
-                <DropdownMenuContent side="right" align="start" className="w-[300px] h-[400px]">
-                    <DropdownMenuLabel><Input className="h-7" placeholder="Search..." /></DropdownMenuLabel>
-                    {trash.length > 0 ? trash.map((item: any, index) => (
-                        <DropdownMenuItem key={index} className="flex flex-row justify-between items-center">
-                            {item.title}
-                            <div>
-                                <Button variant="ghost" size="sm" onClick={() => handleRestorePage(item.id)}><Undo2 className="h-4 w-4" /></Button>
-                                <Button variant="ghost" size="sm"><Trash2 className="h-4 w-4" /></Button>
+                <DropdownMenuTrigger className="flex flex-row gap-2 items-center w-full px-2 py-2 rounded-sm text-sm hover:bg-muted transition-colors">
+                    <Trash2 className="h-4 w-4" />
+                    <span className="flex-1 text-left">Trash</span>
+                    {trash.length > 0 && <Badge variant="secondary" className="h-5 px-1.5 text-xs">{trash.length}</Badge>}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="right" align="start" className="w-[320px] max-h-[400px]">
+                    <DropdownMenuLabel className="pb-2">
+                        <div className="flex items-center justify-between">
+                            <span>Trash</span>
+                            <span className="text-xs text-muted-foreground">{trash.length} items</span>
+                        </div>
+                    </DropdownMenuLabel>
+                    <div className="max-h-[350px] overflow-auto">
+                        {trash.length > 0 ? trash.map((item: any, index) => (
+                            <DropdownMenuItem key={index} className="flex flex-row justify-between items-center gap-2 py-2">
+                                <div className="flex-1 truncate text-sm">
+                                    {item.icon?.icon && <span className="mr-1">{item.icon.icon}</span>}
+                                    {item.title}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 px-2"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRestorePage(item.id);
+                                        }}
+                                        title="Restore"
+                                    >
+                                        <Undo2 className="h-3 w-3" />
+                                    </Button>
+                                </div>
+                            </DropdownMenuItem>
+                        )) : (
+                            <div className="flex flex-col items-center justify-center py-8 text-center">
+                                <Trash2 className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                                <p className="text-sm text-muted-foreground">Trash is empty</p>
                             </div>
-                        </DropdownMenuItem>
-                    )) : <Empty className=" border-0 h-full items-center" />}
+                        )}
+                    </div>
                 </DropdownMenuContent>
             </DropdownMenu>,
             id: '/space/:id/trash',
             icon: <Trash2 className="h-4 w-4" />,
             key: '/space/:id/trash',
-            className: 'text-red-500'
+            className: 'hover:bg-muted'
         }, {
             name: "Save as Template",
             id: "",
             key: "",
             icon: <></>,
-            customerRender: <TemplateCreator space={space} className="flex flex-row gap-2 items-center w-full px-1 py-1 rounded-sm text-sm hover:bg-muted">
+            customerRender: <TemplateCreator space={space} className="flex flex-row gap-2 items-center w-full px-2 py-2 rounded-sm text-sm hover:bg-muted transition-colors">
                 <CircleArrowUp className="h-4 w-4" />
                 <div>Save as Template</div>
             </TemplateCreator>

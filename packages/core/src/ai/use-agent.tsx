@@ -52,7 +52,7 @@ const calculateOffset = (offsets: PosOffset[], pos: number): number => {
 
 export const useEditorAgent = (editor: Editor) => {
     const { pluginManager } = useContext(AppContext)
-    const tools = useMemo(() => pluginManager?.resloveTools(editor), [pluginManager?.plugins])
+    const tools = () => pluginManager?.resloveTools(editor)
     const posOffsetRef = useRef<PosOffset[]>([])
     const agent = useMemo(() => new ToolLoopAgent({
         model: deepseek("deepseek-chat"),
