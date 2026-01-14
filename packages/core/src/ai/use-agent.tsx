@@ -2,7 +2,7 @@ import { AppContext } from "@kn/common"
 import { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import { ToolLoopAgent } from "ai"
-import { useContext, useMemo, useRef } from "react"
+import { useCallback, useContext, useMemo, useRef } from "react"
 import { deepseek } from "./ai-utils"
 import type { Node } from "@kn/editor"
 
@@ -45,15 +45,35 @@ const buildNodeInfo = (node: Node, pos: number): NodeInfo => {
 const calculateOffset = (offsets: PosOffset[], pos: number): number => {
     return offsets
         .filter(it => it.current < pos)
-        .reduce((sum, item) => {
-            return sum + item.length
-        }, 0)
+        .reduce((sum, item) => sum + item.length, 0)
+}
+
+// Helper function to validate document range
+const validateRange = (from: number, to: number | undefined, docSize: number): { valid: boolean; error?: string } => {
+    const maxPos = docSize - 2
+    if (from < 0 || from > maxPos) {
+        return { valid: false, error: `Invalid from position: ${from}. Document size: ${docSize}` }
+    }
+    if (to !== undefined && (to > maxPos || from >= to)) {
+        return { valid: false, error: `Invalid range: ${from}-${to}. Document size: ${docSize}` }
+    }
+    return { valid: true }
 }
 
 export const useEditorAgent = (editor: Editor) => {
     const { pluginManager } = useContext(AppContext)
-    const tools = () => pluginManager?.resloveTools(editor)
     const posOffsetRef = useRef<PosOffset[]>([])
+
+    // Memoize plugin tools to avoid recreation on every render
+    const pluginTools = useMemo(() => {
+        return pluginManager?.resloveTools(editor) || {}
+    }, [pluginManager, editor])
+
+    // Reset position offsets callback
+    const resetOffsets = useCallback(() => {
+        posOffsetRef.current = []
+    }, [])
+
     const agent = useMemo(() => new ToolLoopAgent({
         model: deepseek("deepseek-chat"),
         instructions: "你是一个助手，你需要根据用户输入的指令，完成用户所请求的任务。请注意以下几点" + "\n" +
@@ -68,13 +88,15 @@ export const useEditorAgent = (editor: Editor) => {
                     })
                 }),
                 execute: async ({ range }: { range: { from: number } }) => {
-                    // Validate range
-                    if (range.from < 0 || range.from > editor.state.doc.nodeSize - 2) {
-                        return { error: `Invalid range: ${range.from}. Document size: ${editor.state.doc.nodeSize}` }
+                    const docSize = editor.state.doc.nodeSize
+                    const validation = validateRange(range.from, undefined, docSize)
+                    if (!validation.valid) {
+                        return { error: validation.error }
                     }
 
                     const result: NodeInfo[] = []
-                    editor.state.doc.nodesBetween(range.from, editor.state.doc.nodeSize - 2, (node, pos) => {
+                    const maxPos = docSize - 2
+                    editor.state.doc.nodesBetween(range.from, maxPos, (node, pos) => {
                         result.push(buildNodeInfo(node, pos))
                     })
                     return { nodes: result, count: result.length }
@@ -99,10 +121,10 @@ export const useEditorAgent = (editor: Editor) => {
                 }),
                 execute: async (params: { text: string, pos: number }) => {
                     const { text, pos } = params
-
-                    // Validate position
-                    if (pos < 0 || pos > editor.state.doc.nodeSize - 2) {
-                        return { error: `Invalid position: ${pos}. Document size: ${editor.state.doc.nodeSize}` }
+                    const docSize = editor.state.doc.nodeSize
+                    const validation = validateRange(pos, undefined, docSize)
+                    if (!validation.valid) {
+                        return { error: validation.error }
                     }
 
                     const offset = calculateOffset(posOffsetRef.current, pos)
@@ -114,9 +136,6 @@ export const useEditorAgent = (editor: Editor) => {
                         current: pos,
                         length: text.length
                     })
-
-                    console.log(`Inserted ${text} at position ${actualPos}`)
-                    console.log('Position offset:', posOffsetRef.current)
 
                     return { success: true, insertedAt: actualPos, length: text.length }
                 }
@@ -130,10 +149,10 @@ export const useEditorAgent = (editor: Editor) => {
                 }),
                 execute: async (params: { text: string, from: number, to: number }) => {
                     const { text, from, to } = params
-
-                    // Validate range
-                    if (from < 0 || to > editor.state.doc.nodeSize - 2 || from >= to) {
-                        return { error: `Invalid range: ${from}-${to}. Document size: ${editor.state.doc.nodeSize}` }
+                    const docSize = editor.state.doc.nodeSize
+                    const validation = validateRange(from, to, docSize)
+                    if (!validation.valid) {
+                        return { error: validation.error }
                     }
 
                     editor.chain().deleteRange({ from, to }).insertContentAt(from, text).run()
@@ -158,9 +177,10 @@ export const useEditorAgent = (editor: Editor) => {
                     })
                 }),
                 execute: async ({ range }: { range: { from: number, to: number } }) => {
-                    // Validate range
-                    if (range.from < 0 || range.to > editor.state.doc.nodeSize - 2 || range.from >= range.to) {
-                        return { error: `Invalid range: ${range.from}-${range.to}. Document size: ${editor.state.doc.nodeSize}` }
+                    const docSize = editor.state.doc.nodeSize
+                    const validation = validateRange(range.from, range.to, docSize)
+                    if (!validation.valid) {
+                        return { error: validation.error }
                     }
 
                     const deletedLength = range.to - range.from
@@ -181,20 +201,20 @@ export const useEditorAgent = (editor: Editor) => {
                     to: z.number().describe("结束位置"),
                 }),
                 execute: async (range: { from: number, to: number }) => {
-                    // Validate range
-                    if (range.from < 0 || range.to > editor.state.doc.nodeSize - 2 || range.from >= range.to) {
-                        return { error: `Invalid range: ${range.from}-${range.to}. Document size: ${editor.state.doc.nodeSize}` }
+                    const docSize = editor.state.doc.nodeSize
+                    const validation = validateRange(range.from, range.to, docSize)
+                    if (!validation.valid) {
+                        return { error: validation.error }
                     }
 
                     editor.chain().setTextSelection(range).scrollIntoView().setHighlight().run()
                     return { success: true, from: range.from, to: range.to }
                 }
             },
-            ...tools
+            ...pluginTools
         },
-        onFinish: () => {
-            posOffsetRef.current = []
-        },
-    }), [editor])
-    return agent;
+        onFinish: resetOffsets,
+    }), [editor, pluginTools, resetOffsets])
+
+    return agent
 }

@@ -1,4 +1,4 @@
-import { merge } from "lodash";
+import { isFunction, merge } from "lodash";
 import { ExtensionWrapper } from "./editor";
 import { SiderMenuItemProps } from "./menu";
 import { RouteConfig } from "./route";
@@ -134,8 +134,10 @@ export class PluginManager {
         const res: any = {}
         this.resloveEditorExtension().filter(it => it.tools).map(it => it.tools).flat().forEach((it: any) => {
             logger.info('Resolved tool:', it);
-            res[it.name] = it
-            res[it.name].execute = it?.execute(editor)
+            if (it && it.execute && isFunction(it.execute)) {
+                res[it.name] = it
+                res[it.name].execute = it?.execute(editor)
+            }
         })
         logger.debug('Resolved tools:', Object.keys(res));
         return res;
