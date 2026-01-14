@@ -709,22 +709,23 @@ export const StyledEditor = styled.div.attrs({
     display: flex;
     min-width: 48px;
     margin: 0;
-    line-height: 1.3;
-    // background-color: rgb(64 64 64/var(--tw-bg-opacity));
+    line-height: 1.6;
+    font-family: ${props => (props.theme as any).fontFamilyMono};
+    font-size: 0.875rem;
     counter-reset: line 0;
-
-    // code {
-    //   width: 100%;
-    //   padding: 0;
-    //   margin: 12px;
-    //   overflow: auto;
-    //   font-size: 0.875rem;
-    //   line-height: 1.5rem;
-    //   color: inherit;
-    //   white-space: pre;
-    //   background-color: transparent;
-    //   overscroll-behavior: contain;
-    // }
+    
+    code {
+      display: block;
+      width: 100%;
+      padding: 0;
+      margin: 0;
+      color: inherit;
+      background: transparent;
+      white-space: pre;
+      word-wrap: normal;
+      overflow-wrap: normal;
+      tab-size: 4;
+    }
   }
   /* E Code */
 
@@ -802,10 +803,10 @@ export const StyledEditor = styled.div.attrs({
     user-select: none;
   }
 
-  /* S highlight */
+  /* S highlight - Light Mode */
   .hljs {
     color: #24292e;
-    background: #fff;
+    background: transparent;
   }
 
   .hljs-doctag,
@@ -910,6 +911,101 @@ export const StyledEditor = styled.div.attrs({
     /* prettylights-syntax-markup-deleted */
     color: #b31d28;
     background-color: #ffeef0;
+  }
+
+  /* Dark Mode Syntax Highlighting */
+  &.dark {
+    .hljs {
+      color: #c9d1d9;
+      background: transparent;
+    }
+
+    .hljs-doctag,
+    .hljs-keyword,
+    .hljs-meta .hljs-keyword,
+    .hljs-template-tag,
+    .hljs-template-variable,
+    .hljs-type,
+    .hljs-variable.language_ {
+      color: #ff7b72;
+    }
+
+    .hljs-title,
+    .hljs-title.class_,
+    .hljs-title.class_.inherited__,
+    .hljs-title.function_ {
+      color: #d2a8ff;
+    }
+
+    .hljs-attr,
+    .hljs-attribute,
+    .hljs-literal,
+    .hljs-meta,
+    .hljs-number,
+    .hljs-operator,
+    .hljs-variable,
+    .hljs-selector-attr,
+    .hljs-selector-class,
+    .hljs-selector-id {
+      color: #79c0ff;
+    }
+
+    .hljs-regexp,
+    .hljs-string,
+    .hljs-meta .hljs-string {
+      color: #a5d6ff;
+    }
+
+    .hljs-built_in,
+    .hljs-symbol {
+      color: #ffa657;
+    }
+
+    .hljs-comment,
+    .hljs-code,
+    .hljs-formula {
+      color: #8b949e;
+    }
+
+    .hljs-name,
+    .hljs-quote,
+    .hljs-selector-tag,
+    .hljs-selector-pseudo {
+      color: #7ee787;
+    }
+
+    .hljs-subst {
+      color: #c9d1d9;
+    }
+
+    .hljs-section {
+      font-weight: bold;
+      color: #1f6feb;
+    }
+
+    .hljs-bullet {
+      color: #f2cc60;
+    }
+
+    .hljs-emphasis {
+      font-style: italic;
+      color: #c9d1d9;
+    }
+
+    .hljs-strong {
+      font-weight: bold;
+      color: #c9d1d9;
+    }
+
+    .hljs-addition {
+      color: #aff5b4;
+      background-color: rgba(46, 160, 67, 0.15);
+    }
+
+    .hljs-deletion {
+      color: #ffdcd7;
+      background-color: rgba(248, 81, 73, 0.15);
+    }
   }
   /* E highlight */
 

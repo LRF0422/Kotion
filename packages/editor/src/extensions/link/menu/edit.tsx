@@ -1,28 +1,53 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Editor, getMarkRange, posToDOMRect } from "@tiptap/core";
-import { computePosition, flip } from "@floating-ui/dom";
+import { computePosition, flip, offset } from "@floating-ui/dom";
 
 import { isMarkActive } from "../../../utilities/mark";
 import { Link as LinkExtension } from "../link";
-import { Input, cn } from "@kn/ui";
-import { Button } from "@kn/ui";
-import { Label } from "@kn/ui";
+import { Input, cn, Button, Label } from "@kn/ui";
 import { MarkType } from "@tiptap/pm/model";
 import { ReactRenderer } from "@tiptap/react";
 
-export const LinkEdit: React.FC<{
+/**
+ * URL validation helper
+ */
+const isValidUrl = (urlString: string): boolean => {
+  if (!urlString) return false;
+  try {
+    // If no protocol, add https://
+    const url = urlString.match(/^https?:\/\//i) ? urlString : `https://${urlString}`;
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Normalize URL by adding protocol if missing
+ */
+const normalizeUrl = (url: string): string => {
+  if (!url) return '';
+  return url.match(/^https?:\/\//i) ? url : `https://${url}`;
+};
+
+interface LinkEditProps {
   editor: Editor;
   onOk?: () => void;
   onCancel?: () => void;
   className?: string;
-}> = ({ editor, onOk, onCancel, className }) => {
-  const linkInputRef = useRef<any>(null);
-  const ref = useRef<HTMLDivElement>(null);
+}
+
+export const LinkEdit: React.FC<LinkEditProps> = ({ editor, onOk, onCancel, className }) => {
+  const textInputRef = useRef<HTMLInputElement>(null);
+  const hrefInputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [href, setHref] = useState("");
-  const [start, setStart] = useState<number>(0)
-  const [end, setEnd] = useState<number>(0)
+  const [start, setStart] = useState<number>(0);
+  const [end, setEnd] = useState<number>(0);
+  const [error, setError] = useState<string>("");
 
+  // Initialize form with existing link data or selection
   useEffect(() => {
     const { state } = editor;
     const selection = state.selection;
@@ -39,104 +64,191 @@ export const LinkEdit: React.FC<{
       const range = getMarkRange(
         editor.state.doc.resolve(from),
         editor.state.schema.marks.link as MarkType
-      ) as {
-        from: number;
-        to: number;
-      };
+      );
 
       if (!range) return;
 
-      setStart(range.from)
-      setEnd(range.to)
+      setStart(range.from);
+      setEnd(range.to);
       const attrs = editor.getAttributes(LinkExtension.name);
       setText(state.doc.textBetween(range.from, range.to));
-      setHref(attrs.href);
+      setHref(attrs.href || "");
     }
-
-  }, [])
+  }, [editor]);
 
   const ok = useCallback(() => {
+    // Validate inputs
+    if (!text.trim()) {
+      setError("Link text cannot be empty");
+      textInputRef.current?.focus();
+      return;
+    }
+
+    if (!href.trim()) {
+      setError("URL cannot be empty");
+      hrefInputRef.current?.focus();
+      return;
+    }
+
+    if (!isValidUrl(href)) {
+      setError("Please enter a valid URL");
+      hrefInputRef.current?.focus();
+      return;
+    }
+
+    const normalizedHref = normalizeUrl(href);
     const { view } = editor;
     const schema = view.state.schema;
     const node = schema.text(text, [
-      (schema.marks.link as MarkType).create({ href: href })
+      (schema.marks.link as MarkType).create({
+        href: normalizedHref,
+        target: '_blank',
+        rel: 'noopener noreferrer nofollow'
+      })
     ]);
+
     view.dispatch(view.state.tr.deleteRange(start, end));
     view.dispatch(view.state.tr.insert(start, node));
     view.dispatch(view.state.tr.scrollIntoView());
-    editor
-      .chain()
-      .focus()
-      .run();
-    onOk && onOk();
-  }, [text, href]);
+    editor.chain().focus().run();
+    onOk?.();
+  }, [text, href, start, end, editor, onOk]);
 
+  // Auto focus on text input
   useEffect(() => {
     const timer = setTimeout(() => {
-      linkInputRef.current?.focus();
-    }, 200);
+      textInputRef.current?.focus();
+    }, 100);
 
-    return () => {
-      clearTimeout(timer);
-    };
+    return () => clearTimeout(timer);
   }, []);
 
+  // Handle keyboard shortcuts
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      ok();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      editor.chain().focus().run();
+      onCancel?.();
+    }
+  }, [ok, editor, onCancel]);
+
   return (
-    <div style={{ width: 280, zIndex: 1000 }}
-      ref={ref}
-      className={cn("flex flex-col gap-2 bg-popover text-popover-foreground p-2 rounded-sm border shadow-sm", className)}>
-      <Label htmlFor="label">标题</Label>
-      <Input id="label" defaultValue={text} onChange={(e) => setText(e.target.value)} />
-      <Label htmlFor="link">链接</Label>
-      <Input id="link" defaultValue={href} onChange={(e) => setHref(e.target.value)} />
-      <div className="flex gap-2">
-        <Button size="sm" onClick={ok}>确认</Button>
-        <Button variant="secondary" size="sm" onClick={() => {
-          editor
-            .chain()
-            .focus()
-            .run();
-          onCancel && onCancel()
-        }}>取消</Button>
+    <div
+      style={{ width: 320, zIndex: 1000 }}
+      className={cn("flex flex-col gap-3 bg-popover text-popover-foreground p-3 rounded-md border shadow-md", className)}
+      onKeyDown={handleKeyDown}
+    >
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="text-input" className="text-sm font-medium">
+          Link Text
+        </Label>
+        <Input
+          id="text-input"
+          ref={textInputRef}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setError("");
+          }}
+          placeholder="Enter link text"
+          className="h-9"
+        />
       </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="href-input" className="text-sm font-medium">
+          URL
+        </Label>
+        <Input
+          id="href-input"
+          ref={hrefInputRef}
+          value={href}
+          onChange={(e) => {
+            setHref(e.target.value);
+            setError("");
+          }}
+          placeholder="https://example.com"
+          className="h-9"
+        />
+      </div>
+
+      {error && (
+        <p className="text-xs text-destructive">{error}</p>
+      )}
+
+      <div className="flex gap-2 justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            editor.chain().focus().run();
+            onCancel?.();
+          }}
+        >
+          Cancel
+        </Button>
+        <Button size="sm" onClick={ok}>
+          Confirm
+        </Button>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Press Enter to confirm, Esc to cancel
+      </p>
     </div>
   );
 };
 
-export const showLinkEditor = (editor: Editor) => {
+/**
+ * Show link editor dialog at cursor position
+ */
+export const showLinkEditor = (editor: Editor): void => {
+  const cleanup = () => {
+    try {
+      component.destroy();
+      if (document.body.contains(component.element)) {
+        document.body.removeChild(component.element);
+      }
+    } catch (error) {
+      console.error('Error cleaning up link editor:', error);
+    }
+  };
+
   const component = new ReactRenderer(LinkEdit, {
     editor,
     props: {
       editor,
-      onOk: () => {
-        component.destroy()
-        document.body.removeChild(component.element)
-      },
-      onCancel: () => {
-        component.destroy()
-        document.body.removeChild(component.element)
-      }
+      onOk: cleanup,
+      onCancel: cleanup
     }
-  })
-  component.render()
-  document.body.appendChild(component.element)
+  });
 
-  const { selection } = editor.state
-  const { view } = editor
-  const domRect = posToDOMRect(view, selection.from, selection.to)
+  component.render();
+  document.body.appendChild(component.element);
+
+  const { selection } = editor.state;
+  const { view } = editor;
+  const domRect = posToDOMRect(view, selection.from, selection.to);
 
   const virtualElement = {
     getBoundingClientRect: () => domRect,
     getClientRects: () => [domRect],
-  }
+  };
 
-  computePosition(virtualElement, (component.element as HTMLElement), {
-    placement: 'bottom',
-    middleware: [flip()],
+  computePosition(virtualElement, component.element as HTMLElement, {
+    placement: 'bottom-start',
+    middleware: [
+      offset(8),
+      flip({ padding: 8 })
+    ],
   }).then(({ x, y, strategy }) => {
-    (component.element as HTMLElement).style.zIndex = '1000';
-    (component.element as HTMLElement).style.left = `${x + 650}px`;
-    (component.element as HTMLElement).style.top = `${y}px`;
-    (component.element as HTMLElement).style.position = strategy
-  })
+    const element = component.element as HTMLElement;
+    element.style.position = strategy;
+    element.style.left = `${x}px`;
+    element.style.top = `${y}px`;
+    element.style.zIndex = '1000';
+  });
 };

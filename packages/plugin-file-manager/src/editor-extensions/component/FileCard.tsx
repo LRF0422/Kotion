@@ -52,45 +52,46 @@ export const FileCard: React.FC<FileItem> = React.memo((props) => {
     return <div
         onContextMenu={handleContextMenu}
         onDoubleClick={handleDoubleClick}
+        className="group"
     >
         <Card className={cn(
-            "w-[200px] bg-muted/40 shadow-sm hover:bg-muted/50 hover:shadow-md transition-all",
-            checked && "outline",
+            "w-[160px] border hover:border-primary/50 hover:shadow-md transition-all cursor-pointer",
+            checked && "border-primary bg-primary/5",
             loading && "opacity-50 pointer-events-none"
         )}>
-            <CardHeader className="p-0">
-                <CardTitle className="p-0 m-0 border-b">
-                    <div className="flex items-center justify-between p-1">
-                        {
-                            selectable && <Checkbox
-                                className="ml-1"
-                                checked={checked}
-                                onCheckedChange={handleCheckChange}
-                                disabled={loading}
-                            />
-                        }
-                        <div className="flex items-center gap-1">
-                            <div className="p-1 hover:bg-muted cursor-pointer rounded-sm">
-                                <Download className="h-4 w-4" />
-                            </div>
-                            <div className="p-1 hover:bg-muted cursor-pointer rounded-sm">
-                                <EyeIcon className="h-4 w-4" />
-                            </div>
-                            <div className="p-1 hover:bg-muted cursor-pointer rounded-sm">
-                                <XIcon className="h-4 w-4" />
-                            </div>
+            <CardHeader className="p-2">
+                <div className="flex items-center justify-between">
+                    {
+                        selectable && <Checkbox
+                            checked={checked}
+                            onCheckedChange={handleCheckChange}
+                            disabled={loading}
+                        />
+                    }
+                    <div className="flex items-center gap-0.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="p-1 hover:bg-accent cursor-pointer rounded" title="Download">
+                            <Download className="h-3 w-3" />
+                        </div>
+                        <div className="p-1 hover:bg-accent cursor-pointer rounded" title="Preview">
+                            <EyeIcon className="h-3 w-3" />
+                        </div>
+                        <div className="p-1 hover:bg-destructive/10 cursor-pointer rounded" title="Delete">
+                            <XIcon className="h-3 w-3 hover:text-destructive" />
                         </div>
                     </div>
-                </CardTitle>
+                </div>
             </CardHeader>
-            <CardContent className="flex items-center justify-center p-2">
+            <CardContent className="flex items-center justify-center py-4">
                 {
-                    isFolder ? <FcOpenedFolder className="h-20 w-20" /> :
+                    isFolder ?
+                        <FcOpenedFolder className="h-20 w-20" /> :
                         <FcFile className="h-20 w-20" />
                 }
             </CardContent>
-            <CardFooter className="p-2 m-0 text-sm truncate" title={name}>
-                {name}
+            <CardFooter className="px-2 pb-2 pt-0">
+                <div className="w-full truncate text-xs text-center" title={name}>
+                    {name}
+                </div>
             </CardFooter>
         </Card>
     </div>
