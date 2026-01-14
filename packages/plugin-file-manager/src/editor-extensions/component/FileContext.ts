@@ -16,6 +16,12 @@ export interface FileItem {
     onClick?: () => void
 }
 
+export interface BreadcrumbItem {
+    id: string
+    name: string
+    path: string
+}
+
 export interface FileManagerState {
     selectable?: boolean,
     currentFolderItems: FileItem[],
@@ -30,6 +36,13 @@ export interface FileManagerState {
     handleDelete: (ids: string[]) => void
     loading?: boolean
     error?: string | null
+    // Navigation features
+    breadcrumbPath: BreadcrumbItem[]
+    canGoBack: boolean
+    canGoForward: boolean
+    goBack: () => void
+    goForward: () => void
+    navigateToFolder: (folderId: string, folderName?: string) => void
 }
 
 export const FileManageContext = createContext<FileManagerState | null>(null)

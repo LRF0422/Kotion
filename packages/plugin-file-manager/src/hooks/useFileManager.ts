@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useApi, useUploadFile, useSafeState } from '@kn/core';
 import { toast } from '@kn/ui';
 import { APIS } from '../api';
-import { FileItem } from '../editor-extensions/component/FileContext';
+import { FileItem, BreadcrumbItem } from '../editor-extensions/component/FileContext';
 
 interface UseFileManagerProps {
     initialFolderId?: string;
@@ -16,6 +16,18 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { upload } = useUploadFile();
+
+    // Navigation state
+    const [breadcrumbPath, setBreadcrumbPath] = useState<BreadcrumbItem[]>([{
+        id: initialFolderId,
+        name: 'Home',
+        path: initialFolderId
+    }]);
+    const navigationHistory = useRef<Array<{ id: string; name: string }>>([{
+        id: initialFolderId,
+        name: 'Home'
+    }]);
+    const historyIndex = useRef<number>(0);
 
     const reslove = useCallback((file: any): FileItem => {
         const baseItem = {
@@ -112,6 +124,69 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         toast.info('Delete functionality not yet implemented');
     }, []);
 
+    // Navigation functions
+    const navigateToFolder = useCallback((folderId: string, folderName: string = 'Folder') => {
+        setCurrentFolderId(folderId);
+
+        // Update history
+        const newHistoryItem = { id: folderId, name: folderName };
+        const newHistory = navigationHistory.current.slice(0, historyIndex.current + 1);
+        newHistory.push(newHistoryItem);
+        navigationHistory.current = newHistory;
+        historyIndex.current = newHistory.length - 1;
+
+        // Update breadcrumb path
+        const existingIndex = breadcrumbPath.findIndex(item => item.id === folderId);
+        if (existingIndex >= 0) {
+            // Navigate to existing path item - trim path
+            setBreadcrumbPath(breadcrumbPath.slice(0, existingIndex + 1));
+        } else {
+            // Add new breadcrumb item
+            setBreadcrumbPath([...breadcrumbPath, {
+                id: folderId,
+                name: folderName,
+                path: folderId
+            }]);
+        }
+    }, [breadcrumbPath, setCurrentFolderId]);
+
+    const goBack = useCallback(() => {
+        if (historyIndex.current > 0) {
+            historyIndex.current -= 1;
+            const historyItem = navigationHistory.current[historyIndex.current];
+            setCurrentFolderId(historyItem.id);
+
+            // Update breadcrumb to match history
+            const breadcrumbIndex = breadcrumbPath.findIndex(item => item.id === historyItem.id);
+            if (breadcrumbIndex >= 0) {
+                setBreadcrumbPath(breadcrumbPath.slice(0, breadcrumbIndex + 1));
+            }
+        }
+    }, [breadcrumbPath, setCurrentFolderId]);
+
+    const goForward = useCallback(() => {
+        if (historyIndex.current < navigationHistory.current.length - 1) {
+            historyIndex.current += 1;
+            const historyItem = navigationHistory.current[historyIndex.current];
+            setCurrentFolderId(historyItem.id);
+
+            // Update breadcrumb to match history
+            const existingIndex = breadcrumbPath.findIndex(item => item.id === historyItem.id);
+            if (existingIndex >= 0) {
+                setBreadcrumbPath(breadcrumbPath.slice(0, existingIndex + 1));
+            } else {
+                setBreadcrumbPath([...breadcrumbPath, {
+                    id: historyItem.id,
+                    name: historyItem.name,
+                    path: historyItem.id
+                }]);
+            }
+        }
+    }, [breadcrumbPath, setCurrentFolderId]);
+
+    const canGoBack = historyIndex.current > 0;
+    const canGoForward = historyIndex.current < navigationHistory.current.length - 1;
+
     useEffect(() => {
         fetchFolderContents(currentFolderId || null);
     }, [currentFolderId, updateFlag, fetchFolderContents]);
@@ -128,5 +203,12 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         uploadFile,
         deleteFiles,
         refreshFolder: () => setUpdateFlag((prev) => prev + 1),
+        // Navigation
+        breadcrumbPath,
+        canGoBack,
+        canGoForward,
+        goBack,
+        goForward,
+        navigateToFolder,
     };
 };

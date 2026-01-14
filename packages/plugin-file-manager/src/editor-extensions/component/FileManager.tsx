@@ -1,4 +1,4 @@
-import { Check, ClockIcon, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, HomeIcon, ListIcon, LucideHome, PlusIcon, StarIcon, Trash2, UploadIcon, XIcon } from "@kn/icon";
+import { Check, ClockIcon, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, HomeIcon, ListIcon, LucideHome, PlusIcon, StarIcon, Trash2, UploadIcon, XIcon, ArrowLeft, ArrowRight, ChevronRight } from "@kn/icon";
 import { Button, EmptyState, Input, ScrollArea, Separator, TreeView, cn, Skeleton } from "@kn/ui";
 import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { FileCardList } from "./FileCard";
@@ -8,6 +8,7 @@ import { APIS } from "../../api";
 import { Menu } from "./Menu";
 import { FileItem, FileManageContext } from "./FileContext";
 import { useFileManager } from "../../hooks/useFileManager";
+import { Breadcrumb } from "./Breadcrumb";
 
 
 
@@ -43,7 +44,13 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         createFolder,
         uploadFile,
         deleteFiles,
-        refreshFolder
+        refreshFolder,
+        breadcrumbPath,
+        canGoBack,
+        canGoForward,
+        goBack,
+        goForward,
+        navigateToFolder
     } = useFileManager({ initialFolderId: props.folderId || "" })
 
     const defaultMenus = [
@@ -112,7 +119,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
             icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />,
             onClick: () => {
                 if (file.type.value === 'FOLDER') {
-                    setCurrentFolderId(file.id)
+                    navigateToFolder(file.id, file.name)
                 }
                 setCurrentItem(file)
             }
@@ -126,7 +133,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         }
 
         return baseItem
-    }, [setCurrentFolderId, setCurrentItem])
+    }, [navigateToFolder, setCurrentItem])
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -160,8 +167,14 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         handleUpload: handleCreateFile,
         handleDelete: handleDelete,
         loading,
-        error
-    }), [selectedFiles, currentFolderId, currentFolderItems, currentItem, selectable, repoKey, handleCreateFile, handleDelete, loading, error])
+        error,
+        breadcrumbPath,
+        canGoBack,
+        canGoForward,
+        goBack,
+        goForward,
+        navigateToFolder
+    }), [selectedFiles, currentFolderId, currentFolderItems, currentItem, selectable, repoKey, handleCreateFile, handleDelete, loading, error, breadcrumbPath, canGoBack, canGoForward, goBack, goForward, navigateToFolder])
 
     return <FileManageContext.Provider value={contextValue}>
         <div className={cn("rounded-sm flex flex-col border not-prose", props.className)}>
@@ -211,12 +224,12 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                         <Button
                             variant="outline"
                             size="sm"
-                            className="h-7">
-                            <LucideHome className="w-4 h-4"
-                                onClick={() => {
-                                    setCurrentFolderId(props.folderId || "")
-                                }}
-                            />
+                            className="h-7"
+                            onClick={() => {
+                                navigateToFolder(props.folderId || "", "Home")
+                            }}
+                        >
+                            <LucideHome className="w-4 h-4" />
                         </Button>
                         <Button
                             variant="outline"
@@ -244,9 +257,37 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                     />
                 </div>
                 <div className="overflow-auto w-full flex flex-col h-full">
-                    <div className="w-full border-b bg-muted/50 h-[40px] flex items-center" >
-                        <div className="ml-2">
-                            Files
+                    <div className="w-full border-b bg-muted/50 min-h-[40px] flex items-center justify-between px-2" >
+                        <div className="flex items-center gap-2 flex-1">
+                            {/* Back/Forward Navigation Buttons */}
+                            <div className="flex items-center gap-1">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0"
+                                    onClick={goBack}
+                                    disabled={!canGoBack || loading}
+                                    title="Go back"
+                                >
+                                    <ArrowLeft className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0"
+                                    onClick={goForward}
+                                    disabled={!canGoForward || loading}
+                                    title="Go forward"
+                                >
+                                    <ArrowRight className="h-4 w-4" />
+                                </Button>
+                            </div>
+                            <Separator orientation="vertical" className="h-6" />
+                            {/* Breadcrumb Navigation */}
+                            <Breadcrumb
+                                items={breadcrumbPath}
+                                onNavigate={navigateToFolder}
+                            />
                         </div>
                     </div>
                     <div className="flex-1 overflow-auto h-[calc(100%-45px)]">

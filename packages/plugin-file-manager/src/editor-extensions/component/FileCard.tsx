@@ -18,7 +18,7 @@ export interface FileCardProps {
 
 export const FileCard: React.FC<FileItem> = React.memo((props) => {
     const { isFolder, id, name } = props
-    const { selectedFiles, setSelectFiles, selectable, setCurrentFolderId, loading } = useFileManagerState() as FileManagerState
+    const { selectedFiles, setSelectFiles, selectable, navigateToFolder, loading } = useFileManagerState() as FileManagerState
     const [checked, setChecked] = useSafeState<boolean>(false)
 
     useEffect(() => {
@@ -37,9 +37,9 @@ export const FileCard: React.FC<FileItem> = React.memo((props) => {
         e.preventDefault()
         e.stopPropagation()
         if (isFolder) {
-            setCurrentFolderId(id)
+            navigateToFolder(id, name)
         }
-    }, [isFolder, id, setCurrentFolderId])
+    }, [isFolder, id, name, navigateToFolder])
 
     const handleContextMenu = useCallback(() => {
         if (selectable) {
