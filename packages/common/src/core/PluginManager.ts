@@ -70,50 +70,196 @@ export class PluginManager {
     _pluginStore: (path: string) => string
     _init: boolean = false
 
+    // Cache for resolved plugin data to improve performance
+    private _cacheRoutes: RouteConfig[] | null = null
+    private _cacheMenus: SiderMenuItemProps[] | null = null
+    private _cacheExtensions: ExtensionWrapper[] | null = null
+    private _cacheLocales: any | null = null
+    private _pluginMap: Map<string, KPlugin<any>> = new Map()
+
     constructor(pluginStore: (path: string) => string, initalPlugins: KPlugin<any>[]) {
         this._pluginStore = pluginStore
         this._initialPlugins = initalPlugins
+        this._buildPluginMap(initalPlugins)
         logger.debug('Initial plugins loaded:', this._initialPlugins);
+    }
+
+    private _buildPluginMap(plugins: KPlugin<any>[]) {
+        plugins.forEach(plugin => {
+            this._pluginMap.set(plugin.name, plugin)
+        })
+    }
+
+    private _clearCache() {
+        this._cacheRoutes = null
+        this._cacheMenus = null
+        this._cacheExtensions = null
+        this._cacheLocales = null
+    }
+
+    private _validatePlugin(plugin: any): boolean {
+        if (!plugin) {
+            logger.error('Plugin is null or undefined')
+            return false
+        }
+        if (!plugin.name) {
+            logger.error('Plugin must have a name')
+            return false
+        }
+        if (this._pluginMap.has(plugin.name)) {
+            logger.warn(`Plugin ${plugin.name} is already installed`)
+            return false
+        }
+        return true
     }
 
     public async init(remotePlugins: any[]) {
         logger.info('Initializing remote plugins:', remotePlugins);
-        if (!remotePlugins || remotePlugins.length === 0) {
-            this.plugins = ([...(this._initialPlugins || [])])
-            this._pluginServices = merge(this.pluginServices, ...this.plugins.map(it => it.services))
-            logger.info('Plugins loaded:', this.plugins.length);
-            logger.debug('Services loaded:', this._pluginServices);
+
+        try {
+            if (!remotePlugins || remotePlugins.length === 0) {
+                this.plugins = ([...(this._initialPlugins || [])])
+                this._mergeServices()
+                this._init = true
+                logger.info('Plugins loaded:', this.plugins.length);
+                logger.debug('Services loaded:', this._pluginServices);
+                return
+            }
+
+            const loadResults = await Promise.allSettled(remotePlugins.map(async (plugin) => {
+                try {
+                    const path = this._pluginStore(plugin.resourcePath) + "&cache=true"
+                    const result = await importScript(path, plugin.pluginKey, plugin.name)
+                    return result
+                } catch (error) {
+                    logger.error(`Failed to load plugin ${plugin.name}:`, error)
+                    throw error
+                }
+            }))
+
+            const successfulPlugins = loadResults
+                .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
+                .map(result => Object.values(result.value)[0] as KPlugin<any>)
+                .filter(plugin => {
+                    if (!plugin || !plugin.name) {
+                        logger.warn('Invalid plugin detected, skipping')
+                        return false
+                    }
+                    return true
+                })
+
+            this.plugins = [...this._initialPlugins, ...successfulPlugins]
+            this._buildPluginMap(successfulPlugins)
+            this._mergeServices()
             this._init = true
-            return
+
+            logger.info(`All plugins loaded: ${this.plugins.length} (${successfulPlugins.length} remote)`);
+            logger.debug('Services loaded:', this._pluginServices);
+
+            const failedCount = loadResults.filter(r => r.status === 'rejected').length
+            if (failedCount > 0) {
+                logger.warn(`${failedCount} plugins failed to load`)
+            }
+        } catch (error) {
+            logger.error('Fatal error during plugin initialization:', error)
+            this.plugins = [...this._initialPlugins]
+            this._init = true
+            throw error
         }
-        const res = await Promise.all(remotePlugins.map(async (plugin) => {
-            const path = this._pluginStore(plugin.resourcePath) + "&cache=true"
-            return await importScript(path, plugin.pluginKey, plugin.name)
-        }))
-        this.plugins = [...this._initialPlugins, ...(res.map(it => Object.values(it)[0]) as KPlugin<any>[])]
-        this._pluginServices = merge(this.pluginServices, ...this.plugins.map(it => it.services))
-        this._init = true
-        logger.info('All plugins loaded:', this.plugins.length);
-        logger.debug('All services loaded:', this._pluginServices);
+    }
+
+    private _mergeServices() {
+        const servicesArray = this.plugins
+            .map(it => it.services)
+            .filter(service => service !== undefined)
+
+        if (servicesArray.length > 0) {
+            this._pluginServices = merge({}, ...servicesArray)
+        }
     }
 
     uninstallPlugin(key: string) {
+        const plugin = this._pluginMap.get(key)
+        if (!plugin) {
+            logger.warn(`Plugin ${key} not found, cannot uninstall`)
+            return false
+        }
+
         this.plugins = this.plugins.filter(it => it.name !== key)
+        this._pluginMap.delete(key)
+        this._clearCache()
+
+        // Rebuild services without the uninstalled plugin
+        this._mergeServices()
+
         logger.info('Plugin uninstalled:', key);
         event.emit("REFRESH_PLUSINS")
+        return true
     }
 
     async installPlugin(plugin: any, callBack?: () => void) {
-        const path = this._pluginStore(plugin.resourcePath) + "&cache=true"
-        const pluginInstance = await importScript(path, plugin.pluginKey, plugin.name)
-        this.plugins = [...this.plugins, Object.values(pluginInstance)[0] as KPlugin<any>]
-        this._pluginServices = merge(this._pluginServices, pluginInstance[Object.keys(pluginInstance)[0]].services)
-        event.emit("REFRESH_PLUSINS")
-        callBack && callBack()
+        try {
+            if (!this._validatePlugin(plugin)) {
+                logger.error('Plugin validation failed')
+                return false
+            }
+
+            const path = this._pluginStore(plugin.resourcePath) + "&cache=true"
+            const pluginInstance = await importScript(path, plugin.pluginKey, plugin.name)
+
+            if (!pluginInstance) {
+                logger.error(`Failed to load plugin instance for ${plugin.name}`)
+                return false
+            }
+
+            const pluginKey = Object.keys(pluginInstance)[0]
+            const loadedPlugin = Object.values(pluginInstance)[0] as KPlugin<any>
+
+            if (!loadedPlugin || !loadedPlugin.name) {
+                logger.error(`Invalid plugin structure for ${plugin.name}`)
+                return false
+            }
+
+            this.plugins = [...this.plugins, loadedPlugin]
+            this._pluginMap.set(loadedPlugin.name, loadedPlugin)
+            this._clearCache()
+
+            // Merge services if available
+            if (pluginInstance[pluginKey]?.services) {
+                this._pluginServices = merge(this._pluginServices, pluginInstance[pluginKey].services)
+            }
+
+            logger.info(`Plugin ${loadedPlugin.name} installed successfully`)
+            event.emit("REFRESH_PLUSINS")
+            callBack && callBack()
+            return true
+        } catch (error) {
+            logger.error(`Error installing plugin ${plugin?.name}:`, error)
+            return false
+        }
     }
 
     remove(name: string) {
-        this.plugins = this.plugins.filter(it => it.name !== name)
+        const existed = this._pluginMap.has(name)
+        if (existed) {
+            this.plugins = this.plugins.filter(it => it.name !== name)
+            this._pluginMap.delete(name)
+            this._clearCache()
+            logger.debug(`Plugin ${name} removed from manager`)
+        }
+        return existed
+    }
+
+    getPlugin(name: string): KPlugin<any> | undefined {
+        return this._pluginMap.get(name)
+    }
+
+    hasPlugin(name: string): boolean {
+        return this._pluginMap.has(name)
+    }
+
+    getAllPluginNames(): string[] {
+        return Array.from(this._pluginMap.keys())
     }
 
     get initStatus() {
@@ -121,57 +267,99 @@ export class PluginManager {
     }
 
     resloveRoutes(): RouteConfig[] {
-        let routes: RouteConfig[] = []
-        this.plugins.forEach(it => {
-            if (it.routes) {
-                routes = [...routes, ...it.routes]
+        if (this._cacheRoutes) {
+            return this._cacheRoutes
+        }
+
+        const routes: RouteConfig[] = []
+        for (const plugin of this.plugins) {
+            if (plugin.routes && plugin.routes.length > 0) {
+                routes.push(...plugin.routes)
             }
-        })
-        return routes;
+        }
+
+        this._cacheRoutes = routes
+        return routes
     }
 
     resloveTools(editor: Editor) {
         const res: any = {}
-        this.resloveEditorExtension().filter(it => it.tools).map(it => it.tools).flat().forEach((it: any) => {
-            logger.info('Resolved tool:', it);
-            if (it && it.execute && isFunction(it.execute)) {
-                res[it.name] = it
-                res[it.name].execute = it?.execute(editor)
+        const extensions = this.resloveEditorExtension()
+
+        for (const ext of extensions) {
+            if (!ext.tools) continue
+
+            const tools = Array.isArray(ext.tools) ? ext.tools : [ext.tools]
+
+            for (const tool of tools) {
+                if (!tool || !tool.name) {
+                    logger.warn('Invalid tool detected, skipping')
+                    continue
+                }
+
+                if (tool.execute && isFunction(tool.execute)) {
+                    if (res[tool.name]) {
+                        logger.warn(`Tool ${tool.name} already exists, overwriting`)
+                    }
+                    res[tool.name] = {
+                        ...tool,
+                        execute: tool.execute(editor)
+                    }
+                    logger.debug('Resolved tool:', tool.name)
+                }
             }
-        })
-        logger.debug('Resolved tools:', Object.keys(res));
-        return res;
+        }
+
+        logger.debug('Total resolved tools:', Object.keys(res).length)
+        return res
     }
 
     resloveLocales(): any {
+        if (this._cacheLocales) {
+            return this._cacheLocales
+        }
+
         let locales: any = {}
-        this.plugins.forEach(plugin => {
+        for (const plugin of this.plugins) {
             if (plugin.locales) {
                 locales = merge(locales, plugin.locales)
             }
-        })
-        return locales;
+        }
+
+        this._cacheLocales = locales
+        return locales
     }
 
     resloveEditorExtension(): ExtensionWrapper[] {
-        let editorExtensions: ExtensionWrapper[] = []
-        this.plugins.forEach(plugin => {
-            if (plugin.editorExtensions) {
-                editorExtensions = [...editorExtensions, ...plugin.editorExtensions]
-            }
-        })
-        return editorExtensions;
+        if (this._cacheExtensions) {
+            return this._cacheExtensions
+        }
 
+        const editorExtensions: ExtensionWrapper[] = []
+        for (const plugin of this.plugins) {
+            if (plugin.editorExtensions && plugin.editorExtensions.length > 0) {
+                editorExtensions.push(...plugin.editorExtensions)
+            }
+        }
+
+        this._cacheExtensions = editorExtensions
+        return editorExtensions
     }
 
     resloveMenus(): SiderMenuItemProps[] {
-        let menus: SiderMenuItemProps[] = []
-        this.plugins.forEach(plugin => {
-            if (plugin.menus) {
-                menus = [...menus, ...plugin.menus]
+        if (this._cacheMenus) {
+            return this._cacheMenus
+        }
+
+        const menus: SiderMenuItemProps[] = []
+        for (const plugin of this.plugins) {
+            if (plugin.menus && plugin.menus.length > 0) {
+                menus.push(...plugin.menus)
             }
-        })
-        return menus;
+        }
+
+        this._cacheMenus = menus
+        return menus
     }
 
     get pluginServices(): Services {
