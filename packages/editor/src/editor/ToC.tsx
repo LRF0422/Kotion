@@ -13,14 +13,14 @@ export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number, isA
         'text-slate-600',
         'text-slate-500',
     ]
-    
+
     return (
-        <div 
+        <div
             className={cn(
                 "group relative rounded-md transition-all duration-200 cursor-pointer",
                 "hover:bg-accent/50",
                 isActive && "bg-accent/70"
-            )} 
+            )}
             style={{
                 paddingLeft: `${Math.min(item.level - 1, 3) * 12 + 8}px`,
                 paddingRight: '8px',
@@ -29,15 +29,15 @@ export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number, isA
                 marginBottom: '2px'
             }}
         >
-            <a 
+            <a
                 className={cn(
                     "flex items-start gap-2 w-full no-underline",
                     "text-sm leading-relaxed",
                     levelColors[Math.min(item.level - 1, 3)],
                     "hover:text-primary transition-colors",
                     isActive && "text-primary font-medium"
-                )} 
-                href={`#${item.id}`} 
+                )}
+                href={`#${item.id}`}
                 onClick={e => onItemClick(e, item)}
             >
                 <span className="text-xs opacity-60 min-w-[24px] font-mono">
@@ -125,7 +125,7 @@ export const ToC: React.FC<{ editor: Editor, className?: string, items: any[] }>
                 top: element!.getBoundingClientRect().top + window.scrollY - 100,
                 behavior: 'smooth',
             })
-            
+
             setActiveId(item.id)
         }
     }
@@ -144,10 +144,10 @@ export const ToC: React.FC<{ editor: Editor, className?: string, items: any[] }>
             <ScrollArea className="flex-1 px-3 py-2">
                 <div className="space-y-1">
                     {items.map((item: any, i: number) => (
-                        <ToCItem 
-                            onItemClick={onItemClick} 
-                            key={item.id} 
-                            item={item} 
+                        <ToCItem
+                            onItemClick={onItemClick}
+                            key={item.id}
+                            item={item}
                             index={i + 1}
                             isActive={activeId === item.id}
                         />
