@@ -11,9 +11,9 @@ import { ExtensionWrapper } from "@kn/common";
 import { useEditorExtension } from "./use-extension";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { ThemeProvider } from "styled-components";
-import light from "../styles/theme";
+import light, { dark } from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
-import { cn } from "@kn/ui";
+import { cn, useTheme } from "@kn/ui";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
@@ -89,9 +89,14 @@ export const EditorRender = forwardRef<
   );
 
   useImperativeHandle(ref, () => editor, [editor]);
+
+  // Get current theme from context
+  const { theme: currentTheme } = useTheme();
+  const selectedTheme = currentTheme === 'dark' ? dark : light;
+
   return (editor &&
     <PageContext.Provider value={pageInfo as PageContextProps}>
-      <ThemeProvider theme={light}>
+      <ThemeProvider theme={selectedTheme}>
         <div className={cn("grow z-30", width)}>
           <div className={cn("w-full", props.className)} id="editor-container">
             <div className="flex relative w-full ">

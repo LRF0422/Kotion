@@ -7,9 +7,9 @@ import { Table2 } from "@kn/icon";
 import { Toggle } from "@kn/ui";
 
 export const TableStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
-  const isTableActibe = useActive(editor, Table.name);
+  const isTableActive = useActive(editor, Table.name);
 
-  const toggleSuperscript = useCallback(
+  const insertTable = useCallback(
     () =>
       editor
         .chain()
@@ -21,10 +21,10 @@ export const TableStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
 
   return (
     <Toggle
-      pressed={isTableActibe}
-      onClick={toggleSuperscript}
+      pressed={isTableActive}
+      onClick={insertTable}
       size="sm"
-    ><Table2 className="h-4 2-4" /></Toggle>
+    ><Table2 className="h-4 w-4" /></Toggle>
   );
 };
 

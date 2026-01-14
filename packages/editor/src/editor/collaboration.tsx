@@ -6,12 +6,12 @@ import { TiptapCollabProvider } from "@hocuspocus/provider";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEditorExtension } from "./use-extension";
 import { ThemeProvider } from "styled-components";
-import light from "../styles/theme";
+import light, { dark } from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
 import { ExtensionWrapper } from "@kn/common";
 import { useSafeState, useUnmount } from "ahooks";
 import { ToC } from "./ToC";
-import { cn } from "@kn/ui";
+import { cn, useTheme } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
@@ -113,9 +113,13 @@ export const CollaborationEditor = forwardRef<
   })
   useImperativeHandle(ref, () => editor as Editor)
 
+  // Get current theme from context
+  const { theme: currentTheme } = useTheme();
+  const selectedTheme = currentTheme === 'dark' ? dark : light;
+
   return (editor &&
     <PageContext.Provider value={pageInfo as PageContextProps}>
-      <ThemeProvider theme={light}>
+      <ThemeProvider theme={selectedTheme}>
         <div className={cn("grow z-30", width)}>
           <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />
           <div className={cn("w-full", props.className)} id="editor-container">

@@ -23,10 +23,8 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
     const { selection } = editor.state;
     const predicate = (node: PMNode) => node.type.name === Table.name;
     const parent = findParentNode(predicate)(selection);
-    console.log('parent', parent);
 
     if (parent) {
-
       const dom = editor.view.nodeDOM(parent?.pos) as HTMLElement;
       // @ts-ignore
       return dom.firstElementChild.getBoundingClientRect();
