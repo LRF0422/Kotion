@@ -10,6 +10,8 @@ import React, {
     useContext,
     useEffect,
     useState,
+    memo,
+    useMemo,
 } from "react";
 import { Button } from "@ui/components/ui/button";
 import { EmptyProps } from "./empty";
@@ -84,7 +86,16 @@ const getSize = (size?: Size) => {
     }
 }
 
-const Tree = forwardRef<HTMLDivElement, TreeViewProps>(
+/**
+ * Tree Component - Core tree view implementation with context
+ * 
+ * Performance optimizations:
+ * - React.memo to prevent unnecessary re-renders
+ * - useMemo for context value to prevent context re-creation
+ * - useCallback for event handlers to maintain referential equality
+ * - Optimized expand/collapse logic with state updates
+ */
+const Tree = memo(forwardRef<HTMLDivElement, TreeViewProps>(
     (
         {
             className,
@@ -169,23 +180,25 @@ const Tree = forwardRef<HTMLDivElement, TreeViewProps>(
 
         const direction = dir === "rtl" ? "rtl" : "ltr";
 
+        // Memoize context value to prevent unnecessary re-renders of all tree children
+        // This is critical for performance as context changes trigger re-renders in all consumers
+        const contextValue = useMemo(() => ({
+            selectedId,
+            expendedItems,
+            handleExpand,
+            selectItem,
+            setExpendedItems,
+            indicator,
+            openIcon,
+            closeIcon,
+            direction,
+            size,
+            selectParent,
+            onTreeSelected
+        }), [selectedId, expendedItems, handleExpand, selectItem, indicator, openIcon, closeIcon, direction, size, selectParent, onTreeSelected]);
+
         return (
-            <TreeContext.Provider
-                value={{
-                    selectedId,
-                    expendedItems,
-                    handleExpand,
-                    selectItem,
-                    setExpendedItems,
-                    indicator,
-                    openIcon,
-                    closeIcon,
-                    direction,
-                    size,
-                    selectParent,
-                    onTreeSelected
-                }}
-            >
+            <TreeContext.Provider value={contextValue}>
                 <div className={cn("size-full", className)}>
                     <ScrollArea
                         ref={ref}
@@ -210,7 +223,7 @@ const Tree = forwardRef<HTMLDivElement, TreeViewProps>(
             </TreeContext.Provider>
         );
     }
-);
+));
 
 Tree.displayName = "Tree";
 
@@ -247,7 +260,15 @@ type FolderProps = {
     onClick?: () => void;
 } & FolderComponentProps;
 
-const Folder = forwardRef<
+/**
+ * Folder Component - Expandable/collapsible tree folder
+ * 
+ * Optimizations:
+ * - React.memo to prevent re-renders when props haven't changed
+ * - useCallback for click handlers to maintain stable references
+ * - Computed isExpanded and isSelected to avoid recalculation
+ */
+const Folder = memo(forwardRef<
     HTMLDivElement,
     FolderProps & React.HTMLAttributes<HTMLDivElement>
 >(
@@ -280,6 +301,24 @@ const Folder = forwardRef<
             onTreeSelected
         } = useTree();
 
+        // Cache expansion and selection state to avoid recalculation
+        const isExpanded = expendedItems?.includes(value);
+        const isSelected = (isSelect || selectedId === value) && isSelectable;
+
+        // Memoize click handler to maintain referential equality
+        // Prevents unnecessary re-renders of child components
+        const handleClick = useCallback(() => {
+            onClick?.();
+            selectItem(value);
+            onTreeSelected?.(value);
+        }, [onClick, selectItem, value, onTreeSelected]);
+
+        // Memoize expand handler separately to prevent re-renders
+        const handleExpandClick = useCallback((e: React.MouseEvent) => {
+            e.stopPropagation();
+            handleExpand(value);
+        }, [handleExpand, value]);
+
         return (
             <AccordionPrimitive.Item
                 {...props}
@@ -292,26 +331,19 @@ const Folder = forwardRef<
                         getSize(size),
                         className,
                         {
-                            "bg-muted rounded-md": (isSelect || selectedId === value) && isSelectable,
+                            "bg-muted rounded-md": isSelected,
                             "cursor-pointer": isSelectable,
                             "cursor-not-allowed opacity-50": !isSelectable,
                         },
                         " hover:bg-muted",
                     )}>
-                        <span className="w-full truncate flex flex-row items-center gap-3 px-1 py-1" onClick={() => {
-                            onClick && onClick()
-                            selectItem(value)
-                            onTreeSelected && onTreeSelected(value)
-                        }}>
+                        <span className="w-full truncate flex flex-row items-center gap-3 px-1 py-1" onClick={handleClick}>
                             <AccordionPrimitive.Trigger
                                 disabled={!isSelectable}
-                                onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleExpand(value)
-                                }}
+                                onClick={handleExpandClick}
                             >
                                 <div className="">
-                                    {expendedItems?.includes(value)
+                                    {isExpanded
                                         ? openIcon ?? <ChevronDown className="h-4 w-4" />
                                         : closeIcon ?? <ChevronRight className="h-4 w-4" />}
                                 </div>
@@ -326,7 +358,7 @@ const Folder = forwardRef<
                                 getSize(size),
                                 className,
                                 {
-                                    "bg-muted rounded-md": (isSelect || selectedId === value) && isSelectable,
+                                    "bg-muted rounded-md": isSelected,
                                     "cursor-pointer": isSelectable,
                                     "cursor-not-allowed opacity-50": !isSelectable,
                                 },
@@ -341,7 +373,7 @@ const Folder = forwardRef<
                         >
                             <span className="flex flex-row items-center gap-3 w-[100px]">{icon}{element}</span>
                             <div className=" absolute right-10">
-                                {expendedItems?.includes(value)
+                                {isExpanded
                                     ? openIcon ?? <ChevronDown className="h-4 w-4" />
                                     : closeIcon ?? <ChevronRight className="h-4 w-4" />}
                             </div>
@@ -366,11 +398,19 @@ const Folder = forwardRef<
             </AccordionPrimitive.Item>
         );
     }
-);
+));
 
 Folder.displayName = "Folder";
 
-const File = forwardRef<
+/**
+ * File Component - Tree leaf node (non-expandable)
+ * 
+ * Optimizations:
+ * - React.memo to prevent re-renders
+ * - useCallback for click handler
+ * - Computed isSelected state
+ */
+const File = memo(forwardRef<
     HTMLButtonElement,
     {
         value: string;
@@ -396,7 +436,16 @@ const File = forwardRef<
         ref
     ) => {
         const { direction, selectedId, selectItem, size, onTreeSelected } = useTree();
+        // Cache selection state
         const isSelected = isSelect ?? selectedId === value;
+
+        // Memoize click handler to prevent unnecessary re-renders
+        const handleClick = useCallback(() => {
+            onClick?.();
+            selectItem(value);
+            onTreeSelected?.(value);
+        }, [onClick, selectItem, value, onTreeSelected]);
+
         return (
             <AccordionPrimitive.Item value={value} className="relative">
                 <AccordionPrimitive.Trigger
@@ -415,11 +464,7 @@ const File = forwardRef<
                         isSelectable ? "cursor-pointer" : "opacity-50 cursor-not-allowed",
                         className
                     )}
-                    onClick={() => {
-                        onClick && onClick()
-                        selectItem(value)
-                        onTreeSelected && onTreeSelected(value)
-                    }}
+                    onClick={handleClick}
                 >
                     {fileIcon}
                     {children}
@@ -427,7 +472,7 @@ const File = forwardRef<
             </AccordionPrimitive.Item>
         );
     }
-);
+));
 
 File.displayName = "File";
 
@@ -482,7 +527,24 @@ const CollapseButton = forwardRef<
 
 CollapseButton.displayName = "CollapseButton";
 
-const TreeItemGroup: React.FC<any> = (props) => {
+/**
+ * TreeItemGroup Component - Group header with optional actions and scrollable content
+ * 
+ * Optimizations:
+ * - React.memo to prevent re-renders
+ * - useMemo for conditional scroll area rendering
+ */
+const TreeItemGroup: React.FC<any> = memo((props) => {
+    // Memoize content to avoid re-creating scroll area on every render
+    const groupContent = useMemo(() => {
+        if (props.height) {
+            return <ScrollArea className="h-[450px] pr-3">
+                {props.children}
+            </ScrollArea>;
+        }
+        return props.children;
+    }, [props.height, props.children]);
+
     return <div>
         <div className={`p-1 text-xs text-gray-500 flex justify-between items-center`}>
             <div>
@@ -492,12 +554,8 @@ const TreeItemGroup: React.FC<any> = (props) => {
                 {props.actions}
             </div>
         </div>
-        {
-            props.height ? <ScrollArea className="h-[450px] pr-3">
-                {props.children}
-            </ScrollArea> : props.children
-        }
+        {groupContent}
     </div>
-}
+});
 TreeItemGroup.displayName = "TreeItemGroup"
 export { Tree, Folder, File, CollapseButton, TreeItemGroup, type TreeViewElement };
