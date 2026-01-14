@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useId, memo } from "react";
 import mermaid, { type MermaidConfig } from "mermaid";
+import { IconButton } from "@kn/ui"
 // styles
 // import "./styles.css";
 import { uuidv4 } from "lib0/random";
@@ -130,12 +131,11 @@ function RenderMermaid({
                         (CopyComponent ? (
                             <CopyComponent onClick={handleCopyCode} />
                         ) : (
-                            <button
+                            <IconButton
+                                icon={<CopyIcon />}
                                 onClick={handleCopyCode}
                                 className="mermaid-action-button btn-copy"
-                            >
-                                <CopyIcon />
-                            </button>
+                            />
                         ))}
                 </div>
                 {RenderCode ? (
@@ -148,29 +148,29 @@ function RenderMermaid({
     }
 
     return (
-        <div className="mermaid-renderer w-full h-full justify-center" key={mermaidCode}>
+        <div className="mermaid-renderer w-full h-full justify-center relative" key={mermaidCode}>
             {/* copy code and download buttons */}
-            <div className="mermaid-actions">
+            <div className="mermaid-actions absolute top-1 left-1 flex items-center ">
                 {!disableCopy &&
                     (CopyComponent ? (
                         <CopyComponent onClick={handleCopyCode} />
                     ) : (
-                        <button
+                        <IconButton
+                            icon={<CopyIcon />}
                             onClick={handleCopyCode}
                             className="mermaid-action-button btn-copy"
-                        >
-                            <CopyIcon />
-                        </button>
+                        />
                     ))}
                 {!disableDownload &&
                     (DownloadComponent ? (
                         <DownloadComponent onClick={() => handleDownloadSvg(mermaidRef)} />
                     ) : (
-                        <button
+
+                        <IconButton
+                            icon={<DownloadIcon />}
                             onClick={() => handleDownloadSvg(mermaidRef)}
-                            className="mermaid-action-button btn-download">
-                            <DownloadIcon />
-                        </button>
+                            className="mermaid-action-button btn-copy"
+                        />
                     ))}
             </div>
             <div ref={mermaidRef} className="mermaid-diagram flex justify-center items-center" />

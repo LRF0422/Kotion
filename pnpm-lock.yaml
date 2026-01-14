@@ -305,6 +305,9 @@ importers:
       '@kn/plugin-drawio':
         specifier: workspace:*
         version: link:../../packages/plugin-drawio
+      '@kn/plugin-drawio-v2':
+        specifier: workspace:*
+        version: link:../../packages/plugin-drawio-v2
       '@kn/plugin-drawnix':
         specifier: workspace:*
         version: link:../../packages/plugin-drawnix
@@ -901,6 +904,37 @@ importers:
         version: 1.16.3
 
   packages/plugin-drawio:
+    dependencies:
+      '@drawnix/drawnix':
+        specifier: ^0.1.4
+        version: 0.1.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@kn/common':
+        specifier: workspace:*
+        version: link:../common
+      '@kn/core':
+        specifier: workspace:*
+        version: link:../core
+      '@kn/editor':
+        specifier: workspace:*
+        version: link:../editor
+      '@kn/icon':
+        specifier: workspace:*
+        version: link:../icon
+      '@kn/ui':
+        specifier: workspace:*
+        version: link:../ui
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.4.21(postcss@8.5.6)
+      postcss:
+        specifier: ^8.4.47
+        version: 8.5.6
+    devDependencies:
+      '@kn/rollup-config':
+        specifier: workspace:*
+        version: link:../rollup-config
+
+  packages/plugin-drawio-v2:
     dependencies:
       '@drawnix/drawnix':
         specifier: ^0.1.4

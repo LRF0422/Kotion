@@ -33,9 +33,11 @@ import {
     Edit2,
     Check,
     X,
+    Settings,
 } from "@kn/icon";
 import { FieldConfig, FieldType } from "../../types";
 import { cn } from "@kn/ui";
+import { FieldPropertiesEditor } from "./FieldPropertiesEditor";
 
 interface FieldConfigPanelProps {
     open: boolean;
@@ -75,6 +77,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
     const [showAddField, setShowAddField] = useState(false);
     const [newFieldTitle, setNewFieldTitle] = useState("");
     const [newFieldType, setNewFieldType] = useState<FieldType>(FieldType.TEXT);
+    const [editingPropertiesFieldId, setEditingPropertiesFieldId] = useState<string | null>(null);
 
     // 处理字段拖拽排序
     const handleDragEnd = (result: DropResult) => {
@@ -288,62 +291,92 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                                                         </div>
 
                                                         {/* 操作按钮 */}
-                                                        <div className="flex items-center gap-1">
-                                                            {editingFieldId === field.id ? (
-                                                                <>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => saveFieldTitle(field.id)}
-                                                                    >
-                                                                        <Check className="h-3 w-3" />
-                                                                    </Button>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={cancelEdit}
-                                                                    >
-                                                                        <X className="h-3 w-3" />
-                                                                    </Button>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    {/* 显示/隐藏切换 */}
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() =>
-                                                                            onUpdateField(field.id, { isShow: !field.isShow })
+                                                        <div>
+
+                                                            {/* 字段属性配置面板 */}
+                                                            <div className="flex items-center gap-1">
+                                                                {editingFieldId === field.id ? (
+                                                                    <>
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            onClick={() => saveFieldTitle(field.id)}
+                                                                        >
+                                                                            <Check className="h-3 w-3" />
+                                                                        </Button>
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            onClick={cancelEdit}
+                                                                        >
+                                                                            <X className="h-3 w-3" />
+                                                                        </Button>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        {/* 显示/隐藏切换 */}
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            onClick={() =>
+                                                                                onUpdateField(field.id, { isShow: !field.isShow })
+                                                                            }
+                                                                            disabled={field.type === FieldType.ID}
+                                                                        >
+                                                                            {field.isShow ? (
+                                                                                <Eye className="h-4 w-4" />
+                                                                            ) : (
+                                                                                <EyeOff className="h-4 w-4" />
+                                                                            )}
+                                                                        </Button>
+
+                                                                        {/* 编辑按钮 */}
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            onClick={() => startEditField(field)}
+                                                                            disabled={field.type === FieldType.ID}
+                                                                        >
+                                                                            <Edit2 className="h-3 w-3" />
+                                                                        </Button>
+
+                                                                        {/* 属性配置按钮 */}
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            onClick={() =>
+                                                                                setEditingPropertiesFieldId(
+                                                                                    editingPropertiesFieldId === field.id
+                                                                                        ? null
+                                                                                        : field.id
+                                                                                )
+                                                                            }
+                                                                            disabled={field.type === FieldType.ID}
+                                                                        >
+                                                                            <Settings className="h-3 w-3" />
+                                                                        </Button>
+
+                                                                        {/* 删除按钮 */}
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            onClick={() => onDeleteField(field.id)}
+                                                                            disabled={field.type === FieldType.ID}
+                                                                        >
+                                                                            <Trash2 className="h-3 w-3 text-destructive" />
+                                                                        </Button>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                            {editingPropertiesFieldId === field.id && (
+                                                                <div className="mt-2 p-3 border-t bg-muted/20">
+                                                                    <FieldPropertiesEditor
+                                                                        field={field}
+                                                                        onUpdateField={(updates) =>
+                                                                            onUpdateField(field.id, updates)
                                                                         }
-                                                                        disabled={field.type === FieldType.ID}
-                                                                    >
-                                                                        {field.isShow ? (
-                                                                            <Eye className="h-4 w-4" />
-                                                                        ) : (
-                                                                            <EyeOff className="h-4 w-4" />
-                                                                        )}
-                                                                    </Button>
-
-                                                                    {/* 编辑按钮 */}
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => startEditField(field)}
-                                                                        disabled={field.type === FieldType.ID}
-                                                                    >
-                                                                        <Edit2 className="h-3 w-3" />
-                                                                    </Button>
-
-                                                                    {/* 删除按钮 */}
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => onDeleteField(field.id)}
-                                                                        disabled={field.type === FieldType.ID}
-                                                                    >
-                                                                        <Trash2 className="h-3 w-3 text-destructive" />
-                                                                    </Button>
-                                                                </>
+                                                                    />
+                                                                </div>
                                                             )}
                                                         </div>
                                                     </div>
@@ -365,6 +398,8 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                         <ul className="text-xs text-muted-foreground mt-2 space-y-1">
                             <li>• 拖拽字段可以调整显示顺序</li>
                             <li>• 点击眼睛图标可以显示/隐藏字段</li>
+                            <li>• 点击设置图标可以配置字段属性</li>
+                            <li>• 不同字段类型有不同的可配置属性</li>
                             <li>• ID字段不可删除、隐藏或移动</li>
                             <li>• 删除字段会同时删除该字段的所有数据</li>
                         </ul>
