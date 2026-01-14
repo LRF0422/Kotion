@@ -1,7 +1,7 @@
 import { Node } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import { InfoPanelView } from "./info-panel-view";
-import { CheckCircle2, CircleAlert, TriangleAlert, XCircle } from "@kn/icon";
+import { INFO_PANEL_TYPES, DEFAULT_INFO_PANEL_TYPE, DEFAULT_INFO_PANEL_TIPS } from "./constants";
 
 
 declare module "@tiptap/core" {
@@ -22,40 +22,7 @@ export const InfoPanel = Node.create({
 	priority: 1000,
 	addOptions() {
 		return {
-			type: {
-				info: {
-					color: {
-						light: '#cffafe',
-						dark: '#083344'
-					},
-					icon: CircleAlert,
-					iconColor: '#1D7AFC'
-				},
-				success: {
-					color: {
-						light: '#bbf7d0',
-						dark: '#052e16',
-					},
-					icon: CheckCircle2,
-					iconColor: '#22A06B'
-				},
-				file: {
-					color: {
-						light: '#fef3c7',
-						dark: '#451a03'
-					},
-					icon: TriangleAlert,
-					iconColor: '#E56910'
-				},
-				error: {
-					color: {
-						light: '#fecaca',
-						dark: '#450a0a'
-					},
-					icon: XCircle,
-					iconColor: '#C9372C'
-				}
-			},
+			type: INFO_PANEL_TYPES,
 			exitOnTripleEnter: true,
 			exitOnArrowDown: true
 		}
@@ -68,14 +35,14 @@ export const InfoPanel = Node.create({
 	addAttributes() {
 		return {
 			type: {
-				default: 'info',
+				default: DEFAULT_INFO_PANEL_TYPE,
 				parseHTML: ele => ele.getAttribute("type")
 			},
 			color: {
 				default: "#E9F2FF"
 			},
 			tips: {
-				default: "Tips"
+				default: DEFAULT_INFO_PANEL_TIPS
 			}
 		}
 	},

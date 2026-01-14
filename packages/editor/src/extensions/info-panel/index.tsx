@@ -5,6 +5,9 @@ import { InfoPanelBubbleMenu } from "./menu/bubble";
 import { InfoPanelStaticMenu } from "./menu/static";
 import React from "react";
 
+// Export constants for external use
+export { INFO_PANEL_TYPES, DEFAULT_INFO_PANEL_TYPE, DEFAULT_INFO_PANEL_TIPS } from "./constants";
+export type { InfoPanelType, InfoPanelTypeConfig } from "./constants";
 
 export const InfoPanelExtension: ExtensionWrapper = {
 	name: InfoPanel.name,
