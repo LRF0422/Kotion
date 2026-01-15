@@ -1,6 +1,7 @@
 
 import { KPlugin, PluginConfig } from "@kn/common"
 import { FolderExtension } from "./editor-extensions/folder"
+import { AttachmentExtension } from "./editor-extensions/attachment"
 import { Folder } from "@kn/icon"
 import React from "react"
 import { FileManagerView } from "./editor-extensions/component/FileManager"
@@ -23,7 +24,7 @@ class FileManager extends KPlugin<FileManagerPluginConfig> {
 export const fileManager = new FileManager({
     status: '',
     name: 'File Manager',
-    editorExtension: [FolderExtension, ImageExtension],
+    editorExtension: [FolderExtension, ImageExtension, AttachmentExtension],
     routes: [
         {
             name: 'fileManager',
