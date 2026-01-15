@@ -1,7 +1,7 @@
 {
   "name": "@kn/plugin-block-reference",
-  "version": "0.0.16",
-  "description": "",
+  "version": "0.0.17",
+  "description": "Block and page reference plugin for Knowledge editor - Optimized for performance and type safety",
   "main": "src/index.tsx",
   "types": "src/index.tsx",
   "publishConfig": {

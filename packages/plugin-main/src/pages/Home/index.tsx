@@ -1,6 +1,6 @@
 import { APIS } from "../../api";
 import { CardList } from "../components/CardList";
-import { Button, EmptyState } from "@kn/ui";
+import { Button, EmptyState, Skeleton } from "@kn/ui";
 import { useApi, useService } from "@kn/core";
 import { useNavigator } from "@kn/core";
 import { Space } from "../../model/Space";
@@ -16,27 +16,40 @@ export const Home: React.FC = () => {
     const [recentSpaces, setRecentSpaces] = useState<Space[]>([])
     const [recentPages, setRecentPages] = useState([])
     const [flag, setFlag] = useState(0)
+    const [loading, setLoading] = useState(true)
     const navigator = useNavigator()
     const { t, i18n } = useTranslation()
 
+    const getGreeting = () => {
+        const hour = new Date().getHours()
+        if (hour >= 5 && hour < 12) {
+            return t("home.greeting.morning") || "Good Morning"
+        } else if (hour >= 12 && hour < 18) {
+            return t("home.greeting.afternoon") || "Good Afternoon"
+        } else {
+            return t("home.greeting.evening") || "Good Evening"
+        }
+    }
+
 
     useEffect(() => {
-        useApi(APIS.QUERY_SPACE, { template: false, pageSize: 4 }).then(res => {
-            setRecentSpaces(res.data.records)
+        setLoading(true)
+        Promise.all([
+            useApi(APIS.QUERY_SPACE, { template: false, pageSize: 4 }),
+            useApi(APIS.QUERY_RECENT_PAGE, { pageSize: 8 })
+        ]).then(([spacesRes, pagesRes]) => {
+            setRecentSpaces(spacesRes.data.records)
+            setRecentPages(pagesRes.data.records)
+        }).finally(() => {
+            setLoading(false)
         })
     }, [flag])
-
-    useEffect(() => {
-        useApi(APIS.QUERY_RECENT_PAGE, { pageSize: 8 }).then(res => {
-            setRecentPages(res.data.records)
-        })
-    }, [])
 
 
     return <div className="flex justify-center pb-4">
         <div className="w-[800px] flex flex-col gap-4">
-            <div className=" flex items-center justify-center h-[100px]">
-                <div className="scroll-m-20 text-2xl font-semibold tracking-tight">{t("home.title")}</div>
+            <div className="flex items-center justify-center h-[100px]">
+                <div className="scroll-m-20 text-2xl font-semibold tracking-tight">{getGreeting()}</div>
             </div>
             <div className="flex flex-col gap-1">
                 <div className="flex justify-between items-center">
@@ -52,56 +65,71 @@ export const Home: React.FC = () => {
                         callBack={() => setFlag(f => f + 1)}
                     />
                 </div>
-                <CardList
-                    data={recentSpaces}
-                    className="h-[250px]"
-                    emptyProps={{
-                        button: <CreateSpaceDlg trigger={<Button>{t("home.create-space")}</Button>} />
-                    }}
-                    config={{
-                        // desc: 'description',
-                        cover: 'cover',
-                        // name: 'name'
-                    }}
-                    // icon={(data) => data?.icon?.icon || data.name}
-                    onClick={(data: any) => {
-                        navigator.go({
-                            to: `/space-detail/${data.id}`
-                        })
-                    }}
-                    footer={(data: any) => <div className="text-sm mt-1">
-                        <div className="flex flex-row items-center gap-1">
-                            {data.icon.icon} {data.name}
-                        </div>
-                        <a className="flex flex-row items-center italic gap-1 underline  text-gray-500">
-                            <UserCircle className="h-3 w-3" />Last update by Leong
-                        </a>
-                    </div>}
-                />
+                {loading ? (
+                    <div className="grid gap-4 w-full grid-cols-4">
+                        {[...Array(4)].map((_, index) => (
+                            <div key={index} className="flex flex-col gap-2">
+                                <Skeleton className="h-[250px] w-full rounded-lg" />
+                                <Skeleton className="h-4 w-3/4" />
+                                <Skeleton className="h-3 w-1/2" />
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <CardList
+                        data={recentSpaces}
+                        className="h-[250px]"
+                        emptyProps={{
+                            button: <CreateSpaceDlg trigger={<Button>{t("home.create-space")}</Button>} />
+                        }}
+                        config={{
+                            // desc: 'description',
+                            cover: 'cover',
+                            // name: 'name'
+                        }}
+                        // icon={(data) => data?.icon?.icon || data.name}
+                        onClick={(data: any) => {
+                            navigator.go({
+                                to: `/space-detail/${data.id}`
+                            })
+                        }}
+                        footer={(data: any) => <div className="text-sm mt-1">
+                            <div className="flex flex-row items-center gap-1">
+                                {data.icon.icon} {data.name}
+                            </div>
+                            <a className="flex flex-row items-center italic gap-1 underline  text-gray-500">
+                                <UserCircle className="h-3 w-3" />Last update by Leong
+                            </a>
+                        </div>}
+                    />
+                )}
             </div>
             <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-1 py-1 font-light text-xs">
                     <Clock size={12} />
                     <div className=" font-bold">从最近的页面开始</div>
                 </div>
-                <CardList
-                    data={recentPages}
-                    config={{ name: 'title' }}
-                    icon={(data: any) => data.icon?.icon || <Box />}
-                    onClick={(data: any) => {
-                        navigator.go({
-                            to: `/space-detail/${data.spaceId}/page/${data.id}`
-                        })
-                    }}
-                    // footer={() => <div className="text-sm italic text-gray-500">
-                    //     <a className="flex flex-row items-center gap-1 underline">
-                    //         <UserCircle className="h-3 w-3" />Last update by Leong
-                    //     </a>
-                    //     <div className="flex flex-row items-center gap-1">
-                    //         <Clock className="h-3 w-3" />At 2024年8月19日
-                    //     </div>
-                    // </div>}
-                />
+                {loading ? (
+                    <div className="grid gap-4 w-full grid-cols-4">
+                        {[...Array(8)].map((_, index) => (
+                            <div key={index} className="flex flex-col gap-2">
+                                <Skeleton className="h-[100px] w-full rounded-lg" />
+                                <Skeleton className="h-4 w-3/4" />
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <CardList
+                        data={recentPages}
+                        config={{ name: 'title' }}
+                        icon={(data: any) => data.icon?.icon || <Box />}
+                        onClick={(data: any) => {
+                            navigator.go({
+                                to: `/space-detail/${data.spaceId}/page/${data.id}`
+                            })
+                        }}
+                    />
+                )}
             </div>
             <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-1 py-1 font-light text-xs">

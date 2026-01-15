@@ -72,6 +72,11 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "create-space": "创建空间",
           "rs": "从最近的空间开始",
           "all": "查看全部空间",
+          "greeting": {
+            "morning": "早上好",
+            "afternoon": "下午好",
+            "evening": "晚上好"
+          }
         },
         "space-hub": {
           "all-space": "所有空间"
@@ -108,6 +113,11 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "create-space": "Create a space",
           "rs": "Start from recent space",
           "all": "all spaces",
+          "greeting": {
+            "morning": "Good Morning",
+            "afternoon": "Good Afternoon",
+            "evening": "Good Evening"
+          }
         },
         "space-hub": {
           "all-space": "All Spaces"
