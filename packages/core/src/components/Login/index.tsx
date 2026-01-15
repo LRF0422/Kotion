@@ -9,18 +9,15 @@ import { zodResolver } from '@kn/ui';
 import { useApi } from "../../hooks/use-api"
 import { APIS } from "../../api"
 import { useState } from "react"
-import { useNavigator } from "../../hooks/use-navigator"
 import { Loader2 } from "@kn/icon"
 import { ModeToggle } from "@kn/ui"
 import React from "react"
 import { useUploadFile } from "../../hooks"
 import { LanguageToggle } from "../../locales/LanguageToggle"
-import { event } from "@kn/common"
 
 
 export function Login() {
 
-    const navigator = useNavigator()
     const [loading, setLoading] = useState(false)
     const { usePath } = useUploadFile()
 
@@ -48,12 +45,8 @@ export function Login() {
             const { data } = res
             localStorage.setItem('knowledge-token', `bearer ${data.accessToken}`)
             localStorage.setItem("isLogin", "false")
-            event.emit("REFRESH_PLUSINS")
-            event.on("PLUGIN_INIT_SUCCESS", () => {
-                navigator.go({
-                    to: '/'
-                })
-            })
+            // Force full page reload to trigger plugin loading in Layout
+            window.location.href = '/'
         }).catch(e => {
         }).finally(() => setLoading(false))
     }

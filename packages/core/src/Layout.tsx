@@ -1,23 +1,31 @@
 
-import { Outlet } from "react-router-dom"
+import { Outlet, useLocation } from "react-router-dom"
 import { SiderMenu } from "./components/SiderMenu"
-import { useEffect, useState } from "react"
+import { useContext, useEffect, useState, useMemo } from "react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Onboarding, OnboardingStep, Rate, SparklesText, cn } from "@kn/ui"
 import { useApi } from "./hooks/use-api"
 import { APIS } from "./api"
-import { useDispatch } from "@kn/common"
+import { useDispatch, AppContext, event } from "@kn/common"
 import { useNavigator } from "./hooks/use-navigator"
 import { ErrorBoundary } from "react-error-boundary"
-import { GO_TO_MARKETPLACE, event } from "@kn/common"
+import { GO_TO_MARKETPLACE } from "@kn/common"
 import { toast } from "@kn/ui"
 import { ErrorPage } from "./components/ErrorPage"
 import React from "react"
 import { useUploadFile } from "./hooks"
+import { useAsyncEffect } from "ahooks"
 
-export function Layout() {
+interface LayoutProps {
+    onPluginsReady: (ready: boolean) => void
+}
+
+export function Layout({ onPluginsReady }: LayoutProps) {
 
     const dispatch = useDispatch()
     const navigator = useNavigator()
+    const { pluginManager } = useContext(AppContext)
+    const [pluginsLoaded, setPluginsLoaded] = useState(false)
+    const [refreshFlag, setRefreshFlag] = useState(0)
 
     const searchParams = new URLSearchParams(window.location.search);
     const requestPluginId = searchParams.get('requestPluginId');
@@ -52,13 +60,55 @@ export function Layout() {
         }
     ];
 
+    // Plugin loading logic moved from App.tsx
     useEffect(() => {
-        event.emit("REFRESH_PLUSINS")
+        event.on("REFRESH_PLUSINS", () => {
+            setRefreshFlag(f => f + 1)
+        })
+        return () => {
+            event.off("REFRESH_PLUSINS")
+        }
+    }, [])
+
+    // Load plugins asynchronously in Layout
+    useAsyncEffect(async () => {
+        if (!pluginManager) return
+
+        try {
+            if (!!localStorage.getItem("knowledge-token")) {
+                const installedPlugins: any[] = (await useApi(APIS.GET_INSTALLED_PLUGINS)).data
+                await pluginManager.init(installedPlugins)
+
+                setPluginsLoaded(true)
+                onPluginsReady(true)
+                // Emit events to notify other components that plugins are ready
+                event.emit("PLUGIN_INIT_SUCCESS")
+                event.emit("REFRESH_PLUSINS")
+            } else {
+                // No auth token, redirect to login
+                await pluginManager.init([])
+                if (!window.location.href.includes("login")) {
+                    window.location.href = '/login'
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load plugins:', error)
+            await pluginManager.init([])
+            if (!window.location.href.includes("login")) {
+                window.location.href = '/login'
+            }
+        }
+    }, [pluginManager, refreshFlag])
+
+    useEffect(() => {
         event.on(GO_TO_MARKETPLACE, () => {
             navigator.go({
                 to: '/plugin-hub'
             })
         })
+        return () => {
+            event.off(GO_TO_MARKETPLACE)
+        }
     }, [])
 
     useEffect(() => {
@@ -96,7 +146,22 @@ export function Layout() {
 
     return (
         <div>
-            <div className={cn("grid min-h-screen w-full transition-all grid-cols-[70px_1fr]")} >
+            {/* Show loading overlay while plugins are loading */}
+            {!pluginsLoaded && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
+                    <div className="flex flex-col items-center gap-4">
+                        <SparklesText className="text-[60px]" sparklesCount={8} text="KN" />
+                        <div className="flex items-center gap-2 text-lg text-muted-foreground">
+                            <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                        <p className="text-sm text-muted-foreground">Loading workspace...</p>
+                    </div>
+                </div>
+            )}
+
+            <div className={cn("grid min-h-screen w-full transition-all grid-cols-[70px_1fr]", !pluginsLoaded && "opacity-0")} >
                 <div className="border-r md:block">
                     <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4">
                         <SparklesText className=" text-[30px]" sparklesCount={5} text="KN" />
@@ -106,7 +171,7 @@ export function Layout() {
                     </div>
                 </div>
                 <main className="h-screen w-full overflow-auto">
-                    <Outlet />
+                    {pluginsLoaded ? <Outlet /> : null}
                 </main>
                 <AlertDialog open={open} onOpenChange={setOpen}>
                     <AlertDialogTrigger />

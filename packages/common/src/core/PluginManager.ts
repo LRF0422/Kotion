@@ -119,6 +119,7 @@ export class PluginManager {
         try {
             if (!remotePlugins || remotePlugins.length === 0) {
                 this.plugins = ([...(this._initialPlugins || [])])
+                this._clearCache()
                 this._mergeServices()
                 this._init = true
                 logger.info('Plugins loaded:', this.plugins.length);
@@ -150,6 +151,7 @@ export class PluginManager {
 
             this.plugins = [...this._initialPlugins, ...successfulPlugins]
             this._buildPluginMap(successfulPlugins)
+            this._clearCache()
             this._mergeServices()
             this._init = true
 
