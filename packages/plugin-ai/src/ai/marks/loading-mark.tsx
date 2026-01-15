@@ -1,5 +1,9 @@
-import { Mark, MarkViewContent, ReactMarkViewRenderer, ReactNodeViewRenderer } from "@kn/editor";
+import { Mark, MarkViewContent, ReactMarkViewRenderer } from "@kn/editor";
 import React from "react";
+
+/**
+ * Extend editor commands with loading mark commands
+ */
 
 
 declare module "@kn/editor" {
@@ -11,11 +15,21 @@ declare module "@kn/editor" {
   }
 }
 
+/**
+ * Loading Mark View Component
+ * Displays content wrapped in a loading indicator border
+ */
 const LoadingMarkView: React.FC = () => {
-  return <div className=" border">
-      <MarkViewContent/>
-    </div>
+  return <div className="border">
+    <MarkViewContent />
+  </div>
 }
+
+/**
+ * Loading Mark Extension
+ * Provides a mark for indicating loading/generating content
+ * Currently experimental and may not be actively used
+ */
 
 
 export const LoadingMark = Mark.create({

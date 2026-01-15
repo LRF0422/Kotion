@@ -8,6 +8,18 @@ import TextLoadingDecorationExtension from "./text-loading";
 import { LoadingMark } from "./marks/loading-mark";
 import { ExpandableChatDemo } from "./menu/Chat";
 
+/**
+ * AI Extension Configuration
+ * Bundles all AI-related editor extensions, menus, and slash commands
+ * 
+ * Includes:
+ * - AI text generation block
+ * - AI image generation block
+ * - Loading decorations for streaming text
+ * - Quick action menu for text transformations
+ * - Chat interface for AI interactions
+ */
+
 
 export const AIExtension: ExtensionWrapper = {
     name: Ai.name,

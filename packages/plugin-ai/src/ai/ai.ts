@@ -2,6 +2,10 @@ import { mergeAttributes, PMNode as Node } from "@kn/editor";
 import { ReactNodeViewRenderer } from "@kn/editor";
 import { AiView } from "./AiView";
 
+/**
+ * Extend editor commands with AI-specific commands
+ */
+
 declare module "@kn/editor" {
     interface Commands<ReturnType> {
         ai: {
@@ -13,6 +17,16 @@ declare module "@kn/editor" {
 
 
 
+/**
+ * AI Block Node Extension
+ * Provides a block-level node for AI-generated text content
+ * 
+ * Features:
+ * - Custom prompt input
+ * - Real-time text generation
+ * - Generation timestamp tracking
+ * - Visual feedback during generation
+ */
 export const Ai = Node.create({
     name: 'ai',
     group: 'block',

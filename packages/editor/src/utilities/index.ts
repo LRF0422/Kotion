@@ -9,3 +9,4 @@ export * from "./pos";
 // export * from "./file";
 export * from "./throttle";
 export * from "./svg-to-datauri";
+export * from "./selection";

@@ -5,6 +5,10 @@ import { Command, Extension } from "@kn/editor";
 import { Loader2 } from "@kn/icon";
 import React from "react";
 
+/**
+ * Commands for managing loading decoration in the editor
+ */
+
 declare module "@kn/editor" {
     interface Commands<ReturnType> {
         textLoadingDecoration: {
@@ -16,10 +20,18 @@ declare module "@kn/editor" {
 
 export const loadingDecorationKey = new PluginKey<LoadingDecorationState>("loadingDecoration");
 
+/**
+ * State interface for loading decoration plugin
+ */
 interface LoadingDecorationState {
     decorationSet: DecorationSet;
     hasDecoration: boolean;
 }
+
+/**
+ * Text Loading Decoration Extension
+ * Provides visual feedback during AI text generation with streaming support
+ */
 
 const TextLoadingDecorationExtension = Extension.create({
     name: "loadingDecoration",
@@ -51,6 +63,7 @@ const TextLoadingDecorationExtension = Extension.create({
                         if (action?.type === "loadingDecoration") {
                             const { pos, remove, loadingHtml } = action;
 
+                            // Remove decoration if requested
                             if (remove) {
                                 return {
                                     decorationSet: DecorationSet.empty,
@@ -58,26 +71,28 @@ const TextLoadingDecorationExtension = Extension.create({
                                 };
                             }
 
+                            // Create loading decoration widget
                             const decoration = Decoration.widget(pos, () => {
                                 const container = document.createElement("span");
                                 container.className = "loading-decoration p-1 border rounded-md outline";
 
                                 if (loadingHtml) {
+                                    // Show streaming content
                                     container.innerHTML = loadingHtml;
                                 } else {
-                                    const span = document.createElement("span");
+                                    // Show loading indicator
                                     const component = new ReactRenderer(() => {
-
-                                        const { t } = useTranslation()
-
-                                        return (<span>{t('ai.generate')}
-                                            < Loader2 className=" w-4 h-4 animate-spin inline" />
-                                        </span>)
+                                        const { t } = useTranslation();
+                                        return (
+                                            <span>
+                                                {t('ai.generate')}
+                                                <Loader2 className="w-4 h-4 animate-spin inline" />
+                                            </span>
+                                        );
                                     }, {
                                         editor,
                                         as: 'span'
-                                    })
-                                    span.innerText = "loading...";
+                                    });
                                     container.appendChild(component.element);
                                 }
 
@@ -90,6 +105,7 @@ const TextLoadingDecorationExtension = Extension.create({
                             };
                         }
 
+                        // Map decorations through document changes
                         return {
                             decorationSet: oldState.decorationSet.map(tr.mapping, tr.doc),
                             hasDecoration: oldState.hasDecoration
@@ -108,12 +124,15 @@ const TextLoadingDecorationExtension = Extension.create({
 
     addCommands() {
         return {
+            /**
+             * Toggle loading decoration at a specific position
+             * @param pos - Document position to show decoration
+             * @param loadingHtml - Optional HTML content to show during streaming
+             */
             toggleLoadingDecoration: (pos: number, loadingHtml?: string): Command => ({ state, dispatch }) => {
-
                 if (!dispatch) return false;
 
                 const pluginKey = this.options.pluginKey;
-
                 const tr = state.tr.setMeta(pluginKey, {
                     pos,
                     type: "loadingDecoration",
@@ -125,6 +144,9 @@ const TextLoadingDecorationExtension = Extension.create({
                 return true;
             },
 
+            /**
+             * Remove loading decoration
+             */
             removeLoadingDecoration: (): Command => ({ state, dispatch }) => {
                 if (!dispatch) return false;
 
