@@ -7,7 +7,7 @@ export const deepseek = createDeepSeek({
 })
 
 
-const generateText = (prompt: string, tools?: any) => {
+const generateText = (prompt: string, tools?: any): any => {
     console.log("generateText", prompt);
     return streamText({
         model: deepseek("deepseek-chat"),

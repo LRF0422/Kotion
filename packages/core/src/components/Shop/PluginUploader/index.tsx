@@ -403,7 +403,6 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                             icon={<PlusIcon className="h-4 w-4" />}
                             className="ml-1"
                             onClick={handleAddDescriptionTab}
-                            title="添加新标签"
                         />
                     </div>
                     <div className="h-full">
@@ -541,8 +540,6 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                                         <div className="absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
                                             <IconButton
                                                 icon={<TrashIcon className="h-4 w-4" />}
-                                                variant="destructive"
-                                                size="sm"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleRemoveLogo(index);

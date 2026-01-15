@@ -55,7 +55,7 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
     }),
     postcss({
       // Process Tailwind CSS and other PostCSS plugins
-      plugins: [tailwindcss(), autoprefixer(), cssnext(), nested(), postcssCascadeLayers()],
+      plugins: [postcssCascadeLayers(),cssnext(), nested(),tailwindcss(), autoprefixer()],
       extensions: [".css"],
       extract: false,
       minimize: true,

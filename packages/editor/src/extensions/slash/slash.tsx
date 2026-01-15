@@ -171,7 +171,7 @@ export const createSlash = (name: string, options?: SlashOptions) => {
               onUpdate(props) {
                 if (!isEditable || !component) return;
                 component.updateProps(props);
-                updatePosition(props.clientRect);
+                updatePosition((props.clientRect as any));
               },
 
               onKeyDown(props) {

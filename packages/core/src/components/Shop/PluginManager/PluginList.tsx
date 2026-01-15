@@ -234,15 +234,10 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                             </div>
                             <div className="flex items-center gap-1 shrink-0 ml-auto">
                                 <IconButton
-                                    size="sm"
-                                    variant="ghost"
                                     icon={<EditIcon className="h-4 w-4" />}
                                     onClick={() => handleEditPlugin(item)}
-                                    title="Edit"
                                 />
                                 <IconButton
-                                    size="sm"
-                                    variant="ghost"
                                     icon={
                                         isActivating ? (
                                             <Loader2Icon className="h-4 w-4 animate-spin" />
@@ -251,7 +246,6 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                         )
                                     }
                                     onClick={() => handleToggleActive(item)}
-                                    title={isActive ? "Deactivate" : "Activate"}
                                     disabled={isActivating}
                                 />
                                 <Button
@@ -286,7 +280,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
             <DialogContent className="max-w-4xl w-full max-h-[85vh] flex flex-col">
                 <DialogTitle className="flex items-center gap-3 flex-shrink-0">
                     <Avatar className="h-10 w-10">
-                        <img src={usePath(currentPlugin?.icon)} alt={currentPlugin?.name} />
+                        <img src={usePath(currentPlugin?.icon || '')} alt={currentPlugin?.name || ''} />
                     </Avatar>
                     <div className="min-w-0 flex-1">
                         <div className="truncate">{currentPlugin?.name}</div>
@@ -335,8 +329,6 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                     <CheckCircleIcon className="h-4 w-4 text-green-500 shrink-0" />
                                     <span className="text-sm truncate flex-1">{file.originalName}</span>
                                     <IconButton
-                                        size="sm"
-                                        variant="ghost"
                                         icon={<XIcon className="h-4 w-4" />}
                                         onClick={() => setFile(undefined)}
                                     />
@@ -371,13 +363,10 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                                 }}
                                             />
                                             <IconButton
-                                                size="sm"
                                                 icon={<CheckCircleIcon className="h-4 w-4" />}
                                                 onClick={handleAddTab}
                                             />
                                             <IconButton
-                                                size="sm"
-                                                variant="ghost"
                                                 icon={<XIcon className="h-4 w-4" />}
                                                 onClick={() => {
                                                     setAddingTab(false);
@@ -389,7 +378,6 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                         <IconButton
                                             icon={<PlusIcon className="h-4 w-4" />}
                                             onClick={() => setAddingTab(true)}
-                                            title="Add new tab"
                                             className="flex-shrink-0"
                                         />
                                     )}
@@ -401,11 +389,8 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                                 <span className="text-sm font-medium">{item.label}</span>
                                                 {descriptions.length > 1 && (
                                                     <IconButton
-                                                        size="sm"
-                                                        variant="ghost"
                                                         icon={<XIcon className="h-4 w-4" />}
                                                         onClick={() => handleRemoveTab(index)}
-                                                        title="Remove tab"
                                                     />
                                                 )}
                                             </div>
