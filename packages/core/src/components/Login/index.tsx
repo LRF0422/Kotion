@@ -84,7 +84,7 @@ export function Login() {
                         {/* Logo/Brand */}
                         <div className="space-y-4">
                             <div className="w-20 h-20 rounded-2xl bg-white/20 dark:bg-white/10 backdrop-blur-xl flex items-center justify-center text-4xl font-bold shadow-2xl animate-scale-in">
-                                KN
+                                K
                             </div>
                             <h2 className="text-5xl font-bold leading-tight">
                                 Welcome to

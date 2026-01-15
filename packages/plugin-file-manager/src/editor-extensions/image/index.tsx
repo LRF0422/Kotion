@@ -23,7 +23,20 @@ export const ImageExtension: ExtensionWrapper = {
 			slash: '/image',
 			icon: <ImageIcon className="h-4 w-4" />,
 			action: (editor) => {
-				showFolderDlg(editor)
+				showFolderDlg(editor, (files) => {
+					if (files && files.length > 0) {
+						const file = files[0];
+						// Use file path if available, otherwise use id
+						const src = file.path || file.id;
+						editor
+							.chain()
+							.focus()
+							.setImage({
+								src: src
+							})
+							.run();
+					}
+				});
 			}
 		}
 	]

@@ -35,6 +35,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
             name: file.name,
             isFolder: file.type.value === 'FOLDER',
             type: file.type,
+            path: file.path,
         };
 
         if (file.children) {

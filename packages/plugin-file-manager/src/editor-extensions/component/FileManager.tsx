@@ -116,6 +116,8 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
             id: file.id,
             name: file.name,
             isFolder: file.type.value === 'FOLDER',
+            path: file.path,
+            type: file.type,
             icon: file.type.value === 'FOLDER' ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />,
             onClick: () => {
                 if (file.type.value === 'FOLDER') {
