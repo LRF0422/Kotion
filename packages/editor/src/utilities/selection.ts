@@ -152,19 +152,6 @@ export function getSelectionDepth(state: EditorState): number {
     return selection.$from.depth;
 }
 
-// /**
-//  * Check if the current selection is a node selection
-//  */
-// export function isNodeSelection(selection: Selection): selection is NodeSelection {
-//     return selection instanceof NodeSelection;
-// }
-
-/**
- * Check if the current selection is a text selection
- */
-export function isTextSelection(selection: Selection): selection is TextSelection {
-    return selection instanceof TextSelection;
-}
 
 /**
  * Get the common ancestor node of the selection
@@ -248,3 +235,6 @@ export function getSelectionBoundsInNode(
         return null;
     }
 }
+
+
+export const test = () => { }

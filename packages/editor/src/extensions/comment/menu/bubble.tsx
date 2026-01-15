@@ -55,8 +55,6 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, onReply, onDelete, i
                     <div className="flex items-center justify-between">
                         <div className="font-medium text-sm truncate">{comment.user.name}</div>
                         <IconButton
-                            size="sm"
-                            variant="ghost"
                             icon={<MoreHorizontalIcon className="h-4 w-4" />}
                         />
                     </div>
@@ -101,24 +99,15 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, onReply, onDelete, i
             ) : (
                 <div className="flex items-center gap-1">
                     <IconButton
-                        size="sm"
-                        variant="ghost"
                         icon={<ReplyIcon className="h-4 w-4" />}
                         onClick={() => setIsEditing(true)}
-                        title="Reply to comment"
                     />
                     <IconButton
-                        size="sm"
-                        variant="ghost"
                         icon={<Trash2 className="h-4 w-4" />}
                         onClick={() => onDelete?.(comment.uuid)}
-                        title="Delete comment"
                     />
                     <IconButton
-                        size="sm"
-                        variant="ghost"
                         icon={<HeartIcon className="h-4 w-4" />}
-                        title="Like comment"
                     />
                 </div>
             )}
@@ -140,7 +129,8 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
 
     // Get current comment thread
     const commentThread = useMemo<CustomCommentInterface | null>(() => {
-        const storage = editor.storage.comment;
+        // @ts-ignore
+        const storage = editor.storage.comments;
         if (!storage || !storage.comments) return null;
         return storage.comments.find((thread: CustomCommentInterface) => thread.threadId === threadId) || null;
     }, [editor, threadId, forceUpdate]); // Add forceUpdate to dependencies
@@ -240,18 +230,12 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
                     {!isNewThread && (
                         <div className="flex items-center gap-1">
                             <IconButton
-                                size="sm"
-                                variant="ghost"
                                 icon={<CheckIcon className="h-4 w-4" />}
                                 onClick={handleResolveThread}
-                                title="Resolve thread"
                             />
                             <IconButton
-                                size="sm"
-                                variant="ghost"
                                 icon={<Trash2 className="h-4 w-4" />}
                                 onClick={handleResolveThread}
-                                title="Delete thread"
                             />
                         </div>
                     )}
@@ -295,19 +279,14 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
                         <div className="flex gap-1">
                             {isNewThread && (
                                 <IconButton
-                                    size="sm"
-                                    variant="ghost"
                                     icon={<XIcon className="h-4 w-4" />}
                                     onClick={handleCancelNewComment}
-                                    title="Cancel"
                                 />
                             )}
                             <IconButton
-                                size="sm"
                                 icon={<CheckIcon className="h-4 w-4" />}
                                 onClick={handleAddComment}
                                 disabled={!newCommentText.trim()}
-                                title="Add comment"
                             />
                         </div>
                     </div>

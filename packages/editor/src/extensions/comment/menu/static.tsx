@@ -27,7 +27,7 @@ export const CommentStaticMenu: React.FC<{ editor: Editor }> = (props) => {
             const threadId = attrs.comment_id;
 
             if (threadId) {
-                const storage = editor.storage.comment;
+                const storage: any = {}
                 const thread = storage?.comments?.find((t: any) => t.threadId === threadId);
 
                 if (thread && thread.comments && thread.comments.length > 0) {
@@ -37,7 +37,7 @@ export const CommentStaticMenu: React.FC<{ editor: Editor }> = (props) => {
             }
         } else {
             // Add a new comment mark with placeholder
-            editor.addComments({ comment: '', parent_id: null });
+            // editor.addComments({ comment: '', parent_id: null });
         }
     }, [editor, isCommentActive]);
 

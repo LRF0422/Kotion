@@ -87,7 +87,7 @@ export const CodeBlockView: React.FC<NodeViewProps> = ({
           </div>
           <div className="p-4">
             <pre ref={$container} className="m-0 overflow-x-auto">
-              <NodeViewContent as="code" />
+              <NodeViewContent />
             </pre>
           </div>
         </div>

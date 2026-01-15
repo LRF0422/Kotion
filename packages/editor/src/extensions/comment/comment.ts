@@ -104,7 +104,7 @@ const Comments = Mark.create<CommentOptionsInterface, CommentsStorageInterface>(
 
                     if (comment.parent_id) {
                         // Add reply to existing thread
-                        const threadIndex = findIndex(this.storage.comments, { threadId: this.storage.comment_id });
+                        const threadIndex = findIndex(this.storage.comments, { threadId: "" });
 
                         if (threadIndex === -1) {
                             console.error('[Comment Extension] Thread not found');
@@ -178,7 +178,7 @@ const Comments = Mark.create<CommentOptionsInterface, CommentsStorageInterface>(
                     // If no comments left in thread, remove the thread and unmark text
                     if (thread.comments.length === 0) {
                         comments.splice(threadIndex, 1);
-                        this.removeMarkFromDocument(threadId);
+                        // this.removeMarkFromDocument(threadId);
                     }
 
                     // Sync to document after removing comment
@@ -224,24 +224,6 @@ const Comments = Mark.create<CommentOptionsInterface, CommentsStorageInterface>(
                     return false;
                 }
             }
-        }
-    },
-    removeMarkFromDocument(threadId: string) {
-        try {
-            this.editor.state.doc.descendants((node, pos) => {
-                const { marks } = node;
-                marks.forEach((mark) => {
-                    if (mark.type.name === 'comment' && mark.attrs.comment_id === threadId) {
-                        const from = pos;
-                        const to = pos + (node.nodeSize || 0);
-
-                        this.editor.commands.setTextSelection({ from, to });
-                        this.editor.commands.unsetMark('comment');
-                    }
-                });
-            });
-        } catch (error) {
-            console.error('[Comment Extension] Error removing mark from document:', error);
         }
     },
     onCreate() {

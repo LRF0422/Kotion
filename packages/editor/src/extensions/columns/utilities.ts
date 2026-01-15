@@ -25,7 +25,7 @@ export function getColumnsNodeTypes(schema: Schema): { columns: NodeType; column
 
   if (schema.cached.columnsNodeTypes) {
     cachedColumnsNodeTypes = schema.cached.columnsNodeTypes;
-    return cachedColumnsNodeTypes;
+    return cachedColumnsNodeTypes!;
   }
 
   const roles = {

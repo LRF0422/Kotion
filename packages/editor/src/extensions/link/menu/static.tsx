@@ -36,7 +36,7 @@ export const LinkStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
             pressed={isLinkActive}
             className="hover:bg-accent"
           >
-            <IconLink className="h-4 w-4" />
+            <IconLink />
           </Toggle>
         </TooltipTrigger>
         <TooltipContent side="top">

@@ -33,15 +33,17 @@ const URL_PATTERNS = {
  * Custom Link extension with enhanced functionality
  */
 export const Link = BuiltInLink.extend({
+  // @ts-ignore
   addOptions() {
+    const parentOptions = this.parent?.() || {};
     return {
-      ...this.parent?.(),
+      ...parentOptions,
       openOnClick: false,
       HTMLAttributes: {
         target: '_blank',
         rel: 'noopener noreferrer nofollow',
         class: 'link-extension'
-      }
+      },
     };
   },
 

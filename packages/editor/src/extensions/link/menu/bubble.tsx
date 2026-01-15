@@ -90,7 +90,7 @@ export const LinkBubbleMenu: React.FC<IProps> = ({ editor }) => {
                 disabled={!href}
                 className="hover:bg-accent"
               >
-                <IconVisitlink className="h-4 w-4" />
+                <IconVisitlink />
               </Toggle>
             </TooltipTrigger>
             <TooltipContent side="top">
@@ -105,7 +105,7 @@ export const LinkBubbleMenu: React.FC<IProps> = ({ editor }) => {
               <TooltipTrigger asChild>
                 <PopoverTrigger asChild>
                   <Toggle size="sm" pressed={editOpen} className="hover:bg-accent">
-                    <IconEdit className="h-4 w-4" />
+                    <IconEdit />
                   </Toggle>
                 </PopoverTrigger>
               </TooltipTrigger>
@@ -139,7 +139,7 @@ export const LinkBubbleMenu: React.FC<IProps> = ({ editor }) => {
                 pressed={false}
                 className="hover:bg-destructive hover:text-destructive-foreground"
               >
-                <IconUnlink className="h-4 w-4" />
+                <IconUnlink />
               </Toggle>
             </TooltipTrigger>
             <TooltipContent side="top">

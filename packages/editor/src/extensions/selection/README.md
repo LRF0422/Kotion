@@ -142,16 +142,11 @@ const expandedSelection = expandSelectionToParent(editor.state);
 
 ```typescript
 import {
-  isNodeSelection,
-  isTextSelection
+  isNodeSelection
 } from '@kn/editor';
 
 if (isNodeSelection(editor.state.selection)) {
   console.log('Node is selected');
-}
-
-if (isTextSelection(editor.state.selection)) {
-  console.log('Text range is selected');
 }
 ```
 

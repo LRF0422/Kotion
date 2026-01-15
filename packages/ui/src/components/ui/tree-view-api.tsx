@@ -178,7 +178,7 @@ const Tree = memo(forwardRef<HTMLDivElement, TreeViewProps>(
             }
         }, [initialSelectedId, elements]);
 
-        const direction = dir === "rtl" ? "rtl" : "ltr";
+        const direction: "rtl" | "ltr" = dir === "rtl" ? "rtl" : "ltr";
 
         // Memoize context value to prevent unnecessary re-renders of all tree children
         // This is critical for performance as context changes trigger re-renders in all consumers
