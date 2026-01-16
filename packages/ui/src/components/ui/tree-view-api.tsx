@@ -28,7 +28,7 @@ type TreeViewElement = {
     emptyProps?: EmptyProps,
     actions?: ReactNode[],
     customerRender?: ReactNode,
-    height?: number
+    height?: string
 };
 export type Size = 'default' | 'md' | 'sm'
 type TreeContextProps = {
@@ -529,6 +529,14 @@ CollapseButton.displayName = "CollapseButton";
  * - useMemo for conditional scroll area rendering
  */
 const TreeItemGroup: React.FC<any> = memo((props) => {
+    const hasHeight = props.height !== undefined;
+    const contentWrapperClass = hasHeight
+        ? "overflow-y-auto overflow-x-hidden"
+        : "";
+    const contentStyle = hasHeight
+        ? { maxHeight: props.height }
+        : {};
+
     return <div className={props.className || ""}>
         <div className={`p-1 text-xs text-gray-500 flex justify-between items-center flex-shrink-0`}>
             <div>
@@ -538,7 +546,9 @@ const TreeItemGroup: React.FC<any> = memo((props) => {
                 {props.actions}
             </div>
         </div>
-        {props.children}
+        <div className={contentWrapperClass} style={contentStyle}>
+            {props.children}
+        </div>
     </div>
 });
 TreeItemGroup.displayName = "TreeItemGroup"

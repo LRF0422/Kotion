@@ -32,7 +32,7 @@ export interface SiderMenuItemProps {
     emptyProps?: EmptyProps
     actions?: ReactNode[]
     customerRender?: ReactNode
-    height?: number
+    height?: string
 }
 
 export interface SiderMenuProps {
