@@ -1,72 +1,75 @@
 import React from "react";
-
+import { Github, Twitter, Facebook, Instagram, Linkedin } from "@kn/icon";
 
 export const Footer: React.FC = () => {
-    return <footer className="border-t border-gray-200 dark:border-gray-700 py-12">
+    return <footer className="border-t border-border bg-muted/20 py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
-                <div className="col-span-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12">
+                <div className="lg:col-span-2">
                     <div className="flex items-center mb-4">
-                        {/* <img className="h-8 w-auto" src="https://p3-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/db52835a91294c1995afd744e9c2df91~tplv-a9rns2rl98-image.image?rcl=20251011093920F1590232204D8A60C141&rk3s=8e244e95&rrcfp=f06b921b&x-expires=1762738781&x-signature=%2FxikC6RAqb%2FUZ8aGUsDWvEvIUxc%3D" alt="Notion Logo" /> */}
                         <span className="ml-2 text-xl font-semibold text-notion">Kotion</span>
                     </div>
-                    <p className="text-notion-light mb-4">All-in-one workspace for your notes, tasks, wikis, and databases.</p>
+                    <p className="text-notion-light mb-6 max-w-xs">All-in-one workspace for your notes, tasks, wikis, and databases.</p>
                     <div className="flex space-x-4">
-                        <a href="#" className="text-notion-light hover:text-notion">
-                            <i className="fa fa-twitter" aria-hidden="true"></i>
+                        <a href="#" className="text-notion-light hover:text-primary transition-colors duration-200">
+                            <Twitter className="h-5 w-5" />
                         </a>
-                        <a href="#" className="text-notion-light hover:text-notion">
-                            <i className="fa fa-facebook" aria-hidden="true"></i>
+                        <a href="#" className="text-notion-light hover:text-primary transition-colors duration-200">
+                            <Facebook className="h-5 w-5" />
                         </a>
-                        <a href="#" className="text-notion-light hover:text-notion">
-                            <i className="fa fa-instagram" aria-hidden="true"></i>
+                        <a href="#" className="text-notion-light hover:text-primary transition-colors duration-200">
+                            <Instagram className="h-5 w-5" />
                         </a>
-                        <a href="#" className="text-notion-light hover:text-notion">
-                            <i className="fa fa-linkedin" aria-hidden="true"></i>
+                        <a href="#" className="text-notion-light hover:text-primary transition-colors duration-200">
+                            <Linkedin className="h-5 w-5" />
+                        </a>
+                        <a href="#" className="text-notion-light hover:text-primary transition-colors duration-200">
+                            <Github className="h-5 w-5" />
                         </a>
                     </div>
                 </div>
 
                 <div>
                     <h3 className="text-notion font-medium mb-4">Product</h3>
-                    <ul className="space-y-2">
-                        <li><a href="#" className="text-notion-light hover:text-notion">Features</a></li>
-                        <li><a href="#" className="text-notion-light hover:text-notion">Templates</a></li>
-                        <li><a href="#" className="text-notion-light hover:text-notion">Pricing</a></li>
-                        <li><a href="#" className="text-notion-light hover:text-notion">Integrations</a></li>
-                        <li><a href="#" className="text-notion-light hover:text-notion">Enterprise</a></li>
+                    <ul className="space-y-3">
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">Features</a></li>
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">Templates</a></li>
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">Pricing</a></li>
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">Integrations</a></li>
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">Enterprise</a></li>
                     </ul>
                 </div>
 
                 <div>
                     <h3 className="text-notion font-medium mb-4">Resources</h3>
-                    <ul className="space-y-2">
-                        <li><a href="#" className="text-notion-light hover:text-notion">Documentation</a></li>
-                        <li><a href="#" className="text-notion-light hover:text-notion">Guides</a></li>
-                        <li><a href="#" className="text-notion-light hover:text-notion">API Reference</a></li>
-                        <li><a href="#" className="text-notion-light hover:text-notion">Community</a></li>
-                        <li><a href="#" className="text-notion-light hover:text-notion">Blog</a></li>
+                    <ul className="space-y-3">
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">Documentation</a></li>
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">Guides</a></li>
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">API Reference</a></li>
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">Community</a></li>
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">Blog</a></li>
                     </ul>
                 </div>
 
                 <div>
                     <h3 className="text-notion font-medium mb-4">Company</h3>
-                    <ul className="space-y-2">
-                        <li><a href="#" className="text-notion-light hover:text-notion">About</a></li>
-                        <li><a href="#" className="text-notion-light hover:text-notion">Careers</a></li>
-                        <li><a href="#" className="text-notion-light hover:text-notion">Contact</a></li>
-                        <li><a href="#" className="text-notion-light hover:text-notion">Press</a></li>
-                        <li><a href="#" className="text-notion-light hover:text-notion">Legal</a></li>
+                    <ul className="space-y-3">
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">About</a></li>
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">Careers</a></li>
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">Contact</a></li>
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">Press</a></li>
+                        <li><a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 block">Legal</a></li>
                     </ul>
                 </div>
             </div>
 
-            <div className="border-t border-gray-200 dark:border-gray-700 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
+            <div className="border-t border-border mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
                 <p className="text-notion-light text-sm mb-4 md:mb-0">© 2025 Kotion. All rights reserved.</p>
-                <div className="flex space-x-6">
-                    <a href="#" className="text-notion-light hover:text-notion text-sm">Terms of Service</a>
-                    <a href="#" className="text-notion-light hover:text-notion text-sm">Privacy Policy</a>
-                    <a href="#" className="text-notion-light hover:text-notion text-sm">Cookie Policy</a>
+                <div className="flex flex-wrap justify-center gap-6">
+                    <a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 text-sm">Terms of Service</a>
+                    <a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 text-sm">Privacy Policy</a>
+                    <a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 text-sm">Cookie Policy</a>
+                    <a href="#" className="text-notion-light hover:text-primary transition-colors duration-200 text-sm">Status</a>
                 </div>
             </div>
         </div>

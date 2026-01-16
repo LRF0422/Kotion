@@ -99,7 +99,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
         description: z.string().min(10, "插件描述至少10个字符").max(200, "插件描述最多200个字符"),
         versionDescs: z.array(z.object({
             label: z.string(),
-            content: z.object({})
+            content: z.string()
         }))
     })
 

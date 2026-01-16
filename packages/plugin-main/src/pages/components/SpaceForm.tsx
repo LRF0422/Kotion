@@ -30,7 +30,7 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
             icon: z.string()
         }),
         name: z.string({
-            required_error: "You need to type a space name"
+            error: "You need to type a space name"
         }),
         description: z.string(),
         nickName: z.string().default(userInfo?.name as string),

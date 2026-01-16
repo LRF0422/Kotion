@@ -1,7 +1,11 @@
 // Extend Window interface to include custom __KN__ property
 declare global {
     interface Window {
-        __KN__?: Record<string, any>
+        ui: any,
+        common: any,
+        core: any,
+        icon: any,
+        editor: any
     }
 }
 
@@ -19,7 +23,7 @@ export const importScript = (() => {
             script.addEventListener('load', () => {
                 document.head.removeChild(script)
                 // Access plugin from scoped namespace
-                const Com = (window as any)[packageName] || window.__KN__?.[packageName]
+                const Com = (window as any)[packageName]
                 if (!Com) {
                     reject(new Error(`Plugin ${packageName} not found in window scope`))
                     return
