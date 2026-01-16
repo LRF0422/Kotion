@@ -75,12 +75,6 @@ export const Marketplace: React.FC = () => {
 
     return <div className="w-full min-h-screen bg-gradient-to-b from-background to-muted/20">
         <div className="flex justify-between items-center w-full px-8 py-6 border-b bg-background/95 backdrop-blur-sm sticky top-0 z-10 shadow-sm">
-            <div>
-                <Button size="sm" variant="outline" className="shadow-sm hover:shadow-md transition-shadow">
-                    <ArchiveIcon className="h-4 w-4 mr-2" />
-                    Installed Plugins
-                </Button>
-            </div>
             <div className="flex-1 max-w-2xl mx-8">
                 <Input
                     placeholder="Search plugins..."
@@ -195,7 +189,7 @@ export const Marketplace: React.FC = () => {
                             icons={[BoxIcon]}
                             description="Try adjusting your search or category filter"
                         />
-                    ) : <div className="grid xl:grid-cols-4 2xl:grid-cols-4 3xl:grid-cols-5 md:grid-cols-3 sm:grid-cols-2 gap-6 w-full animate-in fade-in-50 duration-500">
+                    ) : <div className="grid xl:grid-cols-4 2xl:grid-cols-4 3xl:grid-cols-5 md:grid-cols-3 sm:grid-cols-2 gap-3 w-full animate-in fade-in-50 duration-500">
                         {
                             plugins.map((plugin, index) => (
                                 <div key={index} className="group">
@@ -206,7 +200,7 @@ export const Marketplace: React.FC = () => {
                                         <CardHeader className="space-y-4 pb-4">
                                             <CardTitle className="text-base">
                                                 <div className="flex items-start gap-3">
-                                                    <Avatar className="rounded-lg w-16 h-16 ring-2 ring-border group-hover:ring-primary/50 transition-all shadow-md">
+                                                    <Avatar className="rounded-lg w-16 h-16 ">
                                                         <img src={usePath(plugin.icon)} alt={plugin.name} className="object-cover" />
                                                     </Avatar>
                                                     <div className="flex flex-col gap-1.5 flex-1 min-w-0">
@@ -269,7 +263,7 @@ export const Marketplace: React.FC = () => {
                 }
                 {/* CTA Section */}
                 <div className="w-full max-w-7xl mx-auto px-4 py-12">
-                    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border-2 border-primary/20 shadow-2xl">
+                    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/20">
                         <div className="relative flex flex-col md:flex-row justify-between items-center p-12 gap-8">
                             <div className="flex-1 space-y-3">
                                 <h2 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text ">
