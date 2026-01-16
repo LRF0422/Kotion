@@ -68,6 +68,21 @@ export const App: React.FC<AppProps> = (props) => {
     const { usePath } = core.useUploadFile()
     const pluginManager = useMemo(() => new common.PluginManager(usePath, plugins), [])
     const [pluginsReady, setPluginsReady] = useState(false)
+    const [refreshFlag, setRefreshFlag] = useState(0)
+
+    // Listen for plugin refresh events to update routes
+    useEffect(() => {
+        const handleRefresh = () => {
+            console.log('Received REFRESH_PLUSINS event, updating router');
+            setRefreshFlag(prev => prev + 1);
+        };
+
+        event.on("REFRESH_PLUSINS", handleRefresh);
+
+        return () => {
+            event.off("REFRESH_PLUSINS", handleRefresh);
+        };
+    }, []);
 
     // Initialize i18n immediately without plugin locales
     useEffect(() => {
@@ -94,7 +109,7 @@ export const App: React.FC<AppProps> = (props) => {
 
     // Create/Update router when plugins are loaded
     useEffect(() => {
-        console.log('Router useEffect triggered. pluginsReady:', pluginsReady);
+        console.log('Router useEffect triggered. pluginsReady:', pluginsReady, 'refreshFlag:', refreshFlag);
 
         if (pluginsReady && pluginManager) {
             const pluginLocales = pluginManager.resloveLocales()
@@ -137,7 +152,7 @@ export const App: React.FC<AppProps> = (props) => {
             ))
             setRouter(minimalRouter)
         }
-    }, [pluginsReady, pluginManager])
+    }, [pluginsReady, pluginManager, refreshFlag])
 
     return router ? <AppContext.Provider value={{
         pluginManager: pluginManager

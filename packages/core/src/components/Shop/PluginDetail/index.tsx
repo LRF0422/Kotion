@@ -100,7 +100,7 @@ export const PluginDetail: React.FC = () => {
                 </div>
 
                 {/* Content Layout: Tabs on Left, Info on Right */}
-                <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-0">
+                <div className="grid grid-cols-1 grid-cols-[1fr_320px] gap-0">
                     {/* Main Content Area with Tabs */}
                     <div className="border-r">
                         <Tabs className="w-full" defaultValue={pluginDetail.currentVersion?.versionDescription?.[0]?.label || "Overview"}>

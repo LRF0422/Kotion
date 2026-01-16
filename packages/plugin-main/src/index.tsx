@@ -10,6 +10,9 @@ import { LayoutGrid } from '@kn/icon'
 import "@kn/ui/globals.css"
 import { spaceService } from './service/space-service'
 export * from "./service"
+import pkg from '../package.json'
+
+
 
 
 
@@ -17,11 +20,11 @@ interface DefaultPluginProps extends PluginConfig {
 
 }
 class DefaultPlugin extends KPlugin<DefaultPluginProps> {
-
+  pluginKey: string = pkg.name
 }
 
 export const DefaultPluginInstance = new DefaultPlugin({
-  name: 'Default',
+  name: 'Basic plugin',
   status: 'ACTIVE',
   routes: [
     { name: '/', path: '/', element: <Home /> },

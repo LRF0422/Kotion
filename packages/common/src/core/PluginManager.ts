@@ -23,6 +23,7 @@ export interface PluginConfig {
 export class KPlugin<T extends PluginConfig> {
 
     name: string
+    pluginKey: string = ""
     private _routes?: RouteConfig[]
     private _globalRoutes?: RouteConfig[]
     private _editorExtension?: ExtensionWrapper[]
@@ -194,6 +195,7 @@ export class PluginManager {
     }
 
     uninstallPlugin(key: string) {
+        logger.info('pluginStore ', this._pluginMap);
         const plugin = this._pluginMap.get(key)
         if (!plugin) {
             logger.warn(`Plugin ${key} not found, cannot uninstall`)
