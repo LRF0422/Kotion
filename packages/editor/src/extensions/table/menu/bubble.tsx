@@ -12,9 +12,11 @@ import { triggerExcelImport } from "../utilities/excel-import";
 
 import { Table } from "../table";
 import { IconAddColumnAfter, IconAddColumnBefore, IconAddRowAfter, IconAddRowBefore, IconCopy, IconDeleteColumn, IconDeleteRow, IconDeleteTable, IconMergeCell, IconSplitCell, IconTableHeaderCell, IconTableHeaderColumn, IconTableHeaderRow, IconImport } from "../../../icons";
-import { Toggle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
+import { Toggle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, ColorPicker, useTheme, createThemeAwareColor, getColorForTheme } from "@kn/ui";
 
 export const TableBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ editor }) => {
+  const { theme } = useTheme();
+
   const shouldShow = useCallback<BubbleMenuProps["shouldShow"]>(() => {
     return editor.isActive(Table.name) && editor.isEditable;
   }, [editor]);
@@ -80,6 +82,36 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ edito
 
   const canSplitCell = useMemo(() => {
     return editor.can().splitCell();
+  }, [editor]);
+
+  // Get current cell background color
+  const currentCellBackgroundColor = useMemo(() => {
+    const { selection } = editor.state;
+    const cellNode = editor.state.doc.nodeAt(selection.from - 1);
+    if (cellNode && (cellNode.type.name === 'tableCell' || cellNode.type.name === 'tableHeader')) {
+      const bgColor = cellNode.attrs.backgroundColor;
+      if (!bgColor) return '';
+
+      // If it's a theme-aware color object, get the color for current theme
+      if (typeof bgColor === 'object' && bgColor.base) {
+        return getColorForTheme(bgColor, theme);
+      }
+
+      // Legacy format - return as is
+      return bgColor;
+    }
+    return '';
+  }, [editor.state, theme]);
+
+  // Cell background color handlers
+  const handleCellBackgroundColor = useCallback((color: string) => {
+    // Create theme-aware color variants
+    const themeAwareColor = createThemeAwareColor(color);
+    editor.chain().focus().setCellAttribute('backgroundColor', themeAwareColor).run();
+  }, [editor]);
+
+  const handleUnsetCellBackgroundColor = useCallback(() => {
+    editor.chain().focus().setCellAttribute('backgroundColor', null).run();
   }, [editor]);
 
   return (
@@ -272,6 +304,23 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ edito
               )}
             </>
           )}
+
+          <Divider />
+
+          {/* Cell Background Color */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <ColorPicker
+                  simple
+                  background={currentCellBackgroundColor}
+                  setBackground={handleCellBackgroundColor}
+                  handleUnSet={handleUnsetCellBackgroundColor}
+                />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>Cell Background Color</TooltipContent>
+          </Tooltip>
 
           <Divider />
 

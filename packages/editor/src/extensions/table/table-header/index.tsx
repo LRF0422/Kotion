@@ -7,6 +7,7 @@ import React from "react";
 
 import { getCellsInRow, isColumnSelected, selectColumn } from "../utilities";
 import { IconPlus } from "../../../icons";
+import { getColorForTheme } from "@kn/ui";
 
 export interface TableHeaderOptions {
   HTMLAttributes: Record<string, any>;
@@ -47,6 +48,58 @@ export const TableHeader = Node.create<TableHeaderOptions, TableHeaderStorage>({
       },
       style: {
         default: null
+      },
+      backgroundColor: {
+        default: null,
+        parseHTML: element => {
+          const bgColor = element.style.backgroundColor;
+          if (!bgColor) return null;
+
+          // Try to parse as theme-aware color object stored in data attribute
+          const themeData = element.getAttribute('data-bg-color-theme');
+          if (themeData) {
+            try {
+              return JSON.parse(themeData);
+            } catch (e) {
+              // Fall back to simple color string
+            }
+          }
+
+          return bgColor;
+        },
+        renderHTML: attributes => {
+          if (!attributes.backgroundColor) {
+            return {};
+          }
+
+          let bgColorLight: string;
+          let bgColorDark: string;
+          let themeData: string | undefined;
+
+          if (typeof attributes.backgroundColor === 'string') {
+            // Simple color string - use as is (for backward compatibility)
+            return {
+              style: `background-color: ${attributes.backgroundColor}`
+            };
+          } else {
+            // Theme-aware color object
+            bgColorLight = attributes.backgroundColor.light;
+            bgColorDark = attributes.backgroundColor.dark;
+            themeData = JSON.stringify(attributes.backgroundColor);
+          }
+
+          const result: Record<string, string> = {
+            // Use CSS custom properties for theme-aware coloring
+            style: `--bg-color-light: ${bgColorLight}; --bg-color-dark: ${bgColorDark}; background-color: var(--bg-color-light);`,
+            class: 'theme-adaptive-cell'
+          };
+
+          if (themeData) {
+            result['data-bg-color-theme'] = themeData;
+          }
+
+          return result;
+        }
       }
     };
   },

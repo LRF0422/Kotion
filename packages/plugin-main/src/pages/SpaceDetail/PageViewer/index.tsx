@@ -4,6 +4,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from "@kn/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { Separator } from "@kn/ui";
+import { Skeleton } from "@kn/ui";
 import { EditorRender, findNodeByBlockId } from "@kn/editor";
 import { event, ON_FAVORITE_CHANGE } from "../../../event";
 import { useLocation } from "@kn/common";
@@ -84,11 +85,41 @@ export const PageViewer: React.FC = () => {
         })
     }
 
-    return loading ? <div className="w-full h-full flex items-center justify-center">
-        <div className="flex flex-row gap-2 items-center">
-            Loading...
-            <Loader className="animate-spin h-5 w-5" />
-        </div>
+    return loading ? <div className="w-full h-full">
+        <header className="h-11 w-full flex flex-row justify-between px-1 border-b">
+            <div className="flex flex-row items-center gap-2 px-1 text-sm">
+                <Skeleton className="h-5 w-5 rounded" />
+                <Skeleton className="h-5 w-48" />
+            </div>
+            <div className="flex flex-row items-center gap-1 px-1">
+                <Skeleton className="h-8 w-10" />
+                <Separator orientation="vertical" />
+                <Skeleton className="h-8 w-10" />
+                <Skeleton className="h-8 w-10" />
+                <Skeleton className="h-8 w-10" />
+                <Skeleton className="h-8 w-10" />
+            </div>
+        </header>
+        <main className="w-full flex flex-row justify-center p-8">
+            <div className="w-full max-w-[900px] flex flex-col gap-6">
+                {/* Title Skeleton */}
+                <div className="flex flex-col gap-3">
+                    <Skeleton className="h-12 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                </div>
+                {/* Content Skeleton */}
+                <div className="flex flex-col gap-4">
+                    <Skeleton className="h-6 w-full" />
+                    <Skeleton className="h-6 w-full" />
+                    <Skeleton className="h-6 w-5/6" />
+                    <Skeleton className="h-32 w-full rounded-lg" />
+                    <Skeleton className="h-6 w-full" />
+                    <Skeleton className="h-6 w-4/5" />
+                    <Skeleton className="h-6 w-full" />
+                    <Skeleton className="h-24 w-full rounded-lg" />
+                </div>
+            </div>
+        </main>
     </div> : (page && <div className="w-full h-full">
         <header className="h-11 w-full flex flex-row justify-between px-1 border-b ">
             <div className="flex flex-row items-center gap-2 px-1 text-sm">

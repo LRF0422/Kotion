@@ -1,6 +1,6 @@
 import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
-import { IconButton, TreeView, cn } from "@kn/ui";
-import { ArrowLeft, CircleArrowUp, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, MoreVertical, Package, Plus, Settings, ShareIcon, Star, StarIcon, Trash2, Undo2, UserCircle, AlertCircle } from "@kn/icon";
+import { IconButton, TreeView } from "@kn/ui";
+import { ArrowLeft, CircleArrowUp, Clock, Copy, LayoutDashboard, LayoutTemplate, MoreHorizontal, Package, Plus, Settings, Star, StarIcon, Trash2, Undo2, UserCircle, AlertCircle } from "@kn/icon";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@kn/ui";
 import { useApi, useService, useUploadFile } from "@kn/core";
@@ -17,9 +17,7 @@ import { event, ON_FAVORITE_CHANGE, ON_PAGE_REFRESH } from "../../event";
 import { Card } from "@kn/ui";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@kn/ui";
 import { useToggle } from "@kn/core";
-import { Empty } from "@kn/ui";
 import { MultiSelect } from "@kn/ui";
-import { SpaceHub } from "../SpaceHub";
 import { TemplateCreator } from "./TemplateCreator";
 
 export const SpaceDetail: React.FC = () => {
@@ -286,7 +284,7 @@ export const SpaceDetail: React.FC = () => {
 
         if (!treeNode.children) {
             return {
-                icon: treeNode.icon ? treeNode.icon.icon : null,
+                icon: null,
                 name: name,
                 key: treeNode.id,
                 id: treeNode.id,
@@ -304,7 +302,7 @@ export const SpaceDetail: React.FC = () => {
             }
         } else {
             return {
-                icon: treeNode.icon ? treeNode.icon.icon : null,
+                icon: null,
                 name: name,
                 key: treeNode.id,
                 id: treeNode.id,
@@ -404,7 +402,7 @@ export const SpaceDetail: React.FC = () => {
                 <div key="search-actions" className="flex items-center gap-1">
                     <Input
                         onChange={(e) => setSearchValue(e.target.value)}
-                        className="h-7 w-32"
+                        className="h-7"
                         placeholder="Filter..."
                     />
                     <Button
