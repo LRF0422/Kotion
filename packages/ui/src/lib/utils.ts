@@ -55,10 +55,10 @@ function parseColor(color: string): { r: number; g: number; b: number; a: number
   const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
   if (rgbMatch) {
     return {
-      r: parseInt(rgbMatch[1]),
-      g: parseInt(rgbMatch[2]),
-      b: parseInt(rgbMatch[3]),
-      a: rgbMatch[4] ? parseFloat(rgbMatch[4]) : 1
+      r: parseInt(rgbMatch[1] as string),
+      g: parseInt(rgbMatch[2] as string),
+      b: parseInt(rgbMatch[3] as string),
+      a: rgbMatch[4] ? parseFloat(rgbMatch[4] as string) : 1
     };
   }
 

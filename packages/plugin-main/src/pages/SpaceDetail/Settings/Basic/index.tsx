@@ -59,7 +59,7 @@ export const Basic: React.FC = () => {
         <form className="space-y-8" onSubmit={form.handleSubmit(onSubmit)}>
             <div>
                 <h3 className="text-lg font-semibold mb-1">{t("space-settings.basic.title")}</h3>
-                <p className="text-sm text-muted-foreground mb-6">{t("space-settings.basic.description")}</p>
+                <p className="text-sm text-muted-foreground mb-6">{t("space-settings.basic.basic-description")}</p>
                 <Separator className="mb-6" />
 
                 <div className="space-y-6">
