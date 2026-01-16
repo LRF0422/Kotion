@@ -1,10 +1,11 @@
-import { Table2 } from "@kn/icon";
+import { Import, Table2 } from "@kn/icon";
 import { ExtensionWrapper } from "@kn/common";
 import { TableBubbleMenu, TableStaticMenu } from "./menu";
 import { Table } from "./table";
 import { TableCell } from "./table-cell";
 import { TableHeader } from "./table-header";
 import { TableRow } from "./table-row";
+import { triggerExcelImport } from "./utilities/excel-import";
 import React from "react";
 
 export * from "./table";
@@ -33,6 +34,14 @@ export const TableExtension: ExtensionWrapper = {
             slash: '/table',
             action: (editor) => {
                 editor.commands.insertTable()
+            }
+        },
+        {
+            icon: <Import className="w-4 h-4" />,
+            text: "从Excel导入表格",
+            slash: '/excel',
+            action: (editor) => {
+                triggerExcelImport(editor);
             }
         }
     ]

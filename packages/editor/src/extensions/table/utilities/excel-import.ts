@@ -20,6 +20,7 @@ export const parseExcelFile = async (file: File): Promise<string[][]> => {
                 // Convert to 2D array
                 const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, {
                     header: 1,
+                    blankrows: false,
                     defval: '' // Default value for empty cells
                 });
 

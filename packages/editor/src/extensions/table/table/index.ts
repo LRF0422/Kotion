@@ -2,6 +2,9 @@ import { Table as BuiltInTable } from "@tiptap/extension-table";
 
 import { TableCellMenuPlugin } from "../cell-menu-plugin";
 import { TableView } from "./table-view";
+import { Editor } from "@tiptap/core";
+import { triggerExcelImport } from "../utilities/excel-import";
+
 
 export const Table = BuiltInTable.extend({
   // @ts-ignore
