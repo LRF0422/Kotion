@@ -32,7 +32,7 @@ import { uuidv4 } from "lib0/random";
 
 export const BitableView: React.FC<NodeViewProps> = (props) => {
     const { node, updateAttributes, deleteNode, editor } = props;
-    const attrs = node.attrs as BitableAttrs;
+    const attrs = node.attrs;
 
     const [data, setData] = useState<RecordData[]>(attrs.data || []);
     const [currentViewId, setCurrentViewId] = useState(attrs.currentView);

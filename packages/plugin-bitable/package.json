@@ -10,7 +10,7 @@
     "registry": "http://localhost:8081/repository/npm-hosted/"
   },
   "scripts": {
-    "build": "rollup -c rollup.config.mjs"
+    "build": "rollup -c "
   },
   "dependencies": {
     "@kn/common": "workspace:*",
