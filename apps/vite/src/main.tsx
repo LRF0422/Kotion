@@ -18,5 +18,5 @@ import { weaverOA } from "@kn/plugin-weaver-oa"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[]} />
+  <App plugins={[DefaultPluginInstance, mermaid, fileManager, database, excalidraw, drawnix, drawio, drawioV2, blockReference, ai, bitable, weaverOA]} />
 )

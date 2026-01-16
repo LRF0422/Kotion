@@ -76,14 +76,16 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
         try {
             if (!!localStorage.getItem("knowledge-token")) {
+                // Reset plugin manager state before reinitializing to ensure clean state on page refresh
+                console.log('Loading plugins in Layout, refreshFlag:', refreshFlag)
                 const installedPlugins: any[] = (await useApi(APIS.GET_INSTALLED_PLUGINS)).data
                 await pluginManager.init(installedPlugins)
 
                 setPluginsLoaded(true)
                 onPluginsReady(true)
-                // Emit events to notify other components that plugins are ready
+                // Emit event to notify other components that plugins are ready
                 event.emit("PLUGIN_INIT_SUCCESS")
-                event.emit("REFRESH_PLUSINS")
+                // Don't emit REFRESH_PLUSINS here to avoid infinite loop
             } else {
                 // No auth token, redirect to login
                 await pluginManager.init([])

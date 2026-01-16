@@ -2,7 +2,7 @@ import { ArchiveIcon, ArrowUpRight, BoxIcon, Dot, DownloadIcon, FilePlus2, Loade
 import {
     Avatar, Button, Card, CardDescription, CardFooter, CardHeader, CardTitle, EmptyState, IconButton, Input,
     Rate,
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, cn
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, Skeleton, cn
 } from "@kn/ui";
 import React, { useContext, useEffect, useState } from "react";
 import { PluginUploader } from "../PluginUploader";
@@ -29,10 +29,23 @@ export const Marketplace: React.FC = () => {
     const [flag, setFlag] = useState(0)
     const { t } = useTranslation()
     const { pluginManager } = useContext(AppContext)
+    const [isLoading, setIsLoading] = useState<boolean>(false)
+    const [showLoading, setShowLoading] = useState<boolean>(false)
 
     useEffect(() => {
+        setIsLoading(true)
+
+        // Delay showing loading state to avoid flicker on fast loads
+        const loadingTimer = setTimeout(() => {
+            setShowLoading(true)
+        }, 300)
+
         useApi(APIS.GET_PLUGIN_LIST, { pageSize: 10, category: selectCategory === "All" ? null : selectCategory.toLocaleUpperCase() }).then(res => {
             setPlugins(res.data.records)
+        }).finally(() => {
+            clearTimeout(loadingTimer)
+            setShowLoading(false)
+            setIsLoading(false)
         })
     }, [flag, selectCategory])
 
@@ -60,130 +73,221 @@ export const Marketplace: React.FC = () => {
 
     }
 
-    return <div className="w-full">
-        <div className=" flex justify-between items-start w-full px-2 py-3 border-b shadow-sm">
+    return <div className="w-full min-h-screen bg-gradient-to-b from-background to-muted/20">
+        <div className="flex justify-between items-center w-full px-8 py-6 border-b bg-background/95 backdrop-blur-sm sticky top-0 z-10 shadow-sm">
             <div>
-                <Button size="sm" variant="secondary"><ArchiveIcon className="h-4 w-4 mr-1" />Installed Plugins</Button>
+                <Button size="sm" variant="outline" className="shadow-sm hover:shadow-md transition-shadow">
+                    <ArchiveIcon className="h-4 w-4 mr-2" />
+                    Installed Plugins
+                </Button>
             </div>
-            <div className="space-y-2">
-                <Input placeholder="Search plugins" className="h-9 w-[500px] bg-muted" icon={<SearchIcon className="h-4 w-4" />} />
-                <div className="flex gap-2 items-center justify-between w-full text-[16px]">
-                    {
-                        categories.map((it, index) => <div
-                            onClick={() => setSelectCategory(it)}
-                            className={cn("rounded-sm px-3 py-1 hover:bg-muted cursor-pointer transition-colors duration-75", selectCategory === it ? "bg-muted outline  " : "")}
-                            key={index}>
-                            {it}
-                        </div>)
-                    }
-                </div>
+            <div className="flex-1 max-w-2xl mx-8">
+                <Input
+                    placeholder="Search plugins..."
+                    className="h-10 bg-background border-2 shadow-sm focus-visible:shadow-md transition-all"
+                    icon={<SearchIcon className="h-4 w-4" />}
+                />
             </div>
-            <div className="flex gap-2 items-center">
-                <Button size="sm" variant="secondary"><FilePlus2 className="h-4 w-4 mr-1" />Request a plugin</Button>
+            <div className="flex gap-3 items-center">
+                <Button size="sm" variant="outline" className="shadow-sm hover:shadow-md transition-shadow">
+                    <FilePlus2 className="h-4 w-4 mr-2" />
+                    Request Plugin
+                </Button>
                 <PluginUploader>
-                    <Button size="sm"><PlusIcon className="h-4 w-4 mr-1" />Publish plugins</Button>
+                    <Button size="sm" className="shadow-sm hover:shadow-md transition-shadow bg-primary">
+                        <PlusIcon className="h-4 w-4 mr-2" />
+                        Publish Plugin
+                    </Button>
                 </PluginUploader>
             </div>
         </div>
-        <div className="bg-muted/40 w-full rounded-sm px-10  space-y-3 py-2 h-[calc(100vh-102px)] overflow-auto">
-            <div className="w-full">
-                <div className="text-[40px] font-bold font-serif">
-                    {t("marketplace.title", "Enhance your Kotion experience")}
+        <div className="w-full px-12 py-8 space-y-8 h-[calc(100vh-102px)] overflow-auto">
+            {/* Hero Section */}
+            <div className="w-full max-w-7xl mx-auto text-center py-12 space-y-6">
+                <div className="space-y-4">
+                    <h1 className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                        {t("marketplace.title", "Enhance your Kotion experience")}
+                    </h1>
+                    <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto font-light">
+                        {t("marketplace.description", "Discover plugins that extend Kotion's capabilities and help you work more efficiently.")}
+                    </p>
                 </div>
-                <div className="text-[30px] w-full text-ellipsis overflow-hidden font-serif">
-                    {t("marketplace.description", "Discover plugins that extend Kotion's capabilities and help you work more efficiently.")}
+
+                {/* Category Pills */}
+                <div className="flex gap-2 items-center justify-center flex-wrap pt-6">
+                    {
+                        categories.map((it, index) => <button
+                            onClick={() => setSelectCategory(it)}
+                            className={cn(
+                                "rounded-full px-6 py-2.5 font-medium text-sm transition-all duration-200",
+                                "hover:scale-105 hover:shadow-md",
+                                selectCategory === it
+                                    ? "bg-primary text-primary-foreground shadow-lg scale-105"
+                                    : "bg-background border-2 hover:border-primary/50"
+                            )}
+                            key={index}>
+                            {it}
+                        </button>)
+                    }
                 </div>
             </div>
-            <div className="flex gap-2 items-center h-[30px] text-sm">
-                <span>Result</span>
-                <Separator orientation="vertical" />
+
+            {/* Filters Bar */}
+            <div className="flex gap-3 items-center justify-between max-w-7xl mx-auto px-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span className="font-medium">Results</span>
+                    <Separator orientation="vertical" className="h-4" />
+                    <span>{plugins.length} plugins found</span>
+                </div>
                 <Select>
-                    <SelectTrigger className="w-[180px] h-8">
-                        <div className=" mr-2">Sort by</div> <SelectValue placeholder="Theme" />
+                    <SelectTrigger className="w-[180px] h-9 shadow-sm">
+                        <div className="mr-2 text-sm">Sort by</div> <SelectValue placeholder="Relevance" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="light">Light</SelectItem>
-                        <SelectItem value="dark">Dark</SelectItem>
-                        <SelectItem value="system">System</SelectItem>
+                        <SelectItem value="relevance">Relevance</SelectItem>
+                        <SelectItem value="popular">Most Popular</SelectItem>
+                        <SelectItem value="recent">Recently Added</SelectItem>
+                        <SelectItem value="rating">Highest Rated</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
-            {
-                plugins.length === 0 ? (
-                    <EmptyState
-                        className="h-[calc(100vh-160px)] hover:bg-background w-full max-w-none border-none flex flex-col justify-center"
-                        title="No plugins found"
-                        icons={[BoxIcon]}
-                        description="Try searching for something else"
-                    />
-                ) : <div className=" grid xl:grid-cols-4 2xl:grid-cols-4 3xl:grid-clos-5 md:grid-cols-4  gap-2 w-full">
-                    {
-                        plugins.map((plugin, index) => (
-                            <div key={index}>
-                                <Card className="relative hover:bg-muted/30 ">
-                                    <div className=" w-[80px] text-center absolute right-0 top-0 text-xs p-1  rounded-bl-md rounded-tr-md bg-secondary">
-                                        {plugin?.category?.value}
+            {/* Plugin Grid */}
+            <div className="max-w-7xl mx-auto px-4">
+                {
+                    showLoading ? (
+                        <div className="grid xl:grid-cols-4 2xl:grid-cols-4 3xl:grid-cols-5 md:grid-cols-3 sm:grid-cols-2 gap-6 w-full">
+                            {Array.from({ length: 8 }).map((_, index) => (
+                                <Card key={index} className="relative animate-pulse border-2 shadow-lg" style={{
+                                    animationDelay: `${index * 50}ms`,
+                                    animationDuration: '1.5s'
+                                }}>
+                                    <div className="w-[80px] h-[24px] absolute right-0 top-0 rounded-bl-md rounded-tr-md">
+                                        <Skeleton className="w-full h-full" />
                                     </div>
                                     <CardHeader>
-                                        <CardTitle className=" text-sm">
+                                        <CardTitle className="text-sm">
                                             <div className="flex items-center gap-2">
-                                                <Avatar className=" rounded-sm w-[60px] h-[60px]">
-                                                    <img src={usePath(plugin.icon)} alt="logo" />
-                                                </Avatar>
-                                                <div className="flex flex-col gap-1">
-                                                    {plugin.name}
-                                                    <div className="text-xs text-gray-400 space-x-1">
-                                                        <span>{plugin.developer}</span>
-                                                        <span>/</span>
-                                                        <span>{plugin.maintainer}</span>
-                                                    </div>
-                                                    <div className=" flex items-center text-gray-500 italic">
-                                                        <Rate rating={plugin.rating} variant="yellow" disabled size={15} />
-                                                        <Dot />
-                                                        <div className="text-xs flex items-center gap-1">
-                                                            <DownloadIcon className="h-3 w-3" /> {plugin.downloads}
-                                                        </div>
-                                                    </div>
+                                                <Skeleton className="rounded-sm w-[60px] h-[60px]" />
+                                                <div className="flex flex-col gap-2 flex-1">
+                                                    <Skeleton className="h-4 w-3/4" />
+                                                    <Skeleton className="h-3 w-1/2" />
+                                                    <Skeleton className="h-3 w-2/3" />
                                                 </div>
                                             </div>
                                         </CardTitle>
-                                        <CardDescription className="h-[80px] text-wrap overflow-hidden text-ellipsis">
-                                            {plugin.description}
+                                        <CardDescription className="h-[80px] space-y-2 pt-2">
+                                            <Skeleton className="h-3 w-full" />
+                                            <Skeleton className="h-3 w-full" />
+                                            <Skeleton className="h-3 w-4/5" />
                                         </CardDescription>
                                     </CardHeader>
                                     <CardFooter className="pb-3 space-x-1">
-                                        <IconButton
-                                            disabled={!!(plugin.installeddVersions.length > 0)}
-                                            className="px-2 border"
-                                            onClick={() => installPlugin(plugin)}
-                                            icon={(installing && installingPluginId === plugin.currentVersionId) ? <Loader2 className="w-4 h-4 animate-spin" /> : <div className="flex items-center gap-1 text-sm">
-                                                <DownloadIcon className="w-4 h-4" />
-                                                {plugin.installeddVersions.length > 0 ? "Installed" : "Install"}
-                                            </div>} />
-                                        <IconButton className="px-2 border" icon={<div className="flex items-center gap-1 text-sm" onClick={() => {
-                                            navigator.go({
-                                                to: `/plugin-hub/${plugin.id}`
-                                            })
-                                        }}>
-                                            <ArrowUpRight className="w-4 h-4" />
-                                            Details
-                                        </div>} />
+                                        <Skeleton className="h-9 w-24" />
+                                        <Skeleton className="h-9 w-24" />
                                     </CardFooter>
                                 </Card>
-                            </div>
-                        ))
-                    }
-                </div>
-            }
-            <div className="w-full">
-                <div className="flex justify-center items-center w-full p-10 gap-3 bg-muted/70 border rounded-md mt-[30px] mb-[30px]    ">
-                    <div>
-                        <div className=" text-[30px] font-bold">{t("marketplace.create-your-own-plugin")}</div>
-                        <div>Create plugins for Kotion and reach thousands of users worldwide.</div>
+                            ))}
+                        </div>
+                    ) : plugins.length === 0 ? (
+                        <EmptyState
+                            className="h-[calc(100vh-160px)] hover:bg-background w-full max-w-none border-none flex flex-col justify-center"
+                            title="No plugins found"
+                            icons={[BoxIcon]}
+                            description="Try adjusting your search or category filter"
+                        />
+                    ) : <div className="grid xl:grid-cols-4 2xl:grid-cols-4 3xl:grid-cols-5 md:grid-cols-3 sm:grid-cols-2 gap-6 w-full animate-in fade-in-50 duration-500">
+                        {
+                            plugins.map((plugin, index) => (
+                                <div key={index} className="group">
+                                    <Card className="relative h-full border-2 hover:border-primary/50 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-card overflow-hidden">
+                                        <div className="absolute right-0 top-0 px-3 py-1.5 text-xs font-semibold rounded-bl-2xl bg-primary/10 text-primary border-l border-b border-primary/20">
+                                            {plugin?.category?.value}
+                                        </div>
+                                        <CardHeader className="space-y-4 pb-4">
+                                            <CardTitle className="text-base">
+                                                <div className="flex items-start gap-3">
+                                                    <Avatar className="rounded-lg w-16 h-16 ring-2 ring-border group-hover:ring-primary/50 transition-all shadow-md">
+                                                        <img src={usePath(plugin.icon)} alt={plugin.name} className="object-cover" />
+                                                    </Avatar>
+                                                    <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                                                        <div className="font-semibold text-base truncate group-hover:text-primary transition-colors" title={plugin.name}>
+                                                            {plugin.name}
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground flex items-center gap-1 min-w-0">
+                                                            <span className="truncate max-w-[80px]" title={plugin.developer}>{plugin.developer}</span>
+                                                            <span className="flex-shrink-0">/</span>
+                                                            <span className="truncate max-w-[80px]" title={plugin.maintainer}>{plugin.maintainer}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 text-muted-foreground">
+                                                            <Rate rating={plugin.rating} variant="yellow" disabled size={14} />
+                                                            <Dot className="opacity-50" />
+                                                            <div className="text-xs flex items-center gap-1">
+                                                                <DownloadIcon className="h-3 w-3" />
+                                                                <span className="font-medium">{plugin.downloads}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </CardTitle>
+                                            <CardDescription className="h-20 text-sm leading-relaxed line-clamp-3 overflow-hidden" title={plugin.description}>
+                                                {plugin.description}
+                                            </CardDescription>
+                                        </CardHeader>
+                                        <CardFooter className="pb-4 pt-0 gap-2 flex-col">
+                                            <Button
+                                                disabled={!!(plugin.installeddVersions.length > 0)}
+                                                className="w-full shadow-sm hover:shadow-md transition-all"
+                                                size="sm"
+                                                onClick={() => installPlugin(plugin)}
+                                            >
+                                                {(installing && installingPluginId === plugin.currentVersionId) ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                                ) : (
+                                                    <DownloadIcon className="w-4 h-4 mr-2" />
+                                                )}
+                                                {plugin.installeddVersions.length > 0 ? "Installed" : "Install"}
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                className="w-full shadow-sm hover:shadow-md transition-all"
+                                                size="sm"
+                                                onClick={() => {
+                                                    navigator.go({
+                                                        to: `/plugin-hub/${plugin.id}`
+                                                    })
+                                                }}
+                                            >
+                                                <ArrowUpRight className="w-4 h-4 mr-2" />
+                                                View Details
+                                            </Button>
+                                        </CardFooter>
+                                    </Card>
+                                </div>
+                            ))
+                        }
                     </div>
-                    <div className="flex items-center justify-center gap-3">
-                        <Button>{t("marketplace.get-started")}</Button>
-                        <Button variant="secondary">{t("marketplace.doc")}</Button>
+                }
+                {/* CTA Section */}
+                <div className="w-full max-w-7xl mx-auto px-4 py-12">
+                    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border-2 border-primary/20 shadow-2xl">
+                        <div className="relative flex flex-col md:flex-row justify-between items-center p-12 gap-8">
+                            <div className="flex-1 space-y-3">
+                                <h2 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text ">
+                                    {t("marketplace.create-your-own-plugin", "Create Your Own Plugin")}
+                                </h2>
+                                <p className="text-lg text-muted-foreground max-w-xl">
+                                    Create plugins for Kotion and reach thousands of users worldwide. Share your ideas and innovations with the community.
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <Button size="lg" className="shadow-lg hover:shadow-xl transition-all hover:scale-105">
+                                    {t("marketplace.get-started", "Get Started")}
+                                </Button>
+                                <Button size="lg" variant="outline" className="shadow-lg hover:shadow-xl transition-all hover:scale-105 bg-background">
+                                    {t("marketplace.doc", "Documentation")}
+                                </Button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

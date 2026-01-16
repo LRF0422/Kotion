@@ -82,25 +82,13 @@ export const App: React.FC<AppProps> = (props) => {
         }
     }, [])
 
-    // Create initial router with basic routes - plugins will be loaded in Layout
-    useEffect(() => {
-        const basicRouter = createBrowserRouter(createRoutesFromElements(
-            [
-                <Route path='/' element={<Layout onPluginsReady={setPluginsReady} />} errorElement={<ErrorPage />}>
-                    <Route path="/plugin-hub" element={<Shop />}>
-                        <Route path="/plugin-hub" element={<Marketplace />} />
-                        <Route path="/plugin-hub/:id" element={<PluginDetail />} />
-                    </Route>
-                </Route>,
-                <Route path='/login' element={<Login />} />,
-                <Route path='/sign-up' element={<SignUpForm />} />
-            ]
-        ))
-        setRouter(basicRouter)
-    }, [])
+    // DON'T create initial router - wait for plugins to load first
+    // This prevents route matching failures when refreshing on plugin routes
 
-    // Update router when plugins are loaded
+    // Create/Update router when plugins are loaded
     useEffect(() => {
+        console.log('Router useEffect triggered. pluginsReady:', pluginsReady);
+
         if (pluginsReady && pluginManager) {
             const pluginLocales = pluginManager.resloveLocales()
             const res = merge(resources, pluginLocales)
@@ -112,6 +100,7 @@ export const App: React.FC<AppProps> = (props) => {
 
             const routeConfigs = pluginManager.resloveRoutes()
             const routes = routeConfigs.map(it => reslove(it))
+            console.log('Creating router with', routes.length, 'plugin routes')
             const updatedRouter = createBrowserRouter(createRoutesFromElements(
                 [
                     <Route path='/' element={<Layout onPluginsReady={setPluginsReady} />} errorElement={<ErrorPage />}>
@@ -126,6 +115,20 @@ export const App: React.FC<AppProps> = (props) => {
                 ]
             ))
             setRouter(updatedRouter)
+        } else {
+            // Create minimal router while waiting for plugins
+            // The Layout component will show loading screen until plugins are ready
+            console.log('Creating minimal router (plugins not ready yet)')
+            const minimalRouter = createBrowserRouter(createRoutesFromElements(
+                [
+                    <Route path='/' element={<Layout onPluginsReady={setPluginsReady} />} errorElement={<ErrorPage />}>
+                        <Route path="*" element={<div className="flex items-center justify-center h-screen">Loading...</div>} />
+                    </Route>,
+                    <Route path='/login' element={<Login />} />,
+                    <Route path='/sign-up' element={<SignUpForm />} />
+                ]
+            ))
+            setRouter(minimalRouter)
         }
     }, [pluginsReady, pluginManager])
 

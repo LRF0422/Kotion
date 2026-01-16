@@ -1,4 +1,4 @@
-import { ToolSet, streamText } from "ai"
+import { ToolSet, streamText, Output } from "ai"
 import { } from "@ai-sdk/react"
 import { createDeepSeek } from "@ai-sdk/deepseek"
 
@@ -7,7 +7,7 @@ export const deepseek = createDeepSeek({
 })
 
 
-const generateText = (prompt: string, tools?: any): any => {
+const generateText = (prompt: string, tools?: any) => {
     console.log("generateText", prompt);
     return streamText({
         model: deepseek("deepseek-chat"),

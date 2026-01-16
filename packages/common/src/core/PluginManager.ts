@@ -115,8 +115,21 @@ export class PluginManager {
 
     public async init(remotePlugins: any[]) {
         logger.info('Initializing remote plugins:', remotePlugins);
+        logger.info('Current init status:', this._init);
 
         try {
+            // Reset state if reinitializing to ensure clean state
+            if (this._init) {
+                logger.info('PluginManager already initialized, resetting state for reinitialization');
+                this._init = false;
+                // Keep initial plugins but clear remote plugins
+                this.plugins = [...this._initialPlugins];
+                // Rebuild plugin map with only initial plugins
+                this._pluginMap.clear();
+                this._buildPluginMap(this._initialPlugins);
+                this._clearCache();
+            }
+
             if (!remotePlugins || remotePlugins.length === 0) {
                 this.plugins = ([...(this._initialPlugins || [])])
                 this._clearCache()

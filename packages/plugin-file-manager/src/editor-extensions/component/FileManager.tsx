@@ -31,6 +31,8 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const [selectedFiles, setSelectFiles] = useSafeState<FileItem[]>([])
     const [repoKey, setRepoKey] = useState<string>("")
     const [files, setFiles] = useSafeState<any[]>([])
+    const [sidebarLoading, setSidebarLoading] = useState(true)
+    const [isInitialLoad, setIsInitialLoad] = useState(true)
     const { folderId } = props
 
     const {
@@ -138,6 +140,10 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     }, [navigateToFolder, setCurrentItem])
     useEffect(() => {
         const fetchData = async () => {
+            // Only show skeleton on initial load
+            if (isInitialLoad) {
+                setSidebarLoading(true)
+            }
             try {
                 const api = folderId ? APIS.GET_CHILDREN : APIS.GET_ROOT_FOLDER
                 const params = folderId ? { folderId } : undefined
@@ -151,10 +157,15 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 }])
             } catch (err) {
                 console.error('Failed to load folders:', err)
+            } finally {
+                if (isInitialLoad) {
+                    setSidebarLoading(false)
+                    setIsInitialLoad(false)
+                }
             }
         }
         fetchData()
-    }, [folderId, reslove])
+    }, [folderId, reslove, isInitialLoad])
 
     const contextValue = useMemo(() => ({
         selectedFiles,
@@ -230,6 +241,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             onClick={() => {
                                 navigateToFolder(props.folderId || "", "Home")
                             }}
+                            disabled={sidebarLoading}
                         >
                             <LucideHome className="w-4 h-4" />
                         </Button>
@@ -238,7 +250,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             size="sm"
                             className="h-7"
                             onClick={() => handleCreateFile('FOLDER')}
-                            disabled={loading}>
+                            disabled={loading || sidebarLoading}>
                             <FolderPlusIcon className="w-4 h-4" />
                         </Button>
                         <Button
@@ -246,17 +258,39 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             size="sm"
                             className="h-7"
                             onClick={() => handleCreateFile('FILE')}
-                            disabled={loading}>
+                            disabled={loading || sidebarLoading}>
                             <FilePlus2Icon className="w-4 h-4" />
                         </Button>
                     </div>
-                    <TreeView
-                        initialSelectedId={currentFolderId}
-                        selectParent={true}
-                        size="sm"
-                        className="w-[200px] m-0"
-                        elements={files}
-                    />
+                    {sidebarLoading ? (
+                        <div className="p-2 space-y-2">
+                            <div className="space-y-1">
+                                <Skeleton className="h-8 w-full" />
+                                <div className="pl-4 space-y-1">
+                                    <Skeleton className="h-7 w-full" />
+                                    <Skeleton className="h-7 w-full" />
+                                    <Skeleton className="h-7 w-full" />
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <Skeleton className="h-8 w-full" />
+                                <div className="pl-4 space-y-1">
+                                    <Skeleton className="h-7 w-[80%]" />
+                                    <Skeleton className="h-7 w-[90%]" />
+                                    <Skeleton className="h-7 w-[85%]" />
+                                    <Skeleton className="h-7 w-[75%]" />
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <TreeView
+                            initialSelectedId={currentFolderId}
+                            selectParent={true}
+                            size="sm"
+                            className="w-[200px] m-0"
+                            elements={files}
+                        />
+                    )}
                 </div>
                 <div className="overflow-auto w-full flex flex-col h-full">
                     <div className="w-full border-b bg-muted/50 min-h-[40px] flex items-center justify-between px-2" >

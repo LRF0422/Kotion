@@ -85,6 +85,6 @@
     "styled-components": "^6.1.19",
     "vaul": "^0.9.1",
     "y-prosemirror": "^1.2.12",
-    "zod": "^3.23.8"
+    "zod": "^4.3.5"
   }
 }
