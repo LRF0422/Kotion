@@ -7,7 +7,7 @@ import { RadioGroup, RadioGroupItem } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { Switch } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
-import { CollaborationEditor, EditorView, printEditorContent } from "@kn/editor";
+import { CollaborationEditor, EditorView, exportToPDF, printEditorContent } from "@kn/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
 import { useApi, useService } from "@kn/core";
 import { useNavigator } from "@kn/core";
@@ -205,26 +205,6 @@ export const PageEditor: React.FC = () => {
                         {status?.status} {loading && <LoaderCircle className="h-3 w-3 animate-spin" />}
                     </div>
                 </Badge>
-                {/* 
-                <div className="mx-2 ">
-                    {
-                        users ? <div className="flex flex-row gap-2">
-                            {
-                                users.map((user, index) => (
-                                    <Avatar key={index} className={cn("h-7 w-7 outline ease-in")}>
-                                        <AvatarImage src={`http://www.simple-platform.cn:88/knowledge-resource/oss/endpoint/download?fileName=${user?.user?.avatar}`} />
-                                    </Avatar>
-                                ))
-                            }
-                            <CollaborationInvitationDlg>
-                                <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center hover:outline cursor-pointer">
-                                    <Plus className="h-4 w-4" />
-                                </div>
-                            </CollaborationInvitationDlg>
-                        </div> : <div><Loader className="h-4 w-4 animate-spin" /></div>
-                    }
-                </div>
-                <Separator orientation="vertical" /> */}
                 <Button variant="ghost" size="icon" onClick={() => handleSave()}><Save className="h-5 w-5" /></Button>
                 <Button variant="ghost" size="icon" onClick={() => handleSave(true)}><CircleArrowUp className="h-5 w-5" /></Button>
                 <Separator orientation="vertical" />
@@ -356,7 +336,16 @@ export const PageEditor: React.FC = () => {
                                                 <span>as word</span>
                                             </div>
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => printEditorContent(editor.current?.view as EditorView)}>
+                                        <DropdownMenuItem onClick={async () => {
+                                            if (editor.current) {
+                                                exportToPDF(editor.current.view, {
+                                                    filename: `${page.title || 'document'}.pdf`,
+                                                    format: 'a4',
+                                                    orientation: 'portrait',
+                                                    margin: 10
+                                                });
+                                            }
+                                        }}>
                                             <div className="flex flex-row items-center gap-1">
                                                 <FileIcon className="h-4 w-4" />
                                                 <span>as pdf</span>

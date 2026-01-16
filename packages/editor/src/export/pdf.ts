@@ -1,5 +1,19 @@
 import { EditorView } from '@tiptap/pm/view';
+import { PDFExporter, PDFExportOptions } from './PDFExporter';
 
+/**
+ * 导出编辑器内容为PDF
+ * @param view - Tiptap编辑器视图实例
+ * @param options - PDF导出选项
+ */
+export async function exportToPDF(view: EditorView, options: PDFExportOptions = {}) {
+  return await PDFExporter.export(view, options);
+}
+
+/**
+ * @deprecated Use exportToPDF instead
+ * 保持向后兼容性的旧方法
+ */
 function printHtml(dom: Element) {
   const style: string = Array.from(document.querySelectorAll('style, link')).reduce(
     (str, style) => str + style.outerHTML,
@@ -16,16 +30,16 @@ function printHtml(dom: Element) {
 
   // 获取所有的 <meta> 标签
   if (head) {
-     var metaTags = head.getElementsByTagName('meta');
+    var metaTags = head.getElementsByTagName('meta');
 
-  // 遍历 <meta> 标签并更新 charset
-  for (var i = 0; i < metaTags.length; i++) {
-    var metaTag = metaTags[i];
-    if (metaTag.getAttribute('charset')) {
-      metaTag.setAttribute('charset', 'UTF-8');
-      break;
+    // 遍历 <meta> 标签并更新 charset
+    for (var i = 0; i < metaTags.length; i++) {
+      var metaTag = metaTags[i];
+      if (metaTag.getAttribute('charset')) {
+        metaTag.setAttribute('charset', 'UTF-8');
+        break;
+      }
     }
-  }
   } else {
     const head = document.createElement('head');
     const meta = document.createElement('meta');
@@ -69,6 +83,9 @@ function printHtml(dom: Element) {
   }
 }
 
+/**
+ * @deprecated Use exportToPDF instead
+ */
 export function printEditorContent(view: EditorView) {
   const editorContent = view.dom.closest('.ProseMirror');
   if (editorContent) {

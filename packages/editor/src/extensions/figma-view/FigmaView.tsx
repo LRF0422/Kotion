@@ -58,49 +58,49 @@ export const FigmaViewComponent: React.FC<NodeViewProps> = (props) => {
         <Popover open={hover}>
             <PopoverTrigger className="w-full rounded-md border bg-background shadow-sm transition-shadow hover:shadow-md">
                 {
-                    props.node.attrs.url ? 
-                    <div className="bg-background rounded-md overflow-hidden border">
-                        <div className="w-full h-[500px] relative">
-                            {isLoading && (
-                                <div className="absolute inset-0 flex items-center justify-center z-10 bg-background/50">
-                                    <div className="text-center">
-                                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
-                                        <p className="mt-2 text-sm text-muted-foreground">Loading Figma...</p>
+                    props.node.attrs.url ?
+                        <div className="bg-background rounded-md overflow-hidden border">
+                            <div className="w-full h-[500px] relative">
+                                {isLoading && (
+                                    <div className="absolute inset-0 flex items-center justify-center z-10 bg-background/50">
+                                        <div className="text-center">
+                                            <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+                                            <p className="mt-2 text-sm text-muted-foreground">Loading Figma...</p>
+                                        </div>
                                     </div>
-                                </div>
-                            )}
-                            {error && (
-                                <div className="absolute inset-0 flex items-center justify-center z-10 bg-background/80">
-                                    <div className="text-center p-4">
-                                        <div className="text-red-500 mb-2">⚠️ Error</div>
-                                        <p className="text-sm text-muted-foreground">{error}</p>
-                                        <Button 
-                                            variant="outline" 
-                                            size="sm" 
-                                            className="mt-2"
-                                            onClick={() => {
-                                                setIsLoading(true);
-                                                iframeRef.current?.contentWindow?.location.reload();
-                                            }}
-                                        >
-                                            Retry
-                                        </Button>
+                                )}
+                                {error && (
+                                    <div className="absolute inset-0 flex items-center justify-center z-10 bg-background/80">
+                                        <div className="text-center p-4">
+                                            <div className="text-red-500 mb-2">⚠️ Error</div>
+                                            <p className="text-sm text-muted-foreground">{error}</p>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="mt-2"
+                                                onClick={() => {
+                                                    setIsLoading(true);
+                                                    iframeRef.current?.contentWindow?.location.reload();
+                                                }}
+                                            >
+                                                Retry
+                                            </Button>
+                                        </div>
                                     </div>
-                                </div>
-                            )}
-                            <iframe 
-                                className="w-full h-full rounded-sm" 
-                                ref={iframeRef} 
-                                allowFullScreen 
-                                src={`https://www.figma.com/embed?&embed_host=knowledge&url=${encodeURIComponent(
-                                    props.node.attrs.url + (theme ? `&theme=${theme}` : '')
-                                )}`} 
-                                onLoad={handleIframeLoad}
-                                onError={handleIframeError}
-                                style={{ minHeight: '500px' }}
-                            />
-                        </div>
-                    </div> :
+                                )}
+                                <iframe
+                                    className="w-full h-full rounded-sm"
+                                    ref={iframeRef}
+                                    allowFullScreen
+                                    src={`https://www.figma.com/embed?&embed_host=knowledge&url=${encodeURIComponent(
+                                        props.node.attrs.url + (theme ? `&theme=${theme}` : '')
+                                    )}`}
+                                    onLoad={handleIframeLoad}
+                                    onError={handleIframeError}
+                                    style={{ minHeight: '500px' }}
+                                />
+                            </div>
+                        </div> :
                         <div className="border-2 border-dashed rounded-md p-8 text-center transition-colors hover:border-primary/50">
                             <div className="flex flex-col items-center justify-center gap-4">
                                 <FigmaIcon className="h-10 w-10 text-muted-foreground" />

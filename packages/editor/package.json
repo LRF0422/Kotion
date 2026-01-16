@@ -87,7 +87,9 @@
     "tiptap-markdown": "^0.8.10",
     "toggle-selection": "^1.0.6",
     "xlsx": "^0.18.5",
-    "yjs": "^13.6.21"
+    "yjs": "^13.6.21",
+    "jspdf": "^2.5.1",
+    "html2canvas": "^1.4.1"
   },
   "devDependencies": {
     "@kn/eslint-config": "workspace:*",
