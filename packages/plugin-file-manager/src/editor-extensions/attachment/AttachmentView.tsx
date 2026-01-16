@@ -119,7 +119,7 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
                 className={cn(
                     "flex items-center gap-4 p-4 rounded-lg w-full",
                     "bg-muted/50 hover:bg-muted/70 transition-all duration-200",
-                    "border-2 border-border hover:border-primary/50",
+                    "border border-border hover:border-primary/50",
                     "cursor-pointer group",
                     "text-foreground",
                     "shadow-sm hover:shadow-md",
