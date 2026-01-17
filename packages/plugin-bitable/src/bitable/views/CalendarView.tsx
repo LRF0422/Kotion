@@ -316,7 +316,7 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
                                     <SelectValue placeholder="选择结束日期字段（可选）" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">无</SelectItem>
+                                    <SelectItem value="null">无</SelectItem>
                                     {dateFields.map(field => (
                                         <SelectItem key={field.id} value={field.id}>
                                             {field.title}
@@ -335,7 +335,7 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
                                     <SelectValue placeholder="选择标题字段（可选）" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="">自动</SelectItem>
+                                    <SelectItem value="auto">自动</SelectItem>
                                     {textFields.map(field => (
                                         <SelectItem key={field.id} value={field.id}>
                                             {field.title}

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
+import { useTranslation } from "@kn/common";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
 import { Button, IconButton } from "@kn/ui";
 import {
@@ -29,11 +30,12 @@ import { GalleryView } from "./views/GalleryView";
 import { TimelineView } from "./views/TimelineView";
 import { CalendarView } from "./views/CalendarView";
 import { FieldConfigPanel } from "./components/FieldConfigPanel";
-import { uuidv4 } from "lib0/random";
+import { generateRecordId, generateViewId } from "../utils/id";
 
 export const BitableView: React.FC<NodeViewProps> = (props) => {
     const { node, updateAttributes, deleteNode, editor } = props;
     const attrs = node.attrs as BitableAttrs;
+    const { t } = useTranslation();
 
     const [data, setData] = useState<RecordData[]>(attrs.data || []);
     const [currentViewId, setCurrentViewId] = useState(attrs.currentView);
@@ -47,7 +49,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     // 添加记录
     const handleAddRecord = useCallback(() => {
         const newRecord: RecordData = {
-            id: uuidv4(),
+            id: generateRecordId(),
             createdTime: new Date().toISOString(),
             updatedTime: new Date().toISOString(),
         };
@@ -131,8 +133,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     // 添加视图
     const handleAddView = useCallback((viewType: ViewType) => {
         const newView: ViewConfig = {
-            id: uuidv4(),
-            name: getViewTypeName(viewType),
+            id: generateViewId(),
+            name: getViewTypeName(viewType, t),
             type: viewType,
             filters: [],
             sorts: [],
@@ -271,7 +273,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                                         <DropdownMenuContent>
                                             <DropdownMenuItem onClick={() => handleDeleteView(view.id)}>
                                                 <Trash2 className="h-4 w-4 mr-2" />
-                                                删除视图
+                                                {t('bitable.actions.deleteView')}
                                             </DropdownMenuItem>
                                         </DropdownMenuContent>
                                     </DropdownMenu>
@@ -288,27 +290,27 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent>
-                                    <DropdownMenuLabel>添加视图</DropdownMenuLabel>
+                                    <DropdownMenuLabel>{t('bitable.actions.addView')}</DropdownMenuLabel>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem onClick={() => handleAddView(ViewType.TABLE)}>
                                         <Table2 className="h-4 w-4 mr-2" />
-                                        表格视图
+                                        {t('bitable.views.table')}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => handleAddView(ViewType.KANBAN)}>
                                         <KanbanSquare className="h-4 w-4 mr-2" />
-                                        看板视图
+                                        {t('bitable.views.kanban')}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => handleAddView(ViewType.GALLERY)}>
                                         <ImageIcon className="h-4 w-4 mr-2" />
-                                        画廊视图
+                                        {t('bitable.views.gallery')}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => handleAddView(ViewType.TIMELINE)}>
                                         <GanttChartSquare className="h-4 w-4 mr-2" />
-                                        甘特图视图
+                                        {t('bitable.views.timeline')}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => handleAddView(ViewType.CALENDAR)}>
                                         <Calendar className="h-4 w-4 mr-2" />
-                                        日历视图
+                                        {t('bitable.views.calendar')}
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
@@ -320,11 +322,11 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                         <div className="flex items-center gap-2">
                             <Button size="sm" variant="outline" onClick={() => setFieldConfigOpen(true)}>
                                 <Settings className="h-4 w-4 mr-1" />
-                                配置列
+                                {t('bitable.actions.configureColumns')}
                             </Button>
                             <Button size="sm" variant="outline" onClick={handleAddRecord}>
                                 <Plus className="h-4 w-4 mr-1" />
-                                添加记录
+                                {t('bitable.actions.addRecord')}
                             </Button>
                             <Button size="sm" variant="ghost" onClick={deleteNode}>
                                 <Trash2 className="h-4 w-4" />
@@ -340,7 +342,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
                 {/* 底部统计 */}
                 <div className="mt-4 text-sm text-muted-foreground">
-                    共 {data.length} 条记录
+                    {t('bitable.stats.totalRecords', { count: data.length })}
                 </div>
             </div>
 
@@ -359,19 +361,19 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 };
 
 // 辅助函数
-function getViewTypeName(type: ViewType): string {
+function getViewTypeName(type: ViewType, t: (key: string) => string): string {
     switch (type) {
         case ViewType.TABLE:
-            return '表格视图';
+            return t('bitable.views.table');
         case ViewType.KANBAN:
-            return '看板视图';
+            return t('bitable.views.kanban');
         case ViewType.GALLERY:
-            return '画廊视图';
+            return t('bitable.views.gallery');
         case ViewType.CALENDAR:
-            return '日历视图';
+            return t('bitable.views.calendar');
         case ViewType.TIMELINE:
-            return '甘特图视图';
+            return t('bitable.views.timeline');
         default:
-            return '视图';
+            return t('bitable.views.default');
     }
 }

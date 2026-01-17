@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { generateOptionId } from "../../utils/id";
 import {
     Accordion,
     AccordionContent,
@@ -67,7 +68,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
             if (!newOptionLabel.trim()) return;
 
             const newOption: SelectOption = {
-                id: `option_${Date.now()}`,
+                id: generateOptionId(),
                 label: newOptionLabel.trim(),
                 color: getRandomColor(),
             };

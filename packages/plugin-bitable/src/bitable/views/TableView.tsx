@@ -70,7 +70,9 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                             value={props.row[field.id]}
                             field={field}
                             onChange={(value: any) => {
-                                onUpdateRecord(props.row.id, { [field.id]: value });
+                                // Use react-data-grid's internal row change handler
+                                // to avoid re-rendering on every keystroke
+                                props.onRowChange({ ...props.row, [field.id]: value });
                             }}
                         />
                     );

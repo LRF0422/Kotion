@@ -1,7 +1,7 @@
 import { PMNode as Node, ReactNodeViewRenderer, mergeAttributes } from "@kn/editor";
 import { BitableView } from "./BitableView";
 import { FieldType, ViewType } from "../types";
-import { uuidv4 } from "lib0/random";
+import { generateFieldId, generateViewId } from "../utils/id";
 
 declare module '@kn/editor' {
     interface Commands<ReturnType> {
@@ -79,7 +79,7 @@ const getDefaultFields = (customFields?: string[]) => {
     if (customFields && customFields.length > 0) {
         customFields.forEach(fieldName => {
             defaultFields.push({
-                id: uuidv4(),
+                id: generateFieldId(),
                 title: fieldName,
                 type: FieldType.TEXT,
                 width: 150,
@@ -94,7 +94,7 @@ const getDefaultFields = (customFields?: string[]) => {
 // 默认视图配置
 const getDefaultViews = () => [
     {
-        id: uuidv4(),
+        id: generateViewId(),
         name: '表格视图',
         type: ViewType.TABLE,
         filters: [],
@@ -104,7 +104,7 @@ const getDefaultViews = () => [
         fieldOrder: [],
     },
     {
-        id: uuidv4(),
+        id: generateViewId(),
         name: '看板视图',
         type: ViewType.KANBAN,
         filters: [],
@@ -117,7 +117,7 @@ const getDefaultViews = () => [
         }
     },
     {
-        id: uuidv4(),
+        id: generateViewId(),
         name: '画廊视图',
         type: ViewType.GALLERY,
         filters: [],
@@ -132,7 +132,7 @@ const getDefaultViews = () => [
         }
     },
     {
-        id: uuidv4(),
+        id: generateViewId(),
         name: '甘特图视图',
         type: ViewType.TIMELINE,
         filters: [],

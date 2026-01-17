@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { generateFieldId, generateOptionId } from "../../utils/id";
+import { useTranslation } from "@kn/common";
 import {
     Sheet,
     SheetContent,
@@ -18,6 +20,9 @@ import {
     Separator,
     Switch,
     Textarea,
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
 } from "@kn/ui";
 import {
     DragDropContext,
@@ -31,14 +36,10 @@ import {
     EyeOff,
     Plus,
     Trash2,
-    Edit2,
-    Check,
-    X,
-    Settings,
+    ChevronRight,
 } from "@kn/icon";
 import { FieldConfig, FieldType, SelectOption } from "../../types";
 import { cn } from "@kn/ui";
-import { FieldPropertiesEditor } from "./FieldPropertiesEditor";
 
 interface FieldConfigPanelProps {
     open: boolean;
@@ -50,19 +51,339 @@ interface FieldConfigPanelProps {
     onReorderFields: (newOrder: FieldConfig[]) => void;
 }
 
-const FIELD_TYPE_OPTIONS = [
-    { value: FieldType.TEXT, label: "文本" },
-    { value: FieldType.NUMBER, label: "数字" },
-    { value: FieldType.SELECT, label: "单选" },
-    { value: FieldType.MULTI_SELECT, label: "多选" },
-    { value: FieldType.DATE, label: "日期" },
-    { value: FieldType.CHECKBOX, label: "复选框" },
-    { value: FieldType.RATING, label: "评分" },
-    { value: FieldType.PROGRESS, label: "进度" },
-    { value: FieldType.URL, label: "链接" },
-    { value: FieldType.EMAIL, label: "邮箱" },
-    { value: FieldType.PHONE, label: "电话" },
+// Field type options - using translation keys
+const getFieldTypeOptions = (t: (key: string) => string) => [
+    { value: FieldType.TEXT, label: t('bitable.fieldTypes.text') },
+    { value: FieldType.NUMBER, label: t('bitable.fieldTypes.number') },
+    { value: FieldType.SELECT, label: t('bitable.fieldTypes.select') },
+    { value: FieldType.MULTI_SELECT, label: t('bitable.fieldTypes.multiSelect') },
+    { value: FieldType.DATE, label: t('bitable.fieldTypes.date') },
+    { value: FieldType.CHECKBOX, label: t('bitable.fieldTypes.checkbox') },
+    { value: FieldType.RATING, label: t('bitable.fieldTypes.rating') },
+    { value: FieldType.PROGRESS, label: t('bitable.fieldTypes.progress') },
+    { value: FieldType.URL, label: t('bitable.fieldTypes.url') },
+    { value: FieldType.EMAIL, label: t('bitable.fieldTypes.email') },
+    { value: FieldType.PHONE, label: t('bitable.fieldTypes.phone') },
 ];
+
+// Single field configuration popover component
+interface FieldConfigPopoverProps {
+    field: FieldConfig;
+    onUpdateField: (updates: Partial<FieldConfig>) => void;
+    onDeleteField: () => void;
+    children: React.ReactNode;
+}
+
+const FieldConfigPopover: React.FC<FieldConfigPopoverProps> = ({
+    field,
+    onUpdateField,
+    onDeleteField,
+    children,
+}) => {
+    const { t } = useTranslation();
+    const FIELD_TYPE_OPTIONS = getFieldTypeOptions(t);
+    const [localTitle, setLocalTitle] = useState(field.title);
+    const [localType, setLocalType] = useState(field.type);
+    const [localOptions, setLocalOptions] = useState<SelectOption[]>(
+        (field.options as SelectOption[]) || []
+    );
+    const [localFormat, setLocalFormat] = useState(field.format || "");
+    const [localWidth, setLocalWidth] = useState(field.width || 150);
+    const [localDescription, setLocalDescription] = useState(field.description || "");
+    const [newOptionLabel, setNewOptionLabel] = useState("");
+    const [isOpen, setIsOpen] = useState(false);
+
+    // Sync local state when field changes
+    useEffect(() => {
+        setLocalTitle(field.title);
+        setLocalType(field.type);
+        setLocalOptions((field.options as SelectOption[]) || []);
+        setLocalFormat(field.format || "");
+        setLocalWidth(field.width || 150);
+        setLocalDescription(field.description || "");
+    }, [field]);
+
+    // Get random color for new options
+    const getRandomColor = (): string => {
+        const colors = [
+            "#3b82f6", "#10b981", "#f59e0b", "#ef4444",
+            "#8b5cf6", "#ec4899", "#14b8a6", "#f97316",
+        ];
+        return colors[Math.floor(Math.random() * colors.length)] as string;
+    };
+
+    // Handle save on popover close
+    const handleSave = () => {
+        const updates: Partial<FieldConfig> = {};
+
+        if (localTitle !== field.title) updates.title = localTitle;
+        if (localFormat !== field.format) updates.format = localFormat;
+        if (localWidth !== field.width) updates.width = localWidth;
+        if (localDescription !== field.description) updates.description = localDescription;
+        if (JSON.stringify(localOptions) !== JSON.stringify(field.options)) {
+            updates.options = localOptions;
+        }
+
+        if (Object.keys(updates).length > 0) {
+            onUpdateField(updates);
+        }
+    };
+
+    const handleOpenChange = (open: boolean) => {
+        if (!open) {
+            handleSave();
+        }
+        setIsOpen(open);
+    };
+
+    // Add new option for select fields
+    const addOption = () => {
+        if (!newOptionLabel.trim()) return;
+        const newOption: SelectOption = {
+            id: generateOptionId(),
+            label: newOptionLabel.trim(),
+            color: getRandomColor(),
+        };
+        setLocalOptions([...localOptions, newOption]);
+        setNewOptionLabel("");
+    };
+
+    // Update option
+    const updateOption = (optionId: string, updates: Partial<SelectOption>) => {
+        setLocalOptions(localOptions.map((opt) =>
+            opt.id === optionId ? { ...opt, ...updates } : opt
+        ));
+    };
+
+    // Delete option
+    const deleteOption = (optionId: string) => {
+        setLocalOptions(localOptions.filter((opt) => opt.id !== optionId));
+    };
+
+    // Render type-specific config
+    const renderTypeConfig = () => {
+        switch (localType) {
+            case FieldType.SELECT:
+            case FieldType.MULTI_SELECT:
+                return (
+                    <div className="space-y-3">
+                        <Label className="text-xs font-semibold">{t('bitable.fieldConfig.optionsList')}</Label>
+                        <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                            {localOptions.map((option) => (
+                                <div key={option.id} className="flex items-center gap-2">
+                                    <input
+                                        type="color"
+                                        value={option.color}
+                                        onChange={(e) => updateOption(option.id, { color: e.target.value })}
+                                        className="w-6 h-6 rounded border cursor-pointer"
+                                    />
+                                    <Input
+                                        value={option.label}
+                                        onChange={(e) => updateOption(option.id, { label: e.target.value })}
+                                        className="h-8 flex-1"
+                                    />
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-8 w-8 p-0"
+                                        onClick={() => deleteOption(option.id)}
+                                    >
+                                        <Trash2 className="h-3 w-3 text-destructive" />
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex gap-2">
+                            <Input
+                                value={newOptionLabel}
+                                onChange={(e) => setNewOptionLabel(e.target.value)}
+                                placeholder={t('bitable.fieldConfig.newOptionPlaceholder')}
+                                className="h-8 flex-1"
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        addOption();
+                                    }
+                                }}
+                            />
+                            <Button size="sm" variant="outline" onClick={addOption} disabled={!newOptionLabel.trim()}>
+                                <Plus className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+                );
+            case FieldType.NUMBER:
+                return (
+                    <div>
+                        <Label className="text-xs">{t('bitable.formats.numberFormat')}</Label>
+                        <Select value={localFormat || "number"} onValueChange={setLocalFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="number">{t('bitable.formats.number')}</SelectItem>
+                                <SelectItem value="currency">{t('bitable.formats.currency')}</SelectItem>
+                                <SelectItem value="percent">{t('bitable.formats.percent')}</SelectItem>
+                                <SelectItem value="decimal">{t('bitable.formats.decimal')}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            case FieldType.DATE:
+                return (
+                    <div>
+                        <Label className="text-xs">{t('bitable.formats.dateFormat')}</Label>
+                        <Select value={localFormat || "yyyy-MM-dd"} onValueChange={setLocalFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="yyyy-MM-dd">2024-01-15</SelectItem>
+                                <SelectItem value="yyyy/MM/dd">2024/01/15</SelectItem>
+                                <SelectItem value="MM-dd-yyyy">01-15-2024</SelectItem>
+                                <SelectItem value="dd/MM/yyyy">15/01/2024</SelectItem>
+                                <SelectItem value="yyyy-MM-dd HH:mm">2024-01-15 14:30</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            case FieldType.TEXT:
+                return (
+                    <div>
+                        <Label className="text-xs">{t('bitable.formats.textType')}</Label>
+                        <Select value={localFormat || "single"} onValueChange={setLocalFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="single">{t('bitable.formats.singleLine')}</SelectItem>
+                                <SelectItem value="multi">{t('bitable.formats.multiLine')}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            case FieldType.RATING:
+                return (
+                    <div>
+                        <Label className="text-xs">{t('bitable.formats.maxRating')}</Label>
+                        <Select value={localFormat || "5"} onValueChange={setLocalFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="5">{t('bitable.formats.stars5')}</SelectItem>
+                                <SelectItem value="10">{t('bitable.formats.stars10')}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            case FieldType.PROGRESS:
+                return (
+                    <div>
+                        <Label className="text-xs">{t('bitable.formats.progressDisplay')}</Label>
+                        <Select value={localFormat || "bar"} onValueChange={setLocalFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="bar">{t('bitable.formats.progressBar')}</SelectItem>
+                                <SelectItem value="ring">{t('bitable.formats.progressRing')}</SelectItem>
+                                <SelectItem value="number">{t('bitable.formats.progressNumber')}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            case FieldType.URL:
+            case FieldType.EMAIL:
+            case FieldType.PHONE:
+                return (
+                    <div className="flex items-center justify-between">
+                        <Label className="text-xs">{t('bitable.formats.openNewTab')}</Label>
+                        <Switch
+                            checked={localFormat === "newTab"}
+                            onCheckedChange={(checked) => setLocalFormat(checked ? "newTab" : "sameTab")}
+                        />
+                    </div>
+                );
+            default:
+                return null;
+        }
+    };
+
+    return (
+        <Popover open={isOpen} onOpenChange={handleOpenChange}>
+            <PopoverTrigger asChild>
+                {children}
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="start" side="right">
+                <div className="p-4 space-y-4">
+                    {/* Field name */}
+                    <div>
+                        <Label className="text-xs font-semibold">{t('bitable.fieldConfig.fieldName')}</Label>
+                        <Input
+                            value={localTitle}
+                            onChange={(e) => setLocalTitle(e.target.value)}
+                            className="h-9 mt-1"
+                            placeholder={t('bitable.fieldConfig.fieldNamePlaceholder')}
+                        />
+                    </div>
+
+                    {/* Field type (read-only display) */}
+                    <div>
+                        <Label className="text-xs font-semibold">{t('bitable.fieldConfig.fieldType')}</Label>
+                        <div className="mt-1 px-3 py-2 text-sm bg-muted rounded-md">
+                            {FIELD_TYPE_OPTIONS.find((opt) => opt.value === localType)?.label || localType}
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Type-specific config */}
+                    {renderTypeConfig()}
+
+                    {/* Common config */}
+                    <div>
+                        <Label className="text-xs">{t('bitable.fieldConfig.columnWidth')}</Label>
+                        <Input
+                            type="number"
+                            value={localWidth}
+                            onChange={(e) => setLocalWidth(parseInt(e.target.value) || 150)}
+                            className="h-8 mt-1"
+                            min={80}
+                            max={500}
+                        />
+                    </div>
+
+                    <div>
+                        <Label className="text-xs">{t('bitable.fieldConfig.fieldDescription')}</Label>
+                        <Textarea
+                            value={localDescription}
+                            onChange={(e) => setLocalDescription(e.target.value)}
+                            placeholder={t('bitable.fieldConfig.fieldDescriptionPlaceholder')}
+                            className="mt-1 min-h-[60px]"
+                        />
+                    </div>
+
+                    <Separator />
+
+                    {/* Delete button */}
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                            onDeleteField();
+                            setIsOpen(false);
+                        }}
+                    >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        {t('bitable.fieldConfig.deleteField')}
+                    </Button>
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
+};
 
 export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
     open,
@@ -73,22 +394,19 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
     onAddField,
     onReorderFields,
 }) => {
-    const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
-    const [editingFieldTitle, setEditingFieldTitle] = useState("");
+    const { t } = useTranslation();
+    const FIELD_TYPE_OPTIONS = getFieldTypeOptions(t);
     const [showAddField, setShowAddField] = useState(false);
     const [newFieldTitle, setNewFieldTitle] = useState("");
     const [newFieldType, setNewFieldType] = useState<FieldType>(FieldType.TEXT);
-    const [editingPropertiesFieldId, setEditingPropertiesFieldId] = useState<string | null>(null);
 
     // 新字段的配置选项
     const [newFieldOptions, setNewFieldOptions] = useState<SelectOption[]>([
-        { id: "1", label: "选项1", color: "#3b82f6" },
-        { id: "2", label: "选项2", color: "#10b981" },
-        { id: "3", label: "选项3", color: "#f59e0b" },
+        { id: "1", label: t('bitable.defaultOptions.option1'), color: "#3b82f6" },
+        { id: "2", label: t('bitable.defaultOptions.option2'), color: "#10b981" },
+        { id: "3", label: t('bitable.defaultOptions.option3'), color: "#f59e0b" },
     ]);
     const [newFieldFormat, setNewFieldFormat] = useState<string>("");
-    const [newFieldDescription, setNewFieldDescription] = useState("");
-    const [newFieldWidth, setNewFieldWidth] = useState(150);
     const [newOptionLabel, setNewOptionLabel] = useState("");
 
     // 重置新字段表单
@@ -96,13 +414,11 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
         setNewFieldTitle("");
         setNewFieldType(FieldType.TEXT);
         setNewFieldOptions([
-            { id: "1", label: "选项1", color: "#3b82f6" },
-            { id: "2", label: "选项2", color: "#10b981" },
-            { id: "3", label: "选项3", color: "#f59e0b" },
+            { id: "1", label: t('bitable.defaultOptions.option1'), color: "#3b82f6" },
+            { id: "2", label: t('bitable.defaultOptions.option2'), color: "#10b981" },
+            { id: "3", label: t('bitable.defaultOptions.option3'), color: "#f59e0b" },
         ]);
         setNewFieldFormat("");
-        setNewFieldDescription("");
-        setNewFieldWidth(150);
         setNewOptionLabel("");
         setShowAddField(false);
     };
@@ -146,38 +462,16 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
         onReorderFields(items);
     };
 
-    // 开始编辑字段名称
-    const startEditField = (field: FieldConfig) => {
-        setEditingFieldId(field.id);
-        setEditingFieldTitle(field.title);
-    };
-
-    // 保存字段名称
-    const saveFieldTitle = (fieldId: string) => {
-        if (editingFieldTitle.trim()) {
-            onUpdateField(fieldId, { title: editingFieldTitle.trim() });
-        }
-        setEditingFieldId(null);
-        setEditingFieldTitle("");
-    };
-
-    // 取消编辑
-    const cancelEdit = () => {
-        setEditingFieldId(null);
-        setEditingFieldTitle("");
-    };
-
     // 添加新字段
     const handleAddNewField = () => {
         if (!newFieldTitle.trim()) return;
 
         const newField: FieldConfig = {
-            id: `field_${Date.now()}`,
+            id: generateFieldId(),
             title: newFieldTitle.trim(),
             type: newFieldType,
-            width: newFieldWidth,
+            width: 150,
             isShow: true,
-            description: newFieldDescription || undefined,
             format: newFieldFormat || undefined,
         };
 
@@ -194,7 +488,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
     const addNewOption = () => {
         if (!newOptionLabel.trim()) return;
         const newOption: SelectOption = {
-            id: `option_${Date.now()}`,
+            id: generateOptionId(),
             label: newOptionLabel.trim(),
             color: getRandomColor(),
         };
@@ -222,7 +516,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                 return (
                     <div className="space-y-3">
                         <div>
-                            <Label className="text-xs font-semibold">选项列表</Label>
+                            <Label className="text-xs font-semibold">{t('bitable.fieldConfig.optionsList')}</Label>
                             <div className="mt-2 space-y-2">
                                 {newFieldOptions.map((option) => (
                                     <div key={option.id} className="flex items-center gap-2">
@@ -260,7 +554,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                             <Input
                                 value={newOptionLabel}
                                 onChange={(e) => setNewOptionLabel(e.target.value)}
-                                placeholder="新选项名称"
+                                placeholder={t('bitable.fieldConfig.newOptionPlaceholder')}
                                 className="h-8 flex-1"
                                 onKeyDown={(e) => {
                                     if (e.key === "Enter") addNewOption();
@@ -268,7 +562,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                             />
                             <Button size="sm" onClick={addNewOption} disabled={!newOptionLabel.trim()}>
                                 <Plus className="h-4 w-4 mr-1" />
-                                添加
+                                {t('bitable.actions.add')}
                             </Button>
                         </div>
                     </div>
@@ -276,16 +570,16 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
             case FieldType.NUMBER:
                 return (
                     <div>
-                        <Label htmlFor="newFieldFormat" className="text-xs">数字格式</Label>
+                        <Label htmlFor="newFieldFormat" className="text-xs">{t('bitable.formats.numberFormat')}</Label>
                         <Select value={newFieldFormat || "number"} onValueChange={setNewFieldFormat}>
                             <SelectTrigger className="h-8 mt-1">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="number">数字</SelectItem>
-                                <SelectItem value="currency">货币</SelectItem>
-                                <SelectItem value="percent">百分比</SelectItem>
-                                <SelectItem value="decimal">小数</SelectItem>
+                                <SelectItem value="number">{t('bitable.formats.number')}</SelectItem>
+                                <SelectItem value="currency">{t('bitable.formats.currency')}</SelectItem>
+                                <SelectItem value="percent">{t('bitable.formats.percent')}</SelectItem>
+                                <SelectItem value="decimal">{t('bitable.formats.decimal')}</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -293,7 +587,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
             case FieldType.DATE:
                 return (
                     <div>
-                        <Label htmlFor="newFieldFormat" className="text-xs">日期格式</Label>
+                        <Label htmlFor="newFieldFormat" className="text-xs">{t('bitable.formats.dateFormat')}</Label>
                         <Select value={newFieldFormat || "yyyy-MM-dd"} onValueChange={setNewFieldFormat}>
                             <SelectTrigger className="h-8 mt-1">
                                 <SelectValue />
@@ -312,14 +606,14 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
             case FieldType.TEXT:
                 return (
                     <div>
-                        <Label htmlFor="newFieldFormat" className="text-xs">文本类型</Label>
+                        <Label htmlFor="newFieldFormat" className="text-xs">{t('bitable.formats.textType')}</Label>
                         <Select value={newFieldFormat || "single"} onValueChange={setNewFieldFormat}>
                             <SelectTrigger className="h-8 mt-1">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="single">单行文本</SelectItem>
-                                <SelectItem value="multi">多行文本</SelectItem>
+                                <SelectItem value="single">{t('bitable.formats.singleLine')}</SelectItem>
+                                <SelectItem value="multi">{t('bitable.formats.multiLine')}</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -327,14 +621,14 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
             case FieldType.RATING:
                 return (
                     <div>
-                        <Label htmlFor="newFieldFormat" className="text-xs">最大评分</Label>
+                        <Label htmlFor="newFieldFormat" className="text-xs">{t('bitable.formats.maxRating')}</Label>
                         <Select value={newFieldFormat || "5"} onValueChange={setNewFieldFormat}>
                             <SelectTrigger className="h-8 mt-1">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="5">5星</SelectItem>
-                                <SelectItem value="10">10星</SelectItem>
+                                <SelectItem value="5">{t('bitable.formats.stars5')}</SelectItem>
+                                <SelectItem value="10">{t('bitable.formats.stars10')}</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -342,15 +636,15 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
             case FieldType.PROGRESS:
                 return (
                     <div>
-                        <Label htmlFor="newFieldFormat" className="text-xs">进度显示</Label>
+                        <Label htmlFor="newFieldFormat" className="text-xs">{t('bitable.formats.progressDisplay')}</Label>
                         <Select value={newFieldFormat || "bar"} onValueChange={setNewFieldFormat}>
                             <SelectTrigger className="h-8 mt-1">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="bar">进度条</SelectItem>
-                                <SelectItem value="ring">环形</SelectItem>
-                                <SelectItem value="number">数字</SelectItem>
+                                <SelectItem value="bar">{t('bitable.formats.progressBar')}</SelectItem>
+                                <SelectItem value="ring">{t('bitable.formats.progressRing')}</SelectItem>
+                                <SelectItem value="number">{t('bitable.formats.progressNumber')}</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -360,7 +654,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
             case FieldType.PHONE:
                 return (
                     <div className="flex items-center justify-between">
-                        <Label htmlFor="openInNewTab" className="text-xs">新标签页打开</Label>
+                        <Label htmlFor="openInNewTab" className="text-xs">{t('bitable.formats.openNewTab')}</Label>
                         <Switch
                             id="openInNewTab"
                             checked={newFieldFormat === "newTab"}
@@ -388,9 +682,9 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
                 <SheetHeader>
-                    <SheetTitle>配置列</SheetTitle>
+                    <SheetTitle>{t('bitable.fieldConfig.title')}</SheetTitle>
                     <SheetDescription>
-                        管理字段的显示、顺序和属性
+                        {t('bitable.fieldConfig.description')}
                     </SheetDescription>
                 </SheetHeader>
 
@@ -398,14 +692,14 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                     {/* 字段列表 */}
                     <div>
                         <div className="flex items-center justify-between mb-3">
-                            <Label className="text-sm font-semibold">字段列表</Label>
+                            <Label className="text-sm font-semibold">{t('bitable.fieldConfig.fieldList')}</Label>
                             <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => setShowAddField(!showAddField)}
                             >
                                 <Plus className="h-4 w-4 mr-1" />
-                                添加字段
+                                {t('bitable.fieldConfig.addField')}
                             </Button>
                         </div>
 
@@ -414,19 +708,20 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                             <div className="mb-4 p-3 border rounded-lg bg-muted/30 space-y-3">
                                 <div>
                                     <Label htmlFor="newFieldTitle" className="text-xs">
-                                        字段名称
+                                        {t('bitable.fieldConfig.fieldName')}
                                     </Label>
                                     <Input
                                         id="newFieldTitle"
                                         value={newFieldTitle}
                                         onChange={(e) => setNewFieldTitle(e.target.value)}
-                                        placeholder="输入字段名称"
+                                        placeholder={t('bitable.fieldConfig.fieldNamePlaceholder')}
                                         className="h-8 mt-1"
+                                        autoFocus
                                     />
                                 </div>
                                 <div>
                                     <Label htmlFor="newFieldType" className="text-xs">
-                                        字段类型
+                                        {t('bitable.fieldConfig.fieldType')}
                                     </Label>
                                     <Select
                                         value={newFieldType}
@@ -448,53 +743,21 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                                 {/* 字段类型特定配置 */}
                                 {renderNewFieldTypeConfig()}
 
-                                <Separator />
-
-                                {/* 通用配置 */}
-                                <div>
-                                    <Label htmlFor="newFieldWidth" className="text-xs">
-                                        列宽
-                                    </Label>
-                                    <Input
-                                        id="newFieldWidth"
-                                        type="number"
-                                        value={newFieldWidth}
-                                        onChange={(e) => setNewFieldWidth(parseInt(e.target.value) || 150)}
-                                        className="h-8 mt-1"
-                                        min={80}
-                                        max={500}
-                                    />
-                                </div>
-
-                                <div>
-                                    <Label htmlFor="newFieldDescription" className="text-xs">
-                                        字段描述（可选）
-                                    </Label>
-                                    <Textarea
-                                        id="newFieldDescription"
-                                        value={newFieldDescription}
-                                        onChange={(e) => setNewFieldDescription(e.target.value)}
-                                        placeholder="为字段添加描述信息..."
-                                        className="mt-1 min-h-[60px]"
-                                    />
-                                </div>
-
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 pt-2">
                                     <Button
                                         size="sm"
                                         onClick={handleAddNewField}
                                         disabled={!newFieldTitle.trim()}
+                                        className="flex-1"
                                     >
-                                        <Check className="h-4 w-4 mr-1" />
-                                        确认
+                                        {t('bitable.fieldConfig.confirmAdd')}
                                     </Button>
                                     <Button
                                         size="sm"
                                         variant="outline"
                                         onClick={resetNewFieldForm}
                                     >
-                                        <X className="h-4 w-4 mr-1" />
-                                        取消
+                                        {t('bitable.actions.cancel')}
                                     </Button>
                                 </div>
                             </div>
@@ -509,7 +772,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                                     <div
                                         {...provided.droppableProps}
                                         ref={provided.innerRef}
-                                        className="space-y-2"
+                                        className="space-y-1"
                                     >
                                         {fields.map((field, index) => (
                                             <Draggable
@@ -523,8 +786,8 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                                                         ref={provided.innerRef}
                                                         {...provided.draggableProps}
                                                         className={cn(
-                                                            "flex items-center gap-2 p-3 border rounded-lg bg-background transition-shadow",
-                                                            snapshot.isDragging && "shadow-lg",
+                                                            "group flex items-center gap-2 px-2 py-2 rounded-md bg-background transition-all hover:bg-muted/50 border",
+                                                            snapshot.isDragging && "shadow-lg bg-background",
                                                             field.type === FieldType.ID && "opacity-50"
                                                         )}
                                                     >
@@ -532,127 +795,55 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                                                         <div
                                                             {...provided.dragHandleProps}
                                                             className={cn(
-                                                                "cursor-grab active:cursor-grabbing",
+                                                                "cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity",
                                                                 field.type === FieldType.ID && "cursor-not-allowed"
                                                             )}
                                                         >
                                                             <GripVertical className="h-4 w-4 text-muted-foreground" />
                                                         </div>
 
-                                                        {/* 字段名称 */}
-                                                        <div className="flex-1 min-w-0">
-                                                            {editingFieldId === field.id ? (
-                                                                <Input
-                                                                    value={editingFieldTitle}
-                                                                    onChange={(e) => setEditingFieldTitle(e.target.value)}
-                                                                    onKeyDown={(e) => {
-                                                                        if (e.key === "Enter") saveFieldTitle(field.id);
-                                                                        if (e.key === "Escape") cancelEdit();
-                                                                    }}
-                                                                    className="h-8"
-                                                                    autoFocus
-                                                                />
+                                                        {/* 显示/隐藏状态指示 */}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-6 w-6 p-0"
+                                                            onClick={() => onUpdateField(field.id, { isShow: !field.isShow })}
+                                                            disabled={field.type === FieldType.ID}
+                                                        >
+                                                            {field.isShow ? (
+                                                                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                                                             ) : (
+                                                                <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                                                            )}
+                                                        </Button>
+
+                                                        {/* 字段信息 - 点击打开配置 Popover */}
+                                                        {field.type === FieldType.ID ? (
+                                                            <div className="flex-1 min-w-0 flex items-center justify-between py-1">
                                                                 <div>
-                                                                    <div className="font-medium text-sm truncate">
-                                                                        {field.title}
-                                                                    </div>
+                                                                    <div className="font-medium text-sm truncate">{field.title}</div>
                                                                     <div className="text-xs text-muted-foreground">
                                                                         {FIELD_TYPE_OPTIONS.find((opt) => opt.value === field.type)?.label || field.type}
                                                                     </div>
                                                                 </div>
-                                                            )}
-                                                        </div>
-
-                                                        {/* 操作按钮 */}
-                                                        <div>
-
-                                                            {/* 字段属性配置面板 */}
-                                                            <div className="flex items-center gap-1">
-                                                                {editingFieldId === field.id ? (
-                                                                    <>
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            onClick={() => saveFieldTitle(field.id)}
-                                                                        >
-                                                                            <Check className="h-3 w-3" />
-                                                                        </Button>
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            onClick={cancelEdit}
-                                                                        >
-                                                                            <X className="h-3 w-3" />
-                                                                        </Button>
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        {/* 显示/隐藏切换 */}
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            onClick={() =>
-                                                                                onUpdateField(field.id, { isShow: !field.isShow })
-                                                                            }
-                                                                            disabled={field.type === FieldType.ID}
-                                                                        >
-                                                                            {field.isShow ? (
-                                                                                <Eye className="h-4 w-4" />
-                                                                            ) : (
-                                                                                <EyeOff className="h-4 w-4" />
-                                                                            )}
-                                                                        </Button>
-
-                                                                        {/* 编辑按钮 */}
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            onClick={() => startEditField(field)}
-                                                                            disabled={field.type === FieldType.ID}
-                                                                        >
-                                                                            <Edit2 className="h-3 w-3" />
-                                                                        </Button>
-
-                                                                        {/* 属性配置按钮 */}
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            onClick={() =>
-                                                                                setEditingPropertiesFieldId(
-                                                                                    editingPropertiesFieldId === field.id
-                                                                                        ? null
-                                                                                        : field.id
-                                                                                )
-                                                                            }
-                                                                            disabled={field.type === FieldType.ID}
-                                                                        >
-                                                                            <Settings className="h-3 w-3" />
-                                                                        </Button>
-
-                                                                        {/* 删除按钮 */}
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="ghost"
-                                                                            onClick={() => onDeleteField(field.id)}
-                                                                            disabled={field.type === FieldType.ID}
-                                                                        >
-                                                                            <Trash2 className="h-3 w-3 text-destructive" />
-                                                                        </Button>
-                                                                    </>
-                                                                )}
                                                             </div>
-                                                            {editingPropertiesFieldId === field.id && (
-                                                                <div className="mt-2 p-3 border-t bg-muted/20">
-                                                                    <FieldPropertiesEditor
-                                                                        field={field}
-                                                                        onUpdateField={(updates) =>
-                                                                            onUpdateField(field.id, updates)
-                                                                        }
-                                                                    />
+                                                        ) : (
+                                                            <FieldConfigPopover
+                                                                field={field}
+                                                                onUpdateField={(updates) => onUpdateField(field.id, updates)}
+                                                                onDeleteField={() => onDeleteField(field.id)}
+                                                            >
+                                                                <div className="flex-1 min-w-0 flex items-center justify-between cursor-pointer py-1 px-2 rounded hover:bg-muted transition-colors">
+                                                                    <div>
+                                                                        <div className="font-medium text-sm truncate">{field.title}</div>
+                                                                        <div className="text-xs text-muted-foreground">
+                                                                            {FIELD_TYPE_OPTIONS.find((opt) => opt.value === field.type)?.label || field.type}
+                                                                        </div>
+                                                                    </div>
+                                                                    <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                                                                 </div>
-                                                            )}
-                                                        </div>
+                                                            </FieldConfigPopover>
+                                                        )}
                                                     </div>
                                                 )}
                                             </Draggable>
@@ -667,15 +858,13 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                     {/* 提示信息 */}
                     <div className="mt-6 p-3 bg-muted/50 rounded-lg">
                         <p className="text-xs text-muted-foreground">
-                            💡 提示：
+                            💡 {t('bitable.tips.title')}：
                         </p>
                         <ul className="text-xs text-muted-foreground mt-2 space-y-1">
-                            <li>• 拖拽字段可以调整显示顺序</li>
-                            <li>• 点击眼睛图标可以显示/隐藏字段</li>
-                            <li>• 点击设置图标可以配置字段属性</li>
-                            <li>• 不同字段类型有不同的可配置属性</li>
-                            <li>• ID字段不可删除、隐藏或移动</li>
-                            <li>• 删除字段会同时删除该字段的所有数据</li>
+                            <li>• {t('bitable.tips.dragToReorder')}</li>
+                            <li>• {t('bitable.tips.clickEyeToToggle')}</li>
+                            <li>• {t('bitable.tips.clickFieldToConfigure')}</li>
+                            <li>• {t('bitable.tips.idFieldLocked')}</li>
                         </ul>
                     </div>
                 </div>
