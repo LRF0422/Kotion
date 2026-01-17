@@ -2,13 +2,13 @@ import {
     Button, Dialog, DialogContent, DialogDescription,
     DialogHeader, DialogTitle, DialogTrigger, FileUploader,
     Form, FormControl, FormField, FormItem, FormLabel, FormMessage, IconButton, Input,
-    Step, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TagInput, Textarea, useForm, zodResolver, useToast,
+    Step, Stepper, Tabs, TabsContent, TabsList, TabsTrigger, TagInput, Textarea, useForm, zodResolver, toast,
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-    AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Progress
+    AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Progress, ScrollArea, cn
 } from "@kn/ui";
 import React, { PropsWithChildren, useCallback } from "react";
 import { z } from "@kn/ui";
-import { CheckCircle2, PlusIcon, TrashIcon, Loader2Icon, XIcon } from "@kn/icon";
+import { CheckCircle2, PlusIcon, TrashIcon, Loader2Icon, XIcon, UploadIcon, ImageIcon } from "@kn/icon";
 import { CollaborationEditor, JSONContent } from "@kn/editor";
 import { useApi, useUploadFile } from "../../../hooks";
 import { useSafeState } from "ahooks";
@@ -19,50 +19,12 @@ interface Description {
     content: JSONContent
 }
 
-interface LogoItem {
-    label: string;
-    size: number;
-    path: string;
-    uploading?: boolean;
-}
-
 export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
-    const { toast } = useToast();
-
     const steps: Step[] = [
-        { number: 1, label: "填写基本信息" },
-        { number: 2, label: "上传图标" },
-        { number: 3, label: "填写描述信息" },
-        { number: 4, label: "上传插件" },
-        { number: 5, label: "提交审核" }
+        { number: 1, label: "基本信息" },
+        { number: 2, label: "详细描述" },
+        { number: 3, label: "上传发布" }
     ];
-
-    const logoSize: LogoItem[] = [
-        {
-            label: '64X64',
-            size: 64,
-            path: "",
-            uploading: false
-        },
-        {
-            label: '100X100',
-            size: 100,
-            path: "",
-            uploading: false
-        },
-        {
-            label: '120X120',
-            size: 120,
-            path: "",
-            uploading: false
-        },
-        {
-            label: '150X150',
-            size: 150,
-            path: "",
-            uploading: false
-        }
-    ]
 
     const { upload, usePath, uploadFile } = useUploadFile()
     const [open, setOpen] = useSafeState(false);
@@ -73,7 +35,8 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
     const [uploadProgress, setUploadProgress] = useSafeState(0);
     const [isUploading, setIsUploading] = useSafeState(false);
     const [isSubmitting, setIsSubmitting] = useSafeState(false);
-    const [logos, setLogos] = useSafeState<LogoItem[]>(logoSize);
+    const [iconPath, setIconPath] = useSafeState<string>("");
+    const [iconUploading, setIconUploading] = useSafeState(false);
     const [attachments, setAttachments] = useSafeState<File[]>([]);
     const [descriptions, setDescriptions] = React.useState<Description[]>([
         { label: "Feature", content: {} },
@@ -90,13 +53,9 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
             id: z.string(),
             text: z.string()
         })).min(1, "至少添加一个标签"),
-        logos: z.array(z.object({
-            size: z.number(),
-            label: z.string(),
-            path: z.string()
-        })),
-        resourcePath: z.string().min(1, "请上传插件文件"),
-        description: z.string().min(10, "插件描述至少10个字符").max(200, "插件描述最多200个字符"),
+        icon: z.string().optional(),
+        resourcePath: z.string(),
+        description: z.string().min(10, "插件描述至少10个字符").max(500, "插件描述最多500个字符"),
         versionDescs: z.array(z.object({
             label: z.string(),
             content: z.string()
@@ -110,7 +69,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
             pluginKey: "",
             version: "1.0.0",
             tags: [],
-            logos: [],
+            icon: "",
             resourcePath: "",
             description: "",
             versionDescs: []
@@ -118,51 +77,47 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
     })
 
     const validateCurrentStep = async (): Promise<boolean> => {
-        let isValid = true;
-
-        switch (currentStep) {
-            case 1:
-                const basicFields = await form.trigger(['name', 'pluginKey', 'version', 'tags', 'description']);
-                isValid = basicFields;
-                if (!isValid) {
-                    toast({
-                        title: "验证失败",
-                        description: "请检查并填写所有必填字段",
-                        variant: "destructive"
-                    });
-                }
-                break;
-            case 2:
-                const hasAllLogos = logos.every(logo => logo.path !== "");
-                if (!hasAllLogos) {
-                    toast({
-                        title: "请上传所有尺寸的图标",
-                        description: "需要上传所有4个尺寸的图标才能继续",
-                        variant: "destructive"
-                    });
-                    isValid = false;
-                }
-                break;
-            case 4:
-                if (!resourcePath) {
-                    toast({
-                        title: "请上传插件文件",
-                        description: "需要上传插件文件才能继续",
-                        variant: "destructive"
-                    });
-                    isValid = false;
-                }
-                break;
+        try {
+            switch (currentStep) {
+                case 1:
+                    // Trigger validation for basic fields
+                    const basicFields = await form.trigger(['name', 'pluginKey', 'version', 'tags', 'description']);
+                    if (!basicFields) {
+                        // Get the first error message to show in toast
+                        const errors = form.formState.errors;
+                        const firstError = errors.name?.message ||
+                            errors.pluginKey?.message ||
+                            errors.version?.message ||
+                            errors.tags?.message ||
+                            errors.description?.message;
+                        toast.error(firstError || "请检查并填写所有必填字段");
+                        return false;
+                    }
+                    return true;
+                case 2:
+                    // Description step - always valid (descriptions are optional)
+                    return true;
+                case 3:
+                    if (!resourcePath) {
+                        toast.error("请上传插件文件才能继续");
+                        return false;
+                    }
+                    return true;
+                default:
+                    return true;
+            }
+        } catch (error: any) {
+            console.error('Validation error:', error);
+            toast.error("表单验证时发生错误，请检查输入");
+            return false;
         }
-
-        return isValid;
     };
 
     const handleNext = async () => {
-        if (currentStep < 5) {
+        if (currentStep < 3) {
             const isValid = await validateCurrentStep();
             if (isValid) {
-                setCurrentStep((prev) => Math.min(prev + 1, 5));
+                setCurrentStep((prev) => Math.min(prev + 1, 3));
             }
         }
     };
@@ -180,30 +135,26 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
         }
     };
 
-    const handleUpload = async () => {
+    const handleSubmit = async () => {
+        const isValid = await validateCurrentStep();
+        if (!isValid) return;
+
         setIsSubmitting(true);
         try {
             const value = form.getValues();
             value.versionDescs = descriptions.map(item => ({ label: item.label, content: JSON.stringify(item.content) }));
             value.resourcePath = resourcePath;
-            value.logos = logos.map(({ label, size, path }) => ({ label, size, path }));
+            value.icon = iconPath;
 
             await useApi(APIS.CREATE_PLUGIN, null, value);
 
-            toast({
-                title: "提交成功",
-                description: "插件已成功提交审核，请等待审核结果",
-            });
+            toast.success("插件已成功提交审核，请等待审核结果");
 
             // Reset form and close dialog
             resetForm();
             setOpen(false);
         } catch (error: any) {
-            toast({
-                title: "提交失败",
-                description: error?.message || "提交插件时发生错误，请重试",
-                variant: "destructive"
-            });
+            toast.error(error?.message || "提交插件时发生错误，请重试");
         } finally {
             setIsSubmitting(false);
         }
@@ -212,7 +163,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
     const resetForm = () => {
         form.reset();
         setCurrentStep(1);
-        setLogos(logoSize);
+        setIconPath("");
         setAttachments([]);
         setResourcePath("");
         setUploadProgress(0);
@@ -225,7 +176,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
     };
 
     const handleDialogClose = (newOpen: boolean) => {
-        if (!newOpen && currentStep > 1) {
+        if (!newOpen && (currentStep > 1 || form.formState.isDirty)) {
             setShowExitDialog(true);
         } else {
             setOpen(newOpen);
@@ -241,44 +192,23 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
         resetForm();
     };
 
-    const handleLogoUpload = useCallback(async (index: number) => {
+    const handleIconUpload = useCallback(async () => {
         try {
-            setLogos(prev => prev.map((item, i) =>
-                i === index ? { ...item, uploading: true } : item
-            ));
-
+            setIconUploading(true);
             const res = await upload(["image/*"]);
-
-            setLogos(prev => prev.map((item, i) =>
-                i === index ? { ...item, path: res.name, uploading: false } : item
-            ));
-
-            toast({
-                title: "上传成功",
-                description: `图标 ${logos[index].label} 上传成功`,
-            });
+            setIconPath(res.name);
+            toast.success("图标上传成功");
         } catch (error: any) {
-            setLogos(prev => prev.map((item, i) =>
-                i === index ? { ...item, uploading: false } : item
-            ));
-
-            toast({
-                title: "上传失败",
-                description: error?.message || "上传图标失败，请重试",
-                variant: "destructive"
-            });
+            toast.error(error?.message || "上传图标失败，请重试");
+        } finally {
+            setIconUploading(false);
         }
-    }, [logos, upload, toast]);
+    }, [upload]);
 
-    const handleRemoveLogo = useCallback((index: number) => {
-        setLogos(prev => prev.map((item, i) =>
-            i === index ? { ...item, path: "" } : item
-        ));
-        toast({
-            title: "已删除",
-            description: `图标 ${logos[index].label} 已删除`,
-        });
-    }, [logos, toast]);
+    const handleRemoveIcon = useCallback(() => {
+        setIconPath("");
+        toast.info("图标已删除");
+    }, []);
 
     const handleAddDescriptionTab = () => {
         const newLabel = `Custom${descriptions.length + 1}`;
@@ -288,11 +218,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
 
     const handleRemoveDescriptionTab = (index: number) => {
         if (descriptions.length <= 1) {
-            toast({
-                title: "无法删除",
-                description: "至少需要保留一个描述标签",
-                variant: "destructive"
-            });
+            toast.error("至少需要保留一个描述标签");
             return;
         }
 
@@ -303,67 +229,118 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
         }
     };
 
-    const render = () => {
-        switch (currentStep) {
-            case 1: return <Form {...form}>
-                <form className=" space-y-1">
-                    <div className=" grid grid-cols-2 gap-2">
-                        <FormField
-                            control={form.control}
-                            name="name"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>插件名称 <span className="text-destructive">*</span></FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="输入插件名称" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
+    // Step 1: Basic Info
+    const renderBasicInfo = () => (
+        <Form {...form}>
+            <form className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>插件名称 <span className="text-destructive">*</span></FormLabel>
+                                <FormControl>
+                                    <Input placeholder="输入插件名称" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="pluginKey"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>插件Key <span className="text-destructive">*</span></FormLabel>
+                                <FormControl>
+                                    <Input placeholder="例如: my-plugin" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                        control={form.control}
+                        name="version"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>版本号 <span className="text-destructive">*</span></FormLabel>
+                                <FormControl>
+                                    <Input placeholder="1.0.0" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="tags"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>标签 <span className="text-destructive">*</span></FormLabel>
+                                <FormControl>
+                                    <TagInput
+                                        tags={field.value}
+                                        setTags={(tags) => field.onChange(tags)}
+                                        activeTagIndex={activeTagIndex}
+                                        setActiveTagIndex={setActiveTagIndex}
+                                        placeholder="添加标签后按回车"
+                                    />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                </div>
+                <div className="flex gap-4">
+                    {/* Icon Upload */}
+                    <div className="space-y-2">
+                        <FormLabel>插件图标</FormLabel>
+                        <div
+                            className={cn(
+                                "relative w-20 h-20 flex items-center justify-center border-2 rounded-lg overflow-hidden transition-all",
+                                iconPath ? "border-green-500 bg-green-50/50" : "border-dashed border-muted-foreground/50 bg-muted/30 hover:border-primary hover:bg-muted/50",
+                                iconUploading ? "cursor-wait" : "cursor-pointer"
                             )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="pluginKey"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>插件Key <span className="text-destructive">*</span></FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="例如: my-plugin" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
+                            onClick={() => {
+                                if (!iconUploading && !iconPath) {
+                                    handleIconUpload();
+                                }
+                            }}
+                        >
+                            {iconUploading ? (
+                                <Loader2Icon className="h-6 w-6 animate-spin text-primary" />
+                            ) : iconPath ? (
+                                <>
+                                    <img
+                                        src={usePath(iconPath)}
+                                        alt="Plugin Icon"
+                                        className="w-full h-full object-cover"
+                                    />
+                                    <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <IconButton
+                                            icon={<TrashIcon className="h-4 w-4 text-white" />}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRemoveIcon();
+                                            }}
+                                        />
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                                    <ImageIcon className="h-6 w-6" />
+                                    <span className="text-xs">上传</span>
+                                </div>
                             )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="version"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>插件版本 <span className="text-destructive">*</span></FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="1.0.0" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="tags"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>标签 <span className="text-destructive">*</span></FormLabel>
-                                    <FormControl>
-                                        <TagInput tags={field.value} setTags={(tags) => {
-                                            field.onChange(tags)
-                                        }} activeTagIndex={activeTagIndex} setActiveTagIndex={setActiveTagIndex} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                        </div>
+                        <p className="text-xs text-muted-foreground">PNG/JPG, 建议 120x120</p>
                     </div>
-                    <div>
+                    {/* Description */}
+                    <div className="flex-1">
                         <FormField
                             control={form.control}
                             name="description"
@@ -371,72 +348,93 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                                 <FormItem>
                                     <FormLabel>插件描述 <span className="text-destructive">*</span></FormLabel>
                                     <FormControl>
-                                        <Textarea placeholder="简要描述插件的功能和特点" rows={4} {...field} />
+                                        <Textarea
+                                            placeholder="简要描述插件的功能和特点..."
+                                            rows={4}
+                                            className="resize-none"
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )}
                         />
                     </div>
-                </form>
-            </Form>
-            case 3: return <div>
-                <Tabs value={activeDescTab} onValueChange={setActiveDescTab}>
-                    <div className="flex justify-between items-center mb-2">
-                        <TabsList>
-                            {descriptions.map((item, index) => (
-                                <TabsTrigger key={index} value={item.label}>
-                                    {item.label}
-                                    {descriptions.length > 1 && index >= 3 && (
-                                        <XIcon
-                                            className="h-3 w-3 ml-1 hover:text-destructive cursor-pointer"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleRemoveDescriptionTab(index);
-                                            }}
-                                        />
-                                    )}
-                                </TabsTrigger>
-                            ))}
-                        </TabsList>
-                        <IconButton
-                            icon={<PlusIcon className="h-4 w-4" />}
-                            className="ml-1"
-                            onClick={handleAddDescriptionTab}
-                        />
-                    </div>
-                    <div className="h-full">
-                        {descriptions.map((item: any, index) => (
-                            <TabsContent key={index} value={item.label} className=" border w-full rounded-sm h-full overflow-auto">
-                                <CollaborationEditor
-                                    id=""
-                                    content={item.content}
-                                    isEditable
-                                    width="w-[550px]"
-                                    withTitle={false}
-                                    toc={false}
-                                    toolbar={true}
-                                    user={null}
-                                    token=""
-                                    className="h-[250px] prose-sm"
-                                    onBlur={(editor) => {
-                                        const content = editor.getJSON();
-                                        setDescriptions((data) => data.map((it, i) => i === index ? { ...it, content } : it))
-                                    }}
-                                />
-                            </TabsContent>
-                        ))
-                        }
-                    </div>
-                </Tabs>
+                </div>
+            </form>
+        </Form>
+    );
+
+    // Step 2: Version Description
+    const renderDescription = () => (
+        <div className="space-y-3">
+            <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                    添加详细的版本说明，帮助用户了解插件功能
+                </p>
             </div>
-            case 4: return <div className="flex flex-col items-center gap-4">
-                <div className="text-sm text-muted-foreground">
-                    支持上传 .js 文件，最大 100MB
+            <Tabs value={activeDescTab} onValueChange={setActiveDescTab}>
+                <div className="flex items-center gap-2 mb-3">
+                    <TabsList className="h-9">
+                        {descriptions.map((item, index) => (
+                            <TabsTrigger key={index} value={item.label} className="text-sm px-3">
+                                {item.label}
+                                {descriptions.length > 1 && index >= 3 && (
+                                    <XIcon
+                                        className="h-3 w-3 ml-1 hover:text-destructive cursor-pointer"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRemoveDescriptionTab(index);
+                                        }}
+                                    />
+                                )}
+                            </TabsTrigger>
+                        ))}
+                    </TabsList>
+                    <IconButton
+                        icon={<PlusIcon className="h-4 w-4" />}
+                        onClick={handleAddDescriptionTab}
+                    />
+                </div>
+                <div className="border rounded-lg overflow-hidden">
+                    {descriptions.map((item: any, index) => (
+                        <TabsContent key={index} value={item.label} className="m-0">
+                            <CollaborationEditor
+                                id=""
+                                content={item.content}
+                                isEditable
+                                width="w-full"
+                                withTitle={false}
+                                toc={false}
+                                toolbar={true}
+                                user={null}
+                                token=""
+                                className="min-h-[280px] max-h-[400px] prose-sm"
+                                onBlur={(editor) => {
+                                    const content = editor.getJSON();
+                                    setDescriptions((data) => data.map((it, i) => i === index ? { ...it, content } : it))
+                                }}
+                            />
+                        </TabsContent>
+                    ))}
+                </div>
+            </Tabs>
+        </div>
+    );
+
+    // Step 3: Upload & Submit
+    const renderUploadSubmit = () => (
+        <div className="space-y-6">
+            {/* File Upload Section */}
+            <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                    <UploadIcon className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">上传插件文件</span>
+                    <span className="text-xs text-muted-foreground">(支持 .js 文件，最大 100MB)</span>
                 </div>
                 <FileUploader
                     value={attachments}
-                    className="w-[100%]"
+                    className="w-full"
                     accept={{
                         "text/javascript": [".js"]
                     }}
@@ -455,16 +453,9 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                             setUploadProgress(100);
                             setResourcePath(res.name);
 
-                            toast({
-                                title: "上传成功",
-                                description: `插件文件已成功上传：${res.originalName}`,
-                            });
+                            toast.success(`插件文件已成功上传：${res.originalName}`);
                         } catch (error: any) {
-                            toast({
-                                title: "上传失败",
-                                description: error?.message || "上传插件文件失败，请重试",
-                                variant: "destructive"
-                            });
+                            toast.error(error?.message || "上传插件文件失败，请重试");
                         } finally {
                             setIsUploading(false);
                         }
@@ -472,98 +463,63 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                     disabled={isUploading}
                 />
                 {isUploading && (
-                    <div className="w-full space-y-2">
-                        <Progress value={uploadProgress} className="w-full" />
-                        <p className="text-sm text-center text-muted-foreground">
+                    <div className="space-y-2">
+                        <Progress value={uploadProgress} className="w-full h-2" />
+                        <p className="text-xs text-center text-muted-foreground">
                             上传中... {uploadProgress}%
                         </p>
                     </div>
                 )}
                 {resourcePath && (
-                    <div className="flex items-center gap-2 text-sm text-green-600">
-                        <CheckCircle2 className="h-4 w-4" />
-                        插件文件已上传
+                    <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-900">
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        <span className="text-sm text-green-700 dark:text-green-400">插件文件已上传完成</span>
                     </div>
                 )}
             </div>
-            case 5: return <div className="flex flex-col items-center w-full h-full gap-2">
-                <CheckCircle2 className="h-[200px] w-[200px] text-green-500" />
-                <h3 className="text-lg font-semibold">准备就绪</h3>
-                <p className="text-sm text-muted-foreground text-center max-w-md">
-                    您已完成所有步骤，请确认信息无误后提交审核。审核通过后，您的插件将会发布到插件市场。
-                </p>
-                <div className="space-x-2 mt-4">
-                    <Button onClick={handlePrev} variant="outline" disabled={isSubmitting}>
-                        上一步
-                    </Button>
-                    <Button onClick={handleUpload} disabled={isSubmitting}>
-                        {isSubmitting ? (
-                            <>
-                                <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
-                                提交中...
-                            </>
-                        ) : (
-                            "提交审核"
-                        )}
-                    </Button>
+
+            {/* Summary Card */}
+            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <h4 className="text-sm font-medium">发布预览</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">插件名称:</span>
+                        <span className="font-medium truncate">{form.watch('name') || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">版本:</span>
+                        <span className="font-medium">{form.watch('version') || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Key:</span>
+                        <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded">{form.watch('pluginKey') || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">文件:</span>
+                        <span className={cn("font-medium", resourcePath ? "text-green-600" : "text-orange-500")}>
+                            {resourcePath ? '已上传' : '未上传'}
+                        </span>
+                    </div>
                 </div>
+                {form.watch('description') && (
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                        {form.watch('description')}
+                    </p>
+                )}
             </div>
-            case 2: return <div>
-                <div className="text-sm text-muted-foreground mb-4 text-center">
-                    请上传不同尺寸的插件图标（支持 PNG、JPG、SVG 格式）
-                </div>
-                <div className="flex gap-3 w-full min-h-[200px] justify-center flex-wrap">
-                    {logos.map((it, index) => (
-                        <div className="space-y-2" key={index}>
-                            <div
-                                style={{
-                                    width: it.size,
-                                    height: it.size
-                                }}
-                                className={`relative flex items-center justify-center border-2 rounded-sm overflow-hidden ${it.path ? 'border-green-500' : 'border-dashed border-muted-foreground bg-muted'
-                                    } ${it.uploading ? 'cursor-wait' : 'cursor-pointer hover:border-primary'}`}
-                                onClick={() => {
-                                    if (!it.uploading && !it.path) {
-                                        handleLogoUpload(index);
-                                    }
-                                }}
-                            >
-                                {it.uploading ? (
-                                    <Loader2Icon className="h-8 w-8 animate-spin text-primary" />
-                                ) : it.path ? (
-                                    <>
-                                        <img
-                                            src={usePath(it.path)}
-                                            alt={it.label}
-                                            className="w-full h-full object-cover"
-                                        />
-                                        <div className="absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                                            <IconButton
-                                                icon={<TrashIcon className="h-4 w-4" />}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleRemoveLogo(index);
-                                                }}
-                                            />
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="text-xs text-center p-2">
-                                        <PlusIcon className="h-6 w-6 mx-auto mb-1" />
-                                        {it.label}
-                                    </div>
-                                )}
-                            </div>
-                            <div className="text-xs text-center text-muted-foreground">
-                                {it.label}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-            default: return <div>
-                <FileUploader />
-            </div>
+        </div>
+    );
+
+    const render = () => {
+        switch (currentStep) {
+            case 1:
+                return renderBasicInfo();
+            case 2:
+                return renderDescription();
+            case 3:
+                return renderUploadSubmit();
+            default:
+                return renderBasicInfo();
         }
     }
 
@@ -573,34 +529,64 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                 <DialogTrigger asChild onClick={() => setOpen(true)}>
                     {children}
                 </DialogTrigger>
-                <DialogContent className="w-[600px] max-w-none h-auto">
-                    <DialogHeader>
-                        <DialogTitle>发布插件</DialogTitle>
+                <DialogContent className="max-w-2xl w-full max-h-[90vh] flex flex-col p-0">
+                    <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
+                        <DialogTitle className="text-lg">发布插件</DialogTitle>
                         <DialogDescription>
-                            步骤 {currentStep} / {steps.length}: {steps[currentStep - 1].label}
+                            {steps[currentStep - 1].label} ({currentStep}/{steps.length})
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="min-h-[400px] space-y-4">
-                        <Stepper
-                            steps={steps}
-                            currentStep={currentStep}
-                            onStepClick={handleStepClick}
-                        />
-                        {render()}
-                        {currentStep !== 5 && (
-                            <div className="text-center space-x-2 pt-4">
-                                <Button
-                                    onClick={handlePrev}
-                                    variant="outline"
-                                    disabled={currentStep === 1}
-                                >
-                                    上一步
-                                </Button>
-                                <Button onClick={handleNext}>
-                                    {currentStep === 4 ? '完成' : '下一步'}
-                                </Button>
+
+                    <div className="flex-1 overflow-hidden flex flex-col">
+                        {/* Stepper */}
+                        <div className="px-6 py-4 border-b bg-muted/30 flex-shrink-0">
+                            <Stepper
+                                steps={steps}
+                                currentStep={currentStep}
+                                onStepClick={handleStepClick}
+                            />
+                        </div>
+
+                        {/* Content */}
+                        <ScrollArea className="flex-1">
+                            <div className="px-6 py-5">
+                                {render()}
                             </div>
-                        )}
+                        </ScrollArea>
+
+                        {/* Footer */}
+                        <div className="px-6 py-4 border-t bg-background flex-shrink-0 flex items-center justify-between">
+                            <Button
+                                variant="ghost"
+                                onClick={handlePrev}
+                                disabled={currentStep === 1}
+                                className="gap-1"
+                            >
+                                上一步
+                            </Button>
+                            <div className="flex items-center gap-2">
+                                {currentStep < 3 ? (
+                                    <Button onClick={handleNext}>
+                                        下一步
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        onClick={handleSubmit}
+                                        disabled={isSubmitting || !resourcePath}
+                                        className="min-w-[100px]"
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
+                                                提交中...
+                                            </>
+                                        ) : (
+                                            "提交审核"
+                                        )}
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </DialogContent>
             </Dialog>
