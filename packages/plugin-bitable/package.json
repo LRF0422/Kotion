@@ -25,7 +25,9 @@
     "lodash": "^4.17.21",
     "ahooks": "^3.8.1",
     "date-fns": "^4.1.0",
-    "lucide-react": "^0.469.0"
+    "lucide-react": "^0.469.0",
+    "react-dnd": "^16.0.1",
+    "react-dnd-html5-backend": "^16.0.1"
   },
   "devDependencies": {
     "@kn/eslint-config": "workspace:*",

@@ -27,6 +27,7 @@ import { TableView } from "./views/TableView";
 import { KanbanView } from "./views/KanbanView";
 import { GalleryView } from "./views/GalleryView";
 import { TimelineView } from "./views/TimelineView";
+import { CalendarView } from "./views/CalendarView";
 import { FieldConfigPanel } from "./components/FieldConfigPanel";
 import { uuidv4 } from "lib0/random";
 
@@ -159,6 +160,12 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 groupByField: attrs.fields.find(f => f.type === 'select')?.id,
                 scaleUnit: 'day'
             };
+        } else if (viewType === ViewType.CALENDAR) {
+            newView.calendarConfig = {
+                dateField: attrs.fields.find(f => f.type === 'date')?.id || '',
+                endDateField: undefined,
+                titleField: attrs.fields.find(f => f.type === 'text')?.id
+            };
         }
 
         const newViews = [...attrs.views, newView];
@@ -211,6 +218,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 return <GalleryView {...viewProps} />;
             case ViewType.TIMELINE:
                 return <TimelineView {...viewProps} />;
+            case ViewType.CALENDAR:
+                return <CalendarView {...viewProps} editor={editor} />;
             default:
                 return <TableView {...viewProps} />;
         }
@@ -274,7 +283,9 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                         {editor.isEditable && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <IconButton icon={<Plus className="h-4 w-4" />} />
+                                    <Button size="icon" variant="outline" className="h-5 w-5">
+                                        <Plus className="h-3 w-3" />
+                                    </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent>
                                     <DropdownMenuLabel>添加视图</DropdownMenuLabel>
@@ -294,6 +305,10 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                                     <DropdownMenuItem onClick={() => handleAddView(ViewType.TIMELINE)}>
                                         <GanttChartSquare className="h-4 w-4 mr-2" />
                                         甘特图视图
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleAddView(ViewType.CALENDAR)}>
+                                        <Calendar className="h-4 w-4 mr-2" />
+                                        日历视图
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>

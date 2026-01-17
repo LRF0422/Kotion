@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
     Sheet,
     SheetContent,
@@ -17,6 +17,7 @@ import {
     SelectValue,
     Separator,
     Switch,
+    Textarea,
 } from "@kn/ui";
 import {
     DragDropContext,
@@ -35,7 +36,7 @@ import {
     X,
     Settings,
 } from "@kn/icon";
-import { FieldConfig, FieldType } from "../../types";
+import { FieldConfig, FieldType, SelectOption } from "../../types";
 import { cn } from "@kn/ui";
 import { FieldPropertiesEditor } from "./FieldPropertiesEditor";
 
@@ -79,6 +80,60 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
     const [newFieldType, setNewFieldType] = useState<FieldType>(FieldType.TEXT);
     const [editingPropertiesFieldId, setEditingPropertiesFieldId] = useState<string | null>(null);
 
+    // 新字段的配置选项
+    const [newFieldOptions, setNewFieldOptions] = useState<SelectOption[]>([
+        { id: "1", label: "选项1", color: "#3b82f6" },
+        { id: "2", label: "选项2", color: "#10b981" },
+        { id: "3", label: "选项3", color: "#f59e0b" },
+    ]);
+    const [newFieldFormat, setNewFieldFormat] = useState<string>("");
+    const [newFieldDescription, setNewFieldDescription] = useState("");
+    const [newFieldWidth, setNewFieldWidth] = useState(150);
+    const [newOptionLabel, setNewOptionLabel] = useState("");
+
+    // 重置新字段表单
+    const resetNewFieldForm = () => {
+        setNewFieldTitle("");
+        setNewFieldType(FieldType.TEXT);
+        setNewFieldOptions([
+            { id: "1", label: "选项1", color: "#3b82f6" },
+            { id: "2", label: "选项2", color: "#10b981" },
+            { id: "3", label: "选项3", color: "#f59e0b" },
+        ]);
+        setNewFieldFormat("");
+        setNewFieldDescription("");
+        setNewFieldWidth(150);
+        setNewOptionLabel("");
+        setShowAddField(false);
+    };
+
+    // 获取字段类型的默认格式
+    const getDefaultFormat = (type: FieldType): string => {
+        switch (type) {
+            case FieldType.NUMBER:
+                return "number";
+            case FieldType.DATE:
+                return "yyyy-MM-dd";
+            case FieldType.TEXT:
+                return "single";
+            case FieldType.RATING:
+                return "5";
+            case FieldType.PROGRESS:
+                return "bar";
+            case FieldType.URL:
+            case FieldType.EMAIL:
+            case FieldType.PHONE:
+                return "sameTab";
+            default:
+                return "";
+        }
+    };
+
+    // 当字段类型变化时，更新默认格式
+    useEffect(() => {
+        setNewFieldFormat(getDefaultFormat(newFieldType));
+    }, [newFieldType]);
+
     // 处理字段拖拽排序
     const handleDragEnd = (result: DropResult) => {
         if (!result.destination) return;
@@ -120,25 +175,213 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
             id: `field_${Date.now()}`,
             title: newFieldTitle.trim(),
             type: newFieldType,
-            width: 150,
+            width: newFieldWidth,
             isShow: true,
+            description: newFieldDescription || undefined,
+            format: newFieldFormat || undefined,
         };
 
-        // 为单选和多选字段添加默认选项
+        // 为单选和多选字段添加选项
         if (newFieldType === FieldType.SELECT || newFieldType === FieldType.MULTI_SELECT) {
-            newField.options = [
-                { id: "1", label: "选项1", color: "#3b82f6" },
-                { id: "2", label: "选项2", color: "#10b981" },
-                { id: "3", label: "选项3", color: "#f59e0b" },
-            ];
+            newField.options = newFieldOptions;
         }
 
         onAddField(newField);
+        resetNewFieldForm();
+    };
 
-        // 重置表单
-        setNewFieldTitle("");
-        setNewFieldType(FieldType.TEXT);
-        setShowAddField(false);
+    // 添加新选项（用于单选/多选字段）
+    const addNewOption = () => {
+        if (!newOptionLabel.trim()) return;
+        const newOption: SelectOption = {
+            id: `option_${Date.now()}`,
+            label: newOptionLabel.trim(),
+            color: getRandomColor(),
+        };
+        setNewFieldOptions([...newFieldOptions, newOption]);
+        setNewOptionLabel("");
+    };
+
+    // 更新选项
+    const updateNewOption = (optionId: string, updates: Partial<SelectOption>) => {
+        setNewFieldOptions(newFieldOptions.map((opt) =>
+            opt.id === optionId ? { ...opt, ...updates } : opt
+        ));
+    };
+
+    // 删除选项
+    const deleteNewOption = (optionId: string) => {
+        setNewFieldOptions(newFieldOptions.filter((opt) => opt.id !== optionId));
+    };
+
+    // 渲染新字段的类型特定配置
+    const renderNewFieldTypeConfig = () => {
+        switch (newFieldType) {
+            case FieldType.SELECT:
+            case FieldType.MULTI_SELECT:
+                return (
+                    <div className="space-y-3">
+                        <div>
+                            <Label className="text-xs font-semibold">选项列表</Label>
+                            <div className="mt-2 space-y-2">
+                                {newFieldOptions.map((option) => (
+                                    <div key={option.id} className="flex items-center gap-2">
+                                        <div
+                                            className="w-4 h-4 rounded"
+                                            style={{ backgroundColor: option.color }}
+                                        />
+                                        <Input
+                                            value={option.label}
+                                            onChange={(e) =>
+                                                updateNewOption(option.id, { label: e.target.value })
+                                            }
+                                            className="h-8 flex-1"
+                                        />
+                                        <input
+                                            type="color"
+                                            value={option.color}
+                                            onChange={(e) =>
+                                                updateNewOption(option.id, { color: e.target.value })
+                                            }
+                                            className="w-8 h-8 rounded border cursor-pointer"
+                                        />
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => deleteNewOption(option.id)}
+                                        >
+                                            <Trash2 className="h-3 w-3 text-destructive" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <Input
+                                value={newOptionLabel}
+                                onChange={(e) => setNewOptionLabel(e.target.value)}
+                                placeholder="新选项名称"
+                                className="h-8 flex-1"
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") addNewOption();
+                                }}
+                            />
+                            <Button size="sm" onClick={addNewOption} disabled={!newOptionLabel.trim()}>
+                                <Plus className="h-4 w-4 mr-1" />
+                                添加
+                            </Button>
+                        </div>
+                    </div>
+                );
+            case FieldType.NUMBER:
+                return (
+                    <div>
+                        <Label htmlFor="newFieldFormat" className="text-xs">数字格式</Label>
+                        <Select value={newFieldFormat || "number"} onValueChange={setNewFieldFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="number">数字</SelectItem>
+                                <SelectItem value="currency">货币</SelectItem>
+                                <SelectItem value="percent">百分比</SelectItem>
+                                <SelectItem value="decimal">小数</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            case FieldType.DATE:
+                return (
+                    <div>
+                        <Label htmlFor="newFieldFormat" className="text-xs">日期格式</Label>
+                        <Select value={newFieldFormat || "yyyy-MM-dd"} onValueChange={setNewFieldFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="yyyy-MM-dd">2024-01-15</SelectItem>
+                                <SelectItem value="yyyy/MM/dd">2024/01/15</SelectItem>
+                                <SelectItem value="MM-dd-yyyy">01-15-2024</SelectItem>
+                                <SelectItem value="dd/MM/yyyy">15/01/2024</SelectItem>
+                                <SelectItem value="yyyy-MM-dd HH:mm">2024-01-15 14:30</SelectItem>
+                                <SelectItem value="yyyy-MM-dd HH:mm:ss">2024-01-15 14:30:00</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            case FieldType.TEXT:
+                return (
+                    <div>
+                        <Label htmlFor="newFieldFormat" className="text-xs">文本类型</Label>
+                        <Select value={newFieldFormat || "single"} onValueChange={setNewFieldFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="single">单行文本</SelectItem>
+                                <SelectItem value="multi">多行文本</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            case FieldType.RATING:
+                return (
+                    <div>
+                        <Label htmlFor="newFieldFormat" className="text-xs">最大评分</Label>
+                        <Select value={newFieldFormat || "5"} onValueChange={setNewFieldFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="5">5星</SelectItem>
+                                <SelectItem value="10">10星</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            case FieldType.PROGRESS:
+                return (
+                    <div>
+                        <Label htmlFor="newFieldFormat" className="text-xs">进度显示</Label>
+                        <Select value={newFieldFormat || "bar"} onValueChange={setNewFieldFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="bar">进度条</SelectItem>
+                                <SelectItem value="ring">环形</SelectItem>
+                                <SelectItem value="number">数字</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            case FieldType.URL:
+            case FieldType.EMAIL:
+            case FieldType.PHONE:
+                return (
+                    <div className="flex items-center justify-between">
+                        <Label htmlFor="openInNewTab" className="text-xs">新标签页打开</Label>
+                        <Switch
+                            id="openInNewTab"
+                            checked={newFieldFormat === "newTab"}
+                            onCheckedChange={(checked) =>
+                                setNewFieldFormat(checked ? "newTab" : "sameTab")
+                            }
+                        />
+                    </div>
+                );
+            default:
+                return null;
+        }
+    };
+
+    // 获取随机颜色
+    const getRandomColor = (): string => {
+        const colors = [
+            "#3b82f6", "#10b981", "#f59e0b", "#ef4444",
+            "#8b5cf6", "#ec4899", "#14b8a6", "#f97316",
+        ];
+        return colors[Math.floor(Math.random() * colors.length)] as string;
     };
 
     return (
@@ -201,6 +444,41 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                                         </SelectContent>
                                     </Select>
                                 </div>
+
+                                {/* 字段类型特定配置 */}
+                                {renderNewFieldTypeConfig()}
+
+                                <Separator />
+
+                                {/* 通用配置 */}
+                                <div>
+                                    <Label htmlFor="newFieldWidth" className="text-xs">
+                                        列宽
+                                    </Label>
+                                    <Input
+                                        id="newFieldWidth"
+                                        type="number"
+                                        value={newFieldWidth}
+                                        onChange={(e) => setNewFieldWidth(parseInt(e.target.value) || 150)}
+                                        className="h-8 mt-1"
+                                        min={80}
+                                        max={500}
+                                    />
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="newFieldDescription" className="text-xs">
+                                        字段描述（可选）
+                                    </Label>
+                                    <Textarea
+                                        id="newFieldDescription"
+                                        value={newFieldDescription}
+                                        onChange={(e) => setNewFieldDescription(e.target.value)}
+                                        placeholder="为字段添加描述信息..."
+                                        className="mt-1 min-h-[60px]"
+                                    />
+                                </div>
+
                                 <div className="flex gap-2">
                                     <Button
                                         size="sm"
@@ -213,11 +491,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                                     <Button
                                         size="sm"
                                         variant="outline"
-                                        onClick={() => {
-                                            setShowAddField(false);
-                                            setNewFieldTitle("");
-                                            setNewFieldType(FieldType.TEXT);
-                                        }}
+                                        onClick={resetNewFieldForm}
                                     >
                                         <X className="h-4 w-4 mr-1" />
                                         取消
