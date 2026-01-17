@@ -1,12 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { KnowledgeFile, useApi, useUploadFile } from "../../../hooks";
-import { Avatar, Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger, IconButton, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, EmptyState, toast } from "@kn/ui";
-import { PlusIcon, SearchIcon, UploadIcon, XIcon, Loader2Icon, AlertCircleIcon, CheckCircleIcon, EditIcon, PowerIcon, BoxIcon } from "@kn/icon";
+import {
+    Avatar, Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger,
+    IconButton, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, AlertDialog, AlertDialogAction,
+    AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+    AlertDialogTitle, AlertDialogTrigger, EmptyState, toast, Checkbox, Select, SelectContent, SelectItem,
+    SelectTrigger, SelectValue, Separator, ScrollArea, cn, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
+} from "@kn/ui";
+import {
+    PlusIcon, SearchIcon, UploadIcon, XIcon, Loader2Icon, AlertCircleIcon, CheckCircleIcon, EditIcon,
+    PowerIcon, BoxIcon, Trash2Icon, MoreVerticalIcon, ArrowUpDownIcon, EyeIcon, CopyIcon, RefreshCwIcon,
+    SettingsIcon, HistoryIcon, InfoIcon, ChevronRightIcon
+} from "@kn/icon";
 import { PluginUploader } from "../PluginUploader";
 import { APIS } from "../../../api";
 import { CollaborationEditor } from "@kn/editor";
 import { isObject } from "lodash";
-import { cn } from "@kn/ui";
+import { useTranslation } from "@kn/common";
 
 interface PluginStatus {
     code: string;
@@ -23,6 +34,8 @@ interface Plugin {
     status: PluginStatus;
     currentVersion?: string;
     key?: string;
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 interface PluginVersion {
@@ -30,11 +43,17 @@ interface PluginVersion {
     content: any;
 }
 
+type SortOption = 'name' | 'status' | 'updated' | 'created';
+type SortDirection = 'asc' | 'desc';
+
 export interface PluginListProps {
     data: Plugin[];
+    onRefresh?: () => void;
 }
+
 export const PluginList: React.FC<PluginListProps> = (props) => {
 
+    const { t } = useTranslation();
     const { usePath, upload } = useUploadFile();
     const [open, setOpen] = useState(false);
     const [currentId, setCurrentId] = useState<string>();
@@ -48,20 +67,63 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [pluginToDelete, setPluginToDelete] = useState<Plugin>();
     const [newTabName, setNewTabName] = useState("");
-    const [addingTab, setAddingTab] = useState(false)
+    const [addingTab, setAddingTab] = useState(false);
 
-    // Filtered plugins based on search query
-    const filteredPlugins = useMemo(() => {
-        if (!searchQuery.trim()) return props.data;
+    // New state for enhanced features
+    const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(new Set());
+    const [sortBy, setSortBy] = useState<SortOption>('name');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+    const [detailPlugin, setDetailPlugin] = useState<Plugin | null>(null);
+    const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
-        const query = searchQuery.toLowerCase();
-        return props.data.filter(plugin =>
-            plugin.name.toLowerCase().includes(query) ||
-            plugin.developer.toLowerCase().includes(query) ||
-            plugin.maintainer.toLowerCase().includes(query) ||
-            plugin.description?.toLowerCase().includes(query)
-        );
-    }, [props.data, searchQuery]);
+    // Sort and filter plugins
+    const processedPlugins = useMemo(() => {
+        let result = [...props.data];
+
+        // Filter by search query
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            result = result.filter(plugin =>
+                plugin.name.toLowerCase().includes(query) ||
+                plugin.developer.toLowerCase().includes(query) ||
+                plugin.maintainer.toLowerCase().includes(query) ||
+                plugin.description?.toLowerCase().includes(query)
+            );
+        }
+
+        // Sort
+        result.sort((a, b) => {
+            let comparison = 0;
+            switch (sortBy) {
+                case 'name':
+                    comparison = a.name.localeCompare(b.name);
+                    break;
+                case 'status':
+                    comparison = (a.status?.code || '').localeCompare(b.status?.code || '');
+                    break;
+                case 'updated':
+                    comparison = (a.updatedAt || '').localeCompare(b.updatedAt || '');
+                    break;
+                case 'created':
+                    comparison = (a.createdAt || '').localeCompare(b.createdAt || '');
+                    break;
+            }
+            return sortDirection === 'asc' ? comparison : -comparison;
+        });
+
+        return result;
+    }, [props.data, searchQuery, sortBy, sortDirection]);
+
+    // Check if all visible plugins are selected
+    const allSelected = useMemo(() => {
+        return processedPlugins.length > 0 &&
+            processedPlugins.every(p => selectedPlugins.has(p.id));
+    }, [processedPlugins, selectedPlugins]);
+
+    // Check if some plugins are selected
+    const someSelected = useMemo(() => {
+        return processedPlugins.some(p => selectedPlugins.has(p.id)) && !allSelected;
+    }, [processedPlugins, selectedPlugins, allSelected]);
 
     useEffect(() => {
         if (currentId) {
@@ -79,7 +141,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                 })
                 .catch(error => {
                     console.error('Failed to load plugin:', error);
-                    toast.error('Failed to load plugin details');
+                    toast.error(t('pluginManager.loadFailed'));
                 })
                 .finally(() => {
                     setLoading(false);
@@ -87,185 +149,606 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         }
     }, [currentId])
 
+    // Selection handlers
+    const handleSelectAll = useCallback(() => {
+        if (allSelected) {
+            setSelectedPlugins(new Set());
+        } else {
+            setSelectedPlugins(new Set(processedPlugins.map(p => p.id)));
+        }
+    }, [allSelected, processedPlugins]);
+
+    const handleSelectPlugin = useCallback((pluginId: string) => {
+        setSelectedPlugins(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(pluginId)) {
+                newSet.delete(pluginId);
+            } else {
+                newSet.add(pluginId);
+            }
+            return newSet;
+        });
+    }, []);
+
+    const handleClearSelection = useCallback(() => {
+        setSelectedPlugins(new Set());
+    }, []);
+
+    // Bulk actions
+    const handleBulkEnable = useCallback(async () => {
+        if (selectedPlugins.size === 0) return;
+        setBulkActionLoading(true);
+        try {
+            // TODO: Implement bulk enable API call
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated delay
+            toast.success(`${selectedPlugins.size} ${t('pluginManager.bulkEnableSuccess')}`);
+            setSelectedPlugins(new Set());
+            props.onRefresh?.();
+        } catch (error) {
+            toast.error(t('pluginManager.operationFailed'));
+        } finally {
+            setBulkActionLoading(false);
+        }
+    }, [selectedPlugins, props.onRefresh, t]);
+
+    const handleBulkDisable = useCallback(async () => {
+        if (selectedPlugins.size === 0) return;
+        setBulkActionLoading(true);
+        try {
+            // TODO: Implement bulk disable API call
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated delay
+            toast.success(`${selectedPlugins.size} ${t('pluginManager.bulkDisableSuccess')}`);
+            setSelectedPlugins(new Set());
+            props.onRefresh?.();
+        } catch (error) {
+            toast.error(t('pluginManager.operationFailed'));
+        } finally {
+            setBulkActionLoading(false);
+        }
+    }, [selectedPlugins, props.onRefresh, t]);
+
+    const handleBulkDelete = useCallback(async () => {
+        if (selectedPlugins.size === 0) return;
+        setBulkActionLoading(true);
+        try {
+            // TODO: Implement bulk delete API call
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated delay
+            toast.success(`${selectedPlugins.size} ${t('pluginManager.bulkDeleteSuccess')}`);
+            setSelectedPlugins(new Set());
+            props.onRefresh?.();
+        } catch (error) {
+            toast.error(t('pluginManager.operationFailed'));
+        } finally {
+            setBulkActionLoading(false);
+        }
+    }, [selectedPlugins, props.onRefresh, t]);
+
     const handleAddTab = useCallback(() => {
         if (!newTabName.trim()) {
-            toast.error('Tab name cannot be empty');
+            toast.error(t('pluginManager.tabNameEmpty'));
             return;
         }
 
         if (descriptions.some(desc => desc.label === newTabName)) {
-            toast.error('Tab name already exists');
+            toast.error(t('pluginManager.tabNameExists'));
             return;
         }
 
         setDescriptions(prev => [...prev, { label: newTabName, content: {} }]);
         setNewTabName("");
         setAddingTab(false);
-        toast.success('Tab added successfully');
-    }, [newTabName, descriptions]);
+        toast.success(t('pluginManager.tabAdded'));
+    }, [newTabName, descriptions, t]);
 
     const handleRemoveTab = useCallback((index: number) => {
         if (descriptions.length <= 1) {
-            toast.error('Cannot remove the last tab');
+            toast.error(t('pluginManager.cannotRemoveLastTab'));
             return;
         }
 
         setDescriptions(prev => prev.filter((_, i) => i !== index));
-        toast.success('Tab removed successfully');
-    }, [descriptions]);
+        toast.success(t('pluginManager.tabRemoved'));
+    }, [descriptions, t]);
 
     const handleEditPlugin = useCallback((plugin: Plugin) => {
-        // TODO: Implement edit functionality
-        toast.info('Edit functionality coming soon');
+        setDetailPlugin(plugin);
     }, []);
 
-    const handleToggleActive = useCallback((plugin: Plugin) => {
+    const handleToggleActive = useCallback(async (plugin: Plugin) => {
         setActivePluginId(plugin.id);
-        // TODO: Implement activate/deactivate functionality
-        setTimeout(() => {
+        try {
+            // TODO: Implement activate/deactivate API call
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated delay
+            toast.success(plugin.status.code === 'ACTIVE' ? t('pluginManager.disableSuccess') : t('pluginManager.enableSuccess'));
+            props.onRefresh?.();
+        } catch (error) {
+            toast.error(t('pluginManager.operationFailed'));
+        } finally {
             setActivePluginId(undefined);
-            toast.success(`Plugin ${plugin.status.code === 'ACTIVE' ? 'deactivated' : 'activated'} successfully`);
-        }, 1000);
-    }, []);
+        }
+    }, [props.onRefresh, t]);
 
     const handleDeletePlugin = useCallback((plugin: Plugin) => {
         setPluginToDelete(plugin);
         setDeleteDialogOpen(true);
     }, []);
 
-    const confirmDelete = useCallback(() => {
+    const confirmDelete = useCallback(async () => {
         if (!pluginToDelete) return;
 
-        // TODO: Implement delete API call
-        toast.success(`Plugin "${pluginToDelete.name}" deleted successfully`);
-        setDeleteDialogOpen(false);
-        setPluginToDelete(undefined);
-    }, [pluginToDelete]);
+        try {
+            // TODO: Implement delete API call
+            await new Promise(resolve => setTimeout(resolve, 500)); // Simulated delay
+            toast.success(t('pluginManager.deleteSuccess'));
+            props.onRefresh?.();
+        } catch (error) {
+            toast.error(t('pluginManager.operationFailed'));
+        } finally {
+            setDeleteDialogOpen(false);
+            setPluginToDelete(undefined);
+        }
+    }, [pluginToDelete, props.onRefresh, t]);
 
-    const publish = useCallback(() => {
+    const handleCopyPluginKey = useCallback((plugin: Plugin) => {
+        navigator.clipboard.writeText(plugin.key || plugin.id);
+        toast.success(t('pluginManager.keyCopied'));
+    }, [t]);
+
+    const publish = useCallback(async () => {
         if (!file) {
-            toast.error('Please upload a plugin file');
+            toast.error(t('pluginManager.uploadFile'));
             return;
         }
 
         if (!currentPlugin) {
-            toast.error('No plugin selected');
+            toast.error(t('pluginManager.noPluginSelected'));
             return;
         }
 
         setPublishing(true);
-        useApi(APIS.CREATE_PLUGIN, null, {
-            id: currentPlugin.id,
-            resourcePath: file?.name,
-            publish: true,
-            versionDescs: descriptions.map(item => ({
-                label: item.label,
-                content: JSON.stringify(item.content),
-            }))
-        })
-            .then(() => {
-                toast.success('Plugin published successfully');
-                setOpen(false);
-                setFile(undefined);
-            })
-            .catch(error => {
-                console.error('Failed to publish plugin:', error);
-                toast.error('Failed to publish plugin');
-            })
-            .finally(() => {
-                setPublishing(false);
+        try {
+            await useApi(APIS.CREATE_PLUGIN, null, {
+                id: currentPlugin.id,
+                resourcePath: file?.name,
+                publish: true,
+                versionDescs: descriptions.map(item => ({
+                    label: item.label,
+                    content: JSON.stringify(item.content),
+                }))
             });
-    }, [currentPlugin, file, descriptions])
-    return <div className="w-full h-full flex flex-col px-2">
-        <div className="flex items-center gap-2 mb-4 flex-shrink-0">
-            <Input
-                icon={<SearchIcon className="h-4 w-4" />}
-                placeholder="Search plugins..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1 min-w-0"
-            />
-            <PluginUploader>
-                <Button size="sm" variant="ghost" className="flex-shrink-0">
-                    <PlusIcon className="h-4 w-4 mr-2" />
-                    New Plugin
+            toast.success(t('pluginManager.publishSuccess'));
+            setOpen(false);
+            setFile(undefined);
+            props.onRefresh?.();
+        } catch (error) {
+            console.error('Failed to publish plugin:', error);
+            toast.error(t('pluginManager.operationFailed'));
+        } finally {
+            setPublishing(false);
+        }
+    }, [currentPlugin, file, descriptions, props.onRefresh, t]);
+
+    const getStatusBadgeVariant = (status: PluginStatus) => {
+        switch (status?.code) {
+            case 'ACTIVE': return 'default';
+            case 'INACTIVE': return 'secondary';
+            case 'PENDING': return 'outline';
+            default: return 'secondary';
+        }
+    };
+
+    const getStatusColor = (status: PluginStatus) => {
+        switch (status?.code) {
+            case 'ACTIVE': return 'text-green-500';
+            case 'INACTIVE': return 'text-gray-400';
+            case 'PENDING': return 'text-yellow-500';
+            default: return 'text-gray-400';
+        }
+    };
+    return <div className="w-full h-full flex flex-col overflow-hidden">
+        {/* Toolbar */}
+        <div className="flex items-center gap-2 p-3 border-b flex-shrink-0">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+                <Input
+                    icon={<SearchIcon className="h-4 w-4" />}
+                    placeholder={t('pluginManager.searchPlugins')}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="flex-1 min-w-0 max-w-xs"
+                />
+
+                {/* Sort Options */}
+                <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+                    <SelectTrigger className="w-[140px]">
+                        <ArrowUpDownIcon className="h-4 w-4 mr-1" />
+                        <SelectValue placeholder={t('pluginManager.sortBy')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="name">{t('pluginManager.name')}</SelectItem>
+                        <SelectItem value="status">{t('pluginManager.status')}</SelectItem>
+                        <SelectItem value="updated">{t('pluginManager.lastUpdated')}</SelectItem>
+                        <SelectItem value="created">{t('pluginManager.created')}</SelectItem>
+                    </SelectContent>
+                </Select>
+
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
+                    className="h-9 w-9"
+                >
+                    <ArrowUpDownIcon className={cn("h-4 w-4 transition-transform", sortDirection === 'desc' && "rotate-180")} />
                 </Button>
-            </PluginUploader>
+            </div>
+
+            <Separator orientation="vertical" className="h-6" />
+
+            <div className="flex items-center gap-1 flex-shrink-0">
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={props.onRefresh}
+                                className="h-9 w-9"
+                            >
+                                <RefreshCwIcon className="h-4 w-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t('pluginManager.refresh', 'Refresh')}</TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+
+                <PluginUploader>
+                    <Button size="sm" className="flex-shrink-0">
+                        <PlusIcon className="h-4 w-4 mr-1" />
+                        {t('pluginManager.newPlugin')}
+                    </Button>
+                </PluginUploader>
+            </div>
         </div>
 
-        <div className="flex-1 overflow-auto space-y-1 min-h-0">
-            {loading ? (
-                <div className="flex items-center justify-center h-32">
-                    <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-            ) : filteredPlugins.length === 0 ? (
-                <EmptyState
-                    title={searchQuery ? "No plugins found" : "No plugins yet"}
-                    description={searchQuery ? "Try adjusting your search terms" : "Create your first plugin to get started"}
-                    icons={[BoxIcon]}
-                    className="border-none"
+        {/* Bulk Actions Bar */}
+        {selectedPlugins.size > 0 && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border-b flex-shrink-0">
+                <Checkbox
+                    checked={allSelected}
+                    // @ts-ignore
+                    indeterminate={someSelected}
+                    onCheckedChange={handleSelectAll}
                 />
-            ) : (
-                filteredPlugins.map((item, index) => {
-                    const isActivating = activePluginId === item.id;
-                    const isActive = item.status.code === 'ACTIVE';
+                <span className="text-sm font-medium">
+                    {selectedPlugins.size} {t('pluginManager.selected')}
+                </span>
+                <Separator orientation="vertical" className="h-4" />
+                <div className="flex items-center gap-1">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleBulkEnable}
+                        disabled={bulkActionLoading}
+                        className="h-7"
+                    >
+                        <PowerIcon className="h-3 w-3 mr-1 text-green-500" />
+                        {t('pluginManager.enable')}
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleBulkDisable}
+                        disabled={bulkActionLoading}
+                        className="h-7"
+                    >
+                        <PowerIcon className="h-3 w-3 mr-1 text-gray-400" />
+                        {t('pluginManager.disable')}
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleBulkDelete}
+                        disabled={bulkActionLoading}
+                        className="h-7 text-destructive hover:text-destructive"
+                    >
+                        <Trash2Icon className="h-3 w-3 mr-1" />
+                        {t('pluginManager.delete')}
+                    </Button>
+                </div>
+                <div className="flex-1" />
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearSelection}
+                    className="h-7"
+                >
+                    <XIcon className="h-3 w-3 mr-1" />
+                    {t('pluginManager.clear')}
+                </Button>
+            </div>
+        )}
 
-                    return (
-                        <div
-                            key={item.id || index}
-                            className="px-2 py-2 bg-muted/50 hover:bg-muted transition-colors duration-200 rounded-sm flex items-center gap-2 group w-full overflow-hidden"
-                        >
-                            <Avatar className="h-9 w-9 shrink-0">
-                                <img src={usePath(item.icon)} alt={item.name} />
-                            </Avatar>
-                            <div className="flex-1 min-w-0 overflow-hidden">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium truncate">{item.name}</span>
-                                    <Badge
-                                        className="h-5 shrink-0 text-xs"
-                                        variant={isActive ? "default" : "secondary"}
+        {/* Main Content Area */}
+        <div className="flex-1 flex overflow-hidden min-w-0">
+            {/* Plugin List */}
+            <ScrollArea className={cn("flex-1 min-w-0", detailPlugin && "border-r")}>
+                <div className="p-2 space-y-1">
+                    {loading ? (
+                        <div className="flex items-center justify-center h-32">
+                            <Loader2Icon className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : processedPlugins.length === 0 ? (
+                        <EmptyState
+                            title={searchQuery ? t('pluginManager.noPluginsFound') : t('pluginManager.noPluginsYet')}
+                            description={searchQuery ? t('pluginManager.tryAdjusting') : t('pluginManager.createFirst')}
+                            icons={[BoxIcon]}
+                            className="border-none"
+                        />
+                    ) : (
+                        processedPlugins.map((item, index) => {
+                            const isActivating = activePluginId === item.id;
+                            const isActive = item.status?.code === 'ACTIVE';
+                            const isSelected = selectedPlugins.has(item.id);
+                            const isDetailOpen = detailPlugin?.id === item.id;
+
+                            return (
+                                <div
+                                    key={item.id || index}
+                                    className={cn(
+                                        "px-3 py-2 rounded-md flex items-center gap-3 group w-full transition-colors overflow-hidden",
+                                        isSelected && "bg-primary/10",
+                                        isDetailOpen && "bg-muted ring-1 ring-primary/20",
+                                        !isSelected && !isDetailOpen && "hover:bg-muted/50"
+                                    )}
+                                >
+                                    {/* Checkbox */}
+                                    <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={() => handleSelectPlugin(item.id)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="flex-shrink-0"
+                                    />
+
+                                    {/* Avatar */}
+                                    <Avatar className="h-10 w-10 shrink-0">
+                                        <img src={usePath(item.icon)} alt={item.name} />
+                                    </Avatar>
+
+                                    {/* Info */}
+                                    <div
+                                        className="flex-1 min-w-0 overflow-hidden cursor-pointer"
+                                        onClick={() => setDetailPlugin(isDetailOpen ? null : item)}
                                     >
-                                        {item.status.desc}
+                                        <div className="flex items-center gap-2 overflow-hidden">
+                                            <span className="text-sm font-medium truncate">{item.name}</span>
+                                            {item.currentVersion && (
+                                                <span className="text-xs text-muted-foreground flex-shrink-0">v{item.currentVersion}</span>
+                                            )}
+                                            <Badge
+                                                className="h-5 shrink-0 text-xs"
+                                                variant={getStatusBadgeVariant(item.status)}
+                                            >
+                                                {item.status?.desc || 'Unknown'}
+                                            </Badge>
+                                        </div>
+                                        <div className="text-xs text-muted-foreground truncate">
+                                            {item.developer} {item.maintainer && `/ ${item.maintainer}`}
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <IconButton
+                                                        icon={<EyeIcon className="h-4 w-4" />}
+                                                        onClick={() => setDetailPlugin(isDetailOpen ? null : item)}
+                                                    />
+                                                </TooltipTrigger>
+                                                <TooltipContent>{t('pluginManager.viewDetails')}</TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <IconButton
+                                                        icon={
+                                                            isActivating ? (
+                                                                <Loader2Icon className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                <PowerIcon className={cn("h-4 w-4", getStatusColor(item.status))} />
+                                                            )
+                                                        }
+                                                        onClick={() => handleToggleActive(item)}
+                                                        disabled={isActivating}
+                                                    />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    {isActive ? t('pluginManager.deactivate') : t('pluginManager.activate')}
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <IconButton icon={<MoreVerticalIcon className="h-4 w-4" />} />
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => handleEditPlugin(item)}>
+                                                    <EditIcon className="h-4 w-4 mr-2" />
+                                                    {t('pluginManager.edit')}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => {
+                                                    if (currentId === item.id) {
+                                                        setOpen(true);
+                                                    } else {
+                                                        setCurrentId(item.id);
+                                                    }
+                                                }}>
+                                                    <UploadIcon className="h-4 w-4 mr-2" />
+                                                    {t('pluginManager.publishNewVersion')}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleCopyPluginKey(item)}>
+                                                    <CopyIcon className="h-4 w-4 mr-2" />
+                                                    {t('pluginManager.copyPluginKey')}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                    onClick={() => handleDeletePlugin(item)}
+                                                    className="text-destructive focus:text-destructive"
+                                                >
+                                                    <Trash2Icon className="h-4 w-4 mr-2" />
+                                                    {t('pluginManager.delete')}
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            </ScrollArea>
+
+            {/* Detail Panel */}
+            {detailPlugin && (
+                <div className="w-[350px] flex-shrink-0 flex flex-col h-full">
+                    <div className="p-4 border-b flex items-center justify-between">
+                        <h3 className="font-semibold">{t('pluginManager.pluginDetails')}</h3>
+                        <IconButton
+                            icon={<XIcon className="h-4 w-4" />}
+                            onClick={() => setDetailPlugin(null)}
+                        />
+                    </div>
+                    <ScrollArea className="flex-1">
+                        <div className="p-4 space-y-4">
+                            {/* Plugin Header */}
+                            <div className="flex items-center gap-3">
+                                <Avatar className="h-14 w-14">
+                                    <img src={usePath(detailPlugin.icon)} alt={detailPlugin.name} />
+                                </Avatar>
+                                <div>
+                                    <h4 className="font-semibold">{detailPlugin.name}</h4>
+                                    <div className="text-sm text-muted-foreground">
+                                        v{detailPlugin.currentVersion || '1.0.0'}
+                                    </div>
+                                    <Badge variant={getStatusBadgeVariant(detailPlugin.status)} className="mt-1">
+                                        {detailPlugin.status?.desc || t('pluginManager.unknown')}
                                     </Badge>
                                 </div>
-                                <div className="text-xs text-muted-foreground truncate">
-                                    {item.developer} / {item.maintainer}
+                            </div>
+
+                            <Separator />
+
+                            {/* Plugin Info */}
+                            <div className="space-y-3">
+                                <div>
+                                    <Label className="text-xs text-muted-foreground uppercase">{t('pluginManager.developer')}</Label>
+                                    <p className="text-sm">{detailPlugin.developer}</p>
+                                </div>
+                                {detailPlugin.maintainer && (
+                                    <div>
+                                        <Label className="text-xs text-muted-foreground uppercase">{t('pluginManager.maintainer')}</Label>
+                                        <p className="text-sm">{detailPlugin.maintainer}</p>
+                                    </div>
+                                )}
+                                {detailPlugin.description && (
+                                    <div>
+                                        <Label className="text-xs text-muted-foreground uppercase">{t('pluginManager.description', 'Description')}</Label>
+                                        <p className="text-sm text-muted-foreground">{detailPlugin.description}</p>
+                                    </div>
+                                )}
+                                {detailPlugin.key && (
+                                    <div>
+                                        <Label className="text-xs text-muted-foreground uppercase">{t('pluginManager.pluginKey')}</Label>
+                                        <div className="flex items-center gap-1">
+                                            <code className="text-xs bg-muted px-2 py-1 rounded">{detailPlugin.key}</code>
+                                            <IconButton
+                                                icon={<CopyIcon className="h-3 w-3" />}
+                                                onClick={() => handleCopyPluginKey(detailPlugin)}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <Separator />
+
+                            {/* Quick Actions */}
+                            <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground uppercase">{t('pluginManager.quickActions')}</Label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="justify-start"
+                                        onClick={() => handleToggleActive(detailPlugin)}
+                                    >
+                                        <PowerIcon className={cn("h-4 w-4 mr-2", getStatusColor(detailPlugin.status))} />
+                                        {detailPlugin.status?.code === 'ACTIVE' ? t('pluginManager.disable') : t('pluginManager.enable')}
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="justify-start"
+                                        onClick={() => {
+                                            if (currentId === detailPlugin.id) {
+                                                setOpen(true);
+                                            } else {
+                                                setCurrentId(detailPlugin.id);
+                                            }
+                                        }}
+                                    >
+                                        <UploadIcon className="h-4 w-4 mr-2" />
+                                        {t('pluginManager.publish')}
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="justify-start"
+                                        onClick={() => handleEditPlugin(detailPlugin)}
+                                    >
+                                        <SettingsIcon className="h-4 w-4 mr-2" />
+                                        {t('pluginManager.settings')}
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="justify-start text-destructive hover:text-destructive"
+                                        onClick={() => handleDeletePlugin(detailPlugin)}
+                                    >
+                                        <Trash2Icon className="h-4 w-4 mr-2" />
+                                        {t('pluginManager.delete')}
+                                    </Button>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-1 shrink-0 ml-auto">
-                                <IconButton
-                                    icon={<EditIcon className="h-4 w-4" />}
-                                    onClick={() => handleEditPlugin(item)}
-                                />
-                                <IconButton
-                                    icon={
-                                        isActivating ? (
-                                            <Loader2Icon className="h-4 w-4 animate-spin" />
-                                        ) : (
-                                            <PowerIcon className={cn("h-4 w-4", isActive && "text-green-500")} />
-                                        )
-                                    }
-                                    onClick={() => handleToggleActive(item)}
-                                    disabled={isActivating}
-                                />
-                                <Button
-                                    size="sm"
-                                    variant="link"
-                                    className="text-xs px-2 h-7"
-                                    onClick={() => {
-                                        if (currentId === item.id) {
-                                            setOpen(true);
-                                        } else {
-                                            setCurrentId(item.id);
-                                        }
-                                    }}
-                                >
-                                    Publish
-                                </Button>
+
+                            <Separator />
+
+                            {/* Version History Placeholder */}
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-xs text-muted-foreground uppercase">{t('pluginManager.versionHistory')}</Label>
+                                    <Button variant="ghost" size="sm" className="h-6 text-xs">
+                                        {t('pluginManager.viewAll')}
+                                        <ChevronRightIcon className="h-3 w-3 ml-1" />
+                                    </Button>
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-md">
+                                        <HistoryIcon className="h-4 w-4 text-muted-foreground" />
+                                        <div className="flex-1">
+                                            <div className="text-sm font-medium">v{detailPlugin.currentVersion || '1.0.0'}</div>
+                                            <div className="text-xs text-muted-foreground">{t('pluginManager.currentVersion')}</div>
+                                        </div>
+                                        <Badge variant="secondary" className="text-xs">{t('pluginManager.latest')}</Badge>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    );
-                })
+                    </ScrollArea>
+                </div>
             )}
         </div>
         <Dialog open={open} onOpenChange={(value) => {
@@ -285,7 +768,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                     <div className="min-w-0 flex-1">
                         <div className="truncate">{currentPlugin?.name}</div>
                         <div className="text-sm text-muted-foreground font-normal">
-                            Publish New Version
+                            {t('pluginManager.publishVersion')}
                         </div>
                     </div>
                 </DialogTitle>
@@ -294,19 +777,19 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                 <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-2">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <Label>Developer</Label>
+                            <Label>{t('pluginManager.developer')}</Label>
                             <Input value={currentPlugin?.developer || ''} disabled />
                         </div>
                         <div className="space-y-2">
-                            <Label>Maintainer</Label>
+                            <Label>{t('pluginManager.maintainer')}</Label>
                             <Input value={currentPlugin?.maintainer || ''} disabled />
                         </div>
                     </div>
 
                     <div className="space-y-2">
                         <Label className="flex items-center gap-2">
-                            Upload Plugin File
-                            <span className="text-xs text-muted-foreground">(Required)</span>
+                            {t('pluginManager.uploadPluginFile')}
+                            <span className="text-xs text-muted-foreground">({t('pluginManager.required')})</span>
                         </Label>
                         <div className="flex items-center gap-2">
                             <Button
@@ -314,15 +797,15 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                 onClick={() => {
                                     upload().then(res => {
                                         setFile(res);
-                                        toast.success('File uploaded successfully');
+                                        toast.success(t('pluginManager.fileUploaded'));
                                     }).catch(() => {
-                                        toast.error('Failed to upload file');
+                                        toast.error(t('pluginManager.operationFailed'));
                                     });
                                 }}
                                 disabled={loading}
                             >
                                 <UploadIcon className="h-4 w-4 mr-2" />
-                                Choose File
+                                {t('pluginManager.chooseFile')}
                             </Button>
                             {file && (
                                 <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md flex-1">
@@ -338,7 +821,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                     </div>
 
                     <div className="space-y-2">
-                        <Label>Version Description</Label>
+                        <Label>{t('pluginManager.versionDescription')}</Label>
                         {descriptions && descriptions.length > 0 && (
                             <Tabs defaultValue={descriptions[0].label} className="w-full">
                                 <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -427,7 +910,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                         }}
                         disabled={publishing}
                     >
-                        Cancel
+                        {t('pluginManager.cancel')}
                     </Button>
                     <Button
                         onClick={publish}
@@ -436,10 +919,10 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                         {publishing ? (
                             <>
                                 <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
-                                Publishing...
+                                {t('pluginManager.publishing')}
                             </>
                         ) : (
-                            'Publish'
+                            t('pluginManager.publish')
                         )}
                     </Button>
                 </DialogFooter>
@@ -450,17 +933,17 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
             <AlertDialogTrigger />
             <AlertDialogContent>
                 <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Plugin</AlertDialogTitle>
+                    <AlertDialogTitle>{t('pluginManager.deletePlugin')}</AlertDialogTitle>
                     <AlertDialogDescription>
-                        Are you sure you want to delete "{pluginToDelete?.name}"? This action cannot be undone.
+                        {t('pluginManager.deleteConfirm')} "{pluginToDelete?.name}"? {t('pluginManager.deleteWarning')}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel onClick={() => setPluginToDelete(undefined)}>
-                        Cancel
+                        {t('pluginManager.cancel')}
                     </AlertDialogCancel>
                     <AlertDialogAction onClick={confirmDelete}>
-                        Delete
+                        {t('pluginManager.delete')}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
