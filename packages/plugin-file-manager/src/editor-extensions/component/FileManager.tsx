@@ -1,5 +1,5 @@
-import { Check, ClockIcon, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, HomeIcon, ListIcon, LucideHome, PlusIcon, StarIcon, Trash2, UploadIcon, XIcon, ArrowLeft, ArrowRight, ChevronRight } from "@kn/icon";
-import { Button, EmptyState, Input, ScrollArea, Separator, TreeView, cn, Skeleton } from "@kn/ui";
+import { Check, ClockIcon, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, HomeIcon, ListIcon, LucideHome, PlusIcon, StarIcon, Trash2, UploadIcon, XIcon, ArrowLeft, ArrowRight, ChevronRight, Pencil, FolderInput, Copy, Files, CheckSquare, Square } from "@kn/icon";
+import { Button, EmptyState, Input, ScrollArea, Separator, TreeView, cn, Skeleton, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
 import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { FileCardList } from "./FileCard";
 import { useSafeState } from "@kn/core";
@@ -9,6 +9,7 @@ import { Menu } from "./Menu";
 import { FileItem, FileManageContext } from "./FileContext";
 import { useFileManager } from "../../hooks/useFileManager";
 import { Breadcrumb } from "./Breadcrumb";
+import { RenameDialog, MoveDialog, FileDetailsDialog } from "./dialogs";
 
 
 
@@ -52,8 +53,18 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         canGoForward,
         goBack,
         goForward,
-        navigateToFolder
+        navigateToFolder,
+        // New file operations
+        renameFile,
+        moveFiles,
+        copyFiles,
+        duplicateFiles,
     } = useFileManager({ initialFolderId: props.folderId || "" })
+
+    // Dialog states
+    const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+    const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+    const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
     const defaultMenus = [
         {
@@ -111,6 +122,32 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const handleDelete = useCallback((ids: string[]) => {
         deleteFiles(ids)
     }, [deleteFiles])
+
+    // New file operation handlers
+    const handleRename = useCallback((file: FileItem, newName: string) => {
+        renameFile(file, newName);
+    }, [renameFile]);
+
+    const handleMove = useCallback((files: FileItem[], targetFolderId: string) => {
+        moveFiles(files, targetFolderId);
+    }, [moveFiles]);
+
+    const handleCopy = useCallback((files: FileItem[]) => {
+        copyFiles(files);
+    }, [copyFiles]);
+
+    const handleDuplicate = useCallback((files: FileItem[]) => {
+        duplicateFiles(files);
+    }, [duplicateFiles]);
+
+    // Selection handlers
+    const selectAll = useCallback(() => {
+        setSelectFiles([...currentFolderItems]);
+    }, [currentFolderItems, setSelectFiles]);
+
+    const clearSelection = useCallback(() => {
+        setSelectFiles([]);
+    }, [setSelectFiles]);
 
 
     const reslove = useCallback((file: any) => {
@@ -186,29 +223,109 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         canGoForward,
         goBack,
         goForward,
-        navigateToFolder
-    }), [selectedFiles, currentFolderId, currentFolderItems, currentItem, selectable, repoKey, handleCreateFile, handleDelete, loading, error, breadcrumbPath, canGoBack, canGoForward, goBack, goForward, navigateToFolder])
+        navigateToFolder,
+        // New file operations
+        handleRename,
+        handleMove,
+        handleCopy,
+        handleDuplicate,
+        selectAll,
+        clearSelection,
+    }), [selectedFiles, currentFolderId, currentFolderItems, currentItem, selectable, repoKey, handleCreateFile, handleDelete, loading, error, breadcrumbPath, canGoBack, canGoForward, goBack, goForward, navigateToFolder, handleRename, handleMove, handleCopy, handleDuplicate, selectAll, clearSelection])
 
     return <FileManageContext.Provider value={contextValue}>
         <div className={cn("rounded-sm flex flex-col border not-prose", props.className)}>
-            <div className="w-full bg-muted border-b flex items-center justify-between h-[40px]">
+            <div className="w-full bg-muted border-b flex items-center justify-between h-[40px] px-1">
                 <div className="flex items-center h-full gap-1">
                     <Button size="sm" variant="ghost" onClick={() => handleCreateFile('FILE')} disabled={loading}>
                         <UploadIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
                         Upload
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => handleDelete(selectedFiles.map(f => f.id))} disabled={selectedFiles.length === 0 || loading}>
-                        <Trash2 className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                        Delete
+                    <Button size="sm" variant="ghost" onClick={() => handleCreateFile('FOLDER')} disabled={loading}>
+                        <FolderPlusIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
+                        New Folder
                     </Button>
-                    <Button size="sm" variant="ghost" disabled={selectedFiles.length === 0 || loading}>
-                        <DownloadIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                        Download
+
+                    <Separator orientation="vertical" className="h-6" />
+
+                    {/* Selection actions */}
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={selectedFiles.length === currentFolderItems.length ? clearSelection : selectAll}
+                        disabled={loading || currentFolderItems.length === 0}
+                    >
+                        {selectedFiles.length === currentFolderItems.length && currentFolderItems.length > 0 ? (
+                            <><Square className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />Deselect</>
+                        ) : (
+                            <><CheckSquare className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />Select All</>
+                        )}
                     </Button>
+
+                    {selectedFiles.length > 0 && (
+                        <>
+                            <Separator orientation="vertical" className="h-6" />
+
+                            {/* Actions for selected files */}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button size="sm" variant="ghost">
+                                        Actions ({selectedFiles.length})
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" className="w-[180px]">
+                                    {selectedFiles.length === 1 && (
+                                        <>
+                                            <DropdownMenuItem onClick={() => setRenameDialogOpen(true)}>
+                                                <Pencil className="h-4 w-4 mr-2" />
+                                                Rename
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => setDetailsDialogOpen(true)}>
+                                                <FileIcon className="h-4 w-4 mr-2" />
+                                                Properties
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                        </>
+                                    )}
+                                    <DropdownMenuItem onClick={() => setMoveDialogOpen(true)}>
+                                        <FolderInput className="h-4 w-4 mr-2" />
+                                        Move to...
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleCopy(selectedFiles)}>
+                                        <Copy className="h-4 w-4 mr-2" />
+                                        Copy
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleDuplicate(selectedFiles)}>
+                                        <Files className="h-4 w-4 mr-2" />
+                                        Duplicate
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem disabled={selectedFiles.every(f => f.isFolder)}>
+                                        <DownloadIcon className="h-4 w-4 mr-2" />
+                                        Download
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                        onClick={() => handleDelete(selectedFiles.map(f => f.id))}
+                                        className="text-destructive focus:text-destructive"
+                                    >
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        Delete
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            <Button size="sm" variant="ghost" onClick={() => handleDelete(selectedFiles.map(f => f.id))} disabled={loading}>
+                                <Trash2 className="-ms-1 me-2 opacity-60 mr-1 text-destructive" size={16} strokeWidth={2} aria-hidden="true" />
+                                Delete
+                            </Button>
+                        </>
+                    )}
+
                     {
                         selectable &&
                         <>
-                            <Separator orientation="vertical" />
+                            <Separator orientation="vertical" className="h-6" />
                             {
                                 selectedFiles.length > 0 &&
                                 <Button size="sm" className="h-8" onClick={() => {
@@ -368,5 +485,25 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 </div>
             </div>
         </div>
+
+        {/* Dialogs */}
+        <RenameDialog
+            open={renameDialogOpen}
+            onOpenChange={setRenameDialogOpen}
+            file={selectedFiles.length === 1 ? selectedFiles[0] : null}
+            onConfirm={handleRename}
+        />
+        <MoveDialog
+            open={moveDialogOpen}
+            onOpenChange={setMoveDialogOpen}
+            files={selectedFiles}
+            onConfirm={handleMove}
+            currentFolderId={currentFolderId}
+        />
+        <FileDetailsDialog
+            open={detailsDialogOpen}
+            onOpenChange={setDetailsDialogOpen}
+            file={selectedFiles.length === 1 ? selectedFiles[0] : null}
+        />
     </FileManageContext.Provider>
 }

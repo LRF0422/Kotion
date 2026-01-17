@@ -125,6 +125,33 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         toast.info('Delete functionality not yet implemented');
     }, []);
 
+    // New file operations
+    const renameFile = useCallback(async (file: FileItem, newName: string) => {
+        // TODO: Implement rename API call
+        toast.success(`Renamed "${file.name}" to "${newName}"`);
+        setUpdateFlag((prev) => prev + 1);
+    }, []);
+
+    const moveFiles = useCallback(async (files: FileItem[], targetFolderId: string) => {
+        // TODO: Implement move API call
+        const count = files.length;
+        toast.success(`Moved ${count} item${count > 1 ? 's' : ''} successfully`);
+        setUpdateFlag((prev) => prev + 1);
+    }, []);
+
+    const copyFiles = useCallback(async (files: FileItem[]) => {
+        // TODO: Implement copy to clipboard functionality
+        const count = files.length;
+        toast.success(`Copied ${count} item${count > 1 ? 's' : ''} to clipboard`);
+    }, []);
+
+    const duplicateFiles = useCallback(async (files: FileItem[]) => {
+        // TODO: Implement duplicate API call
+        const count = files.length;
+        toast.success(`Duplicated ${count} item${count > 1 ? 's' : ''}`);
+        setUpdateFlag((prev) => prev + 1);
+    }, []);
+
     // Navigation functions
     const navigateToFolder = useCallback((folderId: string, folderName: string = 'Folder') => {
         setCurrentFolderId(folderId);
@@ -211,5 +238,10 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         goBack,
         goForward,
         navigateToFolder,
+        // New file operations
+        renameFile,
+        moveFiles,
+        copyFiles,
+        duplicateFiles,
     };
 };

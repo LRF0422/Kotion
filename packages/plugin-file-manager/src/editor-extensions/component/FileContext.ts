@@ -43,6 +43,13 @@ export interface FileManagerState {
     goBack: () => void
     goForward: () => void
     navigateToFolder: (folderId: string, folderName?: string) => void
+    // New file operations
+    handleRename: (file: FileItem, newName: string) => void
+    handleMove: (files: FileItem[], targetFolderId: string) => void
+    handleCopy: (files: FileItem[]) => void
+    handleDuplicate: (files: FileItem[]) => void
+    selectAll: () => void
+    clearSelection: () => void
 }
 
 export const FileManageContext = createContext<FileManagerState | null>(null)
