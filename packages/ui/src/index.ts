@@ -5,7 +5,8 @@ export * from "class-variance-authority"
 export {
     Bar, BarChart, CartesianGrid,
     XAxis, PolarAngleAxis, PolarGrid, Radar, RadarChart,
-    Label as ChartLabel, Pie, PieChart, Area, AreaChart
+    Label as ChartLabel, Pie, PieChart, Area, AreaChart,
+    LineChart, Line, YAxis, Cell
 } from "recharts"
 export { zodResolver } from "@hookform/resolvers/zod"
 export * from "zod"

@@ -22,6 +22,7 @@ export const bitable = new BitablePlugin({
                         "gallery": "Gallery View",
                         "calendar": "Calendar View",
                         "timeline": "Gantt View",
+                        "chart": "Chart View",
                         "default": "View"
                     },
                     // Actions
@@ -34,7 +35,8 @@ export const bitable = new BitablePlugin({
                         "cancel": "Cancel",
                         "confirm": "Confirm",
                         "save": "Save",
-                        "add": "Add"
+                        "add": "Add",
+                        "importExcel": "Import Excel"
                     },
                     // Record stats
                     "stats": {
@@ -147,6 +149,62 @@ export const bitable = new BitablePlugin({
                         "month": "Month",
                         "week": "Week",
                         "day": "Day"
+                    },
+                    // Chart view
+                    "chartView": {
+                        "configure": "Configure",
+                        "chartConfig": "Chart Configuration",
+                        "chartType": "Chart Type",
+                        "barChart": "Bar Chart",
+                        "lineChart": "Line Chart",
+                        "pieChart": "Pie Chart",
+                        "areaChart": "Area Chart",
+                        "title": "Title",
+                        "titlePlaceholder": "Enter chart title",
+                        "xAxis": "X-Axis",
+                        "yAxis": "Y-Axis",
+                        "selectField": "Select field",
+                        "selectXAxis": "Please select X-axis field",
+                        "selectYAxis": "Please select Y-axis field",
+                        "valueField": "Value Field",
+                        "aggregation": "Aggregation",
+                        "sum": "Sum",
+                        "count": "Count",
+                        "average": "Average",
+                        "min": "Min",
+                        "max": "Max",
+                        "showLegend": "Show Legend",
+                        "showGrid": "Show Grid"
+                    },
+                    // Excel import
+                    "excelImport": {
+                        "title": "Import from Excel",
+                        "description": "Import data from Excel spreadsheet into this table",
+                        "mappingTitle": "Map Columns",
+                        "mappingDescription": "Map Excel columns to table fields or create new fields",
+                        "dropzone": {
+                            "title": "Drop Excel file here",
+                            "description": "Support .xlsx, .xls, .csv files",
+                            "button": "Select File"
+                        },
+                        "hasHeaderRow": "First row contains headers",
+                        "recordCount": "{{count}} records found",
+                        "sampleValue": "Sample",
+                        "createNewField": "Create new field",
+                        "selectField": "Select field",
+                        "skipColumn": "Skip this column",
+                        "importButton": "Import Data",
+                        "importing": "Importing...",
+                        "summary": {
+                            "newFields": "{{count}} new fields",
+                            "mapped": "{{count}} mapped"
+                        },
+                        "errors": {
+                            "emptyFile": "The Excel file is empty",
+                            "parseError": "Failed to parse Excel file",
+                            "importError": "Failed to import data",
+                            "invalidFormat": "Invalid file format. Please select .xlsx, .xls or .csv file"
+                        }
                     }
                 }
             }
@@ -161,6 +219,7 @@ export const bitable = new BitablePlugin({
                         "gallery": "画廊视图",
                         "calendar": "日历视图",
                         "timeline": "甘特图视图",
+                        "chart": "图表视图",
                         "default": "视图"
                     },
                     // Actions
@@ -173,7 +232,8 @@ export const bitable = new BitablePlugin({
                         "cancel": "取消",
                         "confirm": "确认",
                         "save": "保存",
-                        "add": "添加"
+                        "add": "添加",
+                        "importExcel": "导入Excel"
                     },
                     // Record stats
                     "stats": {
@@ -286,6 +346,62 @@ export const bitable = new BitablePlugin({
                         "month": "月",
                         "week": "周",
                         "day": "日"
+                    },
+                    // Chart view
+                    "chartView": {
+                        "configure": "配置",
+                        "chartConfig": "图表配置",
+                        "chartType": "图表类型",
+                        "barChart": "柱状图",
+                        "lineChart": "折线图",
+                        "pieChart": "饼图",
+                        "areaChart": "面积图",
+                        "title": "标题",
+                        "titlePlaceholder": "输入图表标题",
+                        "xAxis": "X轴",
+                        "yAxis": "Y轴",
+                        "selectField": "选择字段",
+                        "selectXAxis": "请选择X轴字段",
+                        "selectYAxis": "请选择Y轴字段",
+                        "valueField": "数值字段",
+                        "aggregation": "聚合方式",
+                        "sum": "求和",
+                        "count": "计数",
+                        "average": "平均值",
+                        "min": "最小值",
+                        "max": "最大值",
+                        "showLegend": "显示图例",
+                        "showGrid": "显示网格"
+                    },
+                    // Excel import
+                    "excelImport": {
+                        "title": "从 Excel 导入",
+                        "description": "从 Excel 电子表格导入数据到此表格",
+                        "mappingTitle": "列映射",
+                        "mappingDescription": "将 Excel 列映射到表格字段或创建新字段",
+                        "dropzone": {
+                            "title": "拖放 Excel 文件到此处",
+                            "description": "支持 .xlsx, .xls, .csv 文件",
+                            "button": "选择文件"
+                        },
+                        "hasHeaderRow": "第一行包含标题",
+                        "recordCount": "找到 {{count}} 条记录",
+                        "sampleValue": "示例",
+                        "createNewField": "创建新字段",
+                        "selectField": "选择字段",
+                        "skipColumn": "跳过此列",
+                        "importButton": "导入数据",
+                        "importing": "导入中...",
+                        "summary": {
+                            "newFields": "{{count}} 个新字段",
+                            "mapped": "{{count}} 个已映射"
+                        },
+                        "errors": {
+                            "emptyFile": "Excel 文件为空",
+                            "parseError": "解析 Excel 文件失败",
+                            "importError": "导入数据失败",
+                            "invalidFormat": "无效的文件格式，请选择 .xlsx, .xls 或 .csv 文件"
+                        }
                     }
                 }
             }

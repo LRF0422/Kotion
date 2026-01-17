@@ -33,6 +33,15 @@ export enum ViewType {
     CALENDAR = 'calendar',
     TIMELINE = 'timeline',
     FORM = 'form',
+    CHART = 'chart',
+}
+
+// 图表类型枚举
+export enum ChartType {
+    BAR = 'bar',
+    LINE = 'line',
+    PIE = 'pie',
+    AREA = 'area',
 }
 
 // 字段配置
@@ -110,6 +119,25 @@ export interface ViewConfig {
         groupByField?: string;
         scaleUnit?: 'day' | 'week' | 'month';
     };
+    // 图表视图特有配置
+    chartConfig?: {
+        chartType: ChartType;
+        xAxisField: string;
+        yAxisFields: YAxisConfig[];
+        title?: string;
+        description?: string;
+        showLegend?: boolean;
+        showGrid?: boolean;
+        aggregation?: 'sum' | 'count' | 'avg' | 'min' | 'max';
+        groupByField?: string;
+    };
+}
+
+// Y轴配置
+export interface YAxisConfig {
+    fieldId: string;
+    color: string;
+    label?: string;
 }
 
 // 筛选配置

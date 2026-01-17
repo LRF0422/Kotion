@@ -1,6 +1,6 @@
 import { PMNode as Node, ReactNodeViewRenderer, mergeAttributes } from "@kn/editor";
 import { BitableView } from "./BitableView";
-import { FieldType, ViewType } from "../types";
+import { FieldType, ViewType, ChartType } from "../types";
 import { generateFieldId, generateViewId } from "../utils/id";
 
 declare module '@kn/editor' {
@@ -147,6 +147,26 @@ const getDefaultViews = () => [
             progressField: 'progress',
             groupByField: 'status',
             scaleUnit: 'day',
+        }
+    },
+    {
+        id: generateViewId(),
+        name: '图表视图',
+        type: ViewType.CHART,
+        filters: [],
+        sorts: [],
+        groups: [],
+        hiddenFields: [],
+        fieldOrder: [],
+        chartConfig: {
+            chartType: ChartType.BAR,
+            xAxisField: 'status',
+            yAxisFields: [],
+            title: '',
+            description: '',
+            showLegend: true,
+            showGrid: true,
+            aggregation: 'count',
         }
     }
 ];

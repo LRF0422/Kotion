@@ -1,8 +1,7 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import { useTranslation } from "@kn/common";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
-import { Button, IconButton } from "@kn/ui";
+import { Button } from "@kn/ui";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -17,19 +16,22 @@ import {
     Settings,
     Trash2,
     Table2,
-    LayoutGrid,
     Calendar,
     KanbanSquare,
     ImageIcon,
-    GanttChartSquare
+    GanttChartSquare,
+    BarChart3,
+    Upload
 } from "@kn/icon";
-import { BitableAttrs, ViewType, ViewConfig, FieldConfig, RecordData } from "../types";
+import { BitableAttrs, ViewType, ViewConfig, FieldConfig, RecordData, ChartType } from "../types";
 import { TableView } from "./views/TableView";
 import { KanbanView } from "./views/KanbanView";
 import { GalleryView } from "./views/GalleryView";
 import { TimelineView } from "./views/TimelineView";
 import { CalendarView } from "./views/CalendarView";
+import { ChartView } from "./views/ChartView";
 import { FieldConfigPanel } from "./components/FieldConfigPanel";
+import { ExcelImportDialog } from "./components/ExcelImportDialog";
 import { generateRecordId, generateViewId } from "../utils/id";
 
 export const BitableView: React.FC<NodeViewProps> = (props) => {
@@ -40,6 +42,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const [data, setData] = useState<RecordData[]>(attrs.data || []);
     const [currentViewId, setCurrentViewId] = useState(attrs.currentView);
     const [fieldConfigOpen, setFieldConfigOpen] = useState(false);
+    const [excelImportOpen, setExcelImportOpen] = useState(false);
 
     // 获取当前视图
     const currentView: any = useMemo(() => {
@@ -130,6 +133,30 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         updateAttributes({ ...attrs, fields: newOrder });
     }, [attrs, updateAttributes]);
 
+    // 从 Excel 导入数据
+    const handleExcelImport = useCallback((newFields: FieldConfig[], newRecords: RecordData[]) => {
+        // 合并新字段
+        const mergedFields = [...attrs.fields, ...newFields];
+
+        // 为新记录添加ID字段
+        const idField = attrs.fields.find(f => f.type === 'id');
+        const startId = data.length + 1;
+        const recordsWithId = newRecords.map((record, index) => ({
+            ...record,
+            [idField?.id || 'id']: startId + index,
+        }));
+
+        // 合并数据
+        const mergedData = [...data, ...recordsWithId];
+
+        setData(mergedData);
+        updateAttributes({
+            ...attrs,
+            fields: mergedFields,
+            data: mergedData
+        });
+    }, [attrs, data, updateAttributes]);
+
     // 添加视图
     const handleAddView = useCallback((viewType: ViewType) => {
         const newView: ViewConfig = {
@@ -167,6 +194,17 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 dateField: attrs.fields.find(f => f.type === 'date')?.id || '',
                 endDateField: undefined,
                 titleField: attrs.fields.find(f => f.type === 'text')?.id
+            };
+        } else if (viewType === ViewType.CHART) {
+            newView.chartConfig = {
+                chartType: ChartType.BAR,
+                xAxisField: attrs.fields.find(f => f.type === 'text' || f.type === 'select')?.id || '',
+                yAxisFields: [],
+                title: '',
+                description: '',
+                showLegend: true,
+                showGrid: true,
+                aggregation: 'count',
             };
         }
 
@@ -222,6 +260,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 return <TimelineView {...viewProps} />;
             case ViewType.CALENDAR:
                 return <CalendarView {...viewProps} editor={editor} />;
+            case ViewType.CHART:
+                return <ChartView {...viewProps} />;
             default:
                 return <TableView {...viewProps} />;
         }
@@ -240,6 +280,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 return <Calendar className="h-4 w-4" />;
             case ViewType.TIMELINE:
                 return <GanttChartSquare className="h-4 w-4" />;
+            case ViewType.CHART:
+                return <BarChart3 className="h-4 w-4" />;
             default:
                 return <Table2 className="h-4 w-4" />;
         }
@@ -312,6 +354,10 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                                         <Calendar className="h-4 w-4 mr-2" />
                                         {t('bitable.views.calendar')}
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleAddView(ViewType.CHART)}>
+                                        <BarChart3 className="h-4 w-4 mr-2" />
+                                        {t('bitable.views.chart')}
+                                    </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         )}
@@ -320,6 +366,10 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                     {/* 操作按钮 */}
                     {editor.isEditable && (
                         <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline" onClick={() => setExcelImportOpen(true)}>
+                                <Upload className="h-4 w-4 mr-1" />
+                                {t('bitable.actions.importExcel')}
+                            </Button>
                             <Button size="sm" variant="outline" onClick={() => setFieldConfigOpen(true)}>
                                 <Settings className="h-4 w-4 mr-1" />
                                 {t('bitable.actions.configureColumns')}
@@ -356,6 +406,14 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 onAddField={handleAddField}
                 onReorderFields={handleReorderFields}
             />
+
+            {/* Excel 导入对话框 */}
+            <ExcelImportDialog
+                open={excelImportOpen}
+                onOpenChange={setExcelImportOpen}
+                fields={attrs.fields}
+                onImport={handleExcelImport}
+            />
         </NodeViewWrapper>
     );
 };
@@ -373,6 +431,8 @@ function getViewTypeName(type: ViewType, t: (key: string) => string): string {
             return t('bitable.views.calendar');
         case ViewType.TIMELINE:
             return t('bitable.views.timeline');
+        case ViewType.CHART:
+            return t('bitable.views.chart');
         default:
             return t('bitable.views.default');
     }

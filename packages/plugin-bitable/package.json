@@ -27,7 +27,8 @@
     "date-fns": "^4.1.0",
     "lucide-react": "^0.469.0",
     "react-dnd": "^16.0.1",
-    "react-dnd-html5-backend": "^16.0.1"
+    "react-dnd-html5-backend": "^16.0.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@kn/eslint-config": "workspace:*",
