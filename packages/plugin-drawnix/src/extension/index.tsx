@@ -2,7 +2,7 @@ import { ExtensionWrapper } from "@kn/common";
 import { Drawnix, DrawnixData, MindmapNodeData, convertToPlaitElement, extractMindmapStructure, addChildToNode, deleteNodeById, updateNodeText } from "./drawnix";
 import { Paintbrush2 } from "@kn/icon";
 import React from "react";
-import { z } from "zod";
+import { z } from "@kn/ui";
 import { nanoid } from "nanoid";
 import { Editor } from "@kn/editor";
 import { parseMarkdownToDrawnix } from "@plait-board/markdown-to-drawnix";
@@ -188,12 +188,12 @@ export const DrawnixExtension: ExtensionWrapper = {
                 try {
                     const mindData = await parseMermaidToDrawnix(mermaid);
 
-                    if (!mindData || !mindData.children || mindData.children.length === 0) {
+                    if (!mindData || !mindData.elements || mindData.elements.length === 0) {
                         return { error: '无法解析Mermaid代码，请确保语法正确' };
                     }
 
                     const data: DrawnixData = {
-                        children: mindData.children
+                        children: mindData.elements
                     };
 
                     if (pos !== undefined) {

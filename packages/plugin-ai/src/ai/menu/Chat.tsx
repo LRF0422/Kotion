@@ -272,7 +272,6 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         <TooltipProvider>
             <ExpandableChat
                 size="md"
-                position="bottom-right"
                 icon={
                     <div className="relative">
                         <Sparkles className="h-6 w-6" />
