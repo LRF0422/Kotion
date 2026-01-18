@@ -107,14 +107,17 @@ const performWebSearch = async (query: string, maxResults: number = 5): Promise<
 
 // Type definitions
 interface NodeInfo {
-    from: number
-    to: number
-    position: number
+    from: number           // Node start position (block boundary)
+    to: number             // Node end position (block boundary)
+    position: number       // Same as from
     type: string
     attrs: Record<string, any>
     marks: any
-    textContent?: string // Changed from textPos array to simple text
+    textContent?: string   // Text content of the node
     nodeSize: number
+    // Insertion positions:
+    textStartPos?: number  // Position where text content starts (use for inserting at beginning)
+    textEndPos?: number    // Position where text content ends (use for inserting at end)
 }
 
 interface DocumentStructure {
@@ -122,18 +125,20 @@ interface DocumentStructure {
     headings: Array<{
         level: number
         text: string
-        pos: number
+        pos: number           // Block position
+        textInsertPos: number // Position inside heading for text insertion
     }>
     blocks: Array<{
         type: string
-        pos: number
+        pos: number           // Block position
         size: number
+        textInsertPos?: number // Position inside block for text insertion (if textblock)
     }>
 }
 
 // Helper function to build node information (optimized)
 const buildNodeInfo = (node: Node, pos: number, includeFullText: boolean = false): NodeInfo => {
-    return {
+    const info: NodeInfo = {
         from: pos,
         to: pos + node.nodeSize,
         position: pos,
@@ -143,6 +148,14 @@ const buildNodeInfo = (node: Node, pos: number, includeFullText: boolean = false
         textContent: includeFullText ? node.textContent : undefined,
         nodeSize: node.nodeSize
     }
+
+    // For text blocks, provide text insertion positions
+    if (node.isTextblock) {
+        info.textStartPos = pos + 1  // Position inside the block for inserting at start
+        info.textEndPos = pos + node.nodeSize - 1  // Position inside the block for inserting at end
+    }
+
+    return info
 }
 
 // Helper function to extract document structure
@@ -155,16 +168,24 @@ const extractDocumentStructure = (editor: Editor): DocumentStructure => {
             headings.push({
                 level: node.attrs.level || 1,
                 text: node.textContent,
-                pos
+                pos,
+                textInsertPos: pos + 1  // Position inside heading for insertion
             })
         }
 
         if (node.isBlock) {
-            blocks.push({
+            const blockInfo: DocumentStructure['blocks'][0] = {
                 type: node.type.name,
                 pos,
                 size: node.nodeSize
-            })
+            }
+
+            // For text blocks, provide insertion position
+            if (node.isTextblock) {
+                blockInfo.textInsertPos = pos + 1
+            }
+
+            blocks.push(blockInfo)
         }
 
         return true
@@ -459,34 +480,295 @@ export const useEditorAgentOptimized = (
         },
 
         write: {
-            description: '插入内容到指定位置',
+            description: '插入文本到文档。可以指定块索引和位置，工具会实时计算正确的插入位置',
             inputSchema: z.object({
                 text: z.string().describe("要插入的文本"),
-                pos: z.number().describe("插入位置(使用当前文档的实际位置)")
+                blockIndex: z.number().optional().describe("块索引（从0开始），不填则使用最后一个块"),
+                location: z.enum(['start', 'end']).optional().describe("在块内的位置: 'start'开头, 'end'末尾。默认'end'")
             }),
-            execute: async (params: { text: string, pos: number }) => {
-                const { text, pos } = params
+            execute: async (params: { text: string, blockIndex?: number, location?: 'start' | 'end' }) => {
+                const { text, blockIndex, location = 'end' } = params
+
+                try {
+                    // Find all text blocks in the document with accurate position info
+                    const textBlocks: Array<{
+                        pos: number,
+                        contentStart: number,
+                        contentEnd: number,
+                        type: string,
+                        text: string
+                    }> = []
+
+                    editor.state.doc.descendants((node, pos) => {
+                        if (node.isTextblock) {
+                            // Use resolve to get accurate content positions
+                            const $pos = editor.state.doc.resolve(pos + 1)
+                            textBlocks.push({
+                                pos,
+                                contentStart: $pos.start(),   // Start of content inside block
+                                contentEnd: $pos.end(),       // End of content inside block  
+                                type: node.type.name,
+                                text: node.textContent.slice(0, 50) + (node.textContent.length > 50 ? '...' : '')
+                            })
+                        }
+                        return true
+                    })
+
+                    if (textBlocks.length === 0) {
+                        return { error: '文档中没有可插入文本的块' }
+                    }
+
+                    // Determine which block to use
+                    const targetIndex = blockIndex !== undefined
+                        ? Math.min(Math.max(0, blockIndex), textBlocks.length - 1)
+                        : textBlocks.length - 1
+
+                    const targetBlock = textBlocks[targetIndex]
+
+                    // Use contentStart/contentEnd for accurate positioning
+                    const insertPos = location === 'start'
+                        ? targetBlock.contentStart
+                        : targetBlock.contentEnd
+
+                    const docSize = editor.state.doc.nodeSize
+
+                    // Use setTextSelection + insertContent for reliable insertion
+                    const success = editor.chain()
+                        .focus()
+                        .setTextSelection(insertPos)
+                        .insertContent(text)
+                        .run()
+
+                    if (!success) {
+                        return { error: `插入失败，位置: ${insertPos}` }
+                    }
+
+                    const newDocSize = editor.state.doc.nodeSize
+                    const insertedSize = newDocSize - docSize
+
+                    return {
+                        success: true,
+                        blockIndex: targetIndex,
+                        blockType: targetBlock.type,
+                        blockPreview: targetBlock.text,
+                        location,
+                        insertedAt: insertPos,
+                        insertedSize,
+                        oldDocSize: docSize,
+                        newDocSize,
+                        totalBlocks: textBlocks.length
+                    }
+                } catch (error) {
+                    return { error: `插入失败: ${error instanceof Error ? error.message : '未知错误'}` }
+                }
+            }
+        },
+
+        insertAtEnd: {
+            description: '在文档末尾插入内容。这是最可靠的插入方式，适合追加新内容',
+            inputSchema: z.object({
+                text: z.string().describe("要插入的文本内容"),
+                asNewParagraph: z.boolean().optional().describe("是否作为新段落插入，默认true")
+            }),
+            execute: async (params: { text: string, asNewParagraph?: boolean }) => {
+                const { text, asNewParagraph = true } = params
                 const docSize = editor.state.doc.nodeSize
-                const validation = validateRange(pos, undefined, docSize)
-                if (!validation.valid) {
-                    return { error: validation.error }
+
+                try {
+                    // Find the end position for insertion
+                    // The last valid position is docSize - 2 (before the closing doc tag)
+                    const endPos = docSize - 2
+
+                    let success: boolean
+                    if (asNewParagraph) {
+                        // Insert as a new paragraph
+                        success = editor.chain()
+                            .focus('end')
+                            .insertContent([{ type: 'paragraph', content: [{ type: 'text', text }] }])
+                            .run()
+                    } else {
+                        // Insert at the end of the last text block
+                        success = editor.chain()
+                            .focus('end')
+                            .insertContent(text)
+                            .run()
+                    }
+
+                    if (!success) {
+                        return { error: 'Failed to insert content at document end' }
+                    }
+
+                    const newDocSize = editor.state.doc.nodeSize
+                    const insertedSize = newDocSize - docSize
+
+                    return {
+                        success: true,
+                        insertedAt: 'end',
+                        insertedSize,
+                        oldDocSize: docSize,
+                        newDocSize,
+                        asNewParagraph
+                    }
+                } catch (error) {
+                    return { error: `Insert at end failed: ${error instanceof Error ? error.message : 'Unknown error'}` }
                 }
+            }
+        },
 
-                const success = editor.commands.insertContentAt(pos, text)
+        insertAfterBlock: {
+            description: '在指定块节点之后插入新段落。适合在特定标题或段落后添加内容',
+            inputSchema: z.object({
+                blockIndex: z.number().describe("块索引（从0开始）"),
+                text: z.string().describe("要插入的文本内容")
+            }),
+            execute: async (params: { blockIndex: number, text: string }) => {
+                const { blockIndex, text } = params
+                const docSize = editor.state.doc.nodeSize
 
-                if (!success) {
-                    return { error: `Failed to insert content at position ${pos}` }
+                try {
+                    // Find all blocks
+                    const blocks: Array<{ pos: number, size: number, type: string }> = []
+                    editor.state.doc.descendants((node, pos) => {
+                        if (node.isBlock && node.type.name !== 'doc') {
+                            blocks.push({
+                                pos,
+                                size: node.nodeSize,
+                                type: node.type.name
+                            })
+                        }
+                        return true
+                    })
+
+                    if (blocks.length === 0) {
+                        return { error: '文档中没有块节点' }
+                    }
+
+                    const targetIndex = Math.min(Math.max(0, blockIndex), blocks.length - 1)
+                    const targetBlock = blocks[targetIndex]
+
+                    // Calculate the position after this block
+                    const insertPos = targetBlock.pos + targetBlock.size
+
+                    // Insert a new paragraph after the block
+                    const success = editor.commands.insertContentAt(insertPos, [
+                        { type: 'paragraph', content: [{ type: 'text', text }] }
+                    ])
+
+                    if (!success) {
+                        return { error: `插入失败` }
+                    }
+
+                    const newDocSize = editor.state.doc.nodeSize
+                    const insertedSize = newDocSize - docSize
+
+                    return {
+                        success: true,
+                        blockIndex: targetIndex,
+                        blockType: targetBlock.type,
+                        insertedAfter: insertPos,
+                        insertedSize,
+                        oldDocSize: docSize,
+                        newDocSize,
+                        totalBlocks: blocks.length
+                    }
+                } catch (error) {
+                    return { error: `插入失败: ${error instanceof Error ? error.message : '未知错误'}` }
                 }
+            }
+        },
 
-                const newDocSize = editor.state.doc.nodeSize
-                const insertedSize = newDocSize - docSize
+        insertNear: {
+            description: '在包含指定文本的块附近插入内容。通过搜索文本定位插入位置',
+            inputSchema: z.object({
+                searchText: z.string().describe("要搜索的文本，用于定位插入位置"),
+                text: z.string().describe("要插入的文本"),
+                position: z.enum(['before', 'after', 'start', 'end']).optional().describe("插入位置: 'before'块前, 'after'块后, 'start'块内开头, 'end'块内末尾。默认'after'")
+            }),
+            execute: async (params: { searchText: string, text: string, position?: 'before' | 'after' | 'start' | 'end' }) => {
+                const { searchText, text, position = 'after' } = params
+                const docSize = editor.state.doc.nodeSize
 
-                return {
-                    success: true,
-                    insertedAt: pos,
-                    insertedSize,
-                    oldDocSize: docSize,
-                    newDocSize
+                try {
+                    // Find the block containing the search text
+                    let foundBlock: { pos: number, size: number, type: string, contentStart: number, contentEnd: number } | null = null
+
+                    editor.state.doc.descendants((node, pos) => {
+                        if (foundBlock) return false
+                        if (node.isTextblock && node.textContent.includes(searchText)) {
+                            const $pos = editor.state.doc.resolve(pos + 1)
+                            foundBlock = {
+                                pos,
+                                size: node.nodeSize,
+                                type: node.type.name,
+                                contentStart: $pos.start(),
+                                contentEnd: $pos.end()
+                            }
+                            return false
+                        }
+                        return true
+                    })
+
+                    if (!foundBlock) {
+                        return { error: `未找到包含 "${searchText}" 的块` }
+                    }
+
+                    let success: boolean
+                    let insertedAt: number | string
+
+                    switch (position) {
+                        case 'before':
+                            // Insert new paragraph before the block
+                            success = editor.commands.insertContentAt(foundBlock.pos, [
+                                { type: 'paragraph', content: [{ type: 'text', text }] }
+                            ])
+                            insertedAt = foundBlock.pos
+                            break
+                        case 'after':
+                            // Insert new paragraph after the block
+                            success = editor.commands.insertContentAt(foundBlock.pos + foundBlock.size, [
+                                { type: 'paragraph', content: [{ type: 'text', text }] }
+                            ])
+                            insertedAt = foundBlock.pos + foundBlock.size
+                            break
+                        case 'start':
+                            // Insert text at start of block content
+                            success = editor.chain()
+                                .focus()
+                                .setTextSelection(foundBlock.contentStart)
+                                .insertContent(text)
+                                .run()
+                            insertedAt = foundBlock.contentStart
+                            break
+                        case 'end':
+                            // Insert text at end of block content
+                            success = editor.chain()
+                                .focus()
+                                .setTextSelection(foundBlock.contentEnd)
+                                .insertContent(text)
+                                .run()
+                            insertedAt = foundBlock.contentEnd
+                            break
+                    }
+
+                    if (!success) {
+                        return { error: '插入失败' }
+                    }
+
+                    const newDocSize = editor.state.doc.nodeSize
+                    const insertedSize = newDocSize - docSize
+
+                    return {
+                        success: true,
+                        searchText,
+                        foundInBlock: foundBlock.type,
+                        position,
+                        insertedAt,
+                        insertedSize,
+                        oldDocSize: docSize,
+                        newDocSize
+                    }
+                } catch (error) {
+                    return { error: `插入失败: ${error instanceof Error ? error.message : '未知错误'}` }
                 }
             }
         },
@@ -759,36 +1041,40 @@ export const useEditorAgentOptimized = (
 
     const agent = useMemo(() => new ToolLoopAgent({
         model: deepseek("deepseek-chat"),
-        instructions: `你是一个智能文档编辑助手,具备文档编辑、网络搜索和用户交互能力。
+        instructions: `你是一个智能文档编辑助手。
 
-## 文档编辑能力
-处理大文档时请注意:
-1. 使用 getDocumentStructure 先了解文档结构
-2. 使用 readChunk 分块读取内容,每次读取有限大小
-3. 使用 searchInDocument 搜索特定内容
-4. 插入、删除、替换操作使用当前文档的实际位置
-5. 每次编辑后会返回新的文档大小
-6. 对于长文档,优先处理用户关注的区域
-7. 批量编辑时,从后往前操作可以避免位置偏移问题
+## 插入内容的方式（按推荐顺序）
 
-## 网络搜索能力
-当用户需要获取最新信息时:
-1. 使用 webSearch 搜索互联网获取最新信息、新闻、事实等
-2. 使用 fetchWebPage 获取特定网页的详细内容
-3. 搜索结果可用于补充文档内容或回答问题
-4. 对于时效性强的问题(如最新新闻、实时数据),优先使用网络搜索
-5. 搜索后可将相关内容整理并插入到文档中
+### 1. insertNear - 通过搜索文本定位（最推荐）
+参数:
+- searchText: 要搜索的文本
+- text: 要插入的内容
+- position: 'before'块前 | 'after'块后 | 'start'块内开头 | 'end'块内末尾
 
-## 用户交互能力
-当需要用户输入或确认时:
-1. 使用 askUserChoice 向用户提问并提供选项
-2. 在以下情况下主动询问用户:
-   - 任务有多种可能的执行方案时
-   - 需要用户确认重要操作(如删除、大范围修改)时
-   - 任务要求不明确需要澄清时
-   - 需要用户提供额外信息时
-3. 根据用户选择的结果继续执行后续操作
-4. 保持选项清晰简洁,便于用户理解和选择`,
+示例: insertNear({ searchText: "第一章", text: "新内容", position: "after" })
+
+### 2. write - 通过块索引插入
+参数:
+- text: 要插入的文本
+- blockIndex: 块索引（0开始），默认最后一个
+- location: 'start' | 'end'，默认'end'
+
+### 3. insertAtEnd - 在文档末尾追加新段落
+参数: text, asNewParagraph(默认true)
+
+### 4. insertAfterBlock - 在指定块后插入新段落  
+参数: blockIndex, text
+
+## 读取文档
+- getDocumentStructure: 获取文档结构
+- readChunk: 分块读取内容
+- searchInDocument: 搜索文本
+
+## 其他工具
+- replace: 替换内容
+- deleteRange: 删除内容
+- webSearch: 网络搜索
+- askUserChoice: 用户交互`,
         tools: wrappedTools,
     }), [wrappedTools])
 

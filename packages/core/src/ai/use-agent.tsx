@@ -128,7 +128,7 @@ export const useEditorAgent = (editor: Editor) => {
                     }
 
                     const offset = calculateOffset(posOffsetRef.current, pos)
-                    const actualPos = offset === 0 ? pos : offset
+                    const actualPos = pos + offset
 
                     editor.commands.insertContentAt(actualPos, text)
 
