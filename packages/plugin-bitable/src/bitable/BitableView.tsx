@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import { useTranslation } from "@kn/common";
 import { Button } from "@kn/ui";
@@ -21,7 +21,9 @@ import {
     ImageIcon,
     GanttChartSquare,
     BarChart3,
-    Upload
+    Upload,
+    ChevronLeft,
+    ChevronRight
 } from "@kn/icon";
 import { BitableAttrs, ViewType, ViewConfig, FieldConfig, RecordData, ChartType, FieldType, SelectOption } from "../types";
 import { TableView } from "./views/TableView";
@@ -44,6 +46,50 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const [currentViewId, setCurrentViewId] = useState(attrs.currentView);
     const [fieldConfigOpen, setFieldConfigOpen] = useState(false);
     const [excelImportOpen, setExcelImportOpen] = useState(false);
+
+    // 视图标签页滚动状态
+    const viewTabsRef = useRef<HTMLDivElement>(null);
+    const [canScrollLeft, setCanScrollLeft] = useState(false);
+    const [canScrollRight, setCanScrollRight] = useState(false);
+
+    // 检查滚动状态
+    const checkScrollState = useCallback(() => {
+        const container = viewTabsRef.current;
+        if (container) {
+            setCanScrollLeft(container.scrollLeft > 0);
+            setCanScrollRight(
+                container.scrollLeft < container.scrollWidth - container.clientWidth - 1
+            );
+        }
+    }, []);
+
+    // 监听滚动和视图变化
+    useEffect(() => {
+        checkScrollState();
+        const container = viewTabsRef.current;
+        if (container) {
+            container.addEventListener('scroll', checkScrollState);
+            // 使用 ResizeObserver 监听容器大小变化
+            const resizeObserver = new ResizeObserver(checkScrollState);
+            resizeObserver.observe(container);
+            return () => {
+                container.removeEventListener('scroll', checkScrollState);
+                resizeObserver.disconnect();
+            };
+        }
+    }, [checkScrollState, attrs.views.length]);
+
+    // 滚动视图标签页
+    const scrollViewTabs = useCallback((direction: 'left' | 'right') => {
+        const container = viewTabsRef.current;
+        if (container) {
+            const scrollAmount = 150;
+            container.scrollBy({
+                left: direction === 'left' ? -scrollAmount : scrollAmount,
+                behavior: 'smooth'
+            });
+        }
+    }, []);
 
     // 获取当前视图
     const currentView: any = useMemo(() => {
@@ -338,82 +384,113 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     return (
         <NodeViewWrapper className="node-bitable-wrapper" contentEditable={false}>
             <div className="min-h-[400px] w-full rounded-md border bg-background p-4">
-                <div className="flex items-center justify-between mb-4">
-                    {/* 视图标签页 */}
-                    <div className="flex items-center gap-2">
-                        {attrs.views.map((view) => (
-                            <div
-                                key={view.id}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer transition-colors ${currentViewId === view.id
-                                    ? 'bg-primary text-primary-foreground'
-                                    : 'hover:bg-muted'
-                                    }`}
-                                onClick={() => {
-                                    setCurrentViewId(view.id);
-                                    updateAttributes({ ...attrs, currentView: view.id });
-                                }}
+                <div className="flex items-center justify-between mb-4 gap-4">
+                    {/* 视图标签页 - 可滚动，带左右箭头按钮 */}
+                    <div className="flex items-center gap-1 flex-1 min-w-0">
+                        {/* 左滚动按钮 */}
+                        {canScrollLeft && (
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 flex-shrink-0"
+                                onClick={() => scrollViewTabs('left')}
                             >
-                                {getViewIcon(view.type)}
-                                <span className="text-sm font-medium">{view.name}</span>
-                                {editor.isEditable && attrs.views.length > 1 && (
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                            <MoreVertical className="h-3 w-3" />
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent>
-                                            <DropdownMenuItem onClick={() => handleDeleteView(view.id)}>
-                                                <Trash2 className="h-4 w-4 mr-2" />
-                                                {t('bitable.actions.deleteView')}
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                )}
-                            </div>
-                        ))}
+                                <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                        )}
 
-                        {/* 添加视图按钮 */}
-                        {editor.isEditable && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button size="icon" variant="outline" className="h-5 w-5">
-                                        <Plus className="h-3 w-3" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent>
-                                    <DropdownMenuLabel>{t('bitable.actions.addView')}</DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => handleAddView(ViewType.TABLE)}>
-                                        <Table2 className="h-4 w-4 mr-2" />
-                                        {t('bitable.views.table')}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleAddView(ViewType.KANBAN)}>
-                                        <KanbanSquare className="h-4 w-4 mr-2" />
-                                        {t('bitable.views.kanban')}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleAddView(ViewType.GALLERY)}>
-                                        <ImageIcon className="h-4 w-4 mr-2" />
-                                        {t('bitable.views.gallery')}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleAddView(ViewType.TIMELINE)}>
-                                        <GanttChartSquare className="h-4 w-4 mr-2" />
-                                        {t('bitable.views.timeline')}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleAddView(ViewType.CALENDAR)}>
-                                        <Calendar className="h-4 w-4 mr-2" />
-                                        {t('bitable.views.calendar')}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleAddView(ViewType.CHART)}>
-                                        <BarChart3 className="h-4 w-4 mr-2" />
-                                        {t('bitable.views.chart')}
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                        {/* 视图标签容器 */}
+                        <div
+                            ref={viewTabsRef}
+                            className="flex items-center gap-2 overflow-x-auto scrollbar-none flex-1 min-w-0"
+                            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                        >
+                            {attrs.views.map((view) => (
+                                <div
+                                    key={view.id}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer transition-colors whitespace-nowrap flex-shrink-0 ${currentViewId === view.id
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'hover:bg-muted'
+                                        }`}
+                                    onClick={() => {
+                                        setCurrentViewId(view.id);
+                                        updateAttributes({ ...attrs, currentView: view.id });
+                                    }}
+                                >
+                                    {getViewIcon(view.type)}
+                                    <span className="text-sm font-medium">{view.name}</span>
+                                    {editor.isEditable && attrs.views.length > 1 && (
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                <MoreVertical className="h-3 w-3" />
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent>
+                                                <DropdownMenuItem onClick={() => handleDeleteView(view.id)}>
+                                                    <Trash2 className="h-4 w-4 mr-2" />
+                                                    {t('bitable.actions.deleteView')}
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    )}
+                                </div>
+                            ))}
+
+                            {/* 添加视图按钮 */}
+                            {editor.isEditable && (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button size="icon" variant="outline" className="h-6 w-6 flex-shrink-0">
+                                            <Plus className="h-3 w-3" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        <DropdownMenuLabel>{t('bitable.actions.addView')}</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={() => handleAddView(ViewType.TABLE)}>
+                                            <Table2 className="h-4 w-4 mr-2" />
+                                            {t('bitable.views.table')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleAddView(ViewType.KANBAN)}>
+                                            <KanbanSquare className="h-4 w-4 mr-2" />
+                                            {t('bitable.views.kanban')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleAddView(ViewType.GALLERY)}>
+                                            <ImageIcon className="h-4 w-4 mr-2" />
+                                            {t('bitable.views.gallery')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleAddView(ViewType.TIMELINE)}>
+                                            <GanttChartSquare className="h-4 w-4 mr-2" />
+                                            {t('bitable.views.timeline')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleAddView(ViewType.CALENDAR)}>
+                                            <Calendar className="h-4 w-4 mr-2" />
+                                            {t('bitable.views.calendar')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleAddView(ViewType.CHART)}>
+                                            <BarChart3 className="h-4 w-4 mr-2" />
+                                            {t('bitable.views.chart')}
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            )}
+                        </div>
+
+                        {/* 右滚动按钮 */}
+                        {canScrollRight && (
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 flex-shrink-0"
+                                onClick={() => scrollViewTabs('right')}
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </Button>
                         )}
                     </div>
 
                     {/* 操作按钮 */}
                     {editor.isEditable && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                             <Button size="sm" variant="outline" onClick={() => setExcelImportOpen(true)}>
                                 <Upload className="h-4 w-4 mr-1" />
                                 {t('bitable.actions.importExcel')}

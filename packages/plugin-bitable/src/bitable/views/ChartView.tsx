@@ -46,7 +46,9 @@ import {
     PieChart as PieChartIcon, LineChart as LineChartIcon, AreaChart as AreaChartIcon,
     CircleDot, Target, Layers, Maximize2, X,
     Activity,
-    Circle
+    Circle,
+    ChevronDown,
+    ChevronUp
 } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 import { FieldConfig, RecordData, ViewConfig, ChartType, FieldType, YAxisConfig } from "../../types";
@@ -96,6 +98,7 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
     const [configOpen, setConfigOpen] = useState(false);
     const [activeConfigTab, setActiveConfigTab] = useState('basic');
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [expandedYAxis, setExpandedYAxis] = useState<Record<string, boolean>>({});
 
     const chartConfig = view.chartConfig || {
         chartType: ChartType.BAR,
@@ -946,7 +949,7 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
 
             {/* 配置面板 */}
             {configOpen && editable && (
-                <div className="absolute top-0 right-0 w-96 bg-background border rounded-lg shadow-lg z-50 max-h-[600px] overflow-hidden flex flex-col">
+                <div className="absolute top-0 right-0 w-96 bg-background border rounded-lg shadow-lg z-50 max-h-[600px] flex flex-col">
                     <div className="flex items-center justify-between p-4 border-b">
                         <h4 className="font-semibold">{t('bitable.chartView.chartConfig')}</h4>
                         <Button size="icon" variant="ghost" onClick={() => setConfigOpen(false)}>
@@ -954,7 +957,7 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
                         </Button>
                     </div>
 
-                    <Tabs value={activeConfigTab} onValueChange={setActiveConfigTab} className="flex-1 flex flex-col overflow-hidden">
+                    <Tabs value={activeConfigTab} onValueChange={setActiveConfigTab} className="flex-1 flex flex-col">
                         <TabsList className="grid w-full grid-cols-3 px-4 pt-2">
                             <TabsTrigger value="basic">{t('bitable.chartView.basic')}</TabsTrigger>
                             <TabsTrigger value="data">{t('bitable.chartView.data')}</TabsTrigger>
@@ -1062,205 +1065,226 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
 
                             {/* 数据配置选项卡 */}
                             <TabsContent value="data" className="mt-0 space-y-4">
-                                {/* X轴字段 */}
-                                <div className="space-y-2">
-                                    <Label>{t('bitable.chartView.xAxis')}</Label>
-                                    <Select
-                                        value={chartConfig.xAxisField}
-                                        onValueChange={(value) => updateChartConfig({ xAxisField: value })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder={t('bitable.chartView.selectField')} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {categoryFields.map((field) => (
-                                                <SelectItem key={field.id} value={field.id}>
-                                                    {field.title}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                                <ScrollArea className="h-[400px] pr-3">
+                                    {/* X轴字段 */}
+                                    <div className="space-y-2">
+                                        <Label>{t('bitable.chartView.xAxis')}</Label>
+                                        <Select
+                                            value={chartConfig.xAxisField}
+                                            onValueChange={(value) => updateChartConfig({ xAxisField: value })}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder={t('bitable.chartView.selectField')} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {categoryFields.map((field) => (
+                                                    <SelectItem key={field.id} value={field.id}>
+                                                        {field.title}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
 
-                                {/* 聚合方式 */}
-                                <div className="space-y-2">
-                                    <Label>{t('bitable.chartView.aggregation')}</Label>
-                                    <Select
-                                        value={chartConfig.aggregation || 'sum'}
-                                        onValueChange={(value: any) => updateChartConfig({ aggregation: value })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="sum">{t('bitable.chartView.sum')}</SelectItem>
-                                            <SelectItem value="count">{t('bitable.chartView.count')}</SelectItem>
-                                            <SelectItem value="avg">{t('bitable.chartView.average')}</SelectItem>
-                                            <SelectItem value="min">{t('bitable.chartView.min')}</SelectItem>
-                                            <SelectItem value="max">{t('bitable.chartView.max')}</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                                    {/* 聚合方式 */}
+                                    <div className="space-y-2">
+                                        <Label>{t('bitable.chartView.aggregation')}</Label>
+                                        <Select
+                                            value={chartConfig.aggregation || 'sum'}
+                                            onValueChange={(value: any) => updateChartConfig({ aggregation: value })}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="sum">{t('bitable.chartView.sum')}</SelectItem>
+                                                <SelectItem value="count">{t('bitable.chartView.count')}</SelectItem>
+                                                <SelectItem value="avg">{t('bitable.chartView.average')}</SelectItem>
+                                                <SelectItem value="min">{t('bitable.chartView.min')}</SelectItem>
+                                                <SelectItem value="max">{t('bitable.chartView.max')}</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
 
-                                {/* Y轴字段配置 */}
-                                {chartConfig.aggregation !== 'count' && (
-                                    <div className="space-y-3 p-3 bg-muted/50 rounded-lg">
-                                        <div className="flex items-center justify-between">
-                                            <Label className="text-sm font-medium">{t('bitable.chartView.yAxisConfig')}</Label>
-                                            <Button size="sm" variant="outline" onClick={addYAxisField}>
-                                                <Plus className="h-3 w-3 mr-1" />
-                                                {t('bitable.actions.add')}
-                                            </Button>
-                                        </div>
-
-                                        {chartConfig.yAxisFields.length === 0 ? (
-                                            <div className="text-sm text-muted-foreground py-2">
-                                                {t('bitable.chartView.noYAxisField')}
+                                    {/* Y轴字段配置 */}
+                                    {chartConfig.aggregation !== 'count' && (
+                                        <div className="space-y-3 p-3 bg-muted/50 rounded-lg">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-sm font-medium">{t('bitable.chartView.yAxisConfig')}</Label>
+                                                <Button size="sm" variant="outline" onClick={addYAxisField}>
+                                                    <Plus className="h-3 w-3 mr-1" />
+                                                    {t('bitable.actions.add')}
+                                                </Button>
                                             </div>
-                                        ) : (
-                                            <ScrollArea className="max-h-[400px] pr-3">
-                                                <div className="space-y-3">
-                                                    {chartConfig.yAxisFields.map((yConfig, index) => {
-                                                        const field = fields.find(f => f.id === yConfig.fieldId);
-                                                        return (
-                                                            <div key={yConfig.fieldId} className="p-2 bg-background rounded border space-y-2">
-                                                                <div className="flex items-center gap-2">
-                                                                    <Select
-                                                                        value={yConfig.fieldId}
-                                                                        onValueChange={(value) => {
-                                                                            const newYFields = [...chartConfig.yAxisFields];
-                                                                            newYFields[index] = { ...newYFields[index], fieldId: value };
-                                                                            updateChartConfig({ yAxisFields: newYFields });
-                                                                        }}
-                                                                    >
-                                                                        <SelectTrigger className="flex-1 h-8">
-                                                                            <SelectValue />
-                                                                        </SelectTrigger>
-                                                                        <SelectContent>
-                                                                            {numericFields.map((field) => (
-                                                                                <SelectItem key={field.id} value={field.id}>
-                                                                                    {field.title}
-                                                                                </SelectItem>
-                                                                            ))}
-                                                                        </SelectContent>
-                                                                    </Select>
-                                                                    <Input
-                                                                        type="color"
-                                                                        value={yConfig.color}
-                                                                        onChange={(e) => updateYAxisField(yConfig.fieldId, { color: e.target.value })}
-                                                                        className="w-8 h-8 p-1 cursor-pointer"
-                                                                    />
-                                                                    <Button
-                                                                        size="icon"
-                                                                        variant="ghost"
-                                                                        className="h-8 w-8"
-                                                                        onClick={() => removeYAxisField(yConfig.fieldId)}
-                                                                    >
-                                                                        <Trash2 className="h-4 w-4" />
-                                                                    </Button>
-                                                                </div>
 
-                                                                {/* Y轴高级配置 - 仅显示第一个字段的详细配置 */}
-                                                                {index === 0 && (
-                                                                    <div className="pt-2 border-t space-y-2">
-                                                                        <div className="grid grid-cols-2 gap-2">
-                                                                            <div className="space-y-1">
-                                                                                <Label className="text-xs text-muted-foreground">{t('bitable.chartView.yAxisMin')}</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={chartConfig.yAxisConfig?.min ?? ''}
-                                                                                    onChange={(e) => updateChartConfig({
-                                                                                        yAxisConfig: {
-                                                                                            ...chartConfig.yAxisConfig,
-                                                                                            min: e.target.value ? Number(e.target.value) : undefined
-                                                                                        }
-                                                                                    })}
-                                                                                    placeholder={t('bitable.chartView.auto')}
-                                                                                    className="h-7 text-xs"
-                                                                                />
-                                                                            </div>
-                                                                            <div className="space-y-1">
-                                                                                <Label className="text-xs text-muted-foreground">{t('bitable.chartView.yAxisMax')}</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={chartConfig.yAxisConfig?.max ?? ''}
-                                                                                    onChange={(e) => updateChartConfig({
-                                                                                        yAxisConfig: {
-                                                                                            ...chartConfig.yAxisConfig,
-                                                                                            max: e.target.value ? Number(e.target.value) : undefined
-                                                                                        }
-                                                                                    })}
-                                                                                    placeholder={t('bitable.chartView.auto')}
-                                                                                    className="h-7 text-xs"
-                                                                                />
-                                                                            </div>
-                                                                        </div>
-                                                                        <div className="space-y-1">
-                                                                            <Label className="text-xs text-muted-foreground">{t('bitable.chartView.tickFormatter')}</Label>
-                                                                            <Select
-                                                                                value={chartConfig.yAxisConfig?.tickFormatter || 'number'}
-                                                                                onValueChange={(value: any) => updateChartConfig({
-                                                                                    yAxisConfig: { ...chartConfig.yAxisConfig, tickFormatter: value }
-                                                                                })}
-                                                                            >
-                                                                                <SelectTrigger className="h-7 text-xs">
-                                                                                    <SelectValue />
-                                                                                </SelectTrigger>
-                                                                                <SelectContent>
-                                                                                    <SelectItem value="number">{t('bitable.chartView.formatNumber')}</SelectItem>
-                                                                                    <SelectItem value="percent">{t('bitable.chartView.formatPercent')}</SelectItem>
-                                                                                    <SelectItem value="currency">{t('bitable.chartView.formatCurrency')}</SelectItem>
-                                                                                    <SelectItem value="compact">{t('bitable.chartView.formatCompact')}</SelectItem>
-                                                                                </SelectContent>
-                                                                            </Select>
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    })}
+                                            {chartConfig.yAxisFields.length === 0 ? (
+                                                <div className="text-sm text-muted-foreground py-2">
+                                                    {t('bitable.chartView.noYAxisField')}
                                                 </div>
-                                            </ScrollArea>
-                                        )}
+                                            ) : (
+                                                <ScrollArea className="max-h-[400px] pr-3">
+                                                    <div className="space-y-3">
+                                                        {chartConfig.yAxisFields.map((yConfig, index) => {
+                                                            const field = fields.find(f => f.id === yConfig.fieldId);
+                                                            const isExpanded = expandedYAxis[yConfig.fieldId] ?? (index === 0);
+                                                            return (
+                                                                <div key={yConfig.fieldId} className="p-2 bg-background rounded border space-y-2">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Button
+                                                                            size="icon"
+                                                                            variant="ghost"
+                                                                            className="h-8 w-8 shrink-0"
+                                                                            onClick={() => setExpandedYAxis(prev => ({
+                                                                                ...prev,
+                                                                                [yConfig.fieldId]: !isExpanded
+                                                                            }))}
+                                                                        >
+                                                                            {isExpanded ? (
+                                                                                <ChevronDown className="h-4 w-4" />
+                                                                            ) : (
+                                                                                <ChevronUp className="h-4 w-4" />
+                                                                            )}
+                                                                        </Button>
+                                                                        <Select
+                                                                            value={yConfig.fieldId}
+                                                                            onValueChange={(value) => {
+                                                                                const newYFields = [...chartConfig.yAxisFields];
+                                                                                newYFields[index] = { ...newYFields[index], fieldId: value };
+                                                                                updateChartConfig({ yAxisFields: newYFields });
+                                                                            }}
+                                                                        >
+                                                                            <SelectTrigger className="flex-1 h-8">
+                                                                                <SelectValue />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                {numericFields.map((field) => (
+                                                                                    <SelectItem key={field.id} value={field.id}>
+                                                                                        {field.title}
+                                                                                    </SelectItem>
+                                                                                ))}
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                        <div className="relative">
+                                                                            <Input
+                                                                                type="color"
+                                                                                value={yConfig.color || currentColors[index % currentColors.length]}
+                                                                                onChange={(e) => updateYAxisField(yConfig.fieldId, { color: e.target.value })}
+                                                                                className="w-10 h-8 p-0 border-2 cursor-pointer"
+                                                                                title={t('bitable.chartView.selectColor') || 'Select color'}
+                                                                            />
+                                                                        </div>
+                                                                        <Button
+                                                                            size="icon"
+                                                                            variant="ghost"
+                                                                            className="h-8 w-8"
+                                                                            onClick={() => removeYAxisField(yConfig.fieldId)}
+                                                                        >
+                                                                            <Trash2 className="h-4 w-4" />
+                                                                        </Button>
+                                                                    </div>
+
+                                                                    {/* Y轴高级配置 - 仅显示第一个字段的详细配置 */}
+                                                                    {index === 0 && isExpanded && (
+                                                                        <div className="pt-2 border-t space-y-2">
+                                                                            <div className="grid grid-cols-2 gap-2">
+                                                                                <div className="space-y-1">
+                                                                                    <Label className="text-xs text-muted-foreground">{t('bitable.chartView.yAxisMin')}</Label>
+                                                                                    <Input
+                                                                                        type="number"
+                                                                                        value={chartConfig.yAxisConfig?.min ?? ''}
+                                                                                        onChange={(e) => updateChartConfig({
+                                                                                            yAxisConfig: {
+                                                                                                ...chartConfig.yAxisConfig,
+                                                                                                min: e.target.value ? Number(e.target.value) : undefined
+                                                                                            }
+                                                                                        })}
+                                                                                        placeholder={t('bitable.chartView.auto')}
+                                                                                        className="h-7 text-xs"
+                                                                                    />
+                                                                                </div>
+                                                                                <div className="space-y-1">
+                                                                                    <Label className="text-xs text-muted-foreground">{t('bitable.chartView.yAxisMax')}</Label>
+                                                                                    <Input
+                                                                                        type="number"
+                                                                                        value={chartConfig.yAxisConfig?.max ?? ''}
+                                                                                        onChange={(e) => updateChartConfig({
+                                                                                            yAxisConfig: {
+                                                                                                ...chartConfig.yAxisConfig,
+                                                                                                max: e.target.value ? Number(e.target.value) : undefined
+                                                                                            }
+                                                                                        })}
+                                                                                        placeholder={t('bitable.chartView.auto')}
+                                                                                        className="h-7 text-xs"
+                                                                                    />
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="space-y-1">
+                                                                                <Label className="text-xs text-muted-foreground">{t('bitable.chartView.tickFormatter')}</Label>
+                                                                                <Select
+                                                                                    value={chartConfig.yAxisConfig?.tickFormatter || 'number'}
+                                                                                    onValueChange={(value: any) => updateChartConfig({
+                                                                                        yAxisConfig: { ...chartConfig.yAxisConfig, tickFormatter: value }
+                                                                                    })}
+                                                                                >
+                                                                                    <SelectTrigger className="h-7 text-xs">
+                                                                                        <SelectValue />
+                                                                                    </SelectTrigger>
+                                                                                    <SelectContent>
+                                                                                        <SelectItem value="number">{t('bitable.chartView.formatNumber')}</SelectItem>
+                                                                                        <SelectItem value="percent">{t('bitable.chartView.formatPercent')}</SelectItem>
+                                                                                        <SelectItem value="currency">{t('bitable.chartView.formatCurrency')}</SelectItem>
+                                                                                        <SelectItem value="compact">{t('bitable.chartView.formatCompact')}</SelectItem>
+                                                                                    </SelectContent>
+                                                                                </Select>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </ScrollArea>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <Separator />
+
+                                    {/* 排序方式 */}
+                                    <div className="space-y-2">
+                                        <Label>{t('bitable.chartView.sortOrder')}</Label>
+                                        <Select
+                                            value={chartConfig.sortOrder || 'none'}
+                                            onValueChange={(value: any) => updateChartConfig({ sortOrder: value })}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">{t('bitable.chartView.sortNone')}</SelectItem>
+                                                <SelectItem value="asc">{t('bitable.chartView.sortAsc')}</SelectItem>
+                                                <SelectItem value="desc">{t('bitable.chartView.sortDesc')}</SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                     </div>
-                                )}
 
-                                <Separator />
-
-                                {/* 排序方式 */}
-                                <div className="space-y-2">
-                                    <Label>{t('bitable.chartView.sortOrder')}</Label>
-                                    <Select
-                                        value={chartConfig.sortOrder || 'none'}
-                                        onValueChange={(value: any) => updateChartConfig({ sortOrder: value })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="none">{t('bitable.chartView.sortNone')}</SelectItem>
-                                            <SelectItem value="asc">{t('bitable.chartView.sortAsc')}</SelectItem>
-                                            <SelectItem value="desc">{t('bitable.chartView.sortDesc')}</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                {/* Top N */}
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <Label>{t('bitable.chartView.topN')}</Label>
-                                        <span className="text-sm text-muted-foreground">
-                                            {chartConfig.topN ? chartConfig.topN : t('bitable.chartView.all')}
-                                        </span>
+                                    {/* Top N */}
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <Label>{t('bitable.chartView.topN')}</Label>
+                                            <span className="text-sm text-muted-foreground">
+                                                {chartConfig.topN ? chartConfig.topN : t('bitable.chartView.all')}
+                                            </span>
+                                        </div>
+                                        <Slider
+                                            value={[chartConfig.topN || 0]}
+                                            onValueChange={(value) => updateChartConfig({ topN: value[0] })}
+                                            max={20}
+                                            step={1}
+                                            className="w-full"
+                                        />
                                     </div>
-                                    <Slider
-                                        value={[chartConfig.topN || 0]}
-                                        onValueChange={(value) => updateChartConfig({ topN: value[0] })}
-                                        max={20}
-                                        step={1}
-                                        className="w-full"
-                                    />
-                                </div>
+                                </ScrollArea>
                             </TabsContent>
 
                             {/* 样式配置选项卡 */}
