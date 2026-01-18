@@ -1,4 +1,4 @@
-import { AppContext } from "@kn/common"
+import { AppContext, axios } from "@kn/common"
 import { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import { ToolLoopAgent } from "ai"
@@ -10,6 +10,100 @@ import type { Node } from "@kn/editor"
 const MAX_CHUNK_SIZE = 2000 // Maximum characters per chunk
 const MAX_NODES_PER_READ = 50 // Maximum nodes to return in one read
 const CONTEXT_WINDOW = 500 // Characters of context to include before/after
+
+// Web search configuration
+const WEB_SEARCH_API_URL = '/api/web-search' // Default backend API endpoint
+const WEB_SEARCH_MAX_RESULTS = 10 // Maximum search results to return
+
+// Web search result interface
+interface WebSearchResult {
+    title: string
+    url: string
+    snippet: string
+    source?: string
+}
+
+// Web search function using backend API or fallback to DuckDuckGo
+const performWebSearch = async (query: string, maxResults: number = 5): Promise<WebSearchResult[]> => {
+    try {
+        // Try backend API first
+        const response = await axios.post(WEB_SEARCH_API_URL, {
+            query,
+            maxResults
+        }, {
+            timeout: 10000,
+            validateStatus: (status) => status < 500
+        })
+
+        if (response.status === 200 && response.data?.results) {
+            return response.data.results
+        }
+
+        // Fallback: Use DuckDuckGo Instant Answer API (limited but free)
+        const ddgResponse = await axios.get(
+            `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`,
+            { timeout: 8000 }
+        )
+
+        const results: WebSearchResult[] = []
+
+        // Parse DDG response
+        if (ddgResponse.data) {
+            const data = ddgResponse.data
+
+            // Abstract (main result)
+            if (data.Abstract && data.AbstractURL) {
+                results.push({
+                    title: data.Heading || 'Main Result',
+                    url: data.AbstractURL,
+                    snippet: data.Abstract,
+                    source: data.AbstractSource
+                })
+            }
+
+            // Related topics
+            if (data.RelatedTopics && Array.isArray(data.RelatedTopics)) {
+                for (const topic of data.RelatedTopics.slice(0, maxResults - results.length)) {
+                    if (topic.FirstURL && topic.Text) {
+                        results.push({
+                            title: topic.Text?.split(' - ')[0] || 'Related',
+                            url: topic.FirstURL,
+                            snippet: topic.Text,
+                            source: 'DuckDuckGo'
+                        })
+                    }
+                }
+            }
+
+            // Answer (for direct answers)
+            if (data.Answer && results.length === 0) {
+                results.push({
+                    title: 'Direct Answer',
+                    url: data.AnswerURL || `https://duckduckgo.com/?q=${encodeURIComponent(query)}`,
+                    snippet: data.Answer,
+                    source: 'DuckDuckGo'
+                })
+            }
+        }
+
+        return results.length > 0 ? results : [{
+            title: 'Search Results',
+            url: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`,
+            snippet: `No direct results found. Please visit the search page for more results.`,
+            source: 'DuckDuckGo'
+        }]
+
+    } catch (error) {
+        console.error('Web search error:', error)
+        // Return a fallback result with search link
+        return [{
+            title: 'Search Error',
+            url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+            snippet: `Search failed. Click the link to search manually.`,
+            source: 'Fallback'
+        }]
+    }
+}
 
 // Type definitions
 interface NodeInfo {
@@ -470,6 +564,85 @@ export const useEditorAgentOptimized = (editor: Editor, onToolExecution?: OnTool
                 return { success: true, from: range.from, to: range.to }
             }
         },
+
+        webSearch: {
+            description: '搜索互联网获取最新信息。当用户询问需要实时数据、新闻、或你不确定的事实时使用此工具',
+            inputSchema: z.object({
+                query: z.string().describe("搜索查询关键词"),
+                maxResults: z.number().optional().describe("返回的最大结果数量,默认5条")
+            }),
+            execute: async ({ query, maxResults = 5 }: { query: string, maxResults?: number }) => {
+                if (!query || query.trim().length === 0) {
+                    return { error: 'Search query cannot be empty' }
+                }
+
+                const effectiveMaxResults = Math.min(maxResults, WEB_SEARCH_MAX_RESULTS)
+
+                try {
+                    const results = await performWebSearch(query.trim(), effectiveMaxResults)
+
+                    return {
+                        success: true,
+                        query: query.trim(),
+                        results,
+                        totalResults: results.length,
+                        message: results.length > 0
+                            ? `Found ${results.length} result(s) for "${query}"`
+                            : `No results found for "${query}"`
+                    }
+                } catch (error) {
+                    return {
+                        error: `Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                        query: query.trim()
+                    }
+                }
+            }
+        },
+
+        fetchWebPage: {
+            description: '获取网页内容。当需要获取特定URL的详细内容时使用此工具',
+            inputSchema: z.object({
+                url: z.string().describe("要获取内容的网页URL"),
+                extractText: z.boolean().optional().describe("是否只提取纯文本内容,默认true")
+            }),
+            execute: async ({ url, extractText = true }: { url: string, extractText?: boolean }) => {
+                if (!url || !url.startsWith('http')) {
+                    return { error: 'Invalid URL. URL must start with http:// or https://' }
+                }
+
+                try {
+                    // Try backend API for fetching webpage content
+                    const response = await axios.post('/api/fetch-webpage', {
+                        url,
+                        extractText
+                    }, {
+                        timeout: 15000,
+                        validateStatus: (status) => status < 500
+                    })
+
+                    if (response.status === 200 && response.data) {
+                        return {
+                            success: true,
+                            url,
+                            title: response.data.title || 'Unknown',
+                            content: response.data.content?.slice(0, 5000) || '', // Limit content size
+                            contentLength: response.data.content?.length || 0,
+                            truncated: (response.data.content?.length || 0) > 5000
+                        }
+                    }
+
+                    return {
+                        error: 'Failed to fetch webpage content',
+                        url
+                    }
+                } catch (error) {
+                    return {
+                        error: `Fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                        url
+                    }
+                }
+            }
+        },
     }), [editor])
 
     // Wrap tools with execution callback
@@ -487,14 +660,25 @@ export const useEditorAgentOptimized = (editor: Editor, onToolExecution?: OnTool
 
     const agent = useMemo(() => new ToolLoopAgent({
         model: deepseek("deepseek-chat"),
-        instructions: `你是一个智能文档编辑助手。处理大文档时请注意:
+        instructions: `你是一个智能文档编辑助手,具备文档编辑和网络搜索能力。
+
+## 文档编辑能力
+处理大文档时请注意:
 1. 使用 getDocumentStructure 先了解文档结构
 2. 使用 readChunk 分块读取内容,每次读取有限大小
 3. 使用 searchInDocument 搜索特定内容
 4. 插入、删除、替换操作使用当前文档的实际位置
 5. 每次编辑后会返回新的文档大小
 6. 对于长文档,优先处理用户关注的区域
-7. 批量编辑时,从后往前操作可以避免位置偏移问题`,
+7. 批量编辑时,从后往前操作可以避免位置偏移问题
+
+## 网络搜索能力
+当用户需要获取最新信息时:
+1. 使用 webSearch 搜索互联网获取最新信息、新闻、事实等
+2. 使用 fetchWebPage 获取特定网页的详细内容
+3. 搜索结果可用于补充文档内容或回答问题
+4. 对于时效性强的问题(如最新新闻、实时数据),优先使用网络搜索
+5. 搜索后可将相关内容整理并插入到文档中`,
         tools: wrappedTools,
     }), [wrappedTools])
 
