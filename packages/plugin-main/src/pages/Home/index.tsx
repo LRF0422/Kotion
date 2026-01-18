@@ -4,7 +4,7 @@ import { Button, EmptyState, Skeleton } from "@kn/ui";
 import { useApi, useService } from "@kn/core";
 import { useNavigator } from "@kn/core";
 import { Space } from "../../model/Space";
-import { BanIcon, Book, Box, Clock, LayoutTemplate, Plus, UserCircle } from "@kn/icon";
+import { BanIcon, Book, Box, Clock, LayoutTemplate, Moon, Plus, Sun, Sunset, UserCircle } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { useTranslation } from "@kn/common";
@@ -17,17 +17,38 @@ export const Home: React.FC = () => {
     const [recentPages, setRecentPages] = useState([])
     const [flag, setFlag] = useState(0)
     const [loading, setLoading] = useState(true)
+    const [currentHour, setCurrentHour] = useState(new Date().getHours())
     const navigator = useNavigator()
     const { t, i18n } = useTranslation()
 
+    // Update current hour every minute to adapt to time changes
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCurrentHour(new Date().getHours())
+        }, 60000) // Update every minute
+        return () => clearInterval(timer)
+    }, [])
+
     const getGreeting = () => {
-        const hour = new Date().getHours()
-        if (hour >= 5 && hour < 12) {
+        if (currentHour >= 5 && currentHour < 12) {
             return t("home.greeting.morning") || "Good Morning"
-        } else if (hour >= 12 && hour < 18) {
+        } else if (currentHour >= 12 && currentHour < 18) {
             return t("home.greeting.afternoon") || "Good Afternoon"
         } else {
             return t("home.greeting.evening") || "Good Evening"
+        }
+    }
+
+    const getGreetingIcon = () => {
+        if (currentHour >= 5 && currentHour < 12) {
+            // Morning: Sun icon with warm yellow color
+            return <Sun className="h-8 w-8 text-yellow-500" />
+        } else if (currentHour >= 12 && currentHour < 18) {
+            // Afternoon: Sunset icon with orange color
+            return <Sunset className="h-8 w-8 text-orange-500" />
+        } else {
+            // Evening/Night: Moon icon with blue-purple color
+            return <Moon className="h-8 w-8 text-indigo-400" />
         }
     }
 
@@ -48,7 +69,8 @@ export const Home: React.FC = () => {
 
     return <div className="flex justify-center pb-4">
         <div className="w-[800px] flex flex-col gap-4">
-            <div className="flex items-center justify-center h-[100px]">
+            <div className="flex items-center justify-center h-[100px] gap-3">
+                {getGreetingIcon()}
                 <div className="scroll-m-20 text-2xl font-semibold tracking-tight">{getGreeting()}</div>
             </div>
             <div className="flex flex-col gap-1">
