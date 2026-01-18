@@ -196,10 +196,10 @@ export const PageEditor: React.FC = () => {
         </main>
     </div> : (page && <div className="w-full h-full" ref={ref}>
         <header className="h-11 w-full flex flex-row justify-between px-1 border-b">
-            <div className="flex flex-row items-center gap-2 px-1 text-sm">
-                <span>{page.title}</span>
+            <div className="flex flex-row items-center gap-2 px-1 text-sm flex-1 min-w-0 overflow-hidden">
+                <span className="truncate">{page.title}</span>
             </div>
-            <div className="flex flex-row items-center gap-1 px-1">
+            <div className="flex flex-row items-center gap-1 px-1 flex-shrink-0">
                 <Badge>
                     <div className="flex flex-row items-center gap-1">
                         {status?.status} {loading && <LoaderCircle className="h-3 w-3 animate-spin" />}

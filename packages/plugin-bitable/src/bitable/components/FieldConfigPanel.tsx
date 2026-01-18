@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { generateFieldId, generateOptionId } from "../../utils/id";
 import { useTranslation } from "@kn/common";
+import { getConversionWarning } from "../../utils/fieldConversion";
 import {
     Sheet,
     SheetContent,
@@ -23,6 +24,8 @@ import {
     Popover,
     PopoverContent,
     PopoverTrigger,
+    Alert,
+    AlertDescription,
 } from "@kn/ui";
 import {
     DragDropContext,
@@ -37,6 +40,8 @@ import {
     Plus,
     Trash2,
     ChevronRight,
+    AlertTriangle,
+    RefreshCw,
 } from "@kn/icon";
 import { FieldConfig, FieldType, SelectOption } from "../../types";
 import { cn } from "@kn/ui";
@@ -49,6 +54,7 @@ interface FieldConfigPanelProps {
     onDeleteField: (fieldId: string) => void;
     onAddField: (field: FieldConfig) => void;
     onReorderFields: (newOrder: FieldConfig[]) => void;
+    onConvertFieldType?: (fieldId: string, newType: FieldType, newOptions?: SelectOption[]) => void;
 }
 
 // Field type options - using translation keys
@@ -71,6 +77,7 @@ interface FieldConfigPopoverProps {
     field: FieldConfig;
     onUpdateField: (updates: Partial<FieldConfig>) => void;
     onDeleteField: () => void;
+    onConvertFieldType?: (newType: FieldType, newOptions?: SelectOption[]) => void;
     children: React.ReactNode;
 }
 
@@ -78,6 +85,7 @@ const FieldConfigPopover: React.FC<FieldConfigPopoverProps> = ({
     field,
     onUpdateField,
     onDeleteField,
+    onConvertFieldType,
     children,
 }) => {
     const { t } = useTranslation();
@@ -92,6 +100,9 @@ const FieldConfigPopover: React.FC<FieldConfigPopoverProps> = ({
     const [localDescription, setLocalDescription] = useState(field.description || "");
     const [newOptionLabel, setNewOptionLabel] = useState("");
     const [isOpen, setIsOpen] = useState(false);
+    const [showTypeConversion, setShowTypeConversion] = useState(false);
+    const [conversionTargetType, setConversionTargetType] = useState<FieldType>(field.type);
+    const [conversionOptions, setConversionOptions] = useState<SelectOption[]>([]);
 
     // Sync local state when field changes
     useEffect(() => {
@@ -366,6 +377,153 @@ const FieldConfigPopover: React.FC<FieldConfigPopoverProps> = ({
 
                     <Separator />
 
+                    {/* Field Type Conversion */}
+                    {onConvertFieldType && (
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-xs font-semibold">{t('bitable.fieldConfig.convertFieldType')}</Label>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 text-xs"
+                                    onClick={() => setShowTypeConversion(!showTypeConversion)}
+                                >
+                                    <RefreshCw className="h-3 w-3 mr-1" />
+                                    {showTypeConversion ? t('bitable.actions.cancel') : 'Change'}
+                                </Button>
+                            </div>
+
+                            {showTypeConversion && (
+                                <div className="space-y-3 p-3 bg-muted/30 rounded-md">
+                                    <p className="text-xs text-muted-foreground">
+                                        {t('bitable.fieldConfig.convertFieldTypeDescription')}
+                                    </p>
+
+                                    <div>
+                                        <Label className="text-xs">{t('bitable.fieldConfig.currentType')}</Label>
+                                        <div className="mt-1 px-3 py-2 text-sm bg-background rounded-md border">
+                                            {FIELD_TYPE_OPTIONS.find((opt) => opt.value === localType)?.label || localType}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <Label className="text-xs">{t('bitable.fieldConfig.newType')}</Label>
+                                        <Select value={conversionTargetType} onValueChange={(value) => {
+                                            setConversionTargetType(value as FieldType);
+                                            // Initialize options for select types
+                                            if (value === FieldType.SELECT || value === FieldType.MULTI_SELECT) {
+                                                setConversionOptions([
+                                                    { id: "1", label: t('bitable.defaultOptions.option1'), color: "#3b82f6" },
+                                                    { id: "2", label: t('bitable.defaultOptions.option2'), color: "#10b981" },
+                                                    { id: "3", label: t('bitable.defaultOptions.option3'), color: "#f59e0b" },
+                                                ]);
+                                            }
+                                        }}>
+                                            <SelectTrigger className="h-8 mt-1">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {FIELD_TYPE_OPTIONS.filter(opt => opt.value !== FieldType.ID).map((option) => (
+                                                    <SelectItem key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {/* Warning if conversion might lose data */}
+                                    {getConversionWarning(localType, conversionTargetType) && (
+                                        <Alert variant="destructive" className="py-2">
+                                            <AlertTriangle className="h-3 w-3" />
+                                            <AlertDescription className="text-xs">
+                                                {getConversionWarning(localType, conversionTargetType)}
+                                            </AlertDescription>
+                                        </Alert>
+                                    )}
+
+                                    {/* Options configuration for select types */}
+                                    {(conversionTargetType === FieldType.SELECT || conversionTargetType === FieldType.MULTI_SELECT) && (
+                                        <div className="space-y-2">
+                                            <Label className="text-xs">{t('bitable.fieldConfig.optionsList')}</Label>
+                                            <div className="space-y-2 max-h-[150px] overflow-y-auto">
+                                                {conversionOptions.map((option) => (
+                                                    <div key={option.id} className="flex items-center gap-2">
+                                                        <input
+                                                            type="color"
+                                                            value={option.color}
+                                                            onChange={(e) => {
+                                                                setConversionOptions(conversionOptions.map((opt) =>
+                                                                    opt.id === option.id ? { ...opt, color: e.target.value } : opt
+                                                                ));
+                                                            }}
+                                                            className="w-5 h-5 rounded border cursor-pointer"
+                                                        />
+                                                        <Input
+                                                            value={option.label}
+                                                            onChange={(e) => {
+                                                                setConversionOptions(conversionOptions.map((opt) =>
+                                                                    opt.id === option.id ? { ...opt, label: e.target.value } : opt
+                                                                ));
+                                                            }}
+                                                            className="h-7 flex-1 text-xs"
+                                                        />
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-7 w-7 p-0"
+                                                            onClick={() => {
+                                                                setConversionOptions(conversionOptions.filter((opt) => opt.id !== option.id));
+                                                            }}
+                                                        >
+                                                            <Trash2 className="h-3 w-3 text-destructive" />
+                                                        </Button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="w-full h-7 text-xs"
+                                                onClick={() => {
+                                                    setConversionOptions([...conversionOptions, {
+                                                        id: generateOptionId(),
+                                                        label: `Option ${conversionOptions.length + 1}`,
+                                                        color: getRandomColor(),
+                                                    }]);
+                                                }}
+                                            >
+                                                <Plus className="h-3 w-3 mr-1" />
+                                                {t('bitable.actions.add')}
+                                            </Button>
+                                        </div>
+                                    )}
+
+                                    <Button
+                                        size="sm"
+                                        className="w-full"
+                                        disabled={conversionTargetType === localType}
+                                        onClick={() => {
+                                            if (onConvertFieldType) {
+                                                const options = (conversionTargetType === FieldType.SELECT || conversionTargetType === FieldType.MULTI_SELECT)
+                                                    ? conversionOptions
+                                                    : undefined;
+                                                onConvertFieldType(conversionTargetType, options);
+                                                setShowTypeConversion(false);
+                                                setIsOpen(false);
+                                            }
+                                        }}
+                                    >
+                                        <RefreshCw className="h-3 w-3 mr-2" />
+                                        {t('bitable.fieldConfig.convertButton')}
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <Separator />
+
                     {/* Delete button */}
                     <Button
                         variant="destructive"
@@ -393,6 +551,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
     onDeleteField,
     onAddField,
     onReorderFields,
+    onConvertFieldType,
 }) => {
     const { t } = useTranslation();
     const FIELD_TYPE_OPTIONS = getFieldTypeOptions(t);
@@ -832,6 +991,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                                                                 field={field}
                                                                 onUpdateField={(updates) => onUpdateField(field.id, updates)}
                                                                 onDeleteField={() => onDeleteField(field.id)}
+                                                                onConvertFieldType={onConvertFieldType ? (newType, newOptions) => onConvertFieldType(field.id, newType, newOptions) : undefined}
                                                             >
                                                                 <div className="flex-1 min-w-0 flex items-center justify-between cursor-pointer py-1 px-2 rounded hover:bg-muted transition-colors">
                                                                     <div>

@@ -23,7 +23,7 @@ import {
     BarChart3,
     Upload
 } from "@kn/icon";
-import { BitableAttrs, ViewType, ViewConfig, FieldConfig, RecordData, ChartType } from "../types";
+import { BitableAttrs, ViewType, ViewConfig, FieldConfig, RecordData, ChartType, FieldType, SelectOption } from "../types";
 import { TableView } from "./views/TableView";
 import { KanbanView } from "./views/KanbanView";
 import { GalleryView } from "./views/GalleryView";
@@ -33,6 +33,7 @@ import { ChartView } from "./views/ChartView";
 import { FieldConfigPanel } from "./components/FieldConfigPanel";
 import { ExcelImportDialog } from "./components/ExcelImportDialog";
 import { generateRecordId, generateViewId } from "../utils/id";
+import { convertFieldValue, generateSelectOptionsFromData } from "../utils/fieldConversion";
 
 export const BitableView: React.FC<NodeViewProps> = (props) => {
     const { node, updateAttributes, deleteNode, editor } = props;
@@ -132,6 +133,53 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const handleReorderFields = useCallback((newOrder: FieldConfig[]) => {
         updateAttributes({ ...attrs, fields: newOrder });
     }, [attrs, updateAttributes]);
+
+    // 转换字段类型
+    const handleConvertFieldType = useCallback((fieldId: string, newType: FieldType, newOptions?: SelectOption[]) => {
+        const field = attrs.fields.find(f => f.id === fieldId);
+        if (!field) return;
+
+        const oldType = field.type;
+
+        // Update field configuration
+        const updatedField: FieldConfig = {
+            ...field,
+            type: newType,
+        };
+
+        // Handle options for select types
+        if (newType === FieldType.SELECT || newType === FieldType.MULTI_SELECT) {
+            // If options are provided, use them
+            if (newOptions && newOptions.length > 0) {
+                updatedField.options = newOptions;
+            } else {
+                // Otherwise, auto-generate from existing data
+                const generatedOptions = generateSelectOptionsFromData(data, fieldId, oldType);
+                updatedField.options = generatedOptions.length > 0 ? generatedOptions : newOptions || [];
+            }
+        } else {
+            // Remove options if not a select type
+            delete updatedField.options;
+        }
+
+        // Update field in fields array
+        const newFields = attrs.fields.map(f =>
+            f.id === fieldId ? updatedField : f
+        );
+
+        // Convert all existing data
+        const newData = data.map(record => {
+            const value = record[fieldId];
+            const convertedValue = convertFieldValue(value, oldType, newType, updatedField);
+            return {
+                ...record,
+                [fieldId]: convertedValue,
+            };
+        });
+
+        setData(newData);
+        updateAttributes({ ...attrs, fields: newFields, data: newData });
+    }, [attrs, data, updateAttributes]);
 
     // 从 Excel 导入数据
     const handleExcelImport = useCallback((newFields: FieldConfig[], newRecords: RecordData[]) => {
@@ -405,6 +453,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 onDeleteField={handleDeleteField}
                 onAddField={handleAddField}
                 onReorderFields={handleReorderFields}
+                onConvertFieldType={handleConvertFieldType}
             />
 
             {/* Excel 导入对话框 */}

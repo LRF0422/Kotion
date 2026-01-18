@@ -122,11 +122,11 @@ export const PageViewer: React.FC = () => {
         </main>
     </div> : (page && <div className="w-full h-full">
         <header className="h-11 w-full flex flex-row justify-between px-1 border-b ">
-            <div className="flex flex-row items-center gap-2 px-1 text-sm">
+            <div className="flex flex-row items-center gap-2 px-1 text-sm flex-1 min-w-0 overflow-hidden">
                 {"😘"}
-                <span>{page?.title}</span>
+                <span className="truncate">{page?.title}</span>
             </div>
-            <div className="flex flex-row items-center gap-1 px-1">
+            <div className="flex flex-row items-center gap-1 px-1 flex-shrink-0">
                 <Button variant="ghost" size="icon" onClick={goToEditor}><Edit className="h-5 w-5" /></Button>
                 <Separator orientation="vertical" />
                 <Popover>

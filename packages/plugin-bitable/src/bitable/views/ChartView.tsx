@@ -1118,107 +1118,109 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
                                                 {t('bitable.chartView.noYAxisField')}
                                             </div>
                                         ) : (
-                                            <div className="space-y-3">
-                                                {chartConfig.yAxisFields.map((yConfig, index) => {
-                                                    const field = fields.find(f => f.id === yConfig.fieldId);
-                                                    return (
-                                                        <div key={yConfig.fieldId} className="p-2 bg-background rounded border space-y-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <Select
-                                                                    value={yConfig.fieldId}
-                                                                    onValueChange={(value) => {
-                                                                        const newYFields = [...chartConfig.yAxisFields];
-                                                                        newYFields[index] = { ...newYFields[index], fieldId: value };
-                                                                        updateChartConfig({ yAxisFields: newYFields });
-                                                                    }}
-                                                                >
-                                                                    <SelectTrigger className="flex-1 h-8">
-                                                                        <SelectValue />
-                                                                    </SelectTrigger>
-                                                                    <SelectContent>
-                                                                        {numericFields.map((field) => (
-                                                                            <SelectItem key={field.id} value={field.id}>
-                                                                                {field.title}
-                                                                            </SelectItem>
-                                                                        ))}
-                                                                    </SelectContent>
-                                                                </Select>
-                                                                <Input
-                                                                    type="color"
-                                                                    value={yConfig.color}
-                                                                    onChange={(e) => updateYAxisField(yConfig.fieldId, { color: e.target.value })}
-                                                                    className="w-8 h-8 p-1 cursor-pointer"
-                                                                />
-                                                                <Button
-                                                                    size="icon"
-                                                                    variant="ghost"
-                                                                    className="h-8 w-8"
-                                                                    onClick={() => removeYAxisField(yConfig.fieldId)}
-                                                                >
-                                                                    <Trash2 className="h-4 w-4" />
-                                                                </Button>
-                                                            </div>
-
-                                                            {/* Y轴高级配置 - 仅显示第一个字段的详细配置 */}
-                                                            {index === 0 && (
-                                                                <div className="pt-2 border-t space-y-2">
-                                                                    <div className="grid grid-cols-2 gap-2">
-                                                                        <div className="space-y-1">
-                                                                            <Label className="text-xs text-muted-foreground">{t('bitable.chartView.yAxisMin')}</Label>
-                                                                            <Input
-                                                                                type="number"
-                                                                                value={chartConfig.yAxisConfig?.min ?? ''}
-                                                                                onChange={(e) => updateChartConfig({
-                                                                                    yAxisConfig: {
-                                                                                        ...chartConfig.yAxisConfig,
-                                                                                        min: e.target.value ? Number(e.target.value) : undefined
-                                                                                    }
-                                                                                })}
-                                                                                placeholder={t('bitable.chartView.auto')}
-                                                                                className="h-7 text-xs"
-                                                                            />
-                                                                        </div>
-                                                                        <div className="space-y-1">
-                                                                            <Label className="text-xs text-muted-foreground">{t('bitable.chartView.yAxisMax')}</Label>
-                                                                            <Input
-                                                                                type="number"
-                                                                                value={chartConfig.yAxisConfig?.max ?? ''}
-                                                                                onChange={(e) => updateChartConfig({
-                                                                                    yAxisConfig: {
-                                                                                        ...chartConfig.yAxisConfig,
-                                                                                        max: e.target.value ? Number(e.target.value) : undefined
-                                                                                    }
-                                                                                })}
-                                                                                placeholder={t('bitable.chartView.auto')}
-                                                                                className="h-7 text-xs"
-                                                                            />
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="space-y-1">
-                                                                        <Label className="text-xs text-muted-foreground">{t('bitable.chartView.tickFormatter')}</Label>
-                                                                        <Select
-                                                                            value={chartConfig.yAxisConfig?.tickFormatter || 'number'}
-                                                                            onValueChange={(value: any) => updateChartConfig({
-                                                                                yAxisConfig: { ...chartConfig.yAxisConfig, tickFormatter: value }
-                                                                            })}
-                                                                        >
-                                                                            <SelectTrigger className="h-7 text-xs">
-                                                                                <SelectValue />
-                                                                            </SelectTrigger>
-                                                                            <SelectContent>
-                                                                                <SelectItem value="number">{t('bitable.chartView.formatNumber')}</SelectItem>
-                                                                                <SelectItem value="percent">{t('bitable.chartView.formatPercent')}</SelectItem>
-                                                                                <SelectItem value="currency">{t('bitable.chartView.formatCurrency')}</SelectItem>
-                                                                                <SelectItem value="compact">{t('bitable.chartView.formatCompact')}</SelectItem>
-                                                                            </SelectContent>
-                                                                        </Select>
-                                                                    </div>
+                                            <ScrollArea className="max-h-[400px] pr-3">
+                                                <div className="space-y-3">
+                                                    {chartConfig.yAxisFields.map((yConfig, index) => {
+                                                        const field = fields.find(f => f.id === yConfig.fieldId);
+                                                        return (
+                                                            <div key={yConfig.fieldId} className="p-2 bg-background rounded border space-y-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <Select
+                                                                        value={yConfig.fieldId}
+                                                                        onValueChange={(value) => {
+                                                                            const newYFields = [...chartConfig.yAxisFields];
+                                                                            newYFields[index] = { ...newYFields[index], fieldId: value };
+                                                                            updateChartConfig({ yAxisFields: newYFields });
+                                                                        }}
+                                                                    >
+                                                                        <SelectTrigger className="flex-1 h-8">
+                                                                            <SelectValue />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            {numericFields.map((field) => (
+                                                                                <SelectItem key={field.id} value={field.id}>
+                                                                                    {field.title}
+                                                                                </SelectItem>
+                                                                            ))}
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                    <Input
+                                                                        type="color"
+                                                                        value={yConfig.color}
+                                                                        onChange={(e) => updateYAxisField(yConfig.fieldId, { color: e.target.value })}
+                                                                        className="w-8 h-8 p-1 cursor-pointer"
+                                                                    />
+                                                                    <Button
+                                                                        size="icon"
+                                                                        variant="ghost"
+                                                                        className="h-8 w-8"
+                                                                        onClick={() => removeYAxisField(yConfig.fieldId)}
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </Button>
                                                                 </div>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
+
+                                                                {/* Y轴高级配置 - 仅显示第一个字段的详细配置 */}
+                                                                {index === 0 && (
+                                                                    <div className="pt-2 border-t space-y-2">
+                                                                        <div className="grid grid-cols-2 gap-2">
+                                                                            <div className="space-y-1">
+                                                                                <Label className="text-xs text-muted-foreground">{t('bitable.chartView.yAxisMin')}</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={chartConfig.yAxisConfig?.min ?? ''}
+                                                                                    onChange={(e) => updateChartConfig({
+                                                                                        yAxisConfig: {
+                                                                                            ...chartConfig.yAxisConfig,
+                                                                                            min: e.target.value ? Number(e.target.value) : undefined
+                                                                                        }
+                                                                                    })}
+                                                                                    placeholder={t('bitable.chartView.auto')}
+                                                                                    className="h-7 text-xs"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-1">
+                                                                                <Label className="text-xs text-muted-foreground">{t('bitable.chartView.yAxisMax')}</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={chartConfig.yAxisConfig?.max ?? ''}
+                                                                                    onChange={(e) => updateChartConfig({
+                                                                                        yAxisConfig: {
+                                                                                            ...chartConfig.yAxisConfig,
+                                                                                            max: e.target.value ? Number(e.target.value) : undefined
+                                                                                        }
+                                                                                    })}
+                                                                                    placeholder={t('bitable.chartView.auto')}
+                                                                                    className="h-7 text-xs"
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="space-y-1">
+                                                                            <Label className="text-xs text-muted-foreground">{t('bitable.chartView.tickFormatter')}</Label>
+                                                                            <Select
+                                                                                value={chartConfig.yAxisConfig?.tickFormatter || 'number'}
+                                                                                onValueChange={(value: any) => updateChartConfig({
+                                                                                    yAxisConfig: { ...chartConfig.yAxisConfig, tickFormatter: value }
+                                                                                })}
+                                                                            >
+                                                                                <SelectTrigger className="h-7 text-xs">
+                                                                                    <SelectValue />
+                                                                                </SelectTrigger>
+                                                                                <SelectContent>
+                                                                                    <SelectItem value="number">{t('bitable.chartView.formatNumber')}</SelectItem>
+                                                                                    <SelectItem value="percent">{t('bitable.chartView.formatPercent')}</SelectItem>
+                                                                                    <SelectItem value="currency">{t('bitable.chartView.formatCurrency')}</SelectItem>
+                                                                                    <SelectItem value="compact">{t('bitable.chartView.formatCompact')}</SelectItem>
+                                                                                </SelectContent>
+                                                                            </Select>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </ScrollArea>
                                         )}
                                     </div>
                                 )}

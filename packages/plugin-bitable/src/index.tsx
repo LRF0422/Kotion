@@ -72,7 +72,14 @@ export const bitable = new BitablePlugin({
                         "columnWidth": "Column Width",
                         "fieldDescription": "Field Description",
                         "fieldDescriptionPlaceholder": "Add description for this field...",
-                        "confirmAdd": "Confirm Add"
+                        "confirmAdd": "Confirm Add",
+                        "convertFieldType": "Convert Field Type",
+                        "convertFieldTypeDescription": "Change this field to a different type. Existing data will be automatically converted.",
+                        "currentType": "Current Type",
+                        "newType": "New Type",
+                        "convertButton": "Convert",
+                        "conversionWarning": "Warning: Some data may be lost during conversion.",
+                        "autoGenerateOptions": "Auto-generate options from existing data"
                     },
                     // Field formats
                     "formats": {
@@ -316,7 +323,14 @@ export const bitable = new BitablePlugin({
                         "columnWidth": "列宽",
                         "fieldDescription": "字段描述",
                         "fieldDescriptionPlaceholder": "为字段添加描述信息...",
-                        "confirmAdd": "确认添加"
+                        "confirmAdd": "确认添加",
+                        "convertFieldType": "转换字段类型",
+                        "convertFieldTypeDescription": "将此字段更改为不同类型。现有数据将自动转换。",
+                        "currentType": "当前类型",
+                        "newType": "新类型",
+                        "convertButton": "转换",
+                        "conversionWarning": "警告：转换过程中可能会丢失部分数据。",
+                        "autoGenerateOptions": "从现有数据自动生成选项"
                     },
                     // Field formats
                     "formats": {
