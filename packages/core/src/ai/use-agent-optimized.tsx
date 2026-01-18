@@ -1,7 +1,7 @@
 import { AppContext, axios } from "@kn/common"
 import { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
-import { ToolLoopAgent } from "ai"
+import { stepCountIs, ToolLoopAgent } from "ai"
 import { useCallback, useContext, useMemo, useRef } from "react"
 import { deepseek } from "./ai-utils"
 import type { Node } from "@kn/editor"
@@ -1118,20 +1118,30 @@ export const useEditorAgentOptimized = (
         },
 
         highlight: {
-            description: '高亮标记',
+            description: '高亮标记指定范围的文本',
             inputSchema: z.object({
                 from: z.number().describe("起始位置"),
                 to: z.number().describe("结束位置"),
             }),
-            execute: async (range: { from: number, to: number }) => {
+            execute: async ({ from, to }: { from: number, to: number }) => {
                 const docSize = editor.state.doc.nodeSize
-                const validation = validateRange(range.from, range.to, docSize)
+                const validation = validateRange(from, to, docSize)
                 if (!validation.valid) {
                     return { error: validation.error }
                 }
 
-                editor.chain().setTextSelection(range).scrollIntoView().setHighlight().run()
-                return { success: true, from: range.from, to: range.to }
+                const success = editor.chain()
+                    .focus()
+                    .setTextSelection({ from, to })
+                    .setHighlight()
+                    .scrollIntoView()
+                    .run()
+
+                if (!success) {
+                    return { error: `高亮失败，范围: ${from}-${to}` }
+                }
+
+                return { success: true, from, to, highlightedRange: to - from }
             }
         },
 
@@ -1230,6 +1240,7 @@ export const useEditorAgentOptimized = (
 
     const agent = useMemo(() => new ToolLoopAgent({
         model: deepseek("deepseek-chat"),
+        stopWhen: stepCountIs(100), // Increased from default 20 to allow more tool calls
         instructions: `你是一个智能文档编辑助手。
 
 ## 核心原则（必须遵守）
