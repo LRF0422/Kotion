@@ -73,8 +73,12 @@ export const DefaultPluginInstance = new DefaultPlugin({
         home: {
           "title": "早上好",
           "create-space": "创建空间",
-          "rs": "从最近的空间开始",
-          "all": "查看全部空间",
+          "rs": "最近的空间",
+          "all": "查看全部",
+          "recent-pages": "最近的页面",
+          "collaboration": "协作空间",
+          "learning": "学习使用 Knowledge",
+          "coming-soon-desc": "功能即将上线，敬请期待！",
           "greeting": {
             "morning": "早上好",
             "afternoon": "下午好",
@@ -190,9 +194,13 @@ export const DefaultPluginInstance = new DefaultPlugin({
       translation: {
         home: {
           "title": "Good morning",
-          "create-space": "Create a space",
-          "rs": "Start from recent space",
-          "all": "all spaces",
+          "create-space": "Create Space",
+          "rs": "Recent Spaces",
+          "all": "View All",
+          "recent-pages": "Recent Pages",
+          "collaboration": "Collaboration Spaces",
+          "learning": "Learn Knowledge",
+          "coming-soon-desc": "This feature is coming soon, stay tuned!",
           "greeting": {
             "morning": "Good Morning",
             "afternoon": "Good Afternoon",

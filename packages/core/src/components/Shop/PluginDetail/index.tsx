@@ -100,9 +100,9 @@ export const PluginDetail: React.FC = () => {
                 </div>
 
                 {/* Content Layout: Tabs on Left, Info on Right */}
-                <div className="grid grid-cols-2 gap-0">
+                <div className="grid grid-cols-3 gap-0">
                     {/* Main Content Area with Tabs */}
-                    <div className="border-r">
+                    <div className="border-r col-span-2">
                         <Tabs className="w-full" defaultValue={pluginDetail.currentVersion?.versionDescription?.[0]?.label || "Overview"}>
                             {/* Tabs Navigation */}
                             <div className="border-b bg-background">
@@ -151,7 +151,7 @@ export const PluginDetail: React.FC = () => {
                     </div>
 
                     {/* Fixed Right Sidebar - Plugin Info */}
-                    <div className="px-6 py-6 bg-muted/20">
+                    <div className="px-6 py-6 bg-muted/20 col-span-1">
                         <div className="sticky top-6 space-y-6">
                             {/* Categories */}
                             <div className="space-y-3">
