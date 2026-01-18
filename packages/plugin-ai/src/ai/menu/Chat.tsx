@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, FormEvent, useCallback, useMemo, useRef, useEffect } from "react"
-import { Bot, Paperclip, Mic, CornerDownLeft, ChevronDown, ChevronUp, Code2, CheckCircle2, Loader2, Sparkles, Send, Terminal, XCircle, Trash2 } from "@kn/icon"
-import { Button, Streamdown, Badge, Collapsible, CollapsibleContent, CollapsibleTrigger, Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@kn/ui"
+import { Bot, Paperclip, Mic, CornerDownLeft, ChevronDown, ChevronUp, Code2, CheckCircle2, Loader2, Sparkles, Send, Terminal, XCircle, Trash2, HelpCircle, MessageSquareMore } from "@kn/icon"
+import { Button, Streamdown, Badge, Collapsible, CollapsibleContent, CollapsibleTrigger, Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Input } from "@kn/ui"
 import {
     ChatBubble,
     ChatBubbleAvatar,
@@ -18,7 +18,7 @@ import {
 import { ChatMessageList } from "@kn/ui"
 import React from "react"
 import { Editor } from "@kn/editor"
-import { useEditorAgent, useEditorAgentOptimized, useUploadFile, ToolExecutionEvent } from "@kn/core"
+import { useEditorAgent, useEditorAgentOptimized, useUploadFile, ToolExecutionEvent, UserChoiceRequest, UserChoiceOption } from "@kn/core"
 import { useSelector } from "@kn/common"
 import { GlobalState } from "@kn/core"
 
@@ -41,6 +41,13 @@ interface ExecutionStep {
     duration?: number
 }
 
+// Pending user choice state
+interface PendingUserChoice {
+    request: UserChoiceRequest
+    resolve: (value: string) => void
+    reject: (reason?: any) => void
+}
+
 // Constants - Use a more professional AI avatar
 const AI_AVATAR_URL = undefined  // We'll use fallback with gradient
 
@@ -58,6 +65,11 @@ const INITIAL_MESSAGE: Message = {
 export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => {
     const [currentSteps, setCurrentSteps] = useState<ExecutionStep[]>([])  // Track current execution steps
     const stepsRef = useRef<ExecutionStep[]>([])  // Ref to track steps during streaming
+
+    // User choice state
+    const [pendingChoice, setPendingChoice] = useState<PendingUserChoice | null>(null)
+    const [customInput, setCustomInput] = useState("")
+    const pendingChoiceRef = useRef<PendingUserChoice | null>(null)
 
     // Tool execution callback
     const handleToolExecution = useCallback((event: ToolExecutionEvent) => {
@@ -89,7 +101,46 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         }
     }, [])
 
-    const agent = useEditorAgentOptimized(editor, handleToolExecution)
+    // User choice request handler
+    const handleUserChoiceRequest = useCallback((request: UserChoiceRequest): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const pendingChoice: PendingUserChoice = { request, resolve, reject }
+            pendingChoiceRef.current = pendingChoice
+            setPendingChoice(pendingChoice)
+        })
+    }, [])
+
+    // Handle user selecting an option
+    const handleOptionSelect = useCallback((optionId: string) => {
+        if (pendingChoiceRef.current) {
+            pendingChoiceRef.current.resolve(optionId)
+            pendingChoiceRef.current = null
+            setPendingChoice(null)
+            setCustomInput("")
+        }
+    }, [])
+
+    // Handle user submitting custom input
+    const handleCustomSubmit = useCallback(() => {
+        if (pendingChoiceRef.current && customInput.trim()) {
+            pendingChoiceRef.current.resolve(customInput.trim())
+            pendingChoiceRef.current = null
+            setPendingChoice(null)
+            setCustomInput("")
+        }
+    }, [customInput])
+
+    // Handle cancel user choice
+    const handleCancelChoice = useCallback(() => {
+        if (pendingChoiceRef.current) {
+            pendingChoiceRef.current.reject(new Error('User cancelled the choice'))
+            pendingChoiceRef.current = null
+            setPendingChoice(null)
+            setCustomInput("")
+        }
+    }, [])
+
+    const agent = useEditorAgentOptimized(editor, handleToolExecution, handleUserChoiceRequest)
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { usePath } = useUploadFile()
     const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE])
@@ -417,6 +468,79 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                 />
                                 <ChatBubbleMessage isLoading className="bg-background shadow-sm border border-border/50" />
                             </ChatBubble>
+                        )}
+
+                        {/* User Choice Dialog */}
+                        {pendingChoice && (
+                            <div className="mx-4 my-2 p-4 rounded-lg bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20 shadow-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
+                                <div className="flex items-start gap-3 mb-3">
+                                    <div className="p-1.5 rounded-lg bg-primary/10 shrink-0">
+                                        <HelpCircle className="h-4 w-4 text-primary" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-medium text-sm text-foreground">{pendingChoice.request.question}</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Please select an option to continue</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    {pendingChoice.request.options.map((option) => (
+                                        <button
+                                            key={option.id}
+                                            onClick={() => handleOptionSelect(option.id)}
+                                            className="w-full p-3 rounded-lg border border-border/50 bg-background hover:bg-muted/50 hover:border-primary/30 transition-all text-left group"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-primary/40 group-hover:bg-primary transition-colors" />
+                                                <span className="font-medium text-sm">{option.label}</span>
+                                            </div>
+                                            {option.description && (
+                                                <p className="text-xs text-muted-foreground mt-1 ml-4">{option.description}</p>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {pendingChoice.request.allowCustomInput && (
+                                    <div className="mt-3 pt-3 border-t border-border/50">
+                                        <p className="text-xs text-muted-foreground mb-2">Or provide a custom response:</p>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                value={customInput}
+                                                onChange={(e) => setCustomInput(e.target.value)}
+                                                placeholder="Type your response..."
+                                                className="flex-1 h-9 text-sm"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && customInput.trim()) {
+                                                        e.preventDefault()
+                                                        handleCustomSubmit()
+                                                    }
+                                                }}
+                                            />
+                                            <Button
+                                                size="sm"
+                                                onClick={handleCustomSubmit}
+                                                disabled={!customInput.trim()}
+                                                className="h-9 px-3"
+                                            >
+                                                <Send className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="mt-3 flex justify-end">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={handleCancelChoice}
+                                        className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                    >
+                                        <XCircle className="h-3 w-3 mr-1" />
+                                        Cancel
+                                    </Button>
+                                </div>
+                            </div>
                         )}
 
                         {/* Enhanced error display */}

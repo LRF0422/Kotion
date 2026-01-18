@@ -208,6 +208,25 @@ export interface ToolExecutionEvent {
 
 export type OnToolExecution = (event: ToolExecutionEvent) => void
 
+// User choice option interface
+export interface UserChoiceOption {
+    id: string
+    label: string
+    description?: string
+}
+
+// User choice request interface
+export interface UserChoiceRequest {
+    id: string
+    question: string
+    options: UserChoiceOption[]
+    allowCustomInput?: boolean
+    timestamp: number
+}
+
+// Callback type for requesting user choice
+export type OnUserChoiceRequest = (request: UserChoiceRequest) => Promise<string>
+
 // Wrap a tool with execution tracking
 const wrapToolWithCallback = (
     toolName: string,
@@ -259,7 +278,11 @@ const wrapToolWithCallback = (
     }
 }
 
-export const useEditorAgentOptimized = (editor: Editor, onToolExecution?: OnToolExecution) => {
+export const useEditorAgentOptimized = (
+    editor: Editor,
+    onToolExecution?: OnToolExecution,
+    onUserChoiceRequest?: OnUserChoiceRequest
+) => {
     const { pluginManager } = useContext(AppContext)
 
     // Memoize plugin tools to avoid recreation on every render
@@ -643,7 +666,83 @@ export const useEditorAgentOptimized = (editor: Editor, onToolExecution?: OnTool
                 }
             }
         },
-    }), [editor])
+
+        askUserChoice: {
+            description: '向用户询问选择。当需要用户确认、选择方案或提供反馈时使用此工具。用户的选择将作为结果返回,你可以根据用户的选择继续后续操作',
+            inputSchema: z.object({
+                question: z.string().describe("向用户提问的问题"),
+                options: z.array(z.object({
+                    id: z.string().describe("选项的唯一标识"),
+                    label: z.string().describe("选项的显示文本"),
+                    description: z.string().optional().describe("选项的详细描述")
+                })).describe("可选项列表,至少提供2个选项"),
+                allowCustomInput: z.boolean().optional().describe("是否允许用户输入自定义回复,默认false")
+            }),
+            execute: async ({ question, options, allowCustomInput = false }: {
+                question: string,
+                options: UserChoiceOption[],
+                allowCustomInput?: boolean
+            }) => {
+                if (!question || question.trim().length === 0) {
+                    return { error: 'Question cannot be empty' }
+                }
+
+                if (!options || options.length < 2) {
+                    return { error: 'At least 2 options are required' }
+                }
+
+                if (!onUserChoiceRequest) {
+                    // If no callback is provided, return the first option as default
+                    return {
+                        success: true,
+                        selectedOption: options[0].id,
+                        selectedLabel: options[0].label,
+                        isDefault: true,
+                        message: 'User choice callback not available, using default option'
+                    }
+                }
+
+                const requestId = `choice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+                try {
+                    // Request user choice and wait for response
+                    const selectedOptionId = await onUserChoiceRequest({
+                        id: requestId,
+                        question,
+                        options,
+                        allowCustomInput,
+                        timestamp: Date.now()
+                    })
+
+                    // Find the selected option
+                    const selectedOption = options.find(opt => opt.id === selectedOptionId)
+
+                    if (selectedOption) {
+                        return {
+                            success: true,
+                            selectedOption: selectedOption.id,
+                            selectedLabel: selectedOption.label,
+                            selectedDescription: selectedOption.description,
+                            isCustomInput: false
+                        }
+                    } else {
+                        // Custom input provided
+                        return {
+                            success: true,
+                            selectedOption: 'custom',
+                            selectedLabel: selectedOptionId, // The custom input text
+                            isCustomInput: true
+                        }
+                    }
+                } catch (error) {
+                    return {
+                        error: `User choice request failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                        question
+                    }
+                }
+            }
+        },
+    }), [editor, onUserChoiceRequest])
 
     // Wrap tools with execution callback
     const wrappedTools = useMemo(() => {
@@ -660,7 +759,7 @@ export const useEditorAgentOptimized = (editor: Editor, onToolExecution?: OnTool
 
     const agent = useMemo(() => new ToolLoopAgent({
         model: deepseek("deepseek-chat"),
-        instructions: `你是一个智能文档编辑助手,具备文档编辑和网络搜索能力。
+        instructions: `你是一个智能文档编辑助手,具备文档编辑、网络搜索和用户交互能力。
 
 ## 文档编辑能力
 处理大文档时请注意:
@@ -678,7 +777,18 @@ export const useEditorAgentOptimized = (editor: Editor, onToolExecution?: OnTool
 2. 使用 fetchWebPage 获取特定网页的详细内容
 3. 搜索结果可用于补充文档内容或回答问题
 4. 对于时效性强的问题(如最新新闻、实时数据),优先使用网络搜索
-5. 搜索后可将相关内容整理并插入到文档中`,
+5. 搜索后可将相关内容整理并插入到文档中
+
+## 用户交互能力
+当需要用户输入或确认时:
+1. 使用 askUserChoice 向用户提问并提供选项
+2. 在以下情况下主动询问用户:
+   - 任务有多种可能的执行方案时
+   - 需要用户确认重要操作(如删除、大范围修改)时
+   - 任务要求不明确需要澄清时
+   - 需要用户提供额外信息时
+3. 根据用户选择的结果继续执行后续操作
+4. 保持选项清晰简洁,便于用户理解和选择`,
         tools: wrappedTools,
     }), [wrappedTools])
 
