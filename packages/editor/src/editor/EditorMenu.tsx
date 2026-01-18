@@ -29,6 +29,7 @@ export const EditorMenu: React.FC<{
 
     const [bubbleMenu, setBubbleMenu] = useSafeState<ElementType[]>([]);
     const [flotMenu, setFloatMenu] = useSafeState<ElementType[]>([]);
+    const [floatingUI, setFloatingUI] = useSafeState<ElementType[]>([]);
     const [record, setRecord] = useSafeState<MenuRecord>({
         block: [],
         inline: [],
@@ -50,6 +51,7 @@ export const EditorMenu: React.FC<{
         };
         const newBubbleMenu: ElementType[] = [];
         const newFlotMenu: ElementType[] = [];
+        const newFloatingUI: ElementType[] = [];
 
         extensionWrappers.forEach(wrapper => {
             // Process menu config
@@ -76,12 +78,18 @@ export const EditorMenu: React.FC<{
             if (wrapper.flotMenuConfig) {
                 newFlotMenu.push(...wrapper.flotMenuConfig);
             }
+
+            // Process floating UI (standalone floating components like chat)
+            if (wrapper.floatingUI) {
+                newFloatingUI.push(wrapper.floatingUI);
+            }
         });
 
         setRecord(newRecord);
         setBubbleMenu(newBubbleMenu);
         setFloatMenu(newFlotMenu);
-    }, [extensionWrappers, setRecord, setBubbleMenu, setFloatMenu]);
+        setFloatingUI(newFloatingUI);
+    }, [extensionWrappers, setRecord, setBubbleMenu, setFloatMenu, setFloatingUI]);
 
     // Memoized render function for menu items
     const renderItem = useCallback((items: ElementType[], level: number) => (
@@ -136,6 +144,10 @@ export const EditorMenu: React.FC<{
                     </div>
                 </ReactBubble>
             )}
+            {/* Floating UI components (rendered outside of toolbar) */}
+            {floatingUI.map((FloatingComponent, index) => (
+                <FloatingComponent key={`floating-ui-${index}`} editor={editor} />
+            ))}
         </>
     );
 };
