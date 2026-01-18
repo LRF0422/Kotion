@@ -188,12 +188,14 @@ export const DrawnixExtension: ExtensionWrapper = {
                 try {
                     const mindData = await parseMermaidToDrawnix(mermaid);
 
-                    if (!mindData || !mindData.elements || mindData.elements.length === 0) {
+                    // @ts-ignore
+                    if (!mindData || !mindData.children || mindData.children.length === 0) {
                         return { error: '无法解析Mermaid代码，请确保语法正确' };
                     }
 
                     const data: DrawnixData = {
-                        children: mindData.elements
+                        // @ts-ignore
+                        children: mindData.children
                     };
 
                     if (pos !== undefined) {
