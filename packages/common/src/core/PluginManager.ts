@@ -8,6 +8,29 @@ import { event } from "../event";
 import { Editor } from "@tiptap/core";
 import { logger } from "../utils/logger";
 
+export interface PluginSettingsConfig {
+    /**
+     * Unique key for the settings panel
+     */
+    key: string;
+    /**
+     * Display name for the settings panel
+     */
+    label: string;
+    /**
+     * Icon component for the settings panel
+     */
+    icon?: React.ReactNode;
+    /**
+     * Settings component to render
+     */
+    component: React.ComponentType<any>;
+    /**
+     * Description of the settings panel
+     */
+    description?: string;
+}
+
 export interface PluginConfig {
     name: string
     status: string
@@ -17,6 +40,10 @@ export interface PluginConfig {
     editorExtension?: ExtensionWrapper[]
     locales?: any
     services?: Services
+    /**
+     * Plugin settings configuration
+     */
+    settings?: PluginSettingsConfig
 }
 
 
@@ -30,6 +57,7 @@ export class KPlugin<T extends PluginConfig> {
     private _menus?: SiderMenuItemProps[]
     private _locales?: any
     private _services?: Services
+    private _settings?: PluginSettingsConfig
 
     constructor(config: T) {
         this.name = config.name
@@ -39,6 +67,7 @@ export class KPlugin<T extends PluginConfig> {
         this._menus = config.menus
         this._locales = config.locales
         this._services = config.services
+        this._settings = config.settings
     }
 
     get routes(): RouteConfig[] {
@@ -59,6 +88,10 @@ export class KPlugin<T extends PluginConfig> {
 
     get services(): Services | undefined {
         return this._services
+    }
+
+    get settings(): PluginSettingsConfig | undefined {
+        return this._settings
     }
 
 }
@@ -377,6 +410,23 @@ export class PluginManager {
 
         this._cacheMenus = menus
         return menus
+    }
+
+    /**
+     * Resolve all plugin settings configurations
+     * Returns an array of settings configs with plugin metadata
+     */
+    resolvePluginSettings(): Array<PluginSettingsConfig & { pluginName: string }> {
+        const settings: Array<PluginSettingsConfig & { pluginName: string }> = []
+        for (const plugin of this.plugins) {
+            if (plugin.settings) {
+                settings.push({
+                    ...plugin.settings,
+                    pluginName: plugin.name
+                })
+            }
+        }
+        return settings
     }
 
     get pluginServices(): Services {

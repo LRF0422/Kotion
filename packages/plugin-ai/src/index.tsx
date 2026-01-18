@@ -1,6 +1,9 @@
 
 import { KPlugin, PluginConfig } from "@kn/common"
 import { AIExtension } from "./ai"
+import { AISettings } from "./ai/AISettings"
+import { Sparkles } from "@kn/icon"
+import React from "react"
 
 interface AiPluginConfig extends PluginConfig {
     /**
@@ -24,6 +27,13 @@ export const ai = new AiPlugin({
     status: '',
     name: 'AI Assistant',
     editorExtension: [AIExtension],
+    settings: {
+        key: 'ai-settings',
+        label: 'AI 助手',
+        description: '配置 AI 文本生成、图像生成和智能功能',
+        icon: React.createElement(Sparkles, { className: "h-4 w-4" }),
+        component: AISettings
+    },
     locales: {
         en: {
             translation: {
