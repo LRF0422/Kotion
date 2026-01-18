@@ -790,7 +790,7 @@ export const useEditorAgentOptimized = (
                     }
 
                     // TypeScript can't track mutations inside callbacks, so we need to help it
-                    const block = foundBlock!
+                    const block: any = foundBlock!
 
                     let success: boolean
                     let insertedAt: number | string
