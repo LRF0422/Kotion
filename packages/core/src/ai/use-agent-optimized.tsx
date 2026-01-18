@@ -311,8 +311,85 @@ export const useEditorAgentOptimized = (
         return pluginManager?.resloveTools(editor) || {}
     }, [])
 
-    // Define base tools
+    // Define base tools - askUserChoice first for priority
     const baseTools = useMemo(() => ({
+        // User interaction tool - MUST BE CALLED FIRST
+        askUserChoice: {
+            description: '【必须优先使用】向用户询问选择。在执行任何修改操作前，必须先调用此工具征求用户确认。这是与用户交互的唯一方式，必须在以下场景使用: 1)删除内容前 2)有多个方案时 3)用户请求不明确时 4)任何不确定时',
+            inputSchema: z.object({
+                question: z.string().describe("向用户提问的问题"),
+                options: z.array(z.object({
+                    id: z.string().describe("选项的唯一标识"),
+                    label: z.string().describe("选项的显示文本"),
+                    description: z.string().optional().describe("选项的详细描述")
+                })).describe("可选项列表,至少提供2个选项"),
+                allowCustomInput: z.boolean().optional().describe("是否允许用户输入自定义回复,默认false")
+            }),
+            execute: async ({ question, options, allowCustomInput = false }: {
+                question: string,
+                options: UserChoiceOption[],
+                allowCustomInput?: boolean
+            }) => {
+                if (!question || question.trim().length === 0) {
+                    return { error: 'Question cannot be empty' }
+                }
+
+                if (!options || options.length < 2) {
+                    return { error: 'At least 2 options are required' }
+                }
+
+                if (!onUserChoiceRequest) {
+                    // If no callback is provided, return the first option as default
+                    return {
+                        success: true,
+                        selectedOption: options[0].id,
+                        selectedLabel: options[0].label,
+                        isDefault: true,
+                        message: 'User choice callback not available, using default option'
+                    }
+                }
+
+                const requestId = `choice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+                try {
+                    // Request user choice and wait for response
+                    const selectedOptionId = await onUserChoiceRequest({
+                        id: requestId,
+                        question,
+                        options,
+                        allowCustomInput,
+                        timestamp: Date.now()
+                    })
+
+                    // Find the selected option
+                    const selectedOption = options.find(opt => opt.id === selectedOptionId)
+
+                    if (selectedOption) {
+                        return {
+                            success: true,
+                            selectedOption: selectedOption.id,
+                            selectedLabel: selectedOption.label,
+                            selectedDescription: selectedOption.description,
+                            isCustomInput: false
+                        }
+                    } else {
+                        // Custom input provided
+                        return {
+                            success: true,
+                            selectedOption: 'custom',
+                            selectedLabel: selectedOptionId, // The custom input text
+                            isCustomInput: true
+                        }
+                    }
+                } catch (error) {
+                    return {
+                        error: `User choice request failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                        question
+                    }
+                }
+            }
+        },
+
         getDocumentStructure: {
             description: '获取文档结构概览,包括大小、标题、块等信息。处理大文档时应该首先调用此工具',
             inputSchema: z.object({}),
@@ -712,41 +789,44 @@ export const useEditorAgentOptimized = (
                         return { error: `未找到包含 "${searchText}" 的块` }
                     }
 
+                    // TypeScript can't track mutations inside callbacks, so we need to help it
+                    const block = foundBlock!
+
                     let success: boolean
                     let insertedAt: number | string
 
                     switch (position) {
                         case 'before':
                             // Insert new paragraph before the block
-                            success = editor.commands.insertContentAt(foundBlock.pos, [
+                            success = editor.commands.insertContentAt(block.pos, [
                                 { type: 'paragraph', content: [{ type: 'text', text }] }
                             ])
-                            insertedAt = foundBlock.pos
+                            insertedAt = block.pos
                             break
                         case 'after':
                             // Insert new paragraph after the block
-                            success = editor.commands.insertContentAt(foundBlock.pos + foundBlock.size, [
+                            success = editor.commands.insertContentAt(block.pos + block.size, [
                                 { type: 'paragraph', content: [{ type: 'text', text }] }
                             ])
-                            insertedAt = foundBlock.pos + foundBlock.size
+                            insertedAt = block.pos + block.size
                             break
                         case 'start':
                             // Insert text at start of block content
                             success = editor.chain()
                                 .focus()
-                                .setTextSelection(foundBlock.contentStart)
+                                .setTextSelection(block.contentStart)
                                 .insertContent(text)
                                 .run()
-                            insertedAt = foundBlock.contentStart
+                            insertedAt = block.contentStart
                             break
                         case 'end':
                             // Insert text at end of block content
                             success = editor.chain()
                                 .focus()
-                                .setTextSelection(foundBlock.contentEnd)
+                                .setTextSelection(block.contentEnd)
                                 .insertContent(text)
                                 .run()
-                            insertedAt = foundBlock.contentEnd
+                            insertedAt = block.contentEnd
                             break
                     }
 
@@ -760,7 +840,7 @@ export const useEditorAgentOptimized = (
                     return {
                         success: true,
                         searchText,
-                        foundInBlock: foundBlock.type,
+                        foundInBlock: block.type,
                         position,
                         insertedAt,
                         insertedSize,
@@ -769,46 +849,6 @@ export const useEditorAgentOptimized = (
                     }
                 } catch (error) {
                     return { error: `插入失败: ${error instanceof Error ? error.message : '未知错误'}` }
-                }
-            }
-        },
-
-        replace: {
-            description: '替换指定范围的内容',
-            inputSchema: z.object({
-                text: z.string().describe("替换的文本"),
-                from: z.number().describe("起始位置(使用当前文档的实际位置)"),
-                to: z.number().describe("结束位置(使用当前文档的实际位置)"),
-            }),
-            execute: async (params: { text: string, from: number, to: number }) => {
-                const { text, from, to } = params
-                const docSize = editor.state.doc.nodeSize
-                const validation = validateRange(from, to, docSize)
-                if (!validation.valid) {
-                    return { error: validation.error }
-                }
-
-                const success = editor.chain()
-                    .focus()
-                    .deleteRange({ from, to })
-                    .insertContentAt(from, text)
-                    .run()
-
-                if (!success) {
-                    return { error: `Failed to replace content at range ${from}-${to}` }
-                }
-
-                const newDocSize = editor.state.doc.nodeSize
-                const sizeDiff = newDocSize - docSize
-
-                return {
-                    success: true,
-                    from,
-                    to,
-                    replacedLength: to - from,
-                    sizeDiff,
-                    oldDocSize: docSize,
-                    newDocSize
                 }
             }
         },
@@ -848,6 +888,231 @@ export const useEditorAgentOptimized = (
                     deletedSize,
                     oldDocSize: docSize,
                     newDocSize
+                }
+            }
+        },
+
+        deleteBySearch: {
+            description: '通过搜索文本实时定位并删除内容。这是删除内容最可靠的方式，会在执行时实时计算位置',
+            inputSchema: z.object({
+                searchText: z.string().describe("要删除的文本内容，将搜索并删除包含此文本的内容"),
+                deleteMode: z.enum(['text', 'block']).optional().describe("删除模式: 'text'只删除匹配的文本, 'block'删除整个包含文本的块。默认'text'"),
+                occurrence: z.number().optional().describe("删除第几次出现的匹配项（从1开始），默认1表示第一个匹配")
+            }),
+            execute: async (params: { searchText: string, deleteMode?: 'text' | 'block', occurrence?: number }) => {
+                const { searchText, deleteMode = 'text', occurrence = 1 } = params
+                const docSize = editor.state.doc.nodeSize
+
+                if (!searchText || searchText.trim().length === 0) {
+                    return { error: '搜索文本不能为空' }
+                }
+
+                try {
+                    const matches: Array<{
+                        textFrom: number,
+                        textTo: number,
+                        blockFrom: number,
+                        blockTo: number,
+                        blockType: string,
+                        matchedText: string,
+                        context: string
+                    }> = []
+
+                    const doc = editor.state.doc
+                    const searchLower = searchText.toLowerCase()
+
+                    // Find matches by iterating through textblocks and their content
+                    doc.descendants((node, pos) => {
+                        if (node.isTextblock) {
+                            const blockText = node.textContent
+                            const blockTextLower = blockText.toLowerCase()
+                            let searchIdx = 0
+
+                            // Find all occurrences in this textblock
+                            while ((searchIdx = blockTextLower.indexOf(searchLower, searchIdx)) !== -1) {
+                                // Calculate the actual document position by walking through child nodes
+                                let charCount = 0
+                                let textFrom = -1
+                                let textTo = -1
+
+                                // Walk through the textblock's content to find exact positions
+                                node.forEach((child, offset) => {
+                                    if (textFrom !== -1 && textTo !== -1) return
+
+                                    if (child.isText && child.text) {
+                                        const childText = child.text
+                                        const childStart = charCount
+                                        const childEnd = charCount + childText.length
+
+                                        // Check if match starts in this child
+                                        if (textFrom === -1 && searchIdx >= childStart && searchIdx < childEnd) {
+                                            // pos is the textblock position, +1 to enter it, +offset for child position
+                                            textFrom = pos + 1 + offset + (searchIdx - childStart)
+                                        }
+
+                                        // Check if match ends in this child
+                                        const matchEnd = searchIdx + searchText.length
+                                        if (textFrom !== -1 && textTo === -1 && matchEnd > childStart && matchEnd <= childEnd) {
+                                            textTo = pos + 1 + offset + (matchEnd - childStart)
+                                        }
+
+                                        charCount = childEnd
+                                    } else if (child.isLeaf) {
+                                        // Non-text leaf nodes (atoms) count as 1 character in textContent
+                                        charCount += 1
+                                    }
+                                })
+
+                                if (textFrom !== -1 && textTo !== -1) {
+                                    const contextStart = Math.max(0, searchIdx - 20)
+                                    const contextEnd = Math.min(blockText.length, searchIdx + searchText.length + 20)
+
+                                    matches.push({
+                                        textFrom,
+                                        textTo,
+                                        blockFrom: pos,
+                                        blockTo: pos + node.nodeSize,
+                                        blockType: node.type.name,
+                                        matchedText: blockText.substring(searchIdx, searchIdx + searchText.length),
+                                        context: blockText.substring(contextStart, contextEnd)
+                                    })
+                                }
+
+                                searchIdx += 1
+                            }
+                        }
+                        return true
+                    })
+
+                    if (matches.length === 0) {
+                        return { error: `未找到文本: "${searchText}"` }
+                    }
+
+                    const targetOccurrence = Math.min(Math.max(1, occurrence), matches.length)
+                    const match = matches[targetOccurrence - 1]
+
+                    // Determine what to delete based on mode
+                    let from: number, to: number
+                    if (deleteMode === 'block') {
+                        from = match.blockFrom
+                        to = match.blockTo
+                    } else {
+                        from = match.textFrom
+                        to = match.textTo
+                    }
+
+                    // Double-check by reading what we're about to delete
+                    const textToDelete = editor.state.doc.textBetween(from, to, '', '')
+
+                    const success = editor.chain()
+                        .focus()
+                        .setTextSelection({ from, to })
+                        .deleteSelection()
+                        .run()
+
+                    if (!success) {
+                        return { error: `删除失败` }
+                    }
+
+                    const newDocSize = editor.state.doc.nodeSize
+                    const deletedSize = docSize - newDocSize
+
+                    return {
+                        success: true,
+                        searchText,
+                        deleteMode,
+                        occurrence: targetOccurrence,
+                        totalMatches: matches.length,
+                        deletedFrom: from,
+                        deletedTo: to,
+                        deletedText: deleteMode === 'block' ? `[整个${match.blockType}块]` : match.matchedText,
+                        actualDeletedText: textToDelete,
+                        context: match.context,
+                        deletedSize,
+                        oldDocSize: docSize,
+                        newDocSize
+                    }
+                } catch (error) {
+                    return { error: `删除失败: ${error instanceof Error ? error.message : '未知错误'}` }
+                }
+            }
+        },
+
+        deleteBlock: {
+            description: '通过块索引删除整个块。会实时计算块的位置，适合连续删除多个块',
+            inputSchema: z.object({
+                blockIndex: z.number().describe("要删除的块索引（从0开始）"),
+                blockType: z.string().optional().describe("可选：期望的块类型，用于验证是否删除正确的块")
+            }),
+            execute: async (params: { blockIndex: number, blockType?: string }) => {
+                const { blockIndex, blockType } = params
+                const docSize = editor.state.doc.nodeSize
+
+                try {
+                    // Find all blocks with real-time positions
+                    const blocks: Array<{
+                        from: number,
+                        to: number,
+                        type: string,
+                        text: string
+                    }> = []
+
+                    editor.state.doc.descendants((node, pos) => {
+                        if (node.isBlock && node.type.name !== 'doc') {
+                            blocks.push({
+                                from: pos,
+                                to: pos + node.nodeSize,
+                                type: node.type.name,
+                                text: node.textContent.slice(0, 50) + (node.textContent.length > 50 ? '...' : '')
+                            })
+                        }
+                        return true
+                    })
+
+                    if (blocks.length === 0) {
+                        return { error: '文档中没有可删除的块' }
+                    }
+
+                    if (blockIndex < 0 || blockIndex >= blocks.length) {
+                        return { error: `块索引越界。有效范围: 0-${blocks.length - 1}，请求: ${blockIndex}` }
+                    }
+
+                    const targetBlock = blocks[blockIndex]
+
+                    // Validate block type if specified
+                    if (blockType && targetBlock.type !== blockType) {
+                        return {
+                            error: `块类型不匹配。期望: ${blockType}，实际: ${targetBlock.type}`,
+                            actualBlock: targetBlock
+                        }
+                    }
+
+                    const success = editor.chain()
+                        .focus()
+                        .deleteRange({ from: targetBlock.from, to: targetBlock.to })
+                        .run()
+
+                    if (!success) {
+                        return { error: `删除块失败` }
+                    }
+
+                    const newDocSize = editor.state.doc.nodeSize
+                    const deletedSize = docSize - newDocSize
+
+                    return {
+                        success: true,
+                        blockIndex,
+                        blockType: targetBlock.type,
+                        blockPreview: targetBlock.text,
+                        deletedFrom: targetBlock.from,
+                        deletedTo: targetBlock.to,
+                        deletedSize,
+                        oldDocSize: docSize,
+                        newDocSize,
+                        remainingBlocks: blocks.length - 1
+                    }
+                } catch (error) {
+                    return { error: `删除块失败: ${error instanceof Error ? error.message : '未知错误'}` }
                 }
             }
         },
@@ -948,82 +1213,6 @@ export const useEditorAgentOptimized = (
                 }
             }
         },
-
-        askUserChoice: {
-            description: '向用户询问选择。当需要用户确认、选择方案或提供反馈时使用此工具。用户的选择将作为结果返回,你可以根据用户的选择继续后续操作',
-            inputSchema: z.object({
-                question: z.string().describe("向用户提问的问题"),
-                options: z.array(z.object({
-                    id: z.string().describe("选项的唯一标识"),
-                    label: z.string().describe("选项的显示文本"),
-                    description: z.string().optional().describe("选项的详细描述")
-                })).describe("可选项列表,至少提供2个选项"),
-                allowCustomInput: z.boolean().optional().describe("是否允许用户输入自定义回复,默认false")
-            }),
-            execute: async ({ question, options, allowCustomInput = false }: {
-                question: string,
-                options: UserChoiceOption[],
-                allowCustomInput?: boolean
-            }) => {
-                if (!question || question.trim().length === 0) {
-                    return { error: 'Question cannot be empty' }
-                }
-
-                if (!options || options.length < 2) {
-                    return { error: 'At least 2 options are required' }
-                }
-
-                if (!onUserChoiceRequest) {
-                    // If no callback is provided, return the first option as default
-                    return {
-                        success: true,
-                        selectedOption: options[0].id,
-                        selectedLabel: options[0].label,
-                        isDefault: true,
-                        message: 'User choice callback not available, using default option'
-                    }
-                }
-
-                const requestId = `choice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
-                try {
-                    // Request user choice and wait for response
-                    const selectedOptionId = await onUserChoiceRequest({
-                        id: requestId,
-                        question,
-                        options,
-                        allowCustomInput,
-                        timestamp: Date.now()
-                    })
-
-                    // Find the selected option
-                    const selectedOption = options.find(opt => opt.id === selectedOptionId)
-
-                    if (selectedOption) {
-                        return {
-                            success: true,
-                            selectedOption: selectedOption.id,
-                            selectedLabel: selectedOption.label,
-                            selectedDescription: selectedOption.description,
-                            isCustomInput: false
-                        }
-                    } else {
-                        // Custom input provided
-                        return {
-                            success: true,
-                            selectedOption: 'custom',
-                            selectedLabel: selectedOptionId, // The custom input text
-                            isCustomInput: true
-                        }
-                    }
-                } catch (error) {
-                    return {
-                        error: `User choice request failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                        question
-                    }
-                }
-            }
-        },
     }), [editor, onUserChoiceRequest])
 
     // Wrap tools with execution callback
@@ -1037,44 +1226,66 @@ export const useEditorAgentOptimized = (
             tools[name] = wrapToolWithCallback(name, tool as any, onToolExecution)
         }
         return tools
-    }, [baseTools, pluginTools, onToolExecution])
+    }, [baseTools, pluginTools, onToolExecution, onUserChoiceRequest])
 
     const agent = useMemo(() => new ToolLoopAgent({
         model: deepseek("deepseek-chat"),
         instructions: `你是一个智能文档编辑助手。
 
-## 插入内容的方式（按推荐顺序）
+## 核心原则（必须遵守）
 
-### 1. insertNear - 通过搜索文本定位（最推荐）
-参数:
-- searchText: 要搜索的文本
-- text: 要插入的内容
-- position: 'before'块前 | 'after'块后 | 'start'块内开头 | 'end'块内末尾
+**在执行任何修改操作之前，必须先调用 askUserChoice 工具征求用户确认。**
 
-示例: insertNear({ searchText: "第一章", text: "新内容", position: "after" })
+以下情况必须调用 askUserChoice:
+1. 删除任何内容之前
+2. 有多个可能的方案时
+3. 用户请求不够明确时
+4. 不确定应该如何操作时
+5. 需要用户做出选择时
 
-### 2. write - 通过块索引插入
-参数:
-- text: 要插入的文本
-- blockIndex: 块索引（0开始），默认最后一个
-- location: 'start' | 'end'，默认'end'
+## askUserChoice 用法
 
-### 3. insertAtEnd - 在文档末尾追加新段落
-参数: text, asNewParagraph(默认true)
+\`\`\`javascript
+askUserChoice({
+  question: "您的问题",
+  options: [
+    { id: "option1", label: "选项一", description: "说明" },
+    { id: "option2", label: "选项二", description: "说明" }
+  ],
+  allowCustomInput: true  // 可选，允许用户自定义输入
+})
+\`\`\`
 
-### 4. insertAfterBlock - 在指定块后插入新段落  
-参数: blockIndex, text
+## 插入内容
+
+1. **insertNear** - 通过搜索文本定位（推荐）
+   - searchText: 搜索文本
+   - text: 插入内容
+   - position: 'before' | 'after' | 'start' | 'end'
+
+2. **write** - 按块索引插入
+   - text, blockIndex, location
+
+3. **insertAtEnd** - 文档末尾插入
+
+4. **insertAfterBlock** - 块后插入
+
+## 删除内容（必须先调用 askUserChoice 确认）
+
+1. **deleteBySearch** - 搜索删除（推荐）
+   - searchText, deleteMode('text'|'block'), occurrence
+
+2. **deleteBlock** - 按索引删除
+   - blockIndex, blockType
 
 ## 读取文档
-- getDocumentStructure: 获取文档结构
-- readChunk: 分块读取内容
-- searchInDocument: 搜索文本
+- getDocumentStructure: 文档结构
+- readChunk: 分块读取
+- searchInDocument: 搜索
 
-## 其他工具
-- replace: 替换内容
-- deleteRange: 删除内容
+## 其他
 - webSearch: 网络搜索
-- askUserChoice: 用户交互`,
+- highlight: 高亮`,
         tools: wrappedTools,
     }), [wrappedTools])
 

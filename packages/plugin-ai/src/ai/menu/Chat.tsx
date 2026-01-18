@@ -158,7 +158,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
 
     useEffect(() => {
         scrollToBottom()
-    }, [messages, currentMessage, scrollToBottom])
+    }, [messages, currentMessage, pendingChoice, scrollToBottom])
 
     // Generate unique message ID
     const generateMessageId = useCallback(() => {
