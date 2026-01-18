@@ -80,7 +80,7 @@ const FieldTypeEnum = z.enum([
 
 const ViewTypeEnum = z.enum(['table', 'kanban', 'gallery', 'calendar', 'timeline', 'form', 'chart']);
 
-const ChartTypeEnum = z.enum(['bar', 'line', 'pie', 'area']);
+const ChartTypeEnum = z.enum(['bar', 'line', 'pie', 'area', 'radar', 'scatter', 'radial_bar', 'donut', 'stacked_bar', 'stacked_area']);
 
 const SelectOptionSchema = z.object({
     id: z.string().optional().describe("选项ID，不提供则自动生成"),
@@ -303,42 +303,21 @@ export const bitableTools = [
             initialData?: Array<Record<string, any>>;
             defaultViewType?: string;
         }) => {
-            // Build default fields configuration
-            const defaultFields: FieldConfig[] = [
-                { id: 'id', title: 'ID', type: FieldType.ID, width: 80, isShow: true },
-                { id: 'name', title: '名称', type: FieldType.TEXT, width: 200, isShow: true },
-                {
-                    id: 'status', title: '状态', type: FieldType.SELECT, width: 150, isShow: true,
-                    options: [
-                        { id: '1', label: '未开始', color: '#gray' },
-                        { id: '2', label: '进行中', color: '#blue' },
-                        { id: '3', label: '已完成', color: '#green' },
-                    ]
-                },
-                {
-                    id: 'priority', title: '优先级', type: FieldType.SELECT, width: 120, isShow: true,
-                    options: [
-                        { id: '1', label: '低', color: '#green' },
-                        { id: '2', label: '中', color: '#yellow' },
-                        { id: '3', label: '高', color: '#red' },
-                    ]
-                },
-                { id: 'assignee', title: '负责人', type: FieldType.PERSON, width: 150, isShow: true },
-                { id: 'dueDate', title: '截止日期', type: FieldType.DATE, width: 150, isShow: true },
-                { id: 'progress', title: '进度', type: FieldType.PROGRESS, width: 150, isShow: true },
-            ];
-
-            // Build title to ID mapping from default fields
+            // Build fields configuration
+            // If custom fields are provided, use ONLY those (plus required ID field)
+            // Otherwise, use the default fields
+            const fields: FieldConfig[] = [];
             const titleToIdMap: Record<string, string> = {};
-            defaultFields.forEach(f => {
-                titleToIdMap[f.title] = f.id;
-            });
 
-            // Add custom fields if provided, using title as ID for easy data mapping
+            // Always add the ID field first
+            fields.push({ id: 'id', title: 'ID', type: FieldType.ID, width: 80, isShow: true });
+            titleToIdMap['ID'] = 'id';
+
             if (params.fields && params.fields.length > 0) {
+                // Use custom fields only (clear default columns)
                 params.fields.forEach(fieldConfig => {
-                    // Use provided ID or generate one from title (sanitized)
-                    const fieldId = fieldConfig.id || fieldConfig.title.replace(/[^a-zA-Z0-9一-龥]/g, '_');
+                    // Use provided ID or use title as ID for easy data mapping
+                    const fieldId = fieldConfig.id || fieldConfig.title;
 
                     // Process options for select fields
                     const options = fieldConfig.options?.map((opt, idx) => ({
@@ -347,7 +326,7 @@ export const bitableTools = [
                         color: opt.color || '#gray'
                     }));
 
-                    defaultFields.push({
+                    fields.push({
                         id: fieldId,
                         title: fieldConfig.title,
                         type: fieldConfig.type as FieldType,
@@ -360,9 +339,40 @@ export const bitableTools = [
                     // Add to mapping
                     titleToIdMap[fieldConfig.title] = fieldId;
                 });
+            } else {
+                // Use default fields when no custom fields provided
+                const defaultFieldConfigs = [
+                    { id: 'name', title: '名称', type: FieldType.TEXT, width: 200, isShow: true },
+                    {
+                        id: 'status', title: '状态', type: FieldType.SELECT, width: 150, isShow: true,
+                        options: [
+                            { id: '1', label: '未开始', color: '#gray' },
+                            { id: '2', label: '进行中', color: '#blue' },
+                            { id: '3', label: '已完成', color: '#green' },
+                        ]
+                    },
+                    {
+                        id: 'priority', title: '优先级', type: FieldType.SELECT, width: 120, isShow: true,
+                        options: [
+                            { id: '1', label: '低', color: '#green' },
+                            { id: '2', label: '中', color: '#yellow' },
+                            { id: '3', label: '高', color: '#red' },
+                        ]
+                    },
+                    { id: 'assignee', title: '负责人', type: FieldType.PERSON, width: 150, isShow: true },
+                    { id: 'dueDate', title: '截止日期', type: FieldType.DATE, width: 150, isShow: true },
+                    { id: 'progress', title: '进度', type: FieldType.PROGRESS, width: 150, isShow: true },
+                ];
+
+                defaultFieldConfigs.forEach(f => {
+                    fields.push(f as FieldConfig);
+                    titleToIdMap[f.title] = f.id;
+                });
             }
 
             // Build default views
+            // For kanban view, try to find a select field to group by
+            const selectField = fields.find(f => f.type === FieldType.SELECT);
             const defaultViews: ViewConfig[] = [
                 {
                     id: generateViewId(),
@@ -370,13 +380,13 @@ export const bitableTools = [
                     type: ViewType.TABLE,
                     filters: [], sorts: [], groups: [], hiddenFields: [], fieldOrder: []
                 },
-                {
+                ...(selectField ? [{
                     id: generateViewId(),
                     name: '看板视图',
                     type: ViewType.KANBAN,
                     filters: [], sorts: [], groups: [], hiddenFields: [], fieldOrder: [],
-                    kanbanConfig: { groupByField: 'status' }
-                }
+                    kanbanConfig: { groupByField: selectField.id }
+                }] : [])
             ];
 
             // Process initial data - transform field titles to field IDs
@@ -401,7 +411,7 @@ export const bitableTools = [
             editor.commands.insertContent({
                 type: 'bitable',
                 attrs: {
-                    fields: defaultFields,
+                    fields: fields,
                     views: defaultViews,
                     currentView: defaultViews[0]?.id,
                     data: processedData
@@ -411,7 +421,7 @@ export const bitableTools = [
             return {
                 success: true,
                 message: "多维表格已插入",
-                fieldCount: defaultFields.length,
+                fieldCount: fields.length,
                 recordCount: processedData.length,
                 recordIds: processedData.map(r => r.id),
                 fieldMapping: titleToIdMap

@@ -42,6 +42,12 @@ export enum ChartType {
     LINE = 'line',
     PIE = 'pie',
     AREA = 'area',
+    RADAR = 'radar',
+    SCATTER = 'scatter',
+    RADIAL_BAR = 'radial_bar',
+    DONUT = 'donut',
+    STACKED_BAR = 'stacked_bar',
+    STACKED_AREA = 'stacked_area',
 }
 
 // 字段配置
@@ -130,6 +136,28 @@ export interface ViewConfig {
         showGrid?: boolean;
         aggregation?: 'sum' | 'count' | 'avg' | 'min' | 'max';
         groupByField?: string;
+        // Advanced config
+        chartHeight?: number;
+        isHorizontal?: boolean;
+        showDataLabels?: boolean;
+        showYAxis?: boolean;
+        enableAnimation?: boolean;
+        sortOrder?: 'asc' | 'desc' | 'none';
+        topN?: number;
+        innerRadius?: number;
+        outerRadius?: number;
+        colorScheme?: 'default' | 'warm' | 'cool' | 'monochrome';
+        showTrendLine?: boolean;
+        smoothLine?: boolean;
+        // Y-axis configuration
+        yAxisConfig?: {
+            label?: string;
+            min?: number;
+            max?: number;
+            tickCount?: number;
+            showAxisLine?: boolean;
+            tickFormatter?: 'number' | 'percent' | 'currency' | 'compact';
+        };
     };
 }
 
@@ -138,6 +166,23 @@ export interface YAxisConfig {
     fieldId: string;
     color: string;
     label?: string;
+    stackId?: string;  // For stacked charts
+}
+
+// 图表高级配置
+export interface ChartAdvancedConfig {
+    chartHeight?: number;           // Custom chart height
+    isHorizontal?: boolean;         // Horizontal bar chart
+    showDataLabels?: boolean;       // Show values on data points
+    showYAxis?: boolean;            // Show Y axis
+    enableAnimation?: boolean;      // Enable chart animations
+    sortOrder?: 'asc' | 'desc' | 'none';  // Sort data
+    topN?: number;                  // Show top N items only
+    innerRadius?: number;           // For pie/donut charts (0-100)
+    outerRadius?: number;           // For pie/donut charts
+    colorScheme?: 'default' | 'warm' | 'cool' | 'monochrome';  // Color scheme
+    showTrendLine?: boolean;        // Show trend line for line/scatter
+    smoothLine?: boolean;           // Smooth line for line charts
 }
 
 // 筛选配置

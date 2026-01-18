@@ -6,7 +6,9 @@ export {
     Bar, BarChart, CartesianGrid,
     XAxis, PolarAngleAxis, PolarGrid, Radar, RadarChart,
     Label as ChartLabel, Pie, PieChart, Area, AreaChart,
-    LineChart, Line, YAxis, Cell
+    LineChart, Line, YAxis, Cell, PolarRadiusAxis, ScatterChart, Scatter, ZAxis,
+    RadialBarChart, RadialBar,
+    LabelList,
 } from "recharts"
 export { zodResolver } from "@hookform/resolvers/zod"
 export * from "zod"
