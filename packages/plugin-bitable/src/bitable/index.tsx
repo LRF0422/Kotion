@@ -2,7 +2,7 @@ import { ExtensionWrapper } from "@kn/common";
 import { Bitable } from "./bitable-node";
 import { TableIcon } from "@kn/icon";
 import React from "react";
-import { z } from "@kn/ui";
+import { bitableTools } from "./bitable-tools";
 
 export const BitableExtension: ExtensionWrapper = {
     name: Bitable.name,
@@ -25,17 +25,5 @@ export const BitableExtension: ExtensionWrapper = {
             }
         }
     ],
-    tools: [
-        {
-            name: 'bitable',
-            description: '插入多维表格（类似飞书多维表格）',
-            inputSchema: z.object({
-                fields: z.array(z.string()).optional().describe("字段名称列表"),
-                data: z.array(z.any()).optional().describe("数据列表"),
-            }),
-            execute: (editor) => async (params: { fields?: string[], data?: any[] }) => {
-                editor.commands.insertBitable(params.fields, params.data);
-            }
-        },
-    ]
+    tools: bitableTools
 };

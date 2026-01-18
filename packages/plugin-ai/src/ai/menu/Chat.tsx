@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, FormEvent, useCallback, useMemo, useRef, useEffect } from "react"
-import { Bot, Paperclip, Mic, CornerDownLeft, ChevronDown, ChevronUp, Code2, CheckCircle2, Loader2 } from "@kn/icon"
-import { Button, Streamdown, Badge, Collapsible, CollapsibleContent, CollapsibleTrigger } from "@kn/ui"
+import { Bot, Paperclip, Mic, CornerDownLeft, ChevronDown, ChevronUp, Code2, CheckCircle2, Loader2, Sparkles, Send, Terminal, XCircle, Trash2 } from "@kn/icon"
+import { Button, Streamdown, Badge, Collapsible, CollapsibleContent, CollapsibleTrigger, Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@kn/ui"
 import {
     ChatBubble,
     ChatBubbleAvatar,
@@ -41,8 +41,8 @@ interface ExecutionStep {
     duration?: number
 }
 
-// Constants
-const AI_AVATAR_URL = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=64&h=64&q=80&crop=faces&fit=crop"
+// Constants - Use a more professional AI avatar
+const AI_AVATAR_URL = undefined  // We'll use fallback with gradient
 
 const AVATAR_FALLBACKS = {
     ai: "AI",
@@ -50,7 +50,7 @@ const AVATAR_FALLBACKS = {
 
 const INITIAL_MESSAGE: Message = {
     id: "initial-1",
-    content: "Hello! How can I help you today?",
+    content: "Hello! I'm your AI assistant. I can help you edit documents, answer questions, and perform various tasks. How can I assist you today?",
     sender: "ai",
     timestamp: Date.now(),
 }
@@ -210,74 +210,125 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         }
     }, [isInputValid, handleSubmit])
 
+    // Clear chat history
+    const handleClearChat = useCallback(() => {
+        setMessages([INITIAL_MESSAGE])
+        setCurrentSteps([])
+        stepsRef.current = []
+    }, [])
+
     return (
-        <ExpandableChat
-            size="sm"
-            position="bottom-right"
-            icon={<Bot className="h-6 w-6" />}
-        >
-            <ExpandableChatHeader className="flex-col text-center justify-center">
-                <h1 className="text-xl font-semibold">Chat with AI ✨</h1>
-                <p className="text-sm text-muted-foreground">
-                    Ask me anything about the components
-                </p>
-                <div className="mt-2 flex items-center justify-center gap-2">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowSteps(!showSteps)}
-                        className="text-xs"
-                    >
-                        {showSteps ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
-                        {showSteps ? 'Hide' : 'Show'} Execution Steps
-                    </Button>
-                </div>
-            </ExpandableChatHeader>
-
-            <ExpandableChatBody>
-                <ChatMessageList>
-                    {messages.map((message) => (
-                        <ChatBubble
-                            key={message.id}
-                            variant={message.sender === "user" ? "sent" : "received"}
-                        >
-                            <ChatBubbleAvatar
-                                className="h-8 w-8 shrink-0"
-                                src={message.sender === "user"
-                                    ? (userInfo?.avatar ? usePath(userInfo.avatar) : undefined)
-                                    : AI_AVATAR_URL
-                                }
-                                fallback={message.sender === "user"
-                                    ? (userInfo?.name?.substring(0, 2).toUpperCase() || userInfo?.account?.substring(0, 2).toUpperCase() || "U")
-                                    : AVATAR_FALLBACKS.ai
-                                }
-                            />
-                            <div className="flex flex-col gap-2 w-full">
-                                <ChatBubbleMessage
-                                    variant={message.sender === "user" ? "sent" : "received"}
+        <TooltipProvider>
+            <ExpandableChat
+                size="md"
+                position="bottom-right"
+                icon={
+                    <div className="relative">
+                        <Sparkles className="h-6 w-6" />
+                    </div>
+                }
+            >
+                {/* Enhanced Header with Gradient */}
+                <ExpandableChatHeader className="flex-col text-center justify-center bg-gradient-to-r from-primary/10 via-primary/5 to-background border-b-0 pb-3">
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                        <div className="p-1.5 rounded-lg bg-primary/10">
+                            <Sparkles className="h-5 w-5 text-primary" />
+                        </div>
+                        <h1 className="text-lg font-semibold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">AI Assistant</h1>
+                    </div>
+                    <p className="text-xs text-muted-foreground max-w-[240px]">
+                        Ask questions, edit documents, or get help with tasks
+                    </p>
+                    <div className="mt-2 flex items-center justify-center gap-1">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowSteps(!showSteps)}
+                                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                                 >
-                                    <Streamdown>{message.content}</Streamdown>
-                                </ChatBubbleMessage>
+                                    <Terminal className="h-3 w-3 mr-1" />
+                                    {showSteps ? 'Hide' : 'Show'} Steps
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">
+                                {showSteps ? 'Hide tool execution details' : 'Show tool execution details'}
+                            </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleClearChat}
+                                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                >
+                                    <Trash2 className="h-3 w-3" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">
+                                Clear chat history
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
+                </ExpandableChatHeader>
 
-                                {/* Show execution steps for AI messages */}
-                                {message.sender === "ai" && message.steps && message.steps.length > 0 && showSteps && (
-                                    <div className="mt-2 space-y-1">
-                                        <Collapsible>
-                                            <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                                                <Code2 className="h-3 w-3" />
-                                                <span>{message.steps.length} tool {message.steps.length === 1 ? 'call' : 'calls'}</span>
-                                                <ChevronDown className="h-3 w-3" />
+                <ExpandableChatBody className="bg-muted/20">
+                    <ChatMessageList>
+                        {messages.map((message) => (
+                            <ChatBubble
+                                key={message.id}
+                                variant={message.sender === "user" ? "sent" : "received"}
+                            >
+                                <ChatBubbleAvatar
+                                    className={`h-8 w-8 shrink-0 ${message.sender === "ai" ? "bg-gradient-to-br from-primary/80 to-primary text-primary-foreground" : ""}`}
+                                    src={message.sender === "user"
+                                        ? (userInfo?.avatar ? usePath(userInfo.avatar) : undefined)
+                                        : AI_AVATAR_URL
+                                    }
+                                    fallback={message.sender === "user"
+                                        ? (userInfo?.name?.substring(0, 2).toUpperCase() || userInfo?.account?.substring(0, 2).toUpperCase() || "U")
+                                        : AVATAR_FALLBACKS.ai
+                                    }
+                                />
+                                <div className="flex flex-col gap-1.5 w-full max-w-[calc(100%-48px)]">
+                                    <ChatBubbleMessage
+                                        variant={message.sender === "user" ? "sent" : "received"}
+                                        className={message.sender === "ai" ? "bg-background shadow-sm border border-border/50" : ""}
+                                    >
+                                        <Streamdown>{message.content}</Streamdown>
+                                    </ChatBubbleMessage>
+
+                                    {/* Enhanced execution steps display */}
+                                    {message.sender === "ai" && message.steps && message.steps.length > 0 && showSteps && (
+                                        <Collapsible className="mt-1">
+                                            <CollapsibleTrigger className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors group">
+                                                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50 hover:bg-muted transition-colors">
+                                                    <Terminal className="h-3 w-3" />
+                                                    <span className="font-medium">{message.steps.length}</span>
+                                                    <span>tool {message.steps.length === 1 ? 'call' : 'calls'}</span>
+                                                    <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]:rotate-180" />
+                                                </div>
                                             </CollapsibleTrigger>
-                                            <CollapsibleContent className="mt-2 space-y-1">
-                                                {message.steps.map((step, index) => (
+                                            <CollapsibleContent className="mt-2 space-y-1.5 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+                                                {message.steps.map((step) => (
                                                     <div
                                                         key={step.id}
-                                                        className="flex items-start gap-2 p-2 rounded-md bg-muted/50 text-xs"
+                                                        className="flex items-start gap-2 p-2.5 rounded-lg bg-background border border-border/50 text-xs shadow-sm"
                                                     >
-                                                        <CheckCircle2 className="h-3 w-3 mt-0.5 text-green-500 shrink-0" />
+                                                        <div className="mt-0.5">
+                                                            {step.status === 'success' ? (
+                                                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                                            ) : step.status === 'error' ? (
+                                                                <XCircle className="h-3.5 w-3.5 text-red-500" />
+                                                            ) : (
+                                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+                                                            )}
+                                                        </div>
                                                         <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-2 mb-1">
-                                                                <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">
                                                                     {formatToolName(step.toolName)}
                                                                 </Badge>
                                                                 {step.duration && (
@@ -287,8 +338,8 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                                                 )}
                                                             </div>
                                                             {step.args && Object.keys(step.args).length > 0 && (
-                                                                <div className="mt-1 text-[10px] text-muted-foreground truncate">
-                                                                    {JSON.stringify(step.args).slice(0, 100)}...
+                                                                <div className="mt-1.5 text-[10px] text-muted-foreground font-mono bg-muted/50 rounded px-2 py-1 truncate">
+                                                                    {JSON.stringify(step.args).slice(0, 80)}{JSON.stringify(step.args).length > 80 ? '...' : ''}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -296,138 +347,165 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                                 ))}
                                             </CollapsibleContent>
                                         </Collapsible>
-                                    </div>
-                                )}
-                            </div>
-                        </ChatBubble>
-                    ))}
-
-                    {/* Show current execution steps while loading */}
-                    {isLoading && currentSteps.length > 0 && showSteps && (
-                        <div className="px-4 py-2 space-y-1">
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                <span>Executing tools...</span>
-                            </div>
-                            {currentSteps.map((step) => (
-                                <div
-                                    key={step.id}
-                                    className="flex items-start gap-2 p-2 rounded-md bg-muted/30 text-xs"
-                                >
-                                    {step.status === 'running' ? (
-                                        <Loader2 className="h-3 w-3 mt-0.5 animate-spin text-blue-500 shrink-0" />
-                                    ) : step.status === 'success' ? (
-                                        <CheckCircle2 className="h-3 w-3 mt-0.5 text-green-500 shrink-0" />
-                                    ) : (
-                                        <CheckCircle2 className="h-3 w-3 mt-0.5 text-red-500 shrink-0" />
                                     )}
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                                                {formatToolName(step.toolName)}
-                                            </Badge>
-                                            {step.duration && (
-                                                <span className="text-[10px] text-muted-foreground">
-                                                    {step.duration}ms
-                                                </span>
-                                            )}
-                                        </div>
+                                </div>
+                            </ChatBubble>
+                        ))}
+
+                        {/* Enhanced loading state for execution steps */}
+                        {isLoading && currentSteps.length > 0 && showSteps && (
+                            <div className="mx-4 my-2 p-3 rounded-lg bg-background border border-border/50 shadow-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+                                    <div className="flex items-center gap-1.5 text-primary">
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        <span className="font-medium">Running tools...</span>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                                <div className="space-y-2">
+                                    {currentSteps.map((step) => (
+                                        <div
+                                            key={step.id}
+                                            className="flex items-center gap-2 p-2 rounded-md bg-muted/30 text-xs"
+                                        >
+                                            {step.status === 'running' ? (
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500 shrink-0" />
+                                            ) : step.status === 'success' ? (
+                                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                                            ) : (
+                                                <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                                            )}
+                                            <div className="flex-1 flex items-center gap-2 min-w-0">
+                                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono shrink-0">
+                                                    {formatToolName(step.toolName)}
+                                                </Badge>
+                                                {step.status === 'running' && (
+                                                    <span className="text-[10px] text-muted-foreground animate-pulse">executing...</span>
+                                                )}
+                                                {step.duration && (
+                                                    <span className="text-[10px] text-green-600">
+                                                        {step.duration}ms
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
-                    {currentMessage && (
-                        <ChatBubble variant="received">
-                            <ChatBubbleAvatar
-                                className="h-8 w-8 shrink-0"
-                                src={AI_AVATAR_URL}
-                                fallback={AVATAR_FALLBACKS.ai}
-                            />
-                            <ChatBubbleMessage>
-                                <Streamdown isAnimating>{currentMessage}</Streamdown>
-                            </ChatBubbleMessage>
-                        </ChatBubble>
-                    )}
+                        {/* Streaming message with enhanced styling */}
+                        {currentMessage && (
+                            <ChatBubble variant="received">
+                                <ChatBubbleAvatar
+                                    className="h-8 w-8 shrink-0 bg-gradient-to-br from-primary/80 to-primary text-primary-foreground"
+                                    src={AI_AVATAR_URL}
+                                    fallback={AVATAR_FALLBACKS.ai}
+                                />
+                                <ChatBubbleMessage className="bg-background shadow-sm border border-border/50">
+                                    <Streamdown isAnimating>{currentMessage}</Streamdown>
+                                </ChatBubbleMessage>
+                            </ChatBubble>
+                        )}
 
-                    {isLoading && !currentMessage && (
-                        <ChatBubble variant="received">
-                            <ChatBubbleAvatar
-                                className="h-8 w-8 shrink-0"
-                                src={AI_AVATAR_URL}
-                                fallback={AVATAR_FALLBACKS.ai}
-                            />
-                            <ChatBubbleMessage isLoading />
-                        </ChatBubble>
-                    )}
+                        {/* Loading indicator */}
+                        {isLoading && !currentMessage && currentSteps.length === 0 && (
+                            <ChatBubble variant="received">
+                                <ChatBubbleAvatar
+                                    className="h-8 w-8 shrink-0 bg-gradient-to-br from-primary/80 to-primary text-primary-foreground"
+                                    src={AI_AVATAR_URL}
+                                    fallback={AVATAR_FALLBACKS.ai}
+                                />
+                                <ChatBubbleMessage isLoading className="bg-background shadow-sm border border-border/50" />
+                            </ChatBubble>
+                        )}
 
-                    {error && (
-                        <ChatBubble variant="received">
-                            <ChatBubbleAvatar
-                                className="h-8 w-8 shrink-0"
-                                src={AI_AVATAR_URL}
-                                fallback={AVATAR_FALLBACKS.ai}
-                            />
-                            <ChatBubbleMessage className="text-red-500">
-                                {error}
-                            </ChatBubbleMessage>
-                        </ChatBubble>
-                    )}
+                        {/* Enhanced error display */}
+                        {error && (
+                            <div className="mx-4 my-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-sm animate-in fade-in-0 slide-in-from-bottom-2">
+                                <div className="flex items-start gap-2">
+                                    <XCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                                    <div className="flex-1">
+                                        <p className="font-medium text-red-700 dark:text-red-400">Error</p>
+                                        <p className="text-xs text-red-600 dark:text-red-500 mt-0.5">{error}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
-                    <div ref={messagesEndRef} />
-                </ChatMessageList>
-            </ExpandableChatBody>
+                        <div ref={messagesEndRef} />
+                    </ChatMessageList>
+                </ExpandableChatBody>
 
-            <ExpandableChatFooter>
-                <form
-                    onSubmit={handleSubmit}
-                    className="relative rounded-lg border bg-background focus-within:ring-1 focus-within:ring-ring p-1"
-                >
-                    <ChatInput
-                        value={input}
-                        onChange={handleInputChange}
-                        onKeyDown={handleKeyDown}
-                        placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
-                        disabled={isLoading}
-                        className="min-h-12 resize-none rounded-lg bg-background border-0 p-3 shadow-none focus-visible:ring-0"
-                    />
-                    <div className="flex items-center p-3 pt-0 justify-between">
-                        <div className="flex gap-1">
+                {/* Enhanced Footer */}
+                <ExpandableChatFooter className="bg-background p-3">
+                    <form
+                        onSubmit={handleSubmit}
+                        className="relative rounded-xl border bg-muted/30 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/50 transition-all"
+                    >
+                        <ChatInput
+                            value={input}
+                            onChange={handleInputChange}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Ask anything... (Enter to send)"
+                            disabled={isLoading}
+                            className="min-h-[44px] resize-none rounded-xl bg-transparent border-0 px-4 py-3 text-sm shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/60"
+                        />
+                        <div className="flex items-center px-3 pb-2 pt-0 justify-between">
+                            <div className="flex gap-0.5">
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            type="button"
+                                            onClick={handleAttachFile}
+                                            disabled={isLoading}
+                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                        >
+                                            <Paperclip className="h-4 w-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs">Attach file (coming soon)</TooltipContent>
+                                </Tooltip>
+
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            type="button"
+                                            onClick={handleMicrophoneClick}
+                                            disabled={isLoading}
+                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                        >
+                                            <Mic className="h-4 w-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs">Voice input (coming soon)</TooltipContent>
+                                </Tooltip>
+                            </div>
                             <Button
-                                variant="ghost"
-                                size="icon"
-                                type="button"
-                                onClick={handleAttachFile}
-                                disabled={isLoading}
-                                title="Attach file (coming soon)"
+                                type="submit"
+                                size="sm"
+                                className="h-8 px-3 gap-1.5 rounded-lg"
+                                disabled={!isInputValid}
                             >
-                                <Paperclip className="size-4" />
-                            </Button>
-
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                type="button"
-                                onClick={handleMicrophoneClick}
-                                disabled={isLoading}
-                                title="Voice input (coming soon)"
-                            >
-                                <Mic className="size-4" />
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        <span className="text-xs">Sending</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Send className="h-3.5 w-3.5" />
+                                        <span className="text-xs">Send</span>
+                                    </>
+                                )}
                             </Button>
                         </div>
-                        <Button
-                            type="submit"
-                            size="sm"
-                            className="ml-auto gap-1.5"
-                            disabled={!isInputValid}
-                        >
-                            {isLoading ? "Sending..." : "Send Message"}
-                            <CornerDownLeft className="size-3.5" />
-                        </Button>
-                    </div>
-                </form>
-            </ExpandableChatFooter>
-        </ExpandableChat>
+                    </form>
+                </ExpandableChatFooter>
+            </ExpandableChat>
+        </TooltipProvider>
     )
 }
