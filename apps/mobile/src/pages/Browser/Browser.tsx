@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { MobileHeader, MobileNavigation, MobileContent } from '../../components/layout';
 import { Input } from '../../components/adapted';
 import { Card, CardContent } from '@kn/ui';
-import { Search, FileText, Folder, ChevronRight } from 'lucide-react';
+import { Search, FileText, Folder, ChevronRight } from '@kn/icon';
 
 interface FileItem {
   id: number;

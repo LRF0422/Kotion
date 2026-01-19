@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { MobileHeader, MobileNavigation, MobileContent, MobileSidebar } from '../../components/layout';
 import { Button } from '../../components/adapted';
 import { Card, CardContent, CardHeader, CardTitle } from '@kn/ui';
-import { FileText, Plus, Clock, Star, Menu } from 'lucide-react';
+import { FileText, Plus, Clock, Star } from '@kn/icon';
 
 export const Home: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -26,7 +26,7 @@ export const Home: React.FC = () => {
         showMenu
         onMenuClick={() => setSidebarOpen(true)}
       />
-      
+
       <MobileContent>
         <div className="p-4 space-y-6">
           {/* Welcome Section */}

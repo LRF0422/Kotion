@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Menu, MoreVertical } from 'lucide-react';
+import { ChevronLeft, Menu, MoreVertical } from '@kn/icon';
 
 export interface MobileHeaderProps {
   title: string;

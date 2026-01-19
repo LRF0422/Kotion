@@ -1,7 +1,7 @@
 import React from 'react';
 import { MobileHeader, MobileNavigation, MobileContent } from '../../components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Switch, Separator } from '@kn/ui';
-import { User, Bell, Palette, Shield, HelpCircle, LogOut, ChevronRight } from 'lucide-react';
+import { Card, CardContent, Switch, Separator } from '@kn/ui';
+import { User, Bell, Palette, Shield, HelpCircle, LogOut, ChevronRight } from '@kn/icon';
 
 export const Settings: React.FC = () => {
   const settingsSections = [

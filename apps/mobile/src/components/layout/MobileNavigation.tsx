@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, FileText, Settings } from 'lucide-react';
+import { Home, FileText, Settings } from '@kn/icon';
 
 export interface MobileNavigationItem {
   path: string;
@@ -52,11 +52,10 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({ className = 
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              className={`touch-target-lg flex flex-col items-center justify-center gap-1 flex-1 rounded-lg transition-colors ${
-                active
+              className={`touch-target-lg flex flex-col items-center justify-center gap-1 flex-1 rounded-lg transition-colors ${active
                   ? 'text-primary font-medium'
                   : 'text-muted-foreground hover:text-foreground'
-              }`}
+                }`}
               aria-label={item.label}
               aria-current={active ? 'page' : undefined}
             >

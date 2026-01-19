@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X } from '@kn/icon';
 import { disableBodyScroll, enableBodyScroll } from '../../utils';
 
 export interface MobileSidebarProps {
