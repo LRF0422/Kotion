@@ -9,6 +9,143 @@ export const resources = {
                 "title": "增强你的体验",
                 "description": "探索可扩展Kotion功能并助您高效工作的插件。"
             },
+            "messageBox": {
+                "title": "消息盒子",
+                "unreadCount": "{{n}} 条未读消息",
+                "tabs": {
+                    "all": "全部",
+                    "system": "系统",
+                    "collaboration": "协作"
+                },
+                "empty": {
+                    "all": "暂无消息",
+                    "allDesc": "新消息将会显示在这里",
+                    "system": "没有系统消息",
+                    "systemDesc": "系统通知和更新信息将在这里显示",
+                    "collaboration": "都看完啦！",
+                    "collaborationDesc": "您将在这里收到页面协作邀请"
+                },
+                "actions": {
+                    "markAsRead": "标记为已读",
+                    "markAllRead": "全部已读",
+                    "delete": "删除"
+                },
+                "time": {
+                    "justNow": "刚刚",
+                    "minutesAgo": "{{n}} 分钟前",
+                    "hoursAgo": "{{n}} 小时前",
+                    "daysAgo": "{{n}} 天前"
+                },
+                "viewAll": "查看全部消息"
+            },
+            "pluginUploader": {
+                "dialogTitle": "发布插件",
+                "step": "步骤",
+                "steps": {
+                    "basicInfo": "基本信息",
+                    "basicInfoDesc": "填写插件基础信息",
+                    "features": "功能介绍",
+                    "featuresDesc": "添加详细功能描述",
+                    "upload": "上传发布",
+                    "uploadDesc": "上传文件并提交"
+                },
+                "sections": {
+                    "basicIdentity": "基础标识",
+                    "versionAndCategory": "版本与分类",
+                    "displayInfo": "展示信息"
+                },
+                "fields": {
+                    "pluginName": "插件名称",
+                    "pluginNamePlaceholder": "例如：AI 智能助手",
+                    "pluginNameHint": "用于展示的插件显示名称",
+                    "pluginKey": "插件标识",
+                    "pluginKeyPlaceholder": "例如：ai-assistant",
+                    "pluginKeyHint": "唯一标识，仅小写字母、数字和连字符",
+                    "version": "版本号",
+                    "versionPlaceholder": "1.0.0",
+                    "versionHint": "语义化版本格式：主版本.次版本.修订号",
+                    "tags": "分类标签",
+                    "tagsPlaceholder": "输入标签后按 Enter 添加",
+                    "tagsHint": "添加 1-5 个标签，便于用户搜索发现",
+                    "icon": "插件图标",
+                    "iconHint": "PNG/JPG, 建议 120×120px",
+                    "iconUpload": "上传",
+                    "description": "插件简介",
+                    "descriptionPlaceholder": "请简要描述插件的核心功能和使用场景，这将显示在插件列表中...",
+                    "descriptionHint": "一句话描述插件的核心价值"
+                },
+                "tabs": {
+                    "feature": "功能特性",
+                    "featureHint": "介绍插件的主要功能和亮点",
+                    "detail": "使用说明",
+                    "detailHint": "详细的使用方法和配置指南",
+                    "changelog": "更新日志",
+                    "changelogHint": "版本更新内容和历史记录",
+                    "customHint": "自定义描述内容",
+                    "addCustom": "添加自定义分类"
+                },
+                "docTip": {
+                    "title": "丰富的文档能提升用户体验",
+                    "content": "详尽的功能介绍和使用说明可以帮助用户快速上手，也能减少后期的支持工作量"
+                },
+                "uploadSection": {
+                    "title": "上传插件文件",
+                    "hint": "支持 .js 文件，最大 100MB",
+                    "uploading": "正在上传文件...",
+                    "uploaded": "插件文件已就绪"
+                },
+                "preview": {
+                    "title": "发布预览",
+                    "aboutToPublish": "即将发布",
+                    "noName": "未填写名称",
+                    "noDescription": "暂无描述",
+                    "pluginKey": "插件标识",
+                    "fileStatus": "文件状态",
+                    "uploaded": "已上传",
+                    "pending": "待上传",
+                    "tags": "分类标签",
+                    "noTags": "未添加标签"
+                },
+                "submitTip": {
+                    "content": "提交须知：提交后插件将进入审核队列，审核通过后自动上架到插件市场。审核周期通常为 1-3 个工作日。"
+                },
+                "buttons": {
+                    "prev": "上一步",
+                    "next": "下一步",
+                    "submit": "提交审核",
+                    "submitting": "提交中..."
+                },
+                "exitDialog": {
+                    "title": "确认退出？",
+                    "description": "您的进度尚未保存，退出后所有填写的信息将会丢失。确定要退出吗？",
+                    "cancel": "取消",
+                    "confirm": "确认退出"
+                },
+                "validation": {
+                    "nameMin": "插件名称不能少于 2 个字符",
+                    "nameMax": "插件名称不能超过 50 个字符",
+                    "keyMin": "插件标识符不能少于 2 个字符",
+                    "keyMax": "插件标识符不能超过 50 个字符",
+                    "keyFormat": "仅支持小写字母、数字和连字符（如：my-plugin）",
+                    "versionFormat": "请输入正确的版本号格式（如：1.0.0）",
+                    "tagsMin": "请至少添加一个分类标签",
+                    "descriptionMin": "插件描述不能少于 10 个字符，请详细描述插件功能",
+                    "descriptionMax": "插件描述不能超过 500 个字符",
+                    "formIncomplete": "请完善必填信息后再继续",
+                    "fileRequired": "请先上传插件文件（.js 格式）",
+                    "validationError": "表单验证失败，请检查输入",
+                    "keepOneTab": "至少保留一个描述分类"
+                },
+                "toast": {
+                    "submitSuccess": "🎉 插件提交成功！审核通过后将自动上架",
+                    "submitFailed": "提交失败，请检查网络后重试",
+                    "iconUploaded": "图标上传成功",
+                    "iconUploadFailed": "图标上传失败，请检查图片格式",
+                    "iconRemoved": "图标已移除，可重新上传",
+                    "fileUploaded": "✅ 文件上传成功：{{filename}}",
+                    "fileUploadFailed": "文件上传失败，请检查网络后重试"
+                }
+            },
             "pluginManager": {
                 "title": "管理插件",
                 "description": "管理、发布和配置您的插件。",
@@ -99,6 +236,143 @@ export const resources = {
                 "doc": "Developer Docs",
                 "title": "Enhance your Kotion experience",
                 "description": "Discover plugins that extend Kotion's capabilities and help you work more efficiently."
+            },
+            "messageBox": {
+                "title": "Messages",
+                "unreadCount": "{{n}} unread messages",
+                "tabs": {
+                    "all": "All",
+                    "system": "System",
+                    "collaboration": "Collaboration"
+                },
+                "empty": {
+                    "all": "No messages",
+                    "allDesc": "New messages will appear here",
+                    "system": "No system messages",
+                    "systemDesc": "System notifications and updates will appear here",
+                    "collaboration": "All caught up!",
+                    "collaborationDesc": "You'll receive page collaboration invites here"
+                },
+                "actions": {
+                    "markAsRead": "Mark as read",
+                    "markAllRead": "Mark all read",
+                    "delete": "Delete"
+                },
+                "time": {
+                    "justNow": "Just now",
+                    "minutesAgo": "{{n}} min ago",
+                    "hoursAgo": "{{n}} hr ago",
+                    "daysAgo": "{{n}} days ago"
+                },
+                "viewAll": "View all messages"
+            },
+            "pluginUploader": {
+                "dialogTitle": "Publish Plugin",
+                "step": "Step",
+                "steps": {
+                    "basicInfo": "Basic Info",
+                    "basicInfoDesc": "Fill in plugin basic information",
+                    "features": "Features",
+                    "featuresDesc": "Add detailed feature descriptions",
+                    "upload": "Upload & Publish",
+                    "uploadDesc": "Upload file and submit"
+                },
+                "sections": {
+                    "basicIdentity": "Basic Identity",
+                    "versionAndCategory": "Version & Category",
+                    "displayInfo": "Display Info"
+                },
+                "fields": {
+                    "pluginName": "Plugin Name",
+                    "pluginNamePlaceholder": "e.g., AI Smart Assistant",
+                    "pluginNameHint": "Display name shown in plugin listings",
+                    "pluginKey": "Plugin Key",
+                    "pluginKeyPlaceholder": "e.g., ai-assistant",
+                    "pluginKeyHint": "Unique identifier, lowercase letters, numbers and hyphens only",
+                    "version": "Version",
+                    "versionPlaceholder": "1.0.0",
+                    "versionHint": "Semantic version format: major.minor.patch",
+                    "tags": "Tags",
+                    "tagsPlaceholder": "Type and press Enter to add",
+                    "tagsHint": "Add 1-5 tags to help users discover your plugin",
+                    "icon": "Plugin Icon",
+                    "iconHint": "PNG/JPG, recommended 120×120px",
+                    "iconUpload": "Upload",
+                    "description": "Description",
+                    "descriptionPlaceholder": "Briefly describe your plugin's core features and use cases. This will be shown in the plugin list...",
+                    "descriptionHint": "One sentence describing your plugin's core value"
+                },
+                "tabs": {
+                    "feature": "Features",
+                    "featureHint": "Introduce main features and highlights",
+                    "detail": "Usage Guide",
+                    "detailHint": "Detailed usage instructions and configuration",
+                    "changelog": "Changelog",
+                    "changelogHint": "Version updates and history",
+                    "customHint": "Custom description content",
+                    "addCustom": "Add custom category"
+                },
+                "docTip": {
+                    "title": "Rich documentation improves user experience",
+                    "content": "Detailed feature descriptions and usage guides help users get started quickly and reduce support workload"
+                },
+                "uploadSection": {
+                    "title": "Upload Plugin File",
+                    "hint": "Supports .js files, max 100MB",
+                    "uploading": "Uploading file...",
+                    "uploaded": "Plugin file ready"
+                },
+                "preview": {
+                    "title": "Publish Preview",
+                    "aboutToPublish": "Ready to publish",
+                    "noName": "No name provided",
+                    "noDescription": "No description",
+                    "pluginKey": "Plugin Key",
+                    "fileStatus": "File Status",
+                    "uploaded": "Uploaded",
+                    "pending": "Pending",
+                    "tags": "Tags",
+                    "noTags": "No tags added"
+                },
+                "submitTip": {
+                    "content": "Submission Notice: After submission, your plugin will enter the review queue and be published automatically once approved. Review typically takes 1-3 business days."
+                },
+                "buttons": {
+                    "prev": "Previous",
+                    "next": "Next",
+                    "submit": "Submit for Review",
+                    "submitting": "Submitting..."
+                },
+                "exitDialog": {
+                    "title": "Confirm Exit?",
+                    "description": "Your progress has not been saved. All entered information will be lost if you exit. Are you sure?",
+                    "cancel": "Cancel",
+                    "confirm": "Confirm Exit"
+                },
+                "validation": {
+                    "nameMin": "Plugin name must be at least 2 characters",
+                    "nameMax": "Plugin name cannot exceed 50 characters",
+                    "keyMin": "Plugin key must be at least 2 characters",
+                    "keyMax": "Plugin key cannot exceed 50 characters",
+                    "keyFormat": "Only lowercase letters, numbers and hyphens allowed (e.g., my-plugin)",
+                    "versionFormat": "Please enter a valid version format (e.g., 1.0.0)",
+                    "tagsMin": "Please add at least one tag",
+                    "descriptionMin": "Description must be at least 10 characters, please describe your plugin in detail",
+                    "descriptionMax": "Description cannot exceed 500 characters",
+                    "formIncomplete": "Please complete all required fields before continuing",
+                    "fileRequired": "Please upload a plugin file (.js format)",
+                    "validationError": "Form validation failed, please check your input",
+                    "keepOneTab": "Keep at least one description category"
+                },
+                "toast": {
+                    "submitSuccess": "🎉 Plugin submitted successfully! It will be published after review",
+                    "submitFailed": "Submission failed, please check your network and try again",
+                    "iconUploaded": "Icon uploaded successfully",
+                    "iconUploadFailed": "Icon upload failed, please check image format",
+                    "iconRemoved": "Icon removed, you can upload a new one",
+                    "fileUploaded": "✅ File uploaded: {{filename}}",
+                    "fileUploadFailed": "File upload failed, please check your network and try again"
+                }
             },
             "pluginManager": {
                 "title": "Manage Plugins",

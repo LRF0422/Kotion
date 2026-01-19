@@ -1,10 +1,9 @@
 import { useNavigator } from "../hooks/use-navigator";
-import { Blocks, Inbox, LayoutDashboard, MessageCircleCodeIcon, Power, Settings, UserRoundPlus } from "@kn/icon";
+import { Blocks, LayoutDashboard, Power, Settings, UserRoundPlus } from "@kn/icon";
 import React, { useContext, useEffect, useMemo, useState, useCallback, memo } from "react";
-import { Empty, Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile } from "@kn/ui";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile } from "@kn/ui";
 import { useLocation } from "react-router-dom";
 import { cn } from "@kn/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { useSelector } from "@kn/common";
 import { GlobalState } from "../store/GlobalState";
 import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
@@ -17,6 +16,7 @@ import { AppContext, SiderMenuItemProps } from "@kn/common";
 import { event } from "@kn/common";
 import { useUploadFile } from "../hooks";
 import { LanguageToggle } from "../locales/LanguageToggle";
+import { MessageBox } from "./MessageBox";
 
 // Memoized menu item component for better performance
 interface MenuItemProps {
@@ -130,30 +130,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
             },
             {
                 name: 'Message',
-                icon: <Popover>
-                    <PopoverTrigger asChild>
-                        <button className="flex items-center justify-center" aria-label="Messages">
-                            <Inbox className="h-5 w-5" id="message-box" />
-                        </button>
-                    </PopoverTrigger>
-                    <PopoverContent side="right" align="start" className="p-0 w-[280px] max-h-[400px] overflow-y-auto" sideOffset={12}>
-                        <div className="flex flex-row gap-2 items-center font-semibold p-3 border-b">
-                            <MessageCircleCodeIcon className="h-5 w-5 text-primary" />
-                            <span>消息盒子</span>
-                        </div>
-                        <div className="flex flex-col gap-3 text-sm p-3">
-                            <div className="space-y-2">
-                                <h4 className="font-medium text-muted-foreground">系统消息</h4>
-                                <Empty className="border-none text-gray-500" title="没有系统消息" />
-                            </div>
-                            <Separator />
-                            <div className="space-y-2">
-                                <h4 className="font-medium text-muted-foreground">协作邀请</h4>
-                                <Empty className="border-none text-gray-500" title="都看完啦！" desc="你将在这里收到页面协作邀请" />
-                            </div>
-                        </div>
-                    </PopoverContent>
-                </Popover>,
+                icon: <MessageBox />,
                 key: '/message',
                 attachTabs: true,
                 id: '/message',

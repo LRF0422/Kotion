@@ -3,7 +3,7 @@ import { Outlet } from "react-router-dom"
 import { SiderMenu } from "./components/SiderMenu"
 import { useContext, useEffect, useState } from "react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Onboarding, OnboardingStep, Rate, SparklesText, cn, useIsMobile, Sheet, SheetContent, SheetTrigger, Button } from "@kn/ui"
-import { Menu } from "@kn/icon"
+import { Menu, ChevronLeft } from "@kn/icon"
 import { useApi } from "./hooks/use-api"
 import { APIS } from "./api"
 import { useDispatch, AppContext, event } from "@kn/common"
@@ -13,10 +13,69 @@ import { toast } from "@kn/ui"
 import React from "react"
 import { useUploadFile } from "./hooks"
 import { useAsyncEffect } from "ahooks"
+import { MobilePageHeaderProvider, useMobilePageHeader } from "./context/MobilePageHeaderContext"
 
 interface LayoutProps {
     onPluginsReady: (ready: boolean) => void
 }
+
+// Mobile header component that uses the page header context
+const MobileHeader: React.FC<{
+    sidebarOpen: boolean;
+    setSidebarOpen: (open: boolean) => void;
+}> = ({ sidebarOpen, setSidebarOpen }) => {
+    const { headerInfo } = useMobilePageHeader();
+    const navigator = useNavigator();
+
+    const handleBack = () => {
+        window.history.back();
+    };
+
+    return (
+        <div className="flex items-center justify-between px-2 h-14 border-b bg-background sticky top-0 z-40">
+            {/* Left side - back button or logo */}
+            <div className="flex items-center gap-1 flex-1 min-w-0">
+                {headerInfo ? (
+                    <>
+                        <Button variant="ghost" size="icon" onClick={handleBack} className="flex-shrink-0">
+                            <ChevronLeft className="h-5 w-5" />
+                        </Button>
+                        <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                            {headerInfo.icon && <span className="text-lg flex-shrink-0">{headerInfo.icon}</span>}
+                            <span className="text-sm font-medium truncate">{headerInfo.title}</span>
+                        </div>
+                    </>
+                ) : (
+                    <div className="px-2">
+                        <SparklesText className="text-[24px]" sparklesCount={3} text="KN" />
+                    </div>
+                )}
+            </div>
+
+            {/* Right side - actions or menu */}
+            <div className="flex items-center gap-1 flex-shrink-0">
+                {headerInfo?.actions}
+                <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+                    <SheetTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                            <Menu className="h-5 w-5" />
+                        </Button>
+                    </SheetTrigger>
+                    <SheetContent side="left" className="w-[280px] p-0">
+                        <div className="flex flex-col h-full">
+                            <div className="flex items-center justify-center py-4 border-b">
+                                <SparklesText className="text-[30px]" sparklesCount={5} text="KN" />
+                            </div>
+                            <div className="flex-1 overflow-auto px-2 py-2">
+                                <SiderMenu onItemClick={() => setSidebarOpen(false)} />
+                            </div>
+                        </div>
+                    </SheetContent>
+                </Sheet>
+            </div>
+        </div>
+    );
+};
 
 export function Layout({ onPluginsReady }: LayoutProps) {
 
@@ -149,115 +208,98 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const [sidebarOpen, setSidebarOpen] = useState(false)
 
     return (
-        <div>
-            {/* Show loading overlay while plugins are loading */}
-            {!pluginsLoaded && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
-                    <div className="flex flex-col items-center gap-4">
-                        <SparklesText className="text-[60px]" sparklesCount={8} text="KN" />
-                        <div className="flex items-center gap-2 text-lg text-muted-foreground">
-                            <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
-                            <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
-                            <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
-                        </div>
-                        <p className="text-sm text-muted-foreground">Loading workspace...</p>
-                    </div>
-                </div>
-            )}
-
-            <div className={cn(
-                "grid min-h-screen w-full transition-all",
-                isMobile ? "grid-cols-1" : "grid-cols-[70px_1fr]",
-                !pluginsLoaded && "opacity-0"
-            )} >
-                {/* Desktop Sidebar */}
-                {!isMobile && (
-                    <div className="border-r">
-                        <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4">
-                            <SparklesText className="text-[30px]" sparklesCount={5} text="KN" />
-                            <div className="flex-1 px-2">
-                                <SiderMenu />
+        <MobilePageHeaderProvider>
+            <div>
+                {/* Show loading overlay while plugins are loading */}
+                {!pluginsLoaded && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
+                        <div className="flex flex-col items-center gap-4">
+                            <SparklesText className="text-[60px]" sparklesCount={8} text="KN" />
+                            <div className="flex items-center gap-2 text-lg text-muted-foreground">
+                                <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
+                                <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
+                                <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
                             </div>
+                            <p className="text-sm text-muted-foreground">Loading workspace...</p>
                         </div>
                     </div>
                 )}
 
-                {/* Mobile Header + Content */}
-                <div className="flex flex-col h-screen w-full">
-                    {/* Mobile Header */}
-                    {isMobile && (
-                        <div className="flex items-center justify-between px-4 h-14 border-b bg-background sticky top-0 z-40">
-                            <SparklesText className="text-[24px]" sparklesCount={3} text="KN" />
-                            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-                                <SheetTrigger asChild>
-                                    <Button variant="ghost" size="icon">
-                                        <Menu className="h-5 w-5" />
-                                    </Button>
-                                </SheetTrigger>
-                                <SheetContent side="left" className="w-[280px] p-0">
-                                    <div className="flex flex-col h-full">
-                                        <div className="flex items-center justify-center py-4 border-b">
-                                            <SparklesText className="text-[30px]" sparklesCount={5} text="KN" />
-                                        </div>
-                                        <div className="flex-1 overflow-auto px-2 py-2">
-                                            <SiderMenu onItemClick={() => setSidebarOpen(false)} />
-                                        </div>
-                                    </div>
-                                </SheetContent>
-                            </Sheet>
+                <div className={cn(
+                    "grid min-h-screen w-full transition-all",
+                    isMobile ? "grid-cols-1" : "grid-cols-[70px_1fr]",
+                    !pluginsLoaded && "opacity-0"
+                )} >
+                    {/* Desktop Sidebar */}
+                    {!isMobile && (
+                        <div className="border-r">
+                            <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4">
+                                <SparklesText className="text-[30px]" sparklesCount={5} text="KN" />
+                                <div className="flex-1 px-2">
+                                    <SiderMenu />
+                                </div>
+                            </div>
                         </div>
                     )}
 
-                    <main className={cn(
-                        "w-full overflow-hidden",
-                        isMobile ? "flex-1" : "h-screen"
-                    )}>
-                        {pluginsLoaded ? <Outlet /> : null}
-                    </main>
-                </div>
-                <AlertDialog open={open} onOpenChange={setOpen}>
-                    <AlertDialogTrigger />
-                    <AlertDialogContent>
-                        <AlertDialogTitle>Sure to install ?</AlertDialogTitle>
-                        <AlertDialogDescription className=" hidden" />
-                        {requestPlugin &&
-                            <Item variant="muted" className=" hover:shadow-sm transition-shadow duration-300">
-                                <ItemContent>
-                                    <ItemTitle className="flex gap-2">
-                                        <img src={usePath(requestPlugin.icon)} className="w-10 h-10" />
-                                        <div>
-                                            <div>
-                                                {requestPlugin.name}
-                                                <Badge className=" ml-2">{requestPlugin.category.value}</Badge>
-                                            </div>
+                    {/* Mobile Header + Content */}
+                    <div className="flex flex-col h-screen w-full">
+                        {/* Mobile Header */}
+                        {isMobile && (
+                            <MobileHeader sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+                        )}
 
-                                            <div className="text-xs italic text-gray-400">
-                                                {requestPlugin.developer} / {requestPlugin.maintainer}
+                        <main className={cn(
+                            "w-full overflow-hidden",
+                            isMobile ? "flex-1" : "h-screen"
+                        )}>
+                            {pluginsLoaded ? <Outlet /> : null}
+                        </main>
+                    </div>
+                    <AlertDialog open={open} onOpenChange={setOpen}>
+                        <AlertDialogTrigger />
+                        <AlertDialogContent>
+                            <AlertDialogTitle>Sure to install ?</AlertDialogTitle>
+                            <AlertDialogDescription className=" hidden" />
+                            {requestPlugin &&
+                                <Item variant="muted" className=" hover:shadow-sm transition-shadow duration-300">
+                                    <ItemContent>
+                                        <ItemTitle className="flex gap-2">
+                                            <img src={usePath(requestPlugin.icon)} className="w-10 h-10" />
+                                            <div>
+                                                <div>
+                                                    {requestPlugin.name}
+                                                    <Badge className=" ml-2">{requestPlugin.category.value}</Badge>
+                                                </div>
+
+                                                <div className="text-xs italic text-gray-400">
+                                                    {requestPlugin.developer} / {requestPlugin.maintainer}
+                                                </div>
+                                                <Rate rating={requestPlugin.rating} disabled variant="yellow" />
                                             </div>
-                                            <Rate rating={requestPlugin.rating} disabled variant="yellow" />
-                                        </div>
-                                    </ItemTitle>
-                                    <ItemDescription>{requestPlugin.description}</ItemDescription>
-                                </ItemContent>
-                            </Item>
-                        }
-                        <AlertDialogFooter>
-                            <AlertDialogAction onClick={() => {
-                                install(requestPlugin.currentVersion.id)
-                            }}>Confirm</AlertDialogAction>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
+                                        </ItemTitle>
+                                        <ItemDescription>{requestPlugin.description}</ItemDescription>
+                                    </ItemContent>
+                                </Item>
+                            }
+                            <AlertDialogFooter>
+                                <AlertDialogAction onClick={() => {
+                                    install(requestPlugin.currentVersion.id)
+                                }}>Confirm</AlertDialogAction>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </div>
+                <Onboarding
+                    steps={onboardingSteps}
+                    isOpen={showOnboarding}
+                    onClose={() => setShowOnboarding(false)}
+                    onComplete={() => {
+                        localStorage.setItem("showOnboarding", "false");
+                    }}
+                />
             </div>
-            <Onboarding
-                steps={onboardingSteps}
-                isOpen={showOnboarding}
-                onClose={() => setShowOnboarding(false)}
-                onComplete={() => {
-                    localStorage.setItem("showOnboarding", "false");
-                }}
-            />
-        </div>
+        </MobilePageHeaderProvider>
     )
 }

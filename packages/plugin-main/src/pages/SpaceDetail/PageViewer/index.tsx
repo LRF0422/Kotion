@@ -8,7 +8,7 @@ import { Skeleton } from "@kn/ui";
 import { EditorRender, findNodeByBlockId } from "@kn/editor";
 import { event, ON_FAVORITE_CHANGE } from "../../../event";
 import { useLocation } from "@kn/common";
-import { useNavigator, useApi } from "@kn/core";
+import { useNavigator, useApi, useMobilePageHeader } from "@kn/core";
 import { Editor } from "@kn/editor";
 import { useToggle } from "@kn/core";
 import { Edit, Loader, MessageCircleCode, MoreHorizontal, Plus, Share, Star, List } from "@kn/icon";
@@ -29,6 +29,7 @@ export const PageViewer: React.FC = () => {
     const blockId = queryParams.get('blockId'); //
     const navigator = useNavigator()
     const [loading, { toggle }] = useToggle(false)
+    const { setHeaderInfo, clearHeaderInfo } = useMobilePageHeader()
 
 
     useEffect(() => {
@@ -42,6 +43,7 @@ export const PageViewer: React.FC = () => {
         })
         return () => {
             setPage(null)
+            clearHeaderInfo() // Clear header info when unmounting
         }
     }, [params.pageId])
 
@@ -87,21 +89,69 @@ export const PageViewer: React.FC = () => {
         })
     }
 
+    // Set mobile header info when page is loaded
+    useEffect(() => {
+        if (page && isMobile) {
+            setHeaderInfo({
+                title: page.title,
+                icon: "😘", // TODO: Get actual page icon
+                actions: (
+                    <>
+                        <Button variant="ghost" size="icon" onClick={goToEditor}>
+                            <Edit className="h-5 w-5" />
+                        </Button>
+                        <Sheet open={tocOpen} onOpenChange={setTocOpen}>
+                            <SheetTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                    <List className="h-5 w-5" />
+                                </Button>
+                            </SheetTrigger>
+                            <SheetContent side="right" className="w-[280px] p-0">
+                                <SheetTitle className="sr-only">Table of Contents</SheetTitle>
+                                <div id="mobile-toc-container-viewer" className="h-full" />
+                            </SheetContent>
+                        </Sheet>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                    <MoreHorizontal className="h-5 w-5" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-[200px]">
+                                <DropdownMenuItem onClick={() => {
+                                    page.favorite ? handleRemoveFavorite() : handleAddFavorite()
+                                }}>
+                                    {page.favorite ? 'Remove from favorites' : 'Add to favorites'}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem>Save as template</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </>
+                )
+            })
+        } else if (!isMobile) {
+            clearHeaderInfo()
+        }
+    }, [page, isMobile, tocOpen])
+
     return loading ? <div className="w-full h-full">
-        <header className="h-11 w-full flex flex-row justify-between px-1 border-b">
-            <div className="flex flex-row items-center gap-2 px-1 text-sm">
-                <Skeleton className="h-5 w-5 rounded" />
-                <Skeleton className="h-5 w-48" />
-            </div>
-            <div className="flex flex-row items-center gap-1 px-1">
-                <Skeleton className="h-8 w-10" />
-                <Separator orientation="vertical" />
-                <Skeleton className="h-8 w-10" />
-                <Skeleton className="h-8 w-10" />
-                <Skeleton className="h-8 w-10" />
-                <Skeleton className="h-8 w-10" />
-            </div>
-        </header>
+        {/* Only show skeleton header on desktop */}
+        {!isMobile && (
+            <header className="h-11 w-full flex flex-row justify-between px-1 border-b">
+                <div className="flex flex-row items-center gap-2 px-1 text-sm">
+                    <Skeleton className="h-5 w-5 rounded" />
+                    <Skeleton className="h-5 w-48" />
+                </div>
+                <div className="flex flex-row items-center gap-1 px-1">
+                    <Skeleton className="h-8 w-10" />
+                    <Separator orientation="vertical" />
+                    <Skeleton className="h-8 w-10" />
+                    <Skeleton className="h-8 w-10" />
+                    <Skeleton className="h-8 w-10" />
+                    <Skeleton className="h-8 w-10" />
+                </div>
+            </header>
+        )}
         <main className="w-full flex flex-row justify-center p-8">
             <div className="w-full max-w-[900px] flex flex-col gap-6">
                 {/* Title Skeleton */}
@@ -123,68 +173,57 @@ export const PageViewer: React.FC = () => {
             </div>
         </main>
     </div> : (page && <div className="w-full h-full">
-        <header className="h-11 w-full flex flex-row justify-between px-1 border-b ">
-            <div className="flex flex-row items-center gap-2 px-1 text-sm flex-1 min-w-0 overflow-hidden">
-                {"😘"}
-                <span className="truncate">{page?.title}</span>
-            </div>
-            <div className="flex flex-row items-center gap-1 px-1 flex-shrink-0">
-                <Button variant="ghost" size="icon" onClick={goToEditor}><Edit className="h-5 w-5" /></Button>
-                <Separator orientation="vertical" />
-                {/* Mobile Toc toggle button */}
-                {isMobile && (
-                    <Sheet open={tocOpen} onOpenChange={setTocOpen}>
-                        <SheetTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                                <List className="h-5 w-5" />
-                            </Button>
-                        </SheetTrigger>
-                        <SheetContent side="right" className="w-[280px] p-0">
-                            <SheetTitle className="sr-only">Table of Contents</SheetTitle>
-                            <div id="mobile-toc-container-viewer" className="h-full" />
-                        </SheetContent>
-                    </Sheet>
-                )}
-                <Popover>
-                    <PopoverTrigger>
-                        <Button variant="ghost" size="icon"><Share className="h-5 w-5" /></Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[500px] flex flex-col gap-2 text-sm" >
-                        <h3>Share this document</h3>
-                        <div className="flex w-full max-w-sm items-center space-x-2">
-                            <Input className="h-7" type="email" placeholder="Email" />
-                            <Button size="sm">Copy Link</Button>
-                        </div>
-                        <Separator />
-                        <div className="flex flex-row items-center justify-between">
-                            <h3>People with access</h3>
-                            <Button variant="ghost" size="sm"><Plus className="h-4 w-4" /></Button>
-                        </div>
-                    </PopoverContent>
-                </Popover>
-                <Button variant="ghost" size="icon" onClick={() => {
-                    page.favorite ? handleRemoveFavorite() : handleAddFavorite()
-                }}>
-                    {
-                        page.favorite ? <Star
-                            fill=""
-                            className="h-5 w-5" /> : <Star className="h-5 w-5" />
-                    }
-                </Button>
-                <Button variant="ghost" size="icon"><MessageCircleCode className="h-5 w-5" /></Button>
-                <DropdownMenu>
-                    <DropdownMenuTrigger><Button variant="ghost" size="icon"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[200px]">
-                        <DropdownMenuItem>Save as template</DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-        </header>
+        {/* Only show header on desktop - mobile uses the app header */}
+        {!isMobile && (
+            <header className="h-11 w-full flex flex-row justify-between px-1 border-b ">
+                <div className="flex flex-row items-center gap-2 px-1 text-sm flex-1 min-w-0 overflow-hidden">
+                    {"😘"}
+                    <span className="truncate">{page?.title}</span>
+                </div>
+                <div className="flex flex-row items-center gap-1 px-1 flex-shrink-0">
+                    <Button variant="ghost" size="icon" onClick={goToEditor}><Edit className="h-5 w-5" /></Button>
+                    <Separator orientation="vertical" />
+                    <Popover>
+                        <PopoverTrigger>
+                            <Button variant="ghost" size="icon"><Share className="h-5 w-5" /></Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[500px] flex flex-col gap-2 text-sm" >
+                            <h3>Share this document</h3>
+                            <div className="flex w-full max-w-sm items-center space-x-2">
+                                <Input className="h-7" type="email" placeholder="Email" />
+                                <Button size="sm">Copy Link</Button>
+                            </div>
+                            <Separator />
+                            <div className="flex flex-row items-center justify-between">
+                                <h3>People with access</h3>
+                                <Button variant="ghost" size="sm"><Plus className="h-4 w-4" /></Button>
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+                    <Button variant="ghost" size="icon" onClick={() => {
+                        page.favorite ? handleRemoveFavorite() : handleAddFavorite()
+                    }}>
+                        {
+                            page.favorite ? <Star
+                                fill=""
+                                className="h-5 w-5" /> : <Star className="h-5 w-5" />
+                        }
+                    </Button>
+                    <Button variant="ghost" size="icon"><MessageCircleCode className="h-5 w-5" /></Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger><Button variant="ghost" size="icon"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[200px]">
+                            <DropdownMenuItem>Save as template</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </header>
+        )}
         <main className="w-full flex flex-row justify-center">
             <EditorRender
                 ref={(ed) => setEditor(ed)}
                 content={page.content ? JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">")) : undefined}
-                className={isMobile ? "h-[calc(100vh-90px)] overflow-auto" : "h-[calc(100vh-70px)] overflow-auto"}
+                className={isMobile ? "h-[calc(100vh-56px)] overflow-auto" : "h-[calc(100vh-70px)] overflow-auto"}
                 id={params.pageId as string}
                 isEditable={false}
                 isColl={false}

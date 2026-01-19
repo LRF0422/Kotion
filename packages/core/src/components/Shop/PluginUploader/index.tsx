@@ -6,10 +6,11 @@ import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
     AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, Progress, ScrollArea, cn
 } from "@kn/ui";
-import React, { PropsWithChildren, useCallback } from "react";
+import React, { PropsWithChildren, useCallback, useMemo } from "react";
 import { z } from "@kn/ui";
 import { CheckCircle2, PlusIcon, TrashIcon, Loader2Icon, XIcon, UploadIcon, ImageIcon } from "@kn/icon";
 import { CollaborationEditor, JSONContent } from "@kn/editor";
+import { useTranslation } from "@kn/common";
 import { useApi, useUploadFile } from "../../../hooks";
 import { useSafeState } from "ahooks";
 import { APIS } from "../../../api";
@@ -20,11 +21,13 @@ interface Description {
 }
 
 export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
-    const steps: Step[] = [
-        { number: 1, label: "基本信息" },
-        { number: 2, label: "详细描述" },
-        { number: 3, label: "上传发布" }
-    ];
+    const { t } = useTranslation();
+
+    const steps: Step[] = useMemo(() => [
+        { number: 1, label: t('pluginUploader.steps.basicInfo'), description: t('pluginUploader.steps.basicInfoDesc') },
+        { number: 2, label: t('pluginUploader.steps.features'), description: t('pluginUploader.steps.featuresDesc') },
+        { number: 3, label: t('pluginUploader.steps.upload'), description: t('pluginUploader.steps.uploadDesc') }
+    ], [t]);
 
     const { upload, usePath, uploadFile } = useUploadFile()
     const [open, setOpen] = useSafeState(false);
@@ -46,16 +49,24 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
     const [activeDescTab, setActiveDescTab] = React.useState("Feature");
 
     const formSchema = z.object({
-        name: z.string().min(2, "插件名称至少2个字符").max(50, "插件名称最多50个字符"),
-        pluginKey: z.string().min(2, "插件Key至少2个字符").max(50, "插件Key最多50个字符").regex(/^[a-z0-9-]+$/, "插件Key只能包含小写字母、数字和连字符"),
-        version: z.string().regex(/^\d+\.\d+\.\d+$/, "版本号格式应为 x.y.z"),
+        name: z.string()
+            .min(2, t('pluginUploader.validation.nameMin'))
+            .max(50, t('pluginUploader.validation.nameMax')),
+        pluginKey: z.string()
+            .min(2, t('pluginUploader.validation.keyMin'))
+            .max(50, t('pluginUploader.validation.keyMax'))
+            .regex(/^[a-z0-9-]+$/, t('pluginUploader.validation.keyFormat')),
+        version: z.string()
+            .regex(/^\d+\.\d+\.\d+$/, t('pluginUploader.validation.versionFormat')),
         tags: z.array(z.object({
             id: z.string(),
             text: z.string()
-        })).min(1, "至少添加一个标签"),
+        })).min(1, t('pluginUploader.validation.tagsMin')),
         icon: z.string().optional(),
         resourcePath: z.string(),
-        description: z.string().min(10, "插件描述至少10个字符").max(500, "插件描述最多500个字符"),
+        description: z.string()
+            .min(10, t('pluginUploader.validation.descriptionMin'))
+            .max(500, t('pluginUploader.validation.descriptionMax')),
         versionDescs: z.array(z.object({
             label: z.string(),
             content: z.string()
@@ -90,7 +101,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                             errors.version?.message ||
                             errors.tags?.message ||
                             errors.description?.message;
-                        toast.error(firstError || "请检查并填写所有必填字段");
+                        toast.error(firstError || t('pluginUploader.validation.formIncomplete'));
                         return false;
                     }
                     return true;
@@ -99,7 +110,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                     return true;
                 case 3:
                     if (!resourcePath) {
-                        toast.error("请上传插件文件才能继续");
+                        toast.error(t('pluginUploader.validation.fileRequired'));
                         return false;
                     }
                     return true;
@@ -108,7 +119,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
             }
         } catch (error: any) {
             console.error('Validation error:', error);
-            toast.error("表单验证时发生错误，请检查输入");
+            toast.error(t('pluginUploader.validation.validationError'));
             return false;
         }
     };
@@ -148,13 +159,13 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
 
             await useApi(APIS.CREATE_PLUGIN, null, value);
 
-            toast.success("插件已成功提交审核，请等待审核结果");
+            toast.success(t('pluginUploader.toast.submitSuccess'));
 
             // Reset form and close dialog
             resetForm();
             setOpen(false);
         } catch (error: any) {
-            toast.error(error?.message || "提交插件时发生错误，请重试");
+            toast.error(error?.message || t('pluginUploader.toast.submitFailed'));
         } finally {
             setIsSubmitting(false);
         }
@@ -197,9 +208,9 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
             setIconUploading(true);
             const res = await upload(["image/*"]);
             setIconPath(res.name);
-            toast.success("图标上传成功");
+            toast.success(t('pluginUploader.toast.iconUploaded'));
         } catch (error: any) {
-            toast.error(error?.message || "上传图标失败，请重试");
+            toast.error(error?.message || t('pluginUploader.toast.iconUploadFailed'));
         } finally {
             setIconUploading(false);
         }
@@ -207,7 +218,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
 
     const handleRemoveIcon = useCallback(() => {
         setIconPath("");
-        toast.info("图标已删除");
+        toast.info(t('pluginUploader.toast.iconRemoved'));
     }, []);
 
     const handleAddDescriptionTab = () => {
@@ -218,7 +229,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
 
     const handleRemoveDescriptionTab = (index: number) => {
         if (descriptions.length <= 1) {
-            toast.error("至少需要保留一个描述标签");
+            toast.warning(t('pluginUploader.validation.keepOneTab'));
             return;
         }
 
@@ -232,153 +243,208 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
     // Step 1: Basic Info
     const renderBasicInfo = () => (
         <Form {...form}>
-            <form className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>插件名称 <span className="text-destructive">*</span></FormLabel>
-                                <FormControl>
-                                    <Input placeholder="输入插件名称" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="pluginKey"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>插件Key <span className="text-destructive">*</span></FormLabel>
-                                <FormControl>
-                                    <Input placeholder="例如: my-plugin" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                        control={form.control}
-                        name="version"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>版本号 <span className="text-destructive">*</span></FormLabel>
-                                <FormControl>
-                                    <Input placeholder="1.0.0" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="tags"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>标签 <span className="text-destructive">*</span></FormLabel>
-                                <FormControl>
-                                    <TagInput
-                                        tags={field.value}
-                                        setTags={(tags) => field.onChange(tags)}
-                                        activeTagIndex={activeTagIndex}
-                                        setActiveTagIndex={setActiveTagIndex}
-                                        placeholder="添加标签后按回车"
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                </div>
-                <div className="flex gap-4">
-                    {/* Icon Upload */}
-                    <div className="space-y-2">
-                        <FormLabel>插件图标</FormLabel>
-                        <div
-                            className={cn(
-                                "relative w-20 h-20 flex items-center justify-center border-2 rounded-lg overflow-hidden transition-all",
-                                iconPath ? "border-green-500 bg-green-50/50" : "border-dashed border-muted-foreground/50 bg-muted/30 hover:border-primary hover:bg-muted/50",
-                                iconUploading ? "cursor-wait" : "cursor-pointer"
-                            )}
-                            onClick={() => {
-                                if (!iconUploading && !iconPath) {
-                                    handleIconUpload();
-                                }
-                            }}
-                        >
-                            {iconUploading ? (
-                                <Loader2Icon className="h-6 w-6 animate-spin text-primary" />
-                            ) : iconPath ? (
-                                <>
-                                    <img
-                                        src={usePath(iconPath)}
-                                        alt="Plugin Icon"
-                                        className="w-full h-full object-cover"
-                                    />
-                                    <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <IconButton
-                                            icon={<TrashIcon className="h-4 w-4 text-white" />}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleRemoveIcon();
-                                            }}
-                                        />
-                                    </div>
-                                </>
-                            ) : (
-                                <div className="flex flex-col items-center gap-1 text-muted-foreground">
-                                    <ImageIcon className="h-6 w-6" />
-                                    <span className="text-xs">上传</span>
-                                </div>
-                            )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">PNG/JPG, 建议 120x120</p>
+            <form className="space-y-5">
+                {/* 基础标识信息 */}
+                <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                        {t('pluginUploader.sections.basicIdentity')}
                     </div>
-                    {/* Description */}
-                    <div className="flex-1">
+                    <div className="grid grid-cols-2 gap-4 pl-3">
                         <FormField
                             control={form.control}
-                            name="description"
+                            name="name"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>插件描述 <span className="text-destructive">*</span></FormLabel>
+                                    <FormLabel>{t('pluginUploader.fields.pluginName')} <span className="text-destructive">*</span></FormLabel>
                                     <FormControl>
-                                        <Textarea
-                                            placeholder="简要描述插件的功能和特点..."
-                                            rows={4}
-                                            className="resize-none"
-                                            {...field}
-                                        />
+                                        <Input placeholder={t('pluginUploader.fields.pluginNamePlaceholder')} {...field} />
                                     </FormControl>
+                                    <p className="text-xs text-muted-foreground">{t('pluginUploader.fields.pluginNameHint')}</p>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="pluginKey"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>{t('pluginUploader.fields.pluginKey')} <span className="text-destructive">*</span></FormLabel>
+                                    <FormControl>
+                                        <Input placeholder={t('pluginUploader.fields.pluginKeyPlaceholder')} {...field} />
+                                    </FormControl>
+                                    <p className="text-xs text-muted-foreground">{t('pluginUploader.fields.pluginKeyHint')}</p>
                                     <FormMessage />
                                 </FormItem>
                             )}
                         />
                     </div>
                 </div>
+
+                {/* 版本与分类 */}
+                <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                        {t('pluginUploader.sections.versionAndCategory')}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 pl-3">
+                        <FormField
+                            control={form.control}
+                            name="version"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>{t('pluginUploader.fields.version')} <span className="text-destructive">*</span></FormLabel>
+                                    <FormControl>
+                                        <Input placeholder={t('pluginUploader.fields.versionPlaceholder')} {...field} />
+                                    </FormControl>
+                                    <p className="text-xs text-muted-foreground">{t('pluginUploader.fields.versionHint')}</p>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="tags"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>{t('pluginUploader.fields.tags')} <span className="text-destructive">*</span></FormLabel>
+                                    <FormControl>
+                                        <TagInput
+                                            tags={field.value}
+                                            setTags={(tags) => field.onChange(tags)}
+                                            activeTagIndex={activeTagIndex}
+                                            setActiveTagIndex={setActiveTagIndex}
+                                            placeholder={t('pluginUploader.fields.tagsPlaceholder')}
+                                        />
+                                    </FormControl>
+                                    <p className="text-xs text-muted-foreground">{t('pluginUploader.fields.tagsHint')}</p>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    </div>
+                </div>
+
+                {/* 展示信息 */}
+                <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                        {t('pluginUploader.sections.displayInfo')}
+                    </div>
+                    <div className="flex gap-4 pl-3">
+                        {/* Icon Upload */}
+                        <div className="space-y-2">
+                            <FormLabel>{t('pluginUploader.fields.icon')}</FormLabel>
+                            <div
+                                className={cn(
+                                    "relative w-20 h-20 flex items-center justify-center border-2 rounded-lg overflow-hidden transition-all",
+                                    iconPath ? "border-green-500 bg-green-50/50 dark:bg-green-950/30" : "border-dashed border-muted-foreground/50 bg-muted/30 hover:border-primary hover:bg-muted/50",
+                                    iconUploading ? "cursor-wait" : "cursor-pointer"
+                                )}
+                                onClick={() => {
+                                    if (!iconUploading && !iconPath) {
+                                        handleIconUpload();
+                                    }
+                                }}
+                            >
+                                {iconUploading ? (
+                                    <Loader2Icon className="h-6 w-6 animate-spin text-primary" />
+                                ) : iconPath ? (
+                                    <>
+                                        <img
+                                            src={usePath(iconPath)}
+                                            alt="Plugin Icon"
+                                            className="w-full h-full object-cover"
+                                        />
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <IconButton
+                                                icon={<TrashIcon className="h-4 w-4 text-white" />}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleRemoveIcon();
+                                                }}
+                                            />
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                                        <ImageIcon className="h-6 w-6" />
+                                        <span className="text-xs">{t('pluginUploader.fields.iconUpload')}</span>
+                                    </div>
+                                )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{t('pluginUploader.fields.iconHint')}</p>
+                        </div>
+                        {/* Description */}
+                        <div className="flex-1">
+                            <FormField
+                                control={form.control}
+                                name="description"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>{t('pluginUploader.fields.description')} <span className="text-destructive">*</span></FormLabel>
+                                        <FormControl>
+                                            <Textarea
+                                                placeholder={t('pluginUploader.fields.descriptionPlaceholder')}
+                                                rows={4}
+                                                className="resize-none"
+                                                {...field}
+                                            />
+                                        </FormControl>
+                                        <div className="flex justify-between items-center">
+                                            <p className="text-xs text-muted-foreground">{t('pluginUploader.fields.descriptionHint')}</p>
+                                            <span className={cn(
+                                                "text-xs",
+                                                (field.value?.length || 0) > 400 ? "text-orange-500" : "text-muted-foreground"
+                                            )}>
+                                                {field.value?.length || 0}/500
+                                            </span>
+                                        </div>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+                    </div>
+                </div>
             </form>
         </Form>
     );
 
+    // Tab label mapping for display
+    const tabLabelMap: Record<string, { name: string; hint: string }> = useMemo(() => ({
+        "Feature": { name: t('pluginUploader.tabs.feature'), hint: t('pluginUploader.tabs.featureHint') },
+        "Detail": { name: t('pluginUploader.tabs.detail'), hint: t('pluginUploader.tabs.detailHint') },
+        "ChangeLog": { name: t('pluginUploader.tabs.changelog'), hint: t('pluginUploader.tabs.changelogHint') }
+    }), [t]);
+
+    const getTabDisplay = (label: string) => tabLabelMap[label] || { name: label, hint: t('pluginUploader.tabs.customHint') };
+
     // Step 2: Version Description
     const renderDescription = () => (
-        <div className="space-y-3">
-            <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">
-                    添加详细的版本说明，帮助用户了解插件功能
-                </p>
+        <div className="space-y-4">
+            {/* Header Section */}
+            <div className="p-4 bg-muted/30 rounded-lg border border-dashed">
+                <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <span className="text-sm">💡</span>
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium">{t('pluginUploader.docTip.title')}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {t('pluginUploader.docTip.content')}
+                        </p>
+                    </div>
+                </div>
             </div>
+
             <Tabs value={activeDescTab} onValueChange={setActiveDescTab}>
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center justify-between mb-3">
                     <TabsList className="h-9">
                         {descriptions.map((item, index) => (
-                            <TabsTrigger key={index} value={item.label} className="text-sm px-3">
-                                {item.label}
+                            <TabsTrigger key={index} value={item.label} className="text-sm px-3 gap-1">
+                                {getTabDisplay(item.label).name}
                                 {descriptions.length > 1 && index >= 3 && (
                                     <XIcon
                                         className="h-3 w-3 ml-1 hover:text-destructive cursor-pointer"
@@ -394,8 +460,15 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                     <IconButton
                         icon={<PlusIcon className="h-4 w-4" />}
                         onClick={handleAddDescriptionTab}
+                        title={t('pluginUploader.tabs.addCustom')}
                     />
                 </div>
+
+                {/* Tab hint */}
+                <p className="text-xs text-muted-foreground mb-2 pl-1">
+                    {getTabDisplay(activeDescTab).hint}
+                </p>
+
                 <div className="border rounded-lg overflow-hidden">
                     {descriptions.map((item: any, index) => (
                         <TabsContent key={index} value={item.label} className="m-0">
@@ -426,12 +499,16 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
     const renderUploadSubmit = () => (
         <div className="space-y-6">
             {/* File Upload Section */}
-            <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                    <UploadIcon className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">上传插件文件</span>
-                    <span className="text-xs text-muted-foreground">(支持 .js 文件，最大 100MB)</span>
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <UploadIcon className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-medium">{t('pluginUploader.uploadSection.title')}</span>
+                        <span className="text-destructive">*</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{t('pluginUploader.uploadSection.hint')}</span>
                 </div>
+
                 <FileUploader
                     value={attachments}
                     className="w-full"
@@ -453,59 +530,106 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                             setUploadProgress(100);
                             setResourcePath(res.name);
 
-                            toast.success(`插件文件已成功上传：${res.originalName}`);
+                            toast.success(t('pluginUploader.toast.fileUploaded', { filename: res.originalName }));
                         } catch (error: any) {
-                            toast.error(error?.message || "上传插件文件失败，请重试");
+                            toast.error(error?.message || t('pluginUploader.toast.fileUploadFailed'));
                         } finally {
                             setIsUploading(false);
                         }
                     }}
                     disabled={isUploading}
                 />
+
                 {isUploading && (
-                    <div className="space-y-2">
+                    <div className="space-y-2 p-3 bg-muted/30 rounded-lg">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>{t('pluginUploader.uploadSection.uploading')}</span>
+                            <span>{uploadProgress}%</span>
+                        </div>
                         <Progress value={uploadProgress} className="w-full h-2" />
-                        <p className="text-xs text-center text-muted-foreground">
-                            上传中... {uploadProgress}%
-                        </p>
                     </div>
                 )}
+
                 {resourcePath && (
                     <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-900">
                         <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        <span className="text-sm text-green-700 dark:text-green-400">插件文件已上传完成</span>
+                        <span className="text-sm text-green-700 dark:text-green-400">{t('pluginUploader.uploadSection.uploaded')}</span>
                     </div>
                 )}
             </div>
 
             {/* Summary Card */}
-            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-                <h4 className="text-sm font-medium">发布预览</h4>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">插件名称:</span>
-                        <span className="font-medium truncate">{form.watch('name') || '-'}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">版本:</span>
-                        <span className="font-medium">{form.watch('version') || '-'}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">Key:</span>
-                        <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded">{form.watch('pluginKey') || '-'}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">文件:</span>
-                        <span className={cn("font-medium", resourcePath ? "text-green-600" : "text-orange-500")}>
-                            {resourcePath ? '已上传' : '未上传'}
-                        </span>
+            <div className="rounded-lg border bg-gradient-to-br from-muted/50 to-muted/30 p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{t('pluginUploader.preview.title')}</span>
+                    <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">{t('pluginUploader.preview.aboutToPublish')}</span>
+                </div>
+
+                <div className="flex gap-4">
+                    {/* Icon Preview */}
+                    {iconPath && (
+                        <div className="w-14 h-14 rounded-lg overflow-hidden border bg-background flex-shrink-0">
+                            <img
+                                src={usePath(iconPath)}
+                                alt="Plugin Icon"
+                                className="w-full h-full object-cover"
+                            />
+                        </div>
+                    )}
+
+                    <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2">
+                            <span className="font-medium">{form.watch('name') || t('pluginUploader.preview.noName')}</span>
+                            <span className="text-xs px-1.5 py-0.5 bg-muted rounded">v{form.watch('version') || '1.0.0'}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-2">
+                            {form.watch('description') || t('pluginUploader.preview.noDescription')}
+                        </p>
                     </div>
                 </div>
-                {form.watch('description') && (
-                    <p className="text-xs text-muted-foreground line-clamp-2">
-                        {form.watch('description')}
-                    </p>
-                )}
+
+                <div className="grid grid-cols-2 gap-3 text-sm pt-3 border-t">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-16">{t('pluginUploader.preview.pluginKey')}</span>
+                        <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono">
+                            {form.watch('pluginKey') || '-'}
+                        </code>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-16">{t('pluginUploader.preview.fileStatus')}</span>
+                        <span className={cn(
+                            "text-xs font-medium flex items-center gap-1",
+                            resourcePath ? "text-green-600" : "text-orange-500"
+                        )}>
+                            {resourcePath ? (
+                                <><CheckCircle2 className="h-3 w-3" /> {t('pluginUploader.preview.uploaded')}</>
+                            ) : (
+                                <><UploadIcon className="h-3 w-3" /> {t('pluginUploader.preview.pending')}</>
+                            )}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2 col-span-2">
+                        <span className="text-xs text-muted-foreground w-16">{t('pluginUploader.preview.tags')}</span>
+                        <div className="flex gap-1 flex-wrap">
+                            {form.watch('tags')?.length > 0 ? (
+                                form.watch('tags').map((tag: any, index: number) => (
+                                    <span key={index} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                                        {tag.text}
+                                    </span>
+                                ))
+                            ) : (
+                                <span className="text-xs text-muted-foreground">{t('pluginUploader.preview.noTags')}</span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Submission Tips */}
+            <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-900">
+                <p className="text-xs text-blue-700 dark:text-blue-400">
+                    📋 <strong>{t('pluginUploader.submitTip.content')}</strong>
+                </p>
             </div>
         </div>
     );
@@ -531,9 +655,16 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                 </DialogTrigger>
                 <DialogContent className="max-w-2xl w-full max-h-[90vh] flex flex-col p-0">
                     <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
-                        <DialogTitle className="text-lg">发布插件</DialogTitle>
-                        <DialogDescription>
-                            {steps[currentStep - 1].label} ({currentStep}/{steps.length})
+                        <DialogTitle className="text-lg flex items-center gap-2">
+                            <span>{t('pluginUploader.dialogTitle')}</span>
+                            <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                                {t('pluginUploader.step')} {currentStep}/{steps.length}
+                            </span>
+                        </DialogTitle>
+                        <DialogDescription className="flex items-center gap-1">
+                            <span className="font-medium text-foreground">{steps[currentStep - 1].label}</span>
+                            <span>-</span>
+                            <span>{(steps[currentStep - 1] as any).description || ''}</span>
                         </DialogDescription>
                     </DialogHeader>
 
@@ -562,12 +693,12 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                                 disabled={currentStep === 1}
                                 className="gap-1"
                             >
-                                上一步
+                                {t('pluginUploader.buttons.prev')}
                             </Button>
                             <div className="flex items-center gap-2">
                                 {currentStep < 3 ? (
                                     <Button onClick={handleNext}>
-                                        下一步
+                                        {t('pluginUploader.buttons.next')}
                                     </Button>
                                 ) : (
                                     <Button
@@ -578,10 +709,10 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                                         {isSubmitting ? (
                                             <>
                                                 <Loader2Icon className="h-4 w-4 mr-2 animate-spin" />
-                                                提交中...
+                                                {t('pluginUploader.buttons.submitting')}
                                             </>
                                         ) : (
-                                            "提交审核"
+                                            t('pluginUploader.buttons.submit')
                                         )}
                                     </Button>
                                 )}
@@ -594,17 +725,17 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
             <AlertDialog open={showExitDialog} onOpenChange={setShowExitDialog}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>确认退出？</AlertDialogTitle>
+                        <AlertDialogTitle>{t('pluginUploader.exitDialog.title')}</AlertDialogTitle>
                         <AlertDialogDescription>
-                            您的进度尚未保存，退出后所有填写的信息将会丢失。确定要退出吗？
+                            {t('pluginUploader.exitDialog.description')}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel onClick={() => setShowExitDialog(false)}>
-                            取消
+                            {t('pluginUploader.exitDialog.cancel')}
                         </AlertDialogCancel>
                         <AlertDialogAction onClick={confirmExit}>
-                            确认退出
+                            {t('pluginUploader.exitDialog.confirm')}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

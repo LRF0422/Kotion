@@ -8,6 +8,8 @@ export { createRoot } from "react-dom/client"
 export * from "browser-fs-access"
 export * from "./ai"
 export { type GlobalState } from "./store"
+export { MobilePageHeaderProvider, useMobilePageHeader, type MobilePageHeaderInfo } from "./context/MobilePageHeaderContext"
+export { MessageBox } from "./components/MessageBox"
 
 import deepEqual from "deep-equal"
 import moment from "moment"
