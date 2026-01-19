@@ -1,6 +1,6 @@
 import { APIS } from "../../api";
 import { CardList } from "../components/CardList";
-import { Button, Card, CardContent, EmptyState, Skeleton, cn } from "@kn/ui";
+import { Button, Card, CardContent, EmptyState, Skeleton, cn, useIsMobile } from "@kn/ui";
 import { useApi } from "@kn/core";
 import { useNavigator } from "@kn/core";
 import { Space } from "../../model/Space";
@@ -13,6 +13,7 @@ import { SpaceHub } from "../SpaceHub";
 
 export const Home: React.FC = () => {
 
+    const isMobile = useIsMobile()
     const [recentSpaces, setRecentSpaces] = useState<Space[]>([])
     const [recentPages, setRecentPages] = useState<any[]>([])
     const [flag, setFlag] = useState(0)
@@ -63,19 +64,37 @@ export const Home: React.FC = () => {
     }, [flag])
 
     return (
-        <div className="flex justify-center pb-6 pt-2">
-            <div className="w-[800px] flex flex-col gap-6">
+        <div className={cn(
+            "flex justify-center pb-6 pt-2 overflow-auto h-full",
+            isMobile && "px-4"
+        )}>
+            <div className={cn(
+                "flex flex-col gap-6 w-full",
+                !isMobile && "max-w-[800px]"
+            )}>
                 {/* Greeting Section */}
-                <div className="flex items-center justify-center py-6 gap-4">
-                    <div className="p-3 rounded-xl bg-muted/50">
+                <div className={cn(
+                    "flex items-center justify-center gap-4",
+                    isMobile ? "py-4 flex-col" : "py-6"
+                )}>
+                    <div className={cn(
+                        "rounded-xl bg-muted/50",
+                        isMobile ? "p-2" : "p-3"
+                    )}>
                         {getGreetingIcon()}
                     </div>
-                    <div className="text-2xl font-semibold tracking-tight">{getGreeting()}</div>
+                    <div className={cn(
+                        "font-semibold tracking-tight",
+                        isMobile ? "text-xl" : "text-2xl"
+                    )}>{getGreeting()}</div>
                 </div>
 
                 {/* Recent Spaces Section */}
                 <div className="flex flex-col gap-3">
-                    <div className="flex justify-between items-center">
+                    <div className={cn(
+                        "flex items-center",
+                        isMobile ? "flex-col gap-2" : "justify-between"
+                    )}>
                         <div className="flex items-center gap-2">
                             <Clock size={14} className="text-muted-foreground" />
                             <span className="font-medium text-sm">{t("home.rs") || "Recent Spaces"}</span>
@@ -96,10 +115,16 @@ export const Home: React.FC = () => {
                         />
                     </div>
                     {loading ? (
-                        <div className="grid gap-4 w-full grid-cols-4">
-                            {[...Array(4)].map((_, index) => (
+                        <div className={cn(
+                            "grid gap-4 w-full",
+                            isMobile ? "grid-cols-2" : "grid-cols-4"
+                        )}>
+                            {[...Array(isMobile ? 2 : 4)].map((_, index) => (
                                 <div key={index} className="flex flex-col gap-2">
-                                    <Skeleton className="h-[180px] w-full rounded-lg" />
+                                    <Skeleton className={cn(
+                                        "w-full rounded-lg",
+                                        isMobile ? "h-[140px]" : "h-[180px]"
+                                    )} />
                                     <Skeleton className="h-4 w-3/4" />
                                     <Skeleton className="h-3 w-1/2" />
                                 </div>
@@ -108,7 +133,11 @@ export const Home: React.FC = () => {
                     ) : (
                         <CardList
                             data={recentSpaces}
-                            className="h-[180px] hover:shadow-md transition-shadow"
+                            className={cn(
+                                "hover:shadow-md transition-shadow",
+                                isMobile ? "h-[140px]" : "h-[180px]"
+                            )}
+                            containerClassName={isMobile ? "grid-cols-2" : "grid-cols-4"}
                             emptyProps={{
                                 button: <CreateSpaceDlg trigger={<Button>{t("home.create-space") || "Create Space"}</Button>} />
                             }}
@@ -128,7 +157,7 @@ export const Home: React.FC = () => {
                                     </div>
                                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                         <UserCircle className="h-3 w-3" />
-                                        <span>Last update by Leong</span>
+                                        <span className={isMobile ? "truncate" : ""}>Last update by Leong</span>
                                     </div>
                                 </div>
                             )}
@@ -143,10 +172,16 @@ export const Home: React.FC = () => {
                         <span className="font-medium text-sm">{t("home.recent-pages") || "Recent Pages"}</span>
                     </div>
                     {loading ? (
-                        <div className="grid gap-4 w-full grid-cols-4">
-                            {[...Array(8)].map((_, index) => (
+                        <div className={cn(
+                            "grid gap-4 w-full",
+                            isMobile ? "grid-cols-2" : "grid-cols-4"
+                        )}>
+                            {[...Array(isMobile ? 4 : 8)].map((_, index) => (
                                 <div key={index} className="flex flex-col gap-2">
-                                    <Skeleton className="h-[80px] w-full rounded-lg" />
+                                    <Skeleton className={cn(
+                                        "w-full rounded-lg",
+                                        isMobile ? "h-[60px]" : "h-[80px]"
+                                    )} />
                                     <Skeleton className="h-4 w-3/4" />
                                 </div>
                             ))}
@@ -155,6 +190,7 @@ export const Home: React.FC = () => {
                         <CardList
                             data={recentPages}
                             className="hover:shadow-md transition-shadow"
+                            containerClassName={isMobile ? "grid-cols-2" : "grid-cols-4"}
                             config={{ name: 'title' }}
                             icon={(data: any) => data.icon?.icon || <Box className="text-muted-foreground" />}
                             onClick={(data: any) => {

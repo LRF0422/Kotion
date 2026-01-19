@@ -1,7 +1,7 @@
 import { useNavigator } from "../hooks/use-navigator";
 import { Blocks, Inbox, LayoutDashboard, MessageCircleCodeIcon, Power, Settings, UserRoundPlus } from "@kn/icon";
 import React, { useContext, useEffect, useMemo, useState, useCallback, memo } from "react";
-import { Empty, Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@kn/ui";
+import { Empty, Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile } from "@kn/ui";
 import { useLocation } from "react-router-dom";
 import { cn } from "@kn/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
@@ -23,9 +23,33 @@ interface MenuItemProps {
     item: SiderMenuItemProps;
     isActive: boolean;
     onClick: () => void;
+    isMobile?: boolean;
 }
 
-const MenuItem = memo<MenuItemProps>(({ item, isActive, onClick }) => {
+const MenuItem = memo<MenuItemProps>(({ item, isActive, onClick, isMobile }) => {
+    // Mobile layout with text labels
+    if (isMobile) {
+        return (
+            <button
+                onClick={onClick}
+                className={cn(
+                    "w-full rounded-lg flex items-center gap-3 px-4 py-3 cursor-pointer",
+                    "hover:bg-muted transition-all duration-200 ease-in-out",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "active:scale-[0.98]",
+                    isActive && "bg-muted shadow-sm",
+                    item.className
+                )}
+                aria-label={typeof item.name === 'string' ? item.name : item.key}
+                aria-current={isActive ? 'page' : undefined}
+            >
+                <span className="flex-shrink-0">{item.icon}</span>
+                <span className="text-sm font-medium">{item.name}</span>
+            </button>
+        );
+    }
+
+    // Desktop layout with tooltip
     return (
         <Tooltip>
             <TooltipTrigger asChild>
@@ -56,8 +80,9 @@ MenuItem.displayName = 'MenuItem';
 
 
 
-export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size = 'default' }) => {
+export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick?: () => void }> = ({ size = 'default', onItemClick }) => {
 
+    const isMobile = useIsMobile()
     const navigator = useNavigator()
     const location = useLocation()
     const { userInfo } = useSelector((state: GlobalState) => state)
@@ -224,16 +249,24 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
         } else if (item.id && !item.isGroup) {
             navigator.go({ to: item.id });
         }
-    }, [navigator]);
+        // Call onItemClick callback if provided (for mobile drawer close)
+        onItemClick?.();
+    }, [navigator, onItemClick]);
 
     return (
         <TooltipProvider delayDuration={300}>
             <nav
-                className="flex flex-col items-center gap-3 py-2"
+                className={cn(
+                    "flex flex-col gap-3 py-2",
+                    isMobile ? "items-stretch px-2" : "items-center"
+                )}
                 aria-label="Main navigation"
             >
                 {/* Main menu items */}
-                <div className="flex flex-col items-center gap-2">
+                <div className={cn(
+                    "flex flex-col gap-2",
+                    isMobile ? "items-stretch" : "items-center"
+                )}>
                     {menus.map((item, index) => {
                         const isActive = location.pathname === item.id || location.pathname.startsWith(item.id + '/');
                         return (
@@ -242,16 +275,20 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
                                 item={item}
                                 isActive={isActive}
                                 onClick={() => handleMenuClick(item)}
+                                isMobile={isMobile}
                             />
                         );
                     })}
                 </div>
 
                 {/* Utility controls separator */}
-                <Separator className="w-8 my-1" />
+                <Separator className={isMobile ? "my-2" : "w-8 my-1"} />
 
                 {/* Utility controls */}
-                <div className="flex flex-col items-center gap-2">
+                <div className={cn(
+                    "flex gap-2",
+                    isMobile ? "flex-row justify-center" : "flex-col items-center"
+                )}>
                     <ModeToggle />
                     <LanguageToggle />
                 </div>

@@ -1,5 +1,5 @@
 import { useTranslation } from "@kn/common";
-import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, Input, Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle, Label, Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, toast } from "@kn/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, Input, Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle, Label, Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, toast, cn, useIsMobile } from "@kn/ui";
 import React, { PropsWithChildren, useCallback, useEffect, useMemo, useState } from "react";
 import { CardList } from "../components/CardList";
 import { EyeIcon, SearchIcon, StarIcon } from "@kn/icon";
@@ -11,6 +11,7 @@ import { APIS } from "../../api";
 
 export const SpaceHub: React.FC<PropsWithChildren> = (props) => {
 
+    const isMobile = useIsMobile()
     const { t } = useTranslation()
     const [favorites, setFavorites] = useState<Space[]>([])
     const [spaces, setSpaces] = useState<Space[]>([])
@@ -187,7 +188,10 @@ export const SpaceHub: React.FC<PropsWithChildren> = (props) => {
 
     return <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogTrigger asChild>{props.children}</DialogTrigger>
-        <DialogContent className="max-w-none w-[70%] overflow-auto">
+        <DialogContent className={cn(
+            "overflow-auto max-h-[90vh]",
+            isMobile ? "w-[95%] max-w-none p-4" : "max-w-none w-[70%]"
+        )}>
             <DialogHeader>
                 <DialogTitle>{t('space-hub.all-space', 'All Spaces')}</DialogTitle>
                 <DialogDescription />
@@ -195,8 +199,11 @@ export const SpaceHub: React.FC<PropsWithChildren> = (props) => {
             <div className="space-y-2">
                 <Label className="text-base font-semibold">{t('space-hub.favorites', 'Favorites')}</Label>
                 {showLoadingFavorites ? (
-                    <div className="grid grid-cols-6 gap-4 h-[250px]">
-                        {Array.from({ length: 6 }).map((_, index) => (
+                    <div className={cn(
+                        "grid gap-4",
+                        isMobile ? "grid-cols-2 h-[180px]" : "grid-cols-6 h-[250px]"
+                    )}>
+                        {Array.from({ length: isMobile ? 2 : 6 }).map((_, index) => (
                             <Skeleton
                                 key={index}
                                 className="h-full w-full rounded-lg animate-pulse"
@@ -210,8 +217,8 @@ export const SpaceHub: React.FC<PropsWithChildren> = (props) => {
                 ) : favorites.length > 0 ? (
                     <div className="animate-in fade-in-50 duration-500">
                         <CardList
-                            className="h-[250px]"
-                            containerClassName="grid-cols-6"
+                            className={isMobile ? "h-[140px]" : "h-[250px]"}
+                            containerClassName={isMobile ? "grid-cols-2" : "grid-cols-6"}
                             config={{
                                 cover: 'cover',
                             }}
@@ -223,7 +230,10 @@ export const SpaceHub: React.FC<PropsWithChildren> = (props) => {
                         />
                     </div>
                 ) : (
-                    <div className="h-[250px] flex items-center justify-center border border-dashed rounded-lg animate-in fade-in-50 duration-700">
+                    <div className={cn(
+                        "flex items-center justify-center border border-dashed rounded-lg animate-in fade-in-50 duration-700",
+                        isMobile ? "h-[100px]" : "h-[250px]"
+                    )}>
                         <p className="text-sm text-muted-foreground">
                             {t('space-hub.no-favorites', 'No favorite spaces yet')}
                         </p>
@@ -232,7 +242,10 @@ export const SpaceHub: React.FC<PropsWithChildren> = (props) => {
             </div>
             <div className="space-y-2">
                 <Label className="text-base font-semibold">{t('space-hub.all-spaces', 'All Spaces')}</Label>
-                <div className="flex items-center gap-2">
+                <div className={cn(
+                    "flex gap-2",
+                    isMobile ? "flex-col" : "items-center"
+                )}>
                     <Input
                         className="h-9 flex-1"
                         icon={<SearchIcon className="h-4 w-4" />}
@@ -242,7 +255,10 @@ export const SpaceHub: React.FC<PropsWithChildren> = (props) => {
                         aria-label={t('space-hub.search-label', 'Search spaces')}
                     />
                     <Select value={category} onValueChange={setCategory}>
-                        <SelectTrigger className="h-9 w-[200px]" aria-label={t('space-hub.category-label', 'Filter by category')}>
+                        <SelectTrigger className={cn(
+                            "h-9",
+                            isMobile ? "w-full" : "w-[200px]"
+                        )} aria-label={t('space-hub.category-label', 'Filter by category')}>
                             <SelectValue placeholder={t('space-hub.category-placeholder', 'Category')} />
                         </SelectTrigger>
                         <SelectContent>
@@ -254,7 +270,10 @@ export const SpaceHub: React.FC<PropsWithChildren> = (props) => {
                     </Select>
                 </div>
             </div>
-            <div className="flex flex-col gap-1 p-1 min-h-[300px]">
+            <div className={cn(
+                "flex flex-col gap-1 p-1",
+                isMobile ? "min-h-[200px]" : "min-h-[300px]"
+            )}>
                 {showLoadingSpaces ? (
                     <div className="space-y-2">
                         {Array.from({ length: 5 }).map((_, index) => (
@@ -331,7 +350,10 @@ export const SpaceHub: React.FC<PropsWithChildren> = (props) => {
                         })}
                     </div>
                 ) : (
-                    <div className="flex items-center justify-center h-[300px] border border-dashed rounded-lg animate-in fade-in-50 duration-700">
+                    <div className={cn(
+                        "flex items-center justify-center border border-dashed rounded-lg animate-in fade-in-50 duration-700",
+                        isMobile ? "h-[200px]" : "h-[300px]"
+                    )}>
                         <div className="text-center space-y-2 animate-in zoom-in-95 duration-500">
                             <p className="text-sm text-muted-foreground">
                                 {searchValue

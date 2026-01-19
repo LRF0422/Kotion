@@ -1,5 +1,5 @@
 import { APIS } from "../../../api";
-import { Badge, ExpandableChat } from "@kn/ui";
+import { Badge, ExpandableChat, useIsMobile, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuPortal, DropdownMenuLabel } from "@kn/ui";
 import { Label } from "@kn/ui";
@@ -18,7 +18,7 @@ import {
     ALargeSmall, ArrowLeft, BookTemplate, CircleArrowUp,
     Contact2, Download, FileIcon,
     FullscreenIcon, Link, Loader, LoaderCircle, LockIcon, MessageSquareText,
-    Minimize2, MoreHorizontal, MoveDownRight, Plus, Save, Trash2, Upload
+    Minimize2, MoreHorizontal, MoveDownRight, Plus, Save, Trash2, Upload, List
 } from "@kn/icon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "@kn/common";
@@ -26,6 +26,8 @@ import { useParams } from "@kn/common";
 import { toast } from "@kn/ui";
 
 export const PageEditor: React.FC = () => {
+    const isMobile = useIsMobile()
+    const [tocOpen, setTocOpen] = useState(false)
     const [page, setPage] = useState<any>()
     const params = useParams()
     const { userInfo } = useSelector((state: GlobalState) => state)
@@ -208,6 +210,20 @@ export const PageEditor: React.FC = () => {
                 <Button variant="ghost" size="icon" onClick={() => handleSave()}><Save className="h-5 w-5" /></Button>
                 <Button variant="ghost" size="icon" onClick={() => handleSave(true)}><CircleArrowUp className="h-5 w-5" /></Button>
                 <Separator orientation="vertical" />
+                {/* Mobile Toc toggle button */}
+                {isMobile && (
+                    <Sheet open={tocOpen} onOpenChange={setTocOpen}>
+                        <SheetTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                                <List className="h-5 w-5" />
+                            </Button>
+                        </SheetTrigger>
+                        <SheetContent side="right" className="w-[280px] p-0">
+                            <SheetTitle className="sr-only">Table of Contents</SheetTitle>
+                            <div id="mobile-toc-container" className="h-full" />
+                        </SheetContent>
+                    </Sheet>
+                )}
                 <Button variant="ghost" size="icon">
                     <MessageSquareText className="h-5 w-5" />
                 </Button>
@@ -365,11 +381,11 @@ export const PageEditor: React.FC = () => {
                     pageInfo={page}
                     ref={editor}
                     // provider={provider}
-                    className="h-[calc(100vh-80px)]  overflow-auto"
+                    className={isMobile ? "h-[calc(100vh-100px)] overflow-auto" : "h-[calc(100vh-80px)] overflow-auto"}
                     id={params.pageId as string}
                     user={userInfo}
                     token={params.pageId as string}
-                    toc={true}
+                    toc={!isMobile}
                     withTitle={true}
                     content={page.content ? JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">")) : undefined}
                 />

@@ -1,5 +1,5 @@
-import { Check, ClockIcon, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, HomeIcon, ListIcon, LucideHome, PlusIcon, StarIcon, Trash2, UploadIcon, XIcon, ArrowLeft, ArrowRight, ChevronRight, Pencil, FolderInput, Copy, Files, CheckSquare, Square } from "@kn/icon";
-import { Button, EmptyState, Input, ScrollArea, Separator, TreeView, cn, Skeleton, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
+import { Check, ClockIcon, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, HomeIcon, ListIcon, LucideHome, PlusIcon, StarIcon, Trash2, UploadIcon, XIcon, ArrowLeft, ArrowRight, ChevronRight, Pencil, FolderInput, Copy, Files, CheckSquare, Square, Menu as MenuIcon } from "@kn/icon";
+import { Button, EmptyState, Input, ScrollArea, Separator, TreeView, cn, Skeleton, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, useIsMobile, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
 import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { FileCardList } from "./FileCard";
 import { useSafeState } from "@kn/core";
@@ -27,6 +27,8 @@ export interface FileManagerProps {
 
 export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
+    const isMobile = useIsMobile()
+    const [sidebarOpen, setSidebarOpen] = useState(false)
     const { selectable = false, onCancel, onConfirm, multiple = false, target = 'both' } = props
 
     const [selectedFiles, setSelectFiles] = useSafeState<FileItem[]>([])
@@ -233,44 +235,135 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         clearSelection,
     }), [selectedFiles, currentFolderId, currentFolderItems, currentItem, selectable, repoKey, handleCreateFile, handleDelete, loading, error, breadcrumbPath, canGoBack, canGoForward, goBack, goForward, navigateToFolder, handleRename, handleMove, handleCopy, handleDuplicate, selectAll, clearSelection])
 
+    // Sidebar content for reuse
+    const SidebarContent = useMemo(() => (
+        <>
+            <div className="bg-muted/80 border-b h-[40px] flex items-center gap-1 px-1">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7"
+                    onClick={() => {
+                        navigateToFolder(props.folderId || "", "Home")
+                        if (isMobile) setSidebarOpen(false)
+                    }}
+                    disabled={sidebarLoading}
+                >
+                    <LucideHome className="w-4 h-4" />
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7"
+                    onClick={() => handleCreateFile('FOLDER')}
+                    disabled={loading || sidebarLoading}>
+                    <FolderPlusIcon className="w-4 h-4" />
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7"
+                    onClick={() => handleCreateFile('FILE')}
+                    disabled={loading || sidebarLoading}>
+                    <FilePlus2Icon className="w-4 h-4" />
+                </Button>
+            </div>
+            {sidebarLoading ? (
+                <div className="p-2 space-y-2">
+                    <div className="space-y-1">
+                        <Skeleton className="h-8 w-full" />
+                        <div className="pl-4 space-y-1">
+                            <Skeleton className="h-7 w-full" />
+                            <Skeleton className="h-7 w-full" />
+                            <Skeleton className="h-7 w-full" />
+                        </div>
+                    </div>
+                    <div className="space-y-1">
+                        <Skeleton className="h-8 w-full" />
+                        <div className="pl-4 space-y-1">
+                            <Skeleton className="h-7 w-[80%]" />
+                            <Skeleton className="h-7 w-[90%]" />
+                            <Skeleton className="h-7 w-[85%]" />
+                            <Skeleton className="h-7 w-[75%]" />
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <TreeView
+                    initialSelectedId={currentFolderId}
+                    selectParent={true}
+                    size="sm"
+                    className={cn("m-0", isMobile ? "w-full" : "w-[200px]")}
+                    elements={files}
+                    onTreeSelected={() => {
+                        if (isMobile) setSidebarOpen(false)
+                    }}
+                />
+            )}
+        </>
+    ), [sidebarLoading, currentFolderId, files, props.folderId, loading, isMobile, navigateToFolder, handleCreateFile])
+
     return <FileManageContext.Provider value={contextValue}>
         <div className={cn("rounded-sm flex flex-col border not-prose", props.className)}>
-            <div className="w-full bg-muted border-b flex items-center justify-between h-[40px] px-1">
+            {/* Toolbar */}
+            <div className={cn(
+                "w-full bg-muted border-b flex items-center justify-between h-[40px] px-1",
+                isMobile && "overflow-x-auto"
+            )}>
                 <div className="flex items-center h-full gap-1">
+                    {/* Mobile menu button */}
+                    {isMobile && (
+                        <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+                            <SheetTrigger asChild>
+                                <Button size="sm" variant="ghost">
+                                    <MenuIcon className="h-4 w-4" />
+                                </Button>
+                            </SheetTrigger>
+                            <SheetContent side="left" className="w-[260px] p-0">
+                                <SheetTitle className="sr-only">File Navigation</SheetTitle>
+                                <div className="h-full overflow-auto">
+                                    {SidebarContent}
+                                </div>
+                            </SheetContent>
+                        </Sheet>
+                    )}
+
                     <Button size="sm" variant="ghost" onClick={() => handleCreateFile('FILE')} disabled={loading}>
                         <UploadIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                        Upload
+                        {!isMobile && "Upload"}
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => handleCreateFile('FOLDER')} disabled={loading}>
                         <FolderPlusIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
-                        New Folder
+                        {!isMobile && "New Folder"}
                     </Button>
 
-                    <Separator orientation="vertical" className="h-6" />
+                    {!isMobile && <Separator orientation="vertical" className="h-6" />}
 
                     {/* Selection actions */}
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={selectedFiles.length === currentFolderItems.length ? clearSelection : selectAll}
-                        disabled={loading || currentFolderItems.length === 0}
-                    >
-                        {selectedFiles.length === currentFolderItems.length && currentFolderItems.length > 0 ? (
-                            <><Square className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />Deselect</>
-                        ) : (
-                            <><CheckSquare className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />Select All</>
-                        )}
-                    </Button>
+                    {!isMobile && (
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={selectedFiles.length === currentFolderItems.length ? clearSelection : selectAll}
+                            disabled={loading || currentFolderItems.length === 0}
+                        >
+                            {selectedFiles.length === currentFolderItems.length && currentFolderItems.length > 0 ? (
+                                <><Square className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />Deselect</>
+                            ) : (
+                                <><CheckSquare className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />Select All</>
+                            )}
+                        </Button>
+                    )}
 
                     {selectedFiles.length > 0 && (
                         <>
-                            <Separator orientation="vertical" className="h-6" />
+                            {!isMobile && <Separator orientation="vertical" className="h-6" />}
 
                             {/* Actions for selected files */}
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button size="sm" variant="ghost">
-                                        Actions ({selectedFiles.length})
+                                        {isMobile ? `(${selectedFiles.length})` : `Actions (${selectedFiles.length})`}
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="start" className="w-[180px]">
@@ -315,10 +408,12 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                 </DropdownMenuContent>
                             </DropdownMenu>
 
-                            <Button size="sm" variant="ghost" onClick={() => handleDelete(selectedFiles.map(f => f.id))} disabled={loading}>
-                                <Trash2 className="-ms-1 me-2 opacity-60 mr-1 text-destructive" size={16} strokeWidth={2} aria-hidden="true" />
-                                Delete
-                            </Button>
+                            {!isMobile && (
+                                <Button size="sm" variant="ghost" onClick={() => handleDelete(selectedFiles.map(f => f.id))} disabled={loading}>
+                                    <Trash2 className="-ms-1 me-2 opacity-60 mr-1 text-destructive" size={16} strokeWidth={2} aria-hidden="true" />
+                                    Delete
+                                </Button>
+                            )}
                         </>
                     )}
 
@@ -348,68 +443,20 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                     </Button>
                 </div>
             </div>
-            <div className="grid w-full grid-cols-[220px_1fr] flex-1 overflow-auto h-[calc(100%-40px)]">
-                <div className="border-r overflow-y-auto h-full">
-                    <div className="bg-muted/80 border-b h-[40px] flex items-center gap-1">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7"
-                            onClick={() => {
-                                navigateToFolder(props.folderId || "", "Home")
-                            }}
-                            disabled={sidebarLoading}
-                        >
-                            <LucideHome className="w-4 h-4" />
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7"
-                            onClick={() => handleCreateFile('FOLDER')}
-                            disabled={loading || sidebarLoading}>
-                            <FolderPlusIcon className="w-4 h-4" />
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7"
-                            onClick={() => handleCreateFile('FILE')}
-                            disabled={loading || sidebarLoading}>
-                            <FilePlus2Icon className="w-4 h-4" />
-                        </Button>
+            <div className={cn(
+                "flex-1 overflow-auto h-[calc(100%-40px)]",
+                isMobile ? "flex flex-col" : "grid w-full grid-cols-[220px_1fr]"
+            )}>
+                {/* Desktop Sidebar */}
+                {!isMobile && (
+                    <div className="border-r overflow-y-auto h-full">
+                        {SidebarContent}
                     </div>
-                    {sidebarLoading ? (
-                        <div className="p-2 space-y-2">
-                            <div className="space-y-1">
-                                <Skeleton className="h-8 w-full" />
-                                <div className="pl-4 space-y-1">
-                                    <Skeleton className="h-7 w-full" />
-                                    <Skeleton className="h-7 w-full" />
-                                    <Skeleton className="h-7 w-full" />
-                                </div>
-                            </div>
-                            <div className="space-y-1">
-                                <Skeleton className="h-8 w-full" />
-                                <div className="pl-4 space-y-1">
-                                    <Skeleton className="h-7 w-[80%]" />
-                                    <Skeleton className="h-7 w-[90%]" />
-                                    <Skeleton className="h-7 w-[85%]" />
-                                    <Skeleton className="h-7 w-[75%]" />
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <TreeView
-                            initialSelectedId={currentFolderId}
-                            selectParent={true}
-                            size="sm"
-                            className="w-[200px] m-0"
-                            elements={files}
-                        />
-                    )}
-                </div>
-                <div className="overflow-auto w-full flex flex-col h-full">
+                )}
+                <div className={cn(
+                    "overflow-auto w-full flex flex-col",
+                    isMobile ? "flex-1" : "h-full"
+                )}>
                     <div className="w-full border-b bg-muted/50 min-h-[40px] flex items-center justify-between px-2" >
                         <div className="flex items-center gap-2 flex-1">
                             {/* Back/Forward Navigation Buttons */}
@@ -443,7 +490,10 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             />
                         </div>
                     </div>
-                    <div className="flex-1 overflow-auto h-[calc(100%-45px)]">
+                    <div className={cn(
+                        "flex-1 overflow-auto",
+                        isMobile ? "" : "h-[calc(100%-45px)]"
+                    )}>
                         {
                             loading ? (
                                 <div className="p-6 space-y-4">

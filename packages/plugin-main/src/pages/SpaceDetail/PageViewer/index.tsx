@@ -1,5 +1,5 @@
 import { APIS } from "../../../api";
-import { Button } from "@kn/ui";
+import { Button, useIsMobile, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@kn/ui";
 import { Input } from "@kn/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
@@ -11,7 +11,7 @@ import { useLocation } from "@kn/common";
 import { useNavigator, useApi } from "@kn/core";
 import { Editor } from "@kn/editor";
 import { useToggle } from "@kn/core";
-import { Edit, Loader, MessageCircleCode, MoreHorizontal, Plus, Share, Star } from "@kn/icon";
+import { Edit, Loader, MessageCircleCode, MoreHorizontal, Plus, Share, Star, List } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { useParams } from "@kn/common";
 import { toast } from "@kn/ui";
@@ -19,6 +19,8 @@ import { smoothScrollIntoViewIfNeeded } from '@kn/common';
 
 export const PageViewer: React.FC = () => {
 
+    const isMobile = useIsMobile()
+    const [tocOpen, setTocOpen] = useState(false)
     const [page, setPage] = useState<any>()
     const params = useParams()
     const [editor, setEditor] = useState<Editor | null>()
@@ -129,6 +131,20 @@ export const PageViewer: React.FC = () => {
             <div className="flex flex-row items-center gap-1 px-1 flex-shrink-0">
                 <Button variant="ghost" size="icon" onClick={goToEditor}><Edit className="h-5 w-5" /></Button>
                 <Separator orientation="vertical" />
+                {/* Mobile Toc toggle button */}
+                {isMobile && (
+                    <Sheet open={tocOpen} onOpenChange={setTocOpen}>
+                        <SheetTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                                <List className="h-5 w-5" />
+                            </Button>
+                        </SheetTrigger>
+                        <SheetContent side="right" className="w-[280px] p-0">
+                            <SheetTitle className="sr-only">Table of Contents</SheetTitle>
+                            <div id="mobile-toc-container-viewer" className="h-full" />
+                        </SheetContent>
+                    </Sheet>
+                )}
                 <Popover>
                     <PopoverTrigger>
                         <Button variant="ghost" size="icon"><Share className="h-5 w-5" /></Button>
@@ -168,12 +184,13 @@ export const PageViewer: React.FC = () => {
             <EditorRender
                 ref={(ed) => setEditor(ed)}
                 content={page.content ? JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">")) : undefined}
-                className="h-[calc(100vh-70px)] overflow-auto"
+                className={isMobile ? "h-[calc(100vh-90px)] overflow-auto" : "h-[calc(100vh-70px)] overflow-auto"}
                 id={params.pageId as string}
                 isEditable={false}
                 isColl={false}
                 pageInfo={page}
                 toolbar={false}
+                toc={!isMobile}
             />
         </main>
     </div>)

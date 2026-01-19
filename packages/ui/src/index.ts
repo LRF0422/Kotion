@@ -1,6 +1,8 @@
 
 export * from "./components"
 export * from "./lib/utils"
+export { useIsMobile } from "./hooks/use-mobile"
+export { useMediaQuery } from "./hooks/use-media-query"
 export * from "class-variance-authority"
 export {
     Bar, BarChart, CartesianGrid,

@@ -1,14 +1,12 @@
 import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
-import { IconButton, TreeView } from "@kn/ui";
-import { ArrowLeft, CircleArrowUp, Clock, Copy, LayoutDashboard, LayoutTemplate, MoreHorizontal, Package, Plus, Settings, Star, StarIcon, Trash2, Undo2, UserCircle, AlertCircle } from "@kn/icon";
+import { IconButton, TreeView, useIsMobile, Button, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
+import { ArrowLeft, CircleArrowUp, Clock, Copy, LayoutDashboard, LayoutTemplate, Menu, MoreHorizontal, Package, Plus, Settings, Star, StarIcon, Trash2, Undo2, UserCircle, AlertCircle } from "@kn/icon";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { Sheet, SheetContent, SheetTitle } from "@kn/ui";
 import { useApi, useService, useUploadFile } from "@kn/core";
 import { APIS } from "../../api";
 import { Outlet, useParams } from "@kn/common";
 import { Space } from "../../model/Space";
 import { useNavigator } from "@kn/core";
-import { Button } from "@kn/ui";
 import { Input } from "@kn/ui";
 import { Badge } from "@kn/ui";
 import { Alert, AlertDescription } from "@kn/ui";
@@ -17,11 +15,13 @@ import { event, ON_FAVORITE_CHANGE, ON_PAGE_REFRESH } from "../../event";
 import { Card } from "@kn/ui";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@kn/ui";
 import { useToggle } from "@kn/core";
-import { MultiSelect } from "@kn/ui";
+import { MultiSelect, cn } from "@kn/ui";
 import { TemplateCreator } from "./TemplateCreator";
 
 export const SpaceDetail: React.FC = () => {
 
+    const isMobile = useIsMobile()
+    const [sidebarOpen, setSidebarOpen] = useState(false)
     const [visible, setVisible] = useState(false)
     const [space, setSpace] = useState<Space>()
     const [pageTree, setPageTree] = useState([])
@@ -519,8 +519,9 @@ export const SpaceDetail: React.FC = () => {
         }
     ] : [], [space, favorites, pageTree, trash, params.id, navigator, toggle, handleFavorite, handleCreatePage, handleRestorePage, resolve])
 
-    return space && <div className="grid grid-cols-[280px_1fr] h-screen w-full bg-muted/40">
-        <div className="h-screen w-full border-r border-solid flex flex-col overflow-x-hidden">
+    // Sidebar content component for reuse
+    const SidebarContent = useMemo(() => (
+        <>
             {error && (
                 <Alert variant="destructive" className="m-2">
                     <AlertCircle className="h-4 w-4" />
@@ -533,76 +534,124 @@ export const SpaceDetail: React.FC = () => {
                 size="sm"
                 selectParent={true}
                 className="w-full flex-1 flex flex-col"
-                elements={elements} />
-        </div>
-        <div className="w-full h-full overflow-auto">
-            <Outlet />
-        </div>
-        <Sheet
-            open={visible}
-            onOpenChange={(value) => {
-                setVisible(value)
-            }}
-        >
-            <SheetContent className="w-[1000px] sm:max-w-none">
-                <SheetTitle className="flex flex-row items-center gap-1">
-                    选择一个模板
-                </SheetTitle>
-                <div className="flex flex-col gap-4 mt-4">
-                    <div className=" font-bold">个人模板</div>
-                    <div className="flex flex-row items-center gap-2">
-                        <Input className="w-[200px] h-8" placeholder="搜索模板..." />
-                        <MultiSelect
-                            placeholder="模板类型"
-                            className="h-7 w-[150px]"
-                            options={[]}
-                            defaultValue={[]}
-                            onValueChange={(value) => { }}
-                        />
+                elements={elements}
+                onTreeSelected={() => {
+                    if (isMobile) {
+                        setSidebarOpen(false)
+                    }
+                }}
+            />
+        </>
+    ), [error, params.pageId, loading, elements, isMobile])
+
+    return space && (
+        <div className={cn(
+            "h-screen w-full bg-muted/40",
+            isMobile ? "flex flex-col" : "grid grid-cols-[280px_1fr]"
+        )}>
+            {/* Mobile Header */}
+            {isMobile && (
+                <div className="flex items-center justify-between px-4 h-12 border-b bg-background sticky top-0 z-40">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="text-lg">{space?.icon?.icon}</span>
+                        <span className="font-medium truncate">{space.name}</span>
                     </div>
-                    <div className="grid grid-cols-4 gap-4">
-                        {
-                            yourTemplates.map((item: any, index) => (
-                                <div className="flex flex-col gap-1">
-                                    <Card key={index} className="border hover:bg-muted h-[200px]" style={{
-                                        backgroundImage: `url('${usePath(item.cover)}&cache=true')`,
-                                        backgroundSize: 'cover'
-                                    }} >
-                                    </Card>
-                                    <div className="flex flex-row justify-between items-center text-sm text-gray-500 italic ">
-                                        <div className=" w-[100px] overflow-hidden text-ellipsis text-nowrap">{item.title}</div>
-                                        <a href="#" className="flex flex-row gap-1 items-center underline"><UserCircle className="h-4 w-4" />Author Leong</a>
-                                    </div>
-                                    <div>
-                                        <Button size="sm" onClick={() => handleCreateByTemplate(item.id)}>使用此模板</Button>
-                                    </div>
-                                </div>
-                            ))
-                        }
-                    </div>
+                    <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+                        <SheetTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                                <Menu className="h-5 w-5" />
+                            </Button>
+                        </SheetTrigger>
+                        <SheetContent side="left" className="w-[280px] p-0">
+                            <SheetTitle className="sr-only">Navigation</SheetTitle>
+                            <div className="h-full flex flex-col overflow-hidden">
+                                {SidebarContent}
+                            </div>
+                        </SheetContent>
+                    </Sheet>
                 </div>
-            </SheetContent>
-        </Sheet>
-        <CommandDialog open={open} onOpenChange={() => { toggle() }}>
-            <CommandInput />
-            <CommandList>
-                <CommandEmpty />
-                <CommandGroup heading="Page">
-                    <CommandItem onSelect={() => {
-                        handleCreatePage(params.pageId || "0")
-                        toggle()
-                    }}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        <span>Create Page</span>
-                    </CommandItem>
-                </CommandGroup>
-                <CommandGroup heading="Space">
-                    <CommandItem onSelect={handleGoToPersonalSpace}>
-                        <LayoutDashboard className="mr-2 h-4 w-4" />
-                        <span>Personal Space</span>
-                    </CommandItem>
-                </CommandGroup>
-            </CommandList>
-        </CommandDialog>
-    </div>
+            )}
+
+            {/* Desktop Sidebar */}
+            {!isMobile && (
+                <div className="h-screen w-full border-r border-solid flex flex-col overflow-x-hidden">
+                    {SidebarContent}
+                </div>
+            )}
+
+            {/* Main Content */}
+            <div className={cn(
+                "w-full overflow-hidden",
+                isMobile ? "flex-1" : "h-full"
+            )}>
+                <Outlet />
+            </div>
+            <Sheet
+                open={visible}
+                onOpenChange={(value) => {
+                    setVisible(value)
+                }}
+            >
+                <SheetContent className="w-[1000px] sm:max-w-none">
+                    <SheetTitle className="flex flex-row items-center gap-1">
+                        选择一个模板
+                    </SheetTitle>
+                    <div className="flex flex-col gap-4 mt-4">
+                        <div className=" font-bold">个人模板</div>
+                        <div className="flex flex-row items-center gap-2">
+                            <Input className="w-[200px] h-8" placeholder="搜索模板..." />
+                            <MultiSelect
+                                placeholder="模板类型"
+                                className="h-7 w-[150px]"
+                                options={[]}
+                                defaultValue={[]}
+                                onValueChange={(value) => { }}
+                            />
+                        </div>
+                        <div className="grid grid-cols-4 gap-4">
+                            {
+                                yourTemplates.map((item: any, index) => (
+                                    <div className="flex flex-col gap-1">
+                                        <Card key={index} className="border hover:bg-muted h-[200px]" style={{
+                                            backgroundImage: `url('${usePath(item.cover)}&cache=true')`,
+                                            backgroundSize: 'cover'
+                                        }} >
+                                        </Card>
+                                        <div className="flex flex-row justify-between items-center text-sm text-gray-500 italic ">
+                                            <div className=" w-[100px] overflow-hidden text-ellipsis text-nowrap">{item.title}</div>
+                                            <a href="#" className="flex flex-row gap-1 items-center underline"><UserCircle className="h-4 w-4" />Author Leong</a>
+                                        </div>
+                                        <div>
+                                            <Button size="sm" onClick={() => handleCreateByTemplate(item.id)}>使用此模板</Button>
+                                        </div>
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
+                </SheetContent>
+            </Sheet>
+            <CommandDialog open={open} onOpenChange={() => { toggle() }}>
+                <CommandInput />
+                <CommandList>
+                    <CommandEmpty />
+                    <CommandGroup heading="Page">
+                        <CommandItem onSelect={() => {
+                            handleCreatePage(params.pageId || "0")
+                            toggle()
+                        }}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            <span>Create Page</span>
+                        </CommandItem>
+                    </CommandGroup>
+                    <CommandGroup heading="Space">
+                        <CommandItem onSelect={handleGoToPersonalSpace}>
+                            <LayoutDashboard className="mr-2 h-4 w-4" />
+                            <span>Personal Space</span>
+                        </CommandItem>
+                    </CommandGroup>
+                </CommandList>
+            </CommandDialog>
+        </div>
+    )
 }

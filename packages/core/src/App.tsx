@@ -37,22 +37,12 @@ const reslove = (config: common.RouteConfig) => {
 
 
 
-// Initialize scoped namespace for plugin access
 window.ui = ui
 window.common = common
 window.core = core
 window.icon = icon
 window.editor = editor
 window.React = React
-//     = {
-//     ...window,
-//     React,
-//     ui,
-//     common,
-//     core,
-//     icon,
-//     editor
-// };
 
 
 export type Plugins = common.KPlugin<any>[]

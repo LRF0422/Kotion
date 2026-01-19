@@ -1,16 +1,15 @@
 
-import { Outlet, useLocation } from "react-router-dom"
+import { Outlet } from "react-router-dom"
 import { SiderMenu } from "./components/SiderMenu"
-import { useContext, useEffect, useState, useMemo } from "react"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Onboarding, OnboardingStep, Rate, SparklesText, cn } from "@kn/ui"
+import { useContext, useEffect, useState } from "react"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Onboarding, OnboardingStep, Rate, SparklesText, cn, useIsMobile, Sheet, SheetContent, SheetTrigger, Button } from "@kn/ui"
+import { Menu } from "@kn/icon"
 import { useApi } from "./hooks/use-api"
 import { APIS } from "./api"
 import { useDispatch, AppContext, event } from "@kn/common"
 import { useNavigator } from "./hooks/use-navigator"
-import { ErrorBoundary } from "react-error-boundary"
 import { GO_TO_MARKETPLACE } from "@kn/common"
 import { toast } from "@kn/ui"
-import { ErrorPage } from "./components/ErrorPage"
 import React from "react"
 import { useUploadFile } from "./hooks"
 import { useAsyncEffect } from "ahooks"
@@ -146,6 +145,9 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     }
 
 
+    const isMobile = useIsMobile()
+    const [sidebarOpen, setSidebarOpen] = useState(false)
+
     return (
         <div>
             {/* Show loading overlay while plugins are loading */}
@@ -163,18 +165,56 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                 </div>
             )}
 
-            <div className={cn("grid min-h-screen w-full transition-all grid-cols-[70px_1fr]", !pluginsLoaded && "opacity-0")} >
-                <div className="border-r md:block">
-                    <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4">
-                        <SparklesText className=" text-[30px]" sparklesCount={5} text="KN" />
-                        <div className="flex-1 px-2">
-                            <SiderMenu />
+            <div className={cn(
+                "grid min-h-screen w-full transition-all",
+                isMobile ? "grid-cols-1" : "grid-cols-[70px_1fr]",
+                !pluginsLoaded && "opacity-0"
+            )} >
+                {/* Desktop Sidebar */}
+                {!isMobile && (
+                    <div className="border-r">
+                        <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4">
+                            <SparklesText className="text-[30px]" sparklesCount={5} text="KN" />
+                            <div className="flex-1 px-2">
+                                <SiderMenu />
+                            </div>
                         </div>
                     </div>
+                )}
+
+                {/* Mobile Header + Content */}
+                <div className="flex flex-col h-screen w-full">
+                    {/* Mobile Header */}
+                    {isMobile && (
+                        <div className="flex items-center justify-between px-4 h-14 border-b bg-background sticky top-0 z-40">
+                            <SparklesText className="text-[24px]" sparklesCount={3} text="KN" />
+                            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+                                <SheetTrigger asChild>
+                                    <Button variant="ghost" size="icon">
+                                        <Menu className="h-5 w-5" />
+                                    </Button>
+                                </SheetTrigger>
+                                <SheetContent side="left" className="w-[280px] p-0">
+                                    <div className="flex flex-col h-full">
+                                        <div className="flex items-center justify-center py-4 border-b">
+                                            <SparklesText className="text-[30px]" sparklesCount={5} text="KN" />
+                                        </div>
+                                        <div className="flex-1 overflow-auto px-2 py-2">
+                                            <SiderMenu onItemClick={() => setSidebarOpen(false)} />
+                                        </div>
+                                    </div>
+                                </SheetContent>
+                            </Sheet>
+                        </div>
+                    )}
+
+                    <main className={cn(
+                        "w-full overflow-hidden",
+                        isMobile ? "flex-1" : "h-screen"
+                    )}>
+                        {pluginsLoaded ? <Outlet /> : null}
+                    </main>
                 </div>
-                <main className="h-screen w-full overflow-auto">
-                    {pluginsLoaded ? <Outlet /> : null}
-                </main>
                 <AlertDialog open={open} onOpenChange={setOpen}>
                     <AlertDialogTrigger />
                     <AlertDialogContent>

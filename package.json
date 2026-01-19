@@ -24,6 +24,7 @@
     "build:landing": "pnpm --filter @kn/landing-page-vite build",
     "build:landingDocker": "pnpm --filter @kn/landing-page-vite build:docker",
     "build:mobile": "pnpm --filter mobile build",
+    "app:dev": "pnpm --filter vite dev",
     "mobile:dev": "pnpm --filter mobile dev",
     "mobile:build": "pnpm --filter mobile build",
     "mobile:preview": "pnpm --filter mobile preview",    
