@@ -966,7 +966,7 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
 
                         <ScrollArea className="flex-1 px-4 py-2">
                             {/* 基础配置选项卡 */}
-                            <TabsContent value="basic" className="mt-0 space-y-4">
+                            <TabsContent value="basic" className="mt-0 space-y-4 p-1">
                                 {/* 图表类型 */}
                                 <div className="space-y-2">
                                     <Label>{t('bitable.chartView.chartType')}</Label>
