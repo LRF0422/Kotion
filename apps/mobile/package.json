@@ -1,0 +1,41 @@
+{
+  "name": "mobile",
+  "private": true,
+  "version": "0.0.16",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 3001",
+    "build": "tsc && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 3001",
+    "lint": "eslint . --ext ts,tsx --fix --report-unused-disable-directives --max-warnings 100",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kn/core": "workspace:*",
+    "@kn/ui": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/common": "workspace:*",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0",
+    "@use-gesture/react": "^10.3.0",
+    "framer-motion": "^12.4.7",
+    "react-device-detect": "^2.2.3"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@typescript-eslint/eslint-plugin": "^7.10.0",
+    "@typescript-eslint/parser": "^7.10.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "eslint-plugin-react-refresh": "^0.4.7",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "vite-tsconfig-paths": "^5.1.4"
+  }
+}
