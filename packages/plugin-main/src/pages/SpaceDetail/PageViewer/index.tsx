@@ -191,6 +191,7 @@ export const PageViewer: React.FC = () => {
                 pageInfo={page}
                 toolbar={false}
                 toc={!isMobile}
+                width={isMobile ? "w-full" : "w-[calc(100vw-350px)]"}
             />
         </main>
     </div>)

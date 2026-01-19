@@ -11,7 +11,7 @@ import { StyledEditor } from "../styles/editor";
 import { ExtensionWrapper } from "@kn/common";
 import { useSafeState, useUnmount } from "ahooks";
 import { ToC } from "./ToC";
-import { cn, useTheme } from "@kn/ui";
+import { cn, useIsMobile, useTheme } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
@@ -67,30 +67,7 @@ export const CollaborationEditor = forwardRef<
           getIndex: getHierarchicalIndexes,
           // scrollParent: () => document.querySelector("#editor-container") as HTMLElement,
         })
-        // Collaboration.configure({
-        //   document: provider.document
-        // }),
-        // CollaborationCursor.configure({
-        //   provider: provider,
-        //   user: {
-        //     ...user,
-        //     color: getUserColor()
-        //   }
-        // }),
       ],
-      // onCreate({ editor: currentEditor }) {
-      //   if (!provider.document.getMap('config').get('initialContentLoaded')) {
-      //     provider.document.getMap('config').set('initialContentLoaded', true)
-      //     console.log('content', content);
-      //     if (currentEditor.isEmpty) {
-      //       currentEditor.commands.setContent(content as Content)
-      //     }
-      //   }
-      // },
-      onTransaction: (transaction) => {
-        // console.log("transaction", transaction.transaction);
-
-      },
       editorProps: {
         attributes: {
           class: "ProseMirror",
@@ -102,30 +79,22 @@ export const CollaborationEditor = forwardRef<
     []
   );
 
-
-  useUnmount(() => {
-    if (provider) {
-      console.log('disconnect');
-      provider.document.getMap('config').set('initialContentLoaded', false)
-      provider.disconnect()
-      provider.destroy()
-    }
-  })
   useImperativeHandle(ref, () => editor as Editor)
 
   // Get current theme from context
   const { theme: currentTheme } = useTheme();
   const selectedTheme = currentTheme === 'dark' ? dark : light;
+  const isMobile = useIsMobile();
 
   return (editor &&
     <PageContext.Provider value={pageInfo as PageContextProps}>
       <ThemeProvider theme={selectedTheme}>
         <div className={cn("grow z-30", width)}>
-          <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />
+          {!isMobile && <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />}
           <div className={cn("w-full", props.className)} id="editor-container">
             <div className="flex relative w-full">
               <StyledEditor className="w-full grow overflow-auto h-full">
-                <EditorContent editor={editor} className=" min-h-[600px]" />
+                <EditorContent editor={editor} className="h-full" />
               </StyledEditor>
               {
                 toc && (<div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>

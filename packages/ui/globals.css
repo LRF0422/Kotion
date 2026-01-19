@@ -112,6 +112,23 @@
   background: #555;
 }
 
+/* Hide scrollbar on mobile devices */
+@media (max-width: 768px) {
+  * {
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE and Edge */
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
+    /* Chrome, Safari, Opera */
+    width: 0;
+    height: 0;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

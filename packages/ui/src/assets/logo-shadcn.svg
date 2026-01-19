@@ -1,0 +1,16 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Clean black background with rounded corners -->
+  <rect width="512" height="512" rx="64" fill="#09090B"/>
+  
+  <!-- Subtle border -->
+  <rect x="1" y="1" width="510" height="510" rx="63" stroke="#27272A" stroke-width="2" fill="none"/>
+  
+  <!-- K letter - clean geometric style -->
+  <path d="M128 112V400H168V272L284 400H336L200 256L328 112H276L168 240V112H128Z" fill="#FAFAFA"/>
+  
+  <!-- N letter - clean geometric style -->
+  <path d="M348 112V400H388V208L480 400H520V112H480V304L388 112H348Z" fill="#FAFAFA"/>
+  
+  <!-- Minimal accent line -->
+  <rect x="128" y="88" width="120" height="3" rx="1.5" fill="#FAFAFA" fill-opacity="0.2"/>
+</svg>

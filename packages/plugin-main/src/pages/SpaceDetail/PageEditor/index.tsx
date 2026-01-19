@@ -133,34 +133,6 @@ export const PageEditor: React.FC = () => {
         })
     }
 
-    // const provider = useMemo(() => {
-    //     const doc = new Y.Doc()
-    //     return new TiptapCollabProvider({
-    //         baseUrl: 'ws://www.simple-platform.cn:1234',
-    //         name: params.pageId as string,
-    //         token: params.pageId as string,
-    //         document: doc,
-    //         onAwarenessUpdate: ({ states }) => {
-    //             const users = states.map((state) => ({ clientId: state.clientId, user: state.user }));
-    //             if (deepEqual(userInfo, lastAwarenessRef.current)) {
-    //                 return;
-    //             }
-    //             setUsers(users)
-    //             lastAwarenessRef.current = users;
-    //         },
-    //         onSynced: () => {
-    //             setSyncStatus(true)
-    //         },
-    //         onStatus: (status) => {
-    //             setStatus(status)
-    //         }
-    //     })
-    // }, [params.pageId])
-
-    useUnmount(() => {
-        setSyncStatus(false)
-    })
-
     return pageLoading ? <div className="w-full h-full" ref={ref}>
         <header className="h-11 w-full flex flex-row justify-between px-1 border-b">
             <div className="flex flex-row items-center gap-2 px-1">
@@ -220,17 +192,11 @@ export const PageEditor: React.FC = () => {
                         </SheetTrigger>
                         <SheetContent side="right" className="w-[280px] p-0">
                             <SheetTitle className="sr-only">Table of Contents</SheetTitle>
-                            <div id="mobile-toc-container" className="h-full" />
                         </SheetContent>
                     </Sheet>
                 )}
                 <Button variant="ghost" size="icon">
                     <MessageSquareText className="h-5 w-5" />
-                </Button>
-                <Button variant="ghost" size="icon">
-                    {
-                        fullScreen ? <Minimize2 className="h-5 w-5" onClick={toggleFullscreen} /> : <FullscreenIcon className="h-5 w-5" onClick={toggleFullscreen} />
-                    }
                 </Button>
                 <DropdownMenu>
                     <DropdownMenuTrigger><Button variant="ghost" size="icon"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
@@ -375,18 +341,19 @@ export const PageEditor: React.FC = () => {
                 </DropdownMenu>
             </div>
         </header>
-        <main className=" w-full flex flex-row justify-center">
+        <main className="w-full flex flex-row justify-center">
             {
                 page && <CollaborationEditor
                     pageInfo={page}
                     ref={editor}
                     // provider={provider}
-                    className={isMobile ? "h-[calc(100vh-100px)] overflow-auto" : "h-[calc(100vh-80px)] overflow-auto"}
+                    className={isMobile ? "h-[calc(100vh-110px)] overflow-auto" : "h-[calc(100vh-80px)] overflow-auto"}
                     id={params.pageId as string}
                     user={userInfo}
                     token={params.pageId as string}
                     toc={!isMobile}
                     withTitle={true}
+                    width={isMobile ? "w-full" : "w-[calc(100vw-350px)]"}
                     content={page.content ? JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">")) : undefined}
                 />
             }

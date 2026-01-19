@@ -1,10 +1,17 @@
 import styled from "styled-components";
 
 export const StyledEditor = styled.div.attrs({
-  className: 'prose dark:prose-invert prose-img:m-0 max-w-none px-[40px] h-full '
+  className: 'prose dark:prose-invert prose-img:m-0 max-w-none h-full '
 })`
   box-sizing: border-box;
   width: 100%;
+  padding-left: 40px;
+  padding-right: 40px;
+  
+  @media (max-width: 768px) {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 
   *,
   *::before,

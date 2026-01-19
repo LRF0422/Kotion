@@ -1,0 +1,42 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#18181B"/>
+  
+  <!-- Abstract book/knowledge symbol -->
+  <g transform="translate(96, 96)">
+    <!-- Left page -->
+    <path d="M40 60C40 40 56 24 76 24H156C168 24 160 32 160 44V276C160 288 168 296 156 296H76C56 296 40 280 40 260V60Z" fill="url(#page1)"/>
+    
+    <!-- Right page -->
+    <path d="M280 60C280 40 264 24 244 24H164C152 24 160 32 160 44V276C160 288 152 296 164 296H244C264 296 280 280 280 260V60Z" fill="url(#page2)"/>
+    
+    <!-- Center spine glow -->
+    <rect x="156" y="24" width="8" height="272" fill="url(#spine)" rx="4"/>
+    
+    <!-- K symbol on left -->
+    <path d="M72 80V200H92V152L132 200H160L112 140L156 80H128L92 128V80H72Z" fill="#18181B" fill-opacity="0.8"/>
+    
+    <!-- N symbol on right -->
+    <path d="M180 80V200H200V120L244 200H268V80H248V160L204 80H180Z" fill="#18181B" fill-opacity="0.8"/>
+  </g>
+  
+  <!-- Decorative dots -->
+  <circle cx="420" cy="92" r="6" fill="#6366F1"/>
+  <circle cx="440" cy="112" r="4" fill="#8B5CF6"/>
+  <circle cx="92" cy="420" r="8" fill="#3B82F6"/>
+  
+  <defs>
+    <linearGradient id="page1" x1="40" y1="24" x2="160" y2="296" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E0E7FF"/>
+      <stop offset="1" stop-color="#C7D2FE"/>
+    </linearGradient>
+    <linearGradient id="page2" x1="280" y1="24" x2="160" y2="296" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EDE9FE"/>
+      <stop offset="1" stop-color="#DDD6FE"/>
+    </linearGradient>
+    <linearGradient id="spine" x1="160" y1="24" x2="160" y2="296" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#6366F1"/>
+    </linearGradient>
+  </defs>
+</svg>

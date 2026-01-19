@@ -145,9 +145,9 @@ export const EditorMenu: React.FC<{
                 </ReactBubble>
             )}
             {/* Floating UI components (rendered outside of toolbar) */}
-            {floatingUI.map((FloatingComponent, index) => (
+            {/* {floatingUI.map((FloatingComponent, index) => (
                 <FloatingComponent key={`floating-ui-${index}`} editor={editor} />
-            ))}
+            ))} */}
         </>
     );
 };
