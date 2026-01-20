@@ -2,6 +2,20 @@
 export const resources = {
     zh: {
         translation: {
+            "errorPage": {
+                "title": "哎呀！出错了",
+                "subtitle": "我们遇到了一个意外错误",
+                "errorDetails": "错误详情",
+                "unknownError": "发生未知错误",
+                "showDetails": "显示技术详情",
+                "hideDetails": "隐藏技术详情",
+                "backToHome": "返回首页",
+                "reloadPage": "重新加载页面",
+                "helpTitle": "如果问题持续存在，请尝试：",
+                "helpClearCache": "清除浏览器缓存和Cookie",
+                "helpCheckConnection": "检查您的网络连接",
+                "helpContactSupport": "如果问题仍然存在，请联系支持"
+            },
             "marketplace": {
                 "create-your-own-plugin": "创建你自己的插件",
                 "get-started": "马上开始",
@@ -230,6 +244,20 @@ export const resources = {
     },
     en: {
         translation: {
+            "errorPage": {
+                "title": "Oops! Something went wrong",
+                "subtitle": "We encountered an unexpected error",
+                "errorDetails": "Error Details",
+                "unknownError": "Unknown error occurred",
+                "showDetails": "Show technical details",
+                "hideDetails": "Hide technical details",
+                "backToHome": "Back to Home",
+                "reloadPage": "Reload Page",
+                "helpTitle": "If the problem persists, please try:",
+                "helpClearCache": "Clear your browser cache and cookies",
+                "helpCheckConnection": "Check your internet connection",
+                "helpContactSupport": "Contact support if the issue continues"
+            },
             "marketplace": {
                 "create-your-own-plugin": "Build your own plugin",
                 "get-started": "Get Started",

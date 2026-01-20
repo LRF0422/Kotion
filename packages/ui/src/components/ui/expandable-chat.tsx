@@ -22,8 +22,8 @@ const chatConfig = {
     "bottom-left": "bottom-5 left-5",
   },
   chatPositions: {
-    "bottom-right": "bottom-[calc(100%+10px)] right-0 ",
-    "bottom-left": "bottom-[calc(100%+10px)] left-0",
+    "bottom-right": "sm:bottom-[calc(100%+10px)] sm:right-0 sm:top-auto sm:left-auto",
+    "bottom-left": "sm:bottom-[calc(100%+10px)] sm:left-0 sm:top-auto sm:right-auto",
   },
   states: {
     open: "pointer-events-auto opacity-100 visible scale-100 translate-y-0",

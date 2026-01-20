@@ -92,7 +92,7 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
     },
 
     searchInDocument: {
-        description: '在文档中搜索指定文本或正则表达式，返回精确的字符位置(from/to)可直接用于选择和替换',
+        description: '在文档中搜索指定文本，返回每个字符的精确位置可直接用于选择和替换',
         inputSchema: z.object({
             query: z.string().describe("搜索文本"),
             caseSensitive: z.boolean().optional().describe("是否区分大小写"),
@@ -107,6 +107,7 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
                 from: number
                 to: number
                 text: string
+                characters: Array<{ char: string; pos: number }>
                 context: string
                 blockType: string
                 blockPos: number
@@ -124,6 +125,7 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
                 }
 
                 const nodeText = caseSensitive ? node.textContent : node.textContent.toLowerCase()
+                const originalText = node.textContent
                 let searchIndex = 0
 
                 // Find all matches within this text block
@@ -135,13 +137,23 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
                     const from = pos + 1 + index
                     const to = from + query.length
 
+                    // Build character-level position array
+                    const characters: Array<{ char: string; pos: number }> = []
+                    for (let i = 0; i < query.length; i++) {
+                        characters.push({
+                            char: originalText[index + i],
+                            pos: from + i
+                        })
+                    }
+
                     const contextStart = Math.max(0, index - 50)
                     const contextEnd = Math.min(node.textContent.length, index + query.length + 50)
 
                     results.push({
                         from,
                         to,
-                        text: node.textContent.substring(index, index + query.length),
+                        text: originalText.substring(index, index + query.length),
+                        characters,
                         context: node.textContent.substring(contextStart, contextEnd),
                         blockType: node.type.name,
                         blockPos: pos
@@ -158,7 +170,7 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
                 results,
                 totalFound: results.length,
                 hasMore: results.length >= limit,
-                tip: 'Use from/to directly with setTextSelection({ from, to }) for precise selection'
+                tip: 'Use from/to for range selection, or characters[i].pos for specific character position'
             }
         }
     },

@@ -294,10 +294,33 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
     return (
         <TooltipProvider>
             <ExpandableChat
-                size="md"
+                size="sm"
                 icon={
                     <div className="relative">
-                        <Sparkles className="h-6 w-6" />
+                        <Sparkles className={`h-6 w-6 ${isLoading ? 'animate-pulse' : ''}`} />
+                        {/* Loading indicator ring when AI is generating */}
+                        {isLoading && (
+                            <>
+                                {/* Pulsing ring animation */}
+                                <span className="absolute inset-0 -m-1 rounded-full border-2 border-primary-foreground/30 animate-ping" />
+                                {/* Spinning arc indicator */}
+                                <span className="absolute -inset-1">
+                                    <svg className="h-8 w-8 animate-spin" viewBox="0 0 32 32">
+                                        <circle
+                                            cx="16"
+                                            cy="16"
+                                            r="14"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeDasharray="60 40"
+                                            className="opacity-75"
+                                        />
+                                    </svg>
+                                </span>
+                            </>
+                        )}
                     </div>
                 }
             >

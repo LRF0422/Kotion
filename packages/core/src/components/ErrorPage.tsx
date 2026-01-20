@@ -2,6 +2,7 @@ import { Button, Alert, AlertTitle, AlertDescription } from "@kn/ui";
 import { useNavigator } from "../hooks/use-navigator";
 import React, { useState, useEffect } from "react";
 import { useRouteError } from "react-router-dom";
+import { useTranslation } from "@kn/common";
 
 interface ErrorPageProps {
     error?: Error;
@@ -13,6 +14,7 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({ error: propsError, resetEr
     const routeError = useRouteError() as Error | null;
     const error = propsError || routeError;
     const [showDetails, setShowDetails] = useState(false);
+    const { t } = useTranslation();
 
     useEffect(() => {
         // Log error for debugging
@@ -60,19 +62,19 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({ error: propsError, resetEr
                 {/* Error Title */}
                 <div className="text-center space-y-2">
                     <h1 className="text-3xl font-bold text-foreground">
-                        Oops! Something went wrong
+                        {t("errorPage.title")}
                     </h1>
                     <p className="text-muted-foreground text-lg">
-                        We encountered an unexpected error
+                        {t("errorPage.subtitle")}
                     </p>
                 </div>
 
                 {/* Error Alert */}
                 {error && (
                     <Alert variant="destructive" className="w-full">
-                        <AlertTitle>Error Details</AlertTitle>
+                        <AlertTitle>{t("errorPage.errorDetails")}</AlertTitle>
                         <AlertDescription className="space-y-2">
-                            <p className="font-mono text-sm">{error.message || "Unknown error occurred"}</p>
+                            <p className="font-mono text-sm">{error.message || t("errorPage.unknownError")}</p>
                             {error.stack && (
                                 <div>
                                     <Button
@@ -81,7 +83,7 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({ error: propsError, resetEr
                                         onClick={() => setShowDetails(!showDetails)}
                                         className="px-0 h-auto font-normal text-xs hover:bg-transparent"
                                     >
-                                        {showDetails ? "Hide" : "Show"} technical details
+                                        {showDetails ? t("errorPage.hideDetails") : t("errorPage.showDetails")}
                                     </Button>
                                     {showDetails && (
                                         <pre className="mt-2 p-3 bg-background/50 rounded text-xs overflow-auto max-h-40 border">
@@ -114,7 +116,7 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({ error: propsError, resetEr
                                 d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
                             />
                         </svg>
-                        Back to Home
+                        {t("errorPage.backToHome")}
                     </Button>
                     <Button
                         size="lg"
@@ -135,17 +137,17 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({ error: propsError, resetEr
                                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                             />
                         </svg>
-                        Reload Page
+                        {t("errorPage.reloadPage")}
                     </Button>
                 </div>
 
                 {/* Help Text */}
                 <div className="text-center text-sm text-muted-foreground space-y-1">
-                    <p>If the problem persists, please try:</p>
+                    <p>{t("errorPage.helpTitle")}</p>
                     <ul className="list-disc list-inside space-y-1">
-                        <li>Clear your browser cache and cookies</li>
-                        <li>Check your internet connection</li>
-                        <li>Contact support if the issue continues</li>
+                        <li>{t("errorPage.helpClearCache")}</li>
+                        <li>{t("errorPage.helpCheckConnection")}</li>
+                        <li>{t("errorPage.helpContactSupport")}</li>
                     </ul>
                 </div>
             </div>
