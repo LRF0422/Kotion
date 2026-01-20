@@ -45,5 +45,67 @@ export const APIS = {
     UPDATE_PLUGIN: {
         url: '/knowledge-wiki/plugin/update',
         method: 'POST'
+    } as API,
+
+    // ==================== Instant Message APIs ====================
+    /** Send a message */
+    IM_SEND_MESSAGE: {
+        url: '/instant-message/send',
+        method: 'POST'
+    } as API,
+    /** Get conversation messages */
+    IM_GET_CONVERSATION: {
+        url: '/instant-message/conversation/:userId',
+        method: 'GET'
+    } as API,
+    /** Get all conversations list */
+    IM_GET_CONVERSATIONS: {
+        url: '/instant-message/conversations',
+        method: 'GET'
+    } as API,
+    /** Get unread message count */
+    IM_GET_UNREAD_COUNT: {
+        url: '/instant-message/unread-count',
+        method: 'GET'
+    } as API,
+    /** Get unread messages list */
+    IM_GET_UNREAD_MESSAGES: {
+        url: '/instant-message/unread',
+        method: 'GET'
+    } as API,
+    /** Mark messages as read */
+    IM_MARK_READ: {
+        url: '/instant-message/read',
+        method: 'POST'
+    } as API,
+    /** Mark all messages as read */
+    IM_MARK_ALL_READ: {
+        url: '/instant-message/read-all',
+        method: 'POST'
+    } as API,
+    /** Delete a message */
+    IM_DELETE_MESSAGE: {
+        url: '/instant-message/:messageId',
+        method: 'DELETE'
+    } as API,
+    /** Clear conversation history */
+    IM_CLEAR_CONVERSATION: {
+        url: '/instant-message/conversation/:userId',
+        method: 'DELETE'
+    } as API,
+    /** Get online users list */
+    IM_GET_ONLINE_USERS: {
+        url: '/instant-message/online-users',
+        method: 'GET'
+    } as API,
+    /** Check if user is online */
+    IM_CHECK_USER_ONLINE: {
+        url: '/instant-message/online/:userId',
+        method: 'GET'
+    } as API,
+    /** Get online user count */
+    IM_GET_ONLINE_COUNT: {
+        url: '/instant-message/online-count',
+        method: 'GET'
     } as API
 }

@@ -14,6 +14,58 @@ import { validateRange } from "../utils/document-utils"
  * Create document insertion tools
  */
 export const createInsertTools = (editor: Editor): ToolsRecord => ({
+    updateTitle: {
+        description: '更新文档标题。文档标题是第一个块，使用此工具来修改标题而不是插入新标题',
+        inputSchema: z.object({
+            newTitle: z.string().describe("新的标题文本")
+        }),
+        execute: async ({ newTitle }: { newTitle: string }) => {
+            if (!newTitle || newTitle.trim().length === 0) {
+                return { error: '标题不能为空' }
+            }
+
+            try {
+                const doc = editor.state.doc
+                // Title node is always the first child in the document
+                const titleNode = doc.firstChild
+
+                if (!titleNode || titleNode.type.name !== 'title') {
+                    return { error: '未找到文档标题节点' }
+                }
+
+                // The title node contains a heading, we need to replace the heading's content
+                const headingNode = titleNode.firstChild
+                if (!headingNode) {
+                    return { error: '标题节点结构异常' }
+                }
+
+                // Calculate positions: title starts at pos 0, heading starts at pos 1
+                // The text content starts at pos 2 (inside the heading)
+                const contentStart = 2 // 0 (doc) + 1 (title) + 1 (heading)
+                const contentEnd = contentStart + headingNode.textContent.length
+
+                const success = editor.chain()
+                    .focus()
+                    .setTextSelection({ from: contentStart, to: contentEnd })
+                    .insertContent(newTitle)
+                    .run()
+
+                if (!success) {
+                    return { error: '更新标题失败' }
+                }
+
+                return {
+                    success: true,
+                    previousTitle: headingNode.textContent,
+                    newTitle,
+                    message: `标题已从 "${headingNode.textContent}" 更新为 "${newTitle}"`
+                }
+            } catch (error) {
+                return { error: `更新标题失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
+    },
+
     write: {
         description: '插入文本到文档。可以指定块索引和位置',
         inputSchema: z.object({

@@ -6,11 +6,15 @@ import {
 } from "@kn/ui";
 import {
     Inbox, Bell, Users, CheckCheck, Trash2,
-    Clock, MessageCircle, X
+    Clock, MessageCircle, X, Loader2, WifiOff
 } from "@kn/icon";
 import { useTranslation } from "@kn/common";
+import { useInstantMessage, ApiMessage } from "../../hooks/use-instant-message";
 
-// Message type definitions
+// Re-export types for external use
+export type { ApiMessage } from "../../hooks/use-instant-message";
+
+// Message type definitions (for UI display)
 export interface Message {
     id: string;
     type: 'system' | 'collaboration' | 'mention';
@@ -27,13 +31,42 @@ export interface Message {
 }
 
 export interface MessageBoxProps {
+    /** Custom messages (if not using WebSocket) */
     messages?: Message[];
+    /** Called when marking a message as read */
     onMarkAsRead?: (id: string) => void;
+    /** Called when marking all messages as read */
     onMarkAllAsRead?: () => void;
+    /** Called when deleting a message */
     onDelete?: (id: string) => void;
+    /** Called when clicking a message */
     onMessageClick?: (message: Message) => void;
+    /** Additional class names */
     className?: string;
+    /** Use WebSocket connection for real-time messages */
+    useWebSocket?: boolean;
 }
+
+/**
+ * Convert API message to UI Message format
+ */
+const apiMessageToUiMessage = (apiMsg: ApiMessage): Message => {
+    // Determine message type based on content or other logic
+    // For now, treat all as 'collaboration' type since it's instant messaging
+    const type: Message['type'] = 'collaboration';
+
+    return {
+        id: String(apiMsg.id),
+        type,
+        title: apiMsg.senderName || 'Unknown',
+        content: apiMsg.content,
+        timestamp: new Date(apiMsg.sentTime),
+        read: apiMsg.status === 'READ',
+        sender: {
+            name: apiMsg.senderName || 'Unknown',
+        }
+    };
+};
 
 // Empty state component
 const EmptyState = memo<{ icon: React.ReactNode; title: string; description?: string }>(
@@ -155,16 +188,36 @@ MessageItem.displayName = 'MessageItem';
 
 // Main MessageBox component
 export const MessageBox: React.FC<MessageBoxProps> = ({
-    messages = [],
-    onMarkAsRead,
-    onMarkAllAsRead,
+    messages: externalMessages,
+    onMarkAsRead: externalMarkAsRead,
+    onMarkAllAsRead: externalMarkAllAsRead,
     onDelete,
     onMessageClick,
-    className
+    className,
+    useWebSocket = true
 }) => {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'all' | 'system' | 'collaboration'>('all');
+
+    // WebSocket connection
+    const {
+        messages: wsMessages,
+        unreadCount: wsUnreadCount,
+        isConnected,
+        isConnecting,
+        markAsRead: wsMarkAsRead,
+        markAllAsRead: wsMarkAllAsRead
+    } = useInstantMessage({ autoConnect: useWebSocket });
+
+    // Convert WebSocket messages to UI format
+    const convertedWsMessages = useMemo(() =>
+        wsMessages.map(apiMessageToUiMessage),
+        [wsMessages]
+    );
+
+    // Use WebSocket messages or external messages
+    const messages = useWebSocket ? convertedWsMessages : (externalMessages || []);
 
     // Filter messages by tab
     const filteredMessages = useMemo(() => {
@@ -173,16 +226,32 @@ export const MessageBox: React.FC<MessageBoxProps> = ({
     }, [messages, activeTab]);
 
     // Count unread messages
-    const unreadCount = useMemo(() => messages.filter(m => !m.read).length, [messages]);
+    const unreadCount = useWebSocket ? wsUnreadCount : messages.filter(m => !m.read).length;
     const systemUnread = useMemo(() => messages.filter(m => m.type === 'system' && !m.read).length, [messages]);
     const collabUnread = useMemo(() => messages.filter(m => m.type === 'collaboration' && !m.read).length, [messages]);
 
+    // Handle mark as read
+    const handleMarkAsRead = useCallback((id: string) => {
+        if (useWebSocket) {
+            wsMarkAsRead(Number(id));
+        }
+        externalMarkAsRead?.(id);
+    }, [useWebSocket, wsMarkAsRead, externalMarkAsRead]);
+
+    // Handle mark all as read
+    const handleMarkAllAsRead = useCallback(() => {
+        if (useWebSocket) {
+            wsMarkAllAsRead();
+        }
+        externalMarkAllAsRead?.();
+    }, [useWebSocket, wsMarkAllAsRead, externalMarkAllAsRead]);
+
     const handleMessageClick = useCallback((message: Message) => {
-        if (!message.read && onMarkAsRead) {
-            onMarkAsRead(message.id);
+        if (!message.read) {
+            handleMarkAsRead(message.id);
         }
         onMessageClick?.(message);
-    }, [onMarkAsRead, onMessageClick]);
+    }, [handleMarkAsRead, onMessageClick]);
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -217,7 +286,16 @@ export const MessageBox: React.FC<MessageBoxProps> = ({
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b">
                     <div>
-                        <h3 className="font-medium text-sm">{t('messageBox.title')}</h3>
+                        <h3 className="font-medium text-sm flex items-center gap-2">
+                            {t('messageBox.title')}
+                            {useWebSocket && (
+                                isConnecting ? (
+                                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                                ) : !isConnected ? (
+                                    <WifiOff className="h-3 w-3 text-destructive" />
+                                ) : null
+                            )}
+                        </h3>
                         {unreadCount > 0 && (
                             <p className="text-xs text-muted-foreground">
                                 {t('messageBox.unreadCount').replace('{{n}}', String(unreadCount))}
@@ -225,12 +303,12 @@ export const MessageBox: React.FC<MessageBoxProps> = ({
                         )}
                     </div>
                     <div className="flex items-center gap-1">
-                        {unreadCount > 0 && onMarkAllAsRead && (
+                        {unreadCount > 0 && (
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 className="h-7 px-2 text-xs"
-                                onClick={onMarkAllAsRead}
+                                onClick={handleMarkAllAsRead}
                             >
                                 <CheckCheck className="h-3.5 w-3.5 mr-1" />
                                 {t('messageBox.actions.markAllRead')}
@@ -293,7 +371,7 @@ export const MessageBox: React.FC<MessageBoxProps> = ({
                                         <MessageItem
                                             key={message.id}
                                             message={message}
-                                            onMarkAsRead={onMarkAsRead}
+                                            onMarkAsRead={handleMarkAsRead}
                                             onDelete={onDelete}
                                             onClick={handleMessageClick}
                                             t={t}
@@ -315,7 +393,7 @@ export const MessageBox: React.FC<MessageBoxProps> = ({
                                         <MessageItem
                                             key={message.id}
                                             message={message}
-                                            onMarkAsRead={onMarkAsRead}
+                                            onMarkAsRead={handleMarkAsRead}
                                             onDelete={onDelete}
                                             onClick={handleMessageClick}
                                             t={t}
@@ -337,7 +415,7 @@ export const MessageBox: React.FC<MessageBoxProps> = ({
                                         <MessageItem
                                             key={message.id}
                                             message={message}
-                                            onMarkAsRead={onMarkAsRead}
+                                            onMarkAsRead={handleMarkAsRead}
                                             onDelete={onDelete}
                                             onClick={handleMessageClick}
                                             t={t}

@@ -12,11 +12,11 @@ import { fileManager } from '@kn/file-manager'
 // import { drawio } from "@kn/plugin-drawio"
 // import { drawioV2 } from "@kn/plugin-drawio-v2"
 // import { blockReference } from "@kn/plugin-block-reference"
-// import { ai } from "@kn/plugin-ai"
+import { ai } from "@kn/plugin-ai"
 // import { bitable } from "@kn/plugin-bitable"
 // import { weaverOA } from "@kn/plugin-weaver-oa"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[DefaultPluginInstance, fileManager]} />
+  <App plugins={[DefaultPluginInstance, fileManager, ai]} />
 )

@@ -7,7 +7,7 @@ import { RadioGroup, RadioGroupItem } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { Switch } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
-import { CollaborationEditor, EditorView, exportToPDF, printEditorContent } from "@kn/editor";
+import { CollaborationEditor, EditorView, exportToPDF, printEditorContent, useAutoSave, AutoSaveStatus } from "@kn/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
 import { useApi, useService } from "@kn/core";
 import { useNavigator } from "@kn/core";
@@ -18,12 +18,32 @@ import {
     ALargeSmall, ArrowLeft, BookTemplate, CircleArrowUp,
     Contact2, Download, FileIcon,
     FullscreenIcon, Link, Loader, LoaderCircle, LockIcon, MessageSquareText,
-    Minimize2, MoreHorizontal, MoveDownRight, Plus, Save, Trash2, Upload, List
+    Minimize2, MoreHorizontal, MoveDownRight, Plus, Save, Trash2, Upload, List,
+    Check, CloudOff
 } from "@kn/icon";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "@kn/common";
 import { useParams } from "@kn/common";
 import { toast } from "@kn/ui";
+
+// Status display configuration for auto-save
+const getStatusDisplay = (autoSaveStatus: AutoSaveStatus, isManualSaving: boolean) => {
+    // Manual saving takes priority
+    if (isManualSaving || autoSaveStatus === 'saving') {
+        return { text: 'Saving...', icon: <LoaderCircle className="h-3 w-3 animate-spin" />, variant: 'secondary' as const };
+    }
+    switch (autoSaveStatus) {
+        case 'unsaved':
+            return { text: 'Unsaved', icon: <CloudOff className="h-3 w-3" />, variant: 'secondary' as const };
+        case 'saved':
+            return { text: 'Saved', icon: <Check className="h-3 w-3" />, variant: 'secondary' as const };
+        case 'error':
+            return { text: 'Save failed', icon: <CloudOff className="h-3 w-3" />, variant: 'destructive' as const };
+        case 'idle':
+        default:
+            return { text: 'Ready', icon: null, variant: 'outline' as const };
+    }
+};
 
 export const PageEditor: React.FC = () => {
     const isMobile = useIsMobile()
@@ -35,15 +55,13 @@ export const PageEditor: React.FC = () => {
     const [pageLoading, { toggle: toggleLoading }] = useToggle(false)
     const [synceStatus, setSyncStatus] = useState(false)
     const lastAwarenessRef = useRef<any[]>([])
-    const [status, setStatus] = useState<any>({
-        status: 'Ready'
-    })
     const [users, setUsers] = useState<any[]>()
     const editor = useRef<Editor>(null)
     const navigator = useNavigator()
     const ref = useRef<any>()
     const [fullScreen, { toggleFullscreen }] = useFullscreen(ref)
     const spaceService = useService("spaceService")
+    const [isManualSaving, setIsManualSaving] = useState(false)
 
     useEffect(() => {
         toggleLoading()
@@ -57,19 +75,17 @@ export const PageEditor: React.FC = () => {
         }
     }, [params.pageId])
 
-    const getTitleContent = (value: any) => {
+    const getTitleContent = useCallback((value: any) => {
         if (value) {
             const content = value.content[0]
-            console.log('content', content);
-
-            if (content.content) {
-                return content.content[0].content[0].text
+            if (content?.content) {
+                return content.content[0]?.content?.[0]?.text
             }
         }
         return null
-    }
+    }, [])
 
-    const getIcon = (value: any) => {
+    const getIcon = useCallback((value: any) => {
         if (value) {
             const content = value.content[0]
             if (content) {
@@ -77,54 +93,84 @@ export const PageEditor: React.FC = () => {
             }
         }
         return null
-    }
+    }, [])
 
-    const handleSave = (publish: boolean = false) => {
-        const preStatus = status;
-        setStatus({
-            status: "Saving"
-        })
-        toggle()
-        if (editor.current) {
-            const pageContent = editor.current.getJSON()
+    // Auto-save callback - performs the actual save operation
+    const handleAutoSave = useCallback(async (content: any) => {
+        if (!page || !params.pageId) return;
+
+        const title = getTitleContent(content);
+        const icon = getIcon(content);
+
+        const pageData = {
+            ...page,
+            title,
+            icon,
+            id: params.pageId,
+            content: JSON.stringify(content),
+            publish: false
+        };
+
+        await useApi(APIS.CREATE_OR_SAVE_PAGE, undefined, pageData);
+        event.emit(ON_PAGE_REFRESH);
+    }, [page, params.pageId, getTitleContent, getIcon])
+
+    // Use auto-save hook
+    const { status: autoSaveStatus, isDirty, saveNow, markAsSaved } = useAutoSave({
+        editor: editor.current,
+        debounceDelay: 3000, // Auto-save after 3 seconds of inactivity
+        onSave: handleAutoSave,
+        enabled: !!page && !!params.pageId,
+    });
+
+    // Manual save handler (for Ctrl+S and save button)
+    const handleSave = useCallback(async (publish: boolean = false) => {
+        if (!editor.current || !page) return;
+
+        setIsManualSaving(true);
+        toggle();
+
+        try {
+            const pageContent = editor.current.getJSON();
             const title = getTitleContent(pageContent);
             const icon = getIcon(pageContent);
 
-            page.title = title
-            page.icon = icon
-            page.id = params.pageId
-            page.content = JSON.stringify(pageContent)
+            const pageData = {
+                ...page,
+                title,
+                icon,
+                id: params.pageId,
+                content: JSON.stringify(pageContent),
+                publish
+            };
 
-            console.log('content', pageContent);
-            console.log('page', page.content);
-            page.publish = publish
+            await useApi(APIS.CREATE_OR_SAVE_PAGE, undefined, pageData);
+
             if (publish) {
-                useApi(APIS.CREATE_OR_SAVE_PAGE, undefined, page).then((res) => {
-                    navigator.go({
-                        to: `/space-detail/${params.id}/page/${params.pageId}`
-                    })
-                    toast.success("发布成功")
-                    event.emit(ON_PAGE_REFRESH)
-                }).finally(() => {
-                    toggle()
-                    setStatus(preStatus)
-                })
-            } else {
-                useApi(APIS.CREATE_OR_SAVE_PAGE, undefined, page).then((res) => {
-                    event.emit(ON_PAGE_REFRESH)
-                }).finally(() => {
-                    toggle()
-                    setStatus(preStatus)
-                })
+                navigator.go({
+                    to: `/space-detail/${params.id}/page/${params.pageId}`
+                });
+                toast.success("发布成功");
             }
 
+            event.emit(ON_PAGE_REFRESH);
+            markAsSaved(); // Mark as saved to reset auto-save state
+        } catch (error) {
+            console.error('Save failed:', error);
+            toast.error('保存失败');
+        } finally {
+            toggle();
+            setIsManualSaving(false);
         }
-    }
+    }, [editor, page, params.pageId, params.id, getTitleContent, getIcon, toggle, navigator, markAsSaved])
 
     useKeyPress(["ctrl.s"], (e) => {
-        e.preventDefault()
-        handleSave()
+        e.preventDefault();
+        handleSave();
     })
+
+    // Get current status display
+    const statusDisplay = getStatusDisplay(autoSaveStatus, isManualSaving)
 
 
     const handleSaveAsTemplate = () => {
@@ -174,12 +220,20 @@ export const PageEditor: React.FC = () => {
                 <span className="truncate">{page.title}</span>
             </div>
             <div className="flex flex-row items-center gap-1 px-1 flex-shrink-0">
-                <Badge>
+                <Badge variant={statusDisplay.variant}>
                     <div className="flex flex-row items-center gap-1">
-                        {status?.status} {loading && <LoaderCircle className="h-3 w-3 animate-spin" />}
+                        {statusDisplay.icon}
+                        {statusDisplay.text}
                     </div>
                 </Badge>
-                <Button variant="ghost" size="icon" onClick={() => handleSave()}><Save className="h-5 w-5" /></Button>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleSave()}
+                    disabled={loading || isManualSaving}
+                >
+                    <Save className="h-5 w-5" />
+                </Button>
                 <Button variant="ghost" size="icon" onClick={() => handleSave(true)}><CircleArrowUp className="h-5 w-5" /></Button>
                 <Separator orientation="vertical" />
                 {/* Mobile Toc toggle button */}

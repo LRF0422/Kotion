@@ -26,7 +26,10 @@ export const AIExtension: ExtensionWrapper = {
     extendsion: [Ai, AiImage, TextLoadingDecorationExtension, LoadingMark],
     flotMenuConfig: [AiStaticMenu],
     // Chat component is a floating UI, render it separately via floatingUI
-    floatingUI: ExpandableChatDemo,
+    menuConfig: {
+        group: 'block',
+        menu: ExpandableChatDemo
+    },
     slashConfig: [
         {
             divider: true,

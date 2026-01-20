@@ -1,7 +1,7 @@
 import { AppContext } from "@kn/common"
 import { Editor } from "@kn/editor"
 import { stepCountIs, ToolLoopAgent } from "ai"
-import { useContext, useMemo } from "react"
+import { useCallback, useContext, useMemo, useRef } from "react"
 import { deepseek } from "./ai-utils"
 
 // Types
@@ -32,16 +32,30 @@ const AGENT_INSTRUCTIONS = `You are an intelligent document editing assistant. H
 2. **NEVER delete content** without calling askUserChoice first
 3. **Use search-based tools** (searchText) instead of position-based when possible
 4. **Confirm with user** when the request is ambiguous
+5. **For title changes, ALWAYS use updateTitle** - never insert a new heading for title updates
+
+# DOCUMENT STRUCTURE
+
+The document has a special structure:
+- The FIRST block (index 0) is always the **document title** (a special "title" node)
+- Regular content blocks start from index 1
+- To modify the title, use \`updateTitle\` tool, NOT insert tools
 
 # WORKFLOW
 
 1. Understand the user's intent
 2. Read relevant document sections (getDocumentStructure, searchInDocument)
-3. If destructive action → askUserChoice to confirm
-4. Execute the operation
-5. Verify the result
+3. If modifying title → use updateTitle
+4. If destructive action → askUserChoice to confirm
+5. Execute the operation
+6. Verify the result
 
 # TOOLS REFERENCE
+
+## Title Tool (IMPORTANT)
+| Tool | Use When |
+|------|----------|
+| updateTitle | ALWAYS use this to change/update the document title. Never use insert tools for title changes |
 
 ## Reading Tools
 | Tool | Use When |
@@ -57,7 +71,7 @@ const AGENT_INSTRUCTIONS = `You are an intelligent document editing assistant. H
 | insertAtPosition | Insert at exact position (get pos from search first) |
 | insertNear | Insert relative to found text |
 | replaceContent | Find and replace text |
-| batchInsert | Multiple items at once |
+| batchInsert | Multiple items at once (NOT for title updates) |
 | insertAfterBlock | Insert after a specific block |
 | insertAtEnd | Append to document |
 | write | Insert text in a block |
@@ -83,6 +97,9 @@ const AGENT_INSTRUCTIONS = `You are an intelligent document editing assistant. H
 
 # EXAMPLES
 
+**Update document title:**
+updateTitle({ newTitle: "New Document Title" })
+
 **Insert at specific position (after searching):**
 1. searchInDocument({ query: "target text" }) // returns { pos: 42 }
 2. insertAtPosition({ pos: 42, content: "inserted text", insertMode: "text" })
@@ -90,8 +107,8 @@ const AGENT_INSTRUCTIONS = `You are an intelligent document editing assistant. H
 **Insert near specific text:**
 insertNear({ searchText: "Introduction", text: "New paragraph", position: "after" })
 
-**Batch insert multiple items:**
-batchInsert({ items: [{ content: "Title", type: "heading" }, { content: "Paragraph" }], position: "end" })
+**Batch insert multiple items (NOT for titles):**
+batchInsert({ items: [{ content: "Section", type: "heading" }, { content: "Paragraph" }], position: "end" })
 
 **Replace text:**
 replaceContent({ searchText: "old text", replaceWith: "new text" })
@@ -117,7 +134,7 @@ const createEditorTools = (
 })
 
 /**
- * Optimized editor agent hook
+ * Optimized editor agent hook with stop functionality
  */
 export const useEditorAgentOptimized = (
     editor: Editor,
@@ -125,6 +142,9 @@ export const useEditorAgentOptimized = (
     onUserChoiceRequest?: OnUserChoiceRequest
 ) => {
     const { pluginManager } = useContext(AppContext)
+
+    // AbortController ref for stopping generation
+    const abortControllerRef = useRef<AbortController | null>(null)
 
     // Memoize plugin tools
     const pluginTools = useMemo(() => {
@@ -146,5 +166,39 @@ export const useEditorAgentOptimized = (
         tools: wrappedTools,
     }), [wrappedTools])
 
-    return agent
+    // Stream with abort support
+    const stream = useCallback(async (options: { prompt: string }) => {
+        // Abort any previous stream
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort()
+        }
+
+        // Create new AbortController
+        abortControllerRef.current = new AbortController()
+
+        return agent.stream({
+            ...options,
+            abortSignal: abortControllerRef.current.signal
+        })
+    }, [agent])
+
+    // Stop current generation
+    const stop = useCallback(() => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort()
+            abortControllerRef.current = null
+        }
+    }, [])
+
+    // Check if currently generating
+    const isGenerating = useCallback(() => {
+        return abortControllerRef.current !== null && !abortControllerRef.current.signal.aborted
+    }, [])
+
+    return {
+        agent,
+        stream,
+        stop,
+        isGenerating
+    }
 }

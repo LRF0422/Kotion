@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, FormEvent, useCallback, useMemo, useRef, useEffect } from "react"
-import { Bot, Paperclip, Mic, CornerDownLeft, ChevronDown, ChevronUp, Code2, CheckCircle2, Loader2, Sparkles, Send, Terminal, XCircle, Trash2, HelpCircle, MessageSquareMore } from "@kn/icon"
+import { Bot, Paperclip, Mic, CornerDownLeft, ChevronDown, ChevronUp, Code2, CheckCircle2, Loader2, Sparkles, Send, Terminal, XCircle, Trash2, HelpCircle, MessageSquareMore, Square } from "@kn/icon"
 import { Button, Streamdown, Badge, Collapsible, CollapsibleContent, CollapsibleTrigger, Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Input } from "@kn/ui"
 import {
     ChatBubble,
@@ -140,7 +140,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         }
     }, [])
 
-    const agent = useEditorAgentOptimized(editor, handleToolExecution, handleUserChoiceRequest)
+    const { stream, stop } = useEditorAgentOptimized(editor, handleToolExecution, handleUserChoiceRequest)
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { usePath } = useUploadFile()
     const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE])
@@ -192,7 +192,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         try {
             let result = ""
 
-            const { textStream } = await agent.stream({
+            const { textStream } = await stream({
                 prompt: input,
             })
 
@@ -212,15 +212,38 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
             setMessages((prev) => [...prev, aiMessage])
             setCurrentMessage(null)
             setCurrentSteps([])  // Clear current steps display
-        } catch (err) {
-            console.error("Error generating AI response:", err)
-            setError("Failed to generate response. Please try again.")
-            setCurrentMessage(null)
-            setCurrentSteps([])
+        } catch (err: any) {
+            // Check if it's an abort error (user stopped generation)
+            if (err?.name === 'AbortError' || err?.message?.includes('abort')) {
+                // Handle stopped generation gracefully
+                const currentContent = currentMessage || ''
+                if (currentContent) {
+                    const aiMessage: Message = {
+                        id: generateMessageId(),
+                        content: currentContent + '\n\n*[Generation stopped by user]*',
+                        sender: "ai",
+                        timestamp: Date.now(),
+                        steps: [...stepsRef.current]
+                    }
+                    setMessages((prev) => [...prev, aiMessage])
+                }
+                setCurrentMessage(null)
+                setCurrentSteps([])
+            } else {
+                console.error("Error generating AI response:", err)
+                setError("Failed to generate response. Please try again.")
+                setCurrentMessage(null)
+                setCurrentSteps([])
+            }
         } finally {
             setIsLoading(false)
         }
-    }, [input, isInputValid, agent, generateMessageId])
+    }, [input, isInputValid, stream, generateMessageId, currentMessage])
+
+    // Handle stop generation
+    const handleStop = useCallback(() => {
+        stop()
+    }, [stop])
 
     const handleAttachFile = useCallback(() => {
         // TODO: Implement file attachment functionality
@@ -607,24 +630,33 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                     <TooltipContent side="top" className="text-xs">Voice input (coming soon)</TooltipContent>
                                 </Tooltip>
                             </div>
-                            <Button
-                                type="submit"
-                                size="sm"
-                                className="h-8 px-3 gap-1.5 rounded-lg"
-                                disabled={!isInputValid}
-                            >
-                                {isLoading ? (
-                                    <>
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        <span className="text-xs">Sending</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Send className="h-3.5 w-3.5" />
-                                        <span className="text-xs">Send</span>
-                                    </>
-                                )}
-                            </Button>
+                            {isLoading ? (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="destructive"
+                                            className="h-8 px-3 gap-1.5 rounded-lg"
+                                            onClick={handleStop}
+                                        >
+                                            <Square className="h-3.5 w-3.5" />
+                                            <span className="text-xs">Stop</span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs">Stop generation</TooltipContent>
+                                </Tooltip>
+                            ) : (
+                                <Button
+                                    type="submit"
+                                    size="sm"
+                                    className="h-8 px-3 gap-1.5 rounded-lg"
+                                    disabled={!isInputValid}
+                                >
+                                    <Send className="h-3.5 w-3.5" />
+                                    <span className="text-xs">Send</span>
+                                </Button>
+                            )}
                         </div>
                     </form>
                 </ExpandableChatFooter>
