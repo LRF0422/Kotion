@@ -138,8 +138,8 @@ export const ColumnView: React.FC<NodeViewProps> = React.memo((props) => {
 
     const wrapperClassName = useMemo(() =>
         cn(
-            "prose-p:m-1 w-full relative group/column p-2",
-            editor.isEditable && "border border-border/40 rounded",
+            "prose-p:m-1 w-full relative group/column",
+            editor.isEditable ? "p-2 border border-border/40 rounded" : "",
             resizeState?.isResizing && "select-none"
         ), [editor.isEditable, resizeState?.isResizing]
     )

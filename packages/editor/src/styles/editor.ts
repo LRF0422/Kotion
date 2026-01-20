@@ -762,13 +762,13 @@ export const StyledEditor = styled.div.attrs({
     cursor: move;
     opacity: 0;
     transition: opacity 0.3s ease-out;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='1' width='3' height='3' rx='1.5' fill='%23111'/%3E%3Crect x='10' y='1' width='3' height='3' rx='1.5' fill='%23111'/%3E%3Crect x='3' y='6' width='3' height='3' rx='1.5' fill='%23111'/%3E%3Crect x='10' y='6' width='3' height='3' rx='1.5' fill='%23111'/%3E%3Crect x='3' y='11' width='3' height='3' rx='1.5' fill='%23111'/%3E%3Crect x='10' y='11' width='3' height='3' rx='1.5' fill='%23111'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='1' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='1' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='3' y='6' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='6' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='3' y='11' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='11' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3C/svg%3E");
     background-size: contain;
     background-position: center 0;
     background-repeat: no-repeat;
 
     &.show {
-      opacity: 0.3;
+      opacity: 0.5;
 
       &:hover {
         opacity: 1;
@@ -778,6 +778,11 @@ export const StyledEditor = styled.div.attrs({
     &.hide {
       opacity: 0;
     }
+  }
+  
+  /* Dark mode drag handle */
+  &.dark [data-drag-handle] {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='1' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='10' y='1' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='3' y='6' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='10' y='6' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='3' y='11' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='10' y='11' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3C/svg%3E");
   }
   /* E Dragable */
 

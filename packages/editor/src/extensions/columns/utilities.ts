@@ -206,3 +206,36 @@ export function gotoCol({
 
   return true;
 }
+
+/**
+ * Create a columns layout from two nodes (for drag-to-columns feature)
+ * @param schema - Editor schema
+ * @param leftContent - Content for the left column (JSON)
+ * @param rightContent - Content for the right column (JSON)
+ * @param position - 'left' | 'right' - which side the dragged block should go
+ */
+export function createColumnsFromNodes(
+  schema: Schema,
+  leftContent: any,
+  rightContent: any
+): Node {
+  const types = getColumnsNodeTypes(schema);
+
+  // Create left column with content
+  const leftCol = types.column.create(
+    { index: 0, type: 'none', cols: 2 },
+    Array.isArray(leftContent)
+      ? leftContent.map(c => Node.fromJSON(schema, c))
+      : [Node.fromJSON(schema, leftContent)]
+  );
+
+  // Create right column with content
+  const rightCol = types.column.create(
+    { index: 1, type: 'none', cols: 2 },
+    Array.isArray(rightContent)
+      ? rightContent.map(c => Node.fromJSON(schema, c))
+      : [Node.fromJSON(schema, rightContent)]
+  );
+
+  return types.columns.create({ cols: 2 }, [leftCol, rightCol]);
+}
