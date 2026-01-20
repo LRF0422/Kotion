@@ -460,7 +460,6 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                     <IconButton
                         icon={<PlusIcon className="h-4 w-4" />}
                         onClick={handleAddDescriptionTab}
-                        title={t('pluginUploader.tabs.addCustom')}
                     />
                 </div>
 

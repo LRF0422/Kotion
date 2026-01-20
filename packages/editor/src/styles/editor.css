@@ -69,3 +69,19 @@
 .dark .theme-adaptive-cell {
   background-color: var(--bg-color-dark) !important;
 }
+
+/* TOC highlight flash animation */
+@keyframes toc-flash {
+  0% {
+    background-color: hsl(var(--primary) / 0.3);
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+.toc-highlight-flash {
+  animation: toc-flash 1s ease-out;
+  border-radius: 4px;
+}

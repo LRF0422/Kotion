@@ -4,6 +4,7 @@ import { Editor } from '@tiptap/core'
 import { TextSelection } from '@tiptap/pm/state'
 import React, { useState, useEffect } from 'react'
 import { List } from '@kn/icon'
+import scrollIntoView from 'scroll-into-view-if-needed'
 
 
 export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number, isActive: boolean }> = ({ item, onItemClick, index, isActive }) => {
@@ -113,19 +114,36 @@ export const ToC: React.FC<{ editor: Editor, className?: string, items: any[] }>
         e.preventDefault()
 
         if (editor) {
-            const element = editor.view.dom.querySelector(`[data-toc-id="${item.id}"]`)
-            const pos = editor.view.posAtDOM(element as Element, 0)
+            const element = editor.view.dom.querySelector(`[data-toc-id="${item.id}"]`) as HTMLElement
+            if (!element) return
 
-            const tr = editor.view.state.tr
-            tr.setSelection(new TextSelection(tr.doc.resolve(pos)))
-                .scrollIntoView()
-            editor.view.dispatch(tr)
-            editor.view.focus()
-
-            window.scrollTo({
-                top: element!.getBoundingClientRect().top + window.scrollY - 100,
+            // Use scroll-into-view-if-needed for smooth scrolling in nested containers
+            scrollIntoView(element, {
                 behavior: 'smooth',
+                scrollMode: 'always',
+                block: 'start',
+                inline: 'nearest'
             })
+
+            // Set selection and add highlight effect after scroll completes
+            setTimeout(() => {
+                const pos = editor.view.posAtDOM(element, 0)
+                const tr = editor.view.state.tr
+                tr.setSelection(new TextSelection(tr.doc.resolve(pos)))
+                editor.view.dispatch(tr)
+                editor.view.focus()
+
+                // Add flash highlight effect using class
+                element.classList.remove('toc-highlight-flash')
+                // Force reflow to restart animation
+                void element.offsetWidth
+                element.classList.add('toc-highlight-flash')
+
+                // Remove class after animation completes
+                setTimeout(() => {
+                    element.classList.remove('toc-highlight-flash')
+                }, 1000)
+            }, 300)
 
             setActiveId(item.id)
         }

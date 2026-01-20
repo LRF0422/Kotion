@@ -1,5 +1,92 @@
 @import "@kn/ui/globals.css";
 
+/* Base highlight styles */
 .highlight {
-    @apply bg-red-600 rounded-sm
+    @apply rounded-sm px-0.5 py-[1px];
+    transition: background-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+/* Default highlight color (yellow) when no color is specified */
+.highlight:not([style*="background-color"]) {
+    @apply bg-yellow-100;
+}
+
+.dark .highlight:not([style*="background-color"]) {
+    background-color: #854d0e !important;
+    color: #fef9c3 !important;
+}
+
+/* Enhanced visual effects */
+.highlight:hover {
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.dark .highlight:hover {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+/* Dark mode color transformations */
+/* Yellow: #fef9c3 -> #854d0e */
+.dark .highlight[style*="background-color: rgb(254, 249, 195)"],
+.dark .highlight[style*="background-color:#fef9c3"] {
+    background-color: #854d0e !important;
+    color: #fef9c3 !important;
+}
+
+/* Green: #dcfce7 -> #166534 */
+.dark .highlight[style*="background-color: rgb(220, 252, 231)"],
+.dark .highlight[style*="background-color:#dcfce7"] {
+    background-color: #166534 !important;
+    color: #dcfce7 !important;
+}
+
+/* Blue: #dbeafe -> #1e40af */
+.dark .highlight[style*="background-color: rgb(219, 234, 254)"],
+.dark .highlight[style*="background-color:#dbeafe"] {
+    background-color: #1e40af !important;
+    color: #dbeafe !important;
+}
+
+/* Pink: #fce7f3 -> #9d174d */
+.dark .highlight[style*="background-color: rgb(252, 231, 243)"],
+.dark .highlight[style*="background-color:#fce7f3"] {
+    background-color: #9d174d !important;
+    color: #fce7f3 !important;
+}
+
+/* Purple: #f3e8ff -> #6b21a8 */
+.dark .highlight[style*="background-color: rgb(243, 232, 255)"],
+.dark .highlight[style*="background-color:#f3e8ff"] {
+    background-color: #6b21a8 !important;
+    color: #f3e8ff !important;
+}
+
+/* Orange: #ffedd5 -> #9a3412 */
+.dark .highlight[style*="background-color: rgb(255, 237, 213)"],
+.dark .highlight[style*="background-color:#ffedd5"] {
+    background-color: #9a3412 !important;
+    color: #ffedd5 !important;
+}
+
+/* Red: #fee2e2 -> #991b1b */
+.dark .highlight[style*="background-color: rgb(254, 226, 226)"],
+.dark .highlight[style*="background-color:#fee2e2"] {
+    background-color: #991b1b !important;
+    color: #fee2e2 !important;
+}
+
+/* Gray: #f3f4f6 -> #374151 */
+.dark .highlight[style*="background-color: rgb(243, 244, 246)"],
+.dark .highlight[style*="background-color:#f3f4f6"] {
+    background-color: #374151 !important;
+    color: #f3f4f6 !important;
+}
+
+/* Selection styling when highlight text is selected */
+.highlight::selection {
+    background-color: rgba(59, 130, 246, 0.3);
+}
+
+.dark .highlight::selection {
+    background-color: rgba(96, 165, 250, 0.3);
 }
