@@ -1,5 +1,5 @@
-import { EraserIcon } from "@kn/icon";
-import { IconButton, cn } from "@kn/ui";
+import { Trash2 } from "@kn/icon";
+import { cn } from "@kn/ui";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper } from "@tiptap/react";
 import React, { useRef, useCallback, useMemo, useState, useEffect } from "react";
 
@@ -137,8 +137,9 @@ export const ColumnView: React.FC<NodeViewProps> = React.memo((props) => {
     }, [resizeState, editor, getPos, node.nodeSize, updateAttributes]);
 
     const wrapperClassName = useMemo(() =>
-        cn("prose-p:m-1 w-full relative p-1 ",
-            editor.isEditable ? "outline rounded-sm" : " h-full",
+        cn(
+            "prose-p:m-1 w-full relative group/column p-2",
+            editor.isEditable && "border border-border/40 rounded",
             resizeState?.isResizing && "select-none"
         ), [editor.isEditable, resizeState?.isResizing]
     )
@@ -147,10 +148,14 @@ export const ColumnView: React.FC<NodeViewProps> = React.memo((props) => {
         ref={ref}
         className={wrapperClassName}
     >
-        {editor.isEditable && <IconButton
-            onClick={handleDelete}
-            className="absolute z-auto top-0 right-0"
-            icon={<EraserIcon className="h-4 w-4" />} />}
+        {editor.isEditable && (
+            <button
+                onClick={handleDelete}
+                className="absolute z-10 top-1 right-1 p-1 rounded opacity-0 group-hover/column:opacity-100 hover:bg-muted text-muted-foreground hover:text-foreground transition-opacity"
+            >
+                <Trash2 className="h-3.5 w-3.5" />
+            </button>
+        )}
         <NodeViewContent className="h-full w-auto" />
         {editor.isEditable && !isLastColumn && (
             <div
