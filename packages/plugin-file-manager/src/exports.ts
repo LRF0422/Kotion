@@ -25,3 +25,6 @@ export { APIS } from './api';
 
 // Export plugin
 export { fileManager } from './index';
+
+// Export tools
+export * from './editor-extensions/folder/tools';

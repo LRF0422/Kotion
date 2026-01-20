@@ -19,6 +19,7 @@ import { createReadTools } from "./tools/read-tools"
 import { createInsertTools } from "./tools/insert-tools"
 import { createDeleteTools } from "./tools/delete-tools"
 import { createMiscTools } from "./tools/misc-tools"
+import { createColumnsTools } from "./tools/columns-tools"
 
 // Utils
 import { wrapToolsWithCallback } from "./utils/tool-wrapper"
@@ -88,6 +89,17 @@ The document has a special structure:
 |------|----------|
 | askUserChoice | Before destructive actions, when multiple options exist |
 
+## Columns/Layout Tools
+| Tool | Use When |
+|------|----------|
+| insertColumns | Create a new multi-column layout (2-6 columns) |
+| getColumnsInfo | Get information about existing column layouts |
+| updateColumnContent | Update content in a specific column |
+| setColumnsLayout | Change column width ratios (equal, left-wide, right-wide, center-wide) |
+| addColumnToLayout | Add a new column to existing layout |
+| deleteColumn | Remove a column from layout (minimum 2 columns required) |
+| deleteColumnsLayout | Delete entire column layout |
+
 ## Other Tools
 | Tool | Use When |
 |------|----------|
@@ -130,7 +142,8 @@ const createEditorTools = (
     ...createMiscTools(editor, onUserChoiceRequest),
     ...createReadTools(editor),
     ...createInsertTools(editor),
-    ...createDeleteTools(editor)
+    ...createDeleteTools(editor),
+    ...createColumnsTools(editor)
 })
 
 /**

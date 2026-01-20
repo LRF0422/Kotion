@@ -69,6 +69,9 @@ export function useAutoSave({
             setLastSavedAt(new Date());
             updateStatus('saved');
 
+            // Update baseline to current content after successful save
+            initialContentRef.current = JSON.stringify(content);
+
             // Reset to idle after showing "saved" status briefly
             setTimeout(() => {
                 if (!pendingSaveRef.current) {
@@ -112,10 +115,15 @@ export function useAutoSave({
         updateStatus('saved');
         cancelDebouncedSave();
 
+        // Update baseline to current content after save
+        if (editor) {
+            initialContentRef.current = JSON.stringify(editor.getJSON());
+        }
+
         setTimeout(() => {
             updateStatus('idle');
         }, 2000);
-    }, [updateStatus, cancelDebouncedSave]);
+    }, [editor, updateStatus, cancelDebouncedSave]);
 
     // Manual save function
     const saveNow = useCallback(async () => {
@@ -151,12 +159,10 @@ export function useAutoSave({
         };
     }, [editor, enabled, markAsDirty, debouncedSave]);
 
-    // Update initial content reference when editor content is set externally
-    useEffect(() => {
-        if (editor) {
-            initialContentRef.current = JSON.stringify(editor.getJSON());
-        }
-    }, [editor?.state.doc]);
+    // Note: We intentionally do NOT reset initialContentRef on doc changes.
+    // This was causing agent-generated content to not trigger auto-save,
+    // because the baseline was being reset after every change.
+    // The initial content is set once in the update listener effect.
 
     // Cleanup on unmount - save if dirty
     useEffect(() => {
