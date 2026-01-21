@@ -47,6 +47,15 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const [fieldConfigOpen, setFieldConfigOpen] = useState(false);
     const [excelImportOpen, setExcelImportOpen] = useState(false);
 
+    // Synchronize local state with node attributes when they change
+    useEffect(() => {
+        setData(attrs.data || []);
+    }, [attrs.data]);
+
+    useEffect(() => {
+        setCurrentViewId(attrs.currentView);
+    }, [attrs.currentView]);
+
     // 视图标签页滚动状态
     const viewTabsRef = useRef<HTMLDivElement>(null);
     const [canScrollLeft, setCanScrollLeft] = useState(false);
