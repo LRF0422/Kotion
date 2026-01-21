@@ -23,6 +23,10 @@ module.exports = {
       // Match common dynamic utility patterns
       pattern: /^(w|h|max-w|max-h|min-w|min-h)-(\d+|\[.+\]|full|screen|auto)$/,
     },
+    {
+      // Match viewport-based width and height utilities
+      pattern: /^(w|h|max-w|max-h|min-w|min-h)-\[(\d+vh|\d+vw|\d+%|\d+em|\d+rem)\]$/,
+    },
   ],
   theme: {
     container: {

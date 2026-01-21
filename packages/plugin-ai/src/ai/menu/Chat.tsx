@@ -292,60 +292,61 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
     }, [])
 
     return (
-        <TooltipProvider>
-            <ExpandableChat
-                size="sm"
-                icon={
-                    <div className="relative">
-                        <Sparkles className={`h-6 w-6 ${isLoading ? 'animate-pulse' : ''}`} />
-                        {/* Loading indicator ring when AI is generating */}
-                        {isLoading && (
-                            <>
-                                {/* Pulsing ring animation */}
-                                <span className="absolute inset-0 -m-1 rounded-full border-2 border-primary-foreground/30 animate-ping" />
-                                {/* Spinning arc indicator */}
-                                <span className="absolute -inset-1">
-                                    <svg className="h-8 w-8 animate-spin" viewBox="0 0 32 32">
-                                        <circle
-                                            cx="16"
-                                            cy="16"
-                                            r="14"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeDasharray="60 40"
-                                            className="opacity-75"
-                                        />
-                                    </svg>
-                                </span>
-                            </>
-                        )}
+        <ExpandableChat
+            size="md"
+            icon={
+                <div className="relative">
+                    <Sparkles className={`h-6 w-6 ${isLoading ? 'animate-pulse' : ''}`} />
+                    {/* Loading indicator ring when AI is generating */}
+                    {isLoading && (
+                        <>
+                            {/* Pulsing ring animation */}
+                            <span className="absolute inset-0 -m-1 rounded-full border-2 border-primary-foreground/30 animate-ping" />
+                            {/* Spinning arc indicator */}
+                            <span className="absolute -inset-1">
+                                <svg className="h-8 w-8 animate-spin" viewBox="0 0 32 32">
+                                    <circle
+                                        cx="16"
+                                        cy="16"
+                                        r="14"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeDasharray="60 40"
+                                        className="opacity-75"
+                                    />
+                                </svg>
+                            </span>
+                        </>
+                    )}
+                </div>
+            }
+        >
+            {/* Enhanced Header with Gradient */}
+            <ExpandableChatHeader className="flex items-center justify-between p-4 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-b">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500">
+                        <Sparkles className="h-5 w-5 text-white" />
                     </div>
-                }
-            >
-                {/* Enhanced Header with Gradient */}
-                <ExpandableChatHeader className="flex-col text-center justify-center bg-gradient-to-r from-primary/10 via-primary/5 to-background border-b-0 pb-3">
-                    <div className="flex items-center justify-center gap-2 mb-1">
-                        <div className="p-1.5 rounded-lg bg-primary/10">
-                            <Sparkles className="h-5 w-5 text-primary" />
-                        </div>
-                        <h1 className="text-lg font-semibold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">AI Assistant</h1>
+                    <div>
+                        <h1 className="text-base font-semibold text-foreground">AI Assistant</h1>
+                        <p className="text-xs text-muted-foreground">
+                            Ask questions, edit documents, or get help with tasks
+                        </p>
                     </div>
-                    <p className="text-xs text-muted-foreground max-w-[240px]">
-                        Ask questions, edit documents, or get help with tasks
-                    </p>
-                    <div className="mt-2 flex items-center justify-center gap-1">
+                </div>
+                <div className="flex items-center gap-1">
+                    <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => setShowSteps(!showSteps)}
-                                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                    className={`h-8 w-8 p-0 text-muted-foreground hover:text-foreground ${showSteps ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20' : 'hover:text-indigo-500'}`}
                                 >
-                                    <Terminal className="h-3 w-3 mr-1" />
-                                    {showSteps ? 'Hide' : 'Show'} Steps
+                                    <Terminal className="h-4 w-4" />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent side="bottom" className="text-xs">
@@ -358,269 +359,268 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                     variant="ghost"
                                     size="sm"
                                     onClick={handleClearChat}
-                                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                    className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
                                 >
-                                    <Trash2 className="h-3 w-3" />
+                                    <Trash2 className="h-4 w-4" />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent side="bottom" className="text-xs">
                                 Clear chat history
                             </TooltipContent>
                         </Tooltip>
-                    </div>
-                </ExpandableChatHeader>
+                    </TooltipProvider>
+                </div>
+            </ExpandableChatHeader>
 
-                <ExpandableChatBody className="bg-muted/20">
-                    <ChatMessageList>
-                        {messages.map((message) => (
-                            <ChatBubble
-                                key={message.id}
-                                variant={message.sender === "user" ? "sent" : "received"}
-                            >
-                                <ChatBubbleAvatar
-                                    className={`h-8 w-8 shrink-0 ${message.sender === "ai" ? "bg-gradient-to-br from-primary/80 to-primary text-primary-foreground" : ""}`}
-                                    src={message.sender === "user"
-                                        ? (userInfo?.avatar ? usePath(userInfo.avatar) : undefined)
-                                        : AI_AVATAR_URL
-                                    }
-                                    fallback={message.sender === "user"
-                                        ? (userInfo?.name?.substring(0, 2).toUpperCase() || userInfo?.account?.substring(0, 2).toUpperCase() || "U")
-                                        : AVATAR_FALLBACKS.ai
-                                    }
-                                />
-                                <div className="flex flex-col gap-1.5 w-full max-w-[calc(100%-48px)]">
-                                    <ChatBubbleMessage
-                                        variant={message.sender === "user" ? "sent" : "received"}
-                                        className={message.sender === "ai" ? "bg-background shadow-sm border border-border/50" : ""}
-                                    >
-                                        <Streamdown>{message.content}</Streamdown>
-                                    </ChatBubbleMessage>
-
-                                    {/* Enhanced execution steps display */}
-                                    {message.sender === "ai" && message.steps && message.steps.length > 0 && showSteps && (
-                                        <Collapsible className="mt-1">
-                                            <CollapsibleTrigger className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors group">
-                                                <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50 hover:bg-muted transition-colors">
-                                                    <Terminal className="h-3 w-3" />
-                                                    <span className="font-medium">{message.steps.length}</span>
-                                                    <span>tool {message.steps.length === 1 ? 'call' : 'calls'}</span>
-                                                    <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]:rotate-180" />
-                                                </div>
-                                            </CollapsibleTrigger>
-                                            <CollapsibleContent className="mt-2 space-y-1.5 animate-in fade-in-0 slide-in-from-top-1 duration-200">
-                                                {message.steps.map((step) => (
-                                                    <div
-                                                        key={step.id}
-                                                        className="flex items-start gap-2 p-2.5 rounded-lg bg-background border border-border/50 text-xs shadow-sm"
-                                                    >
-                                                        <div className="mt-0.5">
-                                                            {step.status === 'success' ? (
-                                                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                                                            ) : step.status === 'error' ? (
-                                                                <XCircle className="h-3.5 w-3.5 text-red-500" />
-                                                            ) : (
-                                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
-                                                            )}
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-2 flex-wrap">
-                                                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">
-                                                                    {formatToolName(step.toolName)}
-                                                                </Badge>
-                                                                {step.duration && (
-                                                                    <span className="text-[10px] text-muted-foreground">
-                                                                        {step.duration}ms
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            {step.args && Object.keys(step.args).length > 0 && (
-                                                                <div className="mt-1.5 text-[10px] text-muted-foreground font-mono bg-muted/50 rounded px-2 py-1 truncate">
-                                                                    {JSON.stringify(step.args).slice(0, 80)}{JSON.stringify(step.args).length > 80 ? '...' : ''}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </CollapsibleContent>
-                                        </Collapsible>
-                                    )}
-                                </div>
-                            </ChatBubble>
-                        ))}
-
-                        {/* Enhanced loading state for execution steps */}
-                        {isLoading && currentSteps.length > 0 && showSteps && (
-                            <div className="mx-4 my-2 p-3 rounded-lg bg-background border border-border/50 shadow-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
-                                    <div className="flex items-center gap-1.5 text-primary">
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        <span className="font-medium">Running tools...</span>
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    {currentSteps.map((step) => (
-                                        <div
-                                            key={step.id}
-                                            className="flex items-center gap-2 p-2 rounded-md bg-muted/30 text-xs"
-                                        >
-                                            {step.status === 'running' ? (
-                                                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500 shrink-0" />
-                                            ) : step.status === 'success' ? (
-                                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                                            ) : (
-                                                <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                                            )}
-                                            <div className="flex-1 flex items-center gap-2 min-w-0">
-                                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono shrink-0">
-                                                    {formatToolName(step.toolName)}
-                                                </Badge>
-                                                {step.status === 'running' && (
-                                                    <span className="text-[10px] text-muted-foreground animate-pulse">executing...</span>
-                                                )}
-                                                {step.duration && (
-                                                    <span className="text-[10px] text-green-600">
-                                                        {step.duration}ms
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Streaming message with enhanced styling */}
-                        {currentMessage && (
-                            <ChatBubble variant="received">
-                                <ChatBubbleAvatar
-                                    className="h-8 w-8 shrink-0 bg-gradient-to-br from-primary/80 to-primary text-primary-foreground"
-                                    src={AI_AVATAR_URL}
-                                    fallback={AVATAR_FALLBACKS.ai}
-                                />
-                                <ChatBubbleMessage className="bg-background shadow-sm border border-border/50">
-                                    <Streamdown isAnimating>{currentMessage}</Streamdown>
+            <ExpandableChatBody className="bg-background overflow-x-hidden">
+                <ChatMessageList>
+                    {messages.map((message) => (
+                        <ChatBubble
+                            key={message.id}
+                            variant={message.sender === "user" ? "sent" : "received"}
+                        >
+                            <ChatBubbleAvatar
+                                className={`h-9 w-9 shrink-0 ${message.sender === "ai" ? "bg-gradient-to-br from-indigo-500 to-purple-500 text-primary-foreground" : "bg-gradient-to-br from-blue-500 to-cyan-500 text-primary-foreground"}`}
+                                src={message.sender === "user"
+                                    ? (userInfo?.avatar ? usePath(userInfo.avatar) : undefined)
+                                    : AI_AVATAR_URL
+                                }
+                                fallback={message.sender === "user"
+                                    ? (userInfo?.name?.substring(0, 2).toUpperCase() || userInfo?.account?.substring(0, 2).toUpperCase() || "U")
+                                    : AVATAR_FALLBACKS.ai
+                                }
+                            />
+                            <div className="flex flex-col gap-2 max-w-[calc(100%-52px)] min-w-0">
+                                <ChatBubbleMessage
+                                    variant={message.sender === "user" ? "sent" : "received"}
+                                    className={message.sender === "ai" ? "bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-200/50 dark:border-indigo-800/50 shadow-sm p-4 max-w-full overflow-x-auto" : "bg-gradient-to-br from-blue-500 to-cyan-500 text-primary-foreground p-4 max-w-full overflow-x-auto"}
+                                >
+                                    <Streamdown>{message.content}</Streamdown>
                                 </ChatBubbleMessage>
-                            </ChatBubble>
-                        )}
 
-                        {/* Loading indicator */}
-                        {isLoading && !currentMessage && currentSteps.length === 0 && (
-                            <ChatBubble variant="received">
-                                <ChatBubbleAvatar
-                                    className="h-8 w-8 shrink-0 bg-gradient-to-br from-primary/80 to-primary text-primary-foreground"
-                                    src={AI_AVATAR_URL}
-                                    fallback={AVATAR_FALLBACKS.ai}
-                                />
-                                <ChatBubbleMessage isLoading className="bg-background shadow-sm border border-border/50" />
-                            </ChatBubble>
-                        )}
+                                {/* Enhanced execution steps display */}
+                                {message.sender === "ai" && message.steps && message.steps.length > 0 && showSteps && (
+                                    <Collapsible className="mt-3">
+                                        <CollapsibleTrigger className="flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-300 hover:text-indigo-700 transition-colors group px-1 py-1.5 -ml-1 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950/30">
+                                            <Terminal className="h-3.5 w-3.5" />
+                                            <span className="font-medium">{message.steps.length} tool {message.steps.length === 1 ? 'call' : 'calls'}</span>
+                                            <ChevronDown className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180" />
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent className="mt-2 space-y-2 animate-in fade-in-0 slide-in-from-top-1 duration-200 max-w-full overflow-x-auto">
+                                            {message.steps.map((step) => (
+                                                <div
+                                                    key={step.id}
+                                                    className="flex items-start gap-3 p-3 rounded-lg bg-card border border-border text-xs max-w-full overflow-x-auto"
+                                                >
+                                                    <div className="mt-0.5 flex-shrink-0">
+                                                        {step.status === 'success' ? (
+                                                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                                        ) : step.status === 'error' ? (
+                                                            <XCircle className="h-4 w-4 text-red-500" />
+                                                        ) : (
+                                                            <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 flex-wrap max-w-full overflow-x-auto">
+                                                            <Badge variant="secondary" className="text-[10px] px-2 py-0.5 font-mono bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 max-w-full overflow-x-auto">
+                                                                {formatToolName(step.toolName)}
+                                                            </Badge>
+                                                            {step.duration && (
+                                                                <span className="text-[10px] text-muted-foreground">
+                                                                    {step.duration}ms
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {step.args && Object.keys(step.args).length > 0 && (
+                                                            <div className="mt-2 text-[10px] text-muted-foreground font-mono bg-indigo-50/50 dark:bg-indigo-950/20 rounded px-2 py-1.5 truncate max-w-full overflow-x-auto">
+                                                                {JSON.stringify(step.args).slice(0, 80)}{JSON.stringify(step.args).length > 80 ? '...' : ''}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </CollapsibleContent>
+                                    </Collapsible>
+                                )}
+                            </div>
+                        </ChatBubble>
+                    ))}
 
-                        {/* User Choice Dialog */}
-                        {pendingChoice && (
-                            <div className="mx-4 my-2 p-4 rounded-lg bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20 shadow-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
-                                <div className="flex items-start gap-3 mb-3">
-                                    <div className="p-1.5 rounded-lg bg-primary/10 shrink-0">
-                                        <HelpCircle className="h-4 w-4 text-primary" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="font-medium text-sm text-foreground">{pendingChoice.request.question}</p>
-                                        <p className="text-xs text-muted-foreground mt-0.5">Please select an option to continue</p>
-                                    </div>
+                    {/* Enhanced loading state for execution steps */}
+                    {isLoading && currentSteps.length > 0 && showSteps && (
+                        <div className="mx-4 my-3 p-4 rounded-xl bg-gradient-to-br from-indigo-50/30 to-purple-50/30 dark:from-indigo-950/20 dark:to-purple-950/20 border border-indigo-200/50 dark:border-indigo-800/50 animate-in fade-in-0 slide-in-from-bottom-2 duration-300 max-w-full overflow-x-auto">
+                            <div className="flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-300 mb-3">
+                                <div className="flex items-center gap-1.5 text-indigo-500">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <span className="font-medium">Running tools...</span>
                                 </div>
-
-                                <div className="space-y-2">
-                                    {pendingChoice.request.options.map((option) => (
-                                        <button
-                                            key={option.id}
-                                            onClick={() => handleOptionSelect(option.id)}
-                                            className="w-full p-3 rounded-lg border border-border/50 bg-background hover:bg-muted/50 hover:border-primary/30 transition-all text-left group"
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full bg-primary/40 group-hover:bg-primary transition-colors" />
-                                                <span className="font-medium text-sm">{option.label}</span>
-                                            </div>
-                                            {option.description && (
-                                                <p className="text-xs text-muted-foreground mt-1 ml-4">{option.description}</p>
+                            </div>
+                            <div className="space-y-2 max-w-full overflow-x-auto">
+                                {currentSteps.map((step) => (
+                                    <div
+                                        key={step.id}
+                                        className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border text-xs max-w-full overflow-x-auto"
+                                    >
+                                        {step.status === 'running' ? (
+                                            <Loader2 className="h-4 w-4 animate-spin text-indigo-500 shrink-0" />
+                                        ) : step.status === 'success' ? (
+                                            <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                                        ) : (
+                                            <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+                                        )}
+                                        <div className="flex-1 flex items-center gap-2 min-w-0">
+                                            <Badge variant="outline" className="text-[10px] px-2 py-0.5 font-mono shrink-0 border-indigo-200 dark:border-indigo-800 max-w-full overflow-x-auto">
+                                                {formatToolName(step.toolName)}
+                                            </Badge>
+                                            {step.status === 'running' && (
+                                                <span className="text-[10px] text-muted-foreground animate-pulse">executing...</span>
                                             )}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {pendingChoice.request.allowCustomInput && (
-                                    <div className="mt-3 pt-3 border-t border-border/50">
-                                        <p className="text-xs text-muted-foreground mb-2">Or provide a custom response:</p>
-                                        <div className="flex gap-2">
-                                            <Input
-                                                value={customInput}
-                                                onChange={(e) => setCustomInput(e.target.value)}
-                                                placeholder="Type your response..."
-                                                className="flex-1 h-9 text-sm"
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' && customInput.trim()) {
-                                                        e.preventDefault()
-                                                        handleCustomSubmit()
-                                                    }
-                                                }}
-                                            />
-                                            <Button
-                                                size="sm"
-                                                onClick={handleCustomSubmit}
-                                                disabled={!customInput.trim()}
-                                                className="h-9 px-3"
-                                            >
-                                                <Send className="h-3.5 w-3.5" />
-                                            </Button>
+                                            {step.duration && (
+                                                <span className="text-[10px] text-green-600">
+                                                    {step.duration}ms
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
-                                )}
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
-                                <div className="mt-3 flex justify-end">
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={handleCancelChoice}
-                                        className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                                    >
-                                        <XCircle className="h-3 w-3 mr-1" />
-                                        Cancel
-                                    </Button>
+                    {/* Streaming message with enhanced styling */}
+                    {currentMessage && (
+                        <ChatBubble variant="received">
+                            <ChatBubbleAvatar
+                                className="h-9 w-9 shrink-0 bg-gradient-to-br from-indigo-500 to-purple-500 text-primary-foreground"
+                                src={AI_AVATAR_URL}
+                                fallback={AVATAR_FALLBACKS.ai}
+                            />
+                            <ChatBubbleMessage className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-200/50 dark:border-indigo-800/50 shadow-sm p-4 max-w-full overflow-x-auto">
+                                <Streamdown isAnimating>{currentMessage}</Streamdown>
+                            </ChatBubbleMessage>
+                        </ChatBubble>
+                    )}
+
+                    {/* Loading indicator */}
+                    {isLoading && !currentMessage && currentSteps.length === 0 && (
+                        <ChatBubble variant="received">
+                            <ChatBubbleAvatar
+                                className="h-9 w-9 shrink-0 bg-gradient-to-br from-indigo-500 to-purple-500 text-primary-foreground"
+                                src={AI_AVATAR_URL}
+                                fallback={AVATAR_FALLBACKS.ai}
+                            />
+                            <ChatBubbleMessage isLoading className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-200/50 dark:border-indigo-800/50 shadow-sm p-4 max-w-full overflow-x-auto" />
+                        </ChatBubble>
+                    )}
+
+                    {/* User Choice Dialog */}
+                    {pendingChoice && (
+                        <div className="mx-4 my-3 p-4 rounded-xl bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/20 dark:to-purple-950/20 border border-indigo-200/50 dark:border-indigo-800/50 shadow-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-300 max-w-full overflow-x-auto">
+                            <div className="flex items-start gap-3 mb-3">
+                                <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 shrink-0">
+                                    <HelpCircle className="h-4 w-4 text-white" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-sm text-foreground">{pendingChoice.request.question}</p>
+                                    <p className="text-xs text-muted-foreground mt-1">Please select an option to continue</p>
                                 </div>
                             </div>
-                        )}
 
-                        {/* Enhanced error display */}
-                        {error && (
-                            <div className="mx-4 my-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-sm animate-in fade-in-0 slide-in-from-bottom-2">
-                                <div className="flex items-start gap-2">
-                                    <XCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-                                    <div className="flex-1">
-                                        <p className="font-medium text-red-700 dark:text-red-400">Error</p>
-                                        <p className="text-xs text-red-600 dark:text-red-500 mt-0.5">{error}</p>
+                            <div className="space-y-2">
+                                {pendingChoice.request.options.map((option) => (
+                                    <button
+                                        key={option.id}
+                                        onClick={() => handleOptionSelect(option.id)}
+                                        className="w-full p-3 rounded-lg border border-indigo-200/50 dark:border-indigo-800/50 bg-background hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-all text-left group max-w-full overflow-x-auto"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-indigo-500 group-hover:bg-purple-500 transition-colors" />
+                                            <span className="font-medium text-sm truncate">{option.label}</span>
+                                        </div>
+                                        {option.description && (
+                                            <p className="text-xs text-muted-foreground mt-1 ml-4 truncate max-w-full overflow-x-auto">{option.description}</p>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {pendingChoice.request.allowCustomInput && (
+                                <div className="mt-4 pt-3 border-t border-indigo-200/50 dark:border-indigo-800/50 max-w-full overflow-x-auto">
+                                    <p className="text-xs text-muted-foreground mb-2">Or provide a custom response:</p>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            value={customInput}
+                                            onChange={(e) => setCustomInput(e.target.value)}
+                                            placeholder="Type your response..."
+                                            className="flex-1 h-9 text-sm max-w-full overflow-x-auto"
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && customInput.trim()) {
+                                                    e.preventDefault()
+                                                    handleCustomSubmit()
+                                                }
+                                            }}
+                                        />
+                                        <Button
+                                            size="sm"
+                                            onClick={handleCustomSubmit}
+                                            disabled={!customInput.trim()}
+                                            className="h-9 px-3 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600"
+                                        >
+                                            <Send className="h-4 w-4" />
+                                        </Button>
                                     </div>
                                 </div>
+                            )}
+
+                            <div className="mt-4 flex justify-end">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleCancelChoice}
+                                    className="h-8 px-3 border-red-200 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                >
+                                    <XCircle className="h-4 w-4 mr-1" />
+                                    Cancel
+                                </Button>
                             </div>
-                        )}
+                        </div>
+                    )}
 
-                        <div ref={messagesEndRef} />
-                    </ChatMessageList>
-                </ExpandableChatBody>
+                    {/* Enhanced error display */}
+                    {error && (
+                        <div className="mx-4 my-3 p-3 rounded-lg bg-red-50/80 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-sm animate-in fade-in-0 slide-in-from-bottom-2 max-w-full overflow-x-auto">
+                            <div className="flex items-start gap-2">
+                                <XCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-red-600 dark:text-red-400">Error</p>
+                                    <p className="text-xs text-red-500/80 mt-0.5 truncate">{error}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
-                {/* Enhanced Footer */}
-                <ExpandableChatFooter className="bg-background p-3">
-                    <form
-                        onSubmit={handleSubmit}
-                        className="relative rounded-xl border bg-muted/30 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/50 transition-all"
-                    >
-                        <ChatInput
-                            value={input}
-                            onChange={handleInputChange}
-                            onKeyDown={handleKeyDown}
-                            placeholder="Ask anything... (Enter to send)"
-                            disabled={isLoading}
-                            className="min-h-[44px] resize-none rounded-xl bg-transparent border-0 px-4 py-3 text-sm shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/60"
-                        />
-                        <div className="flex items-center px-3 pb-2 pt-0 justify-between">
-                            <div className="flex gap-0.5">
+                    <div ref={messagesEndRef} />
+                </ChatMessageList>
+            </ExpandableChatBody>
+
+            {/* Enhanced Footer */}
+            <ExpandableChatFooter className="bg-background p-4 border-t">
+                <form
+                    onSubmit={handleSubmit}
+                    className="relative rounded-lg border bg-background focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary/50 transition-all shadow-sm max-w-full overflow-x-auto"
+                >
+                    <ChatInput
+                        value={input}
+                        onChange={handleInputChange}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Ask anything... (Enter to send)"
+                        disabled={isLoading}
+                        className="min-h-[48px] resize-none rounded-lg bg-background border-0 px-4 py-3 text-sm shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/60 max-w-full overflow-x-auto"
+                    />
+                    <div className="flex items-center px-3 pb-3 pt-0 justify-between">
+                        <div className="flex gap-1">
+                            <TooltipProvider>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <Button
@@ -652,38 +652,40 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="text-xs">Voice input (coming soon)</TooltipContent>
                                 </Tooltip>
-                            </div>
-                            {isLoading ? (
+                            </TooltipProvider>
+                        </div>
+                        {isLoading ? (
+                            <TooltipProvider>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <Button
                                             type="button"
                                             size="sm"
                                             variant="destructive"
-                                            className="h-8 px-3 gap-1.5 rounded-lg"
+                                            className="h-9 px-3 gap-1.5 rounded-lg"
                                             onClick={handleStop}
                                         >
-                                            <Square className="h-3.5 w-3.5" />
+                                            <Square className="h-4 w-4" />
                                             <span className="text-xs">Stop</span>
                                         </Button>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="text-xs">Stop generation</TooltipContent>
                                 </Tooltip>
-                            ) : (
-                                <Button
-                                    type="submit"
-                                    size="sm"
-                                    className="h-8 px-3 gap-1.5 rounded-lg"
-                                    disabled={!isInputValid}
-                                >
-                                    <Send className="h-3.5 w-3.5" />
-                                    <span className="text-xs">Send</span>
-                                </Button>
-                            )}
-                        </div>
-                    </form>
-                </ExpandableChatFooter>
-            </ExpandableChat>
-        </TooltipProvider>
+                            </TooltipProvider>
+                        ) : (
+                            <Button
+                                type="submit"
+                                size="sm"
+                                className="h-9 px-3 gap-1.5 rounded-lg"
+                                disabled={!isInputValid}
+                            >
+                                <Send className="h-4 w-4" />
+                                <span className="text-xs">Send</span>
+                            </Button>
+                        )}
+                    </div>
+                </form>
+            </ExpandableChatFooter>
+        </ExpandableChat>
     )
 }

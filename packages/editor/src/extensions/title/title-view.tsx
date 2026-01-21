@@ -1,8 +1,8 @@
-import { EmojiPicker, EmojiPickerContent, EmojiPickerSearch, MotionComponent, Badge, Separator, cn } from "@kn/ui";
+import { EmojiPicker, EmojiPickerContent, EmojiPickerSearch, Separator, cn } from "@kn/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
-import { Clock, Image, UserCircle, Sparkles, Plus, X } from "@kn/icon";
+import { Clock, Plus, X } from "@kn/icon";
 import React, { useContext, useState, useMemo } from "react";
 import { PageContext } from "@editor/editor/context";
 

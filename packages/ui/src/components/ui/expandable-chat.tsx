@@ -1,36 +1,37 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useImperativeHandle } from "react";
 import { X, MessageCircle, ArrowDown } from "@kn/icon";
 import { cn } from "@ui/lib/utils";
 import { Button } from "@ui/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./avatar";
-import { useAutoScroll } from "@ui/hooks/use-auto-scrokk";
+import { useAutoScroll } from "@ui/hooks/use-auto-scroll";
 import { Textarea } from "./textarea";
 
 export type ChatPosition = "bottom-right" | "bottom-left";
 export type ChatSize = "sm" | "md" | "lg" | "xl" | "full";
 
-const chatConfig = {
-  dimensions: {
-    sm: "sm:max-w-sm sm:max-h-[500px]",
-    md: "sm:max-w-md sm:max-h-[600px]",
-    lg: "sm:max-w-lg sm:max-h-[700px]",
-    xl: "sm:max-w-xl sm:max-h-[800px]",
-    full: "sm:w-full sm:h-full",
-  },
-  positions: {
-    "bottom-right": "bottom-5 right-5",
-    "bottom-left": "bottom-5 left-5",
-  },
-  chatPositions: {
-    "bottom-right": "sm:bottom-[calc(100%+10px)] sm:right-0 sm:top-auto sm:left-auto",
-    "bottom-left": "sm:bottom-[calc(100%+10px)] sm:left-0 sm:top-auto sm:right-auto",
-  },
-  states: {
-    open: "pointer-events-auto opacity-100 visible scale-100 translate-y-0",
-    closed:
-      "pointer-events-none opacity-0 invisible scale-100 sm:translate-y-5",
-  },
-};
+// Configuration constants for the chat component
+const CHAT_DIMENSIONS = {
+  sm: "max-w-xs max-h-[40vh] min-h-[150px] w-[85vw] sm:w-[380px]",
+  md: "max-w-md max-h-[50vh] min-h-[400px] w-[85vw] sm:w-[450px]",
+  lg: "max-w-lg max-h-[60vh] min-h-[250px] w-[85vw] sm:w-[550px]",
+  xl: "max-w-xl max-h-[70vh] min-h-[300px] w-[85vw] sm:w-[650px]",
+  full: "w-full h-[80vh] max-w-full max-h-full sm:w-full sm:h-[80vh] sm:max-w-full sm:max-h-full",
+} as const;
+
+const CHAT_POSITIONS = {
+  "bottom-right": "bottom-5 right-5",
+  "bottom-left": "bottom-5 left-5",
+} as const;
+
+const CHAT_PANEL_POSITIONS = {
+  "bottom-right": "absolute bottom-[calc(100%+10px)] right-0 top-auto left-auto",
+  "bottom-left": "absolute bottom-[calc(100%+10px)] left-0 top-auto right-auto",
+} as const;
+
+const CHAT_VISIBILITY_STATES = {
+  open: "pointer-events-auto opacity-100 visible scale-100 translate-y-0",
+  closed: "pointer-events-none opacity-0 invisible scale-100 translate-y-5 absolute",
+} as const;
 
 interface ExpandableChatProps extends React.HTMLAttributes<HTMLDivElement> {
   position?: ChatPosition;
@@ -51,30 +52,56 @@ const ExpandableChat: React.FC<ExpandableChatProps> = ({
 
   const toggleChat = () => setIsOpen(!isOpen);
 
+  // Close chat when pressing Escape key
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && isOpen) {
+        setIsOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  // Focus management when chat opens/closes
+  React.useEffect(() => {
+    if (isOpen && chatRef.current) {
+      // Focus the chat container when it opens for better accessibility
+      chatRef.current.focus();
+    }
+  }, [isOpen]);
+
   return (
     <div
-      className={cn(`fixed ${chatConfig.positions[position]} z-50`, className)}
+      className={cn(`fixed ${CHAT_POSITIONS[position]} z-50`, className)}
       {...props}
     >
-      <div
-        ref={chatRef}
-        className={cn(
-          "flex flex-col bg-background border sm:rounded-lg shadow-md overflow-hidden transition-all duration-250 ease-out sm:absolute sm:w-[90vw] sm:h-[80vh] fixed inset-0 w-full h-full sm:inset-auto",
-          chatConfig.chatPositions[position],
-          chatConfig.dimensions[size],
-          isOpen ? chatConfig.states.open : chatConfig.states.closed,
-          className,
-        )}
-      >
-        {children}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute top-2 right-2 sm:hidden"
-          onClick={toggleChat}
+      <div className="relative">
+        <div
+          ref={chatRef}
+          tabIndex={-1}
+          className={cn(
+            "flex flex-col bg-background border rounded-lg shadow-lg overflow-hidden transition-all duration-250 ease-in-out w-full max-h-[70vh] sm:max-h-[60vh]",
+            CHAT_PANEL_POSITIONS[position],
+            CHAT_DIMENSIONS[size],
+            isOpen ? CHAT_VISIBILITY_STATES.open : CHAT_VISIBILITY_STATES.closed,
+            className,
+          )}
         >
-          <X className="h-4 w-4" />
-        </Button>
+          {children}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-2 right-2 rounded-full hover:bg-secondary"
+            onClick={toggleChat}
+            aria-label="Close chat"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
       <ExpandableChatToggle
         icon={icon}
@@ -102,7 +129,7 @@ ExpandableChatHeader.displayName = "ExpandableChatHeader";
 const ExpandableChatBody: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   className,
   ...props
-}) => <div className={cn("flex-grow overflow-y-auto", className)} {...props} />;
+}) => <div className={cn("flex-grow overflow-y-auto p-4 min-h-0", className)} {...props} />;
 
 ExpandableChatBody.displayName = "ExpandableChatBody";
 
@@ -130,8 +157,9 @@ const ExpandableChatToggle: React.FC<ExpandableChatToggleProps> = ({
   <Button
     variant="default"
     onClick={toggleChat}
+    aria-label={isOpen ? "Close chat" : "Open chat"}
     className={cn(
-      "w-14 h-14 rounded-full shadow-md flex items-center justify-center hover:shadow-lg hover:shadow-black/30 transition-all duration-300",
+      "w-12 h-12 rounded-full shadow-lg flex items-center justify-center hover:shadow-xl transition-all duration-300 ring-offset-background",
       className,
     )}
     {...props}
@@ -311,7 +339,7 @@ interface ChatMessageListProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const ChatMessageList = React.forwardRef<HTMLDivElement, ChatMessageListProps>(
-  ({ className, children, smooth = false, ...props }, _ref) => {
+  ({ className, children, smooth = false, ...props }, ref) => {
     const {
       scrollRef,
       isAtBottom,
@@ -323,16 +351,19 @@ const ChatMessageList = React.forwardRef<HTMLDivElement, ChatMessageListProps>(
       content: children,
     });
 
+    // Merge the refs
+    React.useImperativeHandle(ref, () => scrollRef.current as HTMLDivElement);
+
     return (
       <div className="relative w-full h-full">
         <div
-          className={`flex flex-col w-full h-full p-4 overflow-y-auto ${className}`}
+          className={`flex flex-col w-full h-full p-3 overflow-y-auto ${className}`}
           ref={scrollRef}
           onWheel={disableAutoScroll}
           onTouchMove={disableAutoScroll}
           {...props}
         >
-          <div className="flex flex-col gap-6">{children}</div>
+          <div className="flex flex-col gap-4">{children}</div>
         </div>
 
         {!isAtBottom && (
@@ -364,6 +395,7 @@ const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(
       autoComplete="off"
       ref={ref}
       name="message"
+      placeholder="Type your message..."
       className={cn(
         "max-h-12 px-4 py-3 bg-background text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 w-full rounded-md flex items-center h-16 resize-none",
         className,
