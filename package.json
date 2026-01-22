@@ -16,6 +16,7 @@
     "build:mermaid": "pnpm --filter @kn/mermaid-plugin build",
     "build:block": "pnpm --filter @kn/plugin-block-reference build",
     "build:file-manager": "pnpm --filter @kn/file-manager build",
+    "build:bilibili": "pnpm --filter @kn/plugin-bilibili build",
     "build:drawnix": "pnpm --filter @kn/plugin-drawnix build",
     "build:editor": "pnpm --filter @kn/editor build",
     "build:main": "pnpm --filter @kn/plugin-main build",
