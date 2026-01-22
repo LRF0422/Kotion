@@ -17,6 +17,7 @@ import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, C
 import { useToggle } from "@kn/core";
 import { MultiSelect, cn } from "@kn/ui";
 import { TemplateCreator } from "./TemplateCreator";
+import { TemplateSelector } from "../../components/TemplateSelector";
 
 export const SpaceDetail: React.FC = () => {
 
@@ -586,51 +587,11 @@ export const SpaceDetail: React.FC = () => {
             )}>
                 <Outlet />
             </div>
-            <Sheet
+            <TemplateSelector
                 open={visible}
-                onOpenChange={(value) => {
-                    setVisible(value)
-                }}
-            >
-                <SheetContent className="w-[1000px] sm:max-w-none">
-                    <SheetTitle className="flex flex-row items-center gap-1">
-                        选择一个模板
-                    </SheetTitle>
-                    <div className="flex flex-col gap-4 mt-4">
-                        <div className=" font-bold">个人模板</div>
-                        <div className="flex flex-row items-center gap-2">
-                            <Input className="w-[200px] h-8" placeholder="搜索模板..." />
-                            <MultiSelect
-                                placeholder="模板类型"
-                                className="h-7 w-[150px]"
-                                options={[]}
-                                defaultValue={[]}
-                                onValueChange={(value) => { }}
-                            />
-                        </div>
-                        <div className="grid grid-cols-4 gap-4">
-                            {
-                                yourTemplates.map((item: any, index) => (
-                                    <div className="flex flex-col gap-1">
-                                        <Card key={index} className="border hover:bg-muted h-[200px]" style={{
-                                            backgroundImage: `url('${usePath(item.cover)}&cache=true')`,
-                                            backgroundSize: 'cover'
-                                        }} >
-                                        </Card>
-                                        <div className="flex flex-row justify-between items-center text-sm text-gray-500 italic ">
-                                            <div className=" w-[100px] overflow-hidden text-ellipsis text-nowrap">{item.title}</div>
-                                            <a href="#" className="flex flex-row gap-1 items-center underline"><UserCircle className="h-4 w-4" />Author Leong</a>
-                                        </div>
-                                        <div>
-                                            <Button size="sm" onClick={() => handleCreateByTemplate(item.id)}>使用此模板</Button>
-                                        </div>
-                                    </div>
-                                ))
-                            }
-                        </div>
-                    </div>
-                </SheetContent>
-            </Sheet>
+                onOpenChange={setVisible}
+                onCreateFromTemplate={handleCreateByTemplate}
+            />
             <CommandDialog open={open} onOpenChange={() => { toggle() }}>
                 <CommandInput />
                 <CommandList>
