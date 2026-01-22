@@ -3,6 +3,7 @@ import { BilibiliNodeView } from './BilibiliNodeView';
 import { ExtensionWrapper } from '@kn/common';
 import { RiBilibiliFill } from '@kn/icon';
 import React from 'react';
+import { bilibiliTools } from './tools';
 
 declare module '@kn/editor' {
     interface Commands<ReturnType> {
@@ -79,5 +80,6 @@ export const BilibiliExt: ExtensionWrapper = {
                 editor.commands.setBilibili({ bvid: '' });
             }
         }
-    ]
+    ],
+    tools: bilibiliTools
 }

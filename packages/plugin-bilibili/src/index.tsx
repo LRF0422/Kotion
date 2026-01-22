@@ -32,3 +32,4 @@ export const bilibili = new BilibiliPlugin({
     editorExtension: [BilibiliExt]
 });
 export * from "./extension";
+export * from "./extension/tools";
