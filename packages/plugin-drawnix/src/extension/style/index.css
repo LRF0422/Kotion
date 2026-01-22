@@ -2,3 +2,32 @@
     width: 100% !important;
     height: 100% !important;
 }
+
+/* Whiteboard container styles */
+.node-drawnix {
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    transition: box-shadow 0.2s ease;
+}
+
+.node-drawnix:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Plait board container */
+div[class*="plait-board"] {
+    border-radius: 4px;
+    background-color: #fafafa;
+    /* Light gray grid background */
+    background-image: radial-gradient(#e5e5e5 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+
+/* Dark theme support */
+[data-theme="dark"] div[class*="plait-board"],
+.theme-dark div[class*="plait-board"] {
+    background-color: #1a1a1a;
+    background-image: radial-gradient(#333 1px, transparent 1px);
+    background-size: 20px 20px;
+}

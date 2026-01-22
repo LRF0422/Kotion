@@ -206,6 +206,9 @@ export const Drawnix = Node.create({
             insertDrawnix: () => ({ commands }) => {
                 return commands.insertContent({
                     type: this.name,
+                    attrs: {
+                        mode: 'whiteboard'
+                    }
                 })
             },
 
