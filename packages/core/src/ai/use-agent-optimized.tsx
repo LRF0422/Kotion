@@ -77,7 +77,7 @@ The document has a special structure:
 | insertAfterBlock | Insert after a specific block |
 | insertAtEnd | Append to document |
 | write | Insert text in a block |
-| insertSegmentedMarkdown | Insert large markdown content in segments to avoid performance issues |
+| insertSegmentedMarkdown | Insert markdown content with proper formatting - handles headings, lists, emphasis, etc. Recommended for all markdown content |
 
 ## Delete Tools (REQUIRE askUserChoice first)
 | Tool | Use When |
@@ -124,8 +124,8 @@ insertNear({ searchText: "Introduction", text: "New paragraph", position: "after
 **Batch insert multiple items (NOT for titles):**
 batchInsert({ items: [{ content: "Section", type: "heading" }, { content: "Paragraph" }], position: "end" })
 
-**Insert large markdown content in segments:**
-insertSegmentedMarkdown({ markdown: "# Title\n\nLong content...", segmentSize: 50, position: "end" })
+**Insert markdown content with proper formatting:**
+insertSegmentedMarkdown({ markdown: "# Title\n\n- List item 1\n- List item 2\n\n**Bold text** and *italic text*", position: "end" })
 
 **Replace text:**
 replaceContent({ searchText: "old text", replaceWith: "new text" })

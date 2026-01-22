@@ -7,7 +7,7 @@ import {
     findBlockByHeading,
     findTextBlocks
 } from "../utils/block-utils"
-import { contentItemsToNodes } from "../utils/markdown-parser"
+import { contentItemsToNodes, parseMarkdownToNodes } from "../utils/markdown-parser"
 import { validateRange } from "../utils/document-utils"
 
 /**
@@ -514,6 +514,96 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                 }
             } catch (error) {
                 return { error: `替换失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
+    },
+
+    insertSegmentedMarkdown: {
+        description: 'Insert markdown content in segments to handle large content and ensure proper formatting. Parses markdown syntax and converts to appropriate document nodes.',
+        inputSchema: z.object({
+            markdown: z.string().describe("Markdown content to insert"),
+            segmentSize: z.number().optional().describe("Number of lines per segment, default 50"),
+            position: z.enum(['start', 'end', 'afterBlock']).optional().describe("Insert position, default 'end'"),
+            afterBlockIndex: z.number().optional().describe("Block index when position is 'afterBlock'")
+        }),
+        execute: async (params: {
+            markdown: string,
+            segmentSize?: number,
+            position?: 'start' | 'end' | 'afterBlock',
+            afterBlockIndex?: number
+        }) => {
+            const { markdown, segmentSize = 50, position = 'end', afterBlockIndex } = params;
+            const docSize = editor.state.doc.nodeSize;
+
+            if (!markdown || markdown.trim().length === 0) {
+                return { error: 'Markdown content cannot be empty' };
+            }
+
+            try {
+                // Normalize line endings to ensure consistent parsing
+                // Convert Windows (\r\n) and Mac (\r) line endings to Unix (\n)
+                const normalizedMarkdown = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+                // Split content into segments if it's too large, otherwise process as a whole
+                const lines = normalizedMarkdown.split('\n');
+                let nodes: any[] = [];
+
+                if (lines.length > segmentSize) {
+                    // Process content in segments to prevent performance issues
+                    for (let i = 0; i < lines.length; i += segmentSize) {
+                        const segmentLines = lines.slice(i, i + segmentSize);
+                        const segmentMarkdown = segmentLines.join('\n');
+                        const segmentNodes = parseMarkdownToNodes(segmentMarkdown);
+                        nodes = nodes.concat(segmentNodes);
+                    }
+                } else {
+                    // Process content as a whole
+                    nodes = parseMarkdownToNodes(normalizedMarkdown);
+                }
+
+                // Determine insertion position
+                let insertPos: number;
+                switch (position) {
+                    case 'start':
+                        insertPos = 0;
+                        break;
+                    case 'afterBlock':
+                        const blocks = discoverBlocks(editor);
+                        if (blocks.length === 0) {
+                            insertPos = 0;
+                        } else {
+                            const idx = afterBlockIndex !== undefined
+                                ? Math.min(Math.max(0, afterBlockIndex), blocks.length - 1)
+                                : blocks.length - 1;
+                            insertPos = blocks[idx].pos + blocks[idx].size;
+                        }
+                        break;
+                    case 'end':
+                    default:
+                        insertPos = editor.state.doc.content.size;
+                }
+
+                // Insert the parsed nodes
+                const success = editor.commands.insertContentAt(insertPos, nodes);
+
+                if (!success) {
+                    return { error: 'Failed to insert markdown content' };
+                }
+
+                const newDocSize = editor.state.doc.nodeSize;
+
+                return {
+                    success: true,
+                    insertedSegments: lines.length > segmentSize ? Math.ceil(lines.length / segmentSize) : 1,
+                    position,
+                    insertedAt: insertPos,
+                    insertedSize: newDocSize - docSize,
+                    parsedNodesCount: nodes.length,
+                    originalLength: markdown.length,
+                    normalizedLength: normalizedMarkdown.length
+                };
+            } catch (error) {
+                return { error: `Insert markdown failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
             }
         }
     }

@@ -2,17 +2,33 @@
  * Parse Markdown to ProseMirror-compatible JSON nodes
  */
 export const parseMarkdownToNodes = (markdown: string): any[] => {
+    // Normalize line endings to ensure consistent parsing
+    const normalizedMarkdown = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     const nodes: any[] = []
-    const lines = markdown.split('\n')
+    const lines = normalizedMarkdown.split('\n')
     let inCodeBlock = false
     let codeContent: string[] = []
     let codeLanguage = ''
+    let inList = false
+    let listType: 'bullet' | 'ordered' | null = null
+    let currentListItems: any[] = []
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i]
 
         // Code block handling
         if (line.startsWith('```')) {
+            // Close any open list before code block
+            if (inList && currentListItems.length > 0) {
+                nodes.push({
+                    type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                    content: currentListItems
+                })
+                inList = false
+                currentListItems = []
+                listType = null
+            }
+
             if (!inCodeBlock) {
                 inCodeBlock = true
                 codeLanguage = line.slice(3).trim()
@@ -35,44 +51,95 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
             continue
         }
 
+        // Empty line - close any open list
+        if (line.trim() === '') {
+            if (inList && currentListItems.length > 0) {
+                nodes.push({
+                    type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                    content: currentListItems
+                })
+                inList = false
+                currentListItems = []
+                listType = null
+            }
+            continue
+        }
+
         // Heading
         const headingMatch = line.match(/^(#{1,6})\s+(.+)$/)
         if (headingMatch) {
+            // Close any open list before heading
+            if (inList && currentListItems.length > 0) {
+                nodes.push({
+                    type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                    content: currentListItems
+                })
+                inList = false
+                currentListItems = []
+                listType = null
+            }
+
             nodes.push({
                 type: 'heading',
                 attrs: { level: headingMatch[1].length },
-                content: [{ type: 'text', text: headingMatch[2] }]
+                content: parseInlineMarkdown(headingMatch[2])
             })
             continue
         }
 
         // Bullet list item
-        const bulletMatch = line.match(/^[-*+]\s+(.+)$/)
+        const bulletMatch = line.match(/^\s*([-*+])\s+(.+)$/)
         if (bulletMatch) {
-            nodes.push({
-                type: 'bulletList',
+            const indentLevel = line.match(/^\s*/)?.[0]?.length || 0
+            const itemContent = bulletMatch[2]
+
+            if (!inList || listType !== 'bullet') {
+                // Close any existing list before starting a new one
+                if (inList && currentListItems.length > 0) {
+                    nodes.push({
+                        type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                        content: currentListItems
+                    })
+                }
+                inList = true
+                listType = 'bullet'
+                currentListItems = []
+            }
+
+            currentListItems.push({
+                type: 'listItem',
                 content: [{
-                    type: 'listItem',
-                    content: [{
-                        type: 'paragraph',
-                        content: [{ type: 'text', text: bulletMatch[1] }]
-                    }]
+                    type: 'paragraph',
+                    content: parseInlineMarkdown(itemContent)
                 }]
             })
             continue
         }
 
         // Numbered list item
-        const numberedMatch = line.match(/^\d+\.\s+(.+)$/)
+        const numberedMatch = line.match(/^\s*(\d+)\.\s+(.+)$/)
         if (numberedMatch) {
-            nodes.push({
-                type: 'orderedList',
+            const indentLevel = line.match(/^\s*/)?.[0]?.length || 0
+            const itemContent = numberedMatch[2]
+
+            if (!inList || listType !== 'ordered') {
+                // Close any existing list before starting a new one
+                if (inList && currentListItems.length > 0) {
+                    nodes.push({
+                        type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                        content: currentListItems
+                    })
+                }
+                inList = true
+                listType = 'ordered'
+                currentListItems = []
+            }
+
+            currentListItems.push({
+                type: 'listItem',
                 content: [{
-                    type: 'listItem',
-                    content: [{
-                        type: 'paragraph',
-                        content: [{ type: 'text', text: numberedMatch[1] }]
-                    }]
+                    type: 'paragraph',
+                    content: parseInlineMarkdown(itemContent)
                 }]
             })
             continue
@@ -81,11 +148,22 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
         // Blockquote
         const quoteMatch = line.match(/^>\s*(.*)$/)
         if (quoteMatch) {
+            // Close any open list before blockquote
+            if (inList && currentListItems.length > 0) {
+                nodes.push({
+                    type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                    content: currentListItems
+                })
+                inList = false
+                currentListItems = []
+                listType = null
+            }
+
             nodes.push({
                 type: 'blockquote',
                 content: [{
                     type: 'paragraph',
-                    content: quoteMatch[1] ? [{ type: 'text', text: quoteMatch[1] }] : []
+                    content: parseInlineMarkdown(quoteMatch[1] || '')
                 }]
             })
             continue
@@ -93,13 +171,30 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
 
         // Horizontal rule
         if (/^---+$/.test(line) || /^\*\*\*+$/.test(line)) {
+            // Close any open list before horizontal rule
+            if (inList && currentListItems.length > 0) {
+                nodes.push({
+                    type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                    content: currentListItems
+                })
+                inList = false
+                currentListItems = []
+                listType = null
+            }
+
             nodes.push({ type: 'horizontalRule' })
             continue
         }
 
-        // Empty line
-        if (line.trim() === '') {
-            continue
+        // Close any open list before paragraph
+        if (inList && currentListItems.length > 0) {
+            nodes.push({
+                type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+                content: currentListItems
+            })
+            inList = false
+            currentListItems = []
+            listType = null
         }
 
         // Regular paragraph with inline formatting
@@ -119,7 +214,15 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
         })
     }
 
-    return nodes.length > 0 ? nodes : [{ type: 'paragraph', content: [{ type: 'text', text: markdown }] }]
+    // Handle unclosed list
+    if (inList && currentListItems.length > 0) {
+        nodes.push({
+            type: listType === 'bullet' ? 'bulletList' : 'orderedList',
+            content: currentListItems
+        })
+    }
+
+    return nodes.length > 0 ? nodes : [{ type: 'paragraph', content: parseInlineMarkdown(markdown) }]
 }
 
 /**
