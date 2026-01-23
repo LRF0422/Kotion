@@ -9,6 +9,7 @@ import React, { useEffect, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { useTranslation } from "@kn/common";
 import { SpaceHub } from "../SpaceHub";
+import { format, parseISO, formatDistanceToNow } from "date-fns";
 
 
 export const Home: React.FC = () => {
@@ -211,6 +212,30 @@ export const Home: React.FC = () => {
                                     to: `/space-detail/${data.spaceId}/page/${data.id}`
                                 })
                             }}
+                            footer={(data: any) => (
+                                <div className="text-sm mt-2 space-y-0.5">
+                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                        <UserCircle className="h-3 w-3" />
+                                        <span className={isMobile ? "truncate" : ""}>
+                                            {data.updateBy ? `Last update by ${data.updateBy}` : 'Last update'}
+                                        </span>
+                                    </div>
+                                    {data.updateTime && (
+                                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <Clock className="h-3 w-3" />
+                                            <span className={isMobile ? "truncate" : ""}>
+                                                {(() => {
+                                                    try {
+                                                        return formatDistanceToNow(parseISO(data.updateTime), { addSuffix: true });
+                                                    } catch {
+                                                        return format(parseISO(data.updateTime), 'MM/dd/yyyy');
+                                                    }
+                                                })()}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         />
                     )}
                 </div>

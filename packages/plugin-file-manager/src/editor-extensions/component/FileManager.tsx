@@ -304,7 +304,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     // Sidebar content for reuse
     const SidebarContent = useMemo(() => (
         <>
-            <div className="bg-muted/80 border-b h-[40px] flex items-center gap-1 px-1">
+            <div className="bg-muted/80 border-b h-[40px] flex items-center gap-1 px-1 w-full">
                 <Button
                     variant="outline"
                     size="sm"
@@ -359,7 +359,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                     initialSelectedId={currentFolderId}
                     selectParent={true}
                     size="sm"
-                    className={cn("m-0", isMobile ? "w-full" : "w-[200px]")}
+                    className={cn("m-0", isMobile ? "w-full" : "w-full")}
                     elements={files}
                     onTreeSelected={() => {
                         if (isMobile) setSidebarOpen(false)
@@ -511,11 +511,11 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
             </div>
             <div className={cn(
                 "flex-1 overflow-auto h-[calc(100%-40px)]",
-                isMobile ? "flex flex-col" : "grid w-full grid-cols-[220px_1fr]"
+                isMobile ? "flex flex-col" : "grid w-full grid-cols-[250px_1fr]"
             )}>
                 {/* Desktop Sidebar */}
                 {!isMobile && (
-                    <div className="border-r overflow-y-auto h-full">
+                    <div className="border-r overflow-y-auto h-full w-full">
                         {SidebarContent}
                     </div>
                 )}
