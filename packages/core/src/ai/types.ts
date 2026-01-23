@@ -88,10 +88,13 @@ export interface UserChoiceRequest {
 export type OnUserChoiceRequest = (request: UserChoiceRequest) => Promise<string>
 
 // ============ Tool Definition Type ============
+// Make ToolDefinition more flexible to accommodate various AI tool types
 export interface ToolDefinition {
     description: string
-    inputSchema: any
+    inputSchema: any  // Using any to avoid conflicts with AI library's schema types
     execute: (args: any) => Promise<any>
+    // Allow additional properties that might be required by AI library
+    [key: string]: any
 }
 
 export type ToolsRecord = Record<string, ToolDefinition>

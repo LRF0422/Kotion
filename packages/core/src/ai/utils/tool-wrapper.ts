@@ -8,7 +8,7 @@ export const wrapToolWithCallback = (
     tool: ToolDefinition,
     onToolExecution?: OnToolExecution
 ): ToolDefinition => {
-    if (!onToolExecution) return tool
+    if (!onToolExecution) return tool as ToolDefinition
 
     return {
         ...tool,
