@@ -7,6 +7,7 @@ import React from "react";
 import TextLoadingDecorationExtension from "./text-loading";
 import { LoadingMark } from "./marks/loading-mark";
 import { ExpandableChatDemo } from "./menu/Chat";
+import { AiCompletionExtension } from "./completion";
 
 /**
  * AI Extension Configuration
@@ -23,7 +24,7 @@ import { ExpandableChatDemo } from "./menu/Chat";
 
 export const AIExtension: ExtensionWrapper = {
     name: Ai.name,
-    extendsion: [Ai, AiImage, TextLoadingDecorationExtension, LoadingMark],
+    extendsion: [Ai, AiImage, TextLoadingDecorationExtension, LoadingMark, AiCompletionExtension],
     flotMenuConfig: [AiStaticMenu],
     // Chat component is a floating UI, render it separately via floatingUI
     menuConfig: {
@@ -49,6 +50,14 @@ export const AIExtension: ExtensionWrapper = {
             slash: '/aiImage',
             action: (editor) => {
                 // editor.commands.insertAiImage()
+            }
+        },
+        {
+            icon: <Sparkles className="h-4 w-4" />,
+            text: 'AI补全',
+            slash: '/aicomplete',
+            action: (editor) => {
+                editor.commands.triggerAiCompletion();
             }
         }
     ]

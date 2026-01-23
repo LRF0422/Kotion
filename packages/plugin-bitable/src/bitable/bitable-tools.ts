@@ -430,6 +430,162 @@ export const bitableTools = [
     },
 
     // ========================================================================
+    // Insert Bitable At Position Tool
+    // ========================================================================
+    {
+        name: 'insertBitableAtPosition',
+        description: '在文档的指定位置插入一个新的多维表格，可以指定字段和初始数据。数据的key应使用字段标题（如"名称"、"状态"）',
+        inputSchema: z.object({
+            position: z.number().describe("插入位置的文档坐标"),
+            fields: z.array(FieldConfigSchema).optional().describe("自定义字段配置，不提供则使用默认字段"),
+            initialData: z.array(RecordDataSchema).optional().describe("初始数据记录，key为字段标题"),
+            defaultViewType: ViewTypeEnum.optional().describe("默认视图类型，默认为table")
+        }),
+        execute: (editor: Editor) => async (params: {
+            position: number;
+            fields?: Array<{
+                id?: string;
+                title: string;
+                type: string;
+                width?: number;
+                isShow?: boolean;
+                options?: Array<{ id?: string; label: string; color?: string }>;
+                description?: string;
+            }>;
+            initialData?: Array<Record<string, any>>;
+            defaultViewType?: string;
+        }) => {
+            // Build fields configuration
+            // If custom fields are provided, use ONLY those (plus required ID field)
+            // Otherwise, use the default fields
+            const fields: FieldConfig[] = [];
+            const titleToIdMap: Record<string, string> = {};
+
+            // Always add the ID field first
+            fields.push({ id: 'id', title: 'ID', type: FieldType.ID, width: 80, isShow: true });
+            titleToIdMap['ID'] = 'id';
+
+            if (params.fields && params.fields.length > 0) {
+                // Use custom fields only (clear default columns)
+                params.fields.forEach(fieldConfig => {
+                    // Use provided ID or use title as ID for easy data mapping
+                    const fieldId = fieldConfig.id || fieldConfig.title;
+
+                    // Process options for select fields
+                    const options = fieldConfig.options?.map((opt, idx) => ({
+                        id: opt.id || String(idx + 1),
+                        label: opt.label,
+                        color: opt.color || '#gray'
+                    }));
+
+                    fields.push({
+                        id: fieldId,
+                        title: fieldConfig.title,
+                        type: fieldConfig.type as FieldType,
+                        width: fieldConfig.width || 150,
+                        isShow: fieldConfig.isShow !== false,
+                        ...(options && { options }),
+                        ...(fieldConfig.description && { description: fieldConfig.description })
+                    });
+
+                    // Add to mapping
+                    titleToIdMap[fieldConfig.title] = fieldId;
+                });
+            } else {
+                // Use default fields when no custom fields provided
+                const defaultFieldConfigs = [
+                    { id: 'name', title: '名称', type: FieldType.TEXT, width: 200, isShow: true },
+                    {
+                        id: 'status', title: '状态', type: FieldType.SELECT, width: 150, isShow: true,
+                        options: [
+                            { id: '1', label: '未开始', color: '#gray' },
+                            { id: '2', label: '进行中', color: '#blue' },
+                            { id: '3', label: '已完成', color: '#green' },
+                        ]
+                    },
+                    {
+                        id: 'priority', title: '优先级', type: FieldType.SELECT, width: 120, isShow: true,
+                        options: [
+                            { id: '1', label: '低', color: '#green' },
+                            { id: '2', label: '中', color: '#yellow' },
+                            { id: '3', label: '高', color: '#red' },
+                        ]
+                    },
+                    { id: 'assignee', title: '负责人', type: FieldType.PERSON, width: 150, isShow: true },
+                    { id: 'dueDate', title: '截止日期', type: FieldType.DATE, width: 150, isShow: true },
+                    { id: 'progress', title: '进度', type: FieldType.PROGRESS, width: 150, isShow: true },
+                ];
+
+                defaultFieldConfigs.forEach(f => {
+                    fields.push(f as FieldConfig);
+                    titleToIdMap[f.title] = f.id;
+                });
+            }
+
+            // Build default views
+            // For kanban view, try to find a select field to group by
+            const selectField = fields.find(f => f.type === FieldType.SELECT);
+            const defaultViews: ViewConfig[] = [
+                {
+                    id: generateViewId(),
+                    name: '表格视图',
+                    type: ViewType.TABLE,
+                    filters: [], sorts: [], groups: [], hiddenFields: [], fieldOrder: []
+                },
+                ...(selectField ? [{
+                    id: generateViewId(),
+                    name: '看板视图',
+                    type: ViewType.KANBAN,
+                    filters: [], sorts: [], groups: [], hiddenFields: [], fieldOrder: [],
+                    kanbanConfig: { groupByField: selectField.id }
+                }] : [])
+            ];
+
+            // Process initial data - transform field titles to field IDs
+            const now = new Date().toISOString();
+            const processedData = (params.initialData || []).map((record, idx) => {
+                const transformedRecord: Record<string, any> = {
+                    id: idx + 1,  // Auto-incrementing ID
+                    createdTime: now,
+                    updatedTime: now
+                };
+
+                // Transform each field: if key matches a title, use the corresponding ID
+                Object.entries(record).forEach(([key, value]) => {
+                    const fieldId = titleToIdMap[key] || key;  // Use mapped ID or original key
+                    transformedRecord[fieldId] = value;
+                });
+
+                return transformedRecord;
+            });
+
+            // Insert bitable at the specified position with proper configuration
+            const bitableNode = {
+                type: 'bitable',
+                attrs: {
+                    fields: fields,
+                    views: defaultViews,
+                    currentView: defaultViews[0]?.id,
+                    data: processedData
+                }
+            };
+
+            // Use insertContentAt to insert at the specified position
+            editor.commands.insertContentAt(params.position, bitableNode);
+
+            return {
+                success: true,
+                message: `多维表格已插入到位置 ${params.position}`,
+                fieldCount: fields.length,
+                recordCount: processedData.length,
+                recordIds: processedData.map(r => r.id),
+                fieldMapping: titleToIdMap,
+                position: params.position
+            };
+        }
+    },
+
+    // ========================================================================
     // Record Management Tools
     // ========================================================================
     {

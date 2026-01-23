@@ -1,13 +1,13 @@
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Board, BoardChangeData, Wrapper } from '@plait-board/react-board';
-import { PlaitBoard, PlaitBoardOptions, PlaitElement, PlaitTheme, ThemeColorMode, Viewport, BoardTransforms, PlaitPlugin, createBoard, BOARD_TO_HOST } from '@plait/core';
+import { PlaitBoard, PlaitBoardOptions, PlaitElement, ThemeColorMode, BoardTransforms, PlaitPlugin } from '@plait/core';
 import { withMind } from '@plait/mind';
 import { withDraw } from '@plait/draw';
 import { withGroup } from '@plait/common';
 import { initializeData } from "./data";
 import { useTheme, Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
-import { MousePointer2, Square, Circle, Diamond, Pencil, Type, Image, ArrowRightLeft, RotateCcw, Download, Palette, ZoomIn, ZoomOut, Minus, Plus, Menu, MoreHorizontal } from "lucide-react";
+import { MousePointer2, Square, Circle, Diamond, Pencil, Type, Download, MoreHorizontal } from "@kn/icon";
 import "./style/index.css";
 
 import '../../node_modules/@plait-board/react-board/index.css';
@@ -110,27 +110,6 @@ export const DrawnixView: React.FC<NodeViewProps> = (props) => {
         if (board) {
             // In a real implementation, this would trigger export functionality
             alert('Export functionality would be implemented here');
-        }
-    }, [board]);
-
-    // Zoom in
-    const handleZoomIn = useCallback(() => {
-        if (board) {
-            BoardTransforms.updateViewport(board, { zoom: Math.min(board.viewport.zoom * 1.2, 3) });
-        }
-    }, [board]);
-
-    // Zoom out
-    const handleZoomOut = useCallback(() => {
-        if (board) {
-            BoardTransforms.updateViewport(board, { zoom: Math.max(board.viewport.zoom / 1.2, 0.1) });
-        }
-    }, [board]);
-
-    // Reset zoom
-    const handleResetZoom = useCallback(() => {
-        if (board) {
-            BoardTransforms.updateViewport(board, { zoom: 1 });
         }
     }, [board]);
 
@@ -241,54 +220,6 @@ export const DrawnixView: React.FC<NodeViewProps> = (props) => {
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
-
-                        <div className="h-4 w-px bg-gray-200 dark:bg-gray-700 mx-1"></div>
-
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={handleZoomOut}
-                                    >
-                                        <ZoomOut className="h-4 w-4" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>Zoom Out</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleResetZoom}
-                            className="text-xs"
-                        >
-                            {board ? `${Math.round(board.viewport.zoom * 100)}%` : '100%'}
-                        </Button>
-
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={handleZoomIn}
-                                    >
-                                        <ZoomIn className="h-4 w-4" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>Zoom In</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-
-                        <div className="h-4 w-px bg-gray-200 dark:bg-gray-700 mx-1"></div>
-
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>

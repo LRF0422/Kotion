@@ -78,7 +78,7 @@ export const Home: React.FC = () => {
                     isMobile ? "py-4 flex-col" : "py-6"
                 )}>
                     <div className={cn(
-                        "rounded-xl bg-muted/50",
+                        "rounded-xl",
                         isMobile ? "p-2" : "p-3"
                     )}>
                         {getGreetingIcon()}
