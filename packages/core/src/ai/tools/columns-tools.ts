@@ -2,6 +2,7 @@ import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord } from "../types"
 import { Node as PmNode } from "@kn/editor"
+import { parseMarkdownToNodes } from "../utils/markdown-parser"
 
 /**
  * Helper: Find all columns nodes in the document
@@ -64,24 +65,45 @@ const getColumnContent = (column: PmNode): {
  */
 export const createColumnsTools = (editor: Editor): ToolsRecord => ({
     insertColumns: {
-        description: '插入分栏布局。用于创建多列内容布局，可指定列数',
+        description: '插入分栏布局。用于创建多列内容布局，可指定列数和插入位置',
         inputSchema: z.object({
             cols: z.number().min(2).max(6).optional()
                 .describe("列数，2-6列，默认2列"),
             layout: z.enum(['none', 'left', 'right', 'center']).optional()
                 .describe("布局类型: 'none'等宽, 'left'左侧宽, 'right'右侧宽, 'center'中间宽"),
+            position: z.number().optional()
+                .describe("插入位置的文档坐标，不指定则插入到当前光标位置")
         }),
-        execute: async ({ cols = 2, layout = 'none' }: {
+        execute: async ({ cols = 2, layout = 'none', position }: {
             cols?: number
             layout?: 'none' | 'left' | 'right' | 'center'
+            position?: number
         }) => {
             try {
                 const colCount = Math.min(Math.max(2, cols), 6)
 
-                const success = editor.chain()
-                    .focus()
-                    .insertColumns({ cols: colCount })
-                    .run()
+                let success: boolean
+                if (position !== undefined) {
+                    // Insert at specific position using the createColumns utility function
+                    const columnsNode = editor.schema.nodes['columns'].createChecked(
+                        { cols: colCount, type: layout },
+                        Array.from({ length: colCount }, (_, i) =>
+                            editor.schema.nodes['column'].createAndFill({ index: i, type: layout, cols: colCount })!
+                        )
+                    )
+
+                    if (columnsNode) {
+                        success = editor.commands.insertContentAt(position, columnsNode)
+                    } else {
+                        return { error: '创建分栏节点失败' }
+                    }
+                } else {
+                    // Insert at current cursor position
+                    success = editor.chain()
+                        .focus()
+                        .insertColumns({ cols: colCount })
+                        .run()
+                }
 
                 if (!success) {
                     return { error: '插入分栏失败' }
@@ -208,29 +230,26 @@ export const createColumnsTools = (editor: Editor): ToolsRecord => ({
                 const contentStart = columnPos + 1
                 const contentEnd = columnPos + targetColumn.nodeSize - 1
 
+                // Parse markdown content to nodes
+                const contentNodes = parseMarkdownToNodes(content);
+
                 let success: boolean
 
                 if (mode === 'replace') {
                     success = editor.chain()
                         .focus()
                         .deleteRange({ from: contentStart, to: contentEnd })
-                        .insertContentAt(contentStart, [
-                            { type: 'paragraph', content: [{ type: 'text', text: content }] }
-                        ])
+                        .insertContentAt(contentStart, contentNodes)
                         .run()
                 } else if (mode === 'append') {
                     success = editor.chain()
                         .focus()
-                        .insertContentAt(contentEnd, [
-                            { type: 'paragraph', content: [{ type: 'text', text: content }] }
-                        ])
+                        .insertContentAt(contentEnd, contentNodes)
                         .run()
                 } else {
                     success = editor.chain()
                         .focus()
-                        .insertContentAt(contentStart, [
-                            { type: 'paragraph', content: [{ type: 'text', text: content }] }
-                        ])
+                        .insertContentAt(contentStart, contentNodes)
                         .run()
                 }
 

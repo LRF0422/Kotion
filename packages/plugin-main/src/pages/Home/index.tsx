@@ -42,7 +42,7 @@ export const Home: React.FC = () => {
 
     const getGreetingIcon = () => {
         if (currentHour >= 5 && currentHour < 12) {
-            return <Sun className="h-8 w-8 text-yellow-500" />
+            return <Sun className="h-8 w-8 text-yellow-500 animate-spin" />
         } else if (currentHour >= 12 && currentHour < 18) {
             return <Sunset className="h-8 w-8 text-orange-500" />
         } else {
