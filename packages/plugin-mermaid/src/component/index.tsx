@@ -1,21 +1,10 @@
 import React, { useState, useRef, useEffect, useId, memo } from "react";
 import mermaid, { type MermaidConfig } from "mermaid";
-import { IconButton } from "@kn/ui"
+import { Button } from "@kn/ui"
+import { CopyIcon, DownloadIcon } from "@kn/icon"
 // styles
 // import "./styles.css";
 import { uuidv4 } from "lib0/random";
-
-// Simple SVG icons to replace MUI icons
-const CopyIcon = () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
-    </svg>
-);
-const DownloadIcon = () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-    </svg>
-);
 
 // Download SVG function
 const handleDownloadSvg = (
@@ -93,6 +82,7 @@ function RenderMermaid({
                     startOnLoad: false,
                     suppressErrorRendering: true,
                     theme: "default", // Ensure theme is set
+                    themeCSS: ".node rect { stroke: #3b82f6; stroke-width: 2px; fill: #eff6ff; } .edgePath path { stroke: #6b7280; stroke-width: 2px; } .cluster rect { stroke: #818cf8; stroke-width: 2px; fill: #e0e7ff; } .label { font-family: 'Inter', sans-serif; font-weight: 500; }", // Custom CSS for better styling
                     ...mermaidConfig, // Allow user overrides
                 });
                 const { svg } = await mermaid.render(`mermaid-${id}`, mermaidCode);
@@ -125,24 +115,28 @@ function RenderMermaid({
         }
         // Default error rendering
         return (
-            <div className="mermaid-error-container w-full">
-                <div className="mermaid-actions">
+            <div className="mermaid-error-container w-full rounded-lg border bg-card text-card-foreground shadow-sm">
+                <div className="mermaid-actions p-2">
                     {!disableCopy &&
                         (CopyComponent ? (
                             <CopyComponent onClick={handleCopyCode} />
                         ) : (
-                            <IconButton
-                                icon={<CopyIcon />}
+                            <Button
+                                variant="ghost"
+                                size="icon"
                                 onClick={handleCopyCode}
-                                className="mermaid-action-button btn-copy"
-                            />
+                                className="mermaid-action-button btn-copy h-8 w-8 p-1.5"
+                            >
+                                <CopyIcon className="h-4 w-4" />
+                            </Button>
                         ))}
                 </div>
-                {RenderCode ? (
-                    <RenderCode code={mermaidCode} />
-                ) : (
-                    <CodeRenderer>{mermaidCode}</CodeRenderer>
-                )}
+                <div className="p-4 bg-destructive/10 text-destructive rounded-b-lg">
+                    <p className="text-sm font-medium mb-2">Error rendering diagram:</p>
+                    <pre className="text-xs whitespace-pre-wrap break-words font-mono">
+                        {error}
+                    </pre>
+                </div>
             </div>
         );
     }
@@ -155,22 +149,27 @@ function RenderMermaid({
                     (CopyComponent ? (
                         <CopyComponent onClick={handleCopyCode} />
                     ) : (
-                        <IconButton
-                            icon={<CopyIcon />}
+                        <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={handleCopyCode}
-                            className="mermaid-action-button btn-copy"
-                        />
+                            className="mermaid-action-button btn-copy h-8 w-8 p-1.5"
+                        >
+                            <CopyIcon className="h-4 w-4" />
+                        </Button>
                     ))}
                 {!disableDownload &&
                     (DownloadComponent ? (
                         <DownloadComponent onClick={() => handleDownloadSvg(mermaidRef)} />
                     ) : (
-
-                        <IconButton
-                            icon={<DownloadIcon />}
+                        <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => handleDownloadSvg(mermaidRef)}
-                            className="mermaid-action-button btn-copy"
-                        />
+                            className="mermaid-action-button btn-download h-8 w-8 p-1.5"
+                        >
+                            <DownloadIcon className="h-4 w-4" />
+                        </Button>
                     ))}
             </div>
             <div ref={mermaidRef} className="mermaid-diagram flex justify-center items-center" />
