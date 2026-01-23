@@ -42,7 +42,7 @@ export const Home: React.FC = () => {
 
     const getGreetingIcon = () => {
         if (currentHour >= 5 && currentHour < 12) {
-            return <Sun className="h-8 w-8 text-yellow-500 animate-spin" />
+            return <Sun className="h-8 w-8 text-yellow-500 animate-slow-spin" />
         } else if (currentHour >= 12 && currentHour < 18) {
             return <Sunset className="h-8 w-8 text-orange-500" />
         } else {
@@ -68,6 +68,19 @@ export const Home: React.FC = () => {
             "flex justify-center pb-6 pt-2 overflow-auto h-full",
             isMobile && "px-4"
         )}>
+            <style>{`
+                @keyframes slow-spin {
+                    from {
+                        transform: rotate(0deg);
+                    }
+                    to {
+                        transform: rotate(360deg);
+                    }
+                }
+                .animate-slow-spin {
+                    animation: slow-spin 4s linear infinite;
+                }
+            `}</style>
             <div className={cn(
                 "flex flex-col gap-6 w-full",
                 !isMobile && "max-w-[800px]"
