@@ -1,4 +1,4 @@
-import { Check, ClockIcon, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, HomeIcon, ListIcon, LucideHome, PlusIcon, StarIcon, Trash2, UploadIcon, XIcon, ArrowLeft, ArrowRight, ChevronRight, Pencil, FolderInput, Copy, Files, CheckSquare, Square, Menu as MenuIcon } from "@kn/icon";
+import { Check, ClockIcon, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, HomeIcon, ListIcon, LucideHome, PlusIcon, StarIcon, Trash2, UploadIcon, XIcon, ArrowLeft, ArrowRight, ChevronRight, Pencil, FolderInput, Copy, Files, CheckSquare, Square, Menu as MenuIcon, MoreVertical } from "@kn/icon";
 import { Button, EmptyState, Input, ScrollArea, Separator, TreeView, cn, Skeleton, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, useIsMobile, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
 import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { FileCardList } from "./FileCard";
@@ -9,7 +9,7 @@ import { Menu } from "./Menu";
 import { FileItem, FileManageContext } from "./FileContext";
 import { useFileManager } from "../../hooks/useFileManager";
 import { Breadcrumb } from "./Breadcrumb";
-import { RenameDialog, MoveDialog, FileDetailsDialog } from "./dialogs";
+import { RenameDialog, MoveDialog, FileDetailsDialog, CreateFolderDialog } from "./dialogs";
 
 
 
@@ -67,6 +67,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
     const [moveDialogOpen, setMoveDialogOpen] = useState(false);
     const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+    const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
 
     const defaultMenus = [
         {
@@ -115,7 +116,12 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     const handleCreateFile = useCallback((type: 'FOLDER' | 'FILE', name?: string) => {
         if (type === 'FOLDER') {
-            createFolder(name || "New Folder", repoKey)
+            // If no name is provided, open the dialog to get a name from user
+            if (!name) {
+                setCreateFolderDialogOpen(true);
+                return;
+            }
+            createFolder(name, repoKey)
         } else {
             uploadFile(repoKey)
         }
@@ -177,6 +183,66 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
         return baseItem
     }, [navigateToFolder, setCurrentItem])
+    const buildTreeElements = useCallback((items: any[]) => {
+        return items.map((item: any) => {
+            const resolvedItem = reslove(item);
+
+            // Create a folder element with dropdown menu for folders only
+            if (resolvedItem.isFolder) {
+                return {
+                    ...resolvedItem,
+                    // Customize the name to include dropdown menu
+                    name: (
+                        <div className="flex items-center justify-between flex-1 group">
+                            <span className="truncate flex-1">{resolvedItem.name}</span>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <MoreVertical className="h-3 w-3" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-[180px]">
+                                    <DropdownMenuItem onClick={() => {
+                                        setRenameDialogOpen(true);
+                                        // Set the current item to the folder being renamed
+                                        setCurrentItem(resolvedItem);
+                                    }}>
+                                        <Pencil className="h-4 w-4 mr-2" />
+                                        Rename
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => {
+                                        handleDelete([resolvedItem.id]);
+                                    }} className="text-destructive focus:text-destructive">
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        Delete
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
+                    ),
+                    onClick: () => {
+                        navigateToFolder(resolvedItem.id, resolvedItem.name);
+                        setCurrentItem(resolvedItem);
+                    },
+                };
+            }
+
+            // For non-folders, return as is
+            return {
+                ...resolvedItem,
+                onClick: () => {
+                    setCurrentItem(resolvedItem);
+                },
+            };
+        });
+    }, [reslove, navigateToFolder, setCurrentItem, handleDelete]);
+
     useEffect(() => {
         const fetchData = async () => {
             // Only show skeleton on initial load
@@ -187,7 +253,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 const api = folderId ? APIS.GET_CHILDREN : APIS.GET_ROOT_FOLDER
                 const params = folderId ? { folderId } : undefined
                 const res = await useApi(api, params)
-                const items = res.data.map((item: any) => reslove(item))
+                const items = buildTreeElements(res.data);
                 setFiles([...defaultMenus, {
                     isGroup: true,
                     name: "Folders",
@@ -204,7 +270,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
             }
         }
         fetchData()
-    }, [folderId, reslove, isInitialLoad])
+    }, [folderId, buildTreeElements, isInitialLoad])
 
     const contextValue = useMemo(() => ({
         selectedFiles,
@@ -537,11 +603,23 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         </div>
 
         {/* Dialogs */}
+        <CreateFolderDialog
+            open={createFolderDialogOpen}
+            onOpenChange={setCreateFolderDialogOpen}
+            onCreate={(name) => createFolder(name, repoKey)}
+        />
         <RenameDialog
             open={renameDialogOpen}
             onOpenChange={setRenameDialogOpen}
-            file={selectedFiles.length === 1 ? selectedFiles[0] : null}
-            onConfirm={handleRename}
+            file={selectedFiles.length === 1 ? selectedFiles[0] : currentItem}
+            onConfirm={(file, newName) => {
+                // If we have a currentItem (from sidebar), use it; otherwise use selectedFiles
+                const targetFile = currentItem || (selectedFiles.length === 1 ? selectedFiles[0] : null);
+                if (targetFile) {
+                    handleRename(targetFile, newName);
+                }
+                setRenameDialogOpen(false);
+            }}
         />
         <MoveDialog
             open={moveDialogOpen}

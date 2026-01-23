@@ -127,9 +127,19 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
 
     // New file operations
     const renameFile = useCallback(async (file: FileItem, newName: string) => {
-        // TODO: Implement rename API call
-        toast.success(`Renamed "${file.name}" to "${newName}"`);
-        setUpdateFlag((prev) => prev + 1);
+        try {
+            await useApi(APIS.RENAME_FILE, null, {
+                id: file.id,
+                name: newName,
+                type: file.isFolder ? 'FOLDER' : 'FILE',
+            });
+            setUpdateFlag((prev) => prev + 1);
+            toast.success(`${file.isFolder ? 'Folder' : 'File'} renamed successfully`);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : `Failed to rename ${file.isFolder ? 'folder' : 'file'}`;
+            toast.error(errorMessage);
+            throw err;
+        }
     }, []);
 
     const moveFiles = useCallback(async (files: FileItem[], targetFolderId: string) => {

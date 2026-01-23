@@ -32,6 +32,11 @@ export const APIS = {
         url: '/knowledge-file-center/file/download',
         method: 'GET',
         name: 'Download File'
+    } as API,
+    RENAME_FILE: {
+        url: '/knowledge-file-center/file',
+        method: 'POST',
+        name: 'Rename File/Folder'
     } as API
 
 }

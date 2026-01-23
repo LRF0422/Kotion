@@ -6,7 +6,7 @@ import {
 } from "@kn/ui";
 import React, { PropsWithChildren, useContext, useCallback, useState } from "react";
 import { FileManageContext, FileManagerState, FileItem } from "./FileContext";
-import { RenameDialog, MoveDialog, FileDetailsDialog } from "./dialogs";
+import { RenameDialog, MoveDialog, FileDetailsDialog, CreateFolderDialog } from "./dialogs";
 
 
 export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
@@ -29,11 +29,12 @@ export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
     const [moveDialogOpen, setMoveDialogOpen] = useState(false);
     const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+    const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
     const [targetFile, setTargetFile] = useState<FileItem | null>(null);
 
     const handleCreateFolder = useCallback(() => {
-        handleUpload('FOLDER', 'New Folder')
-    }, [handleUpload])
+        setCreateFolderDialogOpen(true);
+    }, [])
 
     const handleUploadFile = useCallback(() => {
         handleUpload('FILE')
@@ -179,6 +180,11 @@ export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
         </ContextMenu>
 
         {/* Dialogs */}
+        <CreateFolderDialog
+            open={createFolderDialogOpen}
+            onOpenChange={setCreateFolderDialogOpen}
+            onCreate={(name) => handleUpload('FOLDER', name)}
+        />
         <RenameDialog
             open={renameDialogOpen}
             onOpenChange={setRenameDialogOpen}
