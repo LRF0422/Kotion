@@ -101,7 +101,7 @@ export const FigmaViewComponent: React.FC<NodeViewProps> = (props) => {
                                 />
                             </div>
                         </div> :
-                        <div className="border-2 border-dashed rounded-md p-8 text-center transition-colors hover:border-primary/50">
+                        <div className="border-1 rounded-md p-8 text-center transition-colors hover:border-primary/50">
                             <div className="flex flex-col items-center justify-center gap-4">
                                 <FigmaIcon className="h-10 w-10 text-muted-foreground" />
                                 <div>

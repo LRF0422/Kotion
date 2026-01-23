@@ -212,7 +212,7 @@ export const SpaceDetail: React.FC = () => {
 
     const resolve = useCallback((treeNode: any): SiderMenuItemProps => {
 
-        const name = <div className="flex flex-row gap-1 items-center group w-full overflow-hidden">
+        const name = <div className="flex flex-row gap-1 items-center group w-full overflow-hidden text-ellipsis">
             <div className="text-left text-ellipsis text-nowrap overflow-hidden flex-1 min-w-0 flex items-center gap-1">
                 {treeNode.icon && <span className="text-sm">{treeNode.icon.icon}</span>}
                 <span className="text-sm">{treeNode.name}</span>

@@ -65,7 +65,7 @@ export const Home: React.FC = () => {
 
     return (
         <div className={cn(
-            "flex justify-center pb-6 pt-2 overflow-auto h-full",
+            "flex justify-center pb-6 pt-2  overflow-auto h-full",
             isMobile && "px-4"
         )}>
             <style>{`
@@ -234,7 +234,7 @@ export const Home: React.FC = () => {
                 </div>
 
                 {/* Learning Section */}
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3 mb-2">
                     <div className="flex items-center gap-2">
                         <Book size={14} className="text-muted-foreground" />
                         <span className="font-medium text-sm">{t("home.learning") || "Learn Knowledge"}</span>
