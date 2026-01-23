@@ -1,5 +1,5 @@
 import { APIS } from "../../../api";
-import { Badge, ExpandableChat, useIsMobile, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
+import { Badge, useIsMobile, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuPortal, DropdownMenuLabel } from "@kn/ui";
 import { Label } from "@kn/ui";
@@ -7,19 +7,20 @@ import { RadioGroup, RadioGroupItem } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { Switch } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
-import { CollaborationEditor, EditorView, exportToPDF, printEditorContent, useAutoSave, AutoSaveStatus } from "@kn/editor";
+import { CollaborationEditor, exportToPDF, useAutoSave, AutoSaveStatus, TiptapCollabProvider } from "@kn/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
-import { useApi, useService } from "@kn/core";
+import { useApi, useService, deepEqual } from "@kn/core";
 import { useNavigator } from "@kn/core";
 import { GlobalState } from "@kn/core";
 import { Editor } from "@kn/editor";
-import { useFullscreen, useKeyPress, useToggle, useUnmount } from "@kn/core";
+import * as Y from "yjs";
+import { useFullscreen, useKeyPress, useToggle } from "@kn/core";
 import {
     ALargeSmall, ArrowLeft, BookTemplate, CircleArrowUp,
     Contact2, Download, FileIcon,
-    FullscreenIcon, Link, Loader, LoaderCircle, LockIcon, MessageSquareText,
-    Minimize2, MoreHorizontal, MoveDownRight, Plus, Save, Trash2, Upload, List,
-    Check, CloudOff
+    Link, LoaderCircle, LockIcon, MessageSquareText,
+    MoreHorizontal, MoveDownRight, Save, Trash2, Upload, List,
+    Check, CloudOff, Users, Wifi, WifiOff
 } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "@kn/common";
@@ -55,13 +56,85 @@ export const PageEditor: React.FC = () => {
     const [pageLoading, { toggle: toggleLoading }] = useToggle(false)
     const [synceStatus, setSyncStatus] = useState(false)
     const lastAwarenessRef = useRef<any[]>([])
-    const [users, setUsers] = useState<any[]>()
+    const [users, setUsers] = useState<any[]>([])
+    const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
     const editor = useRef<Editor>(null)
     const navigator = useNavigator()
     const ref = useRef<any>()
     const [fullScreen, { toggleFullscreen }] = useFullscreen(ref)
     const spaceService = useService("spaceService")
     const [isManualSaving, setIsManualSaving] = useState(false)
+
+    // Generate stable user color based on user ID
+    const userColor = useMemo(() => {
+        const colors = [
+            '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6',
+            '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+        ];
+        const id = userInfo?.id || userInfo?.name || 'anonymous';
+        const hash = String(id).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        return colors[hash % colors.length];
+    }, [userInfo?.id, userInfo?.name]);
+
+    // Memoize user object to prevent infinite loop in CollaborationEditor
+    const collaborationUser = useMemo(() => ({
+        name: userInfo?.name || userInfo?.name || 'Anonymous',
+        color: userColor,
+        id: userInfo?.id,
+    }), [userInfo?.name, userInfo?.name, userInfo?.id, userColor]);
+
+    // Create collaboration provider
+    const provider = React.useMemo(() => {
+        if (!params.pageId) return null;
+
+        const doc = new Y.Doc();
+        const collabProvider = new TiptapCollabProvider({
+            baseUrl: 'ws://localhost:1234',
+            name: `page:${params.pageId}`,
+            token: params.pageId as string,
+            document: doc,
+            onAwarenessUpdate: ({ states }) => {
+                const updatedUsers = states
+                    .map((state) => ({
+                        clientId: state.clientId,
+                        user: state.user
+                    }))
+                    .filter(u => u.user); // Filter out states without user info
+
+                if (!deepEqual(updatedUsers, lastAwarenessRef.current)) {
+                    setUsers(updatedUsers);
+                    lastAwarenessRef.current = updatedUsers;
+                }
+            },
+            onSynced: () => {
+                setSyncStatus(true);
+                setConnectionStatus('connected');
+            },
+            onStatus: (status: any) => {
+                if (status.status === 'connected') {
+                    setConnectionStatus('connected');
+                } else if (status.status === 'disconnected') {
+                    setConnectionStatus('disconnected');
+                } else {
+                    setConnectionStatus('connecting');
+                }
+            }
+        });
+
+        return collabProvider;
+    }, [params.pageId]);
+
+    // Cleanup provider and awareness on unmount
+    React.useEffect(() => {
+        return () => {
+            if (provider) {
+                // Destroy awareness first
+                provider.awareness?.destroy();
+                provider.disconnect();
+                provider.destroy();
+            }
+        };
+    }, [provider]);
 
     useEffect(() => {
         toggleLoading()
@@ -220,6 +293,51 @@ export const PageEditor: React.FC = () => {
                 <span className="truncate">{page.title}</span>
             </div>
             <div className="flex flex-row items-center gap-1 px-1 flex-shrink-0">
+                {/* Collaboration Status and Users */}
+                {provider && (
+                    <>
+                        {/* Connection Status */}
+                        <Badge
+                            variant={connectionStatus === 'connected' ? 'default' : connectionStatus === 'connecting' ? 'secondary' : 'destructive'}
+                            className="gap-1"
+                        >
+                            {connectionStatus === 'connected' ? (
+                                <><Wifi className="h-3 w-3" /> Synced</>
+                            ) : connectionStatus === 'connecting' ? (
+                                <><LoaderCircle className="h-3 w-3 animate-spin" /> Connecting...</>
+                            ) : (
+                                <><WifiOff className="h-3 w-3" /> Disconnected</>
+                            )}
+                        </Badge>
+
+                        {/* Active Users */}
+                        {users.length > 0 && (
+                            <div className="flex items-center gap-1">
+                                <Users className="h-4 w-4 text-muted-foreground" />
+                                <div className="flex -space-x-2">
+                                    {users.slice(0, 3).map((u, index) => (
+                                        <div
+                                            key={u.clientId}
+                                            className="h-6 w-6 rounded-full border-2 border-background flex items-center justify-center text-[10px] font-semibold text-white"
+                                            style={{ backgroundColor: u.user?.color || '#3b82f6' }}
+                                            title={u.user?.name || 'Anonymous'}
+                                        >
+                                            {(u.user?.name || 'A').charAt(0).toUpperCase()}
+                                        </div>
+                                    ))}
+                                    {users.length > 3 && (
+                                        <div className="h-6 w-6 rounded-full border-2 border-background bg-muted flex items-center justify-center text-[10px] font-semibold">
+                                            +{users.length - 3}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                        <Separator orientation="vertical" />
+                    </>
+                )}
+
+                {/* Auto-save Status */}
                 <Badge variant={statusDisplay.variant}>
                     <div className="flex flex-row items-center gap-1">
                         {statusDisplay.icon}
@@ -397,13 +515,14 @@ export const PageEditor: React.FC = () => {
         </header>
         <main className="w-full flex flex-row justify-center">
             {
-                page && <CollaborationEditor
+                page && synceStatus && <CollaborationEditor
                     pageInfo={page}
                     ref={editor}
-                    // provider={provider}
+                    synced={synceStatus}
+                    provider={provider}
                     className={isMobile ? "h-[calc(100vh-110px)] overflow-auto" : "h-[calc(100vh-80px)] overflow-auto"}
                     id={params.pageId as string}
-                    user={userInfo}
+                    user={collaborationUser}
                     token={params.pageId as string}
                     toc={!isMobile}
                     withTitle={true}

@@ -63,11 +63,6 @@ export const PageViewer: React.FC = () => {
 
     }, [blockId, editor, page])
 
-    useEffect(() => {
-        console.log('editor', editor);
-
-    }, [editor])
-
     const goToEditor = () => {
         navigator.go({
             to: `/space-detail/${params.id}/page/edit/${params.pageId}`

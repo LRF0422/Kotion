@@ -58,12 +58,12 @@ export const EditorRender = forwardRef<
   const [exts] = useEditorExtension(undefined, withTitle)
   const [items, setItems] = useSafeState<any[]>([])
 
-  const editor: Editor = useEditor(
+  const editor = useEditor(
     {
       content: content ? rewriteUnknownContent(content as JSONContent,
         getSchema([...(exts as AnyExtension[] || []), ...(extensions as AnyExtension[] || [])]), {
         fallbackToParagraph: true
-      }).json : null,
+      }).json : { type: 'doc', content: [{ type: 'paragraph' }] },
       editable: isEditable,
       extensions: [
         ...(extensions as AnyExtension[] || []),
@@ -88,7 +88,7 @@ export const EditorRender = forwardRef<
     []
   );
 
-  useImperativeHandle(ref, () => editor, [editor]);
+  useImperativeHandle(ref, () => editor as Editor, [editor]);
 
   // Get current theme from context
   const { theme: currentTheme } = useTheme();

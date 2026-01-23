@@ -1,5 +1,7 @@
-import React, { ReactNode, forwardRef, useEffect, useImperativeHandle } from "react";
+import React, { ReactNode, forwardRef, useImperativeHandle, useEffect, useRef } from "react";
 import { AnyExtension, Editor, JSONContent, getSchema } from "@tiptap/core";
+import { Doc as YDoc, XmlFragment, XmlElement } from "yjs";
+import * as Y from "yjs";
 
 import { EditorRenderProps } from "./render";
 import { TiptapCollabProvider } from "@hocuspocus/provider";
@@ -16,6 +18,8 @@ import { EditorMenu } from "./EditorMenu";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
 import { TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
+import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCursor from "@tiptap/extension-collaboration-caret";
 import "../styles/editor.css"
 
 
@@ -27,6 +31,7 @@ export interface CollaborationEditorProps extends EditorRenderProps {
   className?: string
   onStatus?: (status: any) => void
   provider?: TiptapCollabProvider
+  synced: boolean
   onAwarenessUpdate?: (users: { clientId: number; user: { nickName: string } }[]) => void;
 }
 
@@ -42,32 +47,48 @@ export const CollaborationEditor = forwardRef<
   const [items, setItems] = useSafeState<any[]>([])
 
 
-  useEffect(() => {
+  // Memoize user ref to avoid extension recreation
+  const userRef = React.useRef(user);
+  React.useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
-  }, [extensions])
+  // Build extensions array with optional collaboration - only depends on provider, not user
+  const editorExtensions = React.useMemo(() => {
+    const baseExtensions = [
+      ...extensions as AnyExtension[],
+      TableOfContents.configure({
+        onUpdate(content) {
+          setItems(content)
+        },
+        getIndex: getHierarchicalIndexes,
+      })
+    ];
 
-  const editor: Editor = useEditor(
+    // Add collaboration extensions if provider is available
+    if (provider) {
+      baseExtensions.push(
+        Collaboration.configure({
+          document: provider.document,
+        }),
+        CollaborationCursor.configure({
+          provider: provider,
+          user: userRef.current || { name: 'Anonymous', color: '#3b82f6' },
+        })
+      );
+    }
+
+    return baseExtensions;
+  }, [extensions, provider, userRef]); // Include userRef to ensure user updates are captured
+
+  const editor = useEditor(
     {
       editable: true,
-      content: content ? rewriteUnknownContent(content as JSONContent,
-        getSchema(extensions as AnyExtension[]), {
-        fallbackToParagraph: true
-      }).json : null,
-      immediatelyRender: true,
       shouldRerenderOnTransaction: false,
       onBlur: ({ editor }) => {
         props.onBlur && props.onBlur(editor)
       },
-      extensions: [
-        ...extensions as AnyExtension[],
-        TableOfContents.configure({
-          onUpdate(content) {
-            setItems(content)
-          },
-          getIndex: getHierarchicalIndexes,
-          // scrollParent: () => document.querySelector("#editor-container") as HTMLElement,
-        })
-      ],
+      extensions: editorExtensions,
       editorProps: {
         attributes: {
           class: "ProseMirror",
@@ -76,10 +97,30 @@ export const CollaborationEditor = forwardRef<
         }
       }
     },
-    []
+    [editorExtensions]
   );
 
   useImperativeHandle(ref, () => editor as Editor)
+
+  // Handle content updates for non-collaborative mode - wait for editor to be ready
+  React.useEffect(() => {
+    if (editor) {
+      console.log('initContent', content);
+      const processedContent = rewriteUnknownContent(content as JSONContent,
+        getSchema(extensions as AnyExtension[]), {
+        fallbackToParagraph: true
+      }).json;
+      editor.commands.setContent(processedContent);
+    }
+  }, [editor]);
+
+
+  // Cleanup provider on unmount
+  useUnmount(() => {
+    if (provider) {
+      provider.disconnect();
+    }
+  });
 
   // Get current theme from context
   const { theme: currentTheme } = useTheme();

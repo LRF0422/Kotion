@@ -790,29 +790,58 @@ export const StyledEditor = styled.div.attrs({
   
   /* E Placeholder */
 
+  /* Collaboration Cursor Styles */
   .collaboration-cursor__caret {
     position: relative;
-    border-left: 1px solid #0d0d0d;
+    border-left: 2px solid currentColor;
     margin-right: -1px;
     margin-left: -1px;
     word-break: normal;
     pointer-events: none;
-    border-right: 1px solid #0d0d0d;
+    animation: cursor-blink 1.2s ease-in-out infinite;
+  }
+
+  @keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
   }
 
   .collaboration-cursor__label {
     position: absolute;
-    top: -1.4em;
-    left: -1px;
-    padding: 0.1rem 0.3rem;
-    font-size: 12px;
+    top: -1.6em;
+    left: -2px;
+    padding: 2px 8px;
+    font-size: 11px;
     font-style: normal;
-    font-weight: 600;
-    line-height: normal;
-    color: #0d0d0d;
+    font-weight: 500;
+    line-height: 1.4;
+    color: white;
     white-space: nowrap;
-    border-radius: 3px 3px 3px 0;
+    border-radius: 4px 4px 4px 0;
     user-select: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.1);
+    transform-origin: bottom left;
+    animation: cursor-label-appear 0.15s ease-out;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.01em;
+  }
+
+  @keyframes cursor-label-appear {
+    from {
+      opacity: 0;
+      transform: scale(0.9) translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  /* Dark mode adjustments for collaboration cursor */
+  &.dark .collaboration-cursor__label {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
   }
 
   /* S highlight - Light Mode */
