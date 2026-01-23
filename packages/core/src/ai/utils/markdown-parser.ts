@@ -12,6 +12,9 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
     let inList = false
     let listType: 'bullet' | 'ordered' | null = null
     let currentListItems: any[] = []
+    let inTable = false
+    let tableHeaders: string[] = []
+    let tableRows: string[][] = []
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i]
@@ -62,7 +65,63 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
                 currentListItems = []
                 listType = null
             }
+            // Close table if open
+            if (inTable) {
+                // Add table node
+                const tableNode = createTableNode(tableHeaders, tableRows);
+                nodes.push(tableNode);
+                inTable = false;
+                tableHeaders = [];
+                tableRows = [];
+            }
             continue
+        }
+
+        // Table separator line (should come after header row)
+        const tableSeparatorMatch = line.trim().match(/^\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?$/);
+        if (tableSeparatorMatch && !inTable && i > 0) {
+            // This is a table separator, check if previous line was a valid header
+            const prevLine = lines[i - 1];
+            const prevLineMatch = prevLine.trim().match(/^\|\s*(.*?)\s*\|(?:\s*(.*?)\s*\|)*$/);
+            if (prevLineMatch) {
+                // Extract headers from previous line
+                tableHeaders = prevLine.trim()
+                    .split('|')
+                    .slice(1, -1)
+                    .map(h => h.trim())
+                    .filter(h => h !== '');
+                inTable = true;
+                continue;
+            }
+        }
+
+        // Table row
+        const tableRowMatch = line.trim().match(/^\|\s*(.*?)\s*\|(?:\s*(.*?)\s*\|)*$/);
+        if ((tableRowMatch || inTable) && !inList && !inCodeBlock) {
+            if (inTable) {
+                // This is a table body row
+                const cells = line.trim()
+                    .split('|')
+                    .slice(1, -1)
+                    .map(cell => cell.trim())
+                    .filter(cell => cell !== '');
+                tableRows.push(cells);
+                continue;
+            } else {
+                // Check if this might be the start of a table (with a potential separator on the next line)
+                const nextLine = i < lines.length - 1 ? lines[i + 1] : '';
+                const nextLineIsSeparator = nextLine.trim().match(/^\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?$/);
+                if (nextLineIsSeparator) {
+                    // This is a table header row
+                    tableHeaders = line.trim()
+                        .split('|')
+                        .slice(1, -1)
+                        .map(h => h.trim())
+                        .filter(h => h !== '');
+                    inTable = true;
+                    continue;
+                }
+            }
         }
 
         // Heading
@@ -214,6 +273,13 @@ export const parseMarkdownToNodes = (markdown: string): any[] => {
         })
     }
 
+    // Handle unclosed table
+    if (inTable && tableHeaders.length > 0) {
+        // Add table node
+        const tableNode = createTableNode(tableHeaders, tableRows);
+        nodes.push(tableNode);
+    }
+
     // Handle unclosed list
     if (inList && currentListItems.length > 0) {
         nodes.push({
@@ -280,6 +346,49 @@ export const parseInlineMarkdown = (text: string): any[] => {
 
     return result
 }
+
+/**
+ * Create a table node from headers and rows
+ */
+const createTableNode = (headers: string[], rows: string[][]): any => {
+    // Create header row
+    const headerCells = headers.map(header => ({
+        type: 'tableHeader',
+        content: [{
+            type: 'paragraph',
+            content: parseInlineMarkdown(header)
+        }]
+    }));
+
+    const headerRow = {
+        type: 'tableRow',
+        content: headerCells
+    };
+
+    // Create body rows
+    const bodyRows = rows.map(row => {
+        const cells = row.map(cell => ({
+            type: 'tableCell',
+            content: [{
+                type: 'paragraph',
+                content: parseInlineMarkdown(cell)
+            }]
+        }));
+
+        return {
+            type: 'tableRow',
+            content: cells
+        };
+    });
+
+    // Combine header and body rows
+    const allRows = [headerRow, ...bodyRows];
+
+    return {
+        type: 'table',
+        content: allRows
+    };
+};
 
 /**
  * Convert content items to ProseMirror nodes
