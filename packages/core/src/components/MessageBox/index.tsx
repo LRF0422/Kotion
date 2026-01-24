@@ -315,7 +315,7 @@ export const MessageBox: React.FC<MessageBoxProps> = ({
                 side="right"
                 align="start"
                 sideOffset={12}
-                className="w-[320px] p-0 overflow-hidden"
+                className="w-[400px] p-0 overflow-hidden"
             >
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b">

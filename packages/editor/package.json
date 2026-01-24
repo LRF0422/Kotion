@@ -11,7 +11,6 @@
   },
   "scripts": {
     "build": "rollup -c",
-    "room-server": "node ./src/server/server.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

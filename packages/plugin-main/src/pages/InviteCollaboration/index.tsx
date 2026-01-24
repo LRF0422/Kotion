@@ -17,14 +17,16 @@ import {
     FileText,
     Loader2,
     LogOut,
+    Users,
     X
 } from "@kn/icon";
-import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector, AppContext } from "@kn/common";
 import { useParams, useSearchParams } from "@kn/common";
 import { toast } from "@kn/ui";
 import * as Y from "@kn/editor";
 import { ExtensionWrapper } from "@kn/common";
+import { Trans, useTranslation } from "@kn/common";
 
 // Types
 interface InvitationInfo {
@@ -52,31 +54,23 @@ interface PageInfo {
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 type InviteStatus = 'loading' | 'validating' | 'accepting' | 'ready' | 'error' | 'expired';
 
-// Permission label mapping
-const getPermissionLabel = (permission: string) => {
-    switch (permission) {
-        case 'READ': return 'View only';
-        case 'WRITE': return 'Can edit';
-        case 'ADMIN': return 'Full access';
-        default: return permission;
-    }
-};
-
-// Permission badge color
-const getPermissionBadgeVariant = (permission: string): 'default' | 'secondary' | 'destructive' | 'outline' => {
-    switch (permission) {
-        case 'ADMIN': return 'default';
-        case 'WRITE': return 'secondary';
-        default: return 'outline';
-    }
-};
-
 export const InviteCollaboration: React.FC = () => {
+    const { t } = useTranslation();
     const params = useParams();
     const [searchParams] = useSearchParams();
     const navigator = useNavigator();
     const { userInfo } = useSelector((state: GlobalState) => state);
     const { pluginManager } = useContext(AppContext);
+
+    // Permission label mapping
+    const getPermissionLabel = useCallback((permission: string) => {
+        switch (permission) {
+            case 'READ': return t('inviteCollaboration.permission.viewOnly');
+            case 'WRITE': return t('inviteCollaboration.permission.canEdit');
+            case 'ADMIN': return t('inviteCollaboration.permission.fullAccess');
+            default: return permission;
+        }
+    }, [t]);
 
     // Invitation and page state
     const [inviteStatus, setInviteStatus] = useState<InviteStatus>('loading');
@@ -94,6 +88,11 @@ export const InviteCollaboration: React.FC = () => {
     // Inviter's plugins/extensions state
     const [inviterExtensions, setInviterExtensions] = useState<ExtensionWrapper[] | undefined>(undefined);
     const [pluginsLoading, setPluginsLoading] = useState(false);
+
+    // Track if inviter has left the session
+    const [inviterLeft, setInviterLeft] = useState(false);
+    const [waitingForInviter, setWaitingForInviter] = useState(true);
+    const inviterWasPresentRef = useRef(false);
 
     // Get invitation token from URL
     const inviteToken = params.token || searchParams.get('token');
@@ -136,6 +135,8 @@ export const InviteCollaboration: React.FC = () => {
 
                 if (!deepEqual(updatedUsers, lastAwarenessRef.current)) {
                     setUsers(updatedUsers);
+                    console.log('user', updatedUsers);
+
                     lastAwarenessRef.current = updatedUsers;
                 }
             },
@@ -168,11 +169,72 @@ export const InviteCollaboration: React.FC = () => {
         };
     }, [provider]);
 
+    // Handle exit - using useCallback to avoid stale closure in useEffect
+    const handleExit = useCallback(() => {
+        if (provider) {
+            provider.disconnect();
+        }
+        // Navigate to home or close window
+        if (window.opener) {
+            window.close();
+        } else {
+            navigator.go({ to: '/' });
+        }
+    }, [provider, navigator]);
+
+    // Monitor when inviter leaves the session
+    useEffect(() => {
+        // Skip if we don't have required data or already triggered exit
+        if (!invitation?.inviterId || !synced || inviterLeft) {
+            return;
+        }
+
+        // Convert inviterId to string for comparison (handles string/number mismatch)
+        const inviterIdStr = String(invitation.inviterId);
+
+        // Check if inviter is currently present in the session
+        // Compare as strings to avoid type mismatch issues
+        const inviterPresent = users.some(u => {
+            const userId = u.user?.id;
+            return userId !== undefined && String(userId) === inviterIdStr;
+        });
+
+        // Debug logging
+        console.log('[InviteCollaboration] Checking inviter presence:', {
+            inviterId: inviterIdStr,
+            users: users.map(u => ({ id: u.user?.id, name: u.user?.name })),
+            inviterPresent,
+            wasPresent: inviterWasPresentRef.current,
+            waitingForInviter
+        });
+
+        if (inviterPresent) {
+            // Mark that we've seen the inviter in the session
+            if (!inviterWasPresentRef.current) {
+                console.log('[InviteCollaboration] Inviter joined the session');
+                toast.success(t('inviteCollaboration.toast.hostJoined', { name: invitation.inviterName || 'Host' }));
+            }
+            inviterWasPresentRef.current = true;
+            setWaitingForInviter(false);
+        } else if (inviterWasPresentRef.current) {
+            // Inviter was present but is now gone - they left the session
+            console.log('[InviteCollaboration] Inviter left the session, triggering exit');
+            setInviterLeft(true);
+            toast.error(t('inviteCollaboration.toast.sessionEnded'));
+
+            // Auto-exit after a short delay to allow user to see the message
+            setTimeout(() => {
+                handleExit();
+            }, 3000);
+        }
+        // If inviter was never present and still not present, keep waiting
+    }, [users, invitation?.inviterId, invitation?.inviterName, synced, inviterLeft, waitingForInviter, handleExit]);
+
     // Validate and accept invitation on mount
     useEffect(() => {
         if (!inviteToken) {
             setInviteStatus('error');
-            setErrorMessage('Invalid invitation link. No token provided.');
+            setErrorMessage(t('inviteCollaboration.error.noToken'));
             return;
         }
 
@@ -190,13 +252,13 @@ export const InviteCollaboration: React.FC = () => {
 
             if (!invitationData || invitationData.status === 'EXPIRED') {
                 setInviteStatus('expired');
-                setErrorMessage('This invitation has expired.');
+                setErrorMessage(t('inviteCollaboration.error.expired'));
                 return;
             }
 
             if (invitationData.status === 'REVOKED') {
                 setInviteStatus('error');
-                setErrorMessage('This invitation has been revoked.');
+                setErrorMessage(t('inviteCollaboration.error.revoked'));
                 return;
             }
 
@@ -206,7 +268,7 @@ export const InviteCollaboration: React.FC = () => {
             if (invitationData.status === 'PENDING') {
                 setInviteStatus('accepting');
                 await useApi(APIS.ACCEPT_INVITATION, { token: inviteToken });
-                toast.success('Invitation accepted!');
+                toast.success(t('inviteCollaboration.toast.accepted'));
             }
 
             // Step 3: Load page content
@@ -236,20 +298,7 @@ export const InviteCollaboration: React.FC = () => {
         } catch (error: any) {
             console.error('Failed to process invitation:', error);
             setInviteStatus('error');
-            setErrorMessage(error?.message || 'Failed to process invitation. Please try again.');
-        }
-    };
-
-    // Handle exit
-    const handleExit = () => {
-        if (provider) {
-            provider.disconnect();
-        }
-        // Navigate to home or close window
-        if (window.opener) {
-            window.close();
-        } else {
-            navigator.go({ to: '/' });
+            setErrorMessage(error?.message || t('inviteCollaboration.error.processFailed'));
         }
     };
 
@@ -265,7 +314,9 @@ export const InviteCollaboration: React.FC = () => {
                 <div className="flex flex-col items-center gap-4">
                     <Loader2 className="h-12 w-12 animate-spin text-primary" />
                     <p className="text-lg text-muted-foreground">
-                        {inviteStatus === 'loading' ? 'Loading...' : 'Validating invitation...'}
+                        {inviteStatus === 'loading'
+                            ? t('inviteCollaboration.loading.default')
+                            : t('inviteCollaboration.loading.validating')}
                     </p>
                 </div>
             </div>
@@ -281,7 +332,7 @@ export const InviteCollaboration: React.FC = () => {
                         <CheckCircle2 className="h-12 w-12 text-green-500" />
                         <Loader2 className="h-6 w-6 animate-spin text-primary absolute -bottom-1 -right-1" />
                     </div>
-                    <p className="text-lg text-muted-foreground">Accepting invitation...</p>
+                    <p className="text-lg text-muted-foreground">{t('inviteCollaboration.loading.accepting')}</p>
                 </div>
             </div>
         );
@@ -301,12 +352,58 @@ export const InviteCollaboration: React.FC = () => {
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold mb-2">
-                            {inviteStatus === 'expired' ? 'Invitation Expired' : 'Invalid Invitation'}
+                            {inviteStatus === 'expired'
+                                ? t('inviteCollaboration.error.expiredTitle')
+                                : t('inviteCollaboration.error.invalidTitle')}
                         </h1>
                         <p className="text-muted-foreground">{errorMessage}</p>
                     </div>
                     <Button onClick={() => navigator.go({ to: '/' })} variant="outline">
-                        Go to Home
+                        {t('inviteCollaboration.buttons.goHome')}
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    // Render waiting for inviter state
+    if (inviteStatus === 'ready' && waitingForInviter && synced) {
+        return (
+            <div className="w-full h-screen flex flex-col items-center justify-center bg-background">
+                <div className="flex flex-col items-center gap-6 max-w-md text-center p-8">
+                    <div className="relative">
+                        <div className="p-4 rounded-full bg-primary/10">
+                            <Users className="h-12 w-12 text-primary" />
+                        </div>
+                        <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-background flex items-center justify-center">
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                        </div>
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold mb-2">{t('inviteCollaboration.waitingForHost.title')}</h1>
+                        <p className="text-muted-foreground">
+                            <Trans
+                                i18nKey="inviteCollaboration.waitingForHost.waiting"
+                                values={{ name: invitation?.inviterName || 'the host' }}
+                                components={{ host: <span className="font-medium text-foreground" /> }}
+                            />
+                        </p>
+                        <p className="text-sm text-muted-foreground/70 mt-2">
+                            {t('inviteCollaboration.waitingForHost.autoOpen')}
+                        </p>
+                    </div>
+                    <div className="flex flex-col items-center gap-2">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <div className={`h-2 w-2 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                            <span>
+                                {connectionStatus === 'connected'
+                                    ? t('inviteCollaboration.waitingForHost.connected')
+                                    : t('inviteCollaboration.waitingForHost.connecting')}
+                            </span>
+                        </div>
+                    </div>
+                    <Button onClick={handleExit} variant="outline" className="mt-2">
+                        {t('inviteCollaboration.waitingForHost.cancelExit')}
                     </Button>
                 </div>
             </div>
@@ -328,7 +425,7 @@ export const InviteCollaboration: React.FC = () => {
                         </div>
                         <div className="flex flex-col">
                             <span className="font-medium text-sm truncate max-w-[180px] sm:max-w-[280px]">
-                                {page?.title || 'Untitled'}
+                                {page?.title || t('inviteCollaboration.header.untitled')}
                             </span>
                             {invitation?.spaceName && (
                                 <span className="text-[11px] text-muted-foreground/70 truncate">
@@ -356,7 +453,7 @@ export const InviteCollaboration: React.FC = () => {
                     {/* Invited by info - integrated into header */}
                     {invitation?.inviterName && (
                         <div className="text-xs text-muted-foreground hidden sm:block">
-                            Invited by <span className="font-medium text-foreground/80">{invitation.inviterName}</span>
+                            {t('inviteCollaboration.header.invitedBy')} <span className="font-medium text-foreground/80">{invitation.inviterName}</span>
                         </div>
                     )}
 
@@ -381,10 +478,10 @@ export const InviteCollaboration: React.FC = () => {
                             <TooltipContent side="bottom">
                                 <p>
                                     {connectionStatus === 'connected'
-                                        ? 'All changes synced'
+                                        ? t('inviteCollaboration.header.synced')
                                         : connectionStatus === 'connecting'
-                                            ? 'Syncing changes...'
-                                            : 'Connection lost'}
+                                            ? t('inviteCollaboration.header.syncing')
+                                            : t('inviteCollaboration.header.connectionLost')}
                                 </p>
                             </TooltipContent>
                         </Tooltip>
@@ -409,7 +506,7 @@ export const InviteCollaboration: React.FC = () => {
                                                 </div>
                                             </TooltipTrigger>
                                             <TooltipContent side="bottom">
-                                                <p className="font-medium">{u.user?.name || 'Anonymous'}</p>
+                                                <p className="font-medium">{u.user?.name || t('inviteCollaboration.header.anonymous')}</p>
                                             </TooltipContent>
                                         </Tooltip>
                                     ))}
@@ -421,7 +518,7 @@ export const InviteCollaboration: React.FC = () => {
                                                 </div>
                                             </TooltipTrigger>
                                             <TooltipContent side="bottom">
-                                                <p>{users.length - 4} more collaborators</p>
+                                                <p>{t('inviteCollaboration.header.moreCollaborators', { count: users.length - 4 })}</p>
                                             </TooltipContent>
                                         </Tooltip>
                                     )}
@@ -440,7 +537,7 @@ export const InviteCollaboration: React.FC = () => {
                         className="h-8 px-2.5 gap-1.5 text-muted-foreground hover:text-foreground"
                     >
                         <LogOut className="h-4 w-4" />
-                        <span className="hidden sm:inline text-xs">Exit</span>
+                        <span className="hidden sm:inline text-xs">{t('inviteCollaboration.header.exit')}</span>
                     </Button>
                 </div>
             </header>
@@ -483,9 +580,33 @@ export const InviteCollaboration: React.FC = () => {
             </main>
 
             {/* Read-only notice */}
-            {isReadOnly && (
+            {isReadOnly && !inviterLeft && (
                 <div className="fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-muted rounded-full text-sm text-muted-foreground shadow-lg border">
-                    You have view-only access to this page
+                    {t('inviteCollaboration.readOnly.notice')}
+                </div>
+            )}
+
+            {/* Inviter left overlay */}
+            {inviterLeft && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+                    <div className="flex flex-col items-center gap-6 max-w-md text-center p-8 bg-background rounded-lg shadow-lg border">
+                        <div className="p-4 rounded-full bg-amber-100 dark:bg-amber-900/30">
+                            <LogOut className="h-12 w-12 text-amber-600 dark:text-amber-400" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold mb-2">{t('inviteCollaboration.sessionEnded.title')}</h1>
+                            <p className="text-muted-foreground">
+                                {t('inviteCollaboration.sessionEnded.message', { name: invitation?.inviterName })}
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">{t('inviteCollaboration.sessionEnded.redirecting')}</span>
+                        </div>
+                        <Button onClick={handleExit} variant="outline">
+                            {t('inviteCollaboration.sessionEnded.exitNow')}
+                        </Button>
+                    </div>
                 </div>
             )}
         </div>

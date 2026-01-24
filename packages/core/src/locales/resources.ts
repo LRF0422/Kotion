@@ -239,6 +239,61 @@ export const resources = {
                 "fileUploaded": "文件上传成功",
                 "loadFailed": "加载插件详情失败",
                 "operationFailed": "操作失败"
+            },
+            "inviteCollaboration": {
+                "permission": {
+                    "viewOnly": "仅查看",
+                    "canEdit": "可编辑",
+                    "fullAccess": "完全访问"
+                },
+                "loading": {
+                    "default": "加载中...",
+                    "validating": "正在验证邀请...",
+                    "accepting": "正在接受邀请..."
+                },
+                "error": {
+                    "noToken": "无效的邀请链接，未提供令牌。",
+                    "expired": "此邀请已过期。",
+                    "revoked": "此邀请已被撤销。",
+                    "processFailed": "处理邀请失败，请重试。",
+                    "expiredTitle": "邀请已过期",
+                    "invalidTitle": "无效邀请"
+                },
+                "waitingForHost": {
+                    "title": "等待主持人",
+                    "waiting": "正在等待 <host>{{name}}</host> 加入会话。",
+                    "autoOpen": "主持人连接后，编辑器将自动打开。",
+                    "connected": "已连接到服务器",
+                    "connecting": "连接中...",
+                    "cancelExit": "取消并退出"
+                },
+                "toast": {
+                    "hostJoined": "{{name}} 已加入会话",
+                    "sessionEnded": "协作主持人已结束会话",
+                    "accepted": "邀请已接受！"
+                },
+                "header": {
+                    "untitled": "无标题",
+                    "invitedBy": "邀请人",
+                    "synced": "所有更改已同步",
+                    "syncing": "正在同步...",
+                    "connectionLost": "连接已断开",
+                    "moreCollaborators": "还有 {{count}} 位协作者",
+                    "anonymous": "匿名用户",
+                    "exit": "退出"
+                },
+                "sessionEnded": {
+                    "title": "会话已结束",
+                    "message": "协作主持人（{{name}}）已离开会话。您即将被重定向。",
+                    "redirecting": "正在重定向...",
+                    "exitNow": "立即退出"
+                },
+                "readOnly": {
+                    "notice": "您对此页面仅有查看权限"
+                },
+                "buttons": {
+                    "goHome": "返回首页"
+                }
             }
         }
     },
@@ -481,6 +536,61 @@ export const resources = {
                 "fileUploaded": "File uploaded successfully",
                 "loadFailed": "Failed to load plugin details",
                 "operationFailed": "Operation failed"
+            },
+            "inviteCollaboration": {
+                "permission": {
+                    "viewOnly": "View only",
+                    "canEdit": "Can edit",
+                    "fullAccess": "Full access"
+                },
+                "loading": {
+                    "default": "Loading...",
+                    "validating": "Validating invitation...",
+                    "accepting": "Accepting invitation..."
+                },
+                "error": {
+                    "noToken": "Invalid invitation link. No token provided.",
+                    "expired": "This invitation has expired.",
+                    "revoked": "This invitation has been revoked.",
+                    "processFailed": "Failed to process invitation. Please try again.",
+                    "expiredTitle": "Invitation Expired",
+                    "invalidTitle": "Invalid Invitation"
+                },
+                "waitingForHost": {
+                    "title": "Waiting for Host",
+                    "waiting": "Waiting for <host>{{name}}</host> to join the session.",
+                    "autoOpen": "The editor will open automatically when the host connects.",
+                    "connected": "Connected to server",
+                    "connecting": "Connecting...",
+                    "cancelExit": "Cancel & Exit"
+                },
+                "toast": {
+                    "hostJoined": "{{name}} joined the session",
+                    "sessionEnded": "The collaboration host has ended the session",
+                    "accepted": "Invitation accepted!"
+                },
+                "header": {
+                    "untitled": "Untitled",
+                    "invitedBy": "Invited by",
+                    "synced": "All changes synced",
+                    "syncing": "Syncing changes...",
+                    "connectionLost": "Connection lost",
+                    "moreCollaborators": "{{count}} more collaborators",
+                    "anonymous": "Anonymous",
+                    "exit": "Exit"
+                },
+                "sessionEnded": {
+                    "title": "Session Ended",
+                    "message": "The collaboration host ({{name}}) has left the session. You will be redirected shortly.",
+                    "redirecting": "Redirecting...",
+                    "exitNow": "Exit Now"
+                },
+                "readOnly": {
+                    "notice": "You have view-only access to this page"
+                },
+                "buttons": {
+                    "goHome": "Go to Home"
+                }
             }
         }
     }

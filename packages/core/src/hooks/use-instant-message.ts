@@ -77,7 +77,7 @@ const buildWsUrl = (): string => {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    return `ws://kotion.top:88/knowledge-message${WS_BASE_URL}?token=${token}`;
+    return `wss://kotion.top:888/api/knowledge-message${WS_BASE_URL}?token=${token}`;
 };
 
 // ==================== Hook ====================
