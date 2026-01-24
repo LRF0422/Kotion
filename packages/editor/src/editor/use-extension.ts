@@ -17,7 +17,7 @@ import Document from "@tiptap/extension-document";
 import { UndoRedo } from '@tiptap/extensions'
 
 
-export const useEditorExtension = (ext?: string, withTitle?: boolean) => {
+export const useEditorExtension = (ext?: string, withTitle?: boolean, externalExtensions?: ExtensionWrapper[]) => {
 	const { pluginManager } = useContext(AppContext)
 
 	// Memoize everything to prevent infinite loops
@@ -43,7 +43,9 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean) => {
 			BubbleMenu,
 		]
 
-		const full = [...buildInExtension, ...(pluginManager?.resloveEditorExtension() as ExtensionWrapper[])]
+		// Use external extensions if provided, otherwise use pluginManager's extensions
+		const pluginExtensions = externalExtensions || (pluginManager?.resloveEditorExtension() as ExtensionWrapper[]) || []
+		const full = [...buildInExtension, ...pluginExtensions]
 		const reoloved = resolveExtesions(full);
 		let editorExtensions = [
 			...runtimeExtension,
@@ -58,5 +60,5 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean) => {
 			filterTransaction: t => !isChangeOrigin(t)
 		}))
 		return [editorExtensions, full] as const
-	}, [ext, withTitle, pluginManager])
+	}, [ext, withTitle, pluginManager, externalExtensions])
 }

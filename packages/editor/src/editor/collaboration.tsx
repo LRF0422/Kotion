@@ -33,6 +33,12 @@ export interface CollaborationEditorProps extends EditorRenderProps {
   provider?: TiptapCollabProvider
   synced: boolean
   onAwarenessUpdate?: (users: { clientId: number; user: { nickName: string } }[]) => void;
+  /**
+   * External extensions to use instead of current user's plugins.
+   * When provided, these extensions will be used instead of loading from pluginManager.
+   * Useful for collaboration scenarios where invitee should use inviter's plugins.
+   */
+  externalExtensions?: ExtensionWrapper[];
 }
 
 // const MemorizedToC = React.memo(ToC)
@@ -41,9 +47,9 @@ export const CollaborationEditor = forwardRef<
   Editor | null,
   React.PropsWithChildren<CollaborationEditorProps>
 >((props, ref) => {
-  const { content, user, provider, pageInfo, toc, withTitle, width = 'w-[calc(100vw-350px)]' } = props
+  const { content, user, provider, pageInfo, toc, withTitle, width = 'w-[calc(100vw-350px)]', externalExtensions } = props
 
-  const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle)
+  const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle, externalExtensions)
   const [items, setItems] = useSafeState<any[]>([])
 
 

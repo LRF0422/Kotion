@@ -163,4 +163,9 @@ export const APIS = {
         url: '/knowledge-wiki/collaboration/invitation/:token/page',
         method: 'GET'
     } as API,
+    /** Get inviter's installed plugins */
+    GET_INVITER_PLUGINS: {
+        url: '/knowledge-wiki/collaboration/invitation/:token/plugins',
+        method: 'GET'
+    } as API,
 }

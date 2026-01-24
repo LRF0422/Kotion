@@ -19,11 +19,12 @@ import {
     LogOut,
     X
 } from "@kn/icon";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useSelector } from "@kn/common";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useSelector, AppContext } from "@kn/common";
 import { useParams, useSearchParams } from "@kn/common";
 import { toast } from "@kn/ui";
 import * as Y from "@kn/editor";
+import { ExtensionWrapper } from "@kn/common";
 
 // Types
 interface InvitationInfo {
@@ -33,6 +34,7 @@ interface InvitationInfo {
     pageTitle: string;
     spaceName: string;
     inviterName: string;
+    inviterId: string;
     permission: 'READ' | 'WRITE' | 'ADMIN';
     expiresAt?: string;
     status: 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'REVOKED';
@@ -74,6 +76,7 @@ export const InviteCollaboration: React.FC = () => {
     const [searchParams] = useSearchParams();
     const navigator = useNavigator();
     const { userInfo } = useSelector((state: GlobalState) => state);
+    const { pluginManager } = useContext(AppContext);
 
     // Invitation and page state
     const [inviteStatus, setInviteStatus] = useState<InviteStatus>('loading');
@@ -87,6 +90,10 @@ export const InviteCollaboration: React.FC = () => {
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
     const [users, setUsers] = useState<any[]>([]);
     const lastAwarenessRef = useRef<any[]>([]);
+
+    // Inviter's plugins/extensions state
+    const [inviterExtensions, setInviterExtensions] = useState<ExtensionWrapper[] | undefined>(undefined);
+    const [pluginsLoading, setPluginsLoading] = useState(false);
 
     // Get invitation token from URL
     const inviteToken = params.token || searchParams.get('token');
@@ -205,6 +212,25 @@ export const InviteCollaboration: React.FC = () => {
             // Step 3: Load page content
             const pageRes = await useApi(APIS.GET_INVITATION_PAGE, { token: inviteToken });
             setPage(pageRes.data);
+
+            // Step 4: Load inviter's plugins to ensure consistent editor experience
+            setPluginsLoading(true);
+            try {
+                const pluginsRes = await useApi(APIS.GET_INVITER_PLUGINS, { token: inviteToken });
+                const inviterPlugins = pluginsRes.data || [];
+
+                if (inviterPlugins.length > 0 && pluginManager) {
+                    // Use pluginManager to load inviter's plugins and extract their editor extensions
+                    const loadedExtensions = await pluginManager.loadExternalPluginExtensions(inviterPlugins);
+                    console.info(`Loaded ${loadedExtensions.length} extensions from ${inviterPlugins.length} inviter plugins`, loadedExtensions);
+                    setInviterExtensions(loadedExtensions);
+                }
+            } catch (pluginError) {
+                console.warn('Failed to load inviter plugins, using default extensions:', pluginError);
+                // Continue without inviter's plugins - will fall back to current user's plugins
+            } finally {
+                setPluginsLoading(false);
+            }
 
             setInviteStatus('ready');
         } catch (error: any) {
@@ -421,7 +447,7 @@ export const InviteCollaboration: React.FC = () => {
 
             {/* Editor Area */}
             <main className="flex-1 w-full min-h-0 overflow-auto">
-                {!synced ? (
+                {(!synced || pluginsLoading) ? (
                     <div className="w-full h-full flex flex-col items-center justify-center">
                         <div className="w-full max-w-[800px] p-8 space-y-6">
                             <Skeleton className="h-10 w-3/4" />
@@ -450,6 +476,7 @@ export const InviteCollaboration: React.FC = () => {
                             withTitle={true}
                             width="w-full max-w-[900px] mx-auto"
                             toolbar={!isReadOnly}
+                            externalExtensions={inviterExtensions}
                         />
                     )
                 )}

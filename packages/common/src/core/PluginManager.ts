@@ -429,6 +429,60 @@ export class PluginManager {
         return settings
     }
 
+    /**
+     * Load external plugins and extract their editor extensions.
+     * This method is used for collaboration scenarios where we need to load
+     * another user's plugins without affecting the current user's plugin list.
+     * 
+     * @param plugins Array of plugin metadata with resourcePath and pluginKey
+     * @returns Array of ExtensionWrapper from the loaded plugins
+     */
+    async loadExternalPluginExtensions(plugins: Array<{ resourcePath: string; pluginKey: string; name: string }>): Promise<ExtensionWrapper[]> {
+        const extensions: ExtensionWrapper[] = [];
+
+        if (!plugins || plugins.length === 0) {
+            return extensions;
+        }
+
+        const loadResults = await Promise.allSettled(plugins.map(async (plugin) => {
+            try {
+                if (!plugin.resourcePath || !plugin.pluginKey) {
+                    logger.warn(`Skipping plugin ${plugin.name}: missing resourcePath or pluginKey`);
+                    return null;
+                }
+
+                // Construct the plugin URL (same logic as init)
+                const pluginUrl = plugin.resourcePath.startsWith('http')
+                    ? plugin.resourcePath
+                    : this._pluginStore(plugin.resourcePath) + "&cache=true";
+
+                // Load the plugin script
+                const loadedPlugin = await importScript(pluginUrl, plugin.pluginKey, plugin.name);
+
+                // Extract the KPlugin instance
+                const pluginInstance = Object.values(loadedPlugin)[0] as KPlugin<any>;
+
+                return pluginInstance;
+            } catch (error) {
+                logger.warn(`Failed to load external plugin ${plugin.name}:`, error);
+                return null;
+            }
+        }));
+
+        // Extract extensions from successfully loaded plugins
+        for (const result of loadResults) {
+            if (result.status === 'fulfilled' && result.value) {
+                const pluginInstance = result.value;
+                if (pluginInstance.editorExtensions && pluginInstance.editorExtensions.length > 0) {
+                    extensions.push(...pluginInstance.editorExtensions);
+                }
+            }
+        }
+
+        logger.info(`Loaded ${extensions.length} external extensions from ${plugins.length} plugins`);
+        return extensions;
+    }
+
     get pluginServices(): Services {
         return this._pluginServices
     }

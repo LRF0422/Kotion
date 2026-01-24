@@ -46,7 +46,16 @@ The collaboration feature allows users to:
        │                     │                     │ 9. Validate & Accept│
        │                     │                     │<────────────────────│
        │                     │                     │                     │
-       │                     │                     │ 10. Load Editor     │
+       │                     │                     │ 10. Load Page       │
+       │                     │                     │────────────────────>│
+       │                     │                     │                     │
+       │                     │                     │ 11. Load Inviter's  │
+       │                     │                     │     Plugins         │
+       │                     │                     │────────────────────>│
+       │                     │                     │                     │
+       │                     │                     │ 12. Show Editor     │
+       │                     │                     │     with Inviter's  │
+       │                     │                     │     Extensions      │
        │                     │                     │────────────────────>│
        │                     │                     │                     │
 ```
@@ -554,6 +563,7 @@ Validate an invitation token before accepting.
     "pageTitle": "Project Documentation",
     "spaceName": "Engineering Team",
     "inviterName": "John Doe",
+    "inviterId": "inviter-user-uuid",
     "permission": "WRITE",
     "expiresAt": "2024-02-01T10:30:00Z",
     "status": "PENDING"
@@ -650,6 +660,90 @@ Get the page content for an accepted invitation.
 
 ---
 
+### 11. Get Inviter's Installed Plugins
+
+Get the list of plugins installed by the collaboration inviter. This allows the invited user to load the same editor extensions as the inviter, ensuring a consistent editing experience.
+
+**Endpoint:** `GET /knowledge-wiki/collaboration/invitation/:token/plugins`
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| token | string | Yes | Invitation token |
+
+**Request Headers:**
+- `Authorization: Bearer {user_token}` - User must be authenticated
+
+**Response:**
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": [
+    {
+      "id": "plugin-uuid-1",
+      "name": "AI Assistant",
+      "pluginKey": "@kn/plugin-ai",
+      "resourcePath": "https://cdn.example.com/plugins/plugin-ai/1.0.0/index.umd.js",
+      "version": "1.0.0",
+      "description": "AI-powered writing assistant"
+    },
+    {
+      "id": "plugin-uuid-2",
+      "name": "Database",
+      "pluginKey": "@kn/plugin-database",
+      "resourcePath": "https://cdn.example.com/plugins/plugin-database/1.2.0/index.umd.js",
+      "version": "1.2.0",
+      "description": "Database tables and views"
+    },
+    {
+      "id": "plugin-uuid-3",
+      "name": "Mermaid Diagrams",
+      "pluginKey": "@kn/plugin-mermaid",
+      "resourcePath": "https://cdn.example.com/plugins/plugin-mermaid/1.0.5/index.umd.js",
+      "version": "1.0.5",
+      "description": "Create diagrams using Mermaid syntax"
+    }
+  ]
+}
+```
+
+**Field Descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Unique identifier of the installed plugin |
+| name | string | Display name of the plugin |
+| pluginKey | string | Unique plugin package key (used for loading the script) |
+| resourcePath | string | URL to the plugin's UMD bundle file |
+| version | string | Installed version of the plugin |
+| description | string | Brief description of the plugin |
+
+**Important Notes:**
+
+1. **Purpose**: This API returns the inviter's installed plugins so the invited user's editor can load the same extensions, ensuring both users see the same editor features (e.g., custom blocks, formatting options, diagrams).
+
+2. **Plugin Loading**: The frontend will dynamically load each plugin from the `resourcePath` using the `pluginKey` as the window scope identifier.
+
+3. **Fallback**: If this API fails or returns an empty list, the frontend will fall back to the invited user's own installed plugins.
+
+4. **Backend Logic**: The backend should:
+   - Validate the invitation token
+   - Get the inviter's user ID from the invitation record
+   - Return the list of plugins installed by the inviter (from `user_installed_plugin` table or similar)
+
+**Error Responses:**
+
+| Code | Message | Description |
+|------|---------|-------------|
+| 400 | INVALID_TOKEN | Token is invalid or malformed |
+| 401 | UNAUTHORIZED | User not authenticated |
+| 404 | INVITATION_NOT_FOUND | Invitation does not exist |
+
+---
+
 ## Frontend Routes
 
 | Route | Description |
@@ -691,7 +785,21 @@ Get the page content for an accepted invitation.
      │               │               │<──────────────│
      │               │<──────────────│               │
      │               │               │               │
+     │               │ GET /plugins  │               │
+     │               │──────────────>│               │
+     │               │               │ Get inviter's │
+     │               │               │ plugins       │
+     │               │               │──────────────>│
+     │               │               │<──────────────│
+     │               │<──────────────│               │
+     │               │               │               │
+     │               │ Load plugin   │               │
+     │               │ scripts       │               │
+     │               │──────────────>│               │
+     │               │               │               │
      │ Show editor   │               │               │
+     │ with inviter's│               │               │
+     │ plugins       │               │               │
      │<──────────────│               │               │
      │               │               │               │
 ```
