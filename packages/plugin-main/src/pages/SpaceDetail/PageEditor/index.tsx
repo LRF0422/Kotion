@@ -90,7 +90,7 @@ export const PageEditor: React.FC = () => {
 
         const doc = new Y.Doc();
         const collabProvider = new TiptapCollabProvider({
-            baseUrl: 'ws://localhost:1234',
+            baseUrl: 'ws://kotion.top:1234',
             name: `page:${params.pageId}`,
             token: params.pageId as string,
             document: doc,

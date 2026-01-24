@@ -121,7 +121,7 @@ export const InviteCollaboration: React.FC = () => {
 
         const doc = new Y.Doc();
         const collabProvider = new TiptapCollabProvider({
-            baseUrl: 'ws://localhost:1234',
+            baseUrl: 'ws://kotion.top:1234',
             name: `page:${page.id}`,
             token: page.id,
             document: doc,
