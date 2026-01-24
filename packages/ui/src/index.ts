@@ -21,3 +21,4 @@ import styled from "styled-components"
 export { styled }
 export { motion } from "framer-motion"
 export { Streamdown } from "streamdown"
+export { format, parseISO, formatDistanceToNow } from "date-fns"

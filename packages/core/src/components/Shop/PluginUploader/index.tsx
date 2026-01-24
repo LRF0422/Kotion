@@ -475,6 +475,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                                 id=""
                                 content={item.content}
                                 isEditable
+                                synced={true}
                                 width="w-full"
                                 withTitle={false}
                                 toc={false}

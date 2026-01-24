@@ -611,7 +611,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         <RenameDialog
             open={renameDialogOpen}
             onOpenChange={setRenameDialogOpen}
-            file={selectedFiles.length === 1 ? selectedFiles[0] : currentItem}
+            file={(selectedFiles.length === 1 ? selectedFiles[0] : currentItem) as FileItem}
             onConfirm={(file, newName) => {
                 // If we have a currentItem (from sidebar), use it; otherwise use selectedFiles
                 const targetFile = currentItem || (selectedFiles.length === 1 ? selectedFiles[0] : null);

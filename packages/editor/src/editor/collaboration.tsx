@@ -31,7 +31,7 @@ export interface CollaborationEditorProps extends EditorRenderProps {
   className?: string
   onStatus?: (status: any) => void
   provider?: TiptapCollabProvider
-  synced: boolean
+  synced?: boolean
   onAwarenessUpdate?: (users: { clientId: number; user: { nickName: string } }[]) => void;
   /**
    * External extensions to use instead of current user's plugins.

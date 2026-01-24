@@ -9,7 +9,7 @@ import React, { useEffect, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { useTranslation } from "@kn/common";
 import { SpaceHub } from "../SpaceHub";
-import { format, parseISO, formatDistanceToNow } from "date-fns";
+import { format, parseISO, formatDistanceToNow } from "@kn/ui";
 
 
 export const Home: React.FC = () => {
