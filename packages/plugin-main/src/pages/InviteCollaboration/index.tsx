@@ -326,25 +326,30 @@ export const InviteCollaboration: React.FC = () => {
                 </div>
 
                 {/* Center: Connection & Collaborators */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                    {/* Invited by info - integrated into header */}
+                    {invitation?.inviterName && (
+                        <div className="text-xs text-muted-foreground hidden sm:block">
+                            Invited by <span className="font-medium text-foreground/80">{invitation.inviterName}</span>
+                        </div>
+                    )}
+
+                    {/* Vertical divider */}
+                    {invitation?.inviterName && users.length > 0 && <div className="h-4 w-px bg-border hidden sm:block" />}
+
                     {/* Connection Status - minimal dot indicator */}
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors cursor-default">
+                                <div className="flex items-center gap-1.5 px-1.5 py-1 rounded-md hover:bg-muted/50 transition-colors cursor-default">
                                     <div className={`
                                         h-2 w-2 rounded-full transition-colors
                                         ${connectionStatus === 'connected'
-                                            ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]'
+                                            ? 'bg-emerald-500'
                                             : connectionStatus === 'connecting'
                                                 ? 'bg-amber-500 animate-pulse'
                                                 : 'bg-red-500'}
                                     `} />
-                                    <span className="text-xs text-muted-foreground hidden sm:inline">
-                                        {connectionStatus === 'connected' ? 'Synced'
-                                            : connectionStatus === 'connecting' ? 'Syncing...'
-                                                : 'Offline'}
-                                    </span>
                                 </div>
                             </TooltipTrigger>
                             <TooltipContent side="bottom">
@@ -360,23 +365,21 @@ export const InviteCollaboration: React.FC = () => {
                     </TooltipProvider>
 
                     {/* Vertical divider */}
-                    {users.length > 0 && <div className="h-5 w-px bg-border" />}
+                    {users.length > 0 && <div className="h-4 w-px bg-border" />}
 
-                    {/* Active Users - cleaner avatar group */}
+                    {/* Active Users - compact avatar group */}
                     {users.length > 0 && (
                         <TooltipProvider>
                             <div className="flex items-center">
-                                <div className="flex -space-x-2.5">
+                                <div className="flex -space-x-1.5">
                                     {users.slice(0, 4).map((u) => (
                                         <Tooltip key={u.clientId}>
                                             <TooltipTrigger asChild>
                                                 <div
-                                                    className="relative h-7 w-7 rounded-full ring-2 ring-background flex items-center justify-center text-[11px] font-semibold text-white cursor-default transition-transform hover:scale-110 hover:z-10 shadow-sm"
+                                                    className="h-6 w-6 rounded-full ring-2 ring-background flex items-center justify-center text-[10px] font-semibold text-white cursor-default transition-transform hover:scale-110 hover:z-10"
                                                     style={{ backgroundColor: u.user?.color || '#6366f1' }}
                                                 >
                                                     {getUserInitials(u.user?.name || 'A')}
-                                                    {/* Online indicator dot */}
-                                                    <div className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-background" />
                                                 </div>
                                             </TooltipTrigger>
                                             <TooltipContent side="bottom">
@@ -387,7 +390,7 @@ export const InviteCollaboration: React.FC = () => {
                                     {users.length > 4 && (
                                         <Tooltip>
                                             <TooltipTrigger asChild>
-                                                <div className="h-7 w-7 rounded-full ring-2 ring-background bg-muted flex items-center justify-center text-[11px] font-medium text-muted-foreground cursor-default transition-transform hover:scale-110 hover:z-10">
+                                                <div className="h-6 w-6 rounded-full ring-2 ring-background bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground cursor-default transition-transform hover:scale-110 hover:z-10">
                                                     +{users.length - 4}
                                                 </div>
                                             </TooltipTrigger>
@@ -415,19 +418,6 @@ export const InviteCollaboration: React.FC = () => {
                     </Button>
                 </div>
             </header>
-
-            {/* Invited by info bar - more subtle */}
-            {invitation?.inviterName && (
-                <div className="px-4 py-1.5 bg-muted/30 border-b text-xs text-muted-foreground flex items-center justify-center gap-2">
-                    <span>Invited by <span className="font-medium text-foreground/80">{invitation.inviterName}</span></span>
-                    {invitation.expiresAt && (
-                        <>
-                            <span className="text-muted-foreground/50">•</span>
-                            <span>Expires {new Date(invitation.expiresAt).toLocaleDateString()}</span>
-                        </>
-                    )}
-                </div>
-            )}
 
             {/* Editor Area */}
             <main className="flex-1 w-full min-h-0 overflow-auto">
