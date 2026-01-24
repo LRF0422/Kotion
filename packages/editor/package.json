@@ -70,6 +70,8 @@
     "date-fns": "^3.6.0",
     "emojibase": "^15.3.1",
     "evaluatex": "^2.2.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^2.5.1",
     "katex": "^0.16.11",
     "lowlight": "^3.1.0",
     "mysql": "^2.18.1",
@@ -86,9 +88,8 @@
     "tiptap-markdown": "^0.8.10",
     "toggle-selection": "^1.0.6",
     "xlsx": "^0.18.5",
-    "yjs": "^13.6.21",
-    "jspdf": "^2.5.1",
-    "html2canvas": "^1.4.1"
+    "y-prosemirror": "^1.2.12",
+    "yjs": "^13.6.21"
   },
   "devDependencies": {
     "@kn/eslint-config": "workspace:*",

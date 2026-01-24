@@ -9,7 +9,7 @@ import { Switch } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
 import { CollaborationEditor, exportToPDF, useAutoSave, AutoSaveStatus, TiptapCollabProvider } from "@kn/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
-import { useApi, useService, deepEqual } from "@kn/core";
+import { useApi, useService, deepEqual, useUploadFile } from "@kn/core";
 import { useNavigator } from "@kn/core";
 import { GlobalState } from "@kn/core";
 import { Editor } from "@kn/editor";
@@ -65,6 +65,7 @@ export const PageEditor: React.FC = () => {
     const [fullScreen, { toggleFullscreen }] = useFullscreen(ref)
     const spaceService = useService("spaceService")
     const [isManualSaving, setIsManualSaving] = useState(false)
+    const { usePath } = useUploadFile();
 
     // Generate stable user color based on user ID
     const userColor = useMemo(() => {
@@ -82,7 +83,8 @@ export const PageEditor: React.FC = () => {
         name: userInfo?.name || userInfo?.name || 'Anonymous',
         color: userColor,
         id: userInfo?.id,
-    }), [userInfo?.name, userInfo?.name, userInfo?.id, userColor]);
+        avatar: userInfo?.avatar ? usePath(userInfo.avatar) : undefined,
+    }), [userInfo?.name, userInfo?.name, userInfo?.id, userColor, userInfo?.avatar, usePath]);
 
     // Create collaboration provider
     const provider = React.useMemo(() => {

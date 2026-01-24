@@ -80,7 +80,33 @@ export const CollaborationEditor = forwardRef<
         CollaborationCursor.configure({
           provider: provider,
           user: userRef.current || { name: 'Anonymous', color: '#3b82f6' },
-        })
+          render: (user) => {
+            const cursor = document.createElement('span');
+            cursor.classList.add('collaboration-carets__caret');
+
+            const label = document.createElement('div');
+            label.classList.add('collaboration-carets__label');
+            label.style.backgroundColor = user.color;
+
+            // Create avatar element if avatar URL exists
+            if (user.avatar) {
+              const avatar = document.createElement('img');
+              avatar.classList.add('collaboration-carets__avatar');
+              avatar.src = user.avatar;
+              avatar.alt = user.name || 'User';
+              label.appendChild(avatar);
+            }
+
+            // Create name text element
+            const nameSpan = document.createElement('span');
+            nameSpan.classList.add('collaboration-carets__name');
+            nameSpan.textContent = user.name || 'Anonymous';
+            label.appendChild(nameSpan);
+
+            cursor.appendChild(label);
+            return cursor;
+          },
+        }),
       );
     }
 

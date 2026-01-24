@@ -7,7 +7,7 @@ import { Skeleton } from "@kn/ui";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
 import { CollaborationEditor, TiptapCollabProvider } from "@kn/editor";
 import { Editor } from "@kn/editor";
-import { useApi } from "@kn/core";
+import { useApi, useUploadFile } from "@kn/core";
 import { useNavigator } from "@kn/core";
 import { GlobalState } from "@kn/core";
 import { deepEqual } from "@kn/core";
@@ -61,6 +61,7 @@ export const InviteCollaboration: React.FC = () => {
     const navigator = useNavigator();
     const { userInfo } = useSelector((state: GlobalState) => state);
     const { pluginManager } = useContext(AppContext);
+    const { usePath } = useUploadFile();
 
     // Permission label mapping
     const getPermissionLabel = useCallback((permission: string) => {
@@ -113,7 +114,8 @@ export const InviteCollaboration: React.FC = () => {
         name: userInfo?.name || userInfo?.name || 'Guest',
         color: userColor,
         id: userInfo?.id,
-    }), [userInfo?.name, userInfo?.name, userInfo?.id, userColor]);
+        avatar: userInfo?.avatar ? usePath(userInfo.avatar) : undefined,
+    }), [userInfo?.name, userInfo?.name, userInfo?.id, userColor, userInfo?.avatar, usePath]);
 
     // Create collaboration provider
     const provider = useMemo(() => {
