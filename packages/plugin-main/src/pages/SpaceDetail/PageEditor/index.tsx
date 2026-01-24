@@ -13,19 +13,20 @@ import { useApi, useService, deepEqual } from "@kn/core";
 import { useNavigator } from "@kn/core";
 import { GlobalState } from "@kn/core";
 import { Editor } from "@kn/editor";
-import * as Y from "yjs";
+import * as Y from "@kn/editor";
 import { useFullscreen, useKeyPress, useToggle } from "@kn/core";
 import {
     ALargeSmall, ArrowLeft, BookTemplate, CircleArrowUp,
     Contact2, Download, FileIcon,
     Link, LoaderCircle, LockIcon, MessageSquareText,
     MoreHorizontal, MoveDownRight, Save, Trash2, Upload, List,
-    Check, CloudOff, Users, Wifi, WifiOff
+    Check, CloudOff, Users, Wifi, WifiOff, UserPlus
 } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "@kn/common";
 import { useParams } from "@kn/common";
 import { toast } from "@kn/ui";
+import { CollaborationInvitationDlg } from "../../components/CollaborationInvitationDlg";
 
 // Status display configuration for auto-save
 const getStatusDisplay = (autoSaveStatus: AutoSaveStatus, isManualSaving: boolean) => {
@@ -85,7 +86,7 @@ export const PageEditor: React.FC = () => {
 
     // Create collaboration provider
     const provider = React.useMemo(() => {
-        if (!params.pageId) return null;
+        if (!params.pageId) return undefined;
 
         const doc = new Y.Doc();
         const collabProvider = new TiptapCollabProvider({
@@ -296,44 +297,57 @@ export const PageEditor: React.FC = () => {
                 {/* Collaboration Status and Users */}
                 {provider && (
                     <>
-                        {/* Connection Status */}
-                        <Badge
-                            variant={connectionStatus === 'connected' ? 'default' : connectionStatus === 'connecting' ? 'secondary' : 'destructive'}
-                            className="gap-1"
-                        >
-                            {connectionStatus === 'connected' ? (
-                                <><Wifi className="h-3 w-3" /> Synced</>
-                            ) : connectionStatus === 'connecting' ? (
-                                <><LoaderCircle className="h-3 w-3 animate-spin" /> Connecting...</>
-                            ) : (
-                                <><WifiOff className="h-3 w-3" /> Disconnected</>
-                            )}
-                        </Badge>
+                        {/* Connection Status - minimal dot indicator */}
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors cursor-default">
+                            <div className={`
+                                h-2 w-2 rounded-full transition-colors
+                                ${connectionStatus === 'connected'
+                                    ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]'
+                                    : connectionStatus === 'connecting'
+                                        ? 'bg-amber-500 animate-pulse'
+                                        : 'bg-red-500'}
+                            `} />
+                            <span className="text-xs text-muted-foreground">
+                                {connectionStatus === 'connected' ? 'Synced'
+                                    : connectionStatus === 'connecting' ? 'Syncing...'
+                                        : 'Offline'}
+                            </span>
+                        </div>
 
-                        {/* Active Users */}
+                        {/* Active Users - cleaner avatar group */}
                         {users.length > 0 && (
-                            <div className="flex items-center gap-1">
-                                <Users className="h-4 w-4 text-muted-foreground" />
+                            <>
+                                <div className="h-5 w-px bg-border" />
                                 <div className="flex -space-x-2">
-                                    {users.slice(0, 3).map((u, index) => (
+                                    {users.slice(0, 3).map((u) => (
                                         <div
                                             key={u.clientId}
-                                            className="h-6 w-6 rounded-full border-2 border-background flex items-center justify-center text-[10px] font-semibold text-white"
-                                            style={{ backgroundColor: u.user?.color || '#3b82f6' }}
+                                            className="relative h-6 w-6 rounded-full ring-2 ring-background flex items-center justify-center text-[10px] font-semibold text-white cursor-default transition-transform hover:scale-110 hover:z-10 shadow-sm"
+                                            style={{ backgroundColor: u.user?.color || '#6366f1' }}
                                             title={u.user?.name || 'Anonymous'}
                                         >
                                             {(u.user?.name || 'A').charAt(0).toUpperCase()}
+                                            <div className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-[1.5px] ring-background" />
                                         </div>
                                     ))}
                                     {users.length > 3 && (
-                                        <div className="h-6 w-6 rounded-full border-2 border-background bg-muted flex items-center justify-center text-[10px] font-semibold">
+                                        <div className="h-6 w-6 rounded-full ring-2 ring-background bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground transition-transform hover:scale-110 hover:z-10">
                                             +{users.length - 3}
                                         </div>
                                     )}
                                 </div>
-                            </div>
+                            </>
                         )}
-                        <Separator orientation="vertical" />
+
+                        {/* Invite Button */}
+                        <CollaborationInvitationDlg pageTitle={page?.title}>
+                            <Button variant="ghost" size="sm" className="h-7 px-2 gap-1 text-muted-foreground hover:text-foreground">
+                                <UserPlus className="h-3.5 w-3.5" />
+                                <span className="hidden sm:inline text-xs">Invite</span>
+                            </Button>
+                        </CollaborationInvitationDlg>
+
+                        <Separator orientation="vertical" className="h-5" />
                     </>
                 )}
 

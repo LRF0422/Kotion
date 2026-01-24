@@ -19,5 +19,5 @@ import { bilibili } from "@kn/plugin-bilibili"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[DefaultPluginInstance, bitable, bilibili, drawnix, ai, fileManager, blockReference, mermaid]} />
+  <App plugins={[DefaultPluginInstance, fileManager, mermaid, drawnix, ai, bitable, bilibili, blockReference]} />
 )

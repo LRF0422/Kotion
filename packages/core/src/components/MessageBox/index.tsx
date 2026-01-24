@@ -6,9 +6,11 @@ import {
 } from "@kn/ui";
 import {
     Inbox, Bell, Users, CheckCheck, Trash2,
-    Clock, MessageCircle, X, Loader2, WifiOff
+    Clock, MessageCircle, X, Loader2, WifiOff,
+    ExternalLink
 } from "@kn/icon";
 import { useTranslation } from "@kn/common";
+import { useNavigate } from "@kn/common";
 import { useInstantMessage, ApiMessage } from "../../hooks/use-instant-message";
 
 // Re-export types for external use
@@ -51,9 +53,20 @@ export interface MessageBoxProps {
  * Convert API message to UI Message format
  */
 const apiMessageToUiMessage = (apiMsg: ApiMessage): Message => {
-    // Determine message type based on content or other logic
-    // For now, treat all as 'collaboration' type since it's instant messaging
-    const type: Message['type'] = 'collaboration';
+    // Determine message type based on content or metadata
+    // Check if it's a collaboration invitation based on content pattern
+    const isCollaboration = apiMsg.content?.includes('/collaborate/') ||
+        apiMsg.contentType === 'LINK' ||
+        apiMsg.content?.includes('invited you');
+
+    const type: Message['type'] = isCollaboration ? 'collaboration' : 'collaboration';
+
+    // Extract actionUrl from content if it contains a collaboration link
+    let actionUrl: string | undefined;
+    const collaborateMatch = apiMsg.content?.match(/\/collaborate\/([a-zA-Z0-9-]+)/);
+    if (collaborateMatch) {
+        actionUrl = `/collaborate/${collaborateMatch[1]}`;
+    }
 
     return {
         id: String(apiMsg.id),
@@ -62,6 +75,7 @@ const apiMessageToUiMessage = (apiMsg: ApiMessage): Message => {
         content: apiMsg.content,
         timestamp: new Date(apiMsg.sentTime),
         read: apiMsg.status === 'READ',
+        actionUrl,
         sender: {
             name: apiMsg.senderName || 'Unknown',
         }
@@ -105,12 +119,15 @@ const MessageItem = memo<{
         return t('messageBox.time.daysAgo').replace('{{n}}', String(days));
     }, [message.timestamp, t]);
 
+    const hasAction = !!message.actionUrl;
+
     return (
         <div
             className={cn(
                 "group relative p-3 rounded-lg cursor-pointer transition-colors",
                 "hover:bg-muted/50",
-                !message.read && "bg-primary/5"
+                !message.read && "bg-primary/5",
+                hasAction && "hover:bg-primary/5"
             )}
             onClick={() => onClick?.(message)}
         >
@@ -119,11 +136,11 @@ const MessageItem = memo<{
                 <div className={cn(
                     "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
                     message.type === 'system' && "bg-muted",
-                    message.type === 'collaboration' && "bg-muted",
+                    message.type === 'collaboration' && "bg-primary/10",
                     message.type === 'mention' && "bg-muted"
                 )}>
                     {message.type === 'system' && <Bell className="h-4 w-4 text-muted-foreground" />}
-                    {message.type === 'collaboration' && <Users className="h-4 w-4 text-muted-foreground" />}
+                    {message.type === 'collaboration' && <Users className="h-4 w-4 text-primary" />}
                     {message.type === 'mention' && <MessageCircle className="h-4 w-4 text-muted-foreground" />}
                 </div>
 
@@ -143,10 +160,18 @@ const MessageItem = memo<{
                     <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
                         {message.content}
                     </p>
-                    <span className="text-[11px] text-muted-foreground/60 mt-1 flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {timeAgo}
-                    </span>
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {timeAgo}
+                        </span>
+                        {hasAction && (
+                            <span className="text-[11px] text-primary flex items-center gap-1">
+                                <ExternalLink className="h-3 w-3" />
+                                Click to open
+                            </span>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -197,6 +222,7 @@ export const MessageBox: React.FC<MessageBoxProps> = ({
     useWebSocket = true
 }) => {
     const { t } = useTranslation();
+    const navigate = useNavigate();
     const [open, setOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'all' | 'system' | 'collaboration'>('all');
 
@@ -250,8 +276,16 @@ export const MessageBox: React.FC<MessageBoxProps> = ({
         if (!message.read) {
             handleMarkAsRead(message.id);
         }
+
+        // Navigate if there's an actionUrl
+        if (message.actionUrl) {
+            setOpen(false); // Close the popover
+            navigate(message.actionUrl);
+            return;
+        }
+
         onMessageClick?.(message);
-    }, [handleMarkAsRead, onMessageClick]);
+    }, [handleMarkAsRead, onMessageClick, navigate]);
 
     return (
         <Popover open={open} onOpenChange={setOpen}>

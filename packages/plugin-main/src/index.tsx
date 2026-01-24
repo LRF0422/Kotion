@@ -4,6 +4,7 @@ import { SpaceDetail } from './pages/SpaceDetail'
 import { PageViewer } from './pages/SpaceDetail/PageViewer'
 import { PageEditor } from './pages/SpaceDetail/PageEditor'
 import { SpaceSettings } from './pages/SpaceDetail/Settings'
+import { InviteCollaboration } from './pages/InviteCollaboration'
 import { KPlugin, PluginConfig } from '@kn/common'
 import React from 'react'
 import { LayoutGrid } from '@kn/icon'
@@ -30,6 +31,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
     { name: '/', path: '/', element: <Home /> },
     { name: '/home', path: '/home', element: <Home /> },
     { name: '/spaces', path: '/spaces', element: <Spaces /> },
+    { name: '/collaborate/:token', path: '/collaborate/:token', element: <InviteCollaboration /> },
     {
       name: '/space-detail/:id',
       path: '/space-detail/:id',

@@ -106,15 +106,61 @@ export const APIS = {
         method: 'GET'
     } as API,
     GET_BLOCK_INFO: {
-          url: '/knowledge-wiki/space/page/block',
+        url: '/knowledge-wiki/space/page/block',
         method: 'GET'
     } as API,
     SAVE_SPACE_AS_TEMPLATE: {
-          url: '/knowledge-wiki/space/template',
+        url: '/knowledge-wiki/space/template',
         method: 'POST'
     } as API,
     ADD_SPACE_FAVORITE: {
         url: '/knowledge-wiki/space/:id/favorite',
         method: 'POST'
+    } as API,
+    // ==================== Collaboration APIs ====================
+    /** Get space members list */
+    GET_SPACE_MEMBERS: {
+        url: '/knowledge-wiki/space/:id/members',
+        method: 'GET'
+    } as API,
+    /** Search users for invitation */
+    SEARCH_USERS: {
+        url: '/knowledge-system/user/search',
+        method: 'GET'
+    } as API,
+    /** Get page collaborators */
+    GET_PAGE_COLLABORATORS: {
+        url: '/knowledge-wiki/space/page/:pageId/collaborators',
+        method: 'GET'
+    } as API,
+    /** Remove page collaborator */
+    REMOVE_PAGE_COLLABORATOR: {
+        url: '/knowledge-wiki/space/page/:pageId/collaborator/:userId',
+        method: 'DELETE'
+    } as API,
+    /** Update collaborator permission */
+    UPDATE_COLLABORATOR_PERMISSION: {
+        url: '/knowledge-wiki/space/page/:pageId/collaborator/:userId/permission',
+        method: 'PUT'
+    } as API,
+    /** Generate share link */
+    GENERATE_SHARE_LINK: {
+        url: '/knowledge-wiki/space/page/:pageId/share-link',
+        method: 'POST'
+    } as API,
+    /** Validate invitation token */
+    VALIDATE_INVITATION: {
+        url: '/knowledge-wiki/collaboration/invitation/:token/validate',
+        method: 'GET'
+    } as API,
+    /** Accept invitation */
+    ACCEPT_INVITATION: {
+        url: '/knowledge-wiki/collaboration/invitation/:token/accept',
+        method: 'POST'
+    } as API,
+    /** Get invitation page info */
+    GET_INVITATION_PAGE: {
+        url: '/knowledge-wiki/collaboration/invitation/:token/page',
+        method: 'GET'
     } as API,
 }
