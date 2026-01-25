@@ -22,33 +22,110 @@ interface IProps {
 }
 
 const StyledContainer = styled.div`
-  width: 300px;
-  max-height: 400px;
+  width: 320px;
+  max-height: 420px;
   overflow: auto;
+  
+  /* Custom scrollbar */
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.2);
+    border-radius: 3px;
+    
+    &:hover {
+      background: hsl(var(--muted-foreground) / 0.3);
+    }
+  }
 `;
 
 const StyledTitle = styled.div`
-  padding: 8px 16px;
-  font-weight: 500;
+  padding: 8px 12px 6px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: hsl(var(--muted-foreground));
+  margin-top: 4px;
+  
+  &:first-child {
+    margin-top: 0;
+  }
 `;
 
 const StyledItem = styled.div<{ active: boolean }>`
   display: flex;
   justify-content: space-between;
-  padding: 6px;
-  cursor: pointer;  
+  align-items: center;
+  padding: 8px 10px;
+  margin: 2px 4px;
+  cursor: pointer;
+  border-radius: 8px;
+  gap: 10px;
+  position: relative;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
   > div {
     display: flex;
     align-items: center;
   }
+  
+  &:hover {
+    transform: translateX(2px);
+    background: hsl(var(--muted) / 0.4);
+  }
+  
+  ${props => props.active && `
+    background: hsl(var(--primary) / 0.12);
+    box-shadow: 0 0 0 1.5px hsl(var(--primary) / 0.3) inset;
+    transform: translateX(2px);
+    
+    &:hover {
+      background: hsl(var(--primary) / 0.15);
+    }
+  `}
+`;
+
+const StyledIconWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  flex-shrink: 0;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  svg {
+    width: 16px;
+    height: 16px;
+  }
 `;
 
 const StyledText = styled.div`
-  margin-left: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  line-height: 1.4;
 `;
 
 const StyledSlash = styled.div`
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  background: hsl(var(--muted) / 0.5);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid hsl(var(--border) / 0.5);
 `;
 
 export { StyledItem as SlashItem, StyledText as SlashText, StyledSlash as Slash };
@@ -167,7 +244,7 @@ export const SlashMenuView: React.FC<IProps> = forwardRef((props, ref) => {
   return (
     <StyledContainer
       ref={$container}
-      className="p-1 bg-popover text-popover-foreground border shadow-md dark:shadow-lg py-1 rounded-md"
+      className="p-2 bg-popover text-popover-foreground border border-border/60 shadow-xl dark:shadow-2xl rounded-xl backdrop-blur-sm"
     >
       {props.items.length ? (
         props.items.map((item, index) => {
@@ -175,7 +252,7 @@ export const SlashMenuView: React.FC<IProps> = forwardRef((props, ref) => {
             return (
               <StyledTitle
                 key={`divider-${index}`}
-                className="slash-menu-item text-sm border-b mb-2"
+                className="slash-menu-divider"
               >
                 {item.title}
               </StyledTitle>
@@ -187,7 +264,7 @@ export const SlashMenuView: React.FC<IProps> = forwardRef((props, ref) => {
               <item.render
                 key={`render-${index}`}
                 editor={props.editor}
-                className="hover:bg-muted/40"
+                className="hover:bg-muted/60 rounded-md mx-1"
                 active={selectedIndex === index}
               />
             );
@@ -197,28 +274,36 @@ export const SlashMenuView: React.FC<IProps> = forwardRef((props, ref) => {
             <StyledItem
               key={`item-${index}`}
               className={cn(
-                "slash-menu-item hover:bg-muted/50 rounded-sm text-sm transition-colors",
-                selectedIndex === index && "bg-muted"
+                "slash-menu-item group"
               )}
               active={selectedIndex === index}
               onClick={() => selectItem(index)}
             >
-              <div>
-                <div className="rounded-sm transition-all duration-200">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <StyledIconWrapper className={cn(
+                  "transition-all duration-200",
+                  selectedIndex === index && "bg-primary text-primary-foreground scale-110 shadow-lg shadow-primary/30"
+                )}>
                   {item.icon}
-                </div>
-                <StyledText>{item.text}</StyledText>
+                </StyledIconWrapper>
+                <StyledText className={cn(
+                  "truncate transition-colors duration-200",
+                  selectedIndex === index && "text-primary font-semibold"
+                )}>{item.text}</StyledText>
               </div>
-              <div>
-                <StyledSlash className="italic text-sm text-muted-foreground">
-                  {item.slash}
-                </StyledSlash>
-              </div>
+              <StyledSlash className={cn(
+                selectedIndex === index && "border-primary/40 bg-primary/10 text-primary font-semibold"
+              )}>
+                {item.slash}
+              </StyledSlash>
             </StyledItem>
           );
         })
       ) : (
-        <StyledTitle>未找到指令</StyledTitle>
+        <div className="px-4 py-8 text-center">
+          <div className="text-muted-foreground text-sm">未找到指令</div>
+          <div className="text-muted-foreground/60 text-xs mt-1">请尝试其他关键词</div>
+        </div>
       )}
     </StyledContainer>
   );
