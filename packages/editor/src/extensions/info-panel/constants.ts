@@ -1,6 +1,6 @@
 import { CheckCircle2, CircleAlert, TriangleAlert, XCircle } from "@kn/icon";
 
-export type InfoPanelType = 'info' | 'success' | 'file' | 'error';
+export type InfoPanelType = 'info' | 'success' | 'file' | 'error' | 'custom';
 
 export interface InfoPanelTypeConfig {
     color: {
@@ -14,35 +14,43 @@ export interface InfoPanelTypeConfig {
 export const INFO_PANEL_TYPES: Record<InfoPanelType, InfoPanelTypeConfig> = {
     info: {
         color: {
-            light: '#cffafe',
-            dark: '#083344'
+            light: '#eff6ff',
+            dark: '#1e293b'  // Slate-800, subtle blue-gray
         },
         icon: CircleAlert,
-        iconColor: '#1D7AFC'
+        iconColor: '#3b82f6'
     },
     success: {
         color: {
-            light: '#bbf7d0',
-            dark: '#052e16',
+            light: '#f0fdf4',
+            dark: '#1c2a22',  // Subtle dark green
         },
         icon: CheckCircle2,
-        iconColor: '#22A06B'
+        iconColor: '#22c55e'
     },
     file: {
         color: {
-            light: '#fef3c7',
-            dark: '#451a03'
+            light: '#fefce8',
+            dark: '#292524'  // Subtle warm dark
         },
         icon: TriangleAlert,
-        iconColor: '#E56910'
+        iconColor: '#eab308'
     },
     error: {
         color: {
-            light: '#fecaca',
-            dark: '#450a0a'
+            light: '#fef2f2',
+            dark: '#2a2020'  // Subtle dark red
         },
         icon: XCircle,
-        iconColor: '#C9372C'
+        iconColor: '#ef4444'
+    },
+    custom: {
+        color: {
+            light: '#f3f4f6',
+            dark: '#27272a'  // Zinc-800
+        },
+        icon: CircleAlert,
+        iconColor: '#71717a'
     }
 } as const;
 

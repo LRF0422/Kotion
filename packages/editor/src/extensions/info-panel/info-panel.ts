@@ -43,6 +43,22 @@ export const InfoPanel = Node.create({
 			},
 			tips: {
 				default: DEFAULT_INFO_PANEL_TIPS
+			},
+			customIconColor: {
+				default: null,
+				parseHTML: ele => ele.getAttribute("customIconColor")
+			},
+			customBgColorLight: {
+				default: null,
+				parseHTML: ele => ele.getAttribute("customBgColorLight")
+			},
+			customBgColorDark: {
+				default: null,
+				parseHTML: ele => ele.getAttribute("customBgColorDark")
+			},
+			customEmoji: {
+				default: null,
+				parseHTML: ele => ele.getAttribute("customEmoji")
 			}
 		}
 	},
