@@ -45,8 +45,16 @@ export function Login() {
             const { data } = res
             localStorage.setItem('knowledge-token', `bearer ${data.accessToken}`)
             localStorage.setItem("isLogin", "false")
-            // Force full page reload to trigger plugin loading in Layout
-            window.location.href = '/'
+
+            // Check if this is first login (no welcome completed)
+            const hasCompletedWelcome = localStorage.getItem('hasCompletedWelcome')
+            if (!hasCompletedWelcome) {
+                // First time user, redirect to welcome page
+                window.location.href = '/welcome'
+            } else {
+                // Returning user, go to main app
+                window.location.href = '/'
+            }
         }).catch(e => {
         }).finally(() => setLoading(false))
     }

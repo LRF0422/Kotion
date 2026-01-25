@@ -5,6 +5,7 @@ import { ThemeProvider, Toaster } from "@kn/ui";
 import store from './store'
 import { Login } from "./components/Login";
 import { SignUpForm } from "./components/SignUp";
+import { Welcome } from "./components/Welcome";
 import * as ui from "@kn/ui"
 import * as common from "@kn/common"
 import * as core from "./index"
@@ -123,7 +124,8 @@ export const App: React.FC<AppProps> = (props) => {
                         </Route>
                     </Route>,
                     <Route path='/login' element={<Login />} />,
-                    <Route path='/sign-up' element={<SignUpForm />} />
+                    <Route path='/sign-up' element={<SignUpForm />} />,
+                    <Route path='/welcome' element={<Welcome />} />
                 ]
             ))
             setRouter(updatedRouter)
@@ -137,7 +139,8 @@ export const App: React.FC<AppProps> = (props) => {
                         <Route path="*" element={<div className="flex items-center justify-center h-screen">Loading...</div>} />
                     </Route>,
                     <Route path='/login' element={<Login />} />,
-                    <Route path='/sign-up' element={<SignUpForm />} />
+                    <Route path='/sign-up' element={<SignUpForm />} />,
+                    <Route path='/welcome' element={<Welcome />} />
                 ]
             ))
             setRouter(minimalRouter)
