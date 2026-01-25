@@ -11,6 +11,7 @@
     "build:core": "pnpm --filter @kn/core build",
     "build:icon": "pnpm --filter @kn/icon build",
     "build:ui": "pnpm --filter @kn/ui build",
+    "build:ai": "pnpm --filter @kn/plugin-ai build",
     "build:excalidraw": "pnpm --filter @kn/plugin-excalidraw build",
     "build:bitable": "pnpm --filter @kn/plugin-bitable build",
     "build:mermaid": "pnpm --filter @kn/mermaid-plugin build",

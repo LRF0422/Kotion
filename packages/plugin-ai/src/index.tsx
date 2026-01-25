@@ -23,9 +23,6 @@ interface AiPluginConfig extends PluginConfig {
 class AiPlugin extends KPlugin<AiPluginConfig> {
 }
 
-// Export the AI completion extension for direct use if needed
-export { AiCompletionExtension } from './ai/completion';
-
 export const ai = new AiPlugin({
     status: '',
     name: 'AI Assistant',

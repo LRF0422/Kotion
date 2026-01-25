@@ -184,6 +184,7 @@ export class PluginManager {
                     throw error
                 }
             }))
+            console.log('Load results:', loadResults);
 
             const successfulPlugins = loadResults
                 .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')

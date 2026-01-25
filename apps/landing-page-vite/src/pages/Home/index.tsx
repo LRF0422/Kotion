@@ -75,10 +75,10 @@ export const Home: React.FC = () => {
                     <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-slate-50 via-white to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
                         {/* Floating Decorations */}
                         <div className="absolute top-6 right-6 w-16 h-16 bg-gradient-to-br from-yellow-200 to-orange-300 rounded-2xl rotate-12 opacity-60 float-animation"></div>
-                        <div className="absolute top-20 left-8 w-10 h-10 bg-gradient-to-br from-blue-200 to-indigo-300 rounded-xl -rotate-12 opacity-50 float-animation" style={{animationDelay: '0.5s'}}></div>
-                        <div className="absolute bottom-16 right-20 w-8 h-8 bg-gradient-to-br from-green-200 to-teal-300 rounded-lg rotate-6 opacity-50 float-animation" style={{animationDelay: '1s'}}></div>
-                        <div className="absolute bottom-32 left-16 w-6 h-6 bg-gradient-to-br from-pink-200 to-purple-300 rounded-md -rotate-6 opacity-60 float-animation" style={{animationDelay: '1.5s'}}></div>
-                        
+                        <div className="absolute top-20 left-8 w-10 h-10 bg-gradient-to-br from-blue-200 to-indigo-300 rounded-xl -rotate-12 opacity-50 float-animation" style={{ animationDelay: '0.5s' }}></div>
+                        <div className="absolute bottom-16 right-20 w-8 h-8 bg-gradient-to-br from-green-200 to-teal-300 rounded-lg rotate-6 opacity-50 float-animation" style={{ animationDelay: '1s' }}></div>
+                        <div className="absolute bottom-32 left-16 w-6 h-6 bg-gradient-to-br from-pink-200 to-purple-300 rounded-md -rotate-6 opacity-60 float-animation" style={{ animationDelay: '1.5s' }}></div>
+
                         <div className="p-8 md:p-12 flex items-center justify-center min-h-[500px]">
                             <div className="grid grid-cols-12 gap-4 w-full max-w-4xl">
                                 {/* Left Sidebar */}
@@ -119,7 +119,7 @@ export const Home: React.FC = () => {
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 {/* Main Content Area */}
                                 <div className="col-span-9 bg-white dark:bg-gray-800 rounded-xl p-5 shadow-xl border border-gray-100 dark:border-gray-700">
                                     {/* Window Controls & Title */}
@@ -143,19 +143,19 @@ export const Home: React.FC = () => {
                                             </button>
                                         </div>
                                     </div>
-                                    
+
                                     {/* Document Content */}
                                     <div className="space-y-4">
                                         {/* Title */}
                                         <div className="h-8 bg-gradient-to-r from-indigo-100 to-purple-100 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-lg w-3/4"></div>
-                                        
+
                                         {/* Paragraph */}
                                         <div className="space-y-2">
                                             <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-full"></div>
                                             <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-11/12"></div>
                                             <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded w-4/5"></div>
                                         </div>
-                                        
+
                                         {/* Task List */}
                                         <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3 space-y-2">
                                             <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-2">Task Progress</div>
@@ -179,7 +179,7 @@ export const Home: React.FC = () => {
                                                 <span className="ml-auto px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 text-[10px] rounded">Pending</span>
                                             </div>
                                         </div>
-                                        
+
                                         {/* Stats Cards */}
                                         <div className="grid grid-cols-3 gap-2">
                                             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-center">
@@ -394,10 +394,156 @@ export const Home: React.FC = () => {
             </div>
         </section>
 
+        {/* Plugin Store Section */}
+        <section id="plugins" className="section-padding">
+            <div className="container-padding">
+                <div className="text-center mb-16">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-100 dark:bg-indigo-900/30 mb-6">
+                        <FaPlug className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                        <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400">{t("home.plugin-store-badge")}</span>
+                    </div>
+                    <h2 className="text-3xl md:text-5xl font-bold text-notion mb-4">{t("home.plugin-store-title")}</h2>
+                    <p className="text-lg text-notion-light max-w-2xl mx-auto">
+                        {t("home.plugin-store-desc")}
+                    </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* AI Plugin */}
+                    <div className="group bento-card hover:border-orange-200 dark:hover:border-orange-800 transition-all">
+                        <div className="relative mb-4 rounded-xl bg-gradient-to-br from-orange-50 to-amber-100 dark:from-orange-900/20 dark:to-amber-900/20 p-4 h-32 overflow-hidden">
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="relative">
+                                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-pink-500 shadow-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <Sparkles className="w-8 h-8 text-white" />
+                                    </div>
+                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-800 animate-pulse"></div>
+                                </div>
+                            </div>
+                            <div className="absolute top-2 right-2 px-2 py-0.5 bg-orange-500 text-white text-[10px] font-medium rounded-full">HOT</div>
+                        </div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <h3 className="text-lg font-semibold text-notion">{t("home.plugin-ai-name")}</h3>
+                            <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] rounded-full">Official</span>
+                        </div>
+                        <p className="text-notion-light text-sm mb-3">{t("home.plugin-ai-desc")}</p>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1">
+                                <Rate rating={5} disabled variant="yellow" />
+                                <span className="text-xs text-notion-light">(2.3k)</span>
+                            </div>
+                            <span className="text-xs text-notion-light">10k+ installs</span>
+                        </div>
+                    </div>
+
+                    {/* Mermaid Plugin */}
+                    <div className="group bento-card hover:border-blue-200 dark:hover:border-blue-800 transition-all">
+                        <div className="relative mb-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-100 dark:from-blue-900/20 dark:to-cyan-900/20 p-4 h-32 overflow-hidden">
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 group-hover:scale-105 transition-transform">
+                                    <svg className="w-12 h-12" viewBox="0 0 48 48">
+                                        <rect x="4" y="4" width="16" height="10" rx="2" className="fill-blue-200 dark:fill-blue-700" />
+                                        <rect x="28" y="4" width="16" height="10" rx="2" className="fill-blue-200 dark:fill-blue-700" />
+                                        <rect x="16" y="34" width="16" height="10" rx="2" className="fill-blue-300 dark:fill-blue-600" />
+                                        <line x1="12" y1="14" x2="12" y2="24" className="stroke-blue-400" strokeWidth="2" />
+                                        <line x1="36" y1="14" x2="36" y2="24" className="stroke-blue-400" strokeWidth="2" />
+                                        <line x1="12" y1="24" x2="36" y2="24" className="stroke-blue-400" strokeWidth="2" />
+                                        <line x1="24" y1="24" x2="24" y2="34" className="stroke-blue-400" strokeWidth="2" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <h3 className="text-lg font-semibold text-notion">{t("home.plugin-mermaid-name")}</h3>
+                        </div>
+                        <p className="text-notion-light text-sm mb-3">{t("home.plugin-mermaid-desc")}</p>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1">
+                                <Rate rating={4} disabled variant="yellow" />
+                                <span className="text-xs text-notion-light">(856)</span>
+                            </div>
+                            <span className="text-xs text-notion-light">5k+ installs</span>
+                        </div>
+                    </div>
+
+                    {/* Database Plugin */}
+                    <div className="group bento-card hover:border-purple-200 dark:hover:border-purple-800 transition-all">
+                        <div className="relative mb-4 rounded-xl bg-gradient-to-br from-purple-50 to-violet-100 dark:from-purple-900/20 dark:to-violet-900/20 p-4 h-32 overflow-hidden">
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="relative group-hover:scale-105 transition-transform">
+                                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-400 to-violet-500 shadow-lg flex items-center justify-center">
+                                        <FaDatabase className="w-7 h-7 text-white" />
+                                    </div>
+                                    <div className="absolute -bottom-2 -right-2 bg-white dark:bg-gray-800 rounded-lg px-2 py-1 shadow-md">
+                                        <span className="text-[10px] font-medium text-purple-600 dark:text-purple-400">SQL</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <h3 className="text-lg font-semibold text-notion">{t("home.plugin-database-name")}</h3>
+                            <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 text-[10px] rounded-full">Pro</span>
+                        </div>
+                        <p className="text-notion-light text-sm mb-3">{t("home.plugin-database-desc")}</p>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1">
+                                <Rate rating={5} disabled variant="yellow" />
+                                <span className="text-xs text-notion-light">(1.2k)</span>
+                            </div>
+                            <span className="text-xs text-notion-light">8k+ installs</span>
+                        </div>
+                    </div>
+
+                    {/* Draw Plugin */}
+                    <div className="group bento-card hover:border-green-200 dark:hover:border-green-800 transition-all">
+                        <div className="relative mb-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-100 dark:from-green-900/20 dark:to-emerald-900/20 p-4 h-32 overflow-hidden">
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-2 group-hover:scale-105 transition-transform">
+                                    <div className="w-16 h-12 relative">
+                                        <div className="absolute top-1 left-1 w-4 h-4 rounded-full border-2 border-green-400"></div>
+                                        <div className="absolute top-2 right-2 w-6 h-6 rounded bg-green-200 dark:bg-green-700"></div>
+                                        <div className="absolute bottom-1 left-4 w-8 h-3 rounded-full bg-green-300 dark:bg-green-600"></div>
+                                        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 64 48">
+                                            <path d="M8,40 Q32,10 56,40" fill="none" className="stroke-green-500" strokeWidth="2" strokeDasharray="4 2" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="absolute top-2 right-2 px-2 py-0.5 bg-green-500 text-white text-[10px] font-medium rounded-full">NEW</div>
+                        </div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <h3 className="text-lg font-semibold text-notion">{t("home.plugin-draw-name")}</h3>
+                        </div>
+                        <p className="text-notion-light text-sm mb-3">{t("home.plugin-draw-desc")}</p>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1">
+                                <Rate rating={4} disabled variant="yellow" />
+                                <span className="text-xs text-notion-light">(432)</span>
+                            </div>
+                            <span className="text-xs text-notion-light">3k+ installs</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="text-center mt-12">
+                    <Link to="/plugins">
+                        <Button variant="outline" size="lg" className="rounded-xl">
+                            {t("home.explore-plugins")}
+                            <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
+                    </Link>
+                </div>
+            </div>
+        </section>
+
         {/* Templates Section */}
         <section id="templates" className="section-padding bg-muted/30">
             <div className="container-padding">
                 <div className="text-center mb-16">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-100 dark:bg-purple-900/30 mb-6">
+                        <FileText className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                        <span className="text-sm font-medium text-purple-600 dark:text-purple-400">{t("home.template-store-badge")}</span>
+                    </div>
                     <h2 className="text-3xl md:text-5xl font-bold text-notion mb-4">{t("home.templates-title")}</h2>
                     <p className="text-lg text-notion-light max-w-2xl mx-auto">
                         {t("home.templates-desc")}
@@ -628,7 +774,7 @@ export const Home: React.FC = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     {/* Orbiting Elements */}
                                     <div className="absolute -top-4 left-1/4 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-3 transform -translate-x-1/2 float-animation">
                                         <div className="flex items-center gap-2">
@@ -639,8 +785,8 @@ export const Home: React.FC = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    
-                                    <div className="absolute top-8 -right-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-3 float-animation" style={{animationDelay: '0.5s'}}>
+
+                                    <div className="absolute top-8 -right-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-3 float-animation" style={{ animationDelay: '0.5s' }}>
                                         <div className="flex items-center gap-2">
                                             <span className="text-xl">📊</span>
                                             <div className="flex gap-1">
@@ -650,8 +796,8 @@ export const Home: React.FC = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    
-                                    <div className="absolute -bottom-2 left-0 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-3 float-animation" style={{animationDelay: '1s'}}>
+
+                                    <div className="absolute -bottom-2 left-0 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-3 float-animation" style={{ animationDelay: '1s' }}>
                                         <div className="flex items-center gap-2">
                                             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white text-sm">👥</div>
                                             <div className="space-y-1">
@@ -663,8 +809,8 @@ export const Home: React.FC = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    
-                                    <div className="absolute -bottom-4 right-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-3 float-animation" style={{animationDelay: '1.5s'}}>
+
+                                    <div className="absolute -bottom-4 right-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-3 float-animation" style={{ animationDelay: '1.5s' }}>
                                         <div className="flex items-center gap-2">
                                             <span className="text-xl">⚡</span>
                                             <div className="text-[10px] text-gray-600 dark:text-gray-400">
@@ -673,19 +819,19 @@ export const Home: React.FC = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     {/* Connection Lines */}
                                     <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 400 350">
                                         <defs>
                                             <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                                                <stop offset="0%" stopColor="#10b981" stopOpacity="0.3"/>
-                                                <stop offset="100%" stopColor="#14b8a6" stopOpacity="0.1"/>
+                                                <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                                                <stop offset="100%" stopColor="#14b8a6" stopOpacity="0.1" />
                                             </linearGradient>
                                         </defs>
-                                        <path d="M100,60 Q150,100 200,120" stroke="url(#lineGrad)" strokeWidth="2" fill="none" strokeDasharray="4 4"/>
-                                        <path d="M340,100 Q300,130 280,150" stroke="url(#lineGrad)" strokeWidth="2" fill="none" strokeDasharray="4 4"/>
-                                        <path d="M80,280 Q130,250 150,220" stroke="url(#lineGrad)" strokeWidth="2" fill="none" strokeDasharray="4 4"/>
-                                        <path d="M320,290 Q280,260 260,230" stroke="url(#lineGrad)" strokeWidth="2" fill="none" strokeDasharray="4 4"/>
+                                        <path d="M100,60 Q150,100 200,120" stroke="url(#lineGrad)" strokeWidth="2" fill="none" strokeDasharray="4 4" />
+                                        <path d="M340,100 Q300,130 280,150" stroke="url(#lineGrad)" strokeWidth="2" fill="none" strokeDasharray="4 4" />
+                                        <path d="M80,280 Q130,250 150,220" stroke="url(#lineGrad)" strokeWidth="2" fill="none" strokeDasharray="4 4" />
+                                        <path d="M320,290 Q280,260 260,230" stroke="url(#lineGrad)" strokeWidth="2" fill="none" strokeDasharray="4 4" />
                                     </svg>
                                 </div>
                             </div>

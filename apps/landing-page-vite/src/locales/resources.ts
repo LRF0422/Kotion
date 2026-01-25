@@ -54,6 +54,7 @@ export const resources = {
                 "feature-ai-desc": "让 AI 帮助您写作、总结和组织。智能助手提升生产力。",
 
                 // Templates Section
+                "template-store-badge": "模板生态",
                 "templates-title": "即用型模板",
                 "templates-desc": "使用我们的模板库快速开始。根据需求自定义它们。",
 
@@ -67,6 +68,25 @@ export const resources = {
                 "template-notes-desc": "在一处组织您的笔记、想法和资源。",
 
                 "browse-templates": "浏览所有模板",
+
+                // Plugin Store Section
+                "plugin-store-badge": "插件生态",
+                "plugin-store-title": "强大的插件超市",
+                "plugin-store-desc": "探索丰富的插件生态，扩展您的工作空间。从 AI 助手到图表工具，满足各种需求。",
+
+                "plugin-ai-name": "AI 智能助手",
+                "plugin-ai-desc": "AI 驱动的写作、总结和智能建议",
+
+                "plugin-mermaid-name": "Mermaid 图表",
+                "plugin-mermaid-desc": "使用代码创建流程图和图表",
+
+                "plugin-database-name": "高级数据库",
+                "plugin-database-desc": "强大的数据库视图和关联功能",
+
+                "plugin-draw-name": "绘图白板",
+                "plugin-draw-desc": "自由绘图、草图和可视化想法",
+
+                "explore-plugins": "探索更多插件",
 
                 // Why Choose Section
                 "why-title": "团队为何喜爱 Kotion",
@@ -126,6 +146,77 @@ export const resources = {
                 "cta-desc": "加入数千个使用 Kotion 组织工作并共同取得更多成就的团队。",
                 "start-free": "免费开始",
                 "request-demo": "申请演示"
+            },
+            plugins: {
+                badge: "插件生态",
+                "title-1": "发现强大的",
+                "title-2": "Kotion 插件",
+                desc: "探索社区创建的最佳插件，提升您的工作效率，组织您的生活。",
+                "search-placeholder": "搜索插件...",
+                "stat-plugins": "款插件",
+                "stat-installs": "次安装",
+                "stat-rating": "平均评分",
+                "filter-all": "全部插件",
+                "filter-feature": "功能",
+                "filter-app": "应用",
+                "filter-connector": "连接器",
+                "sort-by": "排序：",
+                "sort-popular": "最热门",
+                "sort-recent": "最新",
+                "sort-rating": "评分最高",
+                "popular-title": "热门插件",
+                "plugins-found": "款插件",
+                "view-details": "查看详情",
+                "description": "描述",
+                "features": "功能特性",
+                "add-to-kotion": "添加到 Kotion",
+                "cta-title": "找不到您需要的？",
+                "cta-desc": "申请特定插件或创建并分享您自己的插件来帮助社区。",
+                "request-plugin": "申请插件",
+                "share-plugin": "分享您的插件",
+                "creator-badge": "成为创作者",
+                "creator-title": "成为插件创作者",
+                "creator-desc": "将您的插件提交到 Kotion 插件库，获得展示机会，甚至可以获得收益——只需几步操作。",
+                "creator-benefit-1": "在插件库中获得精选展示",
+                "creator-benefit-2": "通过插件销售赚取收益",
+                "creator-benefit-3": "加入活跃的开发者社区",
+                "get-started": "开始创作"
+            },
+            templates: {
+                badge: "模板生态",
+                "title-1": "发现精美的",
+                "title-2": "Kotion 模板",
+                desc: "探索社区创建的最佳模板，快速开始您的项目，提升工作效率。",
+                "search-placeholder": "搜索模板...",
+                "stat-templates": "个模板",
+                "stat-uses": "次使用",
+                "stat-categories": "个分类",
+                "filter-all": "全部模板",
+                "filter-productivity": "效率",
+                "filter-work": "工作",
+                "filter-personal": "个人",
+                "filter-study": "学习",
+                "filter-health": "健康",
+                "filter-finance": "财务",
+                "sort-by": "排序：",
+                "sort-popular": "最热门",
+                "sort-recent": "最新",
+                "sort-trending": "趋势",
+                "popular-title": "热门模板",
+                "templates-found": "个模板",
+                "preview": "预览",
+                "use-template": "使用模板",
+                "cta-title": "找不到您需要的？",
+                "cta-desc": "申请特定模板或创建并分享您自己的模板来帮助社区。",
+                "request-template": "申请模板",
+                "share-template": "分享您的模板",
+                "creator-badge": "成为创作者",
+                "creator-title": "成为模板创作者",
+                "creator-desc": "将您的模板提交到 Kotion 模板库，获得展示机会，甚至可以获得收益——只需几步操作。",
+                "creator-benefit-1": "在模板库中获得精选展示",
+                "creator-benefit-2": "通过模板销售赚取收益",
+                "creator-benefit-3": "帮助数千用户提升效率",
+                "get-started": "开始创作"
             }
         }
     },
@@ -184,6 +275,7 @@ export const resources = {
                 "feature-ai-desc": "Let AI help you write, summarize, and organize. Boost productivity with intelligent assistance.",
 
                 // Templates Section
+                "template-store-badge": "Template Ecosystem",
                 "templates-title": "Ready-to-use templates",
                 "templates-desc": "Get started quickly with our library of templates. Customize them to fit your needs.",
 
@@ -197,6 +289,25 @@ export const resources = {
                 "template-notes-desc": "Organize your notes, ideas, and resources in one place.",
 
                 "browse-templates": "Browse all templates",
+
+                // Plugin Store Section
+                "plugin-store-badge": "Plugin Ecosystem",
+                "plugin-store-title": "Powerful Plugin Store",
+                "plugin-store-desc": "Explore the rich plugin ecosystem to extend your workspace. From AI assistants to charting tools, meet all your needs.",
+
+                "plugin-ai-name": "AI Assistant",
+                "plugin-ai-desc": "AI-powered writing, summaries, and smart suggestions",
+
+                "plugin-mermaid-name": "Mermaid Charts",
+                "plugin-mermaid-desc": "Create flowcharts and diagrams with code",
+
+                "plugin-database-name": "Advanced Database",
+                "plugin-database-desc": "Powerful database views and relationships",
+
+                "plugin-draw-name": "Drawing Board",
+                "plugin-draw-desc": "Free-form drawing, sketching, and visualization",
+
+                "explore-plugins": "Explore more plugins",
 
                 // Why Choose Section
                 "why-title": "Why teams love Kotion",
@@ -256,6 +367,77 @@ export const resources = {
                 "cta-desc": "Join thousands of teams who use Kotion to organize their work and achieve more together.",
                 "start-free": "Start for free",
                 "request-demo": "Request a demo"
+            },
+            plugins: {
+                badge: "Plugin Ecosystem",
+                "title-1": "Discover Powerful",
+                "title-2": "Kotion Plugins",
+                desc: "Find and use the best plugins created by the community to boost your productivity and organize your life.",
+                "search-placeholder": "Search plugins...",
+                "stat-plugins": "Plugins",
+                "stat-installs": "Installs",
+                "stat-rating": "Avg Rating",
+                "filter-all": "All Plugins",
+                "filter-feature": "Feature",
+                "filter-app": "App",
+                "filter-connector": "Connector",
+                "sort-by": "Sort by:",
+                "sort-popular": "Popular",
+                "sort-recent": "Recent",
+                "sort-rating": "Top Rated",
+                "popular-title": "Popular Plugins",
+                "plugins-found": "plugins found",
+                "view-details": "View Details",
+                "description": "Description",
+                "features": "Features",
+                "add-to-kotion": "Add to Kotion",
+                "cta-title": "Can't find what you're looking for?",
+                "cta-desc": "Request a specific plugin or create and share your own to help the community.",
+                "request-plugin": "Request a Plugin",
+                "share-plugin": "Share Your Plugin",
+                "creator-badge": "Become a Creator",
+                "creator-title": "Become a Plugin Creator",
+                "creator-desc": "Submit your plugin to the Kotion plugin gallery, get featured, and even get paid – all in just a few clicks.",
+                "creator-benefit-1": "Get featured in the plugin gallery",
+                "creator-benefit-2": "Earn money from plugin sales",
+                "creator-benefit-3": "Join an active developer community",
+                "get-started": "Get Started"
+            },
+            templates: {
+                badge: "Template Ecosystem",
+                "title-1": "Discover Beautiful",
+                "title-2": "Kotion Templates",
+                desc: "Find the best templates created by the community to jumpstart your projects and boost productivity.",
+                "search-placeholder": "Search templates...",
+                "stat-templates": "Templates",
+                "stat-uses": "Uses",
+                "stat-categories": "Categories",
+                "filter-all": "All Templates",
+                "filter-productivity": "Productivity",
+                "filter-work": "Work",
+                "filter-personal": "Personal",
+                "filter-study": "Study",
+                "filter-health": "Health",
+                "filter-finance": "Finance",
+                "sort-by": "Sort by:",
+                "sort-popular": "Popular",
+                "sort-recent": "Recent",
+                "sort-trending": "Trending",
+                "popular-title": "Popular Templates",
+                "templates-found": "templates found",
+                "preview": "Preview",
+                "use-template": "Use Template",
+                "cta-title": "Can't find what you're looking for?",
+                "cta-desc": "Request a specific template or create and share your own to help the community.",
+                "request-template": "Request a Template",
+                "share-template": "Share Your Template",
+                "creator-badge": "Become a Creator",
+                "creator-title": "Become a Template Creator",
+                "creator-desc": "Submit your template to the Kotion template gallery, get featured, and even get paid – all in just a few clicks.",
+                "creator-benefit-1": "Get featured in the template gallery",
+                "creator-benefit-2": "Earn money from template sales",
+                "creator-benefit-3": "Help thousands of users be more productive",
+                "get-started": "Get Started"
             }
         }
     }
