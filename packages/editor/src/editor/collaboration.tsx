@@ -13,13 +13,14 @@ import { StyledEditor } from "../styles/editor";
 import { ExtensionWrapper } from "@kn/common";
 import { useSafeState, useUnmount } from "ahooks";
 import { ToC } from "./ToC";
-import { cn, useIsMobile, useTheme } from "@kn/ui";
+import { cn, useIsMobile, useTheme, Button } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
 import { TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-caret";
+import { List, X } from "@kn/icon";
 import "../styles/editor.css"
 
 
@@ -51,6 +52,7 @@ export const CollaborationEditor = forwardRef<
 
   const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle, externalExtensions)
   const [items, setItems] = useSafeState<any[]>([])
+  const [tocVisible, setTocVisible] = useSafeState(true)
 
 
   // Memoize user ref to avoid extension recreation
@@ -162,20 +164,39 @@ export const CollaborationEditor = forwardRef<
   return (editor &&
     <PageContext.Provider value={pageInfo as PageContextProps}>
       <ThemeProvider theme={selectedTheme}>
-        <div className={cn("grow z-30", width)}>
+        <div className={cn("flex flex-col z-30 relative", width, props.className)}>
           {!isMobile && <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />}
-          <div className={cn("w-full", props.className)} id="editor-container">
-            <div className="flex relative w-full">
-              <StyledEditor className="w-full grow overflow-auto h-full">
-                <EditorContent editor={editor} className="h-full" />
-              </StyledEditor>
-              {
-                toc && (<div className={cn("border-l w-[300px] sticky top-0 right-0 box-border h-full", props.className)}>
-                  <ToC editor={editor} items={items} />
-                </div>)
-              }
-            </div>
+          <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
+            <StyledEditor>
+              <EditorContent editor={editor} />
+            </StyledEditor>
           </div>
+          {/* ToC - fixed position */}
+          {toc && (
+            <>
+              {/* Toggle button */}
+              <Button
+                variant="outline"
+                size="icon"
+                className={cn(
+                  "fixed z-50 top-[100px] shadow-md bg-background",
+                  tocVisible ? "right-[310px]" : "right-4"
+                )}
+                onClick={() => setTocVisible(!tocVisible)}
+              >
+                {tocVisible ? <X className="h-4 w-4" /> : <List className="h-4 w-4" />}
+              </Button>
+              {/* ToC panel */}
+              <div
+                className={cn(
+                  "fixed top-[80px] right-0 w-[300px] h-[calc(100vh-80px)] border-l bg-background z-40 transition-transform duration-300",
+                  tocVisible ? "translate-x-0" : "translate-x-full"
+                )}
+              >
+                <ToC editor={editor} items={items} />
+              </div>
+            </>
+          )}
         </div>
       </ThemeProvider >
     </PageContext.Provider>

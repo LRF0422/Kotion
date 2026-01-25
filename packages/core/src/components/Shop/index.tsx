@@ -30,11 +30,11 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void, handleU
     const navigator = useNavigator()
     const { usePath } = useUploadFile()
     const [isHovered, setIsHovered] = useState(false)
-    
+
     return <TooltipProvider>
         <Tooltip>
             <TooltipTrigger asChild>
-                <div 
+                <div
                     className="group relative flex items-center gap-3 rounded-lg p-3 border bg-card hover:bg-accent/50 transition-all duration-300 cursor-pointer hover:shadow-md hover:border-primary/20"
                     style={{
                         transform: isHovered ? 'translateX(2px)' : 'translateX(0)',
@@ -54,7 +54,7 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void, handleU
                             <img src={usePath(item.icon)} alt={item.name} className="object-cover" />
                         </Avatar>
                     </div>
-                    
+
                     {/* Plugin Info */}
                     <div className="flex-1 min-w-0 space-y-1">
                         <div className="flex items-center justify-between gap-2">
@@ -72,17 +72,17 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void, handleU
                                 </div>
                             </div>
                         </div>
-                        
+
                         <p className="text-xs text-muted-foreground line-clamp-1">
                             {item.description}
                         </p>
-                        
+
                         {/* Action Buttons */}
                         <div className="flex gap-1.5 pt-0.5">
-                            <Button 
-                                variant="secondary" 
-                                size="sm" 
-                                className="h-7 px-2.5 text-xs gap-1.5 hover:bg-destructive/10 hover:text-destructive transition-colors" 
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                className="h-7 px-2.5 text-xs gap-1.5 hover:bg-destructive/10 hover:text-destructive transition-colors"
                                 onClick={(e) => {
                                     e.stopPropagation()
                                     handleUnInstall(item)
@@ -225,21 +225,21 @@ export const Shop: React.FC = () => {
                         </TooltipProvider>
                     </div>
                 </div>
-                
+
                 {/* Search Bar */}
                 <div className="px-4 pb-4">
-                    <Input 
-                        className="h-9 bg-background" 
-                        placeholder="Search extensions..." 
+                    <Input
+                        className="h-9 bg-background"
+                        placeholder="Search extensions..."
                     />
                 </div>
             </div>
-            
+
             {/* Plugin List */}
             <div className="flex-1 overflow-hidden">
-                <Accordion 
-                    type="multiple" 
-                    defaultValue={["installed"]} 
+                <Accordion
+                    type="multiple"
+                    defaultValue={["installed"]}
                     className="h-full overflow-auto px-3 py-2"
                 >
                     <AccordionItem value="installed" className="border-none">
@@ -277,7 +277,7 @@ export const Shop: React.FC = () => {
                 </Accordion>
             </div>
         </div>
-        
+
         {/* Main Content */}
         <div className="overflow-auto">
             <Outlet />
@@ -301,13 +301,13 @@ export const Shop: React.FC = () => {
                 <div className="py-4">
                     <div className="rounded-lg border bg-muted/30 p-4">
                         <p className="text-sm">
-                            Are you sure you want to permanently remove <span className="font-semibold text-foreground">{currentPlugin?.name}</span>? 
+                            Are you sure you want to permanently remove <span className="font-semibold text-foreground">{currentPlugin?.name}</span>?
                             All plugin data and configurations will be deleted.
                         </p>
                     </div>
                 </div>
                 <AlertDialogFooter className="gap-2 sm:gap-2">
-                    <AlertDialogCancel 
+                    <AlertDialogCancel
                         className="mt-0"
                         onClick={() => {
                             setCurrentPlugin(undefined)
@@ -316,7 +316,7 @@ export const Shop: React.FC = () => {
                     >
                         Cancel
                     </AlertDialogCancel>
-                    <AlertDialogAction 
+                    <AlertDialogAction
                         className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                         onClick={() => {
                             if (currentPlugin) {

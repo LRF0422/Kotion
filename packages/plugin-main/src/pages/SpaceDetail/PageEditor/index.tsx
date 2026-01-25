@@ -529,14 +529,14 @@ export const PageEditor: React.FC = () => {
                 </DropdownMenu>
             </div>
         </header>
-        <main className="w-full flex flex-row justify-center">
+        <main className="w-full h-[calc(100%-44px)]">
             {
                 page && synceStatus && <CollaborationEditor
                     pageInfo={page}
                     ref={editor}
                     synced={synceStatus}
                     provider={provider}
-                    className={isMobile ? "h-[calc(100vh-110px)] overflow-auto" : "h-[calc(100vh-80px)] overflow-auto"}
+                    className="h-full"
                     id={params.pageId as string}
                     user={collaborationUser}
                     token={params.pageId as string}
