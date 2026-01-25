@@ -214,11 +214,11 @@ export const PageViewer: React.FC = () => {
                 </div>
             </header>
         )}
-        <main className="w-full flex flex-row justify-center">
+        <main className={isMobile ? "w-full h-[calc(100%-56px)]" : "w-full h-[calc(100%-44px)]"}>
             <EditorRender
                 ref={(ed) => setEditor(ed)}
                 content={page.content ? JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">")) : undefined}
-                className={isMobile ? "h-[calc(100vh-56px)] overflow-auto" : "h-[calc(100vh-70px)] overflow-auto"}
+                className="h-full"
                 id={params.pageId as string}
                 isEditable={false}
                 isColl={false}
