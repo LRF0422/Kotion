@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { useApi, useUploadFile, useSafeState } from '@kn/core';
+import { useApi, useFileService, useSafeState } from '@kn/core';
 import { toast } from '@kn/ui';
 import { APIS } from '../api';
 import { FileItem, BreadcrumbItem } from '../editor-extensions/component/FileContext';
@@ -15,7 +15,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
     const [currentFolderItems, setCurrentFolderItems] = useState<FileItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const { upload } = useUploadFile();
+    const fileService = useFileService();
 
     // Navigation state
     const [breadcrumbPath, setBreadcrumbPath] = useState<BreadcrumbItem[]>([{
@@ -95,7 +95,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
     const uploadFile = useCallback(
         async (repoKey: string) => {
             try {
-                const res = await upload();
+                const res = await fileService.upload();
                 const promise = useApi(APIS.CREATE_FOLDER, null, {
                     name: res.originalName,
                     parentId: currentFolderId,
@@ -117,7 +117,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 throw err;
             }
         },
-        [currentFolderId, upload]
+        [currentFolderId, fileService]
     );
 
     const deleteFiles = useCallback(async (ids: string[]) => {

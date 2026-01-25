@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { NodeViewWrapper, NodeViewProps } from "@kn/editor";
 
 import { Resizable } from "@kn/editor";
-import { useUploadFile } from "@kn/core";
+import { useFileService } from "@kn/core";
 
 export const ImageView: React.FC<NodeViewProps> = ({
   editor,
@@ -14,7 +14,7 @@ export const ImageView: React.FC<NodeViewProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const { usePath } = useUploadFile();
+  const fileService = useFileService();
 
   const flexJustifyContent = useMemo(() => {
     if (align === "center") return "center";
@@ -37,8 +37,8 @@ export const ImageView: React.FC<NodeViewProps> = ({
     if (src.startsWith("data:")) {
       return src;
     }
-    return usePath(src);
-  }, [usePath]);
+    return fileService.getDownloadUrl(src);
+  }, [fileService]);
 
   const handleImageLoad = useCallback(() => {
     setLoading(false);

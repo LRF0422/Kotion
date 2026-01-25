@@ -6,6 +6,10 @@ import { Folder } from "@kn/icon"
 import React from "react"
 import { FileManagerView } from "./editor-extensions/component/FileManager"
 import { ImageExtension } from "./editor-extensions/image"
+import { getFileService } from "./services/FileServiceImpl"
+
+// Export FileService related components
+export * from "./services"
 
 // import "@kn/ui/globals.css"
 
@@ -20,6 +24,9 @@ class FileManager extends KPlugin<FileManagerPluginConfig> {
         super(config)
     }
 }
+
+// Create FileService instance for registration
+const fileService = getFileService();
 
 export const fileManager = new FileManager({
     status: '',
@@ -39,5 +46,9 @@ export const fileManager = new FileManager({
             key: 'File Manager',
             icon: <Folder className="h-5 w-5" />
         }
-    ]
+    ],
+    // Register FileService to be accessed via useService/useFileService
+    services: {
+        fileService: fileService
+    }
 })

@@ -1,6 +1,6 @@
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import React, { useMemo } from "react";
-import { useUploadFile } from "@kn/core";
+import { useFileService } from "@kn/core";
 import { cn, Badge } from "@kn/ui";
 import { FileIcon, DownloadIcon, FileTextIcon } from "@kn/icon";
 
@@ -34,7 +34,7 @@ const getFileIcon = (fileName: string) => {
 export const AttachmentView: React.FC<NodeViewProps> = (props) => {
     const { node, editor } = props;
     const { id, name, path, size, fileType } = node.attrs;
-    const { usePath } = useUploadFile();
+    const fileService = useFileService();
 
     // Determine if this is an inline attachment
     const isInline = node.type.name === "attachmentInline";
@@ -45,8 +45,8 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
         if (path.startsWith('http://') || path.startsWith('https://')) {
             return path;
         }
-        return usePath(path);
-    }, [path, usePath]);
+        return fileService.getDownloadUrl(path);
+    }, [path, fileService]);
 
     // Handle download
     const handleDownload = (e: React.MouseEvent) => {
