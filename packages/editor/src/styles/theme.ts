@@ -40,15 +40,19 @@ export const base = {
   blockquoteBorderColor: "#bbbfc5",
   blockquoteTextColor: "#1f2329b3",
 
-  // Light mode table colors
-  tableBorderColor: "#e5e7eb",
-  tableHeaderBgColor: "#f9fafb",
+  // Light mode table colors - Modern clean design
+  tableBorderColor: "#e2e8f0",
+  tableHeaderBgColor: "#f8fafc",
+  tableHeaderTextColor: "#475569",
   tableSelectedBorderColor: "#3b82f6",
-  tableSelectedCellBgColor: "#dbeafe",
+  tableSelectedCellBgColor: "rgba(59, 130, 246, 0.08)",
   tableSelectedControlBgColor: "#3b82f6",
-  tableResizeHandleBgColor: "#93c5fd",
-  tableCellBgColor: "#ffffff",
-  tableHoverBgColor: "#f3f4f6",
+  tableResizeHandleBgColor: "#3b82f6",
+  tableCellBgColor: "transparent",
+  tableHoverBgColor: "#f8fafc",
+  tableGripBgColor: "#f1f5f9",
+  tableGripHoverBgColor: "#e2e8f0",
+  tableGripDotColor: "#94a3b8",
 
   slashMenuColor: "rgba(0, 0, 0, 0.85)",
   slashMenuTitleColor: "rgba(0, 0, 0, 0.45)",
@@ -72,15 +76,19 @@ export const dark = {
   blockquoteBorderColor: "#4b5563",
   blockquoteTextColor: "rgba(255, 255, 255, 0.7)",
 
-  // Dark mode table colors
-  tableBorderColor: "#374151",
-  tableHeaderBgColor: "#1f2937",
+  // Dark mode table colors - Modern clean design
+  tableBorderColor: "#334155",
+  tableHeaderBgColor: "#1e293b",
+  tableHeaderTextColor: "#94a3b8",
   tableSelectedBorderColor: "#60a5fa",
-  tableSelectedCellBgColor: "#1e3a8a",
+  tableSelectedCellBgColor: "rgba(96, 165, 250, 0.12)",
   tableSelectedControlBgColor: "#60a5fa",
   tableResizeHandleBgColor: "#60a5fa",
-  tableCellBgColor: "#111827",
-  tableHoverBgColor: "#1f2937",
+  tableCellBgColor: "transparent",
+  tableHoverBgColor: "#1e293b",
+  tableGripBgColor: "#1e293b",
+  tableGripHoverBgColor: "#334155",
+  tableGripDotColor: "#64748b",
 
   slashMenuColor: "rgba(255, 255, 255, 0.87)",
   slashMenuTitleColor: "rgba(255, 255, 255, 0.45)",

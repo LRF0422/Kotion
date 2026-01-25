@@ -58,7 +58,7 @@ export const EditorRender = forwardRef<
 
   const [exts] = useEditorExtension(undefined, withTitle)
   const [items, setItems] = useSafeState<any[]>([])
-  const [tocVisible, setTocVisible] = useSafeState(true)
+  const [tocVisible, setTocVisible] = useSafeState(false)
 
   const editor = useEditor(
     {

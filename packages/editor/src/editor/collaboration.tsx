@@ -52,7 +52,7 @@ export const CollaborationEditor = forwardRef<
 
   const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle, externalExtensions)
   const [items, setItems] = useSafeState<any[]>([])
-  const [tocVisible, setTocVisible] = useSafeState(true)
+  const [tocVisible, setTocVisible] = useSafeState(false)
 
 
   // Memoize user ref to avoid extension recreation
