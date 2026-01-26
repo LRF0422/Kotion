@@ -14,13 +14,13 @@ import { useNavigator } from "@kn/core";
 import { GlobalState } from "@kn/core";
 import { Editor } from "@kn/editor";
 import * as Y from "@kn/editor";
-import { useFullscreen, useKeyPress, useToggle } from "@kn/core";
+import { useKeyPress, useToggle } from "@kn/core";
 import {
     ALargeSmall, ArrowLeft, BookTemplate, CircleArrowUp,
     Contact2, Download, FileIcon,
     Link, LoaderCircle, LockIcon, MessageSquareText,
     MoreHorizontal, MoveDownRight, Save, Trash2, Upload, List,
-    Check, CloudOff, Users, Wifi, WifiOff, UserPlus
+    Check, CloudOff, UserPlus
 } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "@kn/common";
@@ -62,7 +62,6 @@ export const PageEditor: React.FC = () => {
     const editor = useRef<Editor>(null)
     const navigator = useNavigator()
     const ref = useRef<any>()
-    const [fullScreen, { toggleFullscreen }] = useFullscreen(ref)
     const spaceService = useService("spaceService")
     const [isManualSaving, setIsManualSaving] = useState(false)
     const { usePath } = useUploadFile();
