@@ -50,8 +50,17 @@ export interface FileService {
 /**
  * Plugin services registry
  * Plugins can register their services here to be accessed via useService hook
+ * Use module augmentation to add new services:
+ * 
+ * @example
+ * ```typescript
+ * declare module '@kn/common' {
+ *     interface Services {
+ *         myService: MyServiceType;
+ *     }
+ * }
+ * ```
  */
 export interface Services {
     fileService?: FileService;
-    [key: string]: ValuesOf<Services>;
 }

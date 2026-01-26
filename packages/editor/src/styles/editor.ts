@@ -1,7 +1,7 @@
 import styled from "styled-components";
 
 export const StyledEditor = styled.div.attrs({
-  className: 'prose dark:prose-invert prose-img:m-0 max-w-none'
+  className: 'prose dark:prose-invert prose-img:m-0 max-w-none prose-table:my-0'
 })`
   box-sizing: border-box;
   width: 100%;
@@ -161,6 +161,17 @@ export const StyledEditor = styled.div.attrs({
   }
   /* E List */
 
+  /* Reset prose table styles to ensure our custom styles apply */
+  &.prose table,
+  &.prose thead,
+  &.prose tbody,
+  &.prose tr,
+  &.prose th,
+  &.prose td {
+    border-width: 0;
+    border-style: none;
+  }
+
   /* S Table - Modern Design */
   .tableWrapper {
     position: relative;
@@ -176,13 +187,13 @@ export const StyledEditor = styled.div.attrs({
 
   table {
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
     border-radius: 8px;
     overflow: hidden;
     margin-top: 0;
     background-color: ${props => (props.theme as any).tableCellBgColor};
-    border: 1px solid ${props => (props.theme as any).tableBorderColor};
+    border: 1px solid ${props => (props.theme as any).tableBorderColor} !important;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
     box-sizing: border-box;
@@ -230,15 +241,15 @@ export const StyledEditor = styled.div.attrs({
     th {
       position: relative;
       vertical-align: top;
-      border-bottom: 1px solid ${props => (props.theme as any).tableBorderColor};
-      border-right: 1px solid ${props => (props.theme as any).tableBorderColor};
+      border-bottom: 1px solid ${props => (props.theme as any).tableBorderColor} !important;
+      border-right: 1px solid ${props => (props.theme as any).tableBorderColor} !important;
       padding: 4px 8px !important;
       text-align: left;
       min-width: 100px;
       transition: background-color 0.15s ease;
 
       &:last-child {
-        border-right: none;
+        border-right: none !important;
       }
     }
 

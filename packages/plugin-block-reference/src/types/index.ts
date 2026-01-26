@@ -58,6 +58,13 @@ export interface SpaceService {
     createPage: (params: CreatePageParams) => Promise<PageInfo>;
 }
 
+// Module augmentation to register SpaceService in the Services interface
+declare module '@kn/common' {
+    interface Services {
+        spaceService: SpaceService;
+    }
+}
+
 export type ReferenceType = 'CHILD' | 'BORTHER' | 'LINK';
 
 export interface PageReferenceAttrs {

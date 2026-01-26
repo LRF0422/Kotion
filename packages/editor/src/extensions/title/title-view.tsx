@@ -19,6 +19,7 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 	const { pluginManager } = useContext(AppContext)
 	const [isHovered, setIsHovered] = useState(false)
 	const [isCoverHovered, setIsCoverHovered] = useState(false)
+	const [isTitleAreaHovered, setIsTitleAreaHovered] = useState(false)
 	const [isDragging, setIsDragging] = useState(false)
 	const [isUploading, setIsUploading] = useState(false)
 	const coverRef = useRef<HTMLDivElement>(null)
@@ -101,7 +102,7 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 		const deltaY = e.clientY - dragStartY.current
 		const deltaPercent = (deltaY / coverHeight) * 100
 		const newPosition = Math.max(0, Math.min(100, dragStartPosition.current + deltaPercent))
-		
+
 		props.updateAttributes({
 			...props.node.attrs,
 			cover: {
@@ -202,44 +203,80 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 		)}
 
 		{/* Content area with proper padding */}
-		<div className={cn(
-			"flex flex-col gap-4 w-full",
-			hasCover ? "pt-6 pb-6" : "pt-12 pb-6"
-		)}>
-			{/* Add cover button - Show when no cover and in edit mode */}
-			{!hasCover && props.editor.isEditable && (
+		<div
+			className={cn(
+				"flex flex-col gap-4 w-full",
+				hasCover ? "pt-6 pb-6" : "pt-12 pb-6"
+			)}
+			onMouseEnter={() => setIsTitleAreaHovered(true)}
+			onMouseLeave={() => setIsTitleAreaHovered(false)}
+		>
+			{/* Add icon and cover buttons - Show when no icon/cover and in edit mode */}
+			{props.editor.isEditable && (!hasIcon || !hasCover) && (
 				<div
-					className="group"
-					onMouseEnter={() => setIsCoverHovered(true)}
-					onMouseLeave={() => setIsCoverHovered(false)}
+					className={cn(
+						"flex items-center gap-2",
+						"opacity-0 transition-opacity duration-200",
+						isTitleAreaHovered && "opacity-100"
+					)}
+					contentEditable={false}
 				>
-					<Button
-						variant="ghost"
-						size="sm"
-						className={cn(
-							"h-7 gap-1.5 text-muted-foreground hover:text-foreground",
-							"opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-						)}
-						onClick={handleUploadCover}
-						disabled={isUploading || !fileService}
-						contentEditable={false}
-					>
-						<ImagePlus className="h-4 w-4" />
-						<span className="text-sm">{isUploading ? "Uploading..." : "Add cover"}</span>
-					</Button>
+					{/* Add icon button */}
+					{!hasIcon && (
+						<Popover>
+							<PopoverTrigger asChild>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-7 gap-1.5 text-muted-foreground hover:text-foreground"
+								>
+									<Plus className="h-4 w-4" />
+									<span className="text-sm">Add icon</span>
+								</Button>
+							</PopoverTrigger>
+							<PopoverContent side="bottom" align="start" className="p-0 border-none shadow-2xl">
+								<EmojiPicker
+									className="h-[380px] rounded-xl border shadow-xl w-full"
+									onEmojiSelect={({ emoji }) => {
+										props.updateAttributes({
+											...props.node.attrs,
+											icon: {
+												type: 'EMOJI',
+												icon: emoji
+											}
+										})
+									}}>
+									<EmojiPickerSearch />
+									<EmojiPickerContent />
+								</EmojiPicker>
+							</PopoverContent>
+						</Popover>
+					)}
+					{/* Add cover button */}
+					{!hasCover && (
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-7 gap-1.5 text-muted-foreground hover:text-foreground"
+							onClick={handleUploadCover}
+							disabled={isUploading || !fileService}
+						>
+							<ImagePlus className="h-4 w-4" />
+							<span className="text-sm">{isUploading ? "Uploading..." : "Add cover"}</span>
+						</Button>
+					)}
 				</div>
 			)}
 
-			{/* Icon/Emoji Section - Only show when icon exists or in edit mode */}
-			{(hasIcon || props.editor.isEditable) && (
-			<div
-				className="relative group"
-				onMouseEnter={() => setIsHovered(true)}
-				onMouseLeave={() => setIsHovered(false)}
-			>
-				<Popover>
-					<PopoverTrigger disabled={!props.editor.isEditable}>
-						{hasIcon ? (
+			{/* Icon/Emoji Section - Only show when icon exists */}
+			{hasIcon && (
+				<div
+					className="relative group"
+					onMouseEnter={() => setIsHovered(true)}
+					onMouseLeave={() => setIsHovered(false)}
+				>
+					<Popover>
+						<PopoverTrigger disabled={!props.editor.isEditable}>
 							<div
 								contentEditable={false}
 								className={cn(
@@ -275,80 +312,65 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 									</button>
 								)}
 							</div>
-						) : (
-							// Show add icon button only in edit mode when no icon
-							<div
-								contentEditable={false}
-								className={cn(
-									"flex items-center gap-1.5 px-2 py-1 rounded-md cursor-pointer",
-									"text-muted-foreground hover:text-foreground",
-									"hover:bg-muted/50 transition-all duration-200",
-									"opacity-0 group-hover:opacity-100"
-								)}
-							>
-								<Plus className="h-4 w-4" />
-								<span className="text-sm">Add icon</span>
-							</div>
-						)}
-					</PopoverTrigger>
-					<PopoverContent side="right" align="start" className="p-0 border-none shadow-2xl" >
-						<EmojiPicker
-							className="h-[380px] rounded-xl border shadow-xl w-full"
-							onEmojiSelect={({ emoji }) => {
-								props.updateAttributes({
-									...props.node.attrs,
-									icon: {
-										type: 'EMOJI',
-										icon: emoji
-									}
-								})
-							}} >
-							<EmojiPickerSearch />
-							<EmojiPickerContent />
-						</EmojiPicker>
-					</PopoverContent>
-				</Popover>
-			</div>
-		)}
-
-		{/* Title Content */}
-		<div className="w-full relative">
-			<NodeViewContent className="w-full prose-h1:mb-2 prose-h1:mt-0 prose-h1:font-bold" />
-			{/* Placeholder when title is empty */}
-			{isTitleEmpty && props.editor.isEditable && (
-				<div
-					className="absolute top-0 left-0 pointer-events-none text-muted-foreground/50 text-4xl font-bold"
-					contentEditable={false}
-				>
-					Untitled
+						</PopoverTrigger>
+						<PopoverContent side="right" align="start" className="p-0 border-none shadow-2xl" >
+							<EmojiPicker
+								className="h-[380px] rounded-xl border shadow-xl w-full"
+								onEmojiSelect={({ emoji }) => {
+									props.updateAttributes({
+										...props.node.attrs,
+										icon: {
+											type: 'EMOJI',
+											icon: emoji
+										}
+									})
+								}} >
+								<EmojiPickerSearch />
+								<EmojiPickerContent />
+							</EmojiPicker>
+						</PopoverContent>
+					</Popover>
 				</div>
 			)}
-		</div>
 
-		{/* Metadata Section */}
-		{(!props.editor.isEditable) && (
-			<div className="flex flex-wrap items-center gap-2 mt-2 w-full">
-				{/* Create Time */}
-				<div className="group flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-all duration-200 border border-transparent hover:border-border/50">
-					<Clock className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
-					<div className="flex items-center gap-1.5">
-						<span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">Created</span>
-						<span className="text-xs text-muted-foreground/80">{createTime}</span>
+			{/* Title Content */}
+			<div className="w-full relative">
+				<NodeViewContent className="w-full prose-h1:mb-2 prose-h1:mt-0 prose-h1:font-bold" />
+				{/* Placeholder when title is empty */}
+				{isTitleEmpty && props.editor.isEditable && (
+					<div
+						className="absolute top-0 left-0 pointer-events-none text-muted-foreground/50 text-4xl font-bold"
+						contentEditable={false}
+					>
+						Untitled
 					</div>
-				</div>
-
-				<Separator orientation="vertical" className="h-5" />
-
-				{/* Update Time */}
-				<div className="group flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-all duration-200 border border-transparent hover:border-border/50">
-					<Clock className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
-					<div className="flex items-center gap-1.5">
-						<span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">Updated</span>
-						<span className="text-xs text-muted-foreground/80">{updateTime}</span>
-					</div>
-				</div>
+				)}
 			</div>
-		)}
+
+			{/* Metadata Section */}
+			{(!props.editor.isEditable) && (
+				<div className="flex flex-wrap items-center gap-2 mt-2 w-full">
+					{/* Create Time */}
+					<div className="group flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-all duration-200 border border-transparent hover:border-border/50">
+						<Clock className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+						<div className="flex items-center gap-1.5">
+							<span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">Created</span>
+							<span className="text-xs text-muted-foreground/80">{createTime}</span>
+						</div>
+					</div>
+
+					<Separator orientation="vertical" className="h-5" />
+
+					{/* Update Time */}
+					<div className="group flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-all duration-200 border border-transparent hover:border-border/50">
+						<Clock className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+						<div className="flex items-center gap-1.5">
+							<span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">Updated</span>
+							<span className="text-xs text-muted-foreground/80">{updateTime}</span>
+						</div>
+					</div>
+				</div>
+			)}
 		</div>
 	</NodeViewWrapper>
 }
