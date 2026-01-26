@@ -1,19 +1,39 @@
-import { EmojiPicker, EmojiPickerContent, EmojiPickerSearch, Separator, cn } from "@kn/ui";
+import { EmojiPicker, EmojiPickerContent, EmojiPickerSearch, Separator, cn, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@kn/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
-import { Clock, Plus, X } from "@kn/icon";
-import React, { useContext, useState, useMemo } from "react";
+import { Clock, Plus, X, Image, ImagePlus, Trash2, Move, GripVertical, Link2 } from "@kn/icon";
+import React, { useContext, useState, useMemo, useCallback, useRef } from "react";
 import { PageContext } from "@editor/editor/context";
+import { AppContext, FileService } from "@kn/common";
 
+// Cover image configuration interface
+interface CoverConfig {
+	url: string;
+	position: number; // Vertical position percentage (0-100), default 50
+}
 
 export const TitleView: React.FC<NodeViewProps> = (props) => {
 
 	const { createTime, updateTime } = useContext(PageContext)
+	const { pluginManager } = useContext(AppContext)
 	const [isHovered, setIsHovered] = useState(false)
+	const [isCoverHovered, setIsCoverHovered] = useState(false)
+	const [isDragging, setIsDragging] = useState(false)
+	const [isUploading, setIsUploading] = useState(false)
+	const coverRef = useRef<HTMLDivElement>(null)
+	const dragStartY = useRef<number>(0)
+	const dragStartPosition = useRef<number>(50)
+
+	// Get file service from plugin manager
+	const fileService = pluginManager?.pluginServices?.fileService as FileService | undefined
 
 	// Check if icon is configured
 	const hasIcon = !!props.node.attrs?.icon?.icon
+
+	// Check if cover is configured
+	const cover = props.node.attrs?.cover as CoverConfig | null
+	const hasCover = !!cover?.url
 
 	// Check if title is empty
 	const isTitleEmpty = useMemo(() => {
@@ -22,9 +42,196 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 		return titleNode.textContent?.trim() === ''
 	}, [props.node])
 
-	return <NodeViewWrapper className="flex flex-col gap-4 items-start pt-12 pb-6 w-full">
-		{/* Icon/Emoji Section - Only show when icon exists or in edit mode */}
-		{(hasIcon || props.editor.isEditable) && (
+	// Get cover image URL
+	const getCoverUrl = useCallback((url: string) => {
+		if (!url) return ""
+		if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
+			return url
+		}
+		if (fileService) {
+			return fileService.getDownloadUrl(url)
+		}
+		// Fallback download URL
+		return `https://kotion.top:888/api/knowledge-resource/oss/endpoint/download?fileName=${url}`
+	}, [fileService])
+
+	// Handle cover upload
+	const handleUploadCover = useCallback(async () => {
+		if (!fileService) {
+			console.warn("FileService not available")
+			return
+		}
+		try {
+			setIsUploading(true)
+			const result = await fileService.upload({ mimeTypes: ["image/*"] })
+			props.updateAttributes({
+				...props.node.attrs,
+				cover: {
+					url: result.name,
+					position: 50
+				}
+			})
+		} catch (error) {
+			console.error("Failed to upload cover:", error)
+		} finally {
+			setIsUploading(false)
+		}
+	}, [fileService, props])
+
+	// Handle remove cover
+	const handleRemoveCover = useCallback(() => {
+		props.updateAttributes({
+			...props.node.attrs,
+			cover: null
+		})
+	}, [props])
+
+	// Handle cover position change via dragging
+	const handleDragStart = useCallback((e: React.MouseEvent) => {
+		if (!props.editor.isEditable) return
+		e.preventDefault()
+		setIsDragging(true)
+		dragStartY.current = e.clientY
+		dragStartPosition.current = cover?.position ?? 50
+	}, [props.editor.isEditable, cover?.position])
+
+	const handleDragMove = useCallback((e: MouseEvent) => {
+		if (!isDragging || !coverRef.current) return
+		const coverHeight = coverRef.current.offsetHeight
+		const deltaY = e.clientY - dragStartY.current
+		const deltaPercent = (deltaY / coverHeight) * 100
+		const newPosition = Math.max(0, Math.min(100, dragStartPosition.current + deltaPercent))
+		
+		props.updateAttributes({
+			...props.node.attrs,
+			cover: {
+				...cover,
+				position: newPosition
+			}
+		})
+	}, [isDragging, cover, props])
+
+	const handleDragEnd = useCallback(() => {
+		setIsDragging(false)
+	}, [])
+
+	// Add global mouse event listeners for dragging
+	React.useEffect(() => {
+		if (isDragging) {
+			window.addEventListener('mousemove', handleDragMove)
+			window.addEventListener('mouseup', handleDragEnd)
+			return () => {
+				window.removeEventListener('mousemove', handleDragMove)
+				window.removeEventListener('mouseup', handleDragEnd)
+			}
+		}
+	}, [isDragging, handleDragMove, handleDragEnd])
+
+	return <NodeViewWrapper className="flex flex-col items-start w-full">
+		{/* Cover Image Section */}
+		{hasCover && (
+			<div
+				ref={coverRef}
+				className={cn(
+					"relative w-full h-[30vh] min-h-[200px] max-h-[400px] -mx-[calc(50vw-50%)] left-[calc(50%-50vw)] overflow-hidden",
+					"bg-muted/30",
+					isDragging && "cursor-grabbing select-none"
+				)}
+				onMouseEnter={() => setIsCoverHovered(true)}
+				onMouseLeave={() => setIsCoverHovered(false)}
+				contentEditable={false}
+			>
+				{/* Cover Image */}
+				<img
+					src={getCoverUrl(cover!.url)}
+					alt="Cover"
+					className="w-full h-full object-cover"
+					style={{ objectPosition: `center ${cover!.position ?? 50}%` }}
+					draggable={false}
+				/>
+
+				{/* Cover Controls - Only show in edit mode and when hovered */}
+				{props.editor.isEditable && isCoverHovered && !isDragging && (
+					<div className="absolute bottom-3 right-3 flex items-center gap-2" contentEditable={false}>
+						{/* Reposition hint */}
+						<Button
+							variant="secondary"
+							size="sm"
+							className="h-8 gap-1.5 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border"
+							onMouseDown={handleDragStart}
+						>
+							<GripVertical className="h-4 w-4" />
+							<span className="text-xs">Reposition</span>
+						</Button>
+
+						{/* Change cover button */}
+						<Button
+							variant="secondary"
+							size="sm"
+							className="h-8 gap-1.5 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border"
+							onClick={handleUploadCover}
+							disabled={isUploading}
+						>
+							<Image className="h-4 w-4" />
+							<span className="text-xs">{isUploading ? "Uploading..." : "Change cover"}</span>
+						</Button>
+
+						{/* Remove cover button */}
+						<Button
+							variant="secondary"
+							size="sm"
+							className="h-8 gap-1.5 bg-background/80 backdrop-blur-sm hover:bg-destructive hover:text-destructive-foreground shadow-lg border"
+							onClick={handleRemoveCover}
+						>
+							<Trash2 className="h-4 w-4" />
+							<span className="text-xs">Remove</span>
+						</Button>
+					</div>
+				)}
+
+				{/* Drag indicator overlay */}
+				{isDragging && (
+					<div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+						<div className="bg-background/90 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
+							<Move className="h-4 w-4" />
+							<span className="text-sm font-medium">Drag to reposition</span>
+						</div>
+					</div>
+				)}
+			</div>
+		)}
+
+		{/* Content area with proper padding */}
+		<div className={cn(
+			"flex flex-col gap-4 w-full",
+			hasCover ? "pt-6 pb-6" : "pt-12 pb-6"
+		)}>
+			{/* Add cover button - Show when no cover and in edit mode */}
+			{!hasCover && props.editor.isEditable && (
+				<div
+					className="group"
+					onMouseEnter={() => setIsCoverHovered(true)}
+					onMouseLeave={() => setIsCoverHovered(false)}
+				>
+					<Button
+						variant="ghost"
+						size="sm"
+						className={cn(
+							"h-7 gap-1.5 text-muted-foreground hover:text-foreground",
+							"opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+						)}
+						onClick={handleUploadCover}
+						disabled={isUploading || !fileService}
+						contentEditable={false}
+					>
+						<ImagePlus className="h-4 w-4" />
+						<span className="text-sm">{isUploading ? "Uploading..." : "Add cover"}</span>
+					</Button>
+				</div>
+			)}
+
+			{/* Icon/Emoji Section - Only show when icon exists or in edit mode */}
+			{(hasIcon || props.editor.isEditable) && (
 			<div
 				className="relative group"
 				onMouseEnter={() => setIsHovered(true)}
@@ -142,5 +349,6 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 				</div>
 			</div>
 		)}
+		</div>
 	</NodeViewWrapper>
 }
