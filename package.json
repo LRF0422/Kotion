@@ -40,7 +40,13 @@
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "ui:add": "pnpm --filter @kn/ui ui:add",
-    "volta:install": "curl https://get.volta.sh | bash"
+    "volta:install": "curl https://get.volta.sh | bash",
+    "desktop:dev": "pnpm --filter @kn/desktop dev",
+    "desktop:build": "pnpm --filter @kn/desktop build",
+    "desktop:package": "pnpm --filter @kn/desktop package",
+    "desktop:package:win": "pnpm --filter @kn/desktop package:win",
+    "desktop:package:mac": "pnpm --filter @kn/desktop package:mac",
+    "desktop:package:linux": "pnpm --filter @kn/desktop package:linux"
   },
   "dependencies": {
     "@rollup/plugin-babel": "^6.0.4",
