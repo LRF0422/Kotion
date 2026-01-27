@@ -245,5 +245,4 @@ export interface BitableAttrs {
     currentView: string;
     records?: RecordData[];
     data?: any;
-    title?: string;
 }
