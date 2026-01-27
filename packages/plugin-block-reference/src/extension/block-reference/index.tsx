@@ -1,13 +1,16 @@
-import { event, ExtensionWrapper } from "@kn/common";
+import { ExtensionWrapper } from "@kn/common";
 import { PageReference } from "./page-reference";
-import { FilePlus2 } from "@kn/icon";
+import { FilePlus2, Link2, SquareDashedBottom } from "@kn/icon";
 import React from "react";
 import { computePosition, flip, posToDOMRect, ReactRenderer } from "@kn/editor";
 import { PageSelector } from "./PageSelector";
 import { BlockSelector } from "./BlockSelector";
 import { BlockReference } from "./block-references";
 
-
+/**
+ * Block Reference Extension
+ * Provides slash commands for creating and linking page/block references
+ */
 export const BlockReferenceExtension: ExtensionWrapper = {
     name: "blockReference",
     extendsion: [PageReference, BlockReference],
@@ -18,20 +21,20 @@ export const BlockReferenceExtension: ExtensionWrapper = {
         },
         {
             icon: <FilePlus2 className="h-4 w-4" />,
-            text: "新建页面并引用",
+            text: "新建同级页面并引用",
             slash: '/createPage',
             action: (editor) => {
                 editor.commands.insertContent({
                     type: PageReference.name,
                     attrs: {
-                        type: "BORTHER"
+                        type: "BROTHER"
                     }
                 })
             }
         },
         {
             icon: <FilePlus2 className="h-4 w-4" />,
-            text: "新建页面并引用",
+            text: "新建子页面并引用",
             slash: '/createSubPage',
             action: (editor) => {
                 editor.commands.insertContent({
@@ -43,7 +46,7 @@ export const BlockReferenceExtension: ExtensionWrapper = {
             }
         },
         {
-            icon: <FilePlus2 className="h-4 w-4" />,
+            icon: <Link2 className="h-4 w-4" />,
             text: "关联页面",
             slash: '/linkPage',
             action: (editor) => {
@@ -79,11 +82,10 @@ export const BlockReferenceExtension: ExtensionWrapper = {
             }
         },
         {
-            icon: <FilePlus2 className="h-4 w-4" />,
+            icon: <SquareDashedBottom className="h-4 w-4" />,
             text: "关联块",
             slash: '/linkBlock',
-            action: (editor, props) => {
-                console.log('props', props);
+            action: (editor) => {
                 editor.view.dispatch(editor.state.tr.insertText("("))
                 const component = new ReactRenderer(BlockSelector, {
                     editor: editor,

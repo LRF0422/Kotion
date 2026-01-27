@@ -1,22 +1,31 @@
 import { NodeViewWrapper, NodeViewProps, PageContext } from "@kn/editor";
-import React, { useCallback, useContext, useEffect, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigator, useToggle } from "@kn/core";
 import { event, useParams } from "@kn/common";
-import { Loader2, SquareArrowOutUpRight } from "@kn/icon";
+import { FileText, Loader2 } from "@kn/icon";
+import { cn, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
 import { usePageInfo, useSpaceService } from "../../hooks";
 import type { PageReferenceAttrs } from "../../types";
 
 /**
  * PageReferenceView component displays a reference to another page
- * Optimized with proper hooks and error handling
+ * 
+ * Features:
+ * - Auto-creates new page if pageId is null
+ * - Cached page info fetching
+ * - Click to navigate
+ * - Shows page's own icon
+ * - Tooltip with page title
+ * - Full accessibility support
  */
 export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => {
     const params = useParams();
     const pageInfo = useContext(PageContext);
     const { pageId, type } = props.node.attrs as PageReferenceAttrs;
     const [title, setTitle] = useState<string>();
+    const [icon, setIcon] = useState<string | null>(null);
     const navigator = useNavigator();
-    const [loading, { toggle }] = useToggle(false);
+    const [creating, { toggle: toggleCreating }] = useToggle(false);
     const spaceService = useSpaceService();
 
     // Create new page if pageId is null
@@ -24,7 +33,7 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
         if (pageId || !params.id || !spaceService) return;
 
         const createNewPage = async () => {
-            toggle();
+            toggleCreating();
             try {
                 const res = await spaceService.createPage({
                     spaceId: params.id!,
@@ -38,16 +47,16 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
                 });
                 event.emit("ON_PAGE_REFRESH");
                 setTitle("未命名");
-            } catch (err) {
-                console.error('Failed to create page:', err);
-                setTitle("Failed to create page");
+                setIcon(res.icon?.icon || null);
+            } catch {
+                setTitle("创建失败");
             } finally {
-                toggle();
+                toggleCreating();
             }
         };
 
         createNewPage();
-    }, [pageId, params.id, type, pageInfo, spaceService, props, toggle]);
+    }, [pageId, params.id, type, pageInfo, spaceService, props, toggleCreating]);
 
     // Fetch existing page info
     const { pageInfo: fetchedPageInfo, loading: fetchLoading, error } = usePageInfo(pageId);
@@ -55,8 +64,10 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
     useEffect(() => {
         if (fetchedPageInfo) {
             setTitle(fetchedPageInfo.title);
+            setIcon(fetchedPageInfo.icon?.icon || null);
         } else if (error) {
-            setTitle("该页面已经被删除");
+            setTitle("页面已删除");
+            setIcon(null);
         }
     }, [fetchedPageInfo, error]);
 
@@ -70,22 +81,72 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
         }
     }, [pageId, pageInfo.spaceId, navigator]);
 
-    const isLoading = loading || fetchLoading;
+    const isLoading = creating || fetchLoading;
+    const isDeleted = !isLoading && error;
+    const displayTitle = title || '未命名';
+
+    // Render icon - use page's own icon or fallback to FileText
+    const renderIcon = useMemo(() => {
+        if (icon) {
+            return (
+                <span className={cn("text-base leading-none", isDeleted && "opacity-50")}>
+                    {icon}
+                </span>
+            );
+        }
+        return <FileText className={cn("h-4 w-4 flex-shrink-0", isDeleted && "text-muted-foreground")} />;
+    }, [icon, isDeleted]);
+
+    // Memoized content
+    const content = useMemo(() => {
+        if (isLoading) {
+            return <Loader2 className="h-4 w-4 animate-spin" />;
+        }
+        return (
+            <>
+                {renderIcon}
+                <span className={cn(
+                    "truncate max-w-[200px]",
+                    isDeleted && "line-through text-muted-foreground"
+                )}>
+                    {displayTitle}
+                </span>
+            </>
+        );
+    }, [isLoading, isDeleted, displayTitle, renderIcon]);
 
     return (
-        <NodeViewWrapper
-            as="span"
-            className="inline-flex items-center gap-1 align-middle cursor-pointer hover:underline"
-            onClick={handleClick}
-        >
-            {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-                <>
-                    <SquareArrowOutUpRight className="h-4 w-4" />
-                    {title || 'Untitled'}
-                </>
-            )}
-        </NodeViewWrapper>
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <NodeViewWrapper
+                        as="span"
+                        className={cn(
+                            "inline-flex items-center gap-1 align-middle px-1 py-0.5",
+                            "rounded-sm transition-colors duration-150",
+                            "hover:bg-muted cursor-pointer",
+                            isDeleted && "opacity-60"
+                        )}
+                        onClick={handleClick}
+                        role="link"
+                        aria-label={`页面引用: ${displayTitle}`}
+                        tabIndex={0}
+                        onKeyDown={(e: React.KeyboardEvent) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleClick(e as unknown as React.MouseEvent);
+                            }
+                        }}
+                    >
+                        {content}
+                    </NodeViewWrapper>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                    {isDeleted ? '页面已删除' : `点击跳转到: ${displayTitle}`}
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
     );
 });
+
+PageReferenceView.displayName = 'PageReferenceView';

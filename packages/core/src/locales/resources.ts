@@ -294,6 +294,22 @@ export const resources = {
                 "buttons": {
                     "goHome": "返回首页"
                 }
+            },
+            "bitable": {
+                "actions": {
+                    "addView": "添加视图",
+                    "renameView": "重命名视图",
+                    "deleteView": "删除视图",
+                    "addRecord": "添加记录",
+                    "add": "添加",
+                    "cancel": "取消"
+                },
+                "dialog": {
+                    "deleteViewTitle": "删除视图",
+                    "deleteViewDescription": "确定要删除此视图吗？此操作无法撤销。",
+                    "cancel": "取消",
+                    "delete": "删除"
+                }
             }
         }
     },
@@ -590,6 +606,22 @@ export const resources = {
                 },
                 "buttons": {
                     "goHome": "Go to Home"
+                }
+            },
+            "bitable": {
+                "actions": {
+                    "addView": "Add View",
+                    "renameView": "Rename View",
+                    "deleteView": "Delete View",
+                    "addRecord": "Add Record",
+                    "add": "Add",
+                    "cancel": "Cancel"
+                },
+                "dialog": {
+                    "deleteViewTitle": "Delete View",
+                    "deleteViewDescription": "Are you sure you want to delete this view? This action cannot be undone.",
+                    "cancel": "Cancel",
+                    "delete": "Delete"
                 }
             }
         }

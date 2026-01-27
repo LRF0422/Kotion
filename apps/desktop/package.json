@@ -4,7 +4,7 @@
     "description": "Knowledge Desktop - Offline-first desktop application",
     "main": "dist-electron/main/index.js",
     "scripts": {
-        "dev": "vite",
+        "desktop:dev": "vite",
         "build": "tsc && vite build && electron-builder",
         "build:vite": "vite build",
         "preview": "vite preview",

@@ -16,11 +16,9 @@ export const isElectron = (): boolean => {
 
 // URL to IPC channel mapping
 const urlToIpcChannel: Record<string, string> = {
-    // Auth
-    '/knowledge-auth/token': 'auth:login',
+    // Auth - removed, use HTTP for login/register
     // User
     '/knowledge-system/user/info': 'user:getInfo',
-    '/knowledge-system/user/register': 'auth:register',
     '/knowledge-system/user/search': 'user:search',
     // Space
     '/knowledge-wiki/space/list': 'space:list',
@@ -46,16 +44,15 @@ const urlToIpcChannel: Record<string, string> = {
     '/knowledge-wiki/space/page/templates': 'page:getTemplates',
     '/knowledge-wiki/space/page/blocks': 'page:getBlocks',
     '/knowledge-wiki/space/page/block': 'page:getBlockInfo',
-    // IM
-    '/instant-message/send': 'im:send',
-    '/instant-message/conversations': 'im:getConversations',
-    '/instant-message/unread-count': 'im:getUnreadCount',
-    '/instant-message/unread': 'im:getUnreadMessages',
-    '/instant-message/read': 'im:markRead',
-    '/instant-message/read-all': 'im:markAllRead',
-    '/instant-message/online-users': 'im:getOnlineUsers',
-    '/instant-message/online-count': 'im:getOnlineCount',
+    // IM - removed, use HTTP for WebSocket operations
 }
+
+// URLs that should always use HTTP (remote API) even in Electron
+const httpOnlyUrls = [
+    '/knowledge-auth/token',           // Login
+    '/knowledge-system/user/register', // Register
+    '/instant-message/',               // All IM/WebSocket operations
+]
 
 // Get IPC channel from URL
 const getIpcChannel = (url: string, method: string): string | null => {
@@ -73,9 +70,7 @@ const getIpcChannel = (url: string, method: string): string | null => {
         { pattern: /\/knowledge-wiki\/space\/([^/]+)\/members/, channel: 'space:getMembers' },
         { pattern: /\/knowledge-wiki\/plugin\/([^/]+)/, channel: 'plugin:get' },
         { pattern: /\/knowledge-wiki\/favorite\/([^/]+)/, channel: 'page:removeFavorite' },
-        { pattern: /\/instant-message\/conversation\/([^/]+)/, channel: 'im:getConversation' },
-        { pattern: /\/instant-message\/([^/]+)/, channel: 'im:deleteMessage' },
-        { pattern: /\/instant-message\/online\/([^/]+)/, channel: 'im:checkUserOnline' },
+        // IM patterns removed - use HTTP for WebSocket operations
     ]
 
     // Check static mappings first
@@ -108,9 +103,7 @@ const extractIdFromUrl = (url: string): string | null => {
         /\/space\/([^/]+)\/members$/,
         /\/plugin\/([^/]+)$/,
         /\/favorite\/([^/]+)$/,
-        /\/conversation\/([^/]+)$/,
-        /\/instant-message\/([^/]+)$/,
-        /\/online\/([^/]+)$/,
+        // IM patterns removed - use HTTP for WebSocket operations
     ]
 
     for (const pattern of patterns) {
@@ -197,8 +190,13 @@ const handleHttpRequest = (api: API, param?: any, body?: any, header?: Record<st
 }
 
 export const handleRequest = (api: API, param?: any, body?: any, header?: Record<string, string>) => {
-    // Use Electron IPC if available
-    if (isElectron()) {
+    const filledUrl = fillPathParam(api.url, param)
+
+    // Check if this URL should always use HTTP (e.g., login, register)
+    const shouldUseHttp = httpOnlyUrls.some(url => filledUrl.includes(url))
+
+    // Use Electron IPC if available and URL is not HTTP-only
+    if (isElectron() && !shouldUseHttp) {
         return handleElectronRequest(api, param, body)
     }
 

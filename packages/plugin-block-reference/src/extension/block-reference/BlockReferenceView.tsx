@@ -2,13 +2,52 @@ import { AnyExtension, Content, EditorContent, NodeViewProps, NodeViewWrapper, S
 import React, { useCallback, useMemo, useRef } from "react";
 import { useHover, useNavigator, useToggle } from "@kn/core";
 import { ArrowUpRight, RefreshCcw, Trash2 } from "@kn/icon";
-import { cn, IconButton } from "@kn/ui";
+import { cn, IconButton, Skeleton, Tooltip, TooltipContent, TooltipTrigger } from "@kn/ui";
 import { useBlockInfo } from "../../hooks";
 import type { BlockReferenceAttrs } from "../../types";
 
+/** Memoized toolbar button with tooltip */
+const ToolbarButton = React.memo<{
+    icon: React.ReactNode;
+    onClick: () => void;
+    label: string;
+    disabled?: boolean;
+}>(({ icon, onClick, label, disabled }) => (
+    <Tooltip>
+        <TooltipTrigger asChild>
+            <IconButton
+                icon={icon}
+                onClick={onClick}
+                aria-label={label}
+                disabled={disabled}
+            />
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-xs">
+            {label}
+        </TooltipContent>
+    </Tooltip>
+));
+ToolbarButton.displayName = 'ToolbarButton';
+
+/** Loading skeleton for block content */
+const BlockSkeleton = React.memo(() => (
+    <div className="p-4 space-y-2" role="status" aria-label="加载中">
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-1/2" />
+    </div>
+));
+BlockSkeleton.displayName = 'BlockSkeleton';
+
 /**
  * BlockReferenceView component displays a referenced block with interactive controls
- * Optimized with proper memoization and error handling
+ * 
+ * Features:
+ * - Cached block data fetching with LRU cache
+ * - Refresh, navigate, and delete controls with tooltips
+ * - Skeleton loading states
+ * - Hover-activated toolbar
+ * - Full accessibility support (ARIA)
  */
 export const BlockReferenceView: React.FC<NodeViewProps> = React.memo((props) => {
     const { blockId, spaceId, pageId } = props.node.attrs as BlockReferenceAttrs;
@@ -17,7 +56,7 @@ export const BlockReferenceView: React.FC<NodeViewProps> = React.memo((props) =>
     const navigator = useNavigator();
     const [refreshFlag, { toggle: toggleRefresh }] = useToggle(false);
 
-    // Use custom hook for block info fetching
+    // Use custom hook for block info fetching with caching
     const { blockInfo, loading, error } = useBlockInfo(blockId, refreshFlag);
 
     const goToDetail = useCallback(() => {
@@ -33,8 +72,7 @@ export const BlockReferenceView: React.FC<NodeViewProps> = React.memo((props) =>
         if (!blockInfo?.content) return null;
         try {
             return JSON.parse(blockInfo.content);
-        } catch (err) {
-            console.error('Failed to parse block content:', err);
+        } catch {
             return null;
         }
     }, [blockInfo?.content]);
@@ -61,52 +99,73 @@ export const BlockReferenceView: React.FC<NodeViewProps> = React.memo((props) =>
         }
     }, [editorContent, extensions]);
 
+    // Memoized refresh icon
+    const refreshIcon = useMemo(() => (
+        <RefreshCcw className={cn("w-4 h-4", loading && 'animate-spin')} />
+    ), [loading]);
+
     return (
         <NodeViewWrapper
             as="div"
             ref={ref}
-            className="border border-dashed rounded-sm relative"
+            className="border border-dashed border-border rounded-sm relative group"
+            role="region"
+            aria-label="引用块"
+            aria-busy={loading}
         >
-            {loading && (
-                <div className="p-4 text-center text-muted-foreground">
-                    Loading block...
-                </div>
-            )}
+            {loading && <BlockSkeleton />}
+
             {error && (
-                <div className="p-4 text-center text-destructive">
-                    {error}
+                <div className="p-4 text-center text-destructive text-sm" role="alert">
+                    <span className="font-medium">加载失败:</span> {error}
                 </div>
             )}
-            {!loading && !error && content ? (
+
+            {!loading && !error && content && (
                 <StyledEditor className="px-0" style={{ padding: "5px" }}>
                     <EditorContent editor={editor} />
                 </StyledEditor>
-            ) : !loading && !error && (
-                <div className="p-4 text-center text-muted-foreground">
-                    The block does not exist
+            )}
+
+            {!loading && !error && !content && (
+                <div className="p-4 text-center text-muted-foreground text-sm italic">
+                    块不存在或已被删除
                 </div>
             )}
+
+            {/* Toolbar - shows on hover */}
             <div
                 className={cn(
-                    "absolute right-1 flex items-center gap-1 text-sm top-1 p-1 bg-muted/70 rounded-sm transition-opacity duration-500",
-                    hover ? 'opacity-100' : 'opacity-0'
+                    "absolute right-1 top-1 flex items-center gap-0.5 p-1",
+                    "bg-background/80 dark:bg-background/90 backdrop-blur-sm",
+                    "border border-border rounded-md shadow-sm",
+                    "transition-opacity duration-200",
+                    hover ? 'opacity-100' : 'opacity-0 pointer-events-none'
                 )}
+                role="toolbar"
+                aria-label="块引用操作"
             >
-                <IconButton
-                    icon={<RefreshCcw className={cn("w-4 h-4", loading && 'animate-spin')} />}
+                <ToolbarButton
+                    icon={refreshIcon}
                     onClick={toggleRefresh}
+                    label="刷新"
+                    disabled={loading}
                 />
-                <IconButton
+                <ToolbarButton
                     icon={<ArrowUpRight className="w-4 h-4" />}
                     onClick={goToDetail}
+                    label="跳转到源页面"
                 />
                 {props.editor.isEditable && (
-                    <IconButton
+                    <ToolbarButton
                         icon={<Trash2 className="w-4 h-4" />}
                         onClick={props.deleteNode}
+                        label="删除引用"
                     />
                 )}
             </div>
         </NodeViewWrapper>
     );
 });
+
+BlockReferenceView.displayName = 'BlockReferenceView';

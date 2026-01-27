@@ -1,14 +1,22 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import { useTranslation } from "@kn/common";
-import { Button } from "@kn/ui";
+import { Button, Input } from "@kn/ui";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
-    DropdownMenuTrigger
+    DropdownMenuTrigger,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
 } from "@kn/ui";
 import {
     Plus,
@@ -23,7 +31,16 @@ import {
     BarChart3,
     Upload,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    ChevronDown,
+    ArrowUpDown,
+    Filter,
+    Search,
+    Zap,
+    EyeOff,
+    Pencil,
+    Check,
+    X
 } from "@kn/icon";
 import { BitableAttrs, ViewType, ViewConfig, FieldConfig, RecordData, ChartType, FieldType, SelectOption } from "../types";
 import { TableView } from "./views/TableView";
@@ -46,6 +63,15 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const [currentViewId, setCurrentViewId] = useState(attrs.currentView);
     const [fieldConfigOpen, setFieldConfigOpen] = useState(false);
     const [excelImportOpen, setExcelImportOpen] = useState(false);
+    // 搜索状态
+    const [showSearch, setShowSearch] = useState(false);
+    const [searchText, setSearchText] = useState('');
+
+    // 视图编辑状态
+    const [editingViewId, setEditingViewId] = useState<string | null>(null);
+    const [editingViewName, setEditingViewName] = useState('');
+    const [deleteViewId, setDeleteViewId] = useState<string | null>(null);
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
     // Synchronize local state with node attributes when they change
     useEffect(() => {
@@ -328,6 +354,45 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         updateAttributes({ ...attrs, views: newViews, currentView: newCurrentView });
     }, [attrs, currentViewId, updateAttributes]);
 
+    // 打开删除确认对话框
+    const openDeleteDialog = useCallback((viewId: string) => {
+        setDeleteViewId(viewId);
+        setShowDeleteDialog(true);
+    }, []);
+
+    // 确认删除视图
+    const confirmDeleteView = useCallback(() => {
+        if (deleteViewId) {
+            handleDeleteView(deleteViewId);
+            setShowDeleteDialog(false);
+            setDeleteViewId(null);
+        }
+    }, [deleteViewId, handleDeleteView]);
+
+    // 开始编辑视图名称
+    const startEditingView = useCallback((viewId: string, currentName: string) => {
+        setEditingViewId(viewId);
+        setEditingViewName(currentName);
+    }, []);
+
+    // 保存视图名称
+    const saveViewName = useCallback(() => {
+        if (editingViewId && editingViewName.trim()) {
+            const newViews = attrs.views.map(v =>
+                v.id === editingViewId ? { ...v, name: editingViewName.trim() } : v
+            );
+            updateAttributes({ ...attrs, views: newViews });
+        }
+        setEditingViewId(null);
+        setEditingViewName('');
+    }, [editingViewId, editingViewName, attrs, updateAttributes]);
+
+    // 取消编辑视图名称
+    const cancelEditingView = useCallback(() => {
+        setEditingViewId(null);
+        setEditingViewName('');
+    }, []);
+
     // 更新视图
     const handleUpdateView = useCallback((viewId: string, updates: Partial<ViewConfig>) => {
         const newViews = attrs.views.map(v =>
@@ -392,16 +457,17 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
     return (
         <NodeViewWrapper className="node-bitable-wrapper" contentEditable={false}>
-            <div className="min-h-[400px] w-full rounded-md border bg-background p-4">
-                <div className="flex items-center justify-between mb-4 gap-4">
-                    {/* 视图标签页 - 可滚动，带左右箭头按钮 */}
-                    <div className="flex items-center gap-1 flex-1 min-w-0">
+            <div className="bitable-container min-h-[400px] w-full rounded-lg bg-white dark:bg-[#191919] text-gray-900 dark:text-white border border-gray-200 dark:border-transparent">
+                {/* 视图标签页和工具栏 */}
+                <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-[#333]">
+                    {/* 左侧：视图标签 */}
+                    <div className="flex items-center gap-1">
                         {/* 左滚动按钮 */}
                         {canScrollLeft && (
                             <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-7 w-7 flex-shrink-0"
+                                className="h-7 w-7 flex-shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
                                 onClick={() => scrollViewTabs('left')}
                             >
                                 <ChevronLeft className="h-4 w-4" />
@@ -411,33 +477,84 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                         {/* 视图标签容器 */}
                         <div
                             ref={viewTabsRef}
-                            className="flex items-center gap-2 overflow-x-auto scrollbar-none flex-1 min-w-0"
+                            className="flex items-center gap-1 overflow-x-auto scrollbar-none"
                             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                         >
                             {attrs.views.map((view) => (
                                 <div
                                     key={view.id}
-                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer transition-colors whitespace-nowrap flex-shrink-0 ${currentViewId === view.id
-                                        ? 'bg-primary text-primary-foreground'
-                                        : 'hover:bg-muted'
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md cursor-pointer transition-all whitespace-nowrap flex-shrink-0 text-sm border ${currentViewId === view.id
+                                        ? 'border-blue-500 bg-blue-500/10 text-blue-500 dark:text-blue-400 font-medium'
+                                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-[#ffffff08]'
                                         }`}
                                     onClick={() => {
-                                        setCurrentViewId(view.id);
-                                        updateAttributes({ ...attrs, currentView: view.id });
+                                        if (editingViewId !== view.id) {
+                                            setCurrentViewId(view.id);
+                                            updateAttributes({ ...attrs, currentView: view.id });
+                                        }
+                                    }}
+                                    onDoubleClick={() => {
+                                        if (editor.isEditable && currentViewId === view.id) {
+                                            startEditingView(view.id, view.name);
+                                        }
                                     }}
                                 >
                                     {getViewIcon(view.type)}
-                                    <span className="text-sm font-medium">{view.name}</span>
-                                    {editor.isEditable && attrs.views.length > 1 && (
+                                    {editingViewId === view.id ? (
+                                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                            <Input
+                                                value={editingViewName}
+                                                onChange={(e) => setEditingViewName(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        saveViewName();
+                                                    } else if (e.key === 'Escape') {
+                                                        cancelEditingView();
+                                                    }
+                                                }}
+                                                onBlur={saveViewName}
+                                                autoFocus
+                                                className="h-6 w-32 px-2 text-sm"
+                                            />
+                                            <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-5 w-5"
+                                                onClick={saveViewName}
+                                            >
+                                                <Check className="h-3 w-3" />
+                                            </Button>
+                                            <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-5 w-5"
+                                                onClick={cancelEditingView}
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <span>{view.name}</span>
+                                    )}
+                                    {editor.isEditable && currentViewId === view.id && editingViewId !== view.id && (
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                                <MoreVertical className="h-3 w-3" />
+                                                <MoreVertical className="h-3 w-3 text-gray-400 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white" />
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent>
-                                                <DropdownMenuItem onClick={() => handleDeleteView(view.id)}>
-                                                    <Trash2 className="h-4 w-4 mr-2" />
-                                                    {t('bitable.actions.deleteView')}
+                                                <DropdownMenuItem onClick={() => startEditingView(view.id, view.name)}>
+                                                    <Pencil className="h-4 w-4 mr-2" />
+                                                    {t('bitable.actions.renameView')}
                                                 </DropdownMenuItem>
+                                                {attrs.views.length > 1 && (
+                                                    <DropdownMenuItem
+                                                        onClick={() => openDeleteDialog(view.id)}
+                                                        className="text-red-600 dark:text-red-400"
+                                                    >
+                                                        <Trash2 className="h-4 w-4 mr-2" />
+                                                        {t('bitable.actions.deleteView')}
+                                                    </DropdownMenuItem>
+                                                )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     )}
@@ -448,8 +565,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                             {editor.isEditable && (
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button size="icon" variant="outline" className="h-6 w-6 flex-shrink-0">
-                                            <Plus className="h-3 w-3" />
+                                        <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]">
+                                            <Plus className="h-4 w-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent>
@@ -489,7 +606,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                             <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-7 w-7 flex-shrink-0"
+                                className="h-7 w-7 flex-shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
                                 onClick={() => scrollViewTabs('right')}
                             >
                                 <ChevronRight className="h-4 w-4" />
@@ -497,36 +614,134 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                         )}
                     </div>
 
-                    {/* 操作按钮 */}
-                    {editor.isEditable && (
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                            <Button size="sm" variant="outline" onClick={() => setExcelImportOpen(true)}>
-                                <Upload className="h-4 w-4 mr-1" />
-                                {t('bitable.actions.importExcel')}
+                    {/* 右侧：工具栏 */}
+                    <div className="flex items-center gap-1">
+                        {/* 隐藏字段 */}
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                            onClick={() => setFieldConfigOpen(true)}
+                        >
+                            <EyeOff className="h-4 w-4" />
+                        </Button>
+
+                        {/* 排序 */}
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                        >
+                            <ArrowUpDown className="h-4 w-4" />
+                        </Button>
+
+                        {/* 筛选 */}
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                        >
+                            <Filter className="h-4 w-4" />
+                        </Button>
+
+                        {/* 闪电 */}
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                        >
+                            <Zap className="h-4 w-4" />
+                        </Button>
+
+                        {/* 搜索 */}
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                            onClick={() => setShowSearch(!showSearch)}
+                        >
+                            <Search className="h-4 w-4" />
+                        </Button>
+
+                        {/* 设置 */}
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                            onClick={() => setFieldConfigOpen(true)}
+                        >
+                            <Settings className="h-4 w-4" />
+                        </Button>
+
+                        {/* 导入Excel */}
+                        {editor.isEditable && (
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                                onClick={() => setExcelImportOpen(true)}
+                            >
+                                <Upload className="h-4 w-4" />
                             </Button>
-                            <Button size="sm" variant="outline" onClick={() => setFieldConfigOpen(true)}>
-                                <Settings className="h-4 w-4 mr-1" />
-                                {t('bitable.actions.configureColumns')}
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={handleAddRecord}>
-                                <Plus className="h-4 w-4 mr-1" />
-                                {t('bitable.actions.addRecord')}
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={deleteNode}>
+                        )}
+
+                        {/* New 按钮 */}
+                        {editor.isEditable && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        size="sm"
+                                        className="ml-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 h-8"
+                                    >
+                                        New
+                                        <ChevronDown className="h-4 w-4 ml-1" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="bg-[#252525] border-[#333] text-white">
+                                    <DropdownMenuItem onClick={handleAddRecord}>
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        {t('bitable.actions.addRecord')}
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
+
+                        {/* 删除 */}
+                        {editor.isEditable && (
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-[#333]"
+                                onClick={deleteNode}
+                            >
                                 <Trash2 className="h-4 w-4" />
                             </Button>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
 
+                {/* 搜索框 */}
+                {showSearch && (
+                    <div className="px-4 py-2 border-b border-gray-200 dark:border-[#333]">
+                        <Input
+                            className="w-64 h-8"
+                            placeholder={t('bitable.search.placeholder') || 'Search...'}
+                            value={searchText}
+                            onChange={(e) => setSearchText(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                )}
+
                 {/* 视图内容 */}
-                <div className="mt-4">
+                <div className="bitable-content">
                     {renderViewContent()}
                 </div>
 
                 {/* 底部统计 */}
-                <div className="mt-4 text-sm text-muted-foreground">
-                    {t('bitable.stats.totalRecords', { count: data.length })}
+                <div className="px-4 py-3 text-xs text-gray-500 flex items-center justify-between border-t border-gray-200 dark:border-[#333]">
+                    <span>{t('bitable.stats.totalRecords', { count: data.length })}</span>
+                    <span className="text-gray-400 dark:text-gray-600">RANGE 15 days</span>
                 </div>
             </div>
 
@@ -549,6 +764,29 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 fields={attrs.fields}
                 onImport={handleExcelImport}
             />
+
+            {/* 删除视图确认对话框 */}
+            <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>{t('bitable.dialog.deleteViewTitle')}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {t('bitable.dialog.deleteViewDescription')}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setShowDeleteDialog(false)}>
+                            {t('bitable.dialog.cancel')}
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDeleteView}
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                        >
+                            {t('bitable.dialog.delete')}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </NodeViewWrapper>
     );
 };

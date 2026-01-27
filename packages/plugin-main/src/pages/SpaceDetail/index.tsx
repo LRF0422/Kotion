@@ -575,7 +575,7 @@ export const SpaceDetail: React.FC = () => {
 
             {/* Desktop Sidebar */}
             {!isMobile && (
-                <div className="h-screen w-full border-r border-solid flex flex-col overflow-x-hidden">
+                <div className="h-screen w-full border-r border-solid flex flex-col overflow-x-hidden overflow-y-auto scrollbar-auto-hide">
                     {SidebarContent}
                 </div>
             )}

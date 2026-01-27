@@ -1,8 +1,8 @@
-import { EmojiPicker, EmojiPickerContent, EmojiPickerSearch, Separator, cn, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@kn/ui";
+import { EmojiPicker, EmojiPickerContent, EmojiPickerSearch, Separator, cn, Button } from "@kn/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
-import { Clock, Plus, X, Image, ImagePlus, Trash2, Move, GripVertical, Link2 } from "@kn/icon";
+import { Clock, Plus, X, Image, ImagePlus, Trash2, Move, GripVertical } from "@kn/icon";
 import React, { useContext, useState, useMemo, useCallback, useRef } from "react";
 import { PageContext } from "@editor/editor/context";
 import { AppContext, FileService } from "@kn/common";
@@ -128,16 +128,22 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 		}
 	}, [isDragging, handleDragMove, handleDragEnd])
 
-	return <NodeViewWrapper className="flex flex-col items-start w-full">
-		{/* Cover Image Section */}
+	return <NodeViewWrapper className="flex flex-col items-start w-full" style={{ overflow: 'clip' }}>
+		{/* Cover Image Section - Full bleed design */}
 		{hasCover && (
 			<div
 				ref={coverRef}
 				className={cn(
-					"relative w-full h-[30vh] min-h-[200px] max-h-[400px] -mx-[calc(50vw-50%)] left-[calc(50%-50vw)] overflow-hidden",
+					"relative h-[30vh] min-h-[200px] max-h-[400px] overflow-hidden",
 					"bg-muted/30",
 					isDragging && "cursor-grabbing select-none"
 				)}
+				style={{
+					width: '100vw',
+					position: 'relative',
+					left: '50%',
+					transform: 'translateX(-50%)',
+				}}
 				onMouseEnter={() => setIsCoverHovered(true)}
 				onMouseLeave={() => setIsCoverHovered(false)}
 				contentEditable={false}
@@ -153,40 +159,47 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 
 				{/* Cover Controls - Only show in edit mode and when hovered */}
 				{props.editor.isEditable && isCoverHovered && !isDragging && (
-					<div className="absolute bottom-3 right-3 flex items-center gap-2" contentEditable={false}>
-						{/* Reposition hint */}
-						<Button
-							variant="secondary"
-							size="sm"
-							className="h-8 gap-1.5 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border"
-							onMouseDown={handleDragStart}
-						>
-							<GripVertical className="h-4 w-4" />
-							<span className="text-xs">Reposition</span>
-						</Button>
+					<div
+						className="absolute inset-0 flex items-end justify-center pointer-events-none"
+						contentEditable={false}
+					>
+						<div className="w-full max-w-4xl px-4 pb-3 flex justify-end pointer-events-auto">
+							<div className="flex items-center gap-2">
+								{/* Reposition hint */}
+								<Button
+									variant="secondary"
+									size="sm"
+									className="h-8 gap-1.5 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border"
+									onMouseDown={handleDragStart}
+								>
+									<GripVertical className="h-4 w-4" />
+									<span className="text-xs">Reposition</span>
+								</Button>
 
-						{/* Change cover button */}
-						<Button
-							variant="secondary"
-							size="sm"
-							className="h-8 gap-1.5 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border"
-							onClick={handleUploadCover}
-							disabled={isUploading}
-						>
-							<Image className="h-4 w-4" />
-							<span className="text-xs">{isUploading ? "Uploading..." : "Change cover"}</span>
-						</Button>
+								{/* Change cover button */}
+								<Button
+									variant="secondary"
+									size="sm"
+									className="h-8 gap-1.5 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border"
+									onClick={handleUploadCover}
+									disabled={isUploading}
+								>
+									<Image className="h-4 w-4" />
+									<span className="text-xs">{isUploading ? "Uploading..." : "Change cover"}</span>
+								</Button>
 
-						{/* Remove cover button */}
-						<Button
-							variant="secondary"
-							size="sm"
-							className="h-8 gap-1.5 bg-background/80 backdrop-blur-sm hover:bg-destructive hover:text-destructive-foreground shadow-lg border"
-							onClick={handleRemoveCover}
-						>
-							<Trash2 className="h-4 w-4" />
-							<span className="text-xs">Remove</span>
-						</Button>
+								{/* Remove cover button */}
+								<Button
+									variant="secondary"
+									size="sm"
+									className="h-8 gap-1.5 bg-background/80 backdrop-blur-sm hover:bg-destructive hover:text-destructive-foreground shadow-lg border"
+									onClick={handleRemoveCover}
+								>
+									<Trash2 className="h-4 w-4" />
+									<span className="text-xs">Remove</span>
+								</Button>
+							</div>
+						</div>
 					</div>
 				)}
 
