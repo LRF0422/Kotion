@@ -5,10 +5,11 @@ import { InfoPanelBubbleMenu } from "./menu/bubble";
 import { InfoPanelStaticMenu } from "./menu/static";
 import { Editor } from "@tiptap/core";
 import React from "react";
+import { Square } from "@kn/icon";
 
 // Export constants for external use
-export { INFO_PANEL_TYPES, DEFAULT_INFO_PANEL_TYPE, DEFAULT_INFO_PANEL_TIPS } from "./constants";
-export type { InfoPanelType, InfoPanelTypeConfig } from "./constants";
+export { INFO_PANEL_TYPES, DEFAULT_INFO_PANEL_TYPE, DEFAULT_INFO_PANEL_TIPS, PRESET_COLORS } from "./constants";
+export type { InfoPanelType, InfoPanelTypeConfig, PresetColor } from "./constants";
 
 export const InfoPanelExtension: ExtensionWrapper = {
 	name: InfoPanel.name,
@@ -20,25 +21,25 @@ export const InfoPanelExtension: ExtensionWrapper = {
 	bubbleMenu: InfoPanelBubbleMenu,
 	slashConfig: [
 		{
-			icon: <Info className="h-4 w-4" />,
-			text: '信息面板',
-			slash: '/infoPanel',
+			icon: <Square className="h-4 w-4" />,
+			text: 'Callout',
+			slash: '/callout',
 			action: (editor) => {
-				editor.chain().focus().insertInfoPanel({ type: 'info' }).run()
+				editor.chain().focus().insertInfoPanel({ type: 'default' }).run()
 			}
 		}
 	],
 	tools: [
 		{
 			name: 'changeInfoPanelType',
-			description: 'Change the type of info panel (info, success, warning, error)',
+			description: 'Change the type of callout (default, info, success, warning, error, tip, bookmark)',
 			inputSchema: {
 				type: 'object',
 				properties: {
 					type: {
 						type: 'string',
-						enum: ['info', 'success', 'file', 'error'],
-						description: 'The type of info panel'
+						enum: ['default', 'info', 'success', 'warning', 'error', 'tip', 'bookmark'],
+						description: 'The type of callout'
 					},
 				},
 				required: ['type']
@@ -48,15 +49,15 @@ export const InfoPanelExtension: ExtensionWrapper = {
 			}
 		},
 		{
-			name: 'insertInfoPanel',
-			description: 'Insert a new info panel of specified type',
+			name: 'insertCallout',
+			description: 'Insert a new callout of specified type',
 			inputSchema: {
 				type: 'object',
 				properties: {
 					type: {
 						type: 'string',
-						enum: ['info', 'success', 'file', 'error'],
-						description: 'The type of info panel to insert'
+						enum: ['default', 'info', 'success', 'warning', 'error', 'tip', 'bookmark'],
+						description: 'The type of callout to insert'
 					},
 				},
 				required: ['type']
@@ -66,19 +67,17 @@ export const InfoPanelExtension: ExtensionWrapper = {
 			}
 		},
 		{
-			name: 'copyInfoPanel',
-			description: 'Copy the current info panel',
+			name: 'copyCallout',
+			description: 'Copy the current callout',
 			inputSchema: {},
 			execute: (editor: Editor) => (_params: {}) => {
-				// Get the current info panel node and duplicate it
 				const { selection, doc } = editor.state;
 				const { $from } = selection;
 				const parent = $from.parent;
 				if (parent.type.name === 'infoPanel') {
-					const pos = $from.start() - 1; // Position of the info panel node
+					const pos = $from.start() - 1;
 					const node = doc.nodeAt(pos);
 					if (node && node.type.name === 'infoPanel') {
-						// Insert a copy of the current info panel after the current one
 						return editor.chain().insertContentAt(pos + node.nodeSize, node.toJSON()).run();
 					}
 				}
@@ -86,8 +85,8 @@ export const InfoPanelExtension: ExtensionWrapper = {
 			}
 		},
 		{
-			name: 'deleteInfoPanel',
-			description: 'Delete the current info panel',
+			name: 'deleteCallout',
+			description: 'Delete the current callout',
 			inputSchema: {},
 			execute: (editor: Editor) => (_params: {}) => {
 				return editor.chain().deleteSelection().run();

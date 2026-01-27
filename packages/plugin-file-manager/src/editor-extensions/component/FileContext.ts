@@ -1,5 +1,7 @@
 import { createContext, useContext } from "react"
 
+export type ViewMode = 'grid' | 'list'
+
 export interface FileItem {
     name: string,
     isFolder: boolean,
@@ -50,6 +52,9 @@ export interface FileManagerState {
     handleDuplicate: (files: FileItem[]) => void
     selectAll: () => void
     clearSelection: () => void
+    // View mode
+    viewMode: ViewMode
+    setViewMode: React.Dispatch<React.SetStateAction<ViewMode>>
 }
 
 export const FileManageContext = createContext<FileManagerState | null>(null)

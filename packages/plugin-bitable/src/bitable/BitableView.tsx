@@ -133,6 +133,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
     // 添加记录
     const handleAddRecord = useCallback(() => {
+        // Use attrs.data directly to avoid stale closure issues
+        const currentData = attrs.data || [];
         const newRecord: RecordData = {
             id: generateRecordId(),
             createdTime: new Date().toISOString(),
@@ -154,35 +156,39 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                     newRecord[field.id] = [];
                     break;
                 case 'id':
-                    newRecord[field.id] = data.length + 1;
+                    newRecord[field.id] = currentData.length + 1;
                     break;
                 default:
                     newRecord[field.id] = null;
             }
         });
 
-        const newData = [...data, newRecord];
+        const newData = [...currentData, newRecord];
         setData(newData);
         updateAttributes({ ...attrs, data: newData });
-    }, [data, attrs, updateAttributes]);
+    }, [attrs, updateAttributes]);
 
     // 更新记录
     const handleUpdateRecord = useCallback((recordId: string, updates: Partial<RecordData>) => {
-        const newData = data.map(record =>
+        // Use attrs.data directly to avoid stale closure issues
+        const currentData = attrs.data || [];
+        const newData = currentData.map(record =>
             record.id === recordId
                 ? { ...record, ...updates, updatedTime: new Date().toISOString() }
                 : record
         );
         setData(newData);
         updateAttributes({ ...attrs, data: newData });
-    }, [data, attrs, updateAttributes]);
+    }, [attrs, updateAttributes]);
 
     // 删除记录
     const handleDeleteRecord = useCallback((recordIds: string[]) => {
-        const newData = data.filter(record => !recordIds.includes(record.id));
+        // Use attrs.data directly to avoid stale closure issues
+        const currentData = attrs.data || [];
+        const newData = currentData.filter(record => !recordIds.includes(record.id));
         setData(newData);
         updateAttributes({ ...attrs, data: newData });
-    }, [data, attrs, updateAttributes]);
+    }, [attrs, updateAttributes]);
 
     // 添加字段
     const handleAddField = useCallback((field: FieldConfig) => {
@@ -200,15 +206,17 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
     // 删除字段
     const handleDeleteField = useCallback((fieldId: string) => {
+        // Use attrs.data directly to avoid stale closure issues
+        const currentData = attrs.data || [];
         const newFields = attrs.fields.filter(field => field.id !== fieldId);
         // 同时从数据中删除该字段
-        const newData: RecordData[] = data.map(record => {
+        const newData: RecordData[] = currentData.map(record => {
             const { [fieldId]: _, ...rest } = record;
             return rest;
         }) as RecordData[];
         setData(newData);
         updateAttributes({ ...attrs, fields: newFields, data: newData });
-    }, [attrs, data, updateAttributes]);
+    }, [attrs, updateAttributes]);
 
     // 重新排列字段
     const handleReorderFields = useCallback((newOrder: FieldConfig[]) => {
@@ -217,6 +225,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
     // 转换字段类型
     const handleConvertFieldType = useCallback((fieldId: string, newType: FieldType, newOptions?: SelectOption[]) => {
+        // Use attrs.data directly to avoid stale closure issues
+        const currentData = attrs.data || [];
         const field = attrs.fields.find(f => f.id === fieldId);
         if (!field) return;
 
@@ -235,7 +245,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 updatedField.options = newOptions;
             } else {
                 // Otherwise, auto-generate from existing data
-                const generatedOptions = generateSelectOptionsFromData(data, fieldId, oldType);
+                const generatedOptions = generateSelectOptionsFromData(currentData, fieldId, oldType);
                 updatedField.options = generatedOptions.length > 0 ? generatedOptions : newOptions || [];
             }
         } else {
@@ -249,7 +259,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         );
 
         // Convert all existing data
-        const newData = data.map(record => {
+        const newData = currentData.map(record => {
             const value = record[fieldId];
             const convertedValue = convertFieldValue(value, oldType, newType, updatedField);
             return {
@@ -260,23 +270,25 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
         setData(newData);
         updateAttributes({ ...attrs, fields: newFields, data: newData });
-    }, [attrs, data, updateAttributes]);
+    }, [attrs, updateAttributes]);
 
     // 从 Excel 导入数据
     const handleExcelImport = useCallback((newFields: FieldConfig[], newRecords: RecordData[]) => {
+        // Use attrs.data directly to avoid stale closure issues
+        const currentData = attrs.data || [];
         // 合并新字段
         const mergedFields = [...attrs.fields, ...newFields];
 
         // 为新记录添加ID字段
         const idField = attrs.fields.find(f => f.type === 'id');
-        const startId = data.length + 1;
+        const startId = currentData.length + 1;
         const recordsWithId = newRecords.map((record, index) => ({
             ...record,
             [idField?.id || 'id']: startId + index,
         }));
 
         // 合并数据
-        const mergedData = [...data, ...recordsWithId];
+        const mergedData = [...currentData, ...recordsWithId];
 
         setData(mergedData);
         updateAttributes({
@@ -284,7 +296,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             fields: mergedFields,
             data: mergedData
         });
-    }, [attrs, data, updateAttributes]);
+    }, [attrs, updateAttributes]);
 
     // 添加视图
     const handleAddView = useCallback((viewType: ViewType) => {

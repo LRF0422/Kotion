@@ -12,19 +12,26 @@ export const InfoPanelView: React.FC<NodeViewProps> = memo((props) => {
 
 	// Memoize type info to avoid recalculating on every render
 	const typeInfo = useMemo(() => {
-		return extension.options.type[attrs.type]
+		return extension.options.type[attrs.type] || extension.options.type['default']
 	}, [extension.options.type, attrs.type])
+
+	// Check if should show icon (has type icon or custom emoji)
+	const hasIcon = useMemo(() => {
+		return attrs.customEmoji || (typeInfo.icon && attrs.type !== 'default')
+	}, [attrs.customEmoji, typeInfo.icon, attrs.type])
 
 	// Memoize background color
 	const backgroundColor = useMemo(() => {
-		// Only use custom colors if explicitly set
+		// Use custom colors if set for current theme
+		if (theme === "light" && attrs.customBgColorLight) {
+			return attrs.customBgColorLight
+		}
+		if (theme === "dark" && attrs.customBgColorDark) {
+			return attrs.customBgColorDark
+		}
+		// If custom color is set for opposite theme only, still use it as fallback
 		if (attrs.customBgColorLight || attrs.customBgColorDark) {
-			if (theme === "light" && attrs.customBgColorLight) {
-				return attrs.customBgColorLight
-			}
-			if (theme === "dark" && attrs.customBgColorDark) {
-				return attrs.customBgColorDark
-			}
+			return attrs.customBgColorLight || attrs.customBgColorDark
 		}
 		// Otherwise use type's default color
 		return theme === "light" ? typeInfo.color.light : typeInfo.color.dark
@@ -44,30 +51,17 @@ export const InfoPanelView: React.FC<NodeViewProps> = memo((props) => {
 		color: iconColor
 	} as CSSProperties), [iconColor])
 
-	// Memoize border color (slightly darker than background)
+	// Memoize border color
 	const borderColor = useMemo(() => {
-		return theme === "light"
-			? `${iconColor}20` // 12% opacity
-			: `${iconColor}30` // 18% opacity
-	}, [theme, iconColor])
-
-	// Get icon component or emoji
-	const IconOrEmoji = useMemo(() => {
-		// Use custom emoji if set (regardless of type)
-		if (attrs.customEmoji) {
-			return () => (
-				<span className="text-xl leading-none flex items-center justify-center">
-					{attrs.customEmoji}
-				</span>
-			)
+		// For default type without icon, use a subtle gray border
+		if (attrs.type === 'default' && !attrs.customEmoji) {
+			return theme === "light" ? '#e5e5e5' : '#404040'
 		}
-		return typeInfo.icon
-	}, [typeInfo.icon, attrs.customEmoji])
-
-	// Optimize input change handler
-	const handleTipsChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-		updateAttributes({ tips: e.target.value })
-	}, [updateAttributes])
+		// For types with icons, use icon color with opacity
+		return theme === "light"
+			? `${iconColor}25`
+			: `${iconColor}40`
+	}, [theme, iconColor, attrs.type, attrs.customEmoji])
 
 	return (
 		<NodeViewWrapper as='div'>
@@ -79,42 +73,31 @@ export const InfoPanelView: React.FC<NodeViewProps> = memo((props) => {
 					borderStyle: 'solid'
 				}}
 				className={cn(
-					"rounded-lg shadow-sm transition-all duration-200 p-4",
-					"hover:shadow-md",
+					"rounded-md transition-all duration-200 px-2 py-1.5",
 					theme === "light" ? "text-gray-900" : "text-gray-100"
 				)}
 				role="alert"
 				aria-live="polite"
 			>
 				<div className="flex items-start gap-3">
-					{/* Icon/Emoji */}
-					<div
-						className="flex-shrink-0 mt-0.5"
-						style={iconStyle}
-					>
-						{attrs.customEmoji ? (
-							<span className="text-xl leading-none flex items-center justify-center w-5 h-5">
-								{attrs.customEmoji}
-							</span>
-						) : (
-							<IconOrEmoji className="h-5 w-5" />
-						)}
-					</div>
+					{/* Icon/Emoji - only show if hasIcon */}
+					{hasIcon && (
+						<div
+							className="flex-shrink-0 mt-0.5"
+							style={iconStyle}
+						>
+							{attrs.customEmoji ? (
+								<span className="text-xl leading-none flex items-center justify-center w-5 h-5">
+									{attrs.customEmoji}
+								</span>
+							) : (
+								typeInfo.icon && <typeInfo.icon className="h-5 w-5" />
+							)}
+						</div>
+					)}
 
 					{/* Content */}
 					<div className="flex-1 min-w-0">
-						<input
-							value={attrs.tips}
-							className={cn(
-								"text-base font-semibold bg-transparent outline-none leading-tight w-full mb-1",
-								"placeholder:text-gray-400",
-								"focus:outline-none focus:ring-0"
-							)}
-							style={{ color: iconColor }}
-							onChange={handleTipsChange}
-							aria-label="Info panel title"
-							placeholder="Enter title..."
-						/>
 						<div className="text-sm leading-relaxed">
 							<NodeViewContent className="w-full prose-p:my-1 prose-p:leading-relaxed" />
 						</div>

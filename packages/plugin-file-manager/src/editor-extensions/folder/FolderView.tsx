@@ -1,15 +1,20 @@
-import React, { useEffect } from "react"
+import React, { useCallback } from "react"
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor"
 import { FileManagerView } from "../component/FileManager"
 import { useModal } from "@kn/core"
-import { Button, EmptyState } from "@kn/ui"
+import { EmptyState } from "@kn/ui"
 import { FolderOpenIcon } from "@kn/icon"
+import { ViewMode } from "../component/FileContext"
 
 export const FolderView: React.FC<NodeViewProps> = (props) => {
 
-    const { node: { attrs }, editor } = props
+    const { node: { attrs }, editor, updateAttributes } = props
 
     const { openModal, closeModal } = useModal()
+
+    const handleViewModeChange = useCallback((mode: ViewMode) => {
+        updateAttributes({ viewMode: mode })
+    }, [updateAttributes])
 
     const open = () => {
         openModal({
@@ -21,7 +26,7 @@ export const FolderView: React.FC<NodeViewProps> = (props) => {
                 onCancel={closeModal}
                 onConfirm={(value) => {
                     if (value) {
-                        props.updateAttributes({
+                        updateAttributes({
                             folderId: value[0].id
                         })
                     }
@@ -37,6 +42,8 @@ export const FolderView: React.FC<NodeViewProps> = (props) => {
                 <FileManagerView
                     folderId={attrs.folderId}
                     className=" h-[500px]"
+                    defaultViewMode={attrs.viewMode as ViewMode}
+                    onViewModeChange={handleViewModeChange}
                 /> : <EmptyState
                     title="No folder selected"
                     className="w-full max-w-none"

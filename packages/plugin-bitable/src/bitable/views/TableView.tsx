@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Editor } from "@kn/editor";
 import { Button, Input, Checkbox } from "@kn/ui";
 import {
@@ -99,6 +99,12 @@ export const TableView: React.FC<TableViewProps> = (props) => {
     const [selectedRows, setSelectedRows] = useState<ReadonlySet<string>>(new Set());
     const [searchText, setSearchText] = useState('');
 
+    // Use ref to store latest onUpdateRecord to avoid stale closure without triggering re-renders
+    const onUpdateRecordRef = useRef(onUpdateRecord);
+    useEffect(() => {
+        onUpdateRecordRef.current = onUpdateRecord;
+    }, [onUpdateRecord]);
+
     // 过滤数据
     const filteredData = useMemo(() => {
         if (!searchText) return data;
@@ -149,11 +155,10 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                             value={editProps.row[field.id]}
                             field={field}
                             onChange={(value: any) => {
-                                // 直接更新记录，确保异步操作后也能正确保存
+                                // Update the row in DataGrid's local state
                                 const updatedRow = { ...editProps.row, [field.id]: value };
-                                editProps.onRowChange(updatedRow, true); // true = commit changes
-                                // 同时调用onUpdateRecord确保数据持久化
-                                onUpdateRecord(editProps.row.id, updatedRow);
+                                // Pass false to allow continuous editing without committing
+                                editProps.onRowChange(updatedRow, false);
                             }}
                             editor={editor}
                         />
@@ -162,7 +167,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
             }));
 
         return editable ? [SelectColumn, ...baseColumns] : baseColumns;
-    }, [fields, editable]);
+    }, [fields, editable, editor]);
 
     const handleDeleteSelected = () => {
         onDeleteRecord(Array.from(selectedRows));
@@ -198,10 +203,14 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                     selectedRows={selectedRows}
                     onSelectedRowsChange={setSelectedRows}
                     onRowsChange={(rows, changes) => {
+                        // Persist changes when editing is committed (on blur/Enter)
                         if (changes.indexes.length > 0) {
                             changes.indexes.forEach((index) => {
-                                const row: any = rows[index];
-                                onUpdateRecord(row.id, row);
+                                const row = rows[index];
+                                if (row) {
+                                    // Use ref to get the latest onUpdateRecord without causing re-renders
+                                    onUpdateRecordRef.current(row.id, row);
+                                }
                             });
                         }
                     }}

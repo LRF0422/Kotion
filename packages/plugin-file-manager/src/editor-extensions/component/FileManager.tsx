@@ -1,12 +1,13 @@
-import { Check, ClockIcon, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, HomeIcon, ListIcon, LucideHome, PlusIcon, StarIcon, Trash2, UploadIcon, XIcon, ArrowLeft, ArrowRight, ChevronRight, Pencil, FolderInput, Copy, Files, CheckSquare, Square, Menu as MenuIcon, MoreVertical } from "@kn/icon";
+import { Check, ClockIcon, DownloadIcon, FileIcon, FilePlus2Icon, FolderIcon, FolderOpenIcon, FolderPlusIcon, HomeIcon, ListIcon, LayoutGridIcon, LucideHome, PlusIcon, StarIcon, Trash2, UploadIcon, XIcon, ArrowLeft, ArrowRight, ChevronRight, Pencil, FolderInput, Copy, Files, CheckSquare, Square, Menu as MenuIcon, MoreVertical } from "@kn/icon";
 import { Button, EmptyState, Input, ScrollArea, Separator, TreeView, cn, Skeleton, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, useIsMobile, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
 import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { FileCardList } from "./FileCard";
+import { FileListView } from "./FileList";
 import { useSafeState } from "@kn/core";
 import { useApi } from "@kn/core";
 import { APIS } from "../../api";
 import { Menu } from "./Menu";
-import { FileItem, FileManageContext } from "./FileContext";
+import { FileItem, FileManageContext, ViewMode } from "./FileContext";
 import { useFileManager } from "../../hooks/useFileManager";
 import { Breadcrumb } from "./Breadcrumb";
 import { RenameDialog, MoveDialog, FileDetailsDialog, CreateFolderDialog } from "./dialogs";
@@ -21,6 +22,8 @@ export interface FileManagerProps {
     onConfirm?: (files: FileItem[]) => void
     multiple?: boolean
     target?: 'folder' | 'file' | 'both'
+    defaultViewMode?: ViewMode
+    onViewModeChange?: (mode: ViewMode) => void
 }
 
 
@@ -29,7 +32,14 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     const isMobile = useIsMobile()
     const [sidebarOpen, setSidebarOpen] = useState(false)
-    const { selectable = false, onCancel, onConfirm, multiple = false, target = 'both' } = props
+    const [viewMode, setViewMode] = useState<ViewMode>(props.defaultViewMode || 'grid')
+    const { selectable = false, onCancel, onConfirm, multiple = false, target = 'both', onViewModeChange } = props
+
+    // Handle view mode change
+    const handleViewModeChange = useCallback((mode: ViewMode) => {
+        setViewMode(mode)
+        onViewModeChange?.(mode)
+    }, [onViewModeChange])
 
     const [selectedFiles, setSelectFiles] = useSafeState<FileItem[]>([])
     const [repoKey, setRepoKey] = useState<string>("")
@@ -299,7 +309,9 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         handleDuplicate,
         selectAll,
         clearSelection,
-    }), [selectedFiles, currentFolderId, currentFolderItems, currentItem, selectable, repoKey, handleCreateFile, handleDelete, loading, error, breadcrumbPath, canGoBack, canGoForward, goBack, goForward, navigateToFolder, handleRename, handleMove, handleCopy, handleDuplicate, selectAll, clearSelection])
+        viewMode,
+        setViewMode,
+    }), [selectedFiles, currentFolderId, currentFolderItems, currentItem, selectable, repoKey, handleCreateFile, handleDelete, loading, error, breadcrumbPath, canGoBack, canGoForward, goBack, goForward, navigateToFolder, handleRename, handleMove, handleCopy, handleDuplicate, selectAll, clearSelection, viewMode])
 
     // Sidebar content for reuse
     const SidebarContent = useMemo(() => (
@@ -503,9 +515,22 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                         </>
                     }
                 </div>
-                <div className="flex items-center">
-                    <Button size="sm" variant="ghost">
-                        <ListIcon className="-ms-1 me-2 opacity-60 mr-1" size={16} strokeWidth={2} aria-hidden="true" />
+                <div className="flex items-center gap-1">
+                    <Button
+                        size="sm"
+                        variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                        onClick={() => handleViewModeChange('grid')}
+                        title="Grid view"
+                    >
+                        <LayoutGridIcon size={16} strokeWidth={2} aria-hidden="true" />
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                        onClick={() => handleViewModeChange('list')}
+                        title="List view"
+                    >
+                        <ListIcon size={16} strokeWidth={2} aria-hidden="true" />
                     </Button>
                 </div>
             </div>
@@ -582,7 +607,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                 />
                             ) : currentFolderItems.length > 0 ? (
                                 <Menu>
-                                    <FileCardList />
+                                    {viewMode === 'grid' ? <FileCardList /> : <FileListView />}
                                 </Menu>
                             ) : (
                                 <EmptyState

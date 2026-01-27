@@ -30,6 +30,7 @@ export const TextRenderer: React.FC<FieldRendererProps> = ({ value }) => {
 export const TextEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
     return (
         <Input
+            autoFocus
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
             className="h-full border-0 bg-white dark:bg-[#252525] text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
@@ -45,6 +46,7 @@ export const NumberRenderer: React.FC<FieldRendererProps> = ({ value }) => {
 export const NumberEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
     return (
         <Input
+            autoFocus
             type="number"
             value={value || 0}
             onChange={(e) => onChange(Number(e.target.value))}
@@ -277,6 +279,7 @@ export const URLRenderer: React.FC<FieldRendererProps> = ({ value }) => {
 export const URLEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
     return (
         <Input
+            autoFocus
             type="url"
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
@@ -300,6 +303,7 @@ export const EmailRenderer: React.FC<FieldRendererProps> = ({ value }) => {
 export const EmailEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
     return (
         <Input
+            autoFocus
             type="email"
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
@@ -322,6 +326,7 @@ export const PhoneRenderer: React.FC<FieldRendererProps> = ({ value }) => {
 export const PhoneEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
     return (
         <Input
+            autoFocus
             type="tel"
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
