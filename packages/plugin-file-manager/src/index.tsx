@@ -11,6 +11,12 @@ import { getFileService } from "./services/FileServiceImpl"
 // Export FileService related components
 export * from "./services"
 
+// Export file selector utilities
+export { showFileSelector } from "./editor-extensions/utils/showFileSelector"
+export { showFolderDlg } from "./editor-extensions/utils/showFolderDlg"
+export { FileManagerView } from "./editor-extensions/component/FileManager"
+export type { FileManagerProps } from "./editor-extensions/component/FileManager"
+
 // import "@kn/ui/globals.css"
 
 interface FileManagerPluginConfig extends PluginConfig {

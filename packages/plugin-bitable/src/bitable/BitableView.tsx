@@ -415,6 +415,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             onDeleteField: handleDeleteField,
             onUpdateView: handleUpdateView,
             editable: editor.isEditable,
+            editor: editor,
         };
 
         switch (currentView?.type) {

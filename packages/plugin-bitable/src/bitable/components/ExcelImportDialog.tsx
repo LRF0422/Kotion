@@ -345,6 +345,7 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
             [FieldType.CHECKBOX]: t('bitable.fieldTypes.checkbox'),
             [FieldType.PERSON]: t('bitable.fieldTypes.person'),
             [FieldType.ATTACHMENT]: 'Attachment',
+            [FieldType.IMAGE]: t('bitable.fieldTypes.image'),
             [FieldType.URL]: t('bitable.fieldTypes.url'),
             [FieldType.EMAIL]: t('bitable.fieldTypes.email'),
             [FieldType.PHONE]: t('bitable.fieldTypes.phone'),
@@ -473,6 +474,7 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
                                             <SelectItem value={FieldType.SELECT}>{getFieldTypeName(FieldType.SELECT)}</SelectItem>
                                             <SelectItem value={FieldType.DATE}>{getFieldTypeName(FieldType.DATE)}</SelectItem>
                                             <SelectItem value={FieldType.CHECKBOX}>{getFieldTypeName(FieldType.CHECKBOX)}</SelectItem>
+                                            <SelectItem value={FieldType.IMAGE}>{getFieldTypeName(FieldType.IMAGE)}</SelectItem>
                                             <SelectItem value={FieldType.URL}>{getFieldTypeName(FieldType.URL)}</SelectItem>
                                             <SelectItem value={FieldType.EMAIL}>{getFieldTypeName(FieldType.EMAIL)}</SelectItem>
                                         </SelectContent>

@@ -67,6 +67,7 @@ const getFieldTypeOptions = (t: (key: string) => string) => [
     { value: FieldType.CHECKBOX, label: t('bitable.fieldTypes.checkbox') },
     { value: FieldType.RATING, label: t('bitable.fieldTypes.rating') },
     { value: FieldType.PROGRESS, label: t('bitable.fieldTypes.progress') },
+    { value: FieldType.IMAGE, label: t('bitable.fieldTypes.image') },
     { value: FieldType.URL, label: t('bitable.fieldTypes.url') },
     { value: FieldType.EMAIL, label: t('bitable.fieldTypes.email') },
     { value: FieldType.PHONE, label: t('bitable.fieldTypes.phone') },
@@ -314,6 +315,42 @@ const FieldConfigPopover: React.FC<FieldConfigPopoverProps> = ({
                             checked={localFormat === "newTab"}
                             onCheckedChange={(checked) => setLocalFormat(checked ? "newTab" : "sameTab")}
                         />
+                    </div>
+                );
+            case FieldType.IMAGE:
+                return (
+                    <div className="space-y-3">
+                        <div>
+                            <Label className="text-xs">{t('bitable.formats.imageCount')}</Label>
+                            <Select value={localFormat?.split(':')[0] || "multiple"} onValueChange={(v) => {
+                                const parts = localFormat?.split(':') || ['multiple', 'medium'];
+                                setLocalFormat(`${v}:${parts[1] || 'medium'}`);
+                            }}>
+                                <SelectTrigger className="h-8 mt-1">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="single">{t('bitable.formats.singleImage')}</SelectItem>
+                                    <SelectItem value="multiple">{t('bitable.formats.multipleImages')}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label className="text-xs">{t('bitable.formats.thumbnailSize')}</Label>
+                            <Select value={localFormat?.split(':')[1] || "medium"} onValueChange={(v) => {
+                                const parts = localFormat?.split(':') || ['multiple', 'medium'];
+                                setLocalFormat(`${parts[0] || 'multiple'}:${v}`);
+                            }}>
+                                <SelectTrigger className="h-8 mt-1">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="small">{t('bitable.formats.sizeSmall')}</SelectItem>
+                                    <SelectItem value="medium">{t('bitable.formats.sizeMedium')}</SelectItem>
+                                    <SelectItem value="large">{t('bitable.formats.sizeLarge')}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
                 );
             default:
@@ -599,6 +636,8 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
             case FieldType.EMAIL:
             case FieldType.PHONE:
                 return "sameTab";
+            case FieldType.IMAGE:
+                return "multiple:medium";
             default:
                 return "";
         }
@@ -821,6 +860,42 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                                 setNewFieldFormat(checked ? "newTab" : "sameTab")
                             }
                         />
+                    </div>
+                );
+            case FieldType.IMAGE:
+                return (
+                    <div className="space-y-3">
+                        <div>
+                            <Label htmlFor="imageCount" className="text-xs">{t('bitable.formats.imageCount')}</Label>
+                            <Select value={newFieldFormat?.split(':')[0] || "multiple"} onValueChange={(v) => {
+                                const parts = newFieldFormat?.split(':') || ['multiple', 'medium'];
+                                setNewFieldFormat(`${v}:${parts[1] || 'medium'}`);
+                            }}>
+                                <SelectTrigger className="h-8 mt-1">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="single">{t('bitable.formats.singleImage')}</SelectItem>
+                                    <SelectItem value="multiple">{t('bitable.formats.multipleImages')}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label htmlFor="thumbnailSize" className="text-xs">{t('bitable.formats.thumbnailSize')}</Label>
+                            <Select value={newFieldFormat?.split(':')[1] || "medium"} onValueChange={(v) => {
+                                const parts = newFieldFormat?.split(':') || ['multiple', 'medium'];
+                                setNewFieldFormat(`${parts[0] || 'multiple'}:${v}`);
+                            }}>
+                                <SelectTrigger className="h-8 mt-1">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="small">{t('bitable.formats.sizeSmall')}</SelectItem>
+                                    <SelectItem value="medium">{t('bitable.formats.sizeMedium')}</SelectItem>
+                                    <SelectItem value="large">{t('bitable.formats.sizeLarge')}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
                 );
             default:

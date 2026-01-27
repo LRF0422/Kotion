@@ -1,7 +1,8 @@
-import { FileService, UploadedFile, UploadOptions } from "@kn/common";
+import { FileService, UploadedFile, UploadOptions, FileSelectorOptions, SelectedFile } from "@kn/common";
 import { useApi, APIS as CORE_APIS } from "@kn/core";
 import { fileOpen } from "browser-fs-access";
 import { APIS } from "../api";
+import { showFileSelector } from "../editor-extensions/utils/showFileSelector";
 
 /**
  * FileService implementation provided by FileManager plugin
@@ -105,6 +106,28 @@ export class FileServiceImpl implements FileService {
     async moveFile(fileId: string, targetFolderId: string): Promise<void> {
         // TODO: Implement move file API when available
         console.warn('moveFile API not implemented yet');
+    }
+
+    /**
+     * Open file selector dialog to select files from file manager
+     */
+    async openFileSelector(options?: FileSelectorOptions, editor?: any): Promise<SelectedFile[] | null> {
+        if (!editor) {
+            console.warn('Editor is required for file selector.');
+            return null;
+        }
+
+        const selectedFiles = await showFileSelector(editor, options);
+
+        // Add download URLs to selected files
+        if (selectedFiles) {
+            return selectedFiles.map(file => ({
+                ...file,
+                url: file.path ? this.getDownloadUrl(file.path) : undefined,
+            }));
+        }
+
+        return null;
     }
 
     /**

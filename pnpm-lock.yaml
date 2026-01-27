@@ -1247,6 +1247,9 @@ importers:
       '@kn/ui':
         specifier: workspace:*
         version: link:../ui
+      browser-fs-access:
+        specifier: ^0.35.0
+        version: 0.35.0
     devDependencies:
       '@kn/rollup-config':
         specifier: workspace:*

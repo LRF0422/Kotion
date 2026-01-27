@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { Editor } from "@kn/editor";
 import { Button, Input, Checkbox } from "@kn/ui";
 import {
     Plus,
@@ -20,7 +21,8 @@ import {
     Clock,
     Circle,
     FileText,
-    MessageSquare
+    MessageSquare,
+    ImageIcon
 } from "@kn/icon";
 import { FieldConfig, RecordData, ViewConfig, FieldType } from "../../types";
 import DataGrid, { SelectColumn } from 'react-data-grid';
@@ -52,6 +54,8 @@ const getFieldTypeIcon = (type: FieldType) => {
         case FieldType.SELECT:
         case FieldType.MULTI_SELECT:
             return <Circle className="h-3.5 w-3.5 text-gray-500" />;
+        case FieldType.IMAGE:
+            return <ImageIcon className="h-3.5 w-3.5 text-gray-500" />;
         case FieldType.ATTACHMENT:
             return <Paperclip className="h-3.5 w-3.5 text-gray-500" />;
         case FieldType.CREATED_TIME:
@@ -77,6 +81,7 @@ interface TableViewProps {
     onDeleteField: (fieldId: string) => void;
     onUpdateView: (viewId: string, updates: Partial<ViewConfig>) => void;
     editable: boolean;
+    editor?: Editor;
 }
 
 export const TableView: React.FC<TableViewProps> = (props) => {
@@ -86,7 +91,8 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         onAddRecord,
         onUpdateRecord,
         onDeleteRecord,
-        editable
+        editable,
+        editor
     } = props;
 
     const { theme } = useTheme();
@@ -143,8 +149,13 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                             value={editProps.row[field.id]}
                             field={field}
                             onChange={(value: any) => {
-                                editProps.onRowChange({ ...editProps.row, [field.id]: value });
+                                // 直接更新记录，确保异步操作后也能正确保存
+                                const updatedRow = { ...editProps.row, [field.id]: value };
+                                editProps.onRowChange(updatedRow, true); // true = commit changes
+                                // 同时调用onUpdateRecord确保数据持久化
+                                onUpdateRecord(editProps.row.id, updatedRow);
                             }}
+                            editor={editor}
                         />
                     );
                 }

@@ -32,6 +32,32 @@ export interface UploadOptions {
 }
 
 /**
+ * Options for file selector
+ */
+export interface FileSelectorOptions {
+    /** Allow multiple file selection */
+    multiple?: boolean;
+    /** Target type: 'file', 'folder', or 'both' */
+    target?: 'file' | 'folder' | 'both';
+    /** Filter by file types (e.g., ['image/*', 'application/pdf']) */
+    accept?: string[];
+    /** Dialog title */
+    title?: string;
+}
+
+/**
+ * Selected file information from file manager
+ */
+export interface SelectedFile {
+    id: string;
+    name: string;
+    path?: string;
+    isFolder: boolean;
+    /** Full download URL */
+    url?: string;
+}
+
+/**
  * FileService interface - centralized file operations for the entire application
  * All plugins must use this interface for file operations instead of direct API calls
  */
@@ -45,6 +71,8 @@ export interface FileService {
     createFolder?: (name: string, parentId?: string, repositoryKey?: string) => Promise<any>;
     renameFile?: (fileId: string, newName: string) => Promise<void>;
     moveFile?: (fileId: string, targetFolderId: string) => Promise<void>;
+    /** Open file selector dialog to select files from file manager */
+    openFileSelector?: (options?: FileSelectorOptions, editor?: any) => Promise<SelectedFile[] | null>;
 }
 
 /**

@@ -10,6 +10,7 @@ export enum FieldType {
     CHECKBOX = 'checkbox',
     PERSON = 'person',
     ATTACHMENT = 'attachment',
+    IMAGE = 'image',
     URL = 'url',
     EMAIL = 'email',
     PHONE = 'phone',

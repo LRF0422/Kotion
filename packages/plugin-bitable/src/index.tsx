@@ -52,6 +52,7 @@ export const bitable = new BitablePlugin({
                         "checkbox": "Checkbox",
                         "rating": "Rating",
                         "progress": "Progress",
+                        "image": "Image",
                         "url": "URL",
                         "email": "Email",
                         "phone": "Phone",
@@ -99,7 +100,14 @@ export const bitable = new BitablePlugin({
                         "dateFormat": "Date Format",
                         "textType": "Text Type",
                         "maxRating": "Max Rating",
-                        "progressDisplay": "Progress Display"
+                        "progressDisplay": "Progress Display",
+                        "imageCount": "Image Count",
+                        "singleImage": "Single Image",
+                        "multipleImages": "Multiple Images",
+                        "thumbnailSize": "Thumbnail Size",
+                        "sizeSmall": "Small (32px)",
+                        "sizeMedium": "Medium (64px)",
+                        "sizeLarge": "Large (128px)"
                     },
                     // Tips
                     "tips": {
@@ -303,6 +311,7 @@ export const bitable = new BitablePlugin({
                         "checkbox": "复选框",
                         "rating": "评分",
                         "progress": "进度",
+                        "image": "图片",
                         "url": "链接",
                         "email": "邮箱",
                         "phone": "电话",
@@ -350,7 +359,14 @@ export const bitable = new BitablePlugin({
                         "dateFormat": "日期格式",
                         "textType": "文本类型",
                         "maxRating": "最大评分",
-                        "progressDisplay": "进度显示"
+                        "progressDisplay": "进度显示",
+                        "imageCount": "图片数量",
+                        "singleImage": "单张图片",
+                        "multipleImages": "多张图片",
+                        "thumbnailSize": "缩略图大小",
+                        "sizeSmall": "小 (32px)",
+                        "sizeMedium": "中 (64px)",
+                        "sizeLarge": "大 (128px)"
                     },
                     // Tips
                     "tips": {

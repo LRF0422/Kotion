@@ -74,7 +74,7 @@ const updateBitableAttrs = (editor: Editor, pos: number, newAttrs: Partial<Bitab
 
 const FieldTypeEnum = z.enum([
     'text', 'number', 'select', 'multi_select', 'date', 'checkbox',
-    'person', 'attachment', 'url', 'email', 'phone', 'rating', 'progress',
+    'person', 'attachment', 'image', 'url', 'email', 'phone', 'rating', 'progress',
     'formula', 'relation', 'created_time', 'updated_time', 'created_by', 'updated_by', 'auto_number', 'id'
 ]);
 
