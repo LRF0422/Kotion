@@ -172,7 +172,50 @@ export const StyledEditor = styled.div.attrs({
     border-style: none;
   }
 
-  /* S Table - Modern Design */
+  /* Base table styles - applies to all tables including read-only mode */
+  table {
+    width: 100%;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 1em 0;
+    background-color: ${props => (props.theme as any).tableCellBgColor || 'transparent'};
+    border: 1px solid ${props => (props.theme as any).tableBorderColor || '#e2e8f0'} !important;
+    box-sizing: border-box;
+
+    * { box-sizing: border-box; }
+    p { margin: 0; }
+
+    tr {
+      transition: background-color 0.15s ease;
+      &:hover { background-color: ${props => (props.theme as any).tableHoverBgColor || '#f8fafc'}; }
+      &:last-child td, &:last-child th { border-bottom: none !important; }
+    }
+
+    th {
+      background-color: ${props => (props.theme as any).tableHeaderBgColor || '#f8fafc'};
+      font-weight: 600;
+      font-size: 0.875em;
+      color: ${props => (props.theme as any).tableHeaderTextColor || (props.theme as any).text};
+      &:first-child { border-top-left-radius: 7px; }
+      &:last-child { border-top-right-radius: 7px; }
+    }
+
+    td, th {
+      position: relative;
+      vertical-align: top;
+      border-bottom: 1px solid ${props => (props.theme as any).tableBorderColor || '#e2e8f0'} !important;
+      border-right: 1px solid ${props => (props.theme as any).tableBorderColor || '#e2e8f0'} !important;
+      padding: 4px 8px !important;
+      text-align: left;
+      min-width: 100px;
+      transition: background-color 0.15s ease;
+      &:last-child { border-right: none !important; }
+    }
+  }
+
+  /* S Table - Modern Design (enhanced styles for edit mode with wrapper) */
   .tableWrapper {
     position: relative;
     margin: 1em 0;

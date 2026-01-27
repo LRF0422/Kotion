@@ -393,7 +393,9 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                             <div className="flex flex-col gap-2 max-w-[calc(100%-52px)] min-w-0">
                                 <ChatBubbleMessage
                                     variant={message.sender === "user" ? "sent" : "received"}
-                                    className={message.sender === "ai" ? "bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-200/50 dark:border-indigo-800/50 shadow-sm p-4 max-w-full overflow-x-auto" : "bg-gradient-to-br from-blue-500 to-cyan-500 text-primary-foreground p-4 max-w-full overflow-x-auto"}
+                                    className={message.sender === "ai"
+                                        ? "bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-200/50 dark:border-indigo-800/50 shadow-sm p-4 max-w-full overflow-x-auto"
+                                        : "bg-gradient-to-br from-slate-100 to-gray-100 dark:from-slate-800 dark:to-gray-800 text-foreground border border-slate-200/80 dark:border-slate-700/80 shadow-sm p-4 max-w-full overflow-x-auto rounded-2xl rounded-tr-sm"}
                                 >
                                     <Streamdown>{message.content}</Streamdown>
                                 </ChatBubbleMessage>
