@@ -72,11 +72,15 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
     const [dragState, setDragState] = useState<DragState | null>(null);
     const [dragPreview, setDragPreview] = useState<{ left: number; width: number } | null>(null);
 
+    // Enhanced features state
+    const milestoneField = useMemo(() => config.milestoneField ? fields.find(f => f.id === config.milestoneField) : null, [config.milestoneField, fields]);
+    const dependencyField = useMemo(() => config.dependencyField ? fields.find(f => f.id === config.dependencyField) : null, [config.dependencyField, fields]);
+
     // Handle config change
-    const handleConfigChange = (key: string, value: string) => {
+    const handleConfigChange = (key: string, value: string | boolean) => {
         const newConfig = {
             ...config,
-            [key]: value || undefined
+            [key]: typeof value === 'string' && (value === 'null' || value === '') ? undefined : value
         };
         onUpdateView(view.id, { timelineConfig: newConfig });
     };
@@ -200,6 +204,23 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
         }
     };
 
+    // 计算里程碑位置
+    const calculateMilestonePosition = (record: RecordData) => {
+        try {
+            const dateStr = record[config.startDateField];
+            if (!dateStr) return null;
+
+            const date = parseISO(dateStr);
+            const daysSinceStart = differenceInDays(date, timeRange.start);
+
+            const left = daysSinceStart * columnWidth;
+
+            return { left, date };
+        } catch (error) {
+            return null;
+        }
+    };
+
     // 获取分组标签
     const getGroupLabel = (groupId: string) => {
         if (groupId === 'default') return '所有任务';
@@ -215,6 +236,134 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
         return option?.color || '#6b7280';
     };
 
+    // 获取任务条颜色（支持自定义颜色）
+    const getTaskColor = (record: RecordData, groupId: string) => {
+        if (config.customColorsEnabled) {
+            // 如果启用了自定义颜色，尝试从记录中获取颜色字段
+            const colorField = fields.find(f => f.type === 'text' && f.title.toLowerCase().includes('color'));
+            if (colorField && record[colorField.id]) {
+                return record[colorField.id];
+            }
+        }
+
+        // 否则使用分组颜色
+        return getGroupColor(record[groupByField?.id || 'default']);
+    };
+
+    // 获取依赖关系
+    const getDependencies = () => {
+        if (!dependencyField) return [];
+
+        const dependencies = [];
+
+        Object.values(groupedRecords).forEach(records => {
+            records.forEach(record => {
+                const dependencyValue = record[dependencyField.id];
+                if (dependencyValue) {
+                    // Assuming dependencyValue contains IDs of dependent tasks
+                    const depIds = Array.isArray(dependencyValue) ? dependencyValue : [dependencyValue];
+
+                    depIds.forEach(depId => {
+                        const dependentRecord = data.find(r => r.id === depId);
+                        if (dependentRecord) {
+                            dependencies.push({
+                                from: dependentRecord.id,
+                                to: record.id
+                            });
+                        }
+                    });
+                }
+            });
+        });
+
+        return dependencies;
+    };
+
+    // 计算依赖线路径
+    const calculateDependencyPath = (fromRecordId: string, toRecordId: string) => {
+        // Find positions of both tasks
+        const fromRecord = data.find(r => r.id === fromRecordId);
+        const toRecord = data.find(r => r.id === toRecordId);
+
+        if (!fromRecord || !toRecord) return null;
+
+        const fromPosition = calculateBarPosition(fromRecord);
+        const toPosition = calculateBarPosition(toRecord);
+
+        if (!fromPosition || !toPosition) return null;
+
+        // Calculate positions for the dependency line
+        const fromX = fromPosition.left + fromPosition.width; // End of the from task
+        const toX = toPosition.left; // Beginning of the to task
+
+        // Calculate Y positions based on which row each task is in
+        let fromY = 0;
+        let toY = 0;
+
+        // Find the row indices for both tasks
+        let rowIndex = 0;
+        let foundFrom = false;
+        let foundTo = false;
+
+        for (const [groupId, records] of Object.entries(groupedRecords)) {
+            for (const record of records) {
+                if (record.id === fromRecordId) {
+                    fromY = rowIndex * 48 + 36; // 48px per row, 36px offset for the middle of the task bar
+                    foundFrom = true;
+                }
+                if (record.id === toRecordId) {
+                    toY = rowIndex * 48 + 36; // 48px per row, 36px offset for the middle of the task bar
+                    foundTo = true;
+                }
+                rowIndex++;
+
+                if (foundFrom && foundTo) break;
+            }
+            if (foundFrom && foundTo) break;
+        }
+
+        // Create a curved path for the dependency line
+        const midX = (fromX + toX) / 2;
+
+        return `M ${fromX} ${fromY} C ${midX} ${fromY}, ${midX} ${toY}, ${toX} ${toY}`;
+    };
+
+    // 计算关键路径
+    const calculateCriticalPath = (): string[] => {
+        if (!config.criticalPathEnabled || !dependencyField) return [];
+
+        // This is a simplified critical path algorithm
+        // In a real implementation, you would need to compute earliest start/end times and latest start/end times
+        // For now, we'll highlight tasks that have no successors (potential end tasks) and are late or have dependencies
+
+        // Get all tasks that have dependencies
+        const dependentTasks = new Set<string>();
+        const dependencies = getDependencies();
+
+        dependencies.forEach(dep => {
+            dependentTasks.add(dep.to);
+        });
+
+        // For simplicity, just return tasks that are dependencies of other tasks
+        // In a real critical path algorithm, we'd compute the longest path through the project
+        const criticalTasks = new Set<string>();
+
+        // Add all tasks that are dependencies of other tasks
+        dependencies.forEach(dep => {
+            criticalTasks.add(dep.from);
+            criticalTasks.add(dep.to);
+        });
+
+        return Array.from(criticalTasks);
+    };
+
+    // Check if a task is on the critical path
+    const isCriticalPathTask = (taskId: string): boolean => {
+        if (!config.criticalPathEnabled) return false;
+        const criticalTasks = calculateCriticalPath();
+        return criticalTasks.includes(taskId);
+    };
+
     // 导航函数
     const goToPrevious = () => {
         setCurrentDate(prev => subMonths(prev, 1));
@@ -226,6 +375,12 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
 
     const goToToday = () => {
         setCurrentDate(new Date());
+    };
+
+    // Snap to grid function
+    const snapToGrid = (position: number) => {
+        // Snap to nearest column width to align with day boundaries
+        return Math.round(position / columnWidth) * columnWidth;
     };
 
     // Drag handlers
@@ -244,7 +399,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
             originalEndDate: position.endDate,
         });
         setDragPreview({ left: position.left, width: position.width });
-    }, [editable]);
+    }, [editable, columnWidth]);
 
     const handleDragMove = useCallback((e: React.MouseEvent) => {
         if (!dragState || !dragPreview) return;
@@ -256,6 +411,8 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
         switch (dragState.type) {
             case 'move':
                 newLeft = dragState.originalLeft + deltaX;
+                // Snap to grid if enabled
+                newLeft = snapToGrid(newLeft);
                 break;
             case 'resize-left':
                 newLeft = dragState.originalLeft + deltaX;
@@ -265,6 +422,8 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                     newWidth = columnWidth;
                     newLeft = dragState.originalLeft + dragState.originalWidth - columnWidth;
                 }
+                // Snap to grid if enabled
+                newLeft = snapToGrid(newLeft);
                 break;
             case 'resize-right':
                 newWidth = dragState.originalWidth + deltaX;
@@ -276,7 +435,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
         }
 
         setDragPreview({ left: newLeft, width: newWidth });
-    }, [dragState, dragPreview, columnWidth]);
+    }, [dragState, dragPreview, columnWidth, snapToGrid]);
 
     const handleDragEnd = useCallback(() => {
         if (!dragState || !dragPreview || !startDateField) {
@@ -370,7 +529,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
 
     return (
         <div
-            className="space-y-4"
+            className="space-y-4 p-4"
             onMouseMove={dragState ? handleDragMove : undefined}
             onMouseUp={dragState ? handleDragEnd : undefined}
             onMouseLeave={dragState ? handleDragEnd : undefined}
@@ -483,6 +642,74 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                                 </SelectContent>
                             </Select>
                         </div>
+                        <div className="space-y-2">
+                            <Label>里程碑字段</Label>
+                            <Select
+                                value={config.milestoneField || ''}
+                                onValueChange={(value) => handleConfigChange('milestoneField', value)}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="选择里程碑字段（可选）" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="null">无</SelectItem>
+                                    {selectFields.map(field => (
+                                        <SelectItem key={field.id} value={field.id}>
+                                            {field.title}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>依赖字段</Label>
+                            <Select
+                                value={config.dependencyField || ''}
+                                onValueChange={(value) => handleConfigChange('dependencyField', value)}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="选择依赖字段（可选）" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="null">无</SelectItem>
+                                    {textFields.map(field => (
+                                        <SelectItem key={field.id} value={field.id}>
+                                            {field.title}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>启用关键路径</Label>
+                            <Select
+                                value={config.criticalPathEnabled ? 'true' : 'false'}
+                                onValueChange={(value) => handleConfigChange('criticalPathEnabled', value === 'true')}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="是否启用关键路径" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="false">否</SelectItem>
+                                    <SelectItem value="true">是</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>启用自定义颜色</Label>
+                            <Select
+                                value={config.customColorsEnabled ? 'true' : 'false'}
+                                onValueChange={(value) => handleConfigChange('customColorsEnabled', value === 'true')}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="是否启用自定义颜色" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="false">否</SelectItem>
+                                    <SelectItem value="true">是</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
                     <p className="text-xs text-muted-foreground">
                         💡 提示：甘特图会自动识别字段类型并进行适配，您也可以手动选择。
@@ -491,7 +718,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
             )}
 
             {/* 工具栏 */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between p-2">
                 <div className="flex items-center gap-2">
                     <Button size="sm" variant="outline" onClick={goToPrevious}>
                         <ChevronLeft className="h-4 w-4" />
@@ -549,7 +776,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                         <div className="h-12 border-b flex items-center px-4 font-semibold bg-muted/50">
                             任务名称
                         </div>
-                        <div className="overflow-y-auto" style={{ maxHeight: '600px' }}>
+                        <div className="overflow-y-auto p-2" style={{ maxHeight: '600px' }}>
                             {Object.entries(groupedRecords).map(([groupId, records]) => (
                                 <div key={groupId}>
                                     {groupByField && (
@@ -563,7 +790,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                                     {records.map((record) => (
                                         <div
                                             key={record.id}
-                                            className="h-12 flex items-center px-4 border-b hover:bg-muted/50 transition-colors"
+                                            className="h-12 flex items-center px-4 py-2 border-b hover:bg-muted/50 transition-colors"
                                         >
                                             <div className="truncate text-sm">
                                                 {titleField ? record[titleField.id] : record.name || record.id}
@@ -576,7 +803,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                     </div>
 
                     {/* 右侧时间轴 */}
-                    <div className="flex-1 overflow-x-auto" ref={scrollRef}>
+                    <div className="flex-1 overflow-x-auto p-2" ref={scrollRef}>
                         <div style={{ minWidth: `${timeScale.length * columnWidth}px` }}>
                             {/* 时间刻度头部 */}
                             <div className="h-12 border-b flex bg-muted/50">
@@ -604,6 +831,40 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                                     ))}
                                 </div>
 
+                                {/* Snap grid overlay (visible during drag) */}
+                                {dragState && (
+                                    <div className="absolute inset-0 flex pointer-events-none">
+                                        {timeScale.map((date, index) => (
+                                            <div
+                                                key={`snap-${index}`}
+                                                className="border-r border-dashed border-blue-300/30"
+                                                style={{ width: columnWidth, minWidth: columnWidth }}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Dependency lines */}
+                                {config.dependencyField && (
+                                    <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 5 }}>
+                                        {getDependencies().map((dep, idx) => {
+                                            const path = calculateDependencyPath(dep.from, dep.to);
+                                            if (!path) return null;
+
+                                            return (
+                                                <path
+                                                    key={idx}
+                                                    d={path}
+                                                    stroke="#94a3b8"
+                                                    strokeWidth="2"
+                                                    fill="none"
+                                                    strokeDasharray="5,5"
+                                                />
+                                            );
+                                        })}
+                                    </svg>
+                                )}
+
                                 {/* 今天标记线 */}
                                 {isWithinInterval(new Date(), { start: timeRange.start, end: timeRange.end }) && (
                                     <div
@@ -627,90 +888,125 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
 
                                                 const progress = progressField ? (record[progressField.id] || 0) : 0;
 
+                                                // Check if this is a milestone
+                                                const isMilestone = milestoneField && record[milestoneField.id];
+
                                                 return (
-                                                    <div key={record.id} className="h-12 border-b relative">
-                                                        {/* Task bar */}
-                                                        <div
-                                                            className={cn(
-                                                                "absolute top-2 h-8 rounded-md shadow-sm transition-shadow group",
-                                                                editable && "hover:shadow-md",
-                                                                dragState?.recordId === record.id && "shadow-lg z-30"
-                                                            )}
-                                                            style={{
-                                                                left: `${dragState?.recordId === record.id && dragPreview ? dragPreview.left : position.left}px`,
-                                                                width: `${dragState?.recordId === record.id && dragPreview ? dragPreview.width : position.width}px`,
-                                                                backgroundColor: getGroupColor(record[groupByField?.id || 'default']),
-                                                                opacity: dragState?.recordId === record.id ? 0.9 : 0.8,
-                                                                cursor: editable ? (dragState ? 'grabbing' : 'grab') : 'default',
-                                                            }}
-                                                            onMouseDown={(e) => editable && handleDragStart(e, record, 'move', position)}
-                                                        >
-                                                            {/* Left resize handle */}
-                                                            {editable && (
-                                                                <div
-                                                                    className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 rounded-l-md transition-colors"
-                                                                    onMouseDown={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleDragStart(e, record, 'resize-left', position);
-                                                                    }}
-                                                                />
-                                                            )}
+                                                    <div key={record.id} className="h-12 border-b relative py-1">
+                                                        {isMilestone ? (
+                                                            // Render milestone as diamond shape
+                                                            <div
+                                                                className={cn(
+                                                                    "absolute top-1/2 transform -translate-y-1/2 w-6 h-6 rotate-45 shadow-sm transition-shadow group cursor-pointer",
+                                                                    isCriticalPathTask(record.id) && "ring-2 ring-red-500"
+                                                                )}
+                                                                style={{
+                                                                    left: `${position.left}px`,
+                                                                    backgroundColor: getTaskColor(record, groupId),
+                                                                    opacity: isCriticalPathTask(record.id) ? 1.0 : 0.8,
+                                                                }}
+                                                            >
+                                                                <div className="absolute inset-0 flex items-center justify-center text-xs text-white font-bold transform -rotate-45">
+                                                                    ◊
+                                                                </div>
 
-                                                            {/* Right resize handle */}
-                                                            {editable && (
-                                                                <div
-                                                                    className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 rounded-r-md transition-colors"
-                                                                    onMouseDown={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleDragStart(e, record, 'resize-right', position);
-                                                                    }}
-                                                                />
-                                                            )}
-
-                                                            {/* 进度条 */}
-                                                            {progressField && progress > 0 && (
-                                                                <div
-                                                                    className="absolute inset-0 rounded-md bg-black/20 pointer-events-none"
-                                                                    style={{ width: `${progress}%` }}
-                                                                />
-                                                            )}
-
-                                                            {/* 任务信息提示 */}
-                                                            <div className="absolute inset-0 flex items-center px-3 pointer-events-none">
-                                                                <span className="text-xs text-white font-medium truncate">
-                                                                    {titleField ? record[titleField.id] : record.name}
-                                                                </span>
-                                                            </div>
-
-                                                            {/* Hover显示详细信息 */}
-                                                            {!dragState && (
-                                                                <div className="absolute top-full left-0 mt-1 p-2 bg-popover border rounded-md shadow-lg z-20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                                                                {/* Hover显示详细信息 */}
+                                                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-1 p-3 bg-popover border rounded-md shadow-lg z-20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
                                                                     <div className="text-xs space-y-1">
                                                                         <div className="font-semibold">
                                                                             {titleField ? record[titleField.id] : record.name}
                                                                         </div>
                                                                         <div className="text-muted-foreground">
-                                                                            开始: {format(position.startDate, 'yyyy-MM-dd')}
+                                                                            里程碑: {format(position.startDate, 'yyyy-MM-dd')}
                                                                         </div>
-                                                                        {endDateField && (
-                                                                            <div className="text-muted-foreground">
-                                                                                结束: {format(position.endDate, 'yyyy-MM-dd')}
-                                                                            </div>
-                                                                        )}
-                                                                        {progressField && (
-                                                                            <div className="text-muted-foreground">
-                                                                                进度: {progress}%
-                                                                            </div>
-                                                                        )}
-                                                                        {editable && (
-                                                                            <div className="text-muted-foreground/70 pt-1 border-t">
-                                                                                拖动调整时间 | 边缘调整日期
-                                                                            </div>
-                                                                        )}
                                                                     </div>
                                                                 </div>
-                                                            )}
-                                                        </div>
+                                                            </div>
+                                                        ) : (
+                                                            // Task bar
+                                                            <div
+                                                                className={cn(
+                                                                    "absolute top-2 h-8 rounded-md shadow-sm transition-shadow group",
+                                                                    editable && "hover:shadow-md",
+                                                                    dragState?.recordId === record.id && "shadow-lg z-30",
+                                                                    isCriticalPathTask(record.id) && "ring-2 ring-red-500"
+                                                                )}
+                                                                style={{
+                                                                    left: `${dragState?.recordId === record.id && dragPreview ? dragPreview.left : position.left}px`,
+                                                                    width: `${dragState?.recordId === record.id && dragPreview ? dragPreview.width : position.width}px`,
+                                                                    backgroundColor: getTaskColor(record, groupId),
+                                                                    opacity: dragState?.recordId === record.id ? 0.9 : (isCriticalPathTask(record.id) ? 1.0 : 0.8),
+                                                                    cursor: editable ? (dragState ? 'grabbing' : 'grab') : 'default',
+                                                                }}
+                                                                onMouseDown={(e) => editable && handleDragStart(e, record, 'move', position)}
+                                                            >
+                                                                {/* Left resize handle */}
+                                                                {editable && (
+                                                                    <div
+                                                                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 rounded-l-md transition-colors"
+                                                                        onMouseDown={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleDragStart(e, record, 'resize-left', position);
+                                                                        }}
+                                                                    />
+                                                                )}
+
+                                                                {/* Right resize handle */}
+                                                                {editable && (
+                                                                    <div
+                                                                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 rounded-r-md transition-colors"
+                                                                        onMouseDown={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleDragStart(e, record, 'resize-right', position);
+                                                                        }}
+                                                                    />
+                                                                )}
+
+                                                                {/* 进度条 */}
+                                                                {progressField && progress > 0 && (
+                                                                    <div
+                                                                        className="absolute inset-0 rounded-md bg-black/20 pointer-events-none"
+                                                                        style={{ width: `${progress}%` }}
+                                                                    />
+                                                                )}
+
+                                                                {/* 任务信息提示 */}
+                                                                <div className="absolute inset-0 flex items-center px-3 pointer-events-none">
+                                                                    <span className="text-xs text-white font-medium truncate">
+                                                                        {titleField ? record[titleField.id] : record.name}
+                                                                    </span>
+                                                                </div>
+
+                                                                {/* Hover显示详细信息 */}
+                                                                {!dragState && (
+                                                                    <div className="absolute top-full left-0 mt-1 p-3 bg-popover border rounded-md shadow-lg z-20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                                                                        <div className="text-xs space-y-1">
+                                                                            <div className="font-semibold">
+                                                                                {titleField ? record[titleField.id] : record.name}
+                                                                            </div>
+                                                                            <div className="text-muted-foreground">
+                                                                                开始: {format(position.startDate, 'yyyy-MM-dd')}
+                                                                            </div>
+                                                                            {endDateField && (
+                                                                                <div className="text-muted-foreground">
+                                                                                    结束: {format(position.endDate, 'yyyy-MM-dd')}
+                                                                                </div>
+                                                                            )}
+                                                                            {progressField && (
+                                                                                <div className="text-muted-foreground">
+                                                                                    进度: {progress}%
+                                                                                </div>
+                                                                            )}
+                                                                            {editable && (
+                                                                                <div className="text-muted-foreground/70 pt-1 border-t">
+                                                                                    拖动调整时间 | 边缘调整日期
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 );
                                             })}

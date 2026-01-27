@@ -125,6 +125,11 @@ export interface ViewConfig {
         progressField?: string;
         groupByField?: string;
         scaleUnit?: 'day' | 'week' | 'month';
+        // Enhanced features
+        milestoneField?: string;          // Field to identify milestones
+        dependencyField?: string;         // Field to define task dependencies
+        criticalPathEnabled?: boolean;    // Enable critical path highlighting
+        customColorsEnabled?: boolean;    // Enable custom color options
     };
     // 图表视图特有配置
     chartConfig?: {
@@ -240,4 +245,5 @@ export interface BitableAttrs {
     currentView: string;
     records?: RecordData[];
     data?: any;
+    title?: string;
 }
