@@ -2,12 +2,6 @@
 import { KPlugin, PluginConfig } from "@kn/common";
 import { BlockReferenceExtension } from "./extension/block-reference/index";
 
-// Export types for external use
-export * from "./types";
-export * from "./hooks";
-export * from "./i18n";
-export * from "./utils";
-export * from "./constants";
 
 /**
  * Configuration interface for Block Reference Plugin

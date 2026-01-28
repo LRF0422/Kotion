@@ -33,7 +33,7 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
             icon: z.string()
         }),
         name: z.string({
-            required_error: t("creation.name-required", "Space name is required")
+            error: t("creation.name-required", "Space name is required")
         }).min(1, t("creation.name-required", "Space name is required")),
         description: z.string().optional(),
         nickName: z.string().default(userInfo?.name as string),

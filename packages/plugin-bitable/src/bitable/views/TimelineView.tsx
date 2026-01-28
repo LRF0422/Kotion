@@ -254,7 +254,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
     const getDependencies = () => {
         if (!dependencyField) return [];
 
-        const dependencies = [];
+        const dependencies: any[] = [];
 
         Object.values(groupedRecords).forEach(records => {
             records.forEach(record => {

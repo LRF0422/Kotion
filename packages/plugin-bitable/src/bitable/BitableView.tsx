@@ -172,7 +172,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const handleUpdateRecord = useCallback((recordId: string, updates: Partial<RecordData>) => {
         // Use attrs.data directly to avoid stale closure issues
         const currentData = attrs.data || [];
-        const newData = currentData.map(record =>
+        const newData = currentData.map((record: any) =>
             record.id === recordId
                 ? { ...record, ...updates, updatedTime: new Date().toISOString() }
                 : record
@@ -185,7 +185,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const handleDeleteRecord = useCallback((recordIds: string[]) => {
         // Use attrs.data directly to avoid stale closure issues
         const currentData = attrs.data || [];
-        const newData = currentData.filter(record => !recordIds.includes(record.id));
+        const newData = currentData.filter((record: any) => !recordIds.includes(record.id));
         setData(newData);
         updateAttributes({ ...attrs, data: newData });
     }, [attrs, updateAttributes]);
@@ -210,7 +210,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         const currentData = attrs.data || [];
         const newFields = attrs.fields.filter(field => field.id !== fieldId);
         // 同时从数据中删除该字段
-        const newData: RecordData[] = currentData.map(record => {
+        const newData: RecordData[] = currentData.map((record: any) => {
             const { [fieldId]: _, ...rest } = record;
             return rest;
         }) as RecordData[];
@@ -259,7 +259,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         );
 
         // Convert all existing data
-        const newData = currentData.map(record => {
+        const newData = currentData.map((record: any) => {
             const value = record[fieldId];
             const convertedValue = convertFieldValue(value, oldType, newType, updatedField);
             return {
