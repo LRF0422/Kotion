@@ -207,7 +207,7 @@ export const Bitable = Node.create({
 
     addNodeView() {
         return ReactNodeViewRenderer(BitableView, {
-            stopEvent: () => true
+            stopEvent: () => true,
         });
     },
 

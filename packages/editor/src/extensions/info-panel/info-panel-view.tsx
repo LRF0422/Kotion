@@ -76,8 +76,6 @@ export const InfoPanelView: React.FC<NodeViewProps> = memo((props) => {
 					"rounded-md transition-all duration-200 px-2 py-1.5",
 					theme === "light" ? "text-gray-900" : "text-gray-100"
 				)}
-				role="alert"
-				aria-live="polite"
 			>
 				<div className="flex items-start gap-3">
 					{/* Icon/Emoji - only show if hasIcon */}
