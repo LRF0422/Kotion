@@ -139,7 +139,6 @@ export const CollaborationEditor = forwardRef<
   // Handle content updates for non-collaborative mode - wait for editor to be ready
   React.useEffect(() => {
     if (editor) {
-      console.log('initContent', content);
       const processedContent = rewriteUnknownContent(content as JSONContent,
         getSchema(extensions as AnyExtension[]), {
         fallbackToParagraph: true

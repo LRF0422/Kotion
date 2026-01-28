@@ -123,7 +123,7 @@ export const EditorRender = forwardRef<
               {/* ToC panel */}
               <div
                 className={cn(
-                  "fixed top-[80px] right-0 w-[300px] h-[calc(100vh-80px)] border-l bg-background z-40 transition-transform duration-300",
+                  "fixed top-[60px] right-0 w-[300px] h-[calc(100vh-80px)] border-l bg-background z-40 transition-transform duration-300",
                   tocVisible ? "translate-x-0" : "translate-x-full"
                 )}
               >
