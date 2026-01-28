@@ -16,6 +16,7 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "@kn/common";
 import { toast } from "@kn/ui";
 import { smoothScrollIntoViewIfNeeded } from '@kn/common';
+import { PageBreadcrumb } from '../../../components/PageBreadcrumb';
 
 export const PageViewer: React.FC = () => {
 
@@ -172,8 +173,12 @@ export const PageViewer: React.FC = () => {
         {!isMobile && (
             <header className="h-11 w-full flex flex-row justify-between px-1 border-b ">
                 <div className="flex flex-row items-center gap-2 px-1 text-sm flex-1 min-w-0 overflow-hidden">
-                    {"😘"}
-                    <span className="truncate">{page?.title}</span>
+                    <PageBreadcrumb
+                        currentPageId={params.pageId!}
+                        pageTree={page.parents} /* Will be passed from parent */
+                        spaceId={params.id!}
+                        currentTitle={page?.title}
+                    />
                 </div>
                 <div className="flex flex-row items-center gap-1 px-1 flex-shrink-0">
                     <Button variant="ghost" size="icon" onClick={goToEditor}><Edit className="h-5 w-5" /></Button>
