@@ -34,7 +34,7 @@ export const showFileSelector = (
                         isFolder: file.isFolder,
                     }));
                     component.updateProps({ open: false });
-                    component.destroy();
+                    setTimeout(() => component.destroy(), 500);
                     resolve(selectedFiles);
                 }
             }

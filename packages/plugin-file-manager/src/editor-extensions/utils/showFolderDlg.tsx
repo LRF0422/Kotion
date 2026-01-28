@@ -17,7 +17,7 @@ export const showFolderDlg = (editor: Editor, onConfirm?: (files: any[]) => void
             onConfirm: (files: any[]) => {
                 onConfirm?.(files)
                 component.updateProps({ open: false })
-                component.destroy()
+                setTimeout(() => component.destroy(), 500)
             }
         }
     })
