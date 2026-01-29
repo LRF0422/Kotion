@@ -30,13 +30,12 @@ export const SyncBlockView: React.FC<NodeViewProps> = (props) => {
 
         const doc = new Doc()
         return new TiptapCollabProvider({
-            baseUrl: 'ws://www.simple-platform.cn:1234',
+            baseUrl: (editor.extensionManager.extensions.find(e => e.name === 'collaboration') as any)?.provider?.baseUrl,
             name: key,
             token: key,
             document: doc,
             onSynced: () => {
                 console.log('subDocument synced', doc.isSynced);
-
                 setSyncStatus(true)
             },
         })
@@ -47,9 +46,6 @@ export const SyncBlockView: React.FC<NodeViewProps> = (props) => {
         content: {},
         extensions: [
             ...extensions as AnyExtension[],
-            // Document.extend({
-            //     content: 'block*'
-            // }),
             Collaboration.configure({
                 document: provider.document,
                 field: 'default'
@@ -76,7 +72,7 @@ export const SyncBlockView: React.FC<NodeViewProps> = (props) => {
 
     return <NodeViewWrapper className="outline rounded-sm leading-normal">
         {
-            _editor && syncStatus && <>
+            _editor && <>
                 <StyledEditor className=" min-h-10">
                     <EditorContent editor={_editor} />
                 </StyledEditor>

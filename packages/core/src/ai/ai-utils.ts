@@ -3,7 +3,7 @@ import { } from "@ai-sdk/react"
 import { createDeepSeek } from "@ai-sdk/deepseek"
 
 export const deepseek = createDeepSeek({
-    apiKey: ""
+    apiKey: process.env.VITE_DEEPSERACH_API_KEY
 })
 
 
