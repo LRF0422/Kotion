@@ -1,9 +1,10 @@
 import { streamText } from "ai"
 import { } from "@ai-sdk/react"
 import { createDeepSeek } from "@ai-sdk/deepseek"
+import { getEnvVariable, isEnvVarEnabled } from '@kn/common';
 
 export const deepseek = createDeepSeek({
-    apiKey: process.env.VITE_DEEPSERACH_API_KEY
+    apiKey: getEnvVariable("DEEPSERACH_API_KEY")
 })
 
 

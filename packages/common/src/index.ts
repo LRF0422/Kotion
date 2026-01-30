@@ -8,6 +8,7 @@ export * from "./locales"
 export * from "./core/types"
 export * from "./entity"
 export * from "./utils/logger"
+export * from "./utils/env-utils"
 export * from "react-redux"
 export * from "react-router-dom"
 import axios from "axios";
