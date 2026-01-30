@@ -1,7 +1,6 @@
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor"
 import React, { useEffect, useRef, useState } from "react"
-import mermaid from 'mermaid'
-import { useAsyncEffect, useDebounce } from "@kn/core"
+import { useDebounce } from "@kn/core"
 import { EmptyState, Button, useTheme } from "@kn/ui"
 import Editor, { Monaco } from '@monaco-editor/react';
 import { HelpCircle, BoxIcon } from "@kn/icon"
@@ -11,8 +10,6 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
 
     const editorRef = useRef<Monaco>();
     const { theme } = useTheme()
-    const [needFresh, setNeedFresh] = useState(0)
-    const container = useRef<HTMLDivElement>(null)
     const [code, setCode] = useState(props.node.attrs.data)
     const value = useDebounce(code, {
         wait: 500,
