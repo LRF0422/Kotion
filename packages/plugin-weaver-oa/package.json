@@ -1,0 +1,39 @@
+{
+  "name": "@kn/plugin-weaver-oa",
+  "version": "0.0.1",
+  "description": "Weaver OA integration plugin for Knowledge management system",
+  "main": "src/index.tsx",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "registry": "http://localhost:8081/repository/npm-hosted/"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@kn/common": "workspace:*",
+    "@kn/core": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/ui": "workspace:*",
+    "axios": "^1.6.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "keywords": [
+    "weaver",
+    "oa",
+    "collaboration",
+    "workflow",
+    "document"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@kn/rollup-config": "workspace:*",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0"
+  }
+}

@@ -45,7 +45,7 @@ function rewriteUnknownContentInner({
      */
     rewrittenContent: RewrittenContent
 } {
-    if (json.marks && Array.isArray(json.marks)) {
+    if (json && json.marks && Array.isArray(json.marks)) {
         json.marks = json.marks.filter(mark => {
             const name = typeof mark === 'string' ? mark : mark.type
 
@@ -62,7 +62,7 @@ function rewriteUnknownContentInner({
         })
     }
 
-    if (json.content && Array.isArray(json.content)) {
+    if (json && json.content && Array.isArray(json.content)) {
         json.content = json.content
             .map(
                 value =>
@@ -77,7 +77,7 @@ function rewriteUnknownContentInner({
             .filter(a => a !== null && a !== undefined) as JSONContent[]
     }
 
-    if (json.type && !validNodes.has(json.type)) {
+    if (json && json.type && !validNodes.has(json.type)) {
         rewrittenContent.push({
             original: JSON.parse(JSON.stringify(json)),
             unsupported: json.type,
@@ -85,7 +85,7 @@ function rewriteUnknownContentInner({
         // json.content && Array.isArray(json.content) &&
         if (options?.fallbackToParagraph !== false) {
             // Just treat it like a paragraph and hope for the best
-            json.attrs = {...json.attrs, nodeType: json.type }
+            json.attrs = { ...json.attrs, nodeType: json.type }
             json.type = 'unknownNode'
 
             return {
@@ -101,7 +101,7 @@ function rewriteUnknownContentInner({
         }
     }
 
-        if (json.type && json.type === "unknownNode" && validNodes.has(json.attrs?.nodeType)) {
+    if (json && json.type && json.type === "unknownNode" && validNodes.has(json.attrs?.nodeType)) {
         // json.content && Array.isArray(json.content) &&
         if (options?.fallbackToParagraph !== false) {
             // Just treat it like a paragraph and hope for the best

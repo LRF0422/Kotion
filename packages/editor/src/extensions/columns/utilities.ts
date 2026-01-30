@@ -6,7 +6,7 @@ import { Columns } from "./columns";
 import { EditorState, TextSelection } from "@tiptap/pm/state";
 import { findParentNode } from "prosemirror-utils";
 
-export function createColumn(colType: NodeType, index: number, colContent = null, type: string, cols: number) {
+export function createColumn(colType: NodeType, index: number, colContent = null, type: string, cols: number): Node | null {
   if (colContent) {
     return colType.createChecked({ index }, colContent);
   }
@@ -14,9 +14,18 @@ export function createColumn(colType: NodeType, index: number, colContent = null
   return colType.createAndFill({ index, type, cols });
 }
 
-export function getColumnsNodeTypes(schema: Schema) {
+// Cache for columns node types to improve performance
+let cachedColumnsNodeTypes: { columns: NodeType; column: NodeType } | null = null;
+
+export function getColumnsNodeTypes(schema: Schema): { columns: NodeType; column: NodeType } {
+  // Use in-memory cache for better performance
+  if (cachedColumnsNodeTypes && schema.cached.columnsNodeTypes === cachedColumnsNodeTypes) {
+    return cachedColumnsNodeTypes;
+  }
+
   if (schema.cached.columnsNodeTypes) {
-    return schema.cached.columnsNodeTypes;
+    cachedColumnsNodeTypes = schema.cached.columnsNodeTypes;
+    return cachedColumnsNodeTypes!;
   }
 
   const roles = {
@@ -25,19 +34,19 @@ export function getColumnsNodeTypes(schema: Schema) {
   };
 
   schema.cached.columnsNodeTypes = roles;
+  cachedColumnsNodeTypes = roles;
 
   return roles;
 }
 
-export function createColumns(schema: Schema, colsCount: number, colContent = null, type: string) {
+export function createColumns(schema: Schema, colsCount: number, colContent = null, type: string): Node {
   const types = getColumnsNodeTypes(schema);
-  const cols = [];
+  const cols: Node[] = [];
 
   for (let index = 0; index < colsCount; index += 1) {
-    const col = createColumn(types.column, index, colContent,type, colsCount);
+    const col = createColumn(types.column, index, colContent, type, colsCount);
 
     if (col) {
-      // @ts-ignore
       cols.push(col);
     }
   }
@@ -53,7 +62,7 @@ export function addOrDeleteCol({
   state: EditorState;
   dispatch: any;
   type: "addBefore" | "addAfter" | "delete";
-}) {
+}): boolean {
   const maybeColumns = findParentNode(
     (node: Node) => node.type.name === Columns.name
   )(state.selection);
@@ -61,7 +70,11 @@ export function addOrDeleteCol({
     (node: Node) => node.type.name === Column.name
   )(state.selection);
 
-  if (dispatch && maybeColumns && maybeColumn) {
+  if (!maybeColumns || !maybeColumn) {
+    return false;
+  }
+
+  if (dispatch) {
     const cols = maybeColumns.node;
     const colIndex = maybeColumn.node.attrs.index;
     const colsJSON = cols.toJSON();
@@ -69,6 +82,10 @@ export function addOrDeleteCol({
     let nextIndex = colIndex;
 
     if (type === "delete") {
+      // Prevent deleting if only 2 columns remain
+      if (colsJSON.content.length <= 2) {
+        return false;
+      }
       nextIndex = colIndex - 1;
       colsJSON.content.splice(colIndex, 1);
     } else {
@@ -88,7 +105,8 @@ export function addOrDeleteCol({
 
     colsJSON.attrs.cols = colsJSON.content.length;
 
-    colsJSON.content.forEach((colJSON: any, index: any) => {
+    // Update indices in a single pass
+    colsJSON.content.forEach((colJSON: any, index: number) => {
       colJSON.attrs.index = index;
     });
 
@@ -187,4 +205,37 @@ export function gotoCol({
   }
 
   return true;
+}
+
+/**
+ * Create a columns layout from two nodes (for drag-to-columns feature)
+ * @param schema - Editor schema
+ * @param leftContent - Content for the left column (JSON)
+ * @param rightContent - Content for the right column (JSON)
+ * @param position - 'left' | 'right' - which side the dragged block should go
+ */
+export function createColumnsFromNodes(
+  schema: Schema,
+  leftContent: any,
+  rightContent: any
+): Node {
+  const types = getColumnsNodeTypes(schema);
+
+  // Create left column with content
+  const leftCol = types.column.create(
+    { index: 0, type: 'none', cols: 2 },
+    Array.isArray(leftContent)
+      ? leftContent.map(c => Node.fromJSON(schema, c))
+      : [Node.fromJSON(schema, leftContent)]
+  );
+
+  // Create right column with content
+  const rightCol = types.column.create(
+    { index: 1, type: 'none', cols: 2 },
+    Array.isArray(rightContent)
+      ? rightContent.map(c => Node.fromJSON(schema, c))
+      : [Node.fromJSON(schema, rightContent)]
+  );
+
+  return types.columns.create({ cols: 2 }, [leftCol, rightCol]);
 }

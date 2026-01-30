@@ -24,7 +24,6 @@ export const EmojiSelector: React.FC<{ onChange: (value: IconPropsProps) => void
     const [emoji, setEmoji] = useSafeState<CompactEmoji[]>([])
     useEffect(() => {
         fetchEmojis('zh', { compact: true, flat: true }).then(res => {
-            console.log('res', res);
             setEmoji(res)
         })
     }, [])

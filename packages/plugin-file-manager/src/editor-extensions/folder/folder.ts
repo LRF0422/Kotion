@@ -1,4 +1,4 @@
-import { CommandProps,PMNode as Node, RawCommands, ReactNodeViewRenderer, mergeAttributes } from "@kn/editor";
+import { CommandProps, PMNode as Node, RawCommands, ReactNodeViewRenderer, mergeAttributes } from "@kn/editor";
 import { FolderView } from "./FolderView";
 
 export const Folder = Node.create({
@@ -8,6 +8,9 @@ export const Folder = Node.create({
         return {
             folderId: {
                 default: null
+            },
+            viewMode: {
+                default: 'grid'
             }
         }
     },

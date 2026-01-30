@@ -1,0 +1,86 @@
+{
+    "name": "@kn/desktop",
+    "version": "0.0.16",
+    "description": "Knowledge Desktop - Offline-first desktop application",
+    "main": "dist-electron/main/index.js",
+    "scripts": {
+        "desktop:dev": "vite",
+        "desktop:build": "tsc && vite build && electron-builder",
+        "build:vite": "vite build",
+        "preview": "vite preview",
+        "package": "electron-builder",
+        "package:win": "electron-builder --win",
+        "package:mac": "electron-builder --mac",
+        "package:linux": "electron-builder --linux"
+    },
+    "dependencies": {
+        "@kn/core": "workspace:*",
+        "@kn/common": "workspace:*",
+        "@kn/editor": "workspace:*",
+        "@kn/ui": "workspace:*",
+        "@kn/icon": "workspace:*",
+        "@kn/plugin-main": "workspace:*",
+        "@kn/file-manager": "workspace:*",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "react-router-dom": "^6.30.1",
+        "better-sqlite3": "^9.4.3",
+        "bcryptjs": "^2.4.3",
+        "uuid": "^9.0.1",
+        "electron-store": "^8.1.0"
+    },
+    "devDependencies": {
+        "@types/bcryptjs": "^2.4.6",
+        "@types/better-sqlite3": "^7.6.8",
+        "@types/node": "^20.11.0",
+        "@types/react": "^18.2.48",
+        "@types/react-dom": "^18.2.18",
+        "@types/uuid": "^9.0.7",
+        "@vitejs/plugin-react": "^4.2.1",
+        "autoprefixer": "^10.4.16",
+        "electron": "^28.1.3",
+        "electron-builder": "^24.9.1",
+        "postcss": "^8.4.32",
+        "tailwindcss": "^3.4.0",
+        "typescript": "^5.3.3",
+        "vite": "^5.0.11",
+        "vite-plugin-electron": "^0.15.5",
+        "vite-plugin-electron-renderer": "^0.14.5"
+    },
+    "build": {
+        "appId": "com.knowledge.desktop",
+        "productName": "Knowledge",
+        "directories": {
+            "output": "release"
+        },
+        "files": [
+            "dist/**/*",
+            "dist-electron/**/*"
+        ],
+        "mac": {
+            "target": [
+                "dmg",
+                "zip"
+            ],
+            "icon": "build/icon.icns"
+        },
+        "win": {
+            "target": [
+                "nsis",
+                "portable"
+            ],
+            "icon": "build/icon.ico"
+        },
+        "linux": {
+            "target": [
+                "AppImage",
+                "deb"
+            ],
+            "icon": "build/icon.png"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true
+        }
+    }
+}

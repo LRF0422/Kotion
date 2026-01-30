@@ -3,13 +3,29 @@ module.exports = {
   darkMode: ["class"],
   content: [
     "./src/**/*.{ts,tsx}",
-    // "./packages/**/*.{html,js,ts,jsx,tsx}",
+    // Scan all workspace packages for Tailwind classes
+    // "../../packages/*/src/**/*.{ts,tsx,jsx,js}",
+    // "../../apps/*/src/**/*.{ts,tsx,jsx,js}",
     "./node_modules/@kn/**/*.{ts,tsx}",
+    "./node_modules/streamdown/dist/*.js",
   ],
   prefix: "",
   safelist: [
     {
-      pattern: /grid-cols-+/,
+      // Match dynamic grid column classes like grid-cols-1, grid-cols-2, etc.
+      pattern: /^grid-cols-(\d+|\[.+\])$/,
+    },
+    {
+      // Match dynamic gap classes
+      pattern: /^gap-(\d+|\[.+\])$/,
+    },
+    {
+      // Match common dynamic utility patterns
+      pattern: /^(w|h|max-w|max-h|min-w|min-h)-(\d+|\[.+\]|full|screen|auto)$/,
+    },
+    {
+      // Match viewport-based width and height utilities
+      pattern: /^(w|h|max-w|max-h|min-w|min-h)-\[(\d+vh|\d+vw|\d+%|\d+em|\d+rem)\]$/,
     },
   ],
   theme: {
@@ -121,6 +137,56 @@ module.exports = {
           },
           to: {
             height: "0",
+          },
+        },
+        // Animations from Login page
+        "blob": {
+          "0%, 100%": {
+            transform: "translate(0px, 0px) scale(1)",
+          },
+          "33%": {
+            transform: "translate(30px, -50px) scale(1.1)",
+          },
+          "66%": {
+            transform: "translate(-20px, 20px) scale(0.9)",
+          },
+        },
+        "fade-in-up": {
+          from: {
+            opacity: "0",
+            transform: "translateY(30px)",
+          },
+          to: {
+            opacity: "1",
+            transform: "translateY(0)",
+          },
+        },
+        "fade-in": {
+          from: {
+            opacity: "0",
+          },
+          to: {
+            opacity: "1",
+          },
+        },
+        "scale-in": {
+          from: {
+            opacity: "0",
+            transform: "scale(0.8)",
+          },
+          to: {
+            opacity: "1",
+            transform: "scale(1)",
+          },
+        },
+        "slide-in-left": {
+          from: {
+            opacity: "0",
+            transform: "translateX(-30px)",
+          },
+          to: {
+            opacity: "1",
+            transform: "translateX(0)",
           },
         },
       },

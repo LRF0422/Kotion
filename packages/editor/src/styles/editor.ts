@@ -1,10 +1,17 @@
 import styled from "styled-components";
 
 export const StyledEditor = styled.div.attrs({
-  className: 'prose dark:prose-invert prose-img:m-0 max-w-none px-[40px] h-full '
+  className: 'prose dark:prose-invert prose-img:m-0 max-w-none prose-table:my-0'
 })`
   box-sizing: border-box;
   width: 100%;
+  padding-left: 40px;
+  padding-right: 40px;
+  
+  @media (max-width: 768px) {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 
   *,
   *::before,
@@ -154,24 +161,83 @@ export const StyledEditor = styled.div.attrs({
   }
   /* E List */
 
-  /* S Table */
+  /* Reset prose table styles to ensure our custom styles apply */
+  &.prose table,
+  &.prose thead,
+  &.prose tbody,
+  &.prose tr,
+  &.prose th,
+  &.prose td {
+    border-width: 0;
+    border-style: none;
+  }
+
+  /* Base table styles - applies to all tables including read-only mode */
+  table {
+    width: 100%;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 1em 0;
+    background-color: ${props => (props.theme as any).tableCellBgColor || 'transparent'};
+    border: 1px solid ${props => (props.theme as any).tableBorderColor || '#e2e8f0'} !important;
+    box-sizing: border-box;
+
+    * { box-sizing: border-box; }
+    p { margin: 0; }
+
+    tr {
+      transition: background-color 0.15s ease;
+      &:hover { background-color: ${props => (props.theme as any).tableHoverBgColor || '#f8fafc'}; }
+      &:last-child td, &:last-child th { border-bottom: none !important; }
+    }
+
+    th {
+      background-color: ${props => (props.theme as any).tableHeaderBgColor || '#f8fafc'};
+      font-weight: 600;
+      font-size: 0.875em;
+      color: ${props => (props.theme as any).tableHeaderTextColor || (props.theme as any).text};
+      &:first-child { border-top-left-radius: 7px; }
+      &:last-child { border-top-right-radius: 7px; }
+    }
+
+    td, th {
+      position: relative;
+      vertical-align: top;
+      border-bottom: 1px solid ${props => (props.theme as any).tableBorderColor || '#e2e8f0'} !important;
+      border-right: 1px solid ${props => (props.theme as any).tableBorderColor || '#e2e8f0'} !important;
+      padding: 4px 8px !important;
+      text-align: left;
+      min-width: 100px;
+      transition: background-color 0.15s ease;
+      &:last-child { border-right: none !important; }
+    }
+  }
+
+  /* S Table - Modern Design (enhanced styles for edit mode with wrapper) */
   .tableWrapper {
     position: relative;
-    margin: 0.5em 0px;
+    margin: 1em 0;
+    border-radius: 8px;
+    overflow: hidden;
 
     &.has-focus {
       .scrollWrapper {
-        // margin-top: -20px;
+        // Focus indicator if needed
       }
     }
-
 
   table {
     width: 100%;
-    border-collapse: collapse;
-    border-radius: 4px;
-    overflow: auto;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    border-radius: 8px;
+    overflow: hidden;
     margin-top: 0;
+    background-color: ${props => (props.theme as any).tableCellBgColor};
+    border: 1px solid ${props => (props.theme as any).tableBorderColor} !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
     box-sizing: border-box;
 
@@ -180,476 +246,336 @@ export const StyledEditor = styled.div.attrs({
     }
 
     p {
-      margin: 0
+      margin: 0;
     }
 
     tr {
       position: relative;
-      border-bottom: 1px solid ${props => ((props.theme as any) as any).tableBorderColor};
+      transition: background-color 0.15s ease;
+
+      &:hover {
+        background-color: ${props => (props.theme as any).tableHoverBgColor};
+      }
+
+      &:last-child td,
+      &:last-child th {
+        border-bottom: none;
+      }
     }
 
     th {
-      // background: ${props => (props.theme as any).tableHeaderBgColor};
-      @apply bu-muted
+      background-color: ${props => (props.theme as any).tableHeaderBgColor};
+      font-weight: 600;
+      font-size: 0.875em;
+      color: ${props => (props.theme as any).tableHeaderTextColor || (props.theme as any).text};
+      text-transform: none;
+      letter-spacing: 0;
+      transition: background-color 0.2s ease;
+
+      &:first-child {
+        border-top-left-radius: 7px;
+      }
+      &:last-child {
+        border-top-right-radius: 7px;
+      }
     }
 
     td,
     th {
       position: relative;
       vertical-align: top;
-      border: 1px solid ${props => (props.theme as any).tableBorderColor};
-      position: relative;
+      border-bottom: 1px solid ${props => (props.theme as any).tableBorderColor} !important;
+      border-right: 1px solid ${props => (props.theme as any).tableBorderColor} !important;
       padding: 4px 8px !important;
       text-align: left;
       min-width: 100px;
+      transition: background-color 0.15s ease;
+
+      &:last-child {
+        border-right: none !important;
+      }
     }
 
     .selectedCell {
       position: relative;
-      border: 1px solid ${props => (props.theme as any).tableSelectedBorderColor};
       background-color: ${props => (props.theme as any).tableSelectedCellBgColor};
 
       &::after {
-        box-sizing: content-box;
-        height: 100%;
-        width: 100%;
-        border: 1px solid ${props => (props.theme as any).tableSelectedBorderColor};
         content: "";
         position: absolute;
-        left: -1px;
-        top: -1px;
-        bottom: 0px;
-        z-index: 12;
-        display: inline-block;
+        inset: 0;
+        border: 2px solid ${props => (props.theme as any).tableSelectedBorderColor};
+        border-radius: 2px;
         pointer-events: none;
+        z-index: 12;
       }
     }
 
+    /* Column grip - appears on hover above headers */
     .grip-column {
       position: absolute;
-      top: -12px;
-      left: -1px;
+      top: -14px;
+      left: 0;
       width: 100%;
-
+      height: 12px;
       font-size: 0;
+      z-index: 20;
 
       > span {
         position: absolute;
         top: -18px;
         left: 100%;
-        transform: translateX(-8px);
-
-        display: inline-block;
-        width: 16px;
-        height: 16px;
+        transform: translateX(-10px);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        opacity: 0;
+        transition: opacity 0.2s ease;
       }
 
       &::before {
         content: "";
         position: absolute;
-        left: 100%;
-        bottom: 4px;
-        transform: translateX(-1px);
-
-        width: 4px;
-        height: 4px;
-        background-color: ${props => (props.theme as any).tableBorderColor};
+        left: 50%;
+        top: 4px;
+        transform: translateX(-50%);
+        width: 6px;
+        height: 6px;
+        background-color: ${props => (props.theme as any).tableGripDotColor || (props.theme as any).tableBorderColor};
         border-radius: 50%;
-        display: block;
+        opacity: 0.6;
+        transition: all 0.2s ease;
       }
 
       &::after {
-        box-sizing: content-box;
         content: "";
         cursor: pointer;
         position: absolute;
         top: 0;
         left: 0;
         width: 100%;
-        height: 10px;
-        background: ${props => (props.theme as any).tableHeaderBgColor};
+        height: 12px;
+        background: ${props => (props.theme as any).tableGripBgColor || (props.theme as any).tableHeaderBgColor};
         border: 1px solid ${props => (props.theme as any).tableBorderColor};
-        display: block;
+        border-bottom: none;
+        border-radius: 6px 6px 0 0;
+        transition: all 0.2s ease;
       }
 
       &:hover {
-        font-size: 14px;
-        color: ${props => (props.theme as any).tableSelectedBorderColor};
+        > span {
+          opacity: 1;
+        }
 
         &::before {
-          display: none;
+          opacity: 0;
+        }
+
+        &::after {
+          background: ${props => (props.theme as any).tableGripHoverBgColor || (props.theme as any).tableSelectedControlBgColor};
+          box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
+        }
+      }
+
+      &.first::after {
+        border-top-left-radius: 6px;
+      }
+
+      &.last::after {
+        border-top-right-radius: 6px;
+      }
+
+      &.selected {
+        > span {
+          opacity: 1;
+          color: white;
+        }
+
+        &::before {
+          opacity: 0;
         }
 
         &::after {
           background: ${props => (props.theme as any).tableSelectedControlBgColor};
           border-color: ${props => (props.theme as any).tableSelectedControlBgColor};
+          box-shadow: 0 -2px 8px rgba(59, 130, 246, 0.2);
         }
-      }
-
-      &.last::after {
-        border-top-right-radius: 3px;
-      }
-
-      &.selected::after {
-        background: ${props => (props.theme as any).tableSelectedControlBgColor};
-        border-color: ${props => (props.theme as any).tableSelectedControlBgColor};
       }
     }
 
+    /* Row grip - appears on hover to the left of rows */
     .grip-row {
       position: absolute;
-      left: -12px;
-      top: -1px;
+      left: -14px;
+      top: 0;
+      width: 12px;
       height: 100%;
       font-size: 0;
+      z-index: 20;
 
       > span {
-        transform: translateY(8px);
         position: absolute;
-        left: -16px;
-        bottom: 4px;
-
-        display: inline-block;
-        width: 16px;
-        height: 16px;
+        left: -18px;
+        bottom: 50%;
+        transform: translateY(50%);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        opacity: 0;
+        transition: opacity 0.2s ease;
       }
 
       &::before {
         content: "";
         position: absolute;
-        left: -10px;
-        bottom: -2px;
-        width: 4px;
-        height: 4px;
-        background-color: ${props => (props.theme as any).tableBorderColor};
+        top: 50%;
+        left: 4px;
+        transform: translateY(-50%);
+        width: 6px;
+        height: 6px;
+        background-color: ${props => (props.theme as any).tableGripDotColor || (props.theme as any).tableBorderColor};
         border-radius: 50%;
-        display: block;
+        opacity: 0.6;
+        transition: all 0.2s ease;
       }
 
       &::after {
-        box-sizing: content-box;
         content: "";
         cursor: pointer;
         position: absolute;
         left: 0;
         top: 0;
+        width: 12px;
         height: 100%;
-        width: 10px;
-        background: ${props => (props.theme as any).tableHeaderBgColor};
+        background: ${props => (props.theme as any).tableGripBgColor || (props.theme as any).tableHeaderBgColor};
         border: 1px solid ${props => (props.theme as any).tableBorderColor};
-        display: block;
+        border-right: none;
+        border-radius: 6px 0 0 6px;
+        transition: all 0.2s ease;
       }
 
       &:hover {
-        font-size: 14px;
-        color: ${props => (props.theme as any).tableSelectedBorderColor};
+        > span {
+          opacity: 1;
+        }
 
         &::before {
-          display: none;
+          opacity: 0;
         }
 
         &::after {
-          background: ${props => (props.theme as any).tableSelectedControlBgColor};
-          border-color: ${props => (props.theme as any).tableSelectedBorderColor};
+          background: ${props => (props.theme as any).tableGripHoverBgColor || (props.theme as any).tableSelectedControlBgColor};
+          box-shadow: -2px 0 8px rgba(0, 0, 0, 0.06);
         }
       }
 
+      &.first::after {
+        border-top-left-radius: 6px;
+      }
+
       &.last::after {
-        border-bottom-left-radius: 3px;
+        border-bottom-left-radius: 6px;
       }
 
-      &.selected::after {
-        background: ${props => (props.theme as any).tableSelectedControlBgColor};
-        border-color: ${props => (props.theme as any).tableSelectedBorderColor};
-      }
-    }
-
-    .grip-table {
-      &::after {
-        box-sizing: content-box;
-        content: "";
-        cursor: pointer;
-        position: absolute;
-        top: -12px;
-        left: -12px;
-        display: block;
-        background: ${props => (props.theme as any).tableHeaderBgColor};
-        width: 10px;
-        height: 10px;
-        border: 1px solid ${props => (props.theme as any).tableBorderColor};
-        border-top-left-radius: 3px;
-      }
-      
-      &:hover::after {
-        background: ${props => (props.theme as any).tableSelectedControlBgColor};
-        border-color: ${props => (props.theme as any).tableSelectedBorderColor};
-      }
-
-      &.selected::after {
-        background: ${props => (props.theme as any).tableSelectedControlBgColor};
-        border-color: ${props => (props.theme as any).tableSelectedBorderColor};
-      }
-    }
-  }
-  }
-
-
-  table.view-table {
-    width: 100%;
-    border-collapse: collapse;
-    border-radius: 4px;
-    overflow: auto;
-    margin-top: 0;
-
-    box-sizing: border-box;
-
-    * {
-      box-sizing: border-box;
-    }
-
-    p {
-      margin: 0
-    }
-
-    tr {
-      position: relative;
-      border-bottom: 1px solid ${props => ((props.theme as any) as any).tableBorderColor};
-    }
-
-    th {
-      // background: ${props => (props.theme as any).tableHeaderBgColor};
-      @apply bu-muted
-    }
-
-    td,
-    th {
-      position: relative;
-      vertical-align: top;
-      border: 1px solid ${props => (props.theme as any).tableBorderColor};
-      position: relative;
-      padding: 4px 8px !important;
-      text-align: left;
-      min-width: 100px;
-    }
-
-    .selectedCell {
-      position: relative;
-      border: 1px solid ${props => (props.theme as any).tableSelectedBorderColor};
-      background-color: ${props => (props.theme as any).tableSelectedCellBgColor};
-
-      &::after {
-        box-sizing: content-box;
-        height: 100%;
-        width: 100%;
-        border: 1px solid ${props => (props.theme as any).tableSelectedBorderColor};
-        content: "";
-        position: absolute;
-        left: -1px;
-        top: -1px;
-        bottom: 0px;
-        z-index: 12;
-        display: inline-block;
-        pointer-events: none;
-      }
-    }
-
-    .grip-column {
-      position: absolute;
-      top: -12px;
-      left: -1px;
-      width: 100%;
-
-      font-size: 0;
-
-      > span {
-        position: absolute;
-        top: -18px;
-        left: 100%;
-        transform: translateX(-8px);
-
-        display: inline-block;
-        width: 16px;
-        height: 16px;
-      }
-
-      &::before {
-        content: "";
-        position: absolute;
-        left: 100%;
-        bottom: 4px;
-        transform: translateX(-1px);
-
-        width: 4px;
-        height: 4px;
-        background-color: ${props => (props.theme as any).tableBorderColor};
-        border-radius: 50%;
-        display: block;
-      }
-
-      &::after {
-        box-sizing: content-box;
-        content: "";
-        cursor: pointer;
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 10px;
-        background: ${props => (props.theme as any).tableHeaderBgColor};
-        border: 1px solid ${props => (props.theme as any).tableBorderColor};
-        display: block;
-      }
-
-      &:hover {
-        font-size: 14px;
-        color: ${props => (props.theme as any).tableSelectedBorderColor};
+      &.selected {
+        > span {
+          opacity: 1;
+          color: white;
+        }
 
         &::before {
-          display: none;
+          opacity: 0;
         }
 
         &::after {
           background: ${props => (props.theme as any).tableSelectedControlBgColor};
           border-color: ${props => (props.theme as any).tableSelectedControlBgColor};
+          box-shadow: -2px 0 8px rgba(59, 130, 246, 0.2);
         }
       }
+    }
 
-      &.last::after {
-        border-top-right-radius: 3px;
+    /* Table selector grip - top left corner */
+    .grip-table {
+      &::after {
+        content: "";
+        cursor: pointer;
+        position: absolute;
+        top: -14px;
+        left: -14px;
+        width: 12px;
+        height: 12px;
+        background: ${props => (props.theme as any).tableGripBgColor || (props.theme as any).tableHeaderBgColor};
+        border: 1px solid ${props => (props.theme as any).tableBorderColor};
+        border-radius: 6px 0 0 0;
+        transition: all 0.2s ease;
+      }
+      
+      &:hover::after {
+        background: ${props => (props.theme as any).tableGripHoverBgColor || (props.theme as any).tableSelectedControlBgColor};
+        box-shadow: -1px -1px 6px rgba(0, 0, 0, 0.08);
       }
 
       &.selected::after {
         background: ${props => (props.theme as any).tableSelectedControlBgColor};
         border-color: ${props => (props.theme as any).tableSelectedControlBgColor};
-      }
-    }
-
-    .grip-row {
-      position: absolute;
-      left: -12px;
-      top: -1px;
-      height: 100%;
-      font-size: 0;
-
-      > span {
-        transform: translateY(8px);
-        position: absolute;
-        left: -16px;
-        bottom: 4px;
-
-        display: inline-block;
-        width: 16px;
-        height: 16px;
-      }
-
-      &::before {
-        content: "";
-        position: absolute;
-        left: -10px;
-        bottom: -2px;
-        width: 4px;
-        height: 4px;
-        background-color: ${props => (props.theme as any).tableBorderColor};
-        border-radius: 50%;
-        display: block;
-      }
-
-      &::after {
-        box-sizing: content-box;
-        content: "";
-        cursor: pointer;
-        position: absolute;
-        left: 0;
-        top: 0;
-        height: 100%;
-        width: 10px;
-        background: ${props => (props.theme as any).tableHeaderBgColor};
-        border: 1px solid ${props => (props.theme as any).tableBorderColor};
-        display: block;
-      }
-
-      &:hover {
-        font-size: 14px;
-        color: ${props => (props.theme as any).tableSelectedBorderColor};
-
-        &::before {
-          display: none;
-        }
-
-        &::after {
-          background: ${props => (props.theme as any).tableSelectedControlBgColor};
-          border-color: ${props => (props.theme as any).tableSelectedBorderColor};
-        }
-      }
-
-      &.last::after {
-        border-bottom-left-radius: 3px;
-      }
-
-      &.selected::after {
-        background: ${props => (props.theme as any).tableSelectedControlBgColor};
-        border-color: ${props => (props.theme as any).tableSelectedBorderColor};
-      }
-    }
-
-    .grip-table {
-      &::after {
-        box-sizing: content-box;
-        content: "";
-        cursor: pointer;
-        position: absolute;
-        top: -12px;
-        left: -12px;
-        display: block;
-        background: ${props => (props.theme as any).tableHeaderBgColor};
-        width: 10px;
-        height: 10px;
-        border: 1px solid ${props => (props.theme as any).tableBorderColor};
-        border-top-left-radius: 3px;
-      }
-      
-      &:hover::after {
-        background: ${props => (props.theme as any).tableSelectedControlBgColor};
-        border-color: ${props => (props.theme as any).tableSelectedBorderColor};
-      }
-
-      &.selected::after {
-        background: ${props => (props.theme as any).tableSelectedControlBgColor};
-        border-color: ${props => (props.theme as any).tableSelectedBorderColor};
+        box-shadow: -1px -1px 8px rgba(59, 130, 246, 0.25);
       }
     }
   }
+  }
 
+  /* Scroll wrapper for horizontal overflow */
   .scrollWrapper {
     overflow-y: hidden;
     overflow-x: auto;
     padding-left: 28px;
-    padding-top: 9px;
-    // padding-bottom: 8px;
+    padding-top: 16px;
     margin-left: -28px;
-    margin-top: -20px;
-    // margin-bottom: -8px;
+    margin-top: -16px;
     border-left: 1px solid transparent;
     border-right: 1px solid transparent;
-    -webkit-transition: border 250ms ease-in-out 0s;
-    transition: border 250ms ease-in-out 0s;
+    transition: border-color 0.25s ease;
+
+    /* Custom scrollbar for table */
+    &::-webkit-scrollbar {
+      height: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: ${props => (props.theme as any).tableBorderColor};
+      border-radius: 3px;
+    }
+
+    &::-webkit-scrollbar-thumb:hover {
+      background: ${props => (props.theme as any).tableGripDotColor || (props.theme as any).tableBorderColor};
+    }
   }
 
-
-
+  /* Column resize handle */
   .column-resize-handle {
     position: absolute;
     top: 0;
     right: -2px;
-    bottom: -2px;
+    bottom: 0;
     width: 4px;
     pointer-events: none;
-    background-color: ${props => ((props.theme as any) as any).tableResizeHandleBgColor};
+    background-color: ${props => (props.theme as any).tableResizeHandleBgColor};
+    border-radius: 2px;
+    opacity: 0.8;
   }
 
   .resize-cursor {
     cursor: ew-resize;
-    cursor: col-resize; /* stylelint-disable declaration-block-no-duplicate-properties */
+    cursor: col-resize;
   }
   /* E Table */
 
@@ -669,22 +595,23 @@ export const StyledEditor = styled.div.attrs({
     display: flex;
     min-width: 48px;
     margin: 0;
-    line-height: 1.3;
-    // background-color: rgb(64 64 64/var(--tw-bg-opacity));
+    line-height: 1.6;
+    font-family: ${props => (props.theme as any).fontFamilyMono};
+    font-size: 0.875rem;
     counter-reset: line 0;
-
-    // code {
-    //   width: 100%;
-    //   padding: 0;
-    //   margin: 12px;
-    //   overflow: auto;
-    //   font-size: 0.875rem;
-    //   line-height: 1.5rem;
-    //   color: inherit;
-    //   white-space: pre;
-    //   background-color: transparent;
-    //   overscroll-behavior: contain;
-    // }
+    
+    code {
+      display: block;
+      width: 100%;
+      padding: 0;
+      margin: 0;
+      color: inherit;
+      background: transparent;
+      white-space: pre;
+      word-wrap: normal;
+      overflow-wrap: normal;
+      tab-size: 4;
+    }
   }
   /* E Code */
 
@@ -714,13 +641,13 @@ export const StyledEditor = styled.div.attrs({
     cursor: move;
     opacity: 0;
     transition: opacity 0.3s ease-out;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='1' width='3' height='3' rx='1.5' fill='%23111'/%3E%3Crect x='10' y='1' width='3' height='3' rx='1.5' fill='%23111'/%3E%3Crect x='3' y='6' width='3' height='3' rx='1.5' fill='%23111'/%3E%3Crect x='10' y='6' width='3' height='3' rx='1.5' fill='%23111'/%3E%3Crect x='3' y='11' width='3' height='3' rx='1.5' fill='%23111'/%3E%3Crect x='10' y='11' width='3' height='3' rx='1.5' fill='%23111'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='1' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='1' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='3' y='6' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='6' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='3' y='11' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='11' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3C/svg%3E");
     background-size: contain;
     background-position: center 0;
     background-repeat: no-repeat;
 
     &.show {
-      opacity: 0.3;
+      opacity: 0.5;
 
       &:hover {
         opacity: 1;
@@ -731,41 +658,75 @@ export const StyledEditor = styled.div.attrs({
       opacity: 0;
     }
   }
+  
+  /* Dark mode drag handle */
+  &.dark [data-drag-handle] {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='1' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='10' y='1' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='3' y='6' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='10' y='6' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='3' y='11' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='10' y='11' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3C/svg%3E");
+  }
   /* E Dragable */
 
   /* S Placeholder */
   
   /* E Placeholder */
 
+  /* Collaboration Cursor Styles */
   .collaboration-cursor__caret {
     position: relative;
-    border-left: 1px solid #0d0d0d;
+    border-left: 2px solid currentColor;
     margin-right: -1px;
     margin-left: -1px;
     word-break: normal;
     pointer-events: none;
-    border-right: 1px solid #0d0d0d;
+    animation: cursor-blink 1.2s ease-in-out infinite;
+  }
+
+  @keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
   }
 
   .collaboration-cursor__label {
     position: absolute;
-    top: -1.4em;
-    left: -1px;
-    padding: 0.1rem 0.3rem;
-    font-size: 12px;
+    top: -1.6em;
+    left: -2px;
+    padding: 2px 8px;
+    font-size: 11px;
     font-style: normal;
-    font-weight: 600;
-    line-height: normal;
-    color: #0d0d0d;
+    font-weight: 500;
+    line-height: 1.4;
+    color: white;
     white-space: nowrap;
-    border-radius: 3px 3px 3px 0;
+    border-radius: 4px 4px 4px 0;
     user-select: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.1);
+    transform-origin: bottom left;
+    animation: cursor-label-appear 0.15s ease-out;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.01em;
   }
 
-  /* S highlight */
+  @keyframes cursor-label-appear {
+    from {
+      opacity: 0;
+      transform: scale(0.9) translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  /* Dark mode adjustments for collaboration cursor */
+  &.dark .collaboration-cursor__label {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
+
+  /* S highlight - Light Mode */
   .hljs {
     color: #24292e;
-    background: #fff;
+    background: transparent;
   }
 
   .hljs-doctag,
@@ -870,6 +831,101 @@ export const StyledEditor = styled.div.attrs({
     /* prettylights-syntax-markup-deleted */
     color: #b31d28;
     background-color: #ffeef0;
+  }
+
+  /* Dark Mode Syntax Highlighting */
+  &.dark {
+    .hljs {
+      color: #c9d1d9;
+      background: transparent;
+    }
+
+    .hljs-doctag,
+    .hljs-keyword,
+    .hljs-meta .hljs-keyword,
+    .hljs-template-tag,
+    .hljs-template-variable,
+    .hljs-type,
+    .hljs-variable.language_ {
+      color: #ff7b72;
+    }
+
+    .hljs-title,
+    .hljs-title.class_,
+    .hljs-title.class_.inherited__,
+    .hljs-title.function_ {
+      color: #d2a8ff;
+    }
+
+    .hljs-attr,
+    .hljs-attribute,
+    .hljs-literal,
+    .hljs-meta,
+    .hljs-number,
+    .hljs-operator,
+    .hljs-variable,
+    .hljs-selector-attr,
+    .hljs-selector-class,
+    .hljs-selector-id {
+      color: #79c0ff;
+    }
+
+    .hljs-regexp,
+    .hljs-string,
+    .hljs-meta .hljs-string {
+      color: #a5d6ff;
+    }
+
+    .hljs-built_in,
+    .hljs-symbol {
+      color: #ffa657;
+    }
+
+    .hljs-comment,
+    .hljs-code,
+    .hljs-formula {
+      color: #8b949e;
+    }
+
+    .hljs-name,
+    .hljs-quote,
+    .hljs-selector-tag,
+    .hljs-selector-pseudo {
+      color: #7ee787;
+    }
+
+    .hljs-subst {
+      color: #c9d1d9;
+    }
+
+    .hljs-section {
+      font-weight: bold;
+      color: #1f6feb;
+    }
+
+    .hljs-bullet {
+      color: #f2cc60;
+    }
+
+    .hljs-emphasis {
+      font-style: italic;
+      color: #c9d1d9;
+    }
+
+    .hljs-strong {
+      font-weight: bold;
+      color: #c9d1d9;
+    }
+
+    .hljs-addition {
+      color: #aff5b4;
+      background-color: rgba(46, 160, 67, 0.15);
+    }
+
+    .hljs-deletion {
+      color: #ffdcd7;
+      background-color: rgba(248, 81, 73, 0.15);
+    }
   }
   /* E highlight */
 

@@ -1,28 +1,28 @@
 import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
-import { IconButton, TreeView } from "@kn/ui";
-import { ArrowLeft, CircleArrowUp, Clock, Copy, FolderOpen, LayoutDashboard, LayoutTemplate, MoreHorizontal, MoreVertical, Package, Plus, Settings, ShareIcon, Star, StarIcon, Trash2, Undo2, UserCircle } from "@kn/icon";
-import React, { useEffect, useState } from "react";
-import { Sheet, SheetContent, SheetTitle } from "@kn/ui";
+import { IconButton, TreeView, useIsMobile, Button, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
+import { ArrowLeft, CircleArrowUp, Clock, Copy, LayoutDashboard, LayoutTemplate, Menu, MoreHorizontal, Package, Plus, Settings, Star, StarIcon, Trash2, Undo2, UserCircle, AlertCircle } from "@kn/icon";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useApi, useService, useUploadFile } from "@kn/core";
 import { APIS } from "../../api";
 import { Outlet, useParams } from "@kn/common";
 import { Space } from "../../model/Space";
 import { useNavigator } from "@kn/core";
-import { Button } from "@kn/ui";
 import { Input } from "@kn/ui";
 import { Badge } from "@kn/ui";
+import { Alert, AlertDescription } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
 import { event, ON_FAVORITE_CHANGE, ON_PAGE_REFRESH } from "../../event";
 import { Card } from "@kn/ui";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@kn/ui";
 import { useToggle } from "@kn/core";
-import { Empty } from "@kn/ui";
-import { MultiSelect } from "@kn/ui";
-import { SpaceHub } from "../SpaceHub";
+import { MultiSelect, cn } from "@kn/ui";
 import { TemplateCreator } from "./TemplateCreator";
+import { TemplateSelector } from "../../components/TemplateSelector";
 
 export const SpaceDetail: React.FC = () => {
 
+    const isMobile = useIsMobile()
+    const [sidebarOpen, setSidebarOpen] = useState(false)
     const [visible, setVisible] = useState(false)
     const [space, setSpace] = useState<Space>()
     const [pageTree, setPageTree] = useState([])
@@ -38,12 +38,17 @@ export const SpaceDetail: React.FC = () => {
     const navigator = useNavigator()
     const [searchValue, setSearchValue] = useState<string>()
     const [loading, { toggle: toggleLoading }] = useToggle(true)
+    const [error, setError] = useState<string | null>(null)
     const { usePath } = useUploadFile()
     const spaceService = useService("spaceService")
     useEffect(() => {
         if (params.id) {
             spaceService.getSpaceInfo(params.id).then(res => {
                 setSpace(res)
+                setError(null)
+            }).catch(err => {
+                setError('Failed to load space information')
+                console.error('Error loading space:', err)
             })
         }
         return () => {
@@ -51,26 +56,53 @@ export const SpaceDetail: React.FC = () => {
         }
     }, [params.id])
 
+    // Debounce search to avoid excessive API calls
     useEffect(() => {
-        if (params.id) {
+        if (!params.id) return
+
+        const timeoutId = setTimeout(() => {
             toggleLoading()
-            spaceService.getPageTree(params!.id, searchValue).then(res => {
-                setPageTree(res)
-                toggleLoading()
-            })
-        }
-    }, [flag, searchValue])
+            spaceService.getPageTree(params.id!, searchValue)
+                .then(res => {
+                    setPageTree(res)
+                    setError(null)
+                })
+                .catch(err => {
+                    setError('Failed to load page tree')
+                    console.error('Error loading page tree:', err)
+                })
+                .finally(() => {
+                    toggleLoading()
+                })
+        }, 300) // 300ms debounce
+
+        return () => clearTimeout(timeoutId)
+    }, [flag, searchValue, params.id])
 
     useEffect(() => {
-        useApi(APIS.QUERY_PAGE, { spaceId: params.id, status: 'TRASH', pageSize: 20 }).then((res) => {
-            setTrash(res.data.records)
-        })
-    }, [restoreFlag])
+        if (!params.id) return
+
+        useApi(APIS.QUERY_PAGE, { spaceId: params.id, status: 'TRASH', pageSize: 20 })
+            .then((res) => {
+                setTrash(res.data.records)
+                setError(null)
+            })
+            .catch(err => {
+                console.error('Error loading trash:', err)
+            })
+    }, [restoreFlag, params.id])
     useEffect(() => {
-        useApi(APIS.QUERY_FAVORITE, { scope: params.id, pageSize: 5 }).then(res => {
-            setFavorites(res.data)
-        })
-    }, [favoriteFlag])
+        if (!params.id) return
+
+        useApi(APIS.QUERY_FAVORITE, { scope: params.id, pageSize: 5 })
+            .then(res => {
+                setFavorites(res.data)
+                setError(null)
+            })
+            .catch(err => {
+                console.error('Error loading favorites:', err)
+            })
+    }, [favoriteFlag, params.id])
 
     useEffect(() => {
         if (visible) {
@@ -104,7 +136,7 @@ export const SpaceDetail: React.FC = () => {
         }
     }, [space])
 
-    const handleCreatePage = (parentId: string = "0") => {
+    const handleCreatePage = useCallback((parentId: string = "0") => {
         const param = {
             spaceId: params.id,
             parentId: parentId,
@@ -135,9 +167,9 @@ export const SpaceDetail: React.FC = () => {
             })
             setFlag(f => f + 1)
         })
-    }
+    }, [params.id, navigator])
 
-    const handleCreateByTemplate = (id: string) => {
+    const handleCreateByTemplate = useCallback((id: string) => {
         useApi(APIS.CREATE_OR_SAVE_PAGE, null, {
             templateId: id,
             spaceId: params.id,
@@ -146,78 +178,104 @@ export const SpaceDetail: React.FC = () => {
             setFlag(f => f + 1)
             setVisible(false)
         })
-    }
+    }, [params.id, params.pageId])
 
-    const handleGoToPersonalSpace = () => {
+    const handleGoToPersonalSpace = useCallback(() => {
         useApi(APIS.PERSONAL_SPACE).then((res) => {
             navigator.go({
                 to: `/space-detail/${res.data.id}`
             })
             toggle()
         })
-    }
+    }, [navigator, toggle])
 
-    const handleMoveToTrash = (pageId: string) => {
+    const handleMoveToTrash = useCallback((pageId: string) => {
         useApi(APIS.MOVE_TO_TRASH, { id: pageId }).then(() => {
             setFlag(flag => flag + 1)
             setRestoreFlag(f => f + 1)
         })
-    }
+    }, [])
 
-    const handleRestorePage = (pageId: string) => {
+    const handleRestorePage = useCallback((pageId: string) => {
         useApi(APIS.RESTORE_PAGE, { id: pageId }).then(() => {
             setFlag(f => f + 1)
             setRestoreFlag(f => f + 1)
         })
-    }
+    }, [])
 
-    const handleFavorite = () => {
-        useApi(APIS.ADD_SPACE_FAVORITE, { id: params.id}).then(() => {
+    const handleFavorite = useCallback(() => {
+        useApi(APIS.ADD_SPACE_FAVORITE, { id: params.id }).then(() => {
             setFlag(f => f + 1)
         })
-    }
+    }, [params.id])
 
 
-    const resolve = (treeNode: any) => {
+    const resolve = useCallback((treeNode: any): SiderMenuItemProps => {
 
-        const name = <div className="flex flex-row gap-1 items-center">
-            <div className="text-left text-ellipsis text-nowrap overflow-hidden w-[140px]">
-                {treeNode.icon && treeNode.icon.icon} {treeNode.name}
+        const name = <div className="flex flex-row gap-1 items-center group w-full overflow-hidden text-ellipsis relative">
+            <div className="text-left text-ellipsis text-nowrap overflow-hidden flex-1 min-w-0 flex items-center w-full">
+                {treeNode.icon && <span className="text-sm">{treeNode.icon.icon}</span>}
+                <span className="text-sm">{treeNode.name}</span>
             </div>
-            <div className=" absolute right-1">
-                {treeNode.isDraft && <Badge className="py-0 px-2"  >Draft</Badge>}
-                <Button size="sm" className="h-5" variant="ghost" onClick={(e) => {
-                    e.stopPropagation()
-                    handleCreatePage(treeNode.id)
-                }}>
+            <div className="absolute right-0 left-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-50 bg-muted">
+                {treeNode.isDraft && <Badge variant="outline" className="py-0 px-1.5 text-xs h-5">Draft</Badge>}
+                <Button
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    variant="ghost"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        handleCreatePage(treeNode.id)
+                    }}
+                    title="Add subpage"
+                >
                     <Plus className="h-3 w-3" />
                 </Button>
                 <DropdownMenu>
-                    <DropdownMenuTrigger>
-                        <Button size="sm" className="h-5" variant="ghost" onClick={(e) => {
-                            e.stopPropagation()
-                            e.preventDefault()
-                        }}><MoreHorizontal className="h-3 w-3" /></Button>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            variant="ghost"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                e.preventDefault()
+                            }}
+                        >
+                            <MoreHorizontal className="h-3 w-3" />
+                        </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent side="right" align="start" className="w-[200px]">
-                        <DropdownMenuItem className="flex flex-row gap-1">
-                            <Star className="h-4 w-4" /> Add to favorite
+                    <DropdownMenuContent side="right" align="start" className="w-[220px]">
+                        <DropdownMenuItem className="flex flex-row gap-2">
+                            <Star className="h-4 w-4" /> Add to favorites
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem className="flex flex-row gap-1">
+                        <DropdownMenuItem className="flex flex-row gap-2">
                             <Copy className="h-4 w-4" />Duplicate
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="flex flex-row gap-1">
-                            <ArrowLeft className="h-4 w-4" /> Move
+                        <DropdownMenuItem className="flex flex-row gap-2">
+                            <ArrowLeft className="h-4 w-4" /> Move to
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="flex flex-row gap-1" onClick={() => handleMoveToTrash(treeNode.id)}>
+                        <DropdownMenuItem
+                            className="flex flex-row gap-2 text-red-600 focus:text-red-600"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleMoveToTrash(treeNode.id);
+                            }}
+                        >
                             <Trash2 className="h-4 w-4" /> Move to trash
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuLabel>
-                            <div className=" text-gray-500 text-xs flex flex-col gap-1">
-                                <div className="flex flex-row gap-1 items-center"> <Clock className="w-3 h-3" />Last update by Leong</div>
-                                <div className="flex flex-row gap-1 items-center"> <UserCircle className="w-3 h-3" />2024年8月19日</div>
+                            <div className="text-gray-500 text-xs flex flex-col gap-1.5 font-normal">
+                                <div className="flex flex-row gap-1.5 items-center">
+                                    <Clock className="w-3 h-3" />
+                                    <span>Last updated by Leong</span>
+                                </div>
+                                <div className="flex flex-row gap-1.5 items-center">
+                                    <UserCircle className="w-3 h-3" />
+                                    <span>2024年8月19日</span>
+                                </div>
                             </div>
                         </DropdownMenuLabel>
                     </DropdownMenuContent>
@@ -227,6 +285,7 @@ export const SpaceDetail: React.FC = () => {
 
         if (!treeNode.children) {
             return {
+                icon: null,
                 name: name,
                 key: treeNode.id,
                 id: treeNode.id,
@@ -244,6 +303,7 @@ export const SpaceDetail: React.FC = () => {
             }
         } else {
             return {
+                icon: null,
                 name: name,
                 key: treeNode.id,
                 id: treeNode.id,
@@ -255,63 +315,76 @@ export const SpaceDetail: React.FC = () => {
                 }
             }
         }
-    }
+    }, [params.id, navigator, handleCreatePage, handleMoveToTrash])
 
-    const elements: SiderMenuItemProps[] = space ? [
+    const elements: SiderMenuItemProps[] = useMemo(() => space ? [
         {
             name: space.name,
             key: '/space/:id/overView',
             icon: space?.icon?.icon || '',
             id: '/space/:id/overView',
-            className: 'h-10 gap-3 px-2 bg-muted/10',
+            className: 'px-0 mb-2',
             customerRender:
-                <div className="flex flex-row gap-1 items-center justify-between">
-                    <div className=" p-2 mt-1 border rounded-sm flex-1 flex justify-between items-center">
-                        <div className="flex items-center gap-1 cursor-pointer" onClick={() => {
+                <div className="flex flex-col gap-2 p-3 border-b">
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => {
                             navigator.go({
                                 to: `/space-detail/${params.id}/page/${space.homePageId}`
                             })
                         }}>
-                            <div>{space?.icon?.icon}</div>
-                            {space.name}
+                            <div className="text-2xl flex-shrink-0">{space?.icon?.icon}</div>
+                            <div className="flex flex-col min-w-0 flex-1">
+                                <h2 className="font-semibold text-base truncate">{space.name}</h2>
+                                <p className="text-xs text-muted-foreground truncate">Personal Space</p>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                            <IconButton icon={<StarIcon className="h-4 w-4"  />} onClick={handleFavorite} />
-                        </div>
+                        <IconButton icon={<StarIcon className="h-4 w-4" />} onClick={handleFavorite} />
+                    </div>
+                    <div className="relative">
+                        <Input
+                            placeholder="Search pages..."
+                            className="h-9 pl-3 pr-8"
+                            onFocus={toggle}
+                        />
                     </div>
                 </div>
         },
         {
-            name: 'customerRender',
-            key: 'customerRender',
-            id: 'customerRender',
-            icon: '',
-            customerRender: <div className="px-1 mt-2 mb-2">
-                <Input placeholder="search" onFocus={toggle} />
-            </div>
-        },
-        {
-            name: 'Favorite',
+            name: 'Favorites',
             key: 'favorite',
             id: 'favorite',
-            icon: <Star className="h-4 2-4" />,
+            icon: <Star className="h-4 w-4" />,
             isGroup: true,
+            className: 'mt-2',
             emptyProps: {
-                icon: <FolderOpen />,
-                title: 'No Favorites'
+                icon: <Star className="h-8 w-8 text-muted-foreground/50" />,
+                title: 'No favorites yet',
+                description: 'Star pages to quick access'
             },
             children: favorites.map((it: any, index) => ({
-                name: <div className="flex items-center">
-                    <div className="w-[200px] text-left text-nowrap text-ellipsis overflow-hidden">
+                name: <div className="flex items-center gap-2 pr-8">
+                    <div className="flex-1 text-left text-nowrap text-ellipsis overflow-hidden">
+                        {it.icon?.icon && <span className="mr-1">{it.icon.icon}</span>}
                         {it.title}
                     </div>
-                    <div className=" absolute right-2">
-                        <Trash2 className="h-4 w-4 text-red-500" />
+                    <div className="absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                // Remove from favorites
+                            }}
+                        >
+                            <Trash2 className="h-3 w-3 text-muted-foreground hover:text-red-500" />
+                        </Button>
                     </div>
                 </div>,
                 key: it.id + index,
                 id: it.id + index,
                 icon: null,
+                className: 'group',
                 onClick: () => {
                     navigator.go({
                         to: `/space-detail/${params.id}/page/${it.id}`
@@ -320,40 +393,65 @@ export const SpaceDetail: React.FC = () => {
             }))
         },
         {
-            name: <div className="flex flex-row items-center gap-2">
-                Page
-                <Input onChange={(e) => setSearchValue(e.target.value)} className="h-7" placeholder="Search..." />
-            </div>,
+            name: 'Pages',
             isGroup: true,
             key: 'page',
             id: 'page',
-            height: 300,
-            className: 'h-[300px]',
-            icon: <Package />,
+            className: 'mt-2 flex-1 flex flex-col min-h-0',
+            height: 'calc(100vh - 500px)',
+            icon: <Package className="h-4 w-4" />,
             actions: [
-                <Button className="h-7 w-7 ml-1" variant="ghost" size="icon" key="1" onClick={() => handleCreatePage()}><Plus className="h-3 w-3" /></Button>
+                <div key="search-actions" className="flex items-center gap-1">
+                    <Input
+                        onChange={(e) => setSearchValue(e.target.value)}
+                        className="h-7"
+                        placeholder="Filter..."
+                    />
+                    <Button
+                        className="h-7 w-7"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleCreatePage()}
+                        title="New page"
+                    >
+                        <Plus className="h-4 w-4" />
+                    </Button>
+                </div>
             ],
             emptyProps: {
-                icon: <FolderOpen />,
-                title: 'No Pages',
-                button: <Button size="sm" onClick={() => handleCreatePage()}>create a page</Button>
+                icon: <Package className="h-8 w-8 text-muted-foreground/50" />,
+                title: 'No pages yet',
+                description: 'Create your first page',
+                button: <Button size="sm" onClick={() => handleCreatePage()}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Create Page
+                </Button>
             },
             children: pageTree?.length > 0 ? pageTree.map(it => resolve(it)) as SiderMenuItemProps[] : []
+        },
+        {
+            name: 'Separator',
+            key: 'separator-1',
+            id: 'separator-1',
+            icon: '',
+            customerRender: <div className="border-t my-2"></div>
         },
         {
             name: 'Templates',
             id: '/space/:id/templates',
             icon: <LayoutTemplate className="h-4 w-4" />,
             key: '/space/:id/templates',
+            className: 'hover:bg-muted',
             onClick: () => {
                 setVisible(true)
             }
         },
         {
-            name: 'Space Setting',
+            name: 'Settings',
             id: '/space/:id/settings',
             icon: <Settings className="h-4 w-4" />,
             key: '/space/:id/settings',
+            className: 'hover:bg-muted',
             onClick: () => {
                 navigator.go({
                     to: `/space-detail/${params.id}/settings`
@@ -363,114 +461,158 @@ export const SpaceDetail: React.FC = () => {
         {
             name: 'Trash',
             customerRender: <DropdownMenu>
-                <DropdownMenuTrigger className="flex flex-row gap-2 items-center w-full px-1 py-1 rounded-sm text-sm hover:bg-muted"><Trash2 className="h-4 w-4" /> Trash</DropdownMenuTrigger>
-                <DropdownMenuContent side="right" align="start" className="w-[300px] h-[400px]">
-                    <DropdownMenuLabel><Input className="h-7" placeholder="Search..." /></DropdownMenuLabel>
-                    {trash.length > 0 ? trash.map((item: any, index) => (
-                        <DropdownMenuItem key={index} className="flex flex-row justify-between items-center">
-                            {item.title}
-                            <div>
-                                <Button variant="ghost" size="sm" onClick={() => handleRestorePage(item.id)}><Undo2 className="h-4 w-4" /></Button>
-                                <Button variant="ghost" size="sm"><Trash2 className="h-4 w-4" /></Button>
+                <DropdownMenuTrigger className="flex flex-row gap-2 items-center w-full px-2 py-2 rounded-sm text-sm hover:bg-muted transition-colors">
+                    <Trash2 className="h-4 w-4" />
+                    <span className="flex-1 text-left">Trash</span>
+                    {trash.length > 0 && <Badge variant="secondary" className="h-5 px-1.5 text-xs">{trash.length}</Badge>}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="right" align="start" className="w-[320px] max-h-[400px]">
+                    <DropdownMenuLabel className="pb-2">
+                        <div className="flex items-center justify-between">
+                            <span>Trash</span>
+                            <span className="text-xs text-muted-foreground">{trash.length} items</span>
+                        </div>
+                    </DropdownMenuLabel>
+                    <div className="max-h-[350px] overflow-auto">
+                        {trash.length > 0 ? trash.map((item: any, index) => (
+                            <DropdownMenuItem key={index} className="flex flex-row justify-between items-center gap-2 py-2">
+                                <div className="flex-1 truncate text-sm">
+                                    {item.icon?.icon && <span className="mr-1">{item.icon.icon}</span>}
+                                    {item.title}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 px-2"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRestorePage(item.id);
+                                        }}
+                                        title="Restore"
+                                    >
+                                        <Undo2 className="h-3 w-3" />
+                                    </Button>
+                                </div>
+                            </DropdownMenuItem>
+                        )) : (
+                            <div className="flex flex-col items-center justify-center py-8 text-center">
+                                <Trash2 className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                                <p className="text-sm text-muted-foreground">Trash is empty</p>
                             </div>
-                        </DropdownMenuItem>
-                    )) : <Empty className=" border-0 h-full items-center" />}
+                        )}
+                    </div>
                 </DropdownMenuContent>
             </DropdownMenu>,
             id: '/space/:id/trash',
             icon: <Trash2 className="h-4 w-4" />,
             key: '/space/:id/trash',
-            className: 'text-red-500'
+            className: 'hover:bg-muted'
         }, {
             name: "Save as Template",
             id: "",
             key: "",
             icon: <></>,
-            customerRender: <TemplateCreator space={space} className="flex flex-row gap-2 items-center w-full px-1 py-1 rounded-sm text-sm hover:bg-muted">
+            customerRender: <TemplateCreator space={space} className="flex flex-row gap-2 items-center w-full px-2 py-2 rounded-sm text-sm hover:bg-muted transition-colors">
                 <CircleArrowUp className="h-4 w-4" />
                 <div>Save as Template</div>
             </TemplateCreator>
         }
-    ] : []
+    ] : [], [space, favorites, pageTree, trash, params.id, navigator, toggle, handleFavorite, handleCreatePage, handleRestorePage, resolve])
 
-    return space && <div className="grid grid-cols-[280px_1fr] h-full w-full bg-muted/40 ">
-        <div className="h-full w-full border-r border-solid overflow-auto">
+    // Sidebar content component for reuse
+    const SidebarContent = useMemo(() => (
+        <>
+            {error && (
+                <Alert variant="destructive" className="m-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                </Alert>
+            )}
             <TreeView
                 initialSelectedId={params.pageId}
                 loading={loading}
                 size="sm"
                 selectParent={true}
-                className="w-full h-full"
-                elements={elements} />
-        </div>
-        <div className="w-full h-screen">
-            <Outlet />
-        </div>
-        <Sheet
-            open={visible}
-            onOpenChange={(value) => {
-                setVisible(value)
-            }}
-        >
-            <SheetContent className="w-[1000px] sm:max-w-none">
-                <SheetTitle className="flex flex-row items-center gap-1">
-                    选择一个模板
-                </SheetTitle>
-                <div className="flex flex-col gap-4 mt-4">
-                    <div className=" font-bold">个人模板</div>
-                    <div className="flex flex-row items-center gap-2">
-                        <Input className="w-[200px] h-8" placeholder="搜索模板..." />
-                        <MultiSelect
-                            placeholder="模板类型"
-                            className="h-7 w-[150px]"
-                            options={[]}
-                            defaultValue={[]}
-                            onValueChange={(value) => { }}
-                        />
+                className="w-full flex-1 flex flex-col"
+                elements={elements}
+                onTreeSelected={() => {
+                    if (isMobile) {
+                        setSidebarOpen(false)
+                    }
+                }}
+            />
+        </>
+    ), [error, params.pageId, loading, elements, isMobile])
+
+    return space && (
+        <div className={cn(
+            "h-screen w-full bg-muted/40",
+            isMobile ? "flex flex-col" : "grid grid-cols-[280px_1fr]"
+        )}>
+            {/* Mobile Header */}
+            {isMobile && (
+                <div className="flex items-center justify-between px-4 h-12 border-b bg-background sticky top-0 z-40">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="text-lg">{space?.icon?.icon}</span>
+                        <span className="font-medium truncate">{space.name}</span>
                     </div>
-                    <div className="grid grid-cols-4 gap-4">
-                        {
-                            yourTemplates.map((item: any, index) => (
-                                <div className="flex flex-col gap-1">
-                                    <Card key={index} className="border hover:bg-muted h-[200px]" style={{
-                                        backgroundImage: `url('${usePath(item.cover)}&cache=true')`,
-                                        backgroundSize: 'cover'
-                                    }} >
-                                    </Card>
-                                    <div className="flex flex-row justify-between items-center text-sm text-gray-500 italic ">
-                                        <div className=" w-[100px] overflow-hidden text-ellipsis text-nowrap">{item.title}</div>
-                                        <a href="#" className="flex flex-row gap-1 items-center underline"><UserCircle className="h-4 w-4" />Author Leong</a>
-                                    </div>
-                                    <div>
-                                        <Button size="sm" onClick={() => handleCreateByTemplate(item.id)}>使用此模板</Button>
-                                    </div>
-                                </div>
-                            ))
-                        }
-                    </div>
+                    <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+                        <SheetTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                                <Menu className="h-5 w-5" />
+                            </Button>
+                        </SheetTrigger>
+                        <SheetContent side="left" className="w-[280px] p-0">
+                            <SheetTitle className="sr-only">Navigation</SheetTitle>
+                            <div className="h-full flex flex-col overflow-hidden">
+                                {SidebarContent}
+                            </div>
+                        </SheetContent>
+                    </Sheet>
                 </div>
-            </SheetContent>
-        </Sheet>
-        <CommandDialog open={open} onOpenChange={() => { toggle() }}>
-            <CommandInput />
-            <CommandList>
-                <CommandEmpty />
-                <CommandGroup heading="Page">
-                    <CommandItem onSelect={() => {
-                        handleCreatePage(params.pageId || "0")
-                        toggle()
-                    }}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        <span>Create Page</span>
-                    </CommandItem>
-                </CommandGroup>
-                <CommandGroup heading="Space">
-                    <CommandItem onSelect={handleGoToPersonalSpace}>
-                        <LayoutDashboard className="mr-2 h-4 w-4" />
-                        <span>Personal Space</span>
-                    </CommandItem>
-                </CommandGroup>
-            </CommandList>
-        </CommandDialog>
-    </div>
+            )}
+
+            {/* Desktop Sidebar */}
+            {!isMobile && (
+                <div className="h-screen w-full border-r border-solid flex flex-col overflow-x-hidden overflow-y-auto scrollbar-auto-hide">
+                    {SidebarContent}
+                </div>
+            )}
+
+            {/* Main Content */}
+            <div className={cn(
+                "w-full overflow-hidden",
+                isMobile ? "flex-1" : "h-full"
+            )}>
+                <Outlet />
+            </div>
+            <TemplateSelector
+                open={visible}
+                onOpenChange={setVisible}
+                onCreateFromTemplate={handleCreateByTemplate}
+            />
+            <CommandDialog open={open} onOpenChange={() => { toggle() }}>
+                <CommandInput />
+                <CommandList>
+                    <CommandEmpty />
+                    <CommandGroup heading="Page">
+                        <CommandItem onSelect={() => {
+                            handleCreatePage(params.pageId || "0")
+                            toggle()
+                        }}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            <span>Create Page</span>
+                        </CommandItem>
+                    </CommandGroup>
+                    <CommandGroup heading="Space">
+                        <CommandItem onSelect={handleGoToPersonalSpace}>
+                            <LayoutDashboard className="mr-2 h-4 w-4" />
+                            <span>Personal Space</span>
+                        </CommandItem>
+                    </CommandGroup>
+                </CommandList>
+            </CommandDialog>
+        </div>
+    )
 }

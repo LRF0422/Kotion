@@ -37,3 +37,130 @@
   border-radius: 3px;
   box-shadow: 0 0 0 1px #0C66E4;
 }
+
+/* Selection styles */
+.selected-node {
+  outline: 2px solid rgba(12, 102, 228, 0.4);
+  outline-offset: 1px;
+  border-radius: 4px;
+  transition: outline 0.15s ease-in-out;
+}
+
+.selected-node:hover {
+  outline-color: rgba(12, 102, 228, 0.6);
+}
+
+/* Dark mode selection styles */
+.dark .selected-node {
+  outline-color: rgba(59, 130, 246, 0.5);
+}
+
+.dark .selected-node:hover {
+  outline-color: rgba(59, 130, 246, 0.7);
+}
+
+/* Theme-adaptive table cell background colors */
+.theme-adaptive-cell {
+  /* Default to light mode color */
+  background-color: var(--bg-color-light) !important;
+}
+
+/* Switch to dark mode color when dark theme is active */
+.dark .theme-adaptive-cell {
+  background-color: var(--bg-color-dark) !important;
+}
+
+/* TOC highlight flash animation */
+@keyframes toc-flash {
+  0% {
+    background-color: hsl(var(--primary) / 0.3);
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+.toc-highlight-flash {
+  animation: toc-flash 1s ease-out;
+  border-radius: 4px;
+}
+
+/* Give a remote user a caret */
+.collaboration-carets__caret {
+  border-left: 1px solid #0d0d0d;
+  border-right: 1px solid #0d0d0d;
+  margin-left: -1px;
+  margin-right: -1px;
+  pointer-events: none;
+  position: relative;
+  word-break: normal;
+}
+
+/* Render the username above the caret */
+.collaboration-carets__label {
+  border-radius: 3px 3px 3px 0;
+  color: #0d0d0d;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+  left: -1px;
+  line-height: normal;
+  padding: 0.1rem 0.3rem;
+  position: absolute;
+  top: -1.4em;
+  user-select: none;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Avatar image in collaboration cursor label */
+.collaboration-carets__avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+/* Name text in collaboration cursor label */
+.collaboration-carets__name {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Collaboration selection styles */
+.ProseMirror .collaboration-cursor__selection {
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Collaboration node selection styles */
+.ProseMirror .collaboration-cursor__node-selection {
+  position: relative;
+  outline: 2px solid var(--collaboration-cursor-color, #f783ac);
+  outline-offset: 2px;
+  border-radius: 4px;
+  transition: outline-color 0.15s ease-in-out;
+  pointer-events: none;
+}
+
+.ProseMirror .collaboration-cursor__node-selection::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background-color: var(--collaboration-cursor-color, #f783ac);
+  opacity: 0.08;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* Fallback for node selection when node decoration fails */
+.ProseMirror .collaboration-cursor__node-selection-fallback {
+  border-radius: 2px;
+  pointer-events: none;
+}

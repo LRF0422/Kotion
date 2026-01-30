@@ -1,10 +1,9 @@
 import { useNavigator } from "../hooks/use-navigator";
-import { Blocks, Inbox, LayoutDashboard, MessageCircleCodeIcon, Power, Settings, UserRoundPlus } from "@kn/icon";
-import React, { useContext, useEffect, useMemo, useState } from "react";
-import { Empty } from "@kn/ui";
+import { Blocks, LayoutDashboard, Power, Settings, UserRoundPlus } from "@kn/icon";
+import React, { useContext, useEffect, useMemo, useState, useCallback, memo } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile } from "@kn/ui";
 import { useLocation } from "react-router-dom";
 import { cn } from "@kn/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { useSelector } from "@kn/common";
 import { GlobalState } from "../store/GlobalState";
 import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
@@ -17,11 +16,73 @@ import { AppContext, SiderMenuItemProps } from "@kn/common";
 import { event } from "@kn/common";
 import { useUploadFile } from "../hooks";
 import { LanguageToggle } from "../locales/LanguageToggle";
+import { MessageBox } from "./MessageBox";
+
+// Memoized menu item component for better performance
+interface MenuItemProps {
+    item: SiderMenuItemProps;
+    isActive: boolean;
+    onClick: () => void;
+    isMobile?: boolean;
+}
+
+const MenuItem = memo<MenuItemProps>(({ item, isActive, onClick, isMobile }) => {
+    // Mobile layout with text labels
+    if (isMobile) {
+        return (
+            <button
+                onClick={onClick}
+                className={cn(
+                    "w-full rounded-lg flex items-center gap-3 px-4 py-3 cursor-pointer",
+                    "hover:bg-muted transition-all duration-200 ease-in-out",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "active:scale-[0.98]",
+                    isActive && "bg-muted shadow-sm",
+                    item.className
+                )}
+                aria-label={typeof item.name === 'string' ? item.name : item.key}
+                aria-current={isActive ? 'page' : undefined}
+            >
+                <span className="flex-shrink-0">{item.icon}</span>
+                <span className="text-sm font-medium">{item.name}</span>
+            </button>
+        );
+    }
+
+    // Desktop layout with tooltip
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <button
+                    onClick={onClick}
+                    className={cn(
+                        "rounded-md flex items-center justify-center p-2 cursor-pointer",
+                        "hover:bg-muted transition-all duration-200 ease-in-out",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        "active:scale-95",
+                        isActive && "bg-muted shadow-sm",
+                        item.className
+                    )}
+                    aria-label={typeof item.name === 'string' ? item.name : item.key}
+                    aria-current={isActive ? 'page' : undefined}
+                >
+                    {item.icon}
+                </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="font-medium">
+                {item.name}
+            </TooltipContent>
+        </Tooltip>
+    );
+});
+
+MenuItem.displayName = 'MenuItem';
 
 
 
-export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size = 'default' }) => {
+export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick?: () => void }> = ({ size = 'default', onItemClick }) => {
 
+    const isMobile = useIsMobile()
     const navigator = useNavigator()
     const location = useLocation()
     const { userInfo } = useSelector((state: GlobalState) => state)
@@ -29,63 +90,47 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
     const [flag, setFlag] = useState(0)
     const { usePath } = useUploadFile()
 
-    const handleLogout = () => {
+    // Memoized handlers for better performance
+    const handleLogout = useCallback(() => {
         localStorage.removeItem("knowledge-token")
-        navigator.go({
-            to: '/login'
-        })
-    }
+        window.location.href = '/login'
+    }, [])
 
-    const handleGoToPersonalSpace = () => {
+    const handleGoToPersonalSpace = useCallback(() => {
+        // TODO: Implement personal space navigation
         // useApi(APIS.PERSONAL_SPACE).then((res) => {
         //     navigator.go({
         //         to: `/space-detail/${res.data.id}`
         //     })
         // })
-    }
+    }, []);
 
+    // Handle plugin refresh events
     useEffect(() => {
-        event.on("REFRESH_PLUSINS", () => {
-            setFlag(f => f + 1)
-        })
+        const handleRefresh = () => setFlag(f => f + 1);
+        event.on("REFRESH_PLUSINS", handleRefresh);
         return () => {
-            event.off("REFRESH_PLUSINS")
+            event.off("REFRESH_PLUSINS", handleRefresh);
         }
     }, [])
 
 
+    // Memoized menus construction
     const menus: SiderMenuItemProps[] = useMemo(() => {
+        const pluginMenus = pluginManager?.resloveMenus() || [];
+
         return [
-            ...pluginManager?.resloveMenus() as SiderMenuItemProps[],
+            ...pluginMenus as SiderMenuItemProps[],
             {
                 name: 'Shop',
-                icon: <Blocks className="h-5 w-5" id="welcome-title"  />,
+                icon: <Blocks className="h-5 w-5" id="welcome-title" />,
                 key: '/plugin-hub',
                 attachTabs: true,
                 id: '/plugin-hub',
             },
             {
                 name: 'Message',
-                icon: <Popover>
-                    <PopoverTrigger><Inbox className="h-5 w-5"  id="message-box"/></PopoverTrigger>
-                    <PopoverContent side="right" align="start" className="p-1 w-[250px] h-max-[400px]" sideOffset={10}>
-                        <div className="flex flex-row gap-1 items-center font-bold p-2">
-                            <MessageCircleCodeIcon className="h-5 w-5" />
-                            消息盒子
-                        </div>
-                        <Separator />
-                        <div className="flex flex-col gap-2 text-sm p-2">
-                            <div>
-                                <div>系统消息</div>
-                                <Empty className="border-none text-gray-500" title="没有系统消息" />
-                            </div>
-                            <div>
-                                <div>协作邀请</div>
-                                <Empty className="border-none text-gray-500" title="都看完啦！" desc="你将在这里收到页面协作邀请" />
-                            </div>
-                        </div>
-                    </PopoverContent>
-                </Popover>,
+                icon: <MessageBox />,
                 key: '/message',
                 attachTabs: true,
                 id: '/message',
@@ -94,7 +139,9 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
             {
                 name: 'Setting',
                 icon: <SettingDlg>
-                    <Settings className="h-5 w-5" />
+                    <button className="flex items-center justify-center" aria-label="Settings">
+                        <Settings className="h-5 w-5" />
+                    </button>
                 </SettingDlg>,
                 key: '/setting',
                 attachTabs: true,
@@ -105,67 +152,124 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
             {
                 name: 'UserInfo',
                 icon: <DropdownMenu>
-                    <DropdownMenuTrigger>
-                        <Avatar className="h-9 w-9 border">
-                            <AvatarImage src={usePath(userInfo?.avatar as string)} />
-                            <AvatarFallback>{userInfo?.account}</AvatarFallback>
-                        </Avatar>
+                    <DropdownMenuTrigger asChild>
+                        <button
+                            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            aria-label="User menu"
+                        >
+                            <Avatar className="h-9 w-9 border-2 hover:border-primary transition-colors">
+                                <AvatarImage src={usePath(userInfo?.avatar as string)} />
+                                <AvatarFallback className="text-xs font-medium">{userInfo?.account?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                        </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent side="right" align="start" className="w-[200px]">
-                        <DropdownMenuLabel className="text-gray-500 italic flex flex-col items-center">
-                            <div className="flex flex-row gap-1 items-center justify-between w-full">
-                                <div >
-                                    <div className=" font-bold flex gap-2 items-center">
-                                        {userInfo?.name} <Badge className="h-4">Free</Badge>
+                    <DropdownMenuContent side="right" align="start" className="w-[220px]" sideOffset={8}>
+                        <DropdownMenuLabel className="p-3">
+                            <div className="flex flex-row gap-3 items-start justify-between">
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-bold flex gap-2 items-center text-sm">
+                                        <span className="truncate">{userInfo?.name}</span>
+                                        <Badge variant="secondary" className="h-4 text-xs px-1.5">Free</Badge>
                                     </div>
-                                    <div>
+                                    <div className="text-xs text-muted-foreground mt-0.5 truncate">
                                         {userInfo?.account}
                                     </div>
                                 </div>
-                                <Avatar className="h-9 w-9">
+                                <Avatar className="h-10 w-10 flex-shrink-0">
                                     <AvatarImage src={usePath(userInfo?.avatar as string)} />
-                                    <AvatarFallback>{userInfo?.account}</AvatarFallback>
+                                    <AvatarFallback className="text-xs">{userInfo?.account?.slice(0, 2).toUpperCase()}</AvatarFallback>
                                 </Avatar>
                             </div>
-                            <div className="text-xs w-full">
+                            <div className="text-[11px] text-muted-foreground mt-2">
                                 上次登录时间 2024年9月14日
                             </div>
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem className="flex flex-row items-center gap-1" onClick={handleGoToPersonalSpace}><LayoutDashboard className="h-4 w-4" />个人空间</DropdownMenuItem>
-                        <DropdownMenuItem className="flex flex-row items-center gap-1"><UserRoundPlus className="h-4 w-4" />邀请协作者</DropdownMenuItem>
-                        <DropdownMenuItem className="flex flex-row items-center gap-1"><Settings className="h-4 w-4" />设置</DropdownMenuItem>
+                        <DropdownMenuItem
+                            className="flex flex-row items-center gap-2 cursor-pointer"
+                            onClick={handleGoToPersonalSpace}
+                        >
+                            <LayoutDashboard className="h-4 w-4" />
+                            <span>个人空间</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="flex flex-row items-center gap-2 cursor-pointer">
+                            <UserRoundPlus className="h-4 w-4" />
+                            <span>邀请协作者</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="flex flex-row items-center gap-2 cursor-pointer">
+                            <Settings className="h-4 w-4" />
+                            <span>设置</span>
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem className="flex flex-row items-center gap-1" onClick={handleLogout}> <Power className="h-4 w-4" />注销账号</DropdownMenuItem>
+                        <DropdownMenuItem
+                            className="flex flex-row items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
+                            onClick={handleLogout}
+                        >
+                            <Power className="h-4 w-4" />
+                            <span>注销账号</span>
+                        </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>,
-                key: '/setting',
-                attachTabs: true,
-                id: '/setting',
+                key: '/user-info',
+                attachTabs: false,
+                id: '/user-info',
                 isGroup: true,
-                onClick: () => {
-                }
+                onClick: () => { }
             }
         ]
-    }, [pluginManager?.plugins, flag])
+    }, [pluginManager?.plugins, flag, userInfo, usePath, handleLogout, handleGoToPersonalSpace])
 
-    return <div className="flex flex-col items-center gap-4">
-        {
-            menus.map((it, index) => (
-                <div key={index} onClick={() => {
-                    if (it.onClick) {
-                        it.onClick(it)
-                    } else {
-                        navigator.go({
-                            to: it.id
-                        })
-                    }
-                }} className={cn("rounded-sm flex items-center justify-center p-2 cursor-pointer hover:bg-muted transition-all duration-300", location.pathname === it.id ? " bg-muted" : "", it.className)}>
-                    {it.icon}
-                </div>
-            ))
+    // Memoized click handler
+    const handleMenuClick = useCallback((item: SiderMenuItemProps) => {
+        if (item.onClick) {
+            item.onClick(item);
+        } else if (item.id && !item.isGroup) {
+            navigator.go({ to: item.id });
         }
-        <ModeToggle />
-        <LanguageToggle />
-    </div>
+        // Call onItemClick callback if provided (for mobile drawer close)
+        onItemClick?.();
+    }, [navigator, onItemClick]);
+
+    return (
+        <TooltipProvider delayDuration={300}>
+            <nav
+                className={cn(
+                    "flex flex-col gap-3 py-2",
+                    isMobile ? "items-stretch px-2" : "items-center"
+                )}
+                aria-label="Main navigation"
+            >
+                {/* Main menu items */}
+                <div className={cn(
+                    "flex flex-col gap-2",
+                    isMobile ? "items-stretch" : "items-center"
+                )}>
+                    {menus.map((item, index) => {
+                        const isActive = location.pathname === item.id || location.pathname.startsWith(item.id + '/');
+                        return (
+                            <MenuItem
+                                key={item.key || index}
+                                item={item}
+                                isActive={isActive}
+                                onClick={() => handleMenuClick(item)}
+                                isMobile={isMobile}
+                            />
+                        );
+                    })}
+                </div>
+
+                {/* Utility controls separator */}
+                <Separator className={isMobile ? "my-2" : "w-8 my-1"} />
+
+                {/* Utility controls */}
+                <div className={cn(
+                    "flex gap-2",
+                    isMobile ? "flex-row justify-center" : "flex-col items-center"
+                )}>
+                    <ModeToggle />
+                    <LanguageToggle />
+                </div>
+            </nav>
+        </TooltipProvider>
+    );
 }

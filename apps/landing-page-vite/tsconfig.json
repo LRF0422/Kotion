@@ -17,9 +17,9 @@
     "isolatedModules": true,
     "noEmitOnError": false,
     "noEmit": true,
-    "jsx": "react",
+    "jsx": "react-jsx",
     /* Linting */
-    "strict": false,
+    "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true

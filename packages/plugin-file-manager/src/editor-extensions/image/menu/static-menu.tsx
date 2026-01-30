@@ -5,24 +5,26 @@ import { useActive } from "@kn/editor";
 import { Image as ImageExtension } from "../image";
 import { Toggle } from "@kn/ui";
 import { Image } from "@kn/icon";
-import { useUploadFile } from "@kn/core";
+import { showFolderDlg } from "../../utils/showFolderDlg";
 
 export const ImageStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const isCodeActive = useActive(editor, ImageExtension.name);
 
-  const { upload } = useUploadFile()
-
   const setImage = useCallback(() => {
-    upload().then(res => {
-      editor
-        .chain()
-        .focus()
-        .setImage({
-          ...res,
-          src: res.name
-        })
-        .run();
-    })
+    showFolderDlg(editor, (files) => {
+      if (files && files.length > 0) {
+        const file = files[0];
+        // Use file path if available, otherwise use id
+        const src = file.path || file.id;
+        editor
+          .chain()
+          .focus()
+          .setImage({
+            src: src
+          })
+          .run();
+      }
+    });
   }, [editor]);
 
   return (

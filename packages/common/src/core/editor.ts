@@ -22,9 +22,11 @@ export interface ExtensionWrapper {
         render?: ElementType
     } | { divider: true; title: string })[],
     flotMenuConfig?: ElementType[],
+    floatingUI?: ElementType,  // Floating UI component (e.g., chat widget)
     tools?: {
+        name: string,
         description: string,
-        inputSechem: any,
-        execute: (params: any) => any
+        inputSchema: any,
+        execute: (editor: Editor) => (params: any) => any
     }[]
 }

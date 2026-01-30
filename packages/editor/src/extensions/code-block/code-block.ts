@@ -12,6 +12,7 @@ interface CodeBlockLowlightOptions extends CodeBlockOptions {
   lowlight: any;
   defaultLanguage: string | null | undefined;
   maxTextLength?: number;
+  showLineNumbers?: boolean;
 }
 
 const lowlight = createLowlight(all)
@@ -26,7 +27,8 @@ export const CodeBlock = BuiltInCodeBlock.extend<CodeBlockLowlightOptions>({
       ...this.parent?.(),
       lowlight: {},
       defaultLanguage: null,
-      maxTextLength: 200
+      maxTextLength: 10000,
+      showLineNumbers: false
     };
   },
 
@@ -41,7 +43,7 @@ export const CodeBlock = BuiltInCodeBlock.extend<CodeBlockLowlightOptions>({
         name: this.name,
         lowlight: this.options.lowlight,
         defaultLanguage: this.options.defaultLanguage,
-        maxTextLength: this.options.maxTextLength || 200,
+        maxTextLength: this.options.maxTextLength || 10000,
       })
     ];
   },

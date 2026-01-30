@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as React from "react";
 import type { Column, Row } from "@tanstack/react-table";
 

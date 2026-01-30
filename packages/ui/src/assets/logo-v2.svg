@@ -1,0 +1,23 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background with subtle gradient -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  
+  <!-- Stylized K - modern geometric -->
+  <path d="M152 136C152 131.582 155.582 128 160 128H184C188.418 128 192 131.582 192 136V228L276 136C279.2 132.4 283.2 128 289 128H320C327 128 330 136 325 141L232 244L332 371C337 378 332 384 325 384H290C284 384 280 381 277 377L192 272V376C192 380.418 188.418 384 184 384H160C155.582 384 152 380.418 152 376V136Z" fill="white"/>
+  
+  <!-- Stylized N - modern geometric -->
+  <path d="M340 136C340 131.582 343.582 128 348 128H370C374.5 128 378 130.5 380 134L444 304V136C444 131.582 447.582 128 452 128H476C480.418 128 484 131.582 484 136V376C484 380.418 480.418 384 476 384H454C449.5 384 446 381.5 444 378L380 208V376C380 380.418 376.418 384 372 384H348C343.582 384 340 380.418 340 376V136Z" fill="white"/>
+  
+  <!-- Accent glow -->
+  <circle cx="420" cy="100" r="24" fill="white" fill-opacity="0.15"/>
+  <circle cx="100" cy="412" r="32" fill="white" fill-opacity="0.1"/>
+  
+  <!-- Gradient -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3B82F6"/>
+      <stop offset="0.5" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+</svg>

@@ -5,6 +5,7 @@ import { ThemeProvider, Toaster } from "@kn/ui";
 import store from './store'
 import { Login } from "./components/Login";
 import { SignUpForm } from "./components/SignUp";
+import { Welcome } from "./components/Welcome";
 import * as ui from "@kn/ui"
 import * as common from "@kn/common"
 import * as core from "./index"
@@ -14,7 +15,7 @@ import { useAsyncEffect, useSafeState } from "ahooks";
 import { Shop } from "./components/Shop";
 import { PluginDetail } from "./components/Shop/PluginDetail";
 import { Marketplace } from "./components/Shop/Marketplace";
-import { APIS } from "./api";
+
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
 import { ErrorPage } from "./components/ErrorPage";
@@ -22,31 +23,6 @@ import { ErrorPage } from "./components/ErrorPage";
 const { createBrowserRouter,
     createRoutesFromElements, Route, RouterProvider, Provider,
     AppContext, i18n, initReactI18next, LanguageDetector, event } = common;
-
-
-declare global {
-    interface Window {
-        ui: any,
-        common: any,
-        core: any,
-        icon: any,
-        editor: any
-    }
-}
-
-window.React = React
-window.ui = ui
-window.common = common
-window.core = core
-window.icon = icon
-window.editor = editor
-
-
-export type Plugins = common.KPlugin<any>[]
-
-export interface AppProps {
-    plugins?: Plugins,
-}
 
 const reslove = (config: common.RouteConfig) => {
     if (config.children) {
@@ -61,100 +37,86 @@ const reslove = (config: common.RouteConfig) => {
 }
 
 
+
+window.ui = ui
+window.common = common
+window.core = core
+window.icon = icon
+window.editor = editor
+window.React = React
+
+
+export type Plugins = common.KPlugin<any>[]
+
+export interface AppProps {
+    plugins?: Plugins,
+}
+
+
 export const App: React.FC<AppProps> = (props) => {
     const { plugins = [] } = props
     const [router, setRouter] = useSafeState<any>()
     const { usePath } = core.useUploadFile()
     const pluginManager = useMemo(() => new common.PluginManager(usePath, plugins), [])
-    const [inited, setInited] = useSafeState(false)
+    const [pluginsReady, setPluginsReady] = useState(false)
     const [refreshFlag, setRefreshFlag] = useState(0)
 
+    // Listen for plugin refresh events to update routes
     useEffect(() => {
-        event.on("REFRESH_PLUSINS", () => {
-            setRefreshFlag(f => f + 1)
-        })
+        const handleRefresh = () => {
+            console.log('Received REFRESH_PLUSINS event, updating router');
+            setRefreshFlag(prev => prev + 1);
+        };
+
+        event.on("REFRESH_PLUSINS", handleRefresh);
+
         return () => {
-            event.off("REFRESH_PLUSINS")
+            event.off("REFRESH_PLUSINS", handleRefresh);
+        };
+    }, []);
+
+    // Initialize i18n immediately without plugin locales
+    useEffect(() => {
+        if (!i18n.isInitialized) {
+            i18n.use(initReactI18next)
+                .use(LanguageDetector)
+                .init({
+                    detection: {
+                        lookupLocalStorage: 'language',
+                    },
+                    resources: resources,
+                    fallbackLng: "en",
+                    debug: false,
+                    supportedLngs: common.supportedLngs,
+                    interpolation: {
+                        escapeValue: false,
+                    }
+                })
         }
     }, [])
 
-    useAsyncEffect(async () => {
-        if (!inited) {
-            try {
-                if (!!localStorage.getItem("knowledge-token")) {
-                    const installedPlugins: any[] = (await core.useApi(APIS.GET_INSTALLED_PLUGINS)).data
-                    pluginManager.init(installedPlugins).then(() => {
-                        setInited(true)
-                    })
-                } else {
-                    pluginManager.init([])
-                    setRouter(createBrowserRouter(createRoutesFromElements(
-                        [
-                            <Route path='/' element={<Layout />} errorElement={<ErrorPage />}>
-                            </Route>,
-                            <Route path='/login' element={<Login />} />,
-                            <Route path='/sign-up' element={<SignUpForm />} />
-                        ]
-                    )))
-                    setInited(false)
-                    if (window.location.href.includes("login")) {
-                        return
-                    }
-                    window.location.href = '/login'
-                }
-            } catch (error) {
-                pluginManager.init([])
-                setRouter(createBrowserRouter(createRoutesFromElements(
-                    [
-                        <Route path='/' element={<Layout />} errorElement={<Login />}>
-                            <Route path="/plugin-hub" element={<Shop />}>
-                                <Route path="/plugin-hub" element={<Marketplace />} />
-                                <Route path="/plugin-hub/:id" element={<PluginDetail />} />
-                            </Route>
-                        </Route>,
-                        <Route path='/login' element={<Login />} />,
-                        <Route path='/sign-up' element={<SignUpForm />} />
-                    ]
-                )))
-                setInited(false)
-                if (window.location.href.includes("login")) {
-                    return
-                }
-                window.location.href = '/login'
-            }
-        }
+    // DON'T create initial router - wait for plugins to load first
+    // This prevents route matching failures when refreshing on plugin routes
 
-    }, [refreshFlag])
-
+    // Create/Update router when plugins are loaded
     useEffect(() => {
-        if (inited) {
+        console.log('Router useEffect triggered. pluginsReady:', pluginsReady, 'refreshFlag:', refreshFlag);
+
+        if (pluginsReady && pluginManager) {
             const pluginLocales = pluginManager.resloveLocales()
             const res = merge(resources, pluginLocales)
             if (i18n.isInitialized) {
                 Object.keys(res).forEach(it => {
                     i18n.addResourceBundle(it, "translation", res[it], true, true)
                 })
-            } else {
-                i18n.use(initReactI18next)
-                    .use(LanguageDetector)
-                    .init({
-                        detection: {
-                            lookupLocalStorage: 'language',
-                        },
-                        resources: res,
-                        fallbackLng: "en",
-                        debug: false,
-                        supportedLngs: common.supportedLngs,
-                        interpolation: {
-                            escapeValue: false,
-                        }
-                    })
             }
+
             const routeConfigs = pluginManager.resloveRoutes()
             const routes = routeConfigs.map(it => reslove(it))
-            setRouter(createBrowserRouter(createRoutesFromElements(
+            console.log('Creating router with', routes.length, 'plugin routes')
+            const updatedRouter = createBrowserRouter(createRoutesFromElements(
                 [
-                    <Route path='/' element={<Layout />} errorElement={<ErrorPage />}>
+                    <Route path='/' element={<Layout onPluginsReady={setPluginsReady} />} errorElement={<ErrorPage />}>
                         {routes}
                         <Route path="/plugin-hub" element={<Shop />}>
                             <Route path="/plugin-hub" element={<Marketplace />} />
@@ -162,13 +124,30 @@ export const App: React.FC<AppProps> = (props) => {
                         </Route>
                     </Route>,
                     <Route path='/login' element={<Login />} />,
-                    <Route path='/sign-up' element={<SignUpForm />} />
+                    <Route path='/sign-up' element={<SignUpForm />} />,
+                    <Route path='/welcome' element={<Welcome />} />
                 ]
-            )))
-            event.emit("PLUGIN_INIT_SUCCESS")
+            ))
+            setRouter(updatedRouter)
+        } else {
+            // Create minimal router while waiting for plugins
+            // The Layout component will show loading screen until plugins are ready
+            console.log('Creating minimal router (plugins not ready yet)')
+            const minimalRouter = createBrowserRouter(createRoutesFromElements(
+                [
+                    <Route path='/' element={<Layout onPluginsReady={setPluginsReady} />} errorElement={<ErrorPage />}>
+                        <Route path="*" element={<div className="flex items-center justify-center h-screen">Loading...</div>} />
+                    </Route>,
+                    <Route path='/login' element={<Login />} />,
+                    <Route path='/sign-up' element={<SignUpForm />} />,
+                    <Route path='/welcome' element={<Welcome />} />
+                ]
+            ))
+            setRouter(minimalRouter)
         }
-    }, [pluginManager.plugins, inited, refreshFlag])
-    return (router ? <AppContext.Provider value={{
+    }, [pluginsReady, pluginManager, refreshFlag])
+
+    return router ? <AppContext.Provider value={{
         pluginManager: pluginManager
     }}>
         <core.ModalProvider>
@@ -179,9 +158,5 @@ export const App: React.FC<AppProps> = (props) => {
                 </Provider>
             </ThemeProvider>
         </core.ModalProvider>
-    </AppContext.Provider> : <ThemeProvider>
-        <div className="h-screen w-screen flex items-center justify-center text-lg">
-            Loading <icon.Loader2 className="ml-2 animate-spin" />
-        </div>
-    </ThemeProvider>)
+    </AppContext.Provider> : null
 }

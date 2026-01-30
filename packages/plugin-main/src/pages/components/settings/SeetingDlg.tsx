@@ -2,6 +2,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@kn/ui";
 import { TreeView } from "@kn/ui";
 import { TreeViewElement } from "@kn/ui";
+import { Badge } from "@kn/ui";
+import { ScrollArea } from "@kn/ui";
 import { GlobalState, useUploadFile } from "@kn/core";
 import { useSafeState } from "@kn/core";
 import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import } from "@kn/icon";
@@ -46,15 +48,16 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 {
                     id: 'MyAccount',
                     name: "我的账号",
-                    customerRender: <div className="flex items-center gap-3 bg-white p-1 rounded-sm border-secondary border">
-                        <Avatar className="h-7 w-7 shadow-md">
+                    customerRender: <div className="flex items-center gap-3 p-2 mx-1 mb-1 rounded-md border border-border bg-card hover:bg-accent/50 transition-colors cursor-pointer">
+                        <Avatar className="h-9 w-9 border-2 border-primary/20">
                             <AvatarImage src={usePath(userInfo?.avatar as string)} />
-                            <AvatarFallback>{userInfo?.account}</AvatarFallback>
+                            <AvatarFallback className="bg-primary/10 text-primary font-semibold">{userInfo?.account?.slice(0, 2).toUpperCase()}</AvatarFallback>
                         </Avatar>
-                        <div className=" text-gray-500 text-xs flex flex-col italic">
-                            <div>{userInfo?.account}</div>
-                            <div>{userInfo?.name}</div>
+                        <div className="flex flex-col flex-1 min-w-0">
+                            <div className="font-medium text-sm truncate">{userInfo?.name}</div>
+                            <div className="text-xs text-muted-foreground truncate">{userInfo?.account}</div>
                         </div>
+                        <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">Free</Badge>
                     </div>
                 },
                 {
@@ -93,8 +96,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 {
                     id: 'upgrade',
                     name: '升级方案',
-                    icon: <ArrowUpCircle className="h-4 w-4 " />,
-                    className: 'text-blue-400'
+                    icon: <ArrowUpCircle className="h-4 w-4" />,
+                    className: 'text-primary font-medium hover:text-primary'
                 },
                 {
                     id: 'member',
@@ -119,26 +122,30 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
     ]
 
     return <Dialog>
-        <DialogTrigger>
+        <DialogTrigger asChild>
             {children}
         </DialogTrigger>
-        <DialogContent className="p-0 max-w-[1000px]">
-            <DialogHeader className="hidden">
-                <DialogTitle></DialogTitle>
-                <DialogDescription></DialogDescription>
+        <DialogContent className="p-0 max-w-[1000px] h-[700px] gap-0">
+            <DialogHeader className="px-6 py-4 border-b">
+                <DialogTitle className="text-lg font-semibold">设置</DialogTitle>
+                <DialogDescription className="text-sm text-muted-foreground">管理您的账号和工作空间设置</DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-[220px_1fr] ">
-                <div className=" bg-muted/40 min-h-[600px]">
-                    <TreeView
-                        size="sm"
-                        elements={settingItems}
-                    />
-                </div>
-                <div className="p-9">
-                    {
-                        render()
-                    }
-                </div>
+            <div className="grid grid-cols-[260px_1fr] h-[calc(100%-73px)]">
+                <ScrollArea className="border-r">
+                    <div className="p-3">
+                        <TreeView
+                            size="sm"
+                            elements={settingItems}
+                        />
+                    </div>
+                </ScrollArea>
+                <ScrollArea className="h-full">
+                    <div className="p-8">
+                        {
+                            render()
+                        }
+                    </div>
+                </ScrollArea>
             </div>
         </DialogContent>
     </Dialog>

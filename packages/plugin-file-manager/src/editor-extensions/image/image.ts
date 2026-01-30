@@ -107,16 +107,4 @@ export const Image = Node.create({
   addNodeView() {
     return ReactNodeViewRenderer(ImageView);
   },
-
-  // addProseMirrorPlugins() {
-  //   return [new Plugin({
-  //     key: new PluginKey("ImagePastPlugin"),
-  //     props: {
-  //       handlePaste(view, event, slice) {
-  //         console.log('clipboardData', event.clipboardData);
-  //         console.log('slice', slice)
-  //       },
-  //     }
-  //   })]
-  // },
 });

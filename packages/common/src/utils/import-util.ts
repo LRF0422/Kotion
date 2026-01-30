@@ -1,3 +1,14 @@
+// Extend Window interface to include custom __KN__ property
+declare global {
+    interface Window {
+        ui: any,
+        common: any,
+        core: any,
+        icon: any,
+        editor: any
+    }
+}
+
 export const importScript = (() => {
     const cache: any = {}
 
@@ -11,7 +22,12 @@ export const importScript = (() => {
 
             script.addEventListener('load', () => {
                 document.head.removeChild(script)
-                const Com = window[packageName]
+                // Access plugin from scoped namespace
+                const Com = (window as any)[packageName]
+                if (!Com) {
+                    reject(new Error(`Plugin ${packageName} not found in window scope`))
+                    return
+                }
                 cache[url] = Com
                 resolve(Com)
             })

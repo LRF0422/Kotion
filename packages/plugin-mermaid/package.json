@@ -21,7 +21,8 @@
     "@monaco-editor/react": "^4.7.0",
     "autoprefixer": "^10.4.20",
     "mermaid": "^11.4.1",
-    "postcss": "^8.4.47"
+    "postcss": "^8.4.47",
+    "react-x-mermaid": "^0.0.10"
   },
   "keywords": [],
   "author": "",

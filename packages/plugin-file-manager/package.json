@@ -14,10 +14,11 @@
   },
   "dependencies": {
     "@kn/common": "workspace:*",
-    "@kn/ui": "workspace:*",
-    "@kn/icon": "workspace:*",
+    "@kn/core": "workspace:*",
     "@kn/editor": "workspace:*",
-    "@kn/core": "workspace:*"
+    "@kn/icon": "workspace:*",
+    "@kn/ui": "workspace:*",
+    "browser-fs-access": "^0.35.0"
   },
   "keywords": [],
   "author": "",

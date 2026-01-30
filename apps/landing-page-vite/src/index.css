@@ -1,4 +1,21 @@
+@tailwind base;
+@tailwind components;
 @tailwind utilities;
+
+@layer base {
+    :root {
+        --gradient-start: #fef8f4;
+        --gradient-end: #f5f0ff;
+        --accent-orange: #ff6b35;
+        --accent-blue: #0066ff;
+        --accent-purple: #7c3aed;
+    }
+
+    .dark {
+        --gradient-start: #1a1a2e;
+        --gradient-end: #16213e;
+    }
+}
 
 @layer utilities {
     .text-notion {
@@ -10,7 +27,7 @@
     }
 
     .bg-notion {
-        /* @apply bg-white; */
+        @apply bg-background;
     }
 
     .bg-notion-hover {
@@ -18,10 +35,160 @@
     }
 
     .border-notion {
-        @apply border;
-        /* @apply border */
+        @apply border border-border;
     }
 
+    /* Modern gradient backgrounds */
+    .bg-gradient-hero {
+        background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
+    }
+
+    .bg-gradient-warm {
+        background: linear-gradient(135deg, #fef3c7 0%, #fce7f3 50%, #e0e7ff 100%);
+    }
+
+    .dark .bg-gradient-warm {
+        background: linear-gradient(135deg, #1f1f1f 0%, #2d1f3d 50%, #1f2937 100%);
+    }
+
+    /* Bento grid cards */
+    .bento-card {
+        @apply relative overflow-hidden rounded-2xl p-6 transition-all duration-300;
+        @apply bg-white dark:bg-gray-900;
+        @apply border border-gray-100 dark:border-gray-800;
+        @apply hover:shadow-xl hover:-translate-y-1;
+    }
+
+    .bento-card-lg {
+        @apply bento-card col-span-2 row-span-2;
+    }
+
+    .bento-card-wide {
+        @apply bento-card col-span-2;
+    }
+
+    .bento-card-tall {
+        @apply bento-card row-span-2;
+    }
+
+    /* Glass effect */
+    .glass {
+        @apply backdrop-blur-md bg-white/70 dark:bg-gray-900/70;
+    }
+
+    /* Animated gradient text */
+    .gradient-text {
+        @apply bg-clip-text text-transparent;
+        background-image: linear-gradient(135deg, #ff6b35 0%, #7c3aed 50%, #0066ff 100%);
+    }
+
+    /* Floating animation */
+    .float-animation {
+        animation: float 6s ease-in-out infinite;
+    }
+
+    @keyframes float {
+
+        0%,
+        100% {
+            transform: translateY(0px);
+        }
+
+        50% {
+            transform: translateY(-20px);
+        }
+    }
+
+    /* Fade in animation */
+    .fade-in-up {
+        animation: fadeInUp 0.6s ease-out forwards;
+    }
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Stagger children */
+    .stagger-children>* {
+        animation: fadeInUp 0.5s ease-out forwards;
+        opacity: 0;
+    }
+
+    .stagger-children>*:nth-child(1) {
+        animation-delay: 0.1s;
+    }
+
+    .stagger-children>*:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+
+    .stagger-children>*:nth-child(3) {
+        animation-delay: 0.3s;
+    }
+
+    .stagger-children>*:nth-child(4) {
+        animation-delay: 0.4s;
+    }
+
+    .stagger-children>*:nth-child(5) {
+        animation-delay: 0.5s;
+    }
+
+    .stagger-children>*:nth-child(6) {
+        animation-delay: 0.6s;
+    }
+
+    /* Modern button styles */
+    .btn-primary {
+        @apply inline-flex items-center justify-center px-6 py-3 rounded-xl font-medium;
+        @apply bg-gray-900 dark:bg-white text-white dark:text-gray-900;
+        @apply hover:bg-gray-800 dark:hover:bg-gray-100;
+        @apply transition-all duration-200 hover:shadow-lg;
+    }
+
+    .btn-secondary {
+        @apply inline-flex items-center justify-center px-6 py-3 rounded-xl font-medium;
+        @apply bg-white dark:bg-gray-800 text-gray-900 dark:text-white;
+        @apply border border-gray-200 dark:border-gray-700;
+        @apply hover:bg-gray-50 dark:hover:bg-gray-700;
+        @apply transition-all duration-200;
+    }
+
+    /* Logo cloud */
+    .logo-cloud {
+        @apply flex items-center justify-center gap-8 md:gap-12 flex-wrap;
+        @apply opacity-60 grayscale hover:grayscale-0 hover:opacity-100;
+        @apply transition-all duration-300;
+    }
+
+    .logo-cloud img {
+        @apply h-6 md:h-8 w-auto;
+    }
+
+    /* Feature icon */
+    .feature-icon {
+        @apply w-12 h-12 rounded-xl flex items-center justify-center mb-4;
+        @apply transition-transform duration-300 group-hover:scale-110;
+    }
+
+    /* Modern section spacing */
+    .section-padding {
+        @apply py-20 md:py-32;
+    }
+
+    .container-padding {
+        @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+    }
+
+    /* Legacy classes maintained for compatibility */
     .notion-block {
         @apply p-4 rounded-md bg-notion border-notion mb-3 transition-all duration-200;
     }
@@ -51,7 +218,7 @@
     }
 
     .notion-callout {
-        @apply flex items-start p-4 bg-gray-50 dark:bg-dark-100 rounded-md my-4;
+        @apply flex items-start p-4 bg-gray-50 dark:bg-gray-800 rounded-md my-4;
     }
 
     .notion-callout-icon {

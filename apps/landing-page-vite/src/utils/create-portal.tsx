@@ -6,8 +6,6 @@ import { createRoot } from "react-dom/client";
 
 
 export const createReactElement = (element: ReactNode) => {
-
-    console.log('create');
     const div = document.createElement('div')
     document.body.appendChild(div)
     return ReactDOM.createPortal(element, div)

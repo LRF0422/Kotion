@@ -134,8 +134,10 @@ export function FileUploader(props: FileUploaderProps) {
       setFiles(updatedFiles)
 
       if (rejectedFiles.length > 0) {
-        rejectedFiles.forEach(({ file , errors}) => {
-          toast.error(`File ${file.name} was rejected, message: ${errors[0].message}`)
+        rejectedFiles.forEach(({ file, errors }) => {
+          if (errors && errors.length > 0) {
+            toast.error(`File ${file.name} was rejected, message: ${errors[0]?.message}`)
+          }
         })
       }
 

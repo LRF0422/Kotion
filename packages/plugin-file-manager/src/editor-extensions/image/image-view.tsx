@@ -1,8 +1,8 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { NodeViewWrapper, NodeViewProps } from "@kn/editor";
 
 import { Resizable } from "@kn/editor";
-import { useUploadFile } from "@kn/core";
+import { useFileService } from "@kn/core";
 
 export const ImageView: React.FC<NodeViewProps> = ({
   editor,
@@ -10,9 +10,11 @@ export const ImageView: React.FC<NodeViewProps> = ({
   updateAttributes,
   getPos
 }) => {
-  const { src, width, height, align, aspectRatio, float } = attrs;
+  const { src, width, height, align, aspectRatio, float, alt, title } = attrs;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  const { usePath } = useUploadFile()
+  const fileService = useFileService();
 
   const flexJustifyContent = useMemo(() => {
     if (align === "center") return "center";
@@ -27,23 +29,36 @@ export const ImageView: React.FC<NodeViewProps> = ({
     [updateAttributes]
   );
 
-  const getSrc = (src: string) => {
+  const getSrc = useCallback((src: string) => {
+    if (!src) return "";
     if (src.startsWith("http") || src.startsWith("https")) {
       return src;
     }
     if (src.startsWith("data:")) {
       return src;
     }
-    return usePath(src);
-  }
+    return fileService.getDownloadUrl(src);
+  }, [fileService]);
+
+  const handleImageLoad = useCallback(() => {
+    setLoading(false);
+    setError(false);
+  }, []);
+
+  const handleImageError = useCallback(() => {
+    setLoading(false);
+    setError(true);
+  }, []);
+
+  const imageSrc = useMemo(() => getSrc(src), [src, getSrc]);
 
   return (
     <NodeViewWrapper
       draggable
       style={{
         float: float || "none",
-        maxWidth: '100%',
-        margin: '5px',
+        maxWidth: "100%",
+        margin: "5px",
         position: "relative",
         display: "flex",
         justifyContent: flexJustifyContent
@@ -56,7 +71,73 @@ export const ImageView: React.FC<NodeViewProps> = ({
         className="max-w-full"
         aspectRatio={aspectRatio}
         onResizeStop={onResize}>
-        <img src={getSrc(src)} width={"100%"} />
+        <div style={{ position: "relative", width: "100%", height: "100%" }}>
+          {loading && (
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: "4px",
+                zIndex: 1
+              }}>
+              <span style={{ color: "#888" }}>Loading...</span>
+            </div>
+          )}
+          {error ? (
+            <div
+              style={{
+                width: "100%",
+                height: height || 100,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#f5f5f5",
+                border: "1px dashed #ccc",
+                borderRadius: "4px",
+                color: "#888",
+                padding: "20px",
+                textAlign: "center"
+              }}>
+              <svg
+                width="48"
+                height="48"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                style={{ marginBottom: "8px" }}>
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+              <span>Failed to load image</span>
+              {src && <small style={{ marginTop: "4px", wordBreak: "break-all" }}>{src}</small>}
+            </div>
+          ) : (
+            <img
+              src={imageSrc}
+              alt={alt || "Image"}
+              title={title}
+              width="100%"
+              loading="lazy"
+              onLoad={handleImageLoad}
+              onError={handleImageError}
+              style={{
+                opacity: loading ? 0 : 1,
+                transition: "opacity 0.3s ease-in-out",
+                objectFit: "contain",
+                borderRadius: "4px"
+              }}
+            />
+          )}
+        </div>
       </Resizable>
     </NodeViewWrapper>
   );

@@ -1,15 +1,191 @@
-  .columns {
-      display: flex;
-      width: 100%;
-      gap: 10px;
+.columns {
+    display: flex;
+    width: 100%;
+    gap: 12px;
+    contain: layout style;
+    position: relative;
 
-      .node-column {
-          min-width: 0;
-          /* height: 100%; */
-          flex: 1 1 0%;
+    .node-column {
+        min-width: 0;
+        flex: 1 1 0%;
+        will-change: flex-basis;
+        contain: layout;
+        position: relative;
 
-          p {
-              margin: 0px;
-          }
-      }
-  }
+        p {
+            margin: 0;
+        }
+    }
+}
+
+/* Optimize column-view decorations */
+.column-view {
+    transition: flex-basis 0.15s ease-out;
+}
+
+/* Resize handle - minimal style */
+.resize-handle {
+    position: absolute;
+    top: 0;
+    right: -7px;
+    width: 14px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 10;
+    transform: translateX(50%);
+}
+
+.resize-handle::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 3px;
+    height: 24px;
+    background: hsl(var(--border));
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity 0.15s ease, height 0.15s ease;
+}
+
+.resize-handle:hover::before {
+    opacity: 1;
+}
+
+.resize-handle.resizing::before {
+    opacity: 1;
+    height: 100%;
+    background: hsl(var(--primary) / 0.6);
+}
+
+/* Prevent text selection during resize */
+.select-none {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Active resizing state */
+body.is-resizing-column {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+body.is-resizing-column * {
+    cursor: col-resize !important;
+}
+
+/* Column drop zone indicator for drag-to-columns */
+.column-drop-indicator {
+    position: absolute;
+    pointer-events: none;
+    z-index: 100;
+    display: none;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: left 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        border-radius 0.2s ease;
+}
+
+/* Switching side animation */
+.column-drop-indicator.switching {
+    transition: left 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        border-radius 0.2s ease;
+}
+
+.column-drop-indicator.switching::before {
+    animation: none;
+}
+
+.column-drop-indicator.switching::after {
+    animation: none;
+}
+
+/* Show state with animation */
+.column-drop-indicator[style*="display: block"] {
+    animation: dropIndicatorFadeIn 0.2s ease-out forwards;
+}
+
+@keyframes dropIndicatorFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Inner glow effect */
+.column-drop-indicator::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg,
+            hsl(var(--primary) / 0.08) 0%,
+            hsl(var(--primary) / 0.15) 50%,
+            hsl(var(--primary) / 0.08) 100%);
+    border-radius: inherit;
+}
+
+/* Border effect */
+.column-drop-indicator::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px dashed hsl(var(--primary) / 0.4);
+    border-radius: inherit;
+    animation: dropIndicatorPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes dropIndicatorPulse {
+
+    0%,
+    100% {
+        border-color: hsl(var(--primary) / 0.3);
+    }
+
+    50% {
+        border-color: hsl(var(--primary) / 0.6);
+    }
+}
+
+/* Left indicator */
+.column-drop-indicator.left {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.column-drop-indicator.left::before {
+    background: linear-gradient(90deg,
+            hsl(var(--primary) / 0.15) 0%,
+            hsl(var(--primary) / 0.05) 100%);
+}
+
+.column-drop-indicator.left::after {
+    border-right: none;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+/* Right indicator */
+.column-drop-indicator.right {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+.column-drop-indicator.right::before {
+    background: linear-gradient(270deg,
+            hsl(var(--primary) / 0.15) 0%,
+            hsl(var(--primary) / 0.05) 100%);
+}
+
+.column-drop-indicator.right::after {
+    border-left: none;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}

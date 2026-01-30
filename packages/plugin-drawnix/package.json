@@ -30,6 +30,7 @@
     "@plait/mind": "^0.82.0",
     "@plait/text-plugins": "^0.82.0",
     "autoprefixer": "^10.4.20",
+    "nanoid": "^5.0.7",
     "postcss": "^8.4.47",
     "slate": "^0.116.0",
     "slate-dom": "^0.116.0",

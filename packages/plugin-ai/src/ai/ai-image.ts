@@ -2,6 +2,17 @@ import { mergeAttributes, PMNode as Node } from "@kn/editor";
 import { ReactNodeViewRenderer } from "@kn/editor";
 import { AiImageView } from "./AiImageView";
 
+/**
+ * AI Image Generation Node Extension
+ * Provides a block-level node for AI-generated images
+ * 
+ * Features:
+ * - Text-to-image generation
+ * - Custom prompt input
+ * - Image preview
+ * - URL storage
+ */
+
 
 
 

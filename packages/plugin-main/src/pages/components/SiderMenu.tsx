@@ -1,18 +1,15 @@
-import { useNavigator } from "@kn/core";
-import { CalendarCheck2, Inbox, LayoutDashboard, LayoutGrid, MessageCircleCodeIcon, PanelBottom, Power, Settings, ShoppingBag, UserRoundPlus } from "@kn/icon";
+import { useNavigator, MessageBox } from "@kn/core";
+import { CalendarCheck2, LayoutDashboard, LayoutGrid, PanelBottom, Power, Settings, ShoppingBag, UserRoundPlus } from "@kn/icon";
 import React, { ReactNode } from "react";
-import { Empty, EmptyProps } from "@kn/ui";
+import { EmptyProps } from "@kn/ui";
 import { useLocation } from "react-router-dom";
 import { cn } from "@kn/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { useSelector } from "@kn/common";
-import { GlobalState } from "@kn/core";
+import { GlobalState, useApi } from "@kn/core";
 import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
 import { Badge } from "@kn/ui";
-import { useApi } from "@kn/core";
 import { APIS } from "../../api";
-import { Separator } from "@kn/ui";
 import { SettingDlg } from "./settings/SeetingDlg";
 import { ModeToggle } from "@kn/ui";
 
@@ -32,7 +29,7 @@ export interface SiderMenuItemProps {
     emptyProps?: EmptyProps
     actions?: ReactNode[]
     customerRender?: ReactNode
-    height?: number
+    height?: string
 }
 
 export interface SiderMenuProps {
@@ -103,26 +100,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
         },
         {
             name: 'Message',
-            icon: <Popover>
-                <PopoverTrigger><Inbox className="h-5 w-5" /></PopoverTrigger>
-                <PopoverContent side="right" align="start" className="p-1 w-[250px] h-max-[400px]" sideOffset={10}>
-                    <div className="flex flex-row gap-1 items-center font-bold p-2">
-                        <MessageCircleCodeIcon className="h-5 w-5" />
-                        消息盒子
-                    </div>
-                    <Separator />
-                    <div className="flex flex-col gap-2 text-sm p-2">
-                        <div>
-                            <div>系统消息</div>
-                            <Empty className="border-none text-gray-500" title="没有系统消息" />
-                        </div>
-                        <div>
-                            <div>协作邀请</div>
-                            <Empty className="border-none text-gray-500" title="都看完啦！" desc="你将在这里收到页面协作邀请" />
-                        </div>
-                    </div>
-                </PopoverContent>
-            </Popover>,
+            icon: <MessageBox />,
             key: '/message',
             attachTabs: true,
             id: '/message',

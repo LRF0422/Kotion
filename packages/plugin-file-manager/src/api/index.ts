@@ -22,6 +22,21 @@ export const APIS = {
         url: '/knowledge-file-center/file',
         method: 'POST',
         name: 'Create Folder'
+    } as API,
+    DELETE_FILE: {
+        url: '/knowledge-file-center/file',
+        method: 'DELETE',
+        name: 'Delete File'
+    } as API,
+    DOWNLOAD_FILE: {
+        url: '/knowledge-file-center/file/download',
+        method: 'GET',
+        name: 'Download File'
+    } as API,
+    RENAME_FILE: {
+        url: '/knowledge-file-center/file',
+        method: 'POST',
+        name: 'Rename File/Folder'
     } as API
 
 }

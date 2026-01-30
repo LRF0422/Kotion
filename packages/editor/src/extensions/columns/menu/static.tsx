@@ -7,7 +7,7 @@ import { useActive } from "../../../hooks/use-active";
 import { Columns as ColumnsExtension } from "../columns";
 import { Toggle } from "@kn/ui";
 
-export const ColumnsStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
+export const ColumnsStaticMenu: React.FC<{ editor: Editor }> = React.memo(({ editor }) => {
   const isColumnsActive = useActive(editor, ColumnsExtension.name);
 
   const insertColumns = useCallback(
@@ -27,4 +27,6 @@ export const ColumnsStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
       size="sm"
     ><IconColumns /></Toggle>
   );
-};
+}, (prevProps, nextProps) => {
+  return prevProps.editor === nextProps.editor;
+});

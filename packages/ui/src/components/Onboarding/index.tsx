@@ -35,9 +35,6 @@ export function Onboarding({
       const currentStep = steps[currentStepIndex];
       const targetElement = document.querySelector(currentStep.targetSelector);
 
-      console.log('targetElement', targetElement);
-
-
       if (!targetElement || !highLightRef.current) return;
 
       // 获取目标元素位置信息

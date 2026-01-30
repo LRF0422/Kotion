@@ -1,5 +1,7 @@
 import { createContext, useContext } from "react"
 
+export type ViewMode = 'grid' | 'list'
+
 export interface FileItem {
     name: string,
     isFolder: boolean,
@@ -8,6 +10,18 @@ export interface FileItem {
     type: {
         value: 'FOLDER' | 'FILE'
     }
+    path?: string
+    size?: number
+    createdAt?: string
+    updatedAt?: string
+    icon?: React.ReactNode
+    onClick?: () => void
+}
+
+export interface BreadcrumbItem {
+    id: string
+    name: string
+    path: string
 }
 
 export interface FileManagerState {
@@ -22,7 +36,33 @@ export interface FileManagerState {
     repoKey: string
     handleUpload: (type: 'FOLDER' | 'FILE', name?: string) => void
     handleDelete: (ids: string[]) => void
+    loading?: boolean
+    error?: string | null
+    // Navigation features
+    breadcrumbPath: BreadcrumbItem[]
+    canGoBack: boolean
+    canGoForward: boolean
+    goBack: () => void
+    goForward: () => void
+    navigateToFolder: (folderId: string, folderName?: string) => void
+    // New file operations
+    handleRename: (file: FileItem, newName: string) => void
+    handleMove: (files: FileItem[], targetFolderId: string) => void
+    handleCopy: (files: FileItem[]) => void
+    handleDuplicate: (files: FileItem[]) => void
+    selectAll: () => void
+    clearSelection: () => void
+    // View mode
+    viewMode: ViewMode
+    setViewMode: React.Dispatch<React.SetStateAction<ViewMode>>
 }
 
 export const FileManageContext = createContext<FileManagerState | null>(null)
-export const useFileManagerState = () => useContext(FileManageContext)
+
+export const useFileManagerState = () => {
+    const context = useContext(FileManageContext)
+    if (!context) {
+        throw new Error('useFileManagerState must be used within FileManageContext.Provider')
+    }
+    return context
+}

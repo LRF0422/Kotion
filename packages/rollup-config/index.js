@@ -9,6 +9,8 @@ import nodePolyfills from "rollup-plugin-polyfill-node";
 import babel from "@rollup/plugin-babel";
 import postcssCascadeLayers from "@csstools/postcss-cascade-layers";
 import { terser } from "rollup-plugin-terser";
+import tailwindcss from "tailwindcss";
+import autoprefixer from "autoprefixer";
 
 export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   external: [
@@ -52,8 +54,8 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
       exclude: "../../node_modules/**",
     }),
     postcss({
-      // tailwindcss(), autoprefixer(), nested(), cssnext(), calc()
-      plugins: [cssnext(), nested(), postcssCascadeLayers()],
+      // Process Tailwind CSS and other PostCSS plugins
+      plugins: [postcssCascadeLayers(),cssnext(), nested(),tailwindcss(), autoprefixer()],
       extensions: [".css"],
       extract: false,
       minimize: true,
@@ -79,7 +81,6 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
 });
 
 const isPluginPkg = (pkg) => {
-  console.log("pkg", pkg);
   return pkg.name.includes("plugin");
 };
 export default function bundleStats(pkg) {
@@ -98,7 +99,10 @@ export default function bundleStats(pkg) {
           const sizeKB = (size / 1024).toFixed(2);
           fileSizes[fileName] = sizeKB + " KB";
           if (isPluginPkg(pkg)) {
-            console.log("上传文件开始上传打包产物" + pkg.name);
+            // Note: Auto-upload disabled in build. Use separate deploy step.
+            // Uncomment and configure environment variables for deployment
+            /*
+            console.log("Uploading plugin artifact:", pkg.name);
             const formData = new FormData();
             formData.append("file", new Blob([content]), "index.js");
             fetch(
@@ -108,9 +112,7 @@ export default function bundleStats(pkg) {
                 body: formData,
               },
             ).then((res) => {
-              console.log("resp", res);
               res.json().then((body) => {
-                console.log("body", body);
                 fetch(
                   "https://kotion.top:888/api/knowledge-wiki/plugin/public/inner",
                   {
@@ -125,10 +127,11 @@ export default function bundleStats(pkg) {
                     }),
                   },
                 ).then(() => {
-                  console.log(pkg.name + "打包产物上传完成");
+                  console.log("Plugin artifact uploaded:", pkg.name);
                 });
               });
             });
+            */
           }
         }
       }
@@ -136,7 +139,7 @@ export default function bundleStats(pkg) {
     },
     closeBundle() {
       const totalTime = Date.now() - startTime;
-      console.log("打包时间:" + totalTime + "ms");
+      console.log("Build time:", totalTime + "ms");
     },
   };
 }
