@@ -1,0 +1,98 @@
+{
+    "name": "@kn/desktop",
+    "version": "0.0.1",
+    "private": true,
+    "description": "Knowledge Desktop Application",
+    "author": "KN Team",
+    "main": "./out/main/index.js",
+    "scripts": {
+        "dev": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite dev",
+        "build": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite build",
+        "preview": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite preview",
+        "package": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite build && electron-builder --mac --win --linux",
+        "package:win": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite build && electron-builder --win",
+        "package:mac": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite build && electron-builder --mac",
+        "package:linux": "NODE_OPTIONS='--max-old-space-size=16384' electron-vite build && electron-builder --linux",
+        "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix"
+    },
+    "dependencies": {
+        "@electron-toolkit/preload": "^3.0.1",
+        "@electron-toolkit/utils": "^3.0.0",
+        "@kn/ui": "workspace:*",
+        "@kn/core": "workspace:*",
+        "@kn/plugin-ai": "workspace:*",
+        "@kn/plugin-main": "workspace:*",
+        "@kn/plugin-database": "workspace:*",
+        "@kn/plugin-block-reference": "workspace:*",
+        "@kn/plugin-excalidraw": "workspace:*",
+        "@kn/plugin-drawnix": "workspace:*",
+        "@kn/plugin-drawio": "workspace:*",
+        "@kn/file-manager": "workspace:*",
+        "@kn/mermaid-plugin": "workspace:*",
+        "@kn/plugin-drawio-v2": "workspace:*",
+        "@kn/plugin-mindmap-canvas": "workspace:*",
+        "@kn/plugin-bitable": "workspace:*",
+        "@kn/plugin-weaver-oa": "workspace:*",
+        "@kn/plugin-bilibili": "workspace:*",
+        "next-themes": "^0.3.0"
+    },
+    "devDependencies": {
+        "@electron-toolkit/eslint-config-ts": "^2.0.0",
+        "@types/node": "^22.7.4",
+        "@types/react": "^18.3.23",
+        "@types/react-dom": "^18.3.1",
+        "@vitejs/plugin-react": "^4.3.4",
+        "autoprefixer": "^10.4.21",
+        "electron": "^33.2.1",
+        "electron-builder": "^25.1.8",
+        "electron-vite": "^2.3.0",
+        "eslint": "^8.57.0",
+        "eslint-plugin-react": "^7.37.2",
+        "postcss": "^8.5.6",
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "tailwindcss": "^3.4.17",
+        "typescript": "^5.8.3",
+        "vite": "^5.4.8",
+        "vite-tsconfig-paths": "^5.1.4"
+    },
+    "build": {
+        "appId": "com.kn.desktop",
+        "productName": "KN Desktop",
+        "directories": {
+            "buildResources": "resources",
+            "output": "release"
+        },
+        "files": [
+            "out/**/*",
+            "!node_modules"
+        ],
+        "mac": {
+            "target": [
+                "dmg",
+                "zip"
+            ],
+            "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+            "category": "public.app-category.productivity"
+        },
+        "win": {
+            "target": [
+                "nsis",
+                "zip"
+            ],
+            "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+        },
+        "linux": {
+            "target": [
+                "AppImage",
+                "deb"
+            ],
+            "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+            "category": "Office"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true
+        }
+    }
+}
