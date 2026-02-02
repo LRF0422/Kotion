@@ -30,6 +30,7 @@ function getWorkspaceAliases() {
     } catch (e) {
         console.warn('Failed to auto-detect workspace packages:', e)
     }
+    console.log('aliases', aliases);
 
     return aliases
 }
@@ -80,6 +81,8 @@ export default defineConfig({
             '@main': resolve(__dirname, 'src/main'),
             '@preload': resolve(__dirname, 'src/preload'),
             '@renderer': resolve(__dirname, 'src/renderer'),
+            "@ui": resolve(__dirname, '../../packages/ui/src'),
+            "@editor": resolve(__dirname, '../../packages/editor/src'),
             // Auto-detected workspace packages
             ...workspaceAliases
         }
