@@ -1,98 +1,94 @@
-import { app, BrowserWindow, shell } from 'electron';
-import { join } from 'path';
-import { initializeServices } from './services';
-import { setupIpcHandlers } from './ipc';
+import { app, shell, BrowserWindow, ipcMain, protocol, net } from 'electron'
+import { join } from 'path'
+import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { pathToFileURL } from 'url'
 
-// Keep a global reference of the window object
-let mainWindow: BrowserWindow | null = null;
+// Register custom scheme before app is ready
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true
+    }
+  }
+])
 
-// Disable GPU acceleration for better compatibility
-app.disableHardwareAcceleration();
-
-// Handle creating/removing shortcuts on Windows when installing/uninstalling
-if (require('electron-squirrel-startup')) {
-  app.quit();
-}
-
-function createWindow() {
-  // Create the browser window
-  mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 1000,
+function createWindow(): void {
+  const mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 800,
     minHeight: 600,
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
       sandbox: false,
-    },
-  });
-
-  // Load the index.html
-  if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-    mainWindow.webContents.openDevTools();
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
-  }
-
-  // Show window when ready
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
-  });
-
-  // Open external links in browser
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http:') || url.startsWith('https:')) {
-      shell.openExternal(url);
-      return { action: 'deny' };
+      contextIsolation: true,
+      nodeIntegration: false
     }
-    return { action: 'allow' };
-  });
+  })
 
-  // Emitted when the window is closed
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+  mainWindow.on('ready-to-show', () => {
+    mainWindow.show()
+  })
+
+  mainWindow.webContents.setWindowOpenHandler((details) => {
+    shell.openExternal(details.url)
+    return { action: 'deny' }
+  })
+
+  // Load the renderer
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  } else {
+    // Use custom protocol for production
+    mainWindow.loadURL('app://./index.html')
+  }
 }
 
-// This method will be called when Electron has finished initialization
-app.whenReady().then(async () => {
-  try {
-    // Initialize services (database, auth, storage, etc.)
-    await initializeServices(app);
-    
-    // Setup IPC handlers
-    setupIpcHandlers();
-    
-    // Create main window
-    createWindow();
+app.whenReady().then(() => {
+  // Register custom protocol handler for SPA routing
+  protocol.handle('app', (request) => {
+    const url = new URL(request.url)
+    let filePath = url.pathname
 
-    app.on('activate', () => {
-      // On macOS re-create window when dock icon is clicked
-      if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
-      }
-    });
-  } catch (error) {
-    console.error('Failed to initialize app:', error);
-    app.quit();
-  }
-});
+    // For SPA routing: if the path doesn't have an extension, serve index.html
+    if (!filePath.includes('.') || filePath === '/') {
+      filePath = '/index.html'
+    }
 
-// Quit when all windows are closed
+    const fullPath = join(__dirname, '../renderer', filePath)
+    return net.fetch(pathToFileURL(fullPath).toString())
+  })
+
+  // Set app user model id for windows
+  electronApp.setAppUserModelId('com.kn.desktop')
+
+  // Default open or close DevTools by F12 in development
+  // and ignore CommandOrControl + R in production.
+  app.on('browser-window-created', (_, window) => {
+    optimizer.watchWindowShortcuts(window)
+  })
+
+  // IPC handlers
+  ipcMain.on('ping', () => console.log('pong'))
+
+  createWindow()
+
+  app.on('activate', function () {
+    // On macOS it's common to re-create a window in the app when the
+    // dock icon is clicked and there are no other windows open.
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+// Quit when all windows are closed, except on macOS.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    app.quit();
+    app.quit()
   }
-});
-
-// Handle app shutdown
-app.on('before-quit', async () => {
-  // Cleanup services
-  const { cleanupServices } = await import('./services');
-  await cleanupServices();
-});
+})
