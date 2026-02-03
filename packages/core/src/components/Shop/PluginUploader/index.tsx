@@ -153,7 +153,11 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
         setIsSubmitting(true);
         try {
             const value = form.getValues();
-            value.versionDescs = descriptions.map(item => ({ label: item.label, content: JSON.stringify(item.content) }));
+            value.versionDescs = descriptions.map(item => ({
+                label: item.label,
+                // Only stringify if content is an object (not already a string)
+                content: typeof item.content === 'string' ? item.content : JSON.stringify(item.content)
+            }));
             value.resourcePath = resourcePath;
             value.icon = iconPath;
 

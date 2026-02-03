@@ -1,173 +1,139 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron';
 
-// Define the API types
+// Expose protected methods that allow the renderer process to use
+// the ipcRenderer without exposing the entire object
+contextBridge.exposeInMainWorld('electronAPI', {
+  // ==================== Auth ====================
+  auth: {
+    login: (credentials: any) => ipcRenderer.invoke('auth:login', credentials),
+    loginAnonymous: () => ipcRenderer.invoke('auth:loginAnonymous'),
+    logout: () => ipcRenderer.invoke('auth:logout'),
+    getInfo: () => ipcRenderer.invoke('auth:getInfo'),
+    getUserInfo: () => ipcRenderer.invoke('auth:getUserInfo'),
+    getMembership: () => ipcRenderer.invoke('auth:getMembership'),
+    isLoggedIn: () => ipcRenderer.invoke('auth:isLoggedIn'),
+    isMember: () => ipcRenderer.invoke('auth:isMember'),
+    updatePassword: (oldPassword: string, newPassword: string, confirmPassword: string) =>
+      ipcRenderer.invoke('auth:updatePassword', oldPassword, newPassword, confirmPassword),
+    register: (data: any) => ipcRenderer.invoke('auth:register', data),
+    
+    // Events
+    onAuthExpired: (callback: () => void) => {
+      ipcRenderer.on('auth:expired', callback);
+      return () => ipcRenderer.removeListener('auth:expired', callback);
+    },
+  },
+
+  // ==================== Space ====================
+  space: {
+    create: (dto: any) => ipcRenderer.invoke('space:create', dto),
+    get: (id: number) => ipcRenderer.invoke('space:get', id),
+    getAll: () => ipcRenderer.invoke('space:getAll'),
+    update: (id: number, data: any) => ipcRenderer.invoke('space:update', id, data),
+    delete: (id: number) => ipcRenderer.invoke('space:delete', id),
+  },
+
+  // ==================== Page ====================
+  page: {
+    create: (dto: any) => ipcRenderer.invoke('page:create', dto),
+    get: (id: number) => ipcRenderer.invoke('page:get', id),
+    getBySpace: (spaceId: number) => ipcRenderer.invoke('page:getBySpace', spaceId),
+    getTree: (spaceId: number) => ipcRenderer.invoke('page:getTree', spaceId),
+    getRecent: (limit?: number) => ipcRenderer.invoke('page:getRecent', limit),
+    update: (id: number, data: any) => ipcRenderer.invoke('page:update', id, data),
+    delete: (id: number) => ipcRenderer.invoke('page:delete', id),
+    restore: (id: number) => ipcRenderer.invoke('page:restore', id),
+  },
+
+  // ==================== Plugin ====================
+  plugin: {
+    search: (dto: any) => ipcRenderer.invoke('plugin:search', dto),
+    getDetail: (id: number) => ipcRenderer.invoke('plugin:getDetail', id),
+    install: (versionId: number, pluginId: string, version: string) =>
+      ipcRenderer.invoke('plugin:install', versionId, pluginId, version),
+    uninstall: (id: string) => ipcRenderer.invoke('plugin:uninstall', id),
+    getInstalled: () => ipcRenderer.invoke('plugin:getInstalled'),
+    setEnabled: (id: string, enabled: boolean) =>
+      ipcRenderer.invoke('plugin:setEnabled', id, enabled),
+  },
+
+  // ==================== Database ====================
+  database: {
+    getStats: () => ipcRenderer.invoke('db:getStats'),
+    backup: (backupPath: string) => ipcRenderer.invoke('db:backup', backupPath),
+    vacuum: () => ipcRenderer.invoke('db:vacuum'),
+  },
+
+  // ==================== Storage ====================
+  storage: {
+    getMode: () => ipcRenderer.invoke('storage:getMode'),
+  },
+
+  // ==================== Events ====================
+  on: (channel: string, callback: (...args: any[]) => void) => {
+    ipcRenderer.on(channel, (_event, ...args) => callback(...args));
+    return () => ipcRenderer.removeListener(channel, callback);
+  },
+
+  once: (channel: string, callback: (...args: any[]) => void) => {
+    ipcRenderer.once(channel, (_event, ...args) => callback(...args));
+  },
+});
+
+// Type definitions for TypeScript
 export interface ElectronAPI {
-    // Auth APIs
-    auth: {
-        login: (data: { account: string; password: string }) => Promise<any>
-        register: (data: { username: string; password: string; email: string }) => Promise<any>
-    }
-    // User APIs
-    user: {
-        getInfo: () => Promise<any>
-        search: (query: string) => Promise<any>
-    }
-    // Space APIs
-    space: {
-        list: () => Promise<any>
-        getPersonal: () => Promise<any>
-        getDetail: (id: string) => Promise<any>
-        create: (data: any) => Promise<any>
-        addFavorite: (id: string) => Promise<any>
-        removeFavorite: (id: string) => Promise<any>
-        getMembers: (id: string) => Promise<any>
-        saveAsTemplate: (id: string) => Promise<any>
-    }
-    // Page APIs
-    page: {
-        getTree: (spaceId: string, searchValue?: string) => Promise<any>
-        getContent: (id: string) => Promise<any>
-        create: (data: any) => Promise<any>
-        save: (data: any) => Promise<any>
-        moveToTrash: (id: string) => Promise<any>
-        restore: (id: string) => Promise<any>
-        list: (params: any) => Promise<any>
-        getFavorites: (params: any) => Promise<any>
-        getRecent: () => Promise<any>
-        getTemplates: () => Promise<any>
-        saveAsTemplate: (id: string) => Promise<any>
-        addFavorite: (id: string) => Promise<any>
-        removeFavorite: (id: string) => Promise<any>
-        getBlocks: (params: any) => Promise<any>
-        getBlockInfo: (id: string) => Promise<any>
-        getCollaborators: (pageId: string) => Promise<any>
-    }
-    // Plugin APIs
-    plugin: {
-        list: () => Promise<any>
-        get: (id: string) => Promise<any>
-        create: (data: any) => Promise<any>
-        install: (id: string) => Promise<any>
-        uninstall: (id: string) => Promise<any>
-        update: (data: any) => Promise<any>
-        getInstalled: () => Promise<any>
-    }
-    // File APIs
-    file: {
-        upload: (data: { name: string; buffer: ArrayBuffer; mimeType: string }) => Promise<any>
-        getRootFolder: () => Promise<any>
-        getChildren: (parentId: string) => Promise<any>
-        createFolder: (data: any) => Promise<any>
-        delete: (id: string) => Promise<any>
-        download: (id: string) => Promise<any>
-        rename: (id: string, newName: string) => Promise<any>
-    }
-    // Instant Message APIs
-    im: {
-        send: (data: any) => Promise<any>
-        getConversation: (userId: string) => Promise<any>
-        getConversations: () => Promise<any>
-        getUnreadCount: () => Promise<any>
-        getUnreadMessages: () => Promise<any>
-        markRead: (messageIds: string[]) => Promise<any>
-        markAllRead: () => Promise<any>
-        deleteMessage: (messageId: string) => Promise<any>
-        clearConversation: (userId: string) => Promise<any>
-        getOnlineUsers: () => Promise<any>
-        checkUserOnline: (userId: string) => Promise<any>
-        getOnlineCount: () => Promise<any>
-    }
-    // Utility APIs
-    invoke: (channel: string, data?: any) => Promise<any>
+  auth: {
+    login: (credentials: any) => Promise<any>;
+    loginAnonymous: () => Promise<any>;
+    logout: () => Promise<void>;
+    getInfo: () => Promise<any>;
+    getUserInfo: () => Promise<any>;
+    getMembership: () => Promise<any>;
+    isLoggedIn: () => Promise<boolean>;
+    isMember: () => Promise<boolean>;
+    updatePassword: (oldPassword: string, newPassword: string, confirmPassword: string) => Promise<void>;
+    register: (data: any) => Promise<void>;
+    onAuthExpired: (callback: () => void) => () => void;
+  };
+  space: {
+    create: (dto: any) => Promise<any>;
+    get: (id: number) => Promise<any>;
+    getAll: () => Promise<any[]>;
+    update: (id: number, data: any) => Promise<void>;
+    delete: (id: number) => Promise<void>;
+  };
+  page: {
+    create: (dto: any) => Promise<any>;
+    get: (id: number) => Promise<any>;
+    getBySpace: (spaceId: number) => Promise<any[]>;
+    getTree: (spaceId: number) => Promise<any[]>;
+    getRecent: (limit?: number) => Promise<any[]>;
+    update: (id: number, data: any) => Promise<void>;
+    delete: (id: number) => Promise<void>;
+    restore: (id: number) => Promise<void>;
+  };
+  plugin: {
+    search: (dto: any) => Promise<any>;
+    getDetail: (id: number) => Promise<any>;
+    install: (versionId: number, pluginId: string, version: string) => Promise<any>;
+    uninstall: (id: string) => Promise<void>;
+    getInstalled: () => Promise<any[]>;
+    setEnabled: (id: string, enabled: boolean) => Promise<void>;
+  };
+  database: {
+    getStats: () => Promise<any>;
+    backup: (backupPath: string) => Promise<void>;
+    vacuum: () => Promise<void>;
+  };
+  storage: {
+    getMode: () => Promise<string>;
+  };
+  on: (channel: string, callback: (...args: any[]) => void) => () => void;
+  once: (channel: string, callback: (...args: any[]) => void) => void;
 }
 
-// Expose APIs to the renderer process
-const api: ElectronAPI = {
-    // Auth
-    auth: {
-        login: (data) => ipcRenderer.invoke('auth:login', data),
-        register: (data) => ipcRenderer.invoke('auth:register', data)
-    },
-    // User
-    user: {
-        getInfo: () => ipcRenderer.invoke('user:getInfo'),
-        search: (query) => ipcRenderer.invoke('user:search', query)
-    },
-    // Space
-    space: {
-        list: () => ipcRenderer.invoke('space:list'),
-        getPersonal: () => ipcRenderer.invoke('space:getPersonal'),
-        getDetail: (id) => ipcRenderer.invoke('space:getDetail', id),
-        create: (data) => ipcRenderer.invoke('space:create', data),
-        addFavorite: (id) => ipcRenderer.invoke('space:addFavorite', id),
-        removeFavorite: (id) => ipcRenderer.invoke('space:removeFavorite', id),
-        getMembers: (id) => ipcRenderer.invoke('space:getMembers', id),
-        saveAsTemplate: (id) => ipcRenderer.invoke('space:saveAsTemplate', id)
-    },
-    // Page
-    page: {
-        getTree: (spaceId, searchValue) => ipcRenderer.invoke('page:getTree', { spaceId, searchValue }),
-        getContent: (id) => ipcRenderer.invoke('page:getContent', id),
-        create: (data) => ipcRenderer.invoke('page:create', data),
-        save: (data) => ipcRenderer.invoke('page:save', data),
-        moveToTrash: (id) => ipcRenderer.invoke('page:moveToTrash', id),
-        restore: (id) => ipcRenderer.invoke('page:restore', id),
-        list: (params) => ipcRenderer.invoke('page:list', params),
-        getFavorites: (params) => ipcRenderer.invoke('page:getFavorites', params),
-        getRecent: () => ipcRenderer.invoke('page:getRecent'),
-        getTemplates: () => ipcRenderer.invoke('page:getTemplates'),
-        saveAsTemplate: (id) => ipcRenderer.invoke('page:saveAsTemplate', id),
-        addFavorite: (id) => ipcRenderer.invoke('page:addFavorite', id),
-        removeFavorite: (id) => ipcRenderer.invoke('page:removeFavorite', id),
-        getBlocks: (params) => ipcRenderer.invoke('page:getBlocks', params),
-        getBlockInfo: (id) => ipcRenderer.invoke('page:getBlockInfo', id),
-        getCollaborators: (pageId) => ipcRenderer.invoke('page:getCollaborators', pageId)
-    },
-    // Plugin
-    plugin: {
-        list: () => ipcRenderer.invoke('plugin:list'),
-        get: (id) => ipcRenderer.invoke('plugin:get', id),
-        create: (data) => ipcRenderer.invoke('plugin:create', data),
-        install: (id) => ipcRenderer.invoke('plugin:install', id),
-        uninstall: (id) => ipcRenderer.invoke('plugin:uninstall', id),
-        update: (data) => ipcRenderer.invoke('plugin:update', data),
-        getInstalled: () => ipcRenderer.invoke('plugin:getInstalled')
-    },
-    // File
-    file: {
-        upload: (data) => ipcRenderer.invoke('file:upload', data),
-        getRootFolder: () => ipcRenderer.invoke('file:getRootFolder'),
-        getChildren: (parentId) => ipcRenderer.invoke('file:getChildren', parentId),
-        createFolder: (data) => ipcRenderer.invoke('file:createFolder', data),
-        delete: (id) => ipcRenderer.invoke('file:delete', id),
-        download: (id) => ipcRenderer.invoke('file:download', id),
-        rename: (id, newName) => ipcRenderer.invoke('file:rename', { id, newName })
-    },
-    // IM
-    im: {
-        send: (data) => ipcRenderer.invoke('im:send', data),
-        getConversation: (userId) => ipcRenderer.invoke('im:getConversation', userId),
-        getConversations: () => ipcRenderer.invoke('im:getConversations'),
-        getUnreadCount: () => ipcRenderer.invoke('im:getUnreadCount'),
-        getUnreadMessages: () => ipcRenderer.invoke('im:getUnreadMessages'),
-        markRead: (messageIds) => ipcRenderer.invoke('im:markRead', messageIds),
-        markAllRead: () => ipcRenderer.invoke('im:markAllRead'),
-        deleteMessage: (messageId) => ipcRenderer.invoke('im:deleteMessage', messageId),
-        clearConversation: (userId) => ipcRenderer.invoke('im:clearConversation', userId),
-        getOnlineUsers: () => ipcRenderer.invoke('im:getOnlineUsers'),
-        checkUserOnline: (userId) => ipcRenderer.invoke('im:checkUserOnline', userId),
-        getOnlineCount: () => ipcRenderer.invoke('im:getOnlineCount')
-    },
-    // Generic invoke for flexibility
-    invoke: (channel, data) => ipcRenderer.invoke(channel, data)
-}
-
-// Expose the API to the renderer
-contextBridge.exposeInMainWorld('api', api)
-
-// Declare global types
 declare global {
-    interface Window {
-        api: ElectronAPI
-    }
+  interface Window {
+    electronAPI: ElectronAPI;
+  }
 }

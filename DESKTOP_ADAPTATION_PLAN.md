@@ -407,7 +407,284 @@ export class HybridStorageAdapter implements IStorageAdapter {
 
 ### 3.4 插件管理系统
 
-#### 3.4.1 插件权限控制
+#### 3.4.1 插件文件缓存管理
+
+**插件存储结构**:
+```
+用户数据目录/
+├── plugins/                    # 插件缓存目录
+│   ├── plugin-ai@1.0.0/       # 插件目录（按名称和版本）
+│   │   ├── index.js           # 插件主文件
+│   │   ├── package.json       # 插件元数据
+│   │   ├── assets/            # 静态资源
+│   │   └── manifest.json      # 插件清单
+│   ├── plugin-excalidraw@2.1.0/
+│   └── .cache/                # 下载缓存
+├── database.db                # SQLite 数据库
+└── config.json                # 配置文件
+```
+
+**插件缓存管理器**:
+```typescript
+// apps/desktop/electron/services/plugin-cache-service.ts
+import { app } from 'electron'
+import * as path from 'path'
+import * as fs from 'fs-extra'
+import axios from 'axios'
+import { createHash } from 'crypto'
+
+export interface PluginFile {
+  id: string
+  name: string
+  version: string
+  url: string              // 云端下载地址
+  hash: string             // 文件哈希（用于校验）
+  size: number             // 文件大小
+  entryPoint: string       // 入口文件（通常是 index.js）
+}
+
+export class PluginCacheService {
+  private pluginsDir: string
+  private cacheDir: string
+  
+  constructor() {
+    const userDataPath = app.getPath('userData')
+    this.pluginsDir = path.join(userDataPath, 'plugins')
+    this.cacheDir = path.join(this.pluginsDir, '.cache')
+    
+    // 确保目录存在
+    fs.ensureDirSync(this.pluginsDir)
+    fs.ensureDirSync(this.cacheDir)
+  }
+  
+  /**
+   * 获取插件目录路径
+   */
+  getPluginDir(pluginId: string, version: string): string {
+    return path.join(this.pluginsDir, `${pluginId}@${version}`)
+  }
+  
+  /**
+   * 检查插件是否已缓存
+   */
+  async isPluginCached(pluginId: string, version: string): Promise<boolean> {
+    const pluginDir = this.getPluginDir(pluginId, version)
+    return await fs.pathExists(pluginDir)
+  }
+  
+  /**
+   * 下载并缓存插件文件
+   */
+  async downloadPlugin(plugin: PluginFile, onProgress?: (progress: number) => void): Promise<string> {
+    const pluginDir = this.getPluginDir(plugin.id, plugin.version)
+    const tempFile = path.join(this.cacheDir, `${plugin.id}-${Date.now()}.tmp`)
+    
+    try {
+      // 1. 检查是否已缓存
+      if (await this.isPluginCached(plugin.id, plugin.version)) {
+        console.log(`Plugin ${plugin.id}@${plugin.version} already cached`)
+        return pluginDir
+      }
+      
+      // 2. 下载文件到临时目录
+      console.log(`Downloading plugin from ${plugin.url}`)
+      const response = await axios({
+        method: 'GET',
+        url: plugin.url,
+        responseType: 'stream',
+        onDownloadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            const progress = (progressEvent.loaded / progressEvent.total) * 100
+            onProgress(progress)
+          }
+        }
+      })
+      
+      // 3. 保存到临时文件
+      const writer = fs.createWriteStream(tempFile)
+      response.data.pipe(writer)
+      
+      await new Promise((resolve, reject) => {
+        writer.on('finish', resolve)
+        writer.on('error', reject)
+      })
+      
+      // 4. 校验文件哈希
+      const fileHash = await this.calculateFileHash(tempFile)
+      if (fileHash !== plugin.hash) {
+        throw new Error('Plugin file hash mismatch - file may be corrupted')
+      }
+      
+      // 5. 解压或复制到插件目录
+      await fs.ensureDir(pluginDir)
+      
+      // 如果是 .zip 文件，解压
+      if (plugin.url.endsWith('.zip')) {
+        await this.extractZip(tempFile, pluginDir)
+      } else if (plugin.url.endsWith('.js')) {
+        // 如果是单个 JS 文件，直接复制
+        await fs.copy(tempFile, path.join(pluginDir, 'index.js'))
+      } else {
+        throw new Error('Unsupported plugin format')
+      }
+      
+      // 6. 写入元数据
+      await this.writePluginMetadata(pluginDir, plugin)
+      
+      // 7. 清理临时文件
+      await fs.remove(tempFile)
+      
+      console.log(`Plugin ${plugin.id}@${plugin.version} cached successfully`)
+      return pluginDir
+      
+    } catch (error) {
+      // 清理失败的下载
+      await fs.remove(tempFile).catch(() => {})
+      await fs.remove(pluginDir).catch(() => {})
+      throw error
+    }
+  }
+  
+  /**
+   * 加载本地缓存的插件
+   */
+  async loadPluginFromCache(pluginId: string, version: string): Promise<string> {
+    const pluginDir = this.getPluginDir(pluginId, version)
+    
+    if (!await fs.pathExists(pluginDir)) {
+      throw new Error(`Plugin ${pluginId}@${version} not found in cache`)
+    }
+    
+    // 读取插件清单获取入口文件
+    const manifestPath = path.join(pluginDir, 'manifest.json')
+    const manifest = await fs.readJSON(manifestPath)
+    const entryPoint = path.join(pluginDir, manifest.entryPoint || 'index.js')
+    
+    if (!await fs.pathExists(entryPoint)) {
+      throw new Error(`Plugin entry point not found: ${entryPoint}`)
+    }
+    
+    return entryPoint
+  }
+  
+  /**
+   * 删除缓存的插件
+   */
+  async removePluginCache(pluginId: string, version: string): Promise<void> {
+    const pluginDir = this.getPluginDir(pluginId, version)
+    await fs.remove(pluginDir)
+    console.log(`Plugin cache removed: ${pluginId}@${version}`)
+  }
+  
+  /**
+   * 清理所有缓存
+   */
+  async clearAllCache(): Promise<void> {
+    const items = await fs.readdir(this.pluginsDir)
+    for (const item of items) {
+      const itemPath = path.join(this.pluginsDir, item)
+      await fs.remove(itemPath)
+    }
+    console.log('All plugin caches cleared')
+  }
+  
+  /**
+   * 获取缓存统计信息
+   */
+  async getCacheStats(): Promise<{
+    totalSize: number
+    pluginCount: number
+    plugins: Array<{ id: string; version: string; size: number }>
+  }> {
+    const items = await fs.readdir(this.pluginsDir)
+    const plugins: Array<{ id: string; version: string; size: number }> = []
+    let totalSize = 0
+    
+    for (const item of items) {
+      if (item === '.cache') continue
+      
+      const itemPath = path.join(this.pluginsDir, item)
+      const stat = await fs.stat(itemPath)
+      
+      if (stat.isDirectory()) {
+        const [id, version] = item.split('@')
+        const size = await this.getDirectorySize(itemPath)
+        plugins.push({ id, version, size })
+        totalSize += size
+      }
+    }
+    
+    return {
+      totalSize,
+      pluginCount: plugins.length,
+      plugins
+    }
+  }
+  
+  /**
+   * 计算文件哈希
+   */
+  private async calculateFileHash(filePath: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const hash = createHash('sha256')
+      const stream = fs.createReadStream(filePath)
+      
+      stream.on('data', (data) => hash.update(data))
+      stream.on('end', () => resolve(hash.digest('hex')))
+      stream.on('error', reject)
+    })
+  }
+  
+  /**
+   * 解压 ZIP 文件
+   */
+  private async extractZip(zipPath: string, destPath: string): Promise<void> {
+    const AdmZip = require('adm-zip')
+    const zip = new AdmZip(zipPath)
+    zip.extractAllTo(destPath, true)
+  }
+  
+  /**
+   * 写入插件元数据
+   */
+  private async writePluginMetadata(pluginDir: string, plugin: PluginFile): Promise<void> {
+    const manifest = {
+      id: plugin.id,
+      name: plugin.name,
+      version: plugin.version,
+      entryPoint: plugin.entryPoint,
+      installedAt: Date.now(),
+      hash: plugin.hash
+    }
+    
+    const manifestPath = path.join(pluginDir, 'manifest.json')
+    await fs.writeJSON(manifestPath, manifest, { spaces: 2 })
+  }
+  
+  /**
+   * 计算目录大小
+   */
+  private async getDirectorySize(dirPath: string): Promise<number> {
+    let size = 0
+    const items = await fs.readdir(dirPath)
+    
+    for (const item of items) {
+      const itemPath = path.join(dirPath, item)
+      const stat = await fs.stat(itemPath)
+      
+      if (stat.isDirectory()) {
+        size += await this.getDirectorySize(itemPath)
+      } else {
+        size += stat.size
+      }
+    }
+    
+    return size
+  }
+}
+```
+
+#### 3.4.2 插件权限控制
 ```typescript
 // packages/electron-adapter/src/plugin/permission.ts
 export enum PluginPermission {
@@ -468,46 +745,490 @@ export class PluginPermissionChecker {
 }
 ```
 
-#### 3.4.2 插件管理器
+#### 3.4.3 插件管理器增强版
 ```typescript
 // packages/electron-adapter/src/plugin/manager.ts
 export class ElectronPluginManager extends BasePluginManager {
   private permissionChecker: PluginPermissionChecker
+  private cacheService: PluginCacheService
   private db: Database
+  private loadedPlugins: Map<string, any> = new Map()
   
-  async installPlugin(plugin: PluginMetadata): Promise<void> {
+  constructor(
+    authManager: AuthManager,
+    cacheService: PluginCacheService,
+    db: Database
+  ) {
+    super()
+    this.permissionChecker = new PluginPermissionChecker(authManager)
+    this.cacheService = cacheService
+    this.db = db
+  }
+  
+  /**
+   * 安装插件（下载 + 缓存 + 加载）
+   */
+  async installPlugin(plugin: PluginFile): Promise<void> {
     // 1. 检查权限
     if (!this.permissionChecker.canInstallPlugin(plugin)) {
       const error = this.permissionChecker.getInstallationError(plugin)
       throw new Error(error)
     }
     
-    // 2. 下载并安装插件
-    await this.downloadPlugin(plugin)
+    // 2. 检查是否已安装
+    const installed = this.db.prepare(
+      'SELECT * FROM plugins WHERE id = ? AND version = ?'
+    ).get(plugin.id, plugin.version)
     
-    // 3. 保存到本地数据库
-    this.db.prepare(`
-      INSERT INTO plugins (id, name, version, category, is_premium, installed_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(plugin.id, plugin.name, plugin.version, plugin.category,
-           plugin.permission === PluginPermission.PREMIUM ? 1 : 0,
-           Date.now())
+    if (installed) {
+      throw new Error(`Plugin ${plugin.name} v${plugin.version} is already installed`)
+    }
     
-    // 4. 加载插件
-    await this.loadPlugin(plugin)
+    try {
+      // 3. 下载并缓存插件文件
+      console.log(`Installing plugin: ${plugin.name} v${plugin.version}`)
+      const pluginDir = await this.cacheService.downloadPlugin(plugin, (progress) => {
+        // 通知渲染进程下载进度
+        this.emit('plugin:download:progress', {
+          pluginId: plugin.id,
+          progress
+        })
+      })
+      
+      // 4. 保存到数据库
+      this.db.prepare(`
+        INSERT INTO plugins (id, name, version, category, is_premium, installed_at, cloud_id, file_path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        plugin.id,
+        plugin.name,
+        plugin.version,
+        plugin.category,
+        plugin.permission === PluginPermission.PREMIUM ? 1 : 0,
+        Date.now(),
+        plugin.cloudId,
+        pluginDir
+      )
+      
+      // 5. 加载插件到内存
+      await this.loadPlugin(plugin.id, plugin.version)
+      
+      console.log(`Plugin installed successfully: ${plugin.name}`)
+      this.emit('plugin:installed', plugin)
+      
+    } catch (error) {
+      console.error(`Failed to install plugin ${plugin.name}:`, error)
+      // 清理失败的安装
+      await this.cacheService.removePluginCache(plugin.id, plugin.version).catch(() => {})
+      throw error
+    }
   }
   
-  async uninstallPlugin(pluginId: string): Promise<void> {
-    // 1. 卸载插件
-    await this.unloadPlugin(pluginId)
+  /**
+   * 从缓存加载插件
+   */
+  async loadPlugin(pluginId: string, version: string): Promise<void> {
+    const key = `${pluginId}@${version}`
     
-    // 2. 从数据库删除
-    this.db.prepare('DELETE FROM plugins WHERE id = ?').run(pluginId)
+    // 避免重复加载
+    if (this.loadedPlugins.has(key)) {
+      console.log(`Plugin ${key} already loaded`)
+      return
+    }
+    
+    try {
+      // 1. 从缓存获取插件入口文件
+      const entryPoint = await this.cacheService.loadPluginFromCache(pluginId, version)
+      
+      // 2. 动态加载 JS 文件
+      // 注意：在 Electron 中，需要使用特殊的方式加载插件
+      const pluginModule = await this.loadPluginModule(entryPoint)
+      
+      // 3. 初始化插件
+      if (pluginModule.activate) {
+        await pluginModule.activate(this.getPluginContext())
+      }
+      
+      // 4. 保存到内存
+      this.loadedPlugins.set(key, pluginModule)
+      
+      console.log(`Plugin loaded: ${key}`)
+      this.emit('plugin:loaded', { pluginId, version })
+      
+    } catch (error) {
+      console.error(`Failed to load plugin ${key}:`, error)
+      throw error
+    }
   }
   
+  /**
+   * 卸载插件
+   */
+  async uninstallPlugin(pluginId: string, version: string): Promise<void> {
+    const key = `${pluginId}@${version}`
+    
+    try {
+      // 1. 卸载插件（调用 deactivate）
+      const pluginModule = this.loadedPlugins.get(key)
+      if (pluginModule && pluginModule.deactivate) {
+        await pluginModule.deactivate()
+      }
+      
+      // 2. 从内存中移除
+      this.loadedPlugins.delete(key)
+      
+      // 3. 从数据库删除
+      this.db.prepare(
+        'DELETE FROM plugins WHERE id = ? AND version = ?'
+      ).run(pluginId, version)
+      
+      // 4. 删除缓存文件
+      await this.cacheService.removePluginCache(pluginId, version)
+      
+      console.log(`Plugin uninstalled: ${key}`)
+      this.emit('plugin:uninstalled', { pluginId, version })
+      
+    } catch (error) {
+      console.error(`Failed to uninstall plugin ${key}:`, error)
+      throw error
+    }
+  }
+  
+  /**
+   * 更新插件
+   */
+  async updatePlugin(pluginId: string, newVersion: string, plugin: PluginFile): Promise<void> {
+    // 1. 获取当前版本
+    const current = this.db.prepare(
+      'SELECT version FROM plugins WHERE id = ? ORDER BY installed_at DESC LIMIT 1'
+    ).get(pluginId)
+    
+    if (!current) {
+      throw new Error(`Plugin ${pluginId} is not installed`)
+    }
+    
+    // 2. 卸载旧版本
+    await this.uninstallPlugin(pluginId, current.version)
+    
+    // 3. 安装新版本
+    await this.installPlugin(plugin)
+    
+    console.log(`Plugin updated: ${pluginId} from ${current.version} to ${newVersion}`)
+  }
+  
+  /**
+   * 获取已安装的插件列表
+   */
   async getInstalledPlugins(): Promise<PluginMetadata[]> {
-    return this.db.prepare('SELECT * FROM plugins').all()
+    return this.db.prepare('SELECT * FROM plugins ORDER BY installed_at DESC').all()
   }
+  
+  /**
+   * 重新加载所有已安装的插件
+   */
+  async reloadAllPlugins(): Promise<void> {
+    const plugins = await this.getInstalledPlugins()
+    
+    for (const plugin of plugins) {
+      try {
+        await this.loadPlugin(plugin.id, plugin.version)
+      } catch (error) {
+        console.error(`Failed to reload plugin ${plugin.id}@${plugin.version}:`, error)
+      }
+    }
+  }
+  
+  /**
+   * 动态加载插件模块
+   */
+  private async loadPluginModule(entryPoint: string): Promise<any> {
+    // 方案 1: 使用 VM 模块（隔离环境）
+    const vm = require('vm')
+    const fs = require('fs-extra')
+    
+    const code = await fs.readFile(entryPoint, 'utf-8')
+    const context = this.createPluginContext()
+    
+    // 创建隔离的执行环境
+    vm.createContext(context)
+    
+    // 执行插件代码
+    const script = new vm.Script(code, {
+      filename: entryPoint
+    })
+    
+    script.runInContext(context)
+    
+    return context.module.exports
+    
+    // 方案 2: 直接 require（简单但安全性较低）
+    // delete require.cache[entryPoint]
+    // return require(entryPoint)
+  }
+  
+  /**
+   * 创建插件执行上下文
+   */
+  private createPluginContext(): any {
+    return {
+      console,
+      require: (moduleName: string) => {
+        // 白名单模块
+        const allowedModules = ['path', 'fs', 'crypto']
+        if (allowedModules.includes(moduleName)) {
+          return require(moduleName)
+        }
+        throw new Error(`Module ${moduleName} is not allowed`)
+      },
+      module: { exports: {} },
+      exports: {}
+    }
+  }
+  
+  /**
+   * 获取插件上下文（传递给插件的 API）
+   */
+  private getPluginContext(): any {
+    return {
+      // 提供给插件的 API
+      getEditor: () => this.editor,
+      registerCommand: (command: any) => this.registerCommand(command),
+      registerView: (view: any) => this.registerView(view),
+      // ... 其他插件 API
+    }
+  }
+}
+```
+
+#### 3.4.4 插件数据表更新
+```sql
+-- 插件表（增加文件路径字段）
+CREATE TABLE plugins (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  version TEXT NOT NULL,
+  category TEXT,
+  is_premium INTEGER DEFAULT 0,
+  installed_at INTEGER,
+  cloud_id TEXT,
+  file_path TEXT NOT NULL,  -- 缓存文件路径
+  file_hash TEXT,           -- 文件哈希
+  file_size INTEGER,        -- 文件大小
+  UNIQUE(id, version)
+);
+
+-- 插件下载历史表
+CREATE TABLE plugin_downloads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  plugin_id TEXT NOT NULL,
+  version TEXT NOT NULL,
+  download_url TEXT NOT NULL,
+  downloaded_at INTEGER,
+  file_path TEXT,
+  status TEXT DEFAULT 'pending',  -- pending, downloading, completed, failed
+  error TEXT
+);
+```
+
+#### 3.4.5 IPC 通道增强
+```typescript
+// apps/desktop/electron/ipc/plugin.ts
+import { ipcMain } from 'electron'
+import { IPC_CHANNELS } from './channels'
+
+export function registerPluginHandlers(
+  pluginManager: ElectronPluginManager,
+  cacheService: PluginCacheService
+) {
+  // 安装插件
+  ipcMain.handle(IPC_CHANNELS.PLUGIN_INSTALL, async (event, plugin: PluginFile) => {
+    try {
+      await pluginManager.installPlugin(plugin)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+  
+  // 卸载插件
+  ipcMain.handle(IPC_CHANNELS.PLUGIN_UNINSTALL, async (event, pluginId, version) => {
+    try {
+      await pluginManager.uninstallPlugin(pluginId, version)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+  
+  // 更新插件
+  ipcMain.handle(IPC_CHANNELS.PLUGIN_UPDATE, async (event, pluginId, newVersion, plugin) => {
+    try {
+      await pluginManager.updatePlugin(pluginId, newVersion, plugin)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+  
+  // 获取已安装插件
+  ipcMain.handle(IPC_CHANNELS.PLUGIN_GET_INSTALLED, async () => {
+    const plugins = await pluginManager.getInstalledPlugins()
+    return { success: true, data: plugins }
+  })
+  
+  // 获取缓存统计
+  ipcMain.handle(IPC_CHANNELS.PLUGIN_GET_CACHE_STATS, async () => {
+    const stats = await cacheService.getCacheStats()
+    return { success: true, data: stats }
+  })
+  
+  // 清理缓存
+  ipcMain.handle(IPC_CHANNELS.PLUGIN_CLEAR_CACHE, async () => {
+    try {
+      await cacheService.clearAllCache()
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+  
+  // 监听下载进度
+  pluginManager.on('plugin:download:progress', (data) => {
+    event.sender.send('plugin:download:progress', data)
+  })
+}
+```
+
+#### 3.4.6 前端插件下载 UI
+```typescript
+// packages/core/src/components/PluginDownloadProgress.tsx
+export const PluginDownloadProgress: React.FC<{ plugin: PluginMetadata }> = ({ plugin }) => {
+  const [progress, setProgress] = useState(0)
+  const [status, setStatus] = useState<'idle' | 'downloading' | 'installing' | 'completed'>('idle')
+  
+  useEffect(() => {
+    if (window.electronAPI) {
+      window.electronAPI.plugin.onDownloadProgress((data: any) => {
+        if (data.pluginId === plugin.id) {
+          setProgress(data.progress)
+          setStatus('downloading')
+        }
+      })
+    }
+  }, [plugin.id])
+  
+  const handleInstall = async () => {
+    try {
+      setStatus('downloading')
+      await window.electronAPI.plugin.install(plugin)
+      setStatus('completed')
+    } catch (error) {
+      console.error('Failed to install plugin:', error)
+      setStatus('idle')
+    }
+  }
+  
+  return (
+    <div className="space-y-2">
+      {status === 'idle' && (
+        <Button onClick={handleInstall}>
+          <Download className="h-4 w-4 mr-2" />
+          安装插件
+        </Button>
+      )}
+      
+      {status === 'downloading' && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Loader className="h-4 w-4 animate-spin" />
+            <span className="text-sm">下载中... {progress.toFixed(0)}%</span>
+          </div>
+          <Progress value={progress} />
+        </div>
+      )}
+      
+      {status === 'installing' && (
+        <div className="flex items-center gap-2">
+          <Loader className="h-4 w-4 animate-spin" />
+          <span className="text-sm">正在安装...</span>
+        </div>
+      )}
+      
+      {status === 'completed' && (
+        <div className="flex items-center gap-2 text-green-600">
+          <Check className="h-4 w-4" />
+          <span className="text-sm">安装成功</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// 缓存管理界面
+export const PluginCacheManager: React.FC = () => {
+  const [stats, setStats] = useState<any>(null)
+  
+  useEffect(() => {
+    loadCacheStats()
+  }, [])
+  
+  const loadCacheStats = async () => {
+    if (window.electronAPI) {
+      const result = await window.electronAPI.plugin.getCacheStats()
+      setStats(result.data)
+    }
+  }
+  
+  const handleClearCache = async () => {
+    if (window.electronAPI) {
+      await window.electronAPI.plugin.clearCache()
+      await loadCacheStats()
+    }
+  }
+  
+  if (!stats) return <Loader />
+  
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>插件缓存管理</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-sm text-muted-foreground">缓存大小</div>
+              <div className="text-2xl font-bold">
+                {(stats.totalSize / 1024 / 1024).toFixed(2)} MB
+              </div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">插件数量</div>
+              <div className="text-2xl font-bold">{stats.pluginCount}</div>
+            </div>
+          </div>
+          
+          <Separator />
+          
+          <div className="space-y-2">
+            <h4 className="font-medium">已缓存的插件</h4>
+            {stats.plugins.map((plugin: any) => (
+              <div key={`${plugin.id}@${plugin.version}`} className="flex justify-between items-center">
+                <span className="text-sm">{plugin.id}@{plugin.version}</span>
+                <span className="text-xs text-muted-foreground">
+                  {(plugin.size / 1024).toFixed(2)} KB
+                </span>
+              </div>
+            ))}
+          </div>
+          
+          <Button variant="destructive" onClick={handleClearCache} className="w-full">
+            清理所有缓存
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 ```
 
@@ -1262,7 +1983,986 @@ jobs:
 
 ---
 
-## 十、预期效果
+## 十一、云端 API 接口设计
+
+### 11.1 认证相关接口
+
+#### 11.1.1 用户注册
+```http
+POST /api/auth/register
+Content-Type: application/json
+
+Request:
+{
+  "email": "user@example.com",
+  "password": "encrypted_password",
+  "username": "username",
+  "device_info": {
+    "device_id": "uuid",
+    "device_name": "Mac/Windows/Linux",
+    "platform": "desktop",
+    "app_version": "1.0.0"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "user_123",
+      "username": "username",
+      "email": "user@example.com",
+      "auth_state": "authenticated",
+      "created_at": 1234567890
+    },
+    "token": "jwt_token_here"
+  }
+}
+```
+
+#### 11.1.2 用户登录
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+Request:
+{
+  "email": "user@example.com",
+  "password": "encrypted_password",
+  "device_info": {
+    "device_id": "uuid",
+    "device_name": "Mac/Windows/Linux",
+    "platform": "desktop",
+    "app_version": "1.0.0"
+  }
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "user_123",
+      "username": "username",
+      "email": "user@example.com",
+      "auth_state": "authenticated",
+      "membership": null
+    },
+    "token": "jwt_token_here",
+    "refresh_token": "refresh_token_here"
+  }
+}
+```
+
+#### 11.1.3 刷新 Token
+```http
+POST /api/auth/refresh
+Content-Type: application/json
+Authorization: Bearer <refresh_token>
+
+Response:
+{
+  "success": true,
+  "data": {
+    "token": "new_jwt_token",
+    "refresh_token": "new_refresh_token"
+  }
+}
+```
+
+#### 11.1.4 获取用户信息
+```http
+GET /api/auth/me
+Authorization: Bearer <token>
+
+Response:
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "user_123",
+      "username": "username",
+      "email": "user@example.com",
+      "auth_state": "member",
+      "membership": {
+        "tier": "pro",
+        "expiry": 1234567890,
+        "features": [
+          "cloud_sync",
+          "premium_plugins",
+          "multi_device"
+        ]
+      },
+      "devices": [
+        {
+          "device_id": "uuid",
+          "device_name": "My MacBook",
+          "last_seen": 1234567890
+        }
+      ]
+    }
+  }
+}
+```
+
+#### 11.1.5 登出
+```http
+POST /api/auth/logout
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "device_id": "uuid"
+}
+
+Response:
+{
+  "success": true
+}
+```
+
+---
+
+### 11.2 会员相关接口
+
+#### 11.2.1 获取会员套餐列表
+```http
+GET /api/membership/tiers
+
+Response:
+{
+  "success": true,
+  "data": [
+    {
+      "id": "free",
+      "name": "免费版",
+      "price": 0,
+      "currency": "CNY",
+      "features": [
+        "基础功能",
+        "本地存储",
+        "免费插件（需注册）"
+      ],
+      "limits": {
+        "max_plugins": 5,
+        "storage_quota_gb": 1,
+        "max_devices": 1
+      }
+    },
+    {
+      "id": "pro",
+      "name": "专业版",
+      "price": 99,
+      "currency": "CNY",
+      "billing_period": "monthly",
+      "features": [
+        "所有基础功能",
+        "云端同步",
+        "所有插件",
+        "多设备同步",
+        "优先支持"
+      ],
+      "limits": {
+        "max_plugins": -1,
+        "storage_quota_gb": 10,
+        "max_devices": 3
+      }
+    },
+    {
+      "id": "enterprise",
+      "name": "企业版",
+      "price": 299,
+      "currency": "CNY",
+      "billing_period": "monthly",
+      "features": [
+        "所有专业版功能",
+        "团队协作",
+        "自定义域名",
+        "专属客服",
+        "API 访问"
+      ],
+      "limits": {
+        "max_plugins": -1,
+        "storage_quota_gb": 100,
+        "max_devices": -1
+      }
+    }
+  ]
+}
+```
+
+#### 11.2.2 创建订单
+```http
+POST /api/membership/orders
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "tier_id": "pro",
+  "billing_period": "monthly",
+  "payment_method": "alipay" | "wechat" | "stripe"
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "order": {
+      "id": "order_123",
+      "user_id": "user_123",
+      "tier_id": "pro",
+      "amount": 99,
+      "currency": "CNY",
+      "status": "pending",
+      "payment_url": "https://payment.example.com/pay/order_123",
+      "qr_code": "data:image/png;base64,...",  // 支付二维码（支付宝/微信）
+      "expires_at": 1234567890,
+      "created_at": 1234567890
+    }
+  }
+}
+```
+
+#### 11.2.3 查询订单状态
+```http
+GET /api/membership/orders/:orderId
+Authorization: Bearer <token>
+
+Response:
+{
+  "success": true,
+  "data": {
+    "order": {
+      "id": "order_123",
+      "status": "paid",
+      "paid_at": 1234567890,
+      "membership": {
+        "tier": "pro",
+        "start_date": 1234567890,
+        "expiry_date": 1234567890
+      }
+    }
+  }
+}
+```
+
+#### 11.2.4 验证支付状态
+```http
+POST /api/membership/orders/:orderId/verify
+Authorization: Bearer <token>
+
+Response:
+{
+  "success": true,
+  "data": {
+    "paid": true,
+    "membership": {
+      "tier": "pro",
+      "start_date": 1234567890,
+      "expiry_date": 1234567890,
+      "features": [...]
+    }
+  }
+}
+```
+
+#### 11.2.5 取消订阅
+```http
+POST /api/membership/cancel
+Authorization: Bearer <token>
+
+Response:
+{
+  "success": true,
+  "data": {
+    "cancelled_at": 1234567890,
+    "expires_at": 1234567890,  // 会员有效期至
+    "message": "订阅将在 2024-12-31 到期"
+  }
+}
+```
+
+---
+
+### 11.3 插件相关接口
+
+#### 11.3.1 获取插件市场列表
+```http
+GET /api/plugins?category=all&page=1&pageSize=20&permission=all
+Authorization: Bearer <token> (optional)
+
+Query Parameters:
+- category: all | app | feature | connector
+- page: 1
+- pageSize: 20
+- permission: all | free | premium
+- search: 搜索关键词
+
+Response:
+{
+  "success": true,
+  "data": {
+    "records": [
+      {
+        "id": "plugin-ai",
+        "name": "AI Assistant",
+        "version": "1.0.0",
+        "category": "feature",
+        "permission": "premium",
+        "author": "Kotion Team",
+        "description": "AI-powered writing assistant",
+        "icon": "https://cdn.example.com/plugins/ai/icon.png",
+        "download_count": 10000,
+        "rating": 4.8,
+        "file_info": {
+          "url": "https://cdn.example.com/plugins/ai/1.0.0/index.js",
+          "hash": "sha256_hash_here",
+          "size": 102400,
+          "entry_point": "index.js"
+        },
+        "screenshots": [
+          "https://cdn.example.com/plugins/ai/screenshot1.png"
+        ],
+        "changelog": "Initial release",
+        "required_version": "1.0.0",
+        "created_at": 1234567890,
+        "updated_at": 1234567890
+      }
+    ],
+    "total": 100,
+    "page": 1,
+    "pageSize": 20
+  }
+}
+```
+
+#### 11.3.2 获取插件详情
+```http
+GET /api/plugins/:pluginId
+Authorization: Bearer <token> (optional)
+
+Response:
+{
+  "success": true,
+  "data": {
+    "plugin": {
+      "id": "plugin-ai",
+      "name": "AI Assistant",
+      "version": "1.0.0",
+      "category": "feature",
+      "permission": "premium",
+      "author": "Kotion Team",
+      "description": "Detailed description...",
+      "long_description": "# AI Assistant\n\nFull markdown description...",
+      "icon": "https://cdn.example.com/plugins/ai/icon.png",
+      "download_count": 10000,
+      "rating": 4.8,
+      "reviews_count": 234,
+      "file_info": {
+        "url": "https://cdn.example.com/plugins/ai/1.0.0/index.js",
+        "hash": "sha256_hash_here",
+        "size": 102400,
+        "entry_point": "index.js"
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "released_at": 1234567890,
+          "changelog": "Initial release"
+        }
+      ],
+      "screenshots": [...],
+      "dependencies": [],
+      "permissions": [
+        "network",
+        "filesystem"
+      ],
+      "is_installed": false,
+      "installed_version": null
+    }
+  }
+}
+```
+
+#### 11.3.3 下载插件文件
+```http
+GET /api/plugins/:pluginId/download?version=1.0.0
+Authorization: Bearer <token>
+
+Headers:
+- Authorization: Bearer <token>
+
+Response:
+- Content-Type: application/javascript or application/zip
+- Content-Disposition: attachment; filename="plugin-ai-1.0.0.js"
+- X-File-Hash: sha256_hash_here
+- X-File-Size: 102400
+- Binary file stream
+```
+
+#### 11.3.4 记录插件安装
+```http
+POST /api/plugins/:pluginId/install
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "version": "1.0.0",
+  "device_id": "uuid"
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "installed_at": 1234567890,
+    "cloud_id": "installation_123"
+  }
+}
+```
+
+#### 11.3.5 记录插件卸载
+```http
+POST /api/plugins/:pluginId/uninstall
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "version": "1.0.0",
+  "device_id": "uuid"
+}
+
+Response:
+{
+  "success": true
+}
+```
+
+#### 11.3.6 获取用户已安装插件列表
+```http
+GET /api/plugins/installed
+Authorization: Bearer <token>
+
+Response:
+{
+  "success": true,
+  "data": [
+    {
+      "plugin_id": "plugin-ai",
+      "version": "1.0.0",
+      "installed_at": 1234567890,
+      "device_id": "uuid",
+      "cloud_id": "installation_123"
+    }
+  ]
+}
+```
+
+#### 11.3.7 检查插件更新
+```http
+POST /api/plugins/check-updates
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "plugins": [
+    {
+      "id": "plugin-ai",
+      "version": "1.0.0"
+    },
+    {
+      "id": "plugin-excalidraw",
+      "version": "2.0.0"
+    }
+  ]
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "updates": [
+      {
+        "plugin_id": "plugin-ai",
+        "current_version": "1.0.0",
+        "latest_version": "1.1.0",
+        "changelog": "Bug fixes and improvements",
+        "file_info": {
+          "url": "https://cdn.example.com/plugins/ai/1.1.0/index.js",
+          "hash": "sha256_hash_here",
+          "size": 105600
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 11.4 云端同步接口（仅会员）
+
+#### 11.4.1 同步空间列表
+```http
+GET /api/sync/spaces
+Authorization: Bearer <token>
+
+Response:
+{
+  "success": true,
+  "data": {
+    "spaces": [
+      {
+        "id": "space_123",
+        "name": "My Workspace",
+        "icon": "🏠",
+        "description": "Personal workspace",
+        "home_page_id": "page_456",
+        "created_at": 1234567890,
+        "updated_at": 1234567890,
+        "synced_at": 1234567890
+      }
+    ],
+    "last_sync": 1234567890
+  }
+}
+```
+
+#### 11.4.2 推送空间数据
+```http
+POST /api/sync/spaces
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "space": {
+    "id": "space_123",
+    "name": "My Workspace",
+    "icon": "🏠",
+    "description": "Personal workspace",
+    "home_page_id": "page_456",
+    "created_at": 1234567890,
+    "updated_at": 1234567890
+  }
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "cloud_id": "cloud_space_789",
+    "synced_at": 1234567890
+  }
+}
+```
+
+#### 11.4.3 同步页面列表
+```http
+GET /api/sync/spaces/:spaceId/pages
+Authorization: Bearer <token>
+
+Response:
+{
+  "success": true,
+  "data": {
+    "pages": [
+      {
+        "id": "page_123",
+        "space_id": "space_456",
+        "parent_id": null,
+        "title": "Getting Started",
+        "content": "{}",  // JSON 字符串
+        "icon": "📄",
+        "status": "ACTIVE",
+        "is_draft": false,
+        "created_at": 1234567890,
+        "updated_at": 1234567890,
+        "synced_at": 1234567890
+      }
+    ],
+    "last_sync": 1234567890
+  }
+}
+```
+
+#### 11.4.4 推送页面数据
+```http
+POST /api/sync/pages
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "pages": [
+    {
+      "id": "page_123",
+      "space_id": "space_456",
+      "title": "Getting Started",
+      "content": "{}",
+      "updated_at": 1234567890
+    }
+  ]
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "synced": [
+      {
+        "local_id": "page_123",
+        "cloud_id": "cloud_page_789",
+        "synced_at": 1234567890
+      }
+    ],
+    "conflicts": []
+  }
+}
+```
+
+#### 11.4.5 拉取增量更新
+```http
+GET /api/sync/delta?since=1234567890&entity_types=spaces,pages
+Authorization: Bearer <token>
+
+Query Parameters:
+- since: 上次同步时间戳
+- entity_types: 实体类型（逗号分隔）
+
+Response:
+{
+  "success": true,
+  "data": {
+    "changes": [
+      {
+        "entity_type": "page",
+        "entity_id": "page_123",
+        "operation": "update",
+        "data": {...},
+        "updated_at": 1234567890
+      },
+      {
+        "entity_type": "space",
+        "entity_id": "space_456",
+        "operation": "delete",
+        "deleted_at": 1234567890
+      }
+    ],
+    "current_timestamp": 1234567890
+  }
+}
+```
+
+#### 11.4.6 解决同步冲突
+```http
+POST /api/sync/resolve-conflict
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "entity_type": "page",
+  "entity_id": "page_123",
+  "resolution": "use_local" | "use_cloud" | "merge",
+  "merged_data": {...}  // 如果 resolution = "merge"
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "resolved": true,
+    "final_data": {...},
+    "synced_at": 1234567890
+  }
+}
+```
+
+#### 11.4.7 获取同步状态
+```http
+GET /api/sync/status
+Authorization: Bearer <token>
+
+Response:
+{
+  "success": true,
+  "data": {
+    "last_sync": 1234567890,
+    "pending_changes": 5,
+    "sync_enabled": true,
+    "storage_usage": {
+      "used_gb": 2.5,
+      "quota_gb": 10,
+      "percentage": 25
+    },
+    "devices": [
+      {
+        "device_id": "uuid",
+        "device_name": "MacBook Pro",
+        "last_seen": 1234567890,
+        "sync_enabled": true
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 11.5 数据导出/导入接口
+
+#### 11.5.1 导出用户数据
+```http
+POST /api/export/request
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "entity_types": ["spaces", "pages", "plugins"],
+  "format": "json" | "markdown"
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "export_id": "export_123",
+    "status": "processing",
+    "estimated_time": 60  // 秒
+  }
+}
+```
+
+#### 11.5.2 获取导出状态
+```http
+GET /api/export/:exportId
+Authorization: Bearer <token>
+
+Response:
+{
+  "success": true,
+  "data": {
+    "export_id": "export_123",
+    "status": "completed",
+    "download_url": "https://cdn.example.com/exports/export_123.zip",
+    "expires_at": 1234567890,
+    "file_size": 1048576
+  }
+}
+```
+
+#### 11.5.3 导入数据
+```http
+POST /api/import
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+Request:
+- file: exported_data.zip
+
+Response:
+{
+  "success": true,
+  "data": {
+    "import_id": "import_123",
+    "status": "processing"
+  }
+}
+```
+
+#### 11.5.4 获取导入状态
+```http
+GET /api/import/:importId
+Authorization: Bearer <token>
+
+Response:
+{
+  "success": true,
+  "data": {
+    "import_id": "import_123",
+    "status": "completed",
+    "imported": {
+      "spaces": 5,
+      "pages": 120
+    },
+    "errors": []
+  }
+}
+```
+
+---
+
+### 11.6 设备管理接口
+
+#### 11.6.1 注册设备
+```http
+POST /api/devices
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "device_id": "uuid",
+  "device_name": "MacBook Pro",
+  "device_type": "desktop",
+  "os": "macOS",
+  "os_version": "14.0",
+  "app_version": "1.0.0"
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "device": {
+      "id": "device_123",
+      "device_id": "uuid",
+      "device_name": "MacBook Pro",
+      "registered_at": 1234567890
+    }
+  }
+}
+```
+
+#### 11.6.2 获取设备列表
+```http
+GET /api/devices
+Authorization: Bearer <token>
+
+Response:
+{
+  "success": true,
+  "data": {
+    "devices": [
+      {
+        "id": "device_123",
+        "device_id": "uuid",
+        "device_name": "MacBook Pro",
+        "device_type": "desktop",
+        "os": "macOS",
+        "last_seen": 1234567890,
+        "sync_enabled": true,
+        "is_current": true
+      }
+    ]
+  }
+}
+```
+
+#### 11.6.3 移除设备
+```http
+DELETE /api/devices/:deviceId
+Authorization: Bearer <token>
+
+Response:
+{
+  "success": true
+}
+```
+
+---
+
+### 11.7 错误响应格式
+
+所有接口在出错时返回统一格式：
+
+```http
+Status: 400/401/403/404/500
+
+Response:
+{
+  "success": false,
+  "error": {
+    "code": "PERMISSION_DENIED",
+    "message": "You need to be a member to access this feature",
+    "details": {
+      "required_tier": "pro",
+      "current_tier": "free"
+    }
+  }
+}
+```
+
+**常见错误码**:
+- `UNAUTHORIZED` - 未登录
+- `PERMISSION_DENIED` - 权限不足
+- `MEMBERSHIP_REQUIRED` - 需要会员
+- `PREMIUM_PLUGIN_REQUIRED` - 需要会员安装高级插件
+- `DEVICE_LIMIT_REACHED` - 设备数量达到上限
+- `STORAGE_QUOTA_EXCEEDED` - 存储空间不足
+- `PLUGIN_NOT_FOUND` - 插件不存在
+- `INVALID_FILE_HASH` - 文件哈希校验失败
+- `SYNC_CONFLICT` - 同步冲突
+
+---
+
+### 11.8 认证机制
+
+**JWT Token 格式**:
+```
+Header:
+{
+  "alg": "HS256",
+  "typ": "JWT"
+}
+
+Payload:
+{
+  "user_id": "user_123",
+  "email": "user@example.com",
+  "auth_state": "member",
+  "tier": "pro",
+  "device_id": "uuid",
+  "iat": 1234567890,
+  "exp": 1234567890
+}
+```
+
+**请求头**:
+```
+Authorization: Bearer <jwt_token>
+X-Device-ID: <device_uuid>
+X-App-Version: 1.0.0
+```
+
+---
+
+### 11.9 速率限制
+
+| 端点 | 限制 |
+|------|------|
+| `/api/auth/login` | 5次/分钟 |
+| `/api/auth/register` | 3次/小时 |
+| `/api/plugins/*` | 60次/分钟 |
+| `/api/sync/*` | 120次/分钟（会员） |
+| `/api/export/*` | 10次/小时 |
+
+超出限制返回：
+```http
+Status: 429 Too Many Requests
+
+Response:
+{
+  "success": false,
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Too many requests",
+    "retry_after": 60
+  }
+}
+```
+
+---
+
+## 十二、预期效果
 
 ### 10.1 用户权益
 - **匿名用户**: 无需注册即可体验完整功能（除插件外）
