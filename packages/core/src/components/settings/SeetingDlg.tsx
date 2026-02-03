@@ -22,9 +22,9 @@ interface PluginSettingsWithMeta extends PluginSettingsConfig {
 
 // Settings section header component
 const SectionHeader: React.FC<{ title: string; description?: string }> = ({ title, description }) => (
-    <div className="mb-6">
-        <h2 className="text-xl font-semibold text-foreground">{title}</h2>
-        {description && <p className="text-sm text-muted-foreground mt-1">{description}</p>}
+    <div className="mb-4">
+        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
     </div>
 );
 
@@ -33,11 +33,11 @@ const PluginSettingsLoader: React.FC<{ config: PluginSettingsWithMeta }> = ({ co
     const Component = config.component;
     return (
         <Suspense fallback={
-            <div className="flex items-center justify-center h-40">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <div className="flex items-center justify-center h-32">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
             </div>
         }>
-            <div className="space-y-4">
+            <div className="space-y-3">
                 <SectionHeader
                     title={config.label}
                     description={config.description}
@@ -70,28 +70,28 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
         switch (currentKey) {
             case 'MyAccount':
                 return (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         <SectionHeader title="我的账号" description="管理您的个人信息和账号设置" />
                         <MyAccount />
                     </div>
                 );
             case 'MySetting':
                 return (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         <SectionHeader title="我的设置" description="自定义您的偏好设置" />
                         <MySetting />
                     </div>
                 );
             case 'Member':
                 return (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         <SectionHeader title="人员管理" description="管理工作空间成员和权限" />
                         <Member />
                     </div>
                 );
             default:
                 return (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         <SectionHeader title="我的账号" description="管理您的个人信息和账号设置" />
                         <MyAccount />
                     </div>
@@ -111,7 +111,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
         <button
             onClick={onClick}
             className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200",
+                "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-sm transition-all duration-200",
                 "hover:bg-accent/50",
                 isActive
                     ? "bg-primary/10 text-primary font-medium"
@@ -155,23 +155,23 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                         <div
                             onClick={() => setCurrentKey('MyAccount')}
                             className={cn(
-                                "flex items-center gap-3 p-3 mx-1 mb-2 rounded-xl border transition-all duration-200 cursor-pointer",
+                                "flex items-center gap-2.5 p-2.5 mx-1 mb-1.5 rounded-lg border transition-all duration-200 cursor-pointer",
                                 currentKey === 'MyAccount'
                                     ? "bg-primary/5 border-primary/30 shadow-sm"
                                     : "bg-card border-border hover:bg-accent/50 hover:border-accent"
                             )}
                         >
-                            <Avatar className="h-10 w-10 ring-2 ring-primary/20 ring-offset-2 ring-offset-background">
+                            <Avatar className="h-8 w-8 ring-2 ring-primary/20 ring-offset-1 ring-offset-background">
                                 <AvatarImage src={usePath(userInfo?.avatar as string)} />
-                                <AvatarFallback className="bg-primary/10 text-primary font-bold text-sm">
+                                <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
                                     {userInfo?.account?.slice(0, 2).toUpperCase()}
                                 </AvatarFallback>
                             </Avatar>
                             <div className="flex flex-col flex-1 min-w-0">
-                                <div className="font-semibold text-sm truncate text-foreground">{userInfo?.name}</div>
-                                <div className="text-xs text-muted-foreground truncate">{userInfo?.account}</div>
+                                <div className="font-semibold text-xs truncate text-foreground">{userInfo?.name}</div>
+                                <div className="text-[10px] text-muted-foreground truncate">{userInfo?.account}</div>
                             </div>
-                            <Badge variant="secondary" className="text-[10px] px-2 py-0.5 h-5 font-medium">Free</Badge>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">Free</Badge>
                         </div>
                     )
                 },
@@ -236,33 +236,33 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
             <DialogTrigger asChild>
                 {children}
             </DialogTrigger>
-            <DialogContent className="p-0 max-w-[1000px] h-[720px] gap-0 overflow-hidden">
-                <DialogHeader className="px-6 py-4 border-b bg-muted/30">
+            <DialogContent className="p-0 max-w-[1000px] h-[680px] gap-0 overflow-hidden">
+                <DialogHeader className="px-6 py-3 border-b bg-muted/30">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-primary/10">
-                            <Settings className="h-5 w-5 text-primary" />
+                        <div className="p-1.5 rounded-lg bg-primary/10">
+                            <Settings className="h-4 w-4 text-primary" />
                         </div>
                         <div>
-                            <DialogTitle className="text-lg font-semibold">设置</DialogTitle>
-                            <DialogDescription className="text-sm text-muted-foreground">
+                            <DialogTitle className="text-base font-semibold">设置</DialogTitle>
+                            <DialogDescription className="text-xs text-muted-foreground">
                                 管理您的账号、工作空间和插件设置
                             </DialogDescription>
                         </div>
                     </div>
                 </DialogHeader>
-                <div className="grid grid-cols-[280px_1fr] h-[calc(100%-81px)]">
+                <div className="grid grid-cols-[260px_1fr] h-[calc(100%-65px)]">
                     <div className="border-r bg-muted/20">
                         <ScrollArea className="h-full">
-                            <div className="p-4">
+                            <div className="p-3">
                                 <TreeView
                                     size="sm"
                                     elements={settingItems}
                                 />
                                 {pluginSettings.length > 0 && (
                                     <>
-                                        <Separator className="my-3" />
+                                        <Separator className="my-2" />
                                         <div className="px-2 py-1">
-                                            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                                            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
                                                 已安装插件 ({pluginSettings.length})
                                             </div>
                                         </div>
@@ -271,8 +271,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                             </div>
                         </ScrollArea>
                     </div>
-                    <ScrollArea className="h-[500px]">
-                        <div className="p-8">
+                    <ScrollArea className="h-full">
+                        <div className="p-6">
                             {render()}
                         </div>
                     </ScrollArea>

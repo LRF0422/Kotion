@@ -184,8 +184,11 @@ export const useEditorAgentOptimized = (
         tools: wrappedTools,
     }), [wrappedTools])
 
-    // Stream with abort support
-    const stream = useCallback(async (options: { prompt: string }) => {
+    // Stream with abort support and history messages
+    const stream = useCallback(async (options: { 
+        prompt: string
+        messages?: Array<{ role: 'user' | 'assistant'; content: string }>
+    }) => {
         // Abort any previous stream
         if (abortControllerRef.current) {
             abortControllerRef.current.abort()
@@ -194,8 +197,23 @@ export const useEditorAgentOptimized = (
         // Create new AbortController
         abortControllerRef.current = new AbortController()
 
+        // Build initial messages array for conversation context
+        const initialMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
+        
+        // Add history messages if provided
+        if (options.messages && options.messages.length > 0) {
+            initialMessages.push(...options.messages)
+        }
+        
+        // Add current prompt as the latest user message
+        initialMessages.push({
+            role: 'user',
+            content: options.prompt
+        })
+
         return agent.stream({
-            ...options,
+            prompt: options.prompt,
+            initialMessages,
             abortSignal: abortControllerRef.current.signal
         })
     }, [agent])

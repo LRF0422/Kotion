@@ -35,7 +35,7 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void, handleU
         <Tooltip>
             <TooltipTrigger asChild>
                 <div
-                    className="group relative flex items-center gap-3 rounded-lg p-3 border bg-card hover:bg-accent/50 transition-all duration-300 cursor-pointer hover:shadow-md hover:border-primary/20"
+                    className="group relative flex items-center gap-2 sm:gap-3 rounded-lg p-2 sm:p-3 border bg-card hover:bg-accent/50 transition-all duration-300 cursor-pointer hover:shadow-md hover:border-primary/20"
                     style={{
                         transform: isHovered ? 'translateX(2px)' : 'translateX(0)',
                         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
@@ -50,18 +50,18 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void, handleU
                 >
                     {/* Plugin Icon */}
                     <div className="flex-shrink-0">
-                        <Avatar className="h-12 w-12 rounded-lg border-2 border-border/50 group-hover:border-primary/30 transition-colors">
+                        <Avatar className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg border-2 border-border/50 group-hover:border-primary/30 transition-colors">
                             <img src={usePath(item.icon)} alt={item.name} className="object-cover" />
                         </Avatar>
                     </div>
 
                     {/* Plugin Info */}
-                    <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex-1 min-w-0 space-y-0.5 sm:space-y-1">
                         <div className="flex items-center justify-between gap-2">
-                            <h4 className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                            <h4 className="text-xs sm:text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
                                 {item.name}
                             </h4>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0">
+                            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0">
                                 <div className="flex items-center gap-0.5">
                                     <DownloadCloud className="h-3 w-3" />
                                     <span>100M</span>
@@ -73,31 +73,31 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void, handleU
                             </div>
                         </div>
 
-                        <p className="text-xs text-muted-foreground line-clamp-1">
+                        <p className="text-[10px] sm:text-xs text-muted-foreground line-clamp-1">
                             {item.description}
                         </p>
 
                         {/* Action Buttons */}
-                        <div className="flex gap-1.5 pt-0.5">
+                        <div className="flex gap-1 sm:gap-1.5 pt-0.5">
                             <Button
                                 variant="secondary"
                                 size="sm"
-                                className="h-7 px-2.5 text-xs gap-1.5 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                className="h-6 sm:h-7 px-2 sm:px-2.5 text-[10px] sm:text-xs gap-1 sm:gap-1.5 hover:bg-destructive/10 hover:text-destructive transition-colors"
                                 onClick={(e) => {
                                     e.stopPropagation()
                                     handleUnInstall(item)
                                 }}
                             >
-                                <Trash2 className="h-3 w-3" />
-                                Uninstall
+                                <Trash2 className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                                <span className="hidden xs:inline">Uninstall</span>
                             </Button>
                             {
                                 item.activeVersionId !== item.id &&
-                                <Badge variant="outline" className="h-7 px-2.5 text-xs cursor-pointer hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors" onClick={(e) => {
+                                <Badge variant="outline" className="h-6 sm:h-7 px-2 sm:px-2.5 text-[10px] sm:text-xs cursor-pointer hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-colors" onClick={(e) => {
                                     e.stopPropagation()
                                     handleUpdate(item.id)
                                 }}>
-                                    Update Available
+                                    Update
                                 </Badge>
                             }
                         </div>
@@ -171,19 +171,19 @@ export const Shop: React.FC = () => {
         })
     }
 
-    return <div className="grid grid-cols-[320px_1fr] w-full h-screen bg-background">
+    return <div className="flex flex-col lg:grid lg:grid-cols-[320px_1fr] w-full h-screen bg-background">
         {/* Sidebar */}
-        <div className="border-r bg-muted/30 flex flex-col h-screen">
+        <div className="border-b lg:border-b-0 lg:border-r bg-muted/30 flex flex-col h-auto lg:h-screen">
             {/* Header */}
             <div className="flex-shrink-0 border-b bg-background/80 backdrop-blur-sm">
-                <div className="flex items-center justify-between p-4">
+                <div className="flex items-center justify-between p-3 sm:p-4">
                     <div className="flex items-center gap-2">
-                        <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500">
-                            <Package className="h-4 w-4 text-white" />
+                        <div className="p-1.5 sm:p-2 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500">
+                            <Package className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white" />
                         </div>
                         <div>
-                            <h2 className="text-sm font-semibold">Extensions</h2>
-                            <p className="text-xs text-muted-foreground">
+                            <h2 className="text-xs sm:text-sm font-semibold">Extensions</h2>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground">
                                 {installedPlugins.length} installed
                             </p>
                         </div>
@@ -192,8 +192,8 @@ export const Shop: React.FC = () => {
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted">
-                                        <RefreshCcw className="h-4 w-4" />
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-muted">
+                                        <RefreshCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                     </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>Refresh</TooltipContent>
@@ -203,8 +203,8 @@ export const Shop: React.FC = () => {
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <PluginUploader>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted">
-                                            <PlusSquare className="h-4 w-4" />
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-muted">
+                                            <PlusSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                         </Button>
                                     </PluginUploader>
                                 </TooltipTrigger>
@@ -215,8 +215,8 @@ export const Shop: React.FC = () => {
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <PluginManager>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted">
-                                            <Slack className="h-4 w-4" />
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-muted">
+                                            <Slack className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                         </Button>
                                     </PluginManager>
                                 </TooltipTrigger>
@@ -227,20 +227,20 @@ export const Shop: React.FC = () => {
                 </div>
 
                 {/* Search Bar */}
-                <div className="px-4 pb-4">
+                <div className="px-3 sm:px-4 pb-3 sm:pb-4">
                     <Input
-                        className="h-9 bg-background"
+                        className="h-8 sm:h-9 bg-background text-sm"
                         placeholder="Search extensions..."
                     />
                 </div>
             </div>
 
             {/* Plugin List */}
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden max-h-[300px] lg:max-h-none">
                 <Accordion
                     type="multiple"
                     defaultValue={["installed"]}
-                    className="h-full overflow-auto px-3 py-2"
+                    className="h-full overflow-auto px-2 sm:px-3 py-2"
                 >
                     <AccordionItem value="installed" className="border-none">
                         <AccordionTrigger className="text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground py-2 px-2 hover:no-underline">
@@ -252,11 +252,11 @@ export const Shop: React.FC = () => {
                             </div>
                         </AccordionTrigger>
                         <AccordionContent className="pt-2">
-                            <div className="space-y-1.5">
+                            <div className="space-y-1 sm:space-y-1.5">
                                 {
                                     installedPlugins.length > 0 ? installedPlugins.map((plugin, index) => {
                                         return <Item key={index} item={plugin} handleUnInstall={uninstall} handleUpdate={handleUpdate} />
-                                    }) : <div className="py-12">
+                                    }) : <div className="py-8 sm:py-12">
                                         <EmptyState
                                             title="No Plugins Installed"
                                             description="Browse the marketplace to discover and install plugins"
@@ -279,36 +279,36 @@ export const Shop: React.FC = () => {
         </div>
 
         {/* Main Content */}
-        <div className="overflow-auto">
+        <div className="flex-1 overflow-auto">
             <Outlet />
         </div>
         <AlertDialog open={open} onOpenChange={setOpen}>
             <AlertDialogTrigger />
-            <AlertDialogContent className="max-w-md">
+            <AlertDialogContent className="max-w-[90vw] sm:max-w-md mx-4">
                 <AlertDialogHeader>
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-3 rounded-full bg-destructive/10">
-                            <Trash2 className="h-6 w-6 text-destructive" />
+                    <div className="flex items-center gap-2 sm:gap-3 mb-2">
+                        <div className="p-2 sm:p-3 rounded-full bg-destructive/10">
+                            <Trash2 className="h-5 w-5 sm:h-6 sm:w-6 text-destructive" />
                         </div>
                         <div className="flex-1">
-                            <AlertDialogTitle className="text-lg">Uninstall Plugin</AlertDialogTitle>
-                            <AlertDialogDescription className="text-sm text-muted-foreground mt-1">
+                            <AlertDialogTitle className="text-base sm:text-lg">Uninstall Plugin</AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs sm:text-sm text-muted-foreground mt-1">
                                 This action cannot be undone
                             </AlertDialogDescription>
                         </div>
                     </div>
                 </AlertDialogHeader>
-                <div className="py-4">
-                    <div className="rounded-lg border bg-muted/30 p-4">
-                        <p className="text-sm">
+                <div className="py-3 sm:py-4">
+                    <div className="rounded-lg border bg-muted/30 p-3 sm:p-4">
+                        <p className="text-xs sm:text-sm">
                             Are you sure you want to permanently remove <span className="font-semibold text-foreground">{currentPlugin?.name}</span>?
                             All plugin data and configurations will be deleted.
                         </p>
                     </div>
                 </div>
-                <AlertDialogFooter className="gap-2 sm:gap-2">
+                <AlertDialogFooter className="gap-2 sm:gap-2 flex-col sm:flex-row">
                     <AlertDialogCancel
-                        className="mt-0"
+                        className="mt-0 w-full sm:w-auto"
                         onClick={() => {
                             setCurrentPlugin(undefined)
                             setOpen(false)
@@ -317,7 +317,7 @@ export const Shop: React.FC = () => {
                         Cancel
                     </AlertDialogCancel>
                     <AlertDialogAction
-                        className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                        className="bg-destructive hover:bg-destructive/90 text-destructive-foreground w-full sm:w-auto"
                         onClick={() => {
                             if (currentPlugin) {
                                 useApi(APIS.UNINSTALL_PLUGIN, { versionId: currentPlugin.id }).then(res => {

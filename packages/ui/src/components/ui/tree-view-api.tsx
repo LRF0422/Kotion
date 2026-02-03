@@ -336,14 +336,16 @@ const Folder = memo(forwardRef<
                                 disabled={!isSelectable}
                                 onClick={handleExpandClick}
                             >
-                                <div className="">
+                                <div className="flex-shrink-0">
                                     {isExpanded
                                         ? openIcon ?? <ChevronDown className="h-4 w-4" />
                                         : closeIcon ?? <ChevronRight className="h-4 w-4" />}
                                 </div>
                             </AccordionPrimitive.Trigger>
-                            {icon}
-                            {element}
+                            <div className="flex items-center gap-2 flex-1 truncate">
+                                {icon}
+                                {element}
+                            </div>
                         </span>
                     </div> : (
                         <AccordionPrimitive.Trigger
@@ -365,8 +367,8 @@ const Folder = memo(forwardRef<
                                 // onTreeSelected && onTreeSelected(value)
                             }}
                         >
-                            <span className="flex flex-row items-center gap-3 w-[100px]">{icon}{element}</span>
-                            <div className=" absolute right-10">
+                            <span className="flex flex-row items-center gap-3 flex-1 truncate">{icon}{element}</span>
+                            <div className="flex-shrink-0">
                                 {isExpanded
                                     ? openIcon ?? <ChevronDown className="h-4 w-4" />
                                     : closeIcon ?? <ChevronRight className="h-4 w-4" />}

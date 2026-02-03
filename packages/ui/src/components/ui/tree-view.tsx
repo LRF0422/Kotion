@@ -187,7 +187,7 @@ export const TreeItem = memo(forwardRef<
                                 isSelectable={element.isSelectable}
                                 onClick={element.onClick}
                             >
-                                <span className="w-full">{element?.name}</span>
+                                <span className="flex-1 text-left truncate">{element?.name}</span>
                             </File>
                 )}
             </li>

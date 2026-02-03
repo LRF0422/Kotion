@@ -192,8 +192,17 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         try {
             let result = ""
 
+            // Build history messages from previous conversation (excluding initial message)
+            const historyMessages = messages
+                .filter(msg => msg.id !== INITIAL_MESSAGE.id)  // Exclude initial greeting
+                .map(msg => ({
+                    role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
+                    content: msg.content
+                }))
+
             const { textStream } = await stream({
                 prompt: input,
+                messages: historyMessages  // Pass conversation history
             })
 
             for await (const part of textStream) {
@@ -238,7 +247,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         } finally {
             setIsLoading(false)
         }
-    }, [input, isInputValid, stream, generateMessageId, currentMessage])
+    }, [input, isInputValid, stream, generateMessageId, currentMessage, messages])
 
     // Handle stop generation
     const handleStop = useCallback(() => {

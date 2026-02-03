@@ -214,14 +214,14 @@ export const SpaceDetail: React.FC = () => {
 
         const name = <div className="flex flex-row gap-1 items-center group w-full overflow-hidden text-ellipsis relative">
             <div className="text-left text-ellipsis text-nowrap overflow-hidden flex-1 min-w-0 flex items-center w-full">
-                {treeNode.icon && <span className="text-sm">{treeNode.icon.icon}</span>}
-                <span className="text-sm">{treeNode.name}</span>
+                {treeNode.icon && <span className="text-xs sm:text-sm">{treeNode.icon.icon}</span>}
+                <span className="text-xs sm:text-sm">{treeNode.name}</span>
             </div>
             <div className="absolute right-0 left-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-50 bg-muted">
-                {treeNode.isDraft && <Badge variant="outline" className="py-0 px-1.5 text-xs h-5">Draft</Badge>}
+                {treeNode.isDraft && <Badge variant="outline" className="py-0 px-1 sm:px-1.5 text-[10px] sm:text-xs h-4 sm:h-5">Draft</Badge>}
                 <Button
                     size="sm"
-                    className="h-6 w-6 p-0"
+                    className="h-5 w-5 sm:h-6 sm:w-6 p-0"
                     variant="ghost"
                     onClick={(e) => {
                         e.stopPropagation()
@@ -229,51 +229,51 @@ export const SpaceDetail: React.FC = () => {
                     }}
                     title="Add subpage"
                 >
-                    <Plus className="h-3 w-3" />
+                    <Plus className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                 </Button>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button
                             size="sm"
-                            className="h-6 w-6 p-0"
+                            className="h-5 w-5 sm:h-6 sm:w-6 p-0"
                             variant="ghost"
                             onClick={(e) => {
                                 e.stopPropagation()
                                 e.preventDefault()
                             }}
                         >
-                            <MoreHorizontal className="h-3 w-3" />
+                            <MoreHorizontal className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent side="right" align="start" className="w-[220px]">
-                        <DropdownMenuItem className="flex flex-row gap-2">
-                            <Star className="h-4 w-4" /> Add to favorites
+                    <DropdownMenuContent side="right" align="start" className="w-[200px] sm:w-[220px]">
+                        <DropdownMenuItem className="flex flex-row gap-2 text-xs sm:text-sm">
+                            <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Add to favorites
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem className="flex flex-row gap-2">
-                            <Copy className="h-4 w-4" />Duplicate
+                        <DropdownMenuItem className="flex flex-row gap-2 text-xs sm:text-sm">
+                            <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />Duplicate
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="flex flex-row gap-2">
-                            <ArrowLeft className="h-4 w-4" /> Move to
+                        <DropdownMenuItem className="flex flex-row gap-2 text-xs sm:text-sm">
+                            <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Move to
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                            className="flex flex-row gap-2 text-red-600 focus:text-red-600"
+                            className="flex flex-row gap-2 text-red-600 focus:text-red-600 text-xs sm:text-sm"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 handleMoveToTrash(treeNode.id);
                             }}
                         >
-                            <Trash2 className="h-4 w-4" /> Move to trash
+                            <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Move to trash
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuLabel>
-                            <div className="text-gray-500 text-xs flex flex-col gap-1.5 font-normal">
-                                <div className="flex flex-row gap-1.5 items-center">
-                                    <Clock className="w-3 h-3" />
+                            <div className="text-gray-500 text-[10px] sm:text-xs flex flex-col gap-1 sm:gap-1.5 font-normal">
+                                <div className="flex flex-row gap-1 sm:gap-1.5 items-center">
+                                    <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                                     <span>Last updated by Leong</span>
                                 </div>
-                                <div className="flex flex-row gap-1.5 items-center">
-                                    <UserCircle className="w-3 h-3" />
+                                <div className="flex flex-row gap-1 sm:gap-1.5 items-center">
+                                    <UserCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                                     <span>2024年8月19日</span>
                                 </div>
                             </div>
@@ -325,25 +325,25 @@ export const SpaceDetail: React.FC = () => {
             id: '/space/:id/overView',
             className: 'px-0 mb-2',
             customerRender:
-                <div className="flex flex-col gap-2 p-3 border-b">
+                <div className="flex flex-col gap-2 p-2 sm:p-3 border-b">
                     <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => {
                             navigator.go({
                                 to: `/space-detail/${params.id}/page/${space.homePageId}`
                             })
                         }}>
-                            <div className="text-2xl flex-shrink-0">{space?.icon?.icon}</div>
+                            <div className="text-xl sm:text-2xl flex-shrink-0">{space?.icon?.icon}</div>
                             <div className="flex flex-col min-w-0 flex-1">
-                                <h2 className="font-semibold text-base truncate">{space.name}</h2>
-                                <p className="text-xs text-muted-foreground truncate">Personal Space</p>
+                                <h2 className="font-semibold text-sm sm:text-base truncate">{space.name}</h2>
+                                <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Personal Space</p>
                             </div>
                         </div>
-                        <IconButton icon={<StarIcon className="h-4 w-4" />} onClick={handleFavorite} />
+                        <IconButton icon={<StarIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} onClick={handleFavorite} className="h-7 w-7 sm:h-8 sm:w-8" />
                     </div>
                     <div className="relative">
                         <Input
                             placeholder="Search pages..."
-                            className="h-9 pl-3 pr-8"
+                            className="h-8 sm:h-9 pl-3 pr-8 text-sm"
                             onFocus={toggle}
                         />
                     </div>
@@ -362,22 +362,22 @@ export const SpaceDetail: React.FC = () => {
                 description: 'Star pages to quick access'
             },
             children: favorites.map((it: any, index) => ({
-                name: <div className="flex items-center gap-2 pr-8">
-                    <div className="flex-1 text-left text-nowrap text-ellipsis overflow-hidden">
+                name: <div className="flex items-center gap-1 sm:gap-2 pr-6 sm:pr-8">
+                    <div className="flex-1 text-left text-nowrap text-ellipsis overflow-hidden text-xs sm:text-sm">
                         {it.icon?.icon && <span className="mr-1">{it.icon.icon}</span>}
                         {it.title}
                     </div>
-                    <div className="absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute right-1 sm:right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button
                             size="sm"
                             variant="ghost"
-                            className="h-6 w-6 p-0"
+                            className="h-5 w-5 sm:h-6 sm:w-6 p-0"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 // Remove from favorites
                             }}
                         >
-                            <Trash2 className="h-3 w-3 text-muted-foreground hover:text-red-500" />
+                            <Trash2 className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground hover:text-red-500" />
                         </Button>
                     </div>
                 </div>,
@@ -404,26 +404,26 @@ export const SpaceDetail: React.FC = () => {
                 <div key="search-actions" className="flex items-center gap-1">
                     <Input
                         onChange={(e) => setSearchValue(e.target.value)}
-                        className="h-7"
+                        className="h-6 sm:h-7 text-xs sm:text-sm"
                         placeholder="Filter..."
                     />
                     <Button
-                        className="h-7 w-7"
+                        className="h-6 w-6 sm:h-7 sm:w-7"
                         variant="ghost"
                         size="icon"
                         onClick={() => handleCreatePage()}
                         title="New page"
                     >
-                        <Plus className="h-4 w-4" />
+                        <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
                     </Button>
                 </div>
             ],
             emptyProps: {
-                icon: <Package className="h-8 w-8 text-muted-foreground/50" />,
+                icon: <Package className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground/50" />,
                 title: 'No pages yet',
                 description: 'Create your first page',
-                button: <Button size="sm" onClick={() => handleCreatePage()}>
-                    <Plus className="h-4 w-4 mr-1" />
+                button: <Button size="sm" onClick={() => handleCreatePage()} className="h-7 sm:h-8 text-xs sm:text-sm">
+                    <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     Create Page
                 </Button>
             },
@@ -439,9 +439,9 @@ export const SpaceDetail: React.FC = () => {
         {
             name: 'Templates',
             id: '/space/:id/templates',
-            icon: <LayoutTemplate className="h-4 w-4" />,
+            icon: <LayoutTemplate className="h-3.5 w-3.5 sm:h-4 sm:w-4" />,
             key: '/space/:id/templates',
-            className: 'hover:bg-muted',
+            className: 'hover:bg-muted text-xs sm:text-sm',
             onClick: () => {
                 setVisible(true)
             }
@@ -449,9 +449,9 @@ export const SpaceDetail: React.FC = () => {
         {
             name: 'Settings',
             id: '/space/:id/settings',
-            icon: <Settings className="h-4 w-4" />,
+            icon: <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />,
             key: '/space/:id/settings',
-            className: 'hover:bg-muted',
+            className: 'hover:bg-muted text-xs sm:text-sm',
             onClick: () => {
                 navigator.go({
                     to: `/space-detail/${params.id}/settings`
@@ -461,22 +461,22 @@ export const SpaceDetail: React.FC = () => {
         {
             name: 'Trash',
             customerRender: <DropdownMenu>
-                <DropdownMenuTrigger className="flex flex-row gap-2 items-center w-full px-2 py-2 rounded-sm text-sm hover:bg-muted transition-colors">
-                    <Trash2 className="h-4 w-4" />
+                <DropdownMenuTrigger className="flex flex-row gap-2 items-center w-full px-2 py-2 rounded-sm text-xs sm:text-sm hover:bg-muted transition-colors">
+                    <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     <span className="flex-1 text-left">Trash</span>
-                    {trash.length > 0 && <Badge variant="secondary" className="h-5 px-1.5 text-xs">{trash.length}</Badge>}
+                    {trash.length > 0 && <Badge variant="secondary" className="h-4 sm:h-5 px-1 sm:px-1.5 text-[10px] sm:text-xs">{trash.length}</Badge>}
                 </DropdownMenuTrigger>
-                <DropdownMenuContent side="right" align="start" className="w-[320px] max-h-[400px]">
+                <DropdownMenuContent side="right" align="start" className="w-[280px] sm:w-[320px] max-h-[350px] sm:max-h-[400px]">
                     <DropdownMenuLabel className="pb-2">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between text-xs sm:text-sm">
                             <span>Trash</span>
-                            <span className="text-xs text-muted-foreground">{trash.length} items</span>
+                            <span className="text-[10px] sm:text-xs text-muted-foreground">{trash.length} items</span>
                         </div>
                     </DropdownMenuLabel>
-                    <div className="max-h-[350px] overflow-auto">
+                    <div className="max-h-[300px] sm:max-h-[350px] overflow-auto">
                         {trash.length > 0 ? trash.map((item: any, index) => (
                             <DropdownMenuItem key={index} className="flex flex-row justify-between items-center gap-2 py-2">
-                                <div className="flex-1 truncate text-sm">
+                                <div className="flex-1 truncate text-xs sm:text-sm">
                                     {item.icon?.icon && <span className="mr-1">{item.icon.icon}</span>}
                                     {item.title}
                                 </div>
@@ -484,28 +484,28 @@ export const SpaceDetail: React.FC = () => {
                                     <Button
                                         variant="ghost"
                                         size="sm"
-                                        className="h-7 px-2"
+                                        className="h-6 sm:h-7 px-1.5 sm:px-2"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             handleRestorePage(item.id);
                                         }}
                                         title="Restore"
                                     >
-                                        <Undo2 className="h-3 w-3" />
+                                        <Undo2 className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                                     </Button>
                                 </div>
                             </DropdownMenuItem>
                         )) : (
-                            <div className="flex flex-col items-center justify-center py-8 text-center">
-                                <Trash2 className="h-8 w-8 text-muted-foreground/50 mb-2" />
-                                <p className="text-sm text-muted-foreground">Trash is empty</p>
+                            <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-center">
+                                <Trash2 className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground/50 mb-2" />
+                                <p className="text-xs sm:text-sm text-muted-foreground">Trash is empty</p>
                             </div>
                         )}
                     </div>
                 </DropdownMenuContent>
             </DropdownMenu>,
             id: '/space/:id/trash',
-            icon: <Trash2 className="h-4 w-4" />,
+            icon: <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />,
             key: '/space/:id/trash',
             className: 'hover:bg-muted'
         }, {
@@ -513,8 +513,8 @@ export const SpaceDetail: React.FC = () => {
             id: "",
             key: "",
             icon: <></>,
-            customerRender: <TemplateCreator space={space} className="flex flex-row gap-2 items-center w-full px-2 py-2 rounded-sm text-sm hover:bg-muted transition-colors">
-                <CircleArrowUp className="h-4 w-4" />
+            customerRender: <TemplateCreator space={space} className="flex flex-row gap-2 items-center w-full px-2 py-2 rounded-sm text-xs sm:text-sm hover:bg-muted transition-colors">
+                <CircleArrowUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 <div>Save as Template</div>
             </TemplateCreator>
         }
@@ -552,18 +552,18 @@ export const SpaceDetail: React.FC = () => {
         )}>
             {/* Mobile Header */}
             {isMobile && (
-                <div className="flex items-center justify-between px-4 h-12 border-b bg-background sticky top-0 z-40">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="text-lg">{space?.icon?.icon}</span>
-                        <span className="font-medium truncate">{space.name}</span>
+                <div className="flex items-center justify-between px-3 sm:px-4 h-11 sm:h-12 border-b bg-background sticky top-0 z-40">
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
+                        <span className="text-base sm:text-lg">{space?.icon?.icon}</span>
+                        <span className="font-medium truncate text-sm sm:text-base">{space.name}</span>
                     </div>
                     <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
                         <SheetTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                                <Menu className="h-5 w-5" />
+                            <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9">
+                                <Menu className="h-4 w-4 sm:h-5 sm:w-5" />
                             </Button>
                         </SheetTrigger>
-                        <SheetContent side="left" className="w-[280px] p-0">
+                        <SheetContent side="left" className="w-[260px] sm:w-[280px] p-0">
                             <SheetTitle className="sr-only">Navigation</SheetTitle>
                             <div className="h-full flex flex-col overflow-hidden">
                                 {SidebarContent}
