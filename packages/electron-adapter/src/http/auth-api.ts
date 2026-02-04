@@ -9,7 +9,7 @@ import {
 } from '../types';
 
 export class AuthApi {
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) { }
 
   /**
    * Anonymous login (desktop first launch)
@@ -26,7 +26,7 @@ export class AuthApi {
     params.append('grantType', 'password');
     params.append('account', credentials.account);
     params.append('password', credentials.password);
-    
+
     if (credentials.tenantId) {
       params.append('tenantId', credentials.tenantId);
     }
@@ -38,7 +38,7 @@ export class AuthApi {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-      } as any
+      }
     );
   }
 
@@ -57,7 +57,7 @@ export class AuthApi {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-      } as any
+      }
     );
   }
 
@@ -98,7 +98,7 @@ export class AuthApi {
         newPassword,
         newPassword1: confirmPassword,
       },
-    } as any);
+    });
   }
 
   /**

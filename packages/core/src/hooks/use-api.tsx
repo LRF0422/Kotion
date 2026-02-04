@@ -52,6 +52,7 @@ const httpOnlyUrls = [
     '/knowledge-auth/token',           // Login
     '/knowledge-system/user/register', // Register
     '/instant-message/',               // All IM/WebSocket operations
+    '/knowledge-wiki/plugin',          // Plugin marketplace - always fetch from server
 ]
 
 // Get IPC channel from URL

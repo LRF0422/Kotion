@@ -56,6 +56,9 @@ export class FileServiceImpl implements FileService {
      * Get download URL for a file
      */
     getDownloadUrl(fileName: string): string {
+        if (!fileName) {
+            return '';
+        }
         if (fileName.startsWith('http://') || fileName.startsWith('https://')) {
             return fileName;
         }

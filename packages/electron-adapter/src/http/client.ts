@@ -21,7 +21,7 @@ export class HttpClient extends EventEmitter<HttpClientEvents> {
 
   constructor(config: ApiConfig) {
     super();
-    
+
     this.client = axios.create({
       baseURL: config.baseURL,
       timeout: config.timeout,
@@ -137,32 +137,32 @@ export class HttpClient extends EventEmitter<HttpClientEvents> {
   /**
    * GET request
    */
-  async get<T = any>(url: string, params?: any): Promise<T> {
-    const response = await this.client.get<ApiResponse<T>>(url, { params });
+  async get<T = any>(url: string, params?: any, config?: AxiosRequestConfig): Promise<T> {
+    const response = await this.client.get<ApiResponse<T>>(url, { params, ...config });
     return this.unwrapResponse(response.data);
   }
 
   /**
    * POST request
    */
-  async post<T = any>(url: string, data?: any): Promise<T> {
-    const response = await this.client.post<ApiResponse<T>>(url, data);
+  async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    const response = await this.client.post<ApiResponse<T>>(url, data, config);
     return this.unwrapResponse(response.data);
   }
 
   /**
    * PUT request
    */
-  async put<T = any>(url: string, data?: any): Promise<T> {
-    const response = await this.client.put<ApiResponse<T>>(url, data);
+  async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    const response = await this.client.put<ApiResponse<T>>(url, data, config);
     return this.unwrapResponse(response.data);
   }
 
   /**
    * DELETE request
    */
-  async delete<T = any>(url: string): Promise<T> {
-    const response = await this.client.delete<ApiResponse<T>>(url);
+  async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+    const response = await this.client.delete<ApiResponse<T>>(url, config);
     return this.unwrapResponse(response.data);
   }
 
@@ -187,7 +187,7 @@ export class HttpClient extends EventEmitter<HttpClientEvents> {
     onProgress?: (progress: number) => void
   ): Promise<void> {
     const fs = await import('fs-extra');
-    
+
     const response = await this.client.get(url, {
       responseType: 'stream',
       onDownloadProgress: (progressEvent) => {

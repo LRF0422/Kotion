@@ -91,16 +91,15 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  @apply bg-muted/30;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 5px;
+  @apply bg-muted-foreground/30 rounded-full;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  @apply bg-muted-foreground/50;
 }
 
 @layer base {
@@ -111,4 +110,39 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Desktop app frameless window styles */
+/* Draggable region for the top area - allows window dragging */
+.titlebar-drag-region {
+  -webkit-app-region: drag;
+}
+
+/* Non-draggable elements within draggable regions */
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Add padding-top for sidebar to accommodate traffic lights on macOS */
+/* This only applies in Electron desktop app */
+.electron-sidebar-padding {
+  padding-top: 32px;
+  position: relative;
+}
+
+/* Make the entire app top bar draggable except interactive elements */
+#root>div:first-child {
+  /* Add subtle top padding for the frameless window */
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+/* Ensure buttons, inputs, and interactive elements are not draggable */
+button,
+input,
+select,
+textarea,
+a,
+[role="button"],
+[tabindex]:not([tabindex="-1"]) {
+  -webkit-app-region: no-drag;
 }

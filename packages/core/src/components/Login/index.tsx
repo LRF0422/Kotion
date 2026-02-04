@@ -3,7 +3,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@kn/ui"
 import { Label } from "@kn/ui"
 import { useForm } from "@kn/ui"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { z } from "@kn/ui"
 import { zodResolver } from '@kn/ui';
 import { useApi } from "../../hooks/use-api"
@@ -20,6 +20,7 @@ export function Login() {
 
     const [loading, setLoading] = useState(false)
     const { usePath } = useUploadFile()
+    const navigate = useNavigate()
 
     const formSchema = z.object({
         account: z.string().min(1, {
@@ -50,10 +51,10 @@ export function Login() {
             const hasCompletedWelcome = localStorage.getItem('hasCompletedWelcome')
             if (!hasCompletedWelcome) {
                 // First time user, redirect to welcome page
-                window.location.href = '/welcome'
+                navigate('/welcome')
             } else {
-                // Returning user, go to main app
-                window.location.href = '/'
+                // Returning user, go to main app - force full reload to reinitialize
+                window.location.replace('/')
             }
         }).catch(e => {
         }).finally(() => setLoading(false))

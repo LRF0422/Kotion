@@ -32,8 +32,14 @@ export const useUploadFile = () => {
     }
 
     const usePath = (fileName: string) => {
+        if (!fileName) {
+            return '';
+        }
         if (fileService) {
             return fileService.getDownloadUrl(fileName);
+        }
+        if (fileName.startsWith('http://') || fileName.startsWith('https://')) {
+            return fileName;
         }
         return downloadPath + fileName
     }

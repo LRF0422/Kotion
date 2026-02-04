@@ -2,7 +2,7 @@ import { HttpClient } from './client';
 import { FileInfo, FileDTO, TreeNode } from '../types';
 
 export class FileApi {
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) { }
 
   /**
    * Create file or folder
@@ -56,7 +56,7 @@ export class FileApi {
   ): Promise<FileInfo> {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     if (params?.parentId) {
       formData.append('parentId', params.parentId.toString());
     }
@@ -68,7 +68,7 @@ export class FileApi {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-    } as any);
+    });
   }
 
   /**

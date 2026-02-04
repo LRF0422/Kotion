@@ -1,4 +1,4 @@
-import typescript from '@rollup/plugin-typescript';
+import typescript from 'rollup-plugin-typescript2';
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
@@ -11,15 +11,18 @@ export default {
     sourcemap: true,
   },
   plugins: [
+    commonjs(),
     resolve({
       preferBuiltins: true,
     }),
-    commonjs(),
     json(),
     typescript({
-      tsconfig: './tsconfig.json',
-      declaration: true,
-      declarationDir: './dist',
+      tsconfigOverride: {
+        compilerOptions: {
+          declaration: true,
+          declarationDir: './dist',
+        },
+      },
     }),
   ],
   external: [

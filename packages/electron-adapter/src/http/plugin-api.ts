@@ -9,7 +9,7 @@ import {
 } from '../types';
 
 export class PluginApi {
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) { }
 
   /**
    * Create plugin
@@ -38,7 +38,7 @@ export class PluginApi {
   async installPlugin(versionId: number): Promise<void> {
     return this.http.post('/knowledge-wiki/plugin/install', null, {
       params: { versionId },
-    } as any);
+    });
   }
 
   /**
@@ -47,7 +47,7 @@ export class PluginApi {
   async uninstallPlugin(versionId: number): Promise<void> {
     return this.http.post('/knowledge-wiki/plugin/uninstall', null, {
       params: { versionId },
-    } as any);
+    });
   }
 
   /**
@@ -56,7 +56,7 @@ export class PluginApi {
   async updatePlugin(versionId: number): Promise<void> {
     return this.http.post('/knowledge-wiki/plugin/update', null, {
       params: { versionId },
-    } as any);
+    });
   }
 
   /**
@@ -94,7 +94,7 @@ export class PluginApi {
     onProgress?: (progress: number) => void
   ): Promise<void> {
     const url = `/knowledge-wiki/plugin/${versionId}/download`;
-    
+
     if (onProgress) {
       await this.http.downloadWithProgress(url, savePath, onProgress);
     } else {

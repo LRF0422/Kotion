@@ -39,8 +39,10 @@ function tansParams(params: Record<any, string>) {
 }
 
 axiosInstance.interceptors.request.use(config => {
+  const token = localStorage.getItem(TOKEN_KEY)
+  console.log('[Request]', config.method?.toUpperCase(), config.url, 'Token:', token ? 'present' : 'missing')
 
-  config.headers['Knowledge-Auth'] = localStorage.getItem(TOKEN_KEY) // 让每个请求携带自定义token 请根据实际情况自行修改
+  config.headers['Knowledge-Auth'] = token // 让每个请求携带自定义token 请根据实际情况自行修改
   // 携带client_id client_secret 信息
   config.headers.Authorization = `Basic ${window.btoa(`${'wiki'}:${'wiki_secret'}`)}`
 
@@ -65,6 +67,8 @@ axiosInstance.interceptors.response.use(res => {
   // 消息
   const msg = res.data.msg
 
+  console.log('[Response]', res.config.url, 'status:', status, 'code:', code)
+
   if (status !== 200) {
     toast.error(res.data.msg)
     window.location.href = '/login'
@@ -76,6 +80,7 @@ axiosInstance.interceptors.response.use(res => {
   }
 
   if (code === 401) {
+    console.log('[Response] 401 - Token expired or invalid')
     toast.warning('登录状态已过期，您可以继续留在该页面，或者重新登录', {
       position: 'top-center',
       action: <Button onClick={() => {
@@ -97,6 +102,8 @@ axiosInstance.interceptors.response.use(res => {
 }, error => {
   const { response, request } = error
   let { message } = error
+  console.log('[Response Error]', error.config?.url, 'status:', response?.status, 'message:', message)
+
   if (response.status === 401 && !isRelogin.show) {
     isRelogin.show = true
     return Promise.reject(error)

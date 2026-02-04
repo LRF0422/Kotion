@@ -2,6 +2,8 @@ import { app, shell, BrowserWindow, ipcMain, protocol, net } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { pathToFileURL } from 'url'
+import { setupIpcHandlers } from './ipc'
+import { initializeServices } from './services'
 
 // Register custom scheme before app is ready
 protocol.registerSchemesAsPrivileged([
@@ -22,8 +24,12 @@ function createWindow(): void {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    show: false,
+    show: true, // Show immediately
     autoHideMenuBar: true,
+    // Use hidden title bar for seamless integration with app UI
+    titleBarStyle: 'hiddenInset',
+    // Position traffic lights (macOS window controls) with proper spacing
+    trafficLightPosition: { x: 16, y: 12 },
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -32,8 +38,13 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+  // Open DevTools in development mode
+  if (is.dev) {
+    mainWindow.webContents.openDevTools()
+  }
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('Failed to load:', errorCode, errorDescription)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -42,15 +53,24 @@ function createWindow(): void {
   })
 
   // Load the renderer
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+  console.log('Loading URL:', rendererUrl || 'app://./index.html')
+
+  if (is.dev && rendererUrl) {
+    mainWindow.loadURL(rendererUrl)
   } else {
     // Use custom protocol for production
     mainWindow.loadURL('app://./index.html')
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Initialize services first
+  await initializeServices(app)
+
+  // Setup IPC handlers after services are ready
+  setupIpcHandlers()
+
   // Register custom protocol handler for SPA routing
   protocol.handle('app', (request) => {
     const url = new URL(request.url)

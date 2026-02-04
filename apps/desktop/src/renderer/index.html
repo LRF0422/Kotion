@@ -4,7 +4,26 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>KN Desktop</title>
+    <title>KN</title>
+    <script>
+        // Apply saved theme immediately to prevent flash
+        (function () {
+            const theme = localStorage.getItem('kn-ui-theme') || localStorage.getItem('theme');
+            if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
+    <style>
+        /* Prevent white flash on load */
+        html {
+            background-color: hsl(0 0% 100%);
+        }
+
+        html.dark {
+            background-color: hsl(240 10% 3.9%);
+        }
+    </style>
 </head>
 
 <body>

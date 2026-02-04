@@ -12,6 +12,16 @@ export default defineConfig({
   },
   renderer: {
     root: './src/renderer',
+    server: {
+      proxy: {
+        '/api': {
+          target: 'https://kotion.top:888/api',
+          rewrite: (path) => path.replace(/^\/api/, ''),
+          changeOrigin: true,
+          secure: false,
+        }
+      }
+    },
     build: {
       chunkSizeWarningLimit: 2000,
       rollupOptions: {

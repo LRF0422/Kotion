@@ -2,14 +2,14 @@ import Database from 'better-sqlite3';
 import { Space, Page, SyncStatus } from '../types';
 
 export class SpaceRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private db: Database.Database) { }
 
   /**
    * Create space
    */
-  create(space: Omit<Space, 'id' | 'createdAt' | 'updatedAt'>): number {
+  create(space: Omit<Space, 'id' | 'createdAt' | 'updatedAt'> & { id?: number }): number {
     const now = Date.now();
-    
+
     const result = this.db
       .prepare(
         `INSERT INTO spaces (
@@ -137,14 +137,14 @@ export class SpaceRepository {
 }
 
 export class PageRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private db: Database.Database) { }
 
   /**
    * Create page
    */
-  create(page: Omit<Page, 'id' | 'createdAt' | 'updatedAt'>): number {
+  create(page: Omit<Page, 'id' | 'createdAt' | 'updatedAt'> & { id?: number }): number {
     const now = Date.now();
-    
+
     const result = this.db
       .prepare(
         `INSERT INTO pages (

@@ -99,25 +99,6 @@ export function Layout({ onPluginsReady }: LayoutProps) {
         }
     }, [])
 
-    const onboardingSteps: OnboardingStep[] = [
-        {
-            id: 'welcome',
-            targetSelector: '#welcome-title',
-            title: '欢迎使用',
-            description: '这是我们的新功能，让我们快速了解一下如何使用吧！',
-            actionText: '开始探索',
-            position: 'right'
-        },
-        {
-            id: 'message',
-            targetSelector: '#message-box',
-            title: '信箱',
-            description: '这是我们的新功能，让我们快速了解一下如何使用吧！',
-            actionText: '开始探索',
-            position: 'right'
-        }
-    ];
-
     // Plugin loading logic moved from App.tsx
     useEffect(() => {
         event.on("REFRESH_PLUSINS", () => {
@@ -132,8 +113,18 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     useAsyncEffect(async () => {
         if (!pluginManager) return
 
+        // Skip plugin loading on login page
+        if (window.location.pathname === '/login' || window.location.pathname === '/sign-up') {
+            return
+        }
+
+        console.log('enter layout');
+
         try {
-            if (!!localStorage.getItem("knowledge-token")) {
+            const token = localStorage.getItem("knowledge-token")
+            console.log('Token check:', token ? 'present' : 'missing')
+
+            if (token) {
                 // Reset plugin manager state before reinitializing to ensure clean state on page refresh
                 console.log('Loading plugins in Layout, refreshFlag:', refreshFlag)
                 const installedPlugins: any[] = (await useApi(APIS.GET_INSTALLED_PLUGINS)).data
@@ -146,17 +137,17 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                 // Don't emit REFRESH_PLUSINS here to avoid infinite loop
             } else {
                 // No auth token, redirect to login
+                console.log('No token found, redirecting to login')
                 await pluginManager.init([])
-                if (!window.location.href.includes("login")) {
-                    window.location.href = '/login'
-                }
+                window.location.href = '/login'
             }
         } catch (error) {
             console.error('Failed to load plugins:', error)
+            // Only redirect to login if not already there
             await pluginManager.init([])
-            if (!window.location.href.includes("login")) {
-                window.location.href = '/login'
-            }
+            setPluginsLoaded(true)
+            onPluginsReady(true)
+            // Don't auto-redirect on plugin load failure - let user stay on current page
         }
     }, [pluginManager, refreshFlag])
 
@@ -181,15 +172,32 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     }, [requestPluginId])
 
     useEffect(() => {
+        // Skip user info fetch on login/signup pages
+        if (window.location.pathname === '/login' || window.location.pathname === '/sign-up') {
+            return
+        }
+
+        const token = localStorage.getItem("knowledge-token")
+        if (!token) {
+            console.log('No token for user info, skipping')
+            return
+        }
+
         useApi(APIS.GET_USER_INFO).then((res) => {
             dispatch({
                 type: 'UPDATE_USER',
                 payload: res.data
             })
         }).catch(e => {
-            navigator.go({
-                to: '/login'
-            })
+            console.error('Failed to get user info:', e)
+            // Only redirect if we have a token but it's invalid (401)
+            // Don't redirect on network errors
+            if (e?.response?.status === 401 || e?.code === 401) {
+                localStorage.removeItem("knowledge-token")
+                navigator.go({
+                    to: '/login'
+                })
+            }
         })
     }, [])
 
@@ -233,7 +241,9 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                     {/* Desktop Sidebar */}
                     {!isMobile && (
                         <div className="border-r">
-                            <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4">
+                            <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4 electron-sidebar-padding">
+                                {/* Draggable area for window movement */}
+                                <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region" />
                                 <SparklesText className="text-[30px]" sparklesCount={5} text="KN" />
                                 <div className="flex-1 px-2">
                                     <SiderMenu />
@@ -243,7 +253,9 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                     )}
 
                     {/* Mobile Header + Content */}
-                    <div className="flex flex-col h-screen w-full">
+                    <div className="flex flex-col h-screen w-full relative">
+                        {/* Draggable region at the top of main content area */}
+                        {!isMobile && <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region z-10" />}
                         {/* Mobile Header */}
                         {isMobile && (
                             <MobileHeader sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
@@ -291,14 +303,6 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                         </AlertDialogContent>
                     </AlertDialog>
                 </div>
-                <Onboarding
-                    steps={onboardingSteps}
-                    isOpen={showOnboarding}
-                    onClose={() => setShowOnboarding(false)}
-                    onComplete={() => {
-                        localStorage.setItem("showOnboarding", "false");
-                    }}
-                />
             </div>
         </MobilePageHeaderProvider>
     )
