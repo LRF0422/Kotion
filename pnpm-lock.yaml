@@ -229,6 +229,9 @@ importers:
       '@electron-toolkit/eslint-config-ts':
         specifier: ^2.0.0
         version: 2.0.0(eslint@8.57.1)(typescript@5.9.3)
+      '@kn/electron-adapter':
+        specifier: workspace:*
+        version: link:../../packages/electron-adapter
       '@types/node':
         specifier: ^22.7.4
         version: 22.18.10
