@@ -18,6 +18,7 @@
     "dependencies": {
         "@electron-toolkit/preload": "^3.0.1",
         "@electron-toolkit/utils": "^3.0.0",
+        "fs-extra": "^11.2.0",
         "@kn/ui": "workspace:*",
         "@kn/core": "workspace:*",
         "@kn/plugin-ai": "workspace:*",
@@ -34,10 +35,12 @@
         "@kn/plugin-bitable": "workspace:*",
         "@kn/plugin-weaver-oa": "workspace:*",
         "@kn/plugin-bilibili": "workspace:*",
+        "@kn/electron-adapter": "workspace:*",
         "next-themes": "^0.3.0"
     },
     "devDependencies": {
         "@electron-toolkit/eslint-config-ts": "^2.0.0",
+        "@types/fs-extra": "^11.0.4",
         "@types/node": "^22.7.4",
         "@types/react": "^18.3.23",
         "@types/react-dom": "^18.3.1",
@@ -54,8 +57,7 @@
         "tailwindcss": "^3.4.17",
         "typescript": "^5.8.3",
         "vite": "^5.4.8",
-        "vite-tsconfig-paths": "^5.1.4",
-        "@kn/electron-adapter": "workspace:*"
+        "vite-tsconfig-paths": "^5.1.4"
     },
     "build": {
         "appId": "com.kn.desktop",

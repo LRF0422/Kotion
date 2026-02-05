@@ -480,6 +480,157 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
     console.log(`Storage mode changed to: ${this.mode}`);
   }
 
+  // ==================== Favorites Operations ====================
+
+  /**
+   * Add space to favorites
+   */
+  async addSpaceFavorite(spaceId: number): Promise<void> {
+    this.spaceRepository.addFavorite(spaceId);
+    this.emit('data:changed', 'space', spaceId);
+  }
+
+  /**
+   * Remove space from favorites
+   */
+  async removeSpaceFavorite(spaceId: number): Promise<void> {
+    this.spaceRepository.removeFavorite(spaceId);
+    this.emit('data:changed', 'space', spaceId);
+  }
+
+  /**
+   * Get favorited spaces
+   */
+  async getFavoriteSpaces(): Promise<Space[]> {
+    return this.spaceRepository.getFavorites();
+  }
+
+  /**
+   * Add page to favorites
+   */
+  async addPageFavorite(pageId: number): Promise<void> {
+    this.pageRepository.addFavorite(pageId);
+    this.emit('data:changed', 'page', pageId);
+  }
+
+  /**
+   * Remove page from favorites
+   */
+  async removePageFavorite(pageId: number): Promise<void> {
+    this.pageRepository.removeFavorite(pageId);
+    this.emit('data:changed', 'page', pageId);
+  }
+
+  /**
+   * Get favorited pages
+   */
+  async getFavoritePages(): Promise<Page[]> {
+    return this.pageRepository.getFavorites();
+  }
+
+  // ==================== Template Operations ====================
+
+  /**
+   * Get space templates
+   */
+  async getSpaceTemplates(): Promise<Space[]> {
+    return this.spaceRepository.getTemplates();
+  }
+
+  /**
+   * Get page templates
+   */
+  async getPageTemplates(): Promise<Page[]> {
+    return this.pageRepository.getTemplates();
+  }
+
+  /**
+   * Save page as template
+   */
+  async savePageAsTemplate(pageId: number): Promise<void> {
+    this.pageRepository.saveAsTemplate(pageId);
+    this.emit('data:changed', 'page', pageId);
+  }
+
+  // ==================== Block Operations ====================
+
+  /**
+   * Get page blocks
+   */
+  async getPageBlocks(pageId: number): Promise<any[]> {
+    return this.pageRepository.getBlocks(pageId);
+  }
+
+  /**
+   * Get block by ID
+   */
+  async getBlockById(blockId: string): Promise<any | null> {
+    return this.pageRepository.getBlockById(blockId);
+  }
+
+  /**
+   * Create block
+   */
+  async createBlock(block: {
+    id: string;
+    pageId: number;
+    type: string;
+    content?: any;
+    properties?: Record<string, any>;
+    parentId?: string;
+    order?: number;
+  }): Promise<void> {
+    this.pageRepository.createBlock(block);
+    this.emit('data:changed', 'page', block.pageId);
+  }
+
+  /**
+   * Update block
+   */
+  async updateBlock(blockId: string, data: any): Promise<void> {
+    this.pageRepository.updateBlock(blockId, data);
+  }
+
+  /**
+   * Delete block
+   */
+  async deleteBlock(blockId: string): Promise<void> {
+    this.pageRepository.deleteBlock(blockId);
+  }
+
+  // ==================== Search Operations ====================
+
+  /**
+   * Search pages
+   */
+  async searchPages(keyword: string, spaceId?: number): Promise<Page[]> {
+    return this.pageRepository.search(keyword, spaceId);
+  }
+
+  // ==================== Trash Operations ====================
+
+  /**
+   * Get trash pages
+   */
+  async getTrashPages(spaceId?: number): Promise<Page[]> {
+    return this.pageRepository.getTrash(spaceId);
+  }
+
+  /**
+   * Permanently delete page
+   */
+  async permanentDeletePage(pageId: number): Promise<void> {
+    this.pageRepository.permanentDelete(pageId);
+    this.emit('data:changed', 'page', pageId);
+  }
+
+  /**
+   * Empty trash
+   */
+  async emptyTrash(spaceId?: number): Promise<void> {
+    this.pageRepository.emptyTrash(spaceId);
+  }
+
   /**
    * Private: Build tree from flat page list
    */

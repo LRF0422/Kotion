@@ -126,6 +126,13 @@ export class PageApi {
   }
 
   /**
+   * Remove page from favorites
+   */
+  async removeFavorite(id: number): Promise<void> {
+    return this.http.delete(`/knowledge-wiki/space/page/${id}/favorite`);
+  }
+
+  /**
    * Save page as template
    */
   async saveAsTemplate(id: number): Promise<void> {

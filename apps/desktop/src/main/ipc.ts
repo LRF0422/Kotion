@@ -1,11 +1,10 @@
-import { ipcMain } from 'electron';
+import { ipcMain, dialog, app } from 'electron';
+import * as fs from 'fs-extra';
 import {
   getAuthManager,
   getStorageAdapter,
   getPluginCacheService,
   getAuthApi,
-  getSpaceApi,
-  getPageApi,
   getPluginApi,
   getFileApi,
   getDatabaseManager,
@@ -77,8 +76,14 @@ export function setupIpcHandlers() {
   });
 
   ipcMain.handle('user:search', async (_event, query: string) => {
-    // TODO: Implement user search via API
-    return { data: [] };
+    const authApi = getAuthApi();
+    try {
+      const users = await authApi.searchUsers(query);
+      return { data: users };
+    } catch (error) {
+      console.error('Failed to search users:', error);
+      return { data: [] };
+    }
   });
 
   // ==================== Space Handlers ====================
@@ -116,13 +121,57 @@ export function setupIpcHandlers() {
   });
 
   ipcMain.handle('space:addFavorite', async (_event, id: string) => {
-    // TODO: Implement favorite functionality
-    return { success: true };
+    const storage = getStorageAdapter();
+    try {
+      await storage.addSpaceFavorite(parseInt(id));
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to add space to favorites:', error);
+      return { success: false, error: (error as Error).message };
+    }
   });
 
-  ipcMain.handle('space:getMembers', async (_event, id: string) => {
-    // TODO: Implement members functionality
+  ipcMain.handle('space:removeFavorite', async (_event, id: string) => {
+    const storage = getStorageAdapter();
+    try {
+      await storage.removeSpaceFavorite(parseInt(id));
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to remove space from favorites:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('space:getFavorites', async () => {
+    const storage = getStorageAdapter();
+    try {
+      const favorites = await storage.getFavoriteSpaces();
+      return { data: favorites };
+    } catch (error) {
+      console.error('Failed to get favorite spaces:', error);
+      return { data: [] };
+    }
+  });
+
+  ipcMain.handle('space:getMembers', async (_event, _id: string) => {
+    // Members are stored locally - for now return current user as member
+    const authManager = getAuthManager();
+    const userInfo = authManager.getUserInfo();
+    if (userInfo) {
+      return { data: [{ ...userInfo, role: 'owner' }] };
+    }
     return { data: [] };
+  });
+
+  ipcMain.handle('space:getTemplates', async () => {
+    const storage = getStorageAdapter();
+    try {
+      const templates = await storage.getSpaceTemplates();
+      return { data: templates };
+    } catch (error) {
+      console.error('Failed to get space templates:', error);
+      return { data: [] };
+    }
   });
 
   ipcMain.handle('space:update', async (_event, id: number, data: any) => {
@@ -202,44 +251,176 @@ export function setupIpcHandlers() {
     return { data: await storage.deletePage(parseInt(id)) };
   });
 
-  ipcMain.handle('page:getFavorites', async (_event, params: any) => {
-    // TODO: Implement favorites functionality
-    return { data: [] };
+  ipcMain.handle('page:getFavorites', async () => {
+    const storage = getStorageAdapter();
+    try {
+      const favorites = await storage.getFavoritePages();
+      return { data: favorites };
+    } catch (error) {
+      console.error('Failed to get favorite pages:', error);
+      return { data: [] };
+    }
   });
 
   ipcMain.handle('page:getTemplates', async () => {
-    // TODO: Implement templates functionality
-    return { data: [] };
+    const storage = getStorageAdapter();
+    try {
+      const templates = await storage.getPageTemplates();
+      return { data: templates };
+    } catch (error) {
+      console.error('Failed to get templates:', error);
+      return { data: [] };
+    }
   });
 
   ipcMain.handle('page:saveAsTemplate', async (_event, id: string) => {
-    // TODO: Implement save as template functionality
-    return { success: true };
+    const storage = getStorageAdapter();
+    try {
+      await storage.savePageAsTemplate(parseInt(id));
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to save page as template:', error);
+      return { success: false, error: (error as Error).message };
+    }
   });
 
   ipcMain.handle('page:addFavorite', async (_event, id: string) => {
-    // TODO: Implement favorite functionality
-    return { success: true };
+    const storage = getStorageAdapter();
+    try {
+      await storage.addPageFavorite(parseInt(id));
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to add page to favorites:', error);
+      return { success: false, error: (error as Error).message };
+    }
   });
 
   ipcMain.handle('page:removeFavorite', async (_event, id: string) => {
-    // TODO: Implement remove favorite functionality
-    return { success: true };
+    const storage = getStorageAdapter();
+    try {
+      await storage.removePageFavorite(parseInt(id));
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to remove page from favorites:', error);
+      return { success: false, error: (error as Error).message };
+    }
   });
 
-  ipcMain.handle('page:getBlocks', async (_event, params: any) => {
-    // TODO: Implement blocks functionality
-    return { data: [] };
+  ipcMain.handle('page:getBlocks', async (_event, params: { pageId: number }) => {
+    const storage = getStorageAdapter();
+    try {
+      const blocks = await storage.getPageBlocks(params.pageId);
+      return { data: blocks };
+    } catch (error) {
+      console.error('Failed to get page blocks:', error);
+      return { data: [] };
+    }
   });
 
   ipcMain.handle('page:getBlockInfo', async (_event, id: string) => {
-    // TODO: Implement block info functionality
-    return { data: null };
+    const storage = getStorageAdapter();
+    try {
+      const block = await storage.getBlockById(id);
+      return { data: block };
+    } catch (error) {
+      console.error('Failed to get block info:', error);
+      return { data: null };
+    }
   });
 
-  ipcMain.handle('page:getCollaborators', async (_event, pageId: string) => {
-    // TODO: Implement collaborators functionality
+  ipcMain.handle('page:createBlock', async (_event, block: {
+    id: string;
+    pageId: number;
+    type: string;
+    content?: any;
+    properties?: Record<string, any>;
+    parentId?: string;
+    order?: number;
+  }) => {
+    const storage = getStorageAdapter();
+    try {
+      await storage.createBlock(block);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to create block:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('page:updateBlock', async (_event, blockId: string, data: any) => {
+    const storage = getStorageAdapter();
+    try {
+      await storage.updateBlock(blockId, data);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to update block:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('page:deleteBlock', async (_event, blockId: string) => {
+    const storage = getStorageAdapter();
+    try {
+      await storage.deleteBlock(blockId);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to delete block:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('page:getCollaborators', async (_event, _pageId: string) => {
+    // Collaborators are stored locally - for now return current user as collaborator
+    const authManager = getAuthManager();
+    const userInfo = authManager.getUserInfo();
+    if (userInfo) {
+      return { data: [{ ...userInfo, permission: 'owner' }] };
+    }
     return { data: [] };
+  });
+
+  ipcMain.handle('page:search', async (_event, keyword: string, spaceId?: number) => {
+    const storage = getStorageAdapter();
+    try {
+      const pages = await storage.searchPages(keyword, spaceId);
+      return { data: pages };
+    } catch (error) {
+      console.error('Failed to search pages:', error);
+      return { data: [] };
+    }
+  });
+
+  ipcMain.handle('page:getTrash', async (_event, spaceId?: number) => {
+    const storage = getStorageAdapter();
+    try {
+      const pages = await storage.getTrashPages(spaceId);
+      return { data: pages };
+    } catch (error) {
+      console.error('Failed to get trash pages:', error);
+      return { data: [] };
+    }
+  });
+
+  ipcMain.handle('page:permanentDelete', async (_event, id: string) => {
+    const storage = getStorageAdapter();
+    try {
+      await storage.permanentDeletePage(parseInt(id));
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to permanently delete page:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('page:emptyTrash', async (_event, spaceId?: number) => {
+    const storage = getStorageAdapter();
+    try {
+      await storage.emptyTrash(spaceId);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to empty trash:', error);
+      return { success: false, error: (error as Error).message };
+    }
   });
 
   // ==================== Plugin Handlers ====================
@@ -304,29 +485,87 @@ export function setupIpcHandlers() {
 
   // ==================== File Handlers ====================
 
-  ipcMain.handle('file:upload', async (_event, data: any) => {
-    // TODO: Implement file upload - for now return mock response
-    return { data: { url: '' } };
+  ipcMain.handle('file:upload', async (_event, data: { filePath: string; parentId?: number; repoKey?: string }) => {
+    const fileApi = getFileApi();
+    try {
+      // Read file from local path
+      const fileBuffer = await fs.readFile(data.filePath);
+      const fileName = data.filePath.split(/[\\/]/).pop() || 'unknown';
+
+      // Create a File-like object for the API
+      const file = new File([fileBuffer], fileName);
+
+      const result = await fileApi.uploadFile(file, {
+        parentId: data.parentId,
+        repoKey: data.repoKey,
+      });
+      return { data: result };
+    } catch (error) {
+      console.error('Failed to upload file:', error);
+      return { data: null, error: (error as Error).message };
+    }
   });
 
   ipcMain.handle('file:getRootFolder', async () => {
-    // TODO: Implement root folder functionality
-    return { data: null };
+    const fileApi = getFileApi();
+    try {
+      const rootFolder = await fileApi.getRootFolder();
+      return { data: rootFolder };
+    } catch (error) {
+      console.error('Failed to get root folder:', error);
+      return { data: null };
+    }
   });
 
-  ipcMain.handle('file:getChildren', async (_event, parentId: string) => {
-    // TODO: Implement children folder functionality
-    return { data: [] };
+  ipcMain.handle('file:getChildren', async (_event, parentId: string, repoKey?: string) => {
+    const fileApi = getFileApi();
+    try {
+      const children = await fileApi.getFolderChildren({
+        parentId: parentId ? parseInt(parentId) : undefined,
+        repoKey,
+      });
+      return { data: children };
+    } catch (error) {
+      console.error('Failed to get folder children:', error);
+      return { data: [] };
+    }
   });
 
-  ipcMain.handle('file:createFolder', async (_event, data: any) => {
-    // TODO: Implement folder creation functionality
-    return { data: null };
+  ipcMain.handle('file:createFolder', async (_event, data: { name: string; parentId?: number; repoKey?: string }) => {
+    const fileApi = getFileApi();
+    try {
+      await fileApi.createFile({
+        name: data.name,
+        type: 'folder',
+        parentId: data.parentId,
+        repoKey: data.repoKey,
+      });
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to create folder:', error);
+      return { success: false, error: (error as Error).message };
+    }
   });
 
   ipcMain.handle('file:download', async (_event, id: string) => {
-    // TODO: Implement file download functionality
-    return { data: null };
+    const fileApi = getFileApi();
+    try {
+      // Show save dialog to get destination path
+      const result = await dialog.showSaveDialog({
+        title: 'Save File',
+        defaultPath: app.getPath('downloads'),
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { data: null, canceled: true };
+      }
+
+      await fileApi.downloadFile(parseInt(id), result.filePath);
+      return { data: { path: result.filePath } };
+    } catch (error) {
+      console.error('Failed to download file:', error);
+      return { data: null, error: (error as Error).message };
+    }
   });
 
   // ==================== Database Handlers ====================
@@ -351,6 +590,195 @@ export function setupIpcHandlers() {
   ipcMain.handle('storage:getMode', async () => {
     const storage = getStorageAdapter();
     return storage.getMode();
+  });
+
+  // ==================== System/Desktop Handlers ====================
+
+  ipcMain.handle('system:getAppInfo', async () => {
+    return {
+      version: app.getVersion(),
+      name: app.getName(),
+      platform: process.platform,
+      arch: process.arch,
+      userDataPath: app.getPath('userData'),
+      locale: app.getLocale(),
+    };
+  });
+
+  ipcMain.handle('system:getPaths', async () => {
+    return {
+      userData: app.getPath('userData'),
+      downloads: app.getPath('downloads'),
+      documents: app.getPath('documents'),
+      desktop: app.getPath('desktop'),
+      temp: app.getPath('temp'),
+    };
+  });
+
+  ipcMain.handle('dialog:openFile', async (_event, options?: {
+    title?: string;
+    filters?: { name: string; extensions: string[] }[];
+    multiSelections?: boolean;
+  }) => {
+    const result = await dialog.showOpenDialog({
+      title: options?.title || 'Select File',
+      filters: options?.filters || [{ name: 'All Files', extensions: ['*'] }],
+      properties: options?.multiSelections
+        ? ['openFile', 'multiSelections']
+        : ['openFile'],
+    });
+
+    if (result.canceled) {
+      return { canceled: true, filePaths: [] };
+    }
+    return { canceled: false, filePaths: result.filePaths };
+  });
+
+  ipcMain.handle('dialog:openFolder', async (_event, options?: {
+    title?: string;
+  }) => {
+    const result = await dialog.showOpenDialog({
+      title: options?.title || 'Select Folder',
+      properties: ['openDirectory'],
+    });
+
+    if (result.canceled) {
+      return { canceled: true, folderPath: null };
+    }
+    return { canceled: false, folderPath: result.filePaths[0] };
+  });
+
+  ipcMain.handle('dialog:saveFile', async (_event, options?: {
+    title?: string;
+    defaultPath?: string;
+    filters?: { name: string; extensions: string[] }[];
+  }) => {
+    const result = await dialog.showSaveDialog({
+      title: options?.title || 'Save File',
+      defaultPath: options?.defaultPath || app.getPath('downloads'),
+      filters: options?.filters || [{ name: 'All Files', extensions: ['*'] }],
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { canceled: true, filePath: null };
+    }
+    return { canceled: false, filePath: result.filePath };
+  });
+
+  ipcMain.handle('dialog:showMessage', async (_event, options: {
+    type?: 'none' | 'info' | 'error' | 'question' | 'warning';
+    title?: string;
+    message: string;
+    detail?: string;
+    buttons?: string[];
+  }) => {
+    const result = await dialog.showMessageBox({
+      type: options.type || 'info',
+      title: options.title || '',
+      message: options.message,
+      detail: options.detail,
+      buttons: options.buttons || ['OK'],
+    });
+
+    return { response: result.response };
+  });
+
+  ipcMain.handle('fs:readFile', async (_event, filePath: string, encoding?: BufferEncoding) => {
+    try {
+      const content = await fs.readFile(filePath, encoding || 'utf-8');
+      return { data: content };
+    } catch (error) {
+      console.error('Failed to read file:', error);
+      return { data: null, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string | Buffer, encoding?: BufferEncoding) => {
+    try {
+      await fs.writeFile(filePath, content, encoding || 'utf-8');
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to write file:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('fs:exists', async (_event, filePath: string) => {
+    return fs.pathExists(filePath);
+  });
+
+  ipcMain.handle('fs:mkdir', async (_event, dirPath: string) => {
+    try {
+      await fs.ensureDir(dirPath);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to create directory:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('fs:remove', async (_event, path: string) => {
+    try {
+      await fs.remove(path);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to remove path:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('fs:readdir', async (_event, dirPath: string) => {
+    try {
+      const files = await fs.readdir(dirPath, { withFileTypes: true });
+      return {
+        data: files.map(f => ({
+          name: f.name,
+          isDirectory: f.isDirectory(),
+          isFile: f.isFile(),
+        })),
+      };
+    } catch (error) {
+      console.error('Failed to read directory:', error);
+      return { data: [], error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('fs:stat', async (_event, filePath: string) => {
+    try {
+      const stat = await fs.stat(filePath);
+      return {
+        data: {
+          size: stat.size,
+          isDirectory: stat.isDirectory(),
+          isFile: stat.isFile(),
+          createdAt: stat.birthtime.getTime(),
+          modifiedAt: stat.mtime.getTime(),
+        },
+      };
+    } catch (error) {
+      console.error('Failed to get file stats:', error);
+      return { data: null, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('fs:copy', async (_event, src: string, dest: string) => {
+    try {
+      await fs.copy(src, dest);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('fs:move', async (_event, src: string, dest: string) => {
+    try {
+      await fs.move(src, dest);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to move:', error);
+      return { success: false, error: (error as Error).message };
+    }
   });
 
   console.log('IPC handlers setup complete');

@@ -138,4 +138,11 @@ export class AuthApi {
   async unbindDevice(deviceId: string): Promise<void> {
     return this.http.delete(`/knowledge-system/user/device/${deviceId}`);
   }
+
+  /**
+   * Search users
+   */
+  async searchUsers(query: string): Promise<UserInfo[]> {
+    return this.http.get<UserInfo[]>('/knowledge-system/user/search', { keyword: query });
+  }
 }
