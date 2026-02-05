@@ -4,9 +4,9 @@
     "description": "Bilibili video embed plugin for knowledge repo",
     "main": "src/index.tsx",
     "publishConfig": {
-      "main": "dist/index.js",
-      "types": "dist/index.d.ts",
-      "registry": "http://localhost:8081/repository/npm-hosted/"
+        "main": "dist/index.js",
+        "types": "dist/index.d.ts",
+        "registry": "http://localhost:8081/repository/npm-hosted/"
     },
     "scripts": {
         "build": "rollup -c rollup.config.js",
@@ -34,8 +34,5 @@
         "@types/node": "^20.11.24",
         "typescript": "^5.3.3"
     },
-    "peerDependencies": {
-        "react": "^18.2.0",
-        "@types/react": "^18.2.0"
-    }
+    "peerDependencies": {}
 }

@@ -1,6 +1,8 @@
 import EventEmitter from 'eventemitter3';
 import { v4 as uuidv4 } from 'uuid';
 import * as os from 'os';
+import * as fs from 'fs-extra';
+import * as path from 'path';
 import { AuthRepository } from '../database/auth-repository';
 import { AuthApi } from '../http/auth-api';
 import {
@@ -47,7 +49,7 @@ export class AuthManager extends EventEmitter<AuthManagerEvents> {
     }
 
     const deviceName = os.hostname();
-    
+
     try {
       const authInfo = await this.authApi.anonymousLogin({
         deviceId: this.deviceId,
@@ -56,7 +58,7 @@ export class AuthManager extends EventEmitter<AuthManagerEvents> {
 
       await this.saveAuthInfo(authInfo, UserRole.ANONYMOUS);
       this.emit('auth:login', authInfo);
-      
+
       return authInfo;
     } catch (error) {
       console.error('Anonymous login failed:', error);
@@ -70,9 +72,9 @@ export class AuthManager extends EventEmitter<AuthManagerEvents> {
   async loginWithPassword(credentials: LoginCredentials): Promise<AuthInfo> {
     try {
       const authInfo = await this.authApi.login(credentials);
-      
+
       await this.saveAuthInfo(authInfo, UserRole.AUTHENTICATED);
-      
+
       // Fetch user info and membership in parallel
       await Promise.all([
         this.fetchAndSaveUserInfo(),
@@ -87,7 +89,7 @@ export class AuthManager extends EventEmitter<AuthManagerEvents> {
       }
 
       this.emit('auth:login', authInfo);
-      
+
       return authInfo;
     } catch (error) {
       console.error('Login failed:', error);
@@ -106,7 +108,7 @@ export class AuthManager extends EventEmitter<AuthManagerEvents> {
       }
 
       const newAuthInfo = await this.authApi.refreshToken(authInfo.refreshToken);
-      
+
       // Update tokens
       this.authRepository.updateAccessToken(
         newAuthInfo.accessToken,
@@ -114,7 +116,7 @@ export class AuthManager extends EventEmitter<AuthManagerEvents> {
       );
 
       this.emit('auth:refreshed', newAuthInfo.accessToken);
-      
+
       return true;
     } catch (error) {
       console.error('Refresh token failed:', error);
@@ -246,7 +248,7 @@ export class AuthManager extends EventEmitter<AuthManagerEvents> {
     } catch (error) {
       // Membership endpoint might not exist yet
       console.warn('Failed to fetch membership:', error);
-      
+
       // Save default free membership
       const defaultMembership: MembershipInfo = {
         level: MembershipLevel.FREE,
@@ -279,10 +281,8 @@ export class AuthManager extends EventEmitter<AuthManagerEvents> {
    * Private: Get or create device ID
    */
   private async getOrCreateDeviceId(): Promise<string> {
-    const fs = await import('fs-extra');
-    const path = await import('path');
     const { app } = await import('electron');
-    
+
     const userDataPath = app.getPath('userData');
     const deviceIdPath = path.join(userDataPath, 'device-id');
 
