@@ -67,39 +67,39 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
     },
 
     write: {
-        description: '插入文本到文档。可以指定块索引和位置',
+        description: '在指定块后插入内容，支持 Markdown 格式自动解析。这是推荐的插入工具。',
         inputSchema: z.object({
-            text: z.string().describe("要插入的文本"),
-            blockIndex: z.number().optional().describe("块索引（从0开始），不填则使用最后一个块"),
-            location: z.enum(['start', 'end']).optional().describe("在块内的位置: 'start'开头, 'end'末尾。默认'end'")
+            text: z.string().describe("要插入的内容，支持 Markdown 格式（如 **粗体**、- 列表、## 标题、```代码块``` 等）"),
+            blockIndex: z.number().optional().describe("在此块之后插入（从0开始），不填则在文档末尾插入"),
+            parseMarkdown: z.boolean().optional().describe("是否解析 Markdown 格式，默认 true")
         }),
-        execute: async ({ text, blockIndex, location = 'end' }: {
+        execute: async ({ text, blockIndex, parseMarkdown = true }: {
             text: string
             blockIndex?: number
-            location?: 'start' | 'end'
+            parseMarkdown?: boolean
         }) => {
             try {
-                const textBlocks = findTextBlocks(editor)
+                const blocks = discoverBlocks(editor)
 
-                if (textBlocks.length === 0) {
-                    return { error: '文档中没有可插入文本的块' }
+                if (blocks.length === 0) {
+                    return { error: '文档中没有块节点' }
                 }
 
                 const targetIndex = blockIndex !== undefined
-                    ? Math.min(Math.max(0, blockIndex), textBlocks.length - 1)
-                    : textBlocks.length - 1
+                    ? Math.min(Math.max(0, blockIndex), blocks.length - 1)
+                    : blocks.length - 1
 
-                const targetBlock = textBlocks[targetIndex]
-                const insertPos = location === 'start'
-                    ? targetBlock.contentStart
-                    : targetBlock.contentEnd
+                const targetBlock = blocks[targetIndex]
+                const insertPos = targetBlock.pos + targetBlock.size
 
                 const docSize = editor.state.doc.nodeSize
-                const success = editor.chain()
-                    .focus()
-                    .setTextSelection(insertPos)
-                    .insertContent(text)
-                    .run()
+
+                // Parse markdown if enabled
+                const nodes = parseMarkdown
+                    ? parseMarkdownToNodes(text)
+                    : [{ type: 'paragraph', content: [{ type: 'text', text }] }]
+
+                const success = editor.commands.insertContentAt(insertPos, nodes)
 
                 if (!success) {
                     return { error: `插入失败，位置: ${insertPos}` }
@@ -111,9 +111,10 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     success: true,
                     blockIndex: targetIndex,
                     blockType: targetBlock.type,
-                    location,
-                    insertedAt: insertPos,
-                    insertedSize: newDocSize - docSize
+                    insertedAfter: insertPos,
+                    insertedSize: newDocSize - docSize,
+                    parsedNodes: nodes.length,
+                    markdownParsed: parseMarkdown
                 }
             } catch (error) {
                 return { error: `插入失败: ${error instanceof Error ? error.message : '未知错误'}` }
@@ -122,28 +123,33 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
     },
 
     insertAtEnd: {
-        description: '在文档末尾插入内容',
+        description: '在文档末尾插入内容，支持 Markdown 格式自动解析',
         inputSchema: z.object({
-            text: z.string().describe("要插入的文本内容"),
-            asNewParagraph: z.boolean().optional().describe("是否作为新段落插入，默认true")
+            text: z.string().describe("要插入的内容，支持 Markdown 格式（如 **粗体**、- 列表、## 标题等）"),
+            parseMarkdown: z.boolean().optional().describe("是否解析 Markdown 格式，默认 true")
         }),
-        execute: async ({ text, asNewParagraph = true }: {
+        execute: async ({ text, parseMarkdown = true }: {
             text: string
-            asNewParagraph?: boolean
+            parseMarkdown?: boolean
         }) => {
             const docSize = editor.state.doc.nodeSize
 
             try {
                 let success: boolean
-                if (asNewParagraph) {
+                let nodes: any[]
+
+                if (parseMarkdown) {
+                    // Parse markdown to nodes
+                    nodes = parseMarkdownToNodes(text)
                     success = editor.chain()
                         .focus('end')
-                        .insertContent([{ type: 'paragraph', content: [{ type: 'text', text }] }])
+                        .insertContent(nodes)
                         .run()
                 } else {
+                    nodes = [{ type: 'paragraph', content: [{ type: 'text', text }] }]
                     success = editor.chain()
                         .focus('end')
-                        .insertContent(text)
+                        .insertContent(nodes)
                         .run()
                 }
 
@@ -157,7 +163,8 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     success: true,
                     insertedAt: 'end',
                     insertedSize: newDocSize - docSize,
-                    asNewParagraph
+                    parsedNodes: nodes.length,
+                    markdownParsed: parseMarkdown
                 }
             } catch (error) {
                 return { error: `Insert failed: ${error instanceof Error ? error.message : 'Unknown error'}` }
@@ -226,12 +233,17 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
     },
 
     insertAfterBlock: {
-        description: '在指定块节点之后插入新段落',
+        description: '在指定块节点之后插入内容，支持 Markdown 格式自动解析',
         inputSchema: z.object({
             blockIndex: z.number().describe("块索引（从0开始）"),
-            text: z.string().describe("要插入的文本内容")
+            text: z.string().describe("要插入的内容，支持 Markdown 格式"),
+            parseMarkdown: z.boolean().optional().describe("是否解析 Markdown 格式，默认 true")
         }),
-        execute: async ({ blockIndex, text }: { blockIndex: number; text: string }) => {
+        execute: async ({ blockIndex, text, parseMarkdown = true }: {
+            blockIndex: number
+            text: string
+            parseMarkdown?: boolean
+        }) => {
             const docSize = editor.state.doc.nodeSize
 
             try {
@@ -245,9 +257,12 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                 const targetBlock = blocks[targetIndex]
                 const insertPos = targetBlock.pos + targetBlock.size
 
-                const success = editor.commands.insertContentAt(insertPos, [
-                    { type: 'paragraph', content: [{ type: 'text', text }] }
-                ])
+                // Parse markdown if enabled
+                const nodes = parseMarkdown
+                    ? parseMarkdownToNodes(text)
+                    : [{ type: 'paragraph', content: [{ type: 'text', text }] }]
+
+                const success = editor.commands.insertContentAt(insertPos, nodes)
 
                 if (!success) {
                     return { error: '插入失败' }
@@ -260,7 +275,9 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     blockIndex: targetIndex,
                     blockType: targetBlock.type,
                     insertedAfter: insertPos,
-                    insertedSize: newDocSize - docSize
+                    insertedSize: newDocSize - docSize,
+                    parsedNodes: nodes.length,
+                    markdownParsed: parseMarkdown
                 }
             } catch (error) {
                 return { error: `插入失败: ${error instanceof Error ? error.message : '未知错误'}` }
@@ -269,17 +286,19 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
     },
 
     insertNear: {
-        description: '在包含指定文本的块附近插入内容',
+        description: '在包含指定文本的块附近插入内容，支持 Markdown 格式自动解析',
         inputSchema: z.object({
             searchText: z.string().describe("要搜索的文本，用于定位插入位置"),
-            text: z.string().describe("要插入的文本"),
+            text: z.string().describe("要插入的内容，支持 Markdown 格式"),
             position: z.enum(['before', 'after', 'start', 'end']).optional()
-                .describe("插入位置: 'before'块前, 'after'块后, 'start'块内开头, 'end'块内末尾")
+                .describe("插入位置: 'before'块前, 'after'块后, 'start'块内开头, 'end'块内末尾"),
+            parseMarkdown: z.boolean().optional().describe("是否解析 Markdown 格式，默认 true（仅 before/after 有效）")
         }),
-        execute: async ({ searchText, text, position = 'after' }: {
+        execute: async ({ searchText, text, position = 'after', parseMarkdown = true }: {
             searchText: string
             text: string
             position?: 'before' | 'after' | 'start' | 'end'
+            parseMarkdown?: boolean
         }) => {
             const docSize = editor.state.doc.nodeSize
 
@@ -293,21 +312,26 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
 
                 let success: boolean
                 let insertedAt: number | string
+                let nodes: any[]
+
+                // Parse markdown for block-level insertions (before/after)
+                if (parseMarkdown && (position === 'before' || position === 'after')) {
+                    nodes = parseMarkdownToNodes(text)
+                } else {
+                    nodes = [{ type: 'paragraph', content: [{ type: 'text', text }] }]
+                }
 
                 switch (position) {
                     case 'before':
-                        success = editor.commands.insertContentAt(foundBlock.pos, [
-                            { type: 'paragraph', content: [{ type: 'text', text }] }
-                        ])
+                        success = editor.commands.insertContentAt(foundBlock.pos, nodes)
                         insertedAt = foundBlock.pos
                         break
                     case 'after':
-                        success = editor.commands.insertContentAt(foundBlock.pos + foundBlock.size, [
-                            { type: 'paragraph', content: [{ type: 'text', text }] }
-                        ])
+                        success = editor.commands.insertContentAt(foundBlock.pos + foundBlock.size, nodes)
                         insertedAt = foundBlock.pos + foundBlock.size
                         break
                     case 'start':
+                        // Inline insertion - parse inline markdown only
                         success = editor.chain()
                             .focus()
                             .setTextSelection(foundBlock.contentStart)
@@ -316,6 +340,7 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                         insertedAt = foundBlock.contentStart
                         break
                     case 'end':
+                        // Inline insertion - parse inline markdown only
                         success = editor.chain()
                             .focus()
                             .setTextSelection(foundBlock.contentEnd)
@@ -337,7 +362,9 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     foundInBlock: foundBlock.type,
                     position,
                     insertedAt,
-                    insertedSize: newDocSize - docSize
+                    insertedSize: newDocSize - docSize,
+                    parsedNodes: nodes.length,
+                    markdownParsed: parseMarkdown && (position === 'before' || position === 'after')
                 }
             } catch (error) {
                 return { error: `插入失败: ${error instanceof Error ? error.message : '未知错误'}` }

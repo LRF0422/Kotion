@@ -130,8 +130,8 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                 <DialogTitle className="text-lg font-semibold">设置</DialogTitle>
                 <DialogDescription className="text-sm text-muted-foreground">管理您的账号和工作空间设置</DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-[260px_1fr] h-[calc(100%-73px)]">
-                <ScrollArea className="border-r">
+            <div className="grid grid-cols-[260px_1fr] h-[calc(100%-73px)] overflow-hidden">
+                <ScrollArea className="border-r h-full">
                     <div className="p-3">
                         <TreeView
                             size="sm"
@@ -139,13 +139,13 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                         />
                     </div>
                 </ScrollArea>
-                <ScrollArea className="h-full">
-                    <div className="p-8">
+                <div className="h-full overflow-auto">
+                    <div className="p-8 min-h-full">
                         {
                             render()
                         }
                     </div>
-                </ScrollArea>
+                </div>
             </div>
         </DialogContent>
     </Dialog>

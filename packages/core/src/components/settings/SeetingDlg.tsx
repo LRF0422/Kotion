@@ -8,13 +8,14 @@ import { Separator } from "@kn/ui";
 import { cn } from "@kn/ui";
 import { GlobalState } from "../../store/GlobalState";
 import { useSafeState } from "ahooks";
-import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import, Puzzle, ChevronRight } from "@kn/icon";
+import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import, Puzzle, ChevronRight, Zap } from "@kn/icon";
 import React, { PropsWithChildren, useContext, useMemo, Suspense } from "react";
 import { useSelector, AppContext, PluginSettingsConfig } from "@kn/common";
 import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { Member } from "./components/Member";
 import { useUploadFile } from "../../hooks";
+import { SkillManager } from "../Skills";
 
 interface PluginSettingsWithMeta extends PluginSettingsConfig {
     pluginName: string;
@@ -87,6 +88,12 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                     <div className="space-y-3">
                         <SectionHeader title="人员管理" description="管理工作空间成员和权限" />
                         <Member />
+                    </div>
+                );
+            case 'MySkills':
+                return (
+                    <div className="-m-6 h-[calc(680px-65px)]">
+                        <SkillManager />
                     </div>
                 );
             default:
@@ -196,6 +203,12 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                     id: 'language',
                     name: "语言设置",
                     icon: <Globe className="h-4 w-4" />
+                },
+                {
+                    id: 'skills',
+                    name: "AI 技能",
+                    icon: <Zap className="h-4 w-4" />,
+                    onClick: () => setCurrentKey("MySkills")
                 }
             ]
         },

@@ -171,7 +171,7 @@ export const PageViewer: React.FC = () => {
     </div> : (page && <div className="w-full h-full">
         {/* Only show header on desktop - mobile uses the app header */}
         {!isMobile && (
-            <header className="h-11 w-full flex flex-row justify-between px-1 border-b ">
+            <header className="h-11 w-full flex flex-row justify-between px-1 border-b relative z-50">
                 <div className="flex flex-row items-center gap-2 px-1 text-sm flex-1 min-w-0 overflow-hidden">
                     <PageBreadcrumb
                         currentPageId={params.pageId!}
@@ -184,7 +184,7 @@ export const PageViewer: React.FC = () => {
                     <Button variant="ghost" size="icon" onClick={goToEditor}><Edit className="h-5 w-5" /></Button>
                     <Separator orientation="vertical" />
                     <Popover>
-                        <PopoverTrigger>
+                        <PopoverTrigger asChild>
                             <Button variant="ghost" size="icon"><Share className="h-5 w-5" /></Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-[500px] flex flex-col gap-2 text-sm" >
@@ -211,7 +211,7 @@ export const PageViewer: React.FC = () => {
                     </Button>
                     <Button variant="ghost" size="icon"><MessageCircleCode className="h-5 w-5" /></Button>
                     <DropdownMenu>
-                        <DropdownMenuTrigger><Button variant="ghost" size="icon"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
+                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
                         <DropdownMenuContent className="w-[200px]">
                             <DropdownMenuItem>Save as template</DropdownMenuItem>
                         </DropdownMenuContent>

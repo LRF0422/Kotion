@@ -29,4 +29,12 @@ export interface ExtensionWrapper {
         inputSchema: any,
         execute: (editor: Editor) => (params: any) => any
     }[]
+    skills?: {
+        name: string,
+        description: string,
+        requiredTools: string[],
+        optionalTools?: string[],
+        systemPromptFragment?: string,
+        tags?: string[]
+    }[]
 }

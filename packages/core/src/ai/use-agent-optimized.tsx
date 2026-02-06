@@ -1,7 +1,7 @@
 import { AppContext } from "@kn/common"
 import { Editor } from "@kn/editor"
 import { stepCountIs, ToolLoopAgent } from "ai"
-import { useCallback, useContext, useMemo, useRef } from "react"
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { deepseek } from "./ai-utils"
 
 // Types
@@ -14,18 +14,23 @@ export type {
     OnUserChoiceRequest
 } from "./types"
 
-// Tools
-import { createReadTools } from "./tools/read-tools"
-import { createInsertTools } from "./tools/insert-tools"
-import { createDeleteTools } from "./tools/delete-tools"
-import { createMiscTools } from "./tools/misc-tools"
-import { createColumnsTools } from "./tools/columns-tools"
+// Providers
+import { ToolProvider } from "./providers/ToolProvider"
+import { SkillProvider } from "./providers/SkillProvider"
+
+// Discovery Tools
+import { createToolDiscoveryTools } from "./discovery/tool-discovery-tools"
+import { createSkillDiscoveryTools } from "./discovery/skill-discovery-tools"
+import { createSkillManagementTools } from "./discovery/skill-management-tools"
+
+// Skills
+import { builtinSkills, getSkillRegistry } from "./skills"
 
 // Utils
 import { wrapToolsWithCallback } from "./utils/tool-wrapper"
 
-// Agent instructions
-const AGENT_INSTRUCTIONS = `You are an intelligent document editing assistant. Help users edit, organize, and improve their documents.
+// Base agent instructions (minimal, focused on discovery)
+const BASE_AGENT_INSTRUCTIONS = `You are an intelligent document editing assistant. Help users edit, organize, and improve their documents.
 
 # CRITICAL RULES
 
@@ -52,107 +57,89 @@ The document has a special structure:
 5. Execute the operation
 6. Verify the result
 
-# TOOLS REFERENCE
+# TOOL DISCOVERY
 
-## Title Tool (IMPORTANT)
-| Tool | Use When |
-|------|----------|
-| updateTitle | ALWAYS use this to change/update the document title. Never use insert tools for title changes |
+You start with a minimal set of essential tools. When you need additional capabilities:
 
-## Reading Tools
-| Tool | Use When |
-|------|----------|
-| getDocumentStructure | First step - get overview of headings and blocks |
-| searchInDocument | Find specific text or content |
-| readChunk | Read large documents in chunks |
-| getNodeAtPosition | Get details about a specific location |
+1. **Discover tools**: Use \`discoverTools\` to see all tool categories
+2. **Explore categories**: Use \`exploreCategory\` to see tools in a category
+3. **Search tools**: Use \`searchAvailableTools\` to find specific tools
+4. **Load tools**: Use \`loadTool\` to load tools you need
 
-## Insert Tools (by priority)
-| Tool | Best For |
-|------|----------|
-| insertAtPosition | Insert at exact position (get pos from search first) |
-| insertNear | Insert relative to found text |
-| replaceContent | Find and replace text |
-| batchInsert | Multiple items at once (NOT for title updates) |
-| insertAfterBlock | Insert after a specific block |
-| insertAtEnd | Append to document |
-| write | Insert text in a block |
-| insertSegmentedMarkdown | Insert markdown content with proper formatting - handles headings, lists, emphasis, etc. Recommended for all markdown content |
+## Pre-loaded Essential Tools
+### Reading
+- getDocumentStructure: Get document overview
+- searchInDocument: Search for text
+- readChunk: Read document content
 
-## Delete Tools (REQUIRE askUserChoice first)
-| Tool | Use When |
-|------|----------|
-| deleteBySearch | Delete by text match (safer) |
-| deleteBlock | Delete by block index |
-| deleteRange | Delete by position range |
+### Writing (支持 Markdown 自动解析)
+- updateTitle: Update document title
+- write: Insert content after a block (recommended, supports markdown)
+- insertNear: Insert content near matching text (supports markdown)
+- insertAtEnd: Append content to document end (supports markdown)
+- replaceContent: Find and replace content
 
-## User Interaction
-| Tool | Use When |
-|------|----------|
-| askUserChoice | Before destructive actions, when multiple options exist |
+**Markdown Support**: write/insertNear/insertAtEnd/insertAfterBlock 工具默认解析 Markdown 格式：
+- 标题: ## Heading
+- 列表: - item 或 1. item
+- 代码块: \`\`\`language
+- 粗体/斜体: **bold** *italic*
+- 链接: [text](url)
 
-## Columns/Layout Tools
-| Tool | Use When |
-|------|----------|
-| insertColumns | Create a new multi-column layout (2-6 columns) |
-| getColumnsInfo | Get information about existing column layouts |
-| updateColumnContent | Update content in a specific column |
-| setColumnsLayout | Change column width ratios (equal, left-wide, right-wide, center-wide) |
-| addColumnToLayout | Add a new column to existing layout |
-| deleteColumn | Remove a column from layout (minimum 2 columns required) |
-| deleteColumnsLayout | Delete entire column layout |
+### Interaction
+- askUserChoice: Confirm with user
 
-## Other Tools
-| Tool | Use When |
-|------|----------|
-| highlight | Highlight text range |
-| webSearch | Need external information |
-| fetchWebPage | Get content from URL |
+## Tool Categories
+- document-read: Reading and analyzing document content
+- document-write: Inserting and updating content
+- document-delete: Deleting content (requires confirmation)
+- layout: Multi-column layouts
+- interaction: User interaction
+- web: Web search and fetch
+- plugin: Tools from installed plugins
+
+# SKILLS
+
+Skills are high-level capabilities that combine multiple tools with specialized instructions.
+
+## Built-in Skills
+Use \`listSkills\` to see available skills and \`activateSkill\` to enable them.
+
+## User-Installed Skills
+Users can install custom skills from the web or create their own. Use these tools:
+- \`listInstalledSkills\`: List user-installed skills
+- \`installSkillFromUrl\`: Install a skill from a URL
+- \`installSkill\`: Install a skill from JSON
+- \`createCustomSkill\`: Create a new custom skill
+- \`uninstallSkill\`: Uninstall a skill
+- \`exportSkill\`: Export a skill to share with others
+
+Installed skills are automatically loaded and available for activation.
 
 # EXAMPLES
+
+**Discover what tools are available:**
+discoverTools()
+
+**Find tools for a specific task:**
+searchAvailableTools({ query: "insert" })
+
+**Load a tool you need:**
+loadTool({ toolName: "insertNear" })
 
 **Update document title:**
 updateTitle({ newTitle: "New Document Title" })
 
-**Insert at specific position (after searching):**
-1. searchInDocument({ query: "target text" }) // returns { pos: 42 }
-2. insertAtPosition({ pos: 42, content: "inserted text", insertMode: "text" })
-
-**Insert near specific text:**
-insertNear({ searchText: "Introduction", text: "New paragraph", position: "after" })
-
-**Batch insert multiple items (NOT for titles):**
-batchInsert({ items: [{ content: "Section", type: "heading" }, { content: "Paragraph" }], position: "end" })
-
-**Insert markdown content with proper formatting:**
-insertSegmentedMarkdown({ markdown: "# Title\n\n- List item 1\n- List item 2\n\n**Bold text** and *italic text*", position: "end" })
-
-**Replace text:**
-replaceContent({ searchText: "old text", replaceWith: "new text" })
-
-**Delete (with confirmation):**
-1. askUserChoice({ question: "Delete this paragraph?", options: [...] })
-2. If confirmed → deleteBySearch({ searchText: "paragraph to delete", deleteMode: "block" })
+**Search and read content:**
+1. getDocumentStructure() // Get overview
+2. searchInDocument({ query: "target text" })
+3. readChunk({ startPos: 0 })
 
 # LANGUAGE
 Respond in the same language the user uses.`
 
 /**
- * Create all editor tools
- */
-const createEditorTools = (
-    editor: Editor,
-    onUserChoiceRequest?: OnUserChoiceRequest
-): ToolsRecord => ({
-    ...createMiscTools(editor, onUserChoiceRequest),
-    ...createReadTools(editor),
-    ...createInsertTools(editor),
-    ...createDeleteTools(editor),
-    ...createColumnsTools(editor)
-})
-
-/**
- * Optimized editor agent hook with stop functionality
+ * Optimized editor agent hook with progressive tool discovery and skills
  */
 export const useEditorAgentOptimized = (
     editor: Editor,
@@ -164,28 +151,135 @@ export const useEditorAgentOptimized = (
     // AbortController ref for stopping generation
     const abortControllerRef = useRef<AbortController | null>(null)
 
-    // Memoize plugin tools
-    const pluginTools = useMemo(() => {
-        return pluginManager?.resloveTools(editor) || {}
+    // Version state for reactive updates when tools/skills change
+    const [version, setVersion] = useState(0)
+
+    // Reload callback to trigger re-creation of agent
+    const handleReload = useCallback(() => {
+        setVersion(v => v + 1)
     }, [])
 
-    // Create and wrap base tools
-    const wrappedTools = useMemo(() => {
-        const baseTools = createEditorTools(editor, onUserChoiceRequest)
-        const allTools = { ...baseTools, ...pluginTools }
-        return wrapToolsWithCallback(allTools, onToolExecution)
-    }, [editor, pluginTools, onToolExecution, onUserChoiceRequest])
+    // Create ToolProvider instance
+    const toolProvider = useMemo(() => {
+        return new ToolProvider({
+            editor,
+            onUserChoiceRequest,
+            onReload: handleReload
+        })
+    }, [editor, onUserChoiceRequest, handleReload])
 
-    // Create agent
+    // Get skill registry (singleton)
+    const skillRegistry = useMemo(() => getSkillRegistry(), [])
+
+    // Create SkillProvider instance
+    const skillProvider = useMemo(() => {
+        const provider = new SkillProvider({
+            toolProvider,
+            onReload: handleReload
+        })
+        // Register built-in skills
+        provider.registerSkills(builtinSkills)
+        return provider
+    }, [toolProvider, handleReload])
+
+    // Initialize skill registry and load installed skills
+    useEffect(() => {
+        let mounted = true
+
+        const loadInstalledSkills = async () => {
+            try {
+                await skillRegistry.initialize()
+                if (mounted) {
+                    // Register user-installed skills
+                    const installedSkills = skillRegistry.toSkillFormat()
+                    if (installedSkills.length > 0) {
+                        skillProvider.registerSkills(installedSkills)
+                        handleReload()
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load installed skills:', error)
+            }
+        }
+
+        loadInstalledSkills()
+
+        // Subscribe to skill registry changes
+        const unsubscribe = skillRegistry.subscribe(() => {
+            if (mounted) {
+                // Re-register skills when registry changes
+                const installedSkills = skillRegistry.toSkillFormat()
+                skillProvider.registerSkills(installedSkills)
+                handleReload()
+            }
+        })
+
+        return () => {
+            mounted = false
+            unsubscribe()
+        }
+    }, [skillRegistry, skillProvider, handleReload])
+
+    // Register plugin tools
+    useMemo(() => {
+        const pluginTools = pluginManager?.resloveTools(editor) || {}
+        if (Object.keys(pluginTools).length > 0) {
+            toolProvider.registerPluginTools(pluginTools, 'plugins')
+        }
+
+        // Register plugin skills if available
+        const pluginSkills = pluginManager?.resolveSkills?.() || []
+        if (pluginSkills.length > 0) {
+            skillProvider.registerSkills(pluginSkills)
+        }
+    }, [pluginManager, editor, toolProvider, skillProvider])
+
+    // Create discovery tools
+    const discoveryTools = useMemo(() => {
+        const toolDiscovery = createToolDiscoveryTools({
+            toolProvider,
+            onReload: handleReload
+        })
+        const skillDiscovery = createSkillDiscoveryTools({
+            skillProvider,
+            onReload: handleReload
+        })
+        const skillManagement = createSkillManagementTools({
+            skillRegistry,
+            onReload: handleReload
+        })
+        return { ...toolDiscovery, ...skillDiscovery, ...skillManagement }
+    }, [toolProvider, skillProvider, skillRegistry, handleReload])
+
+    // Combine all tools: loaded tools + discovery tools
+    const allTools = useMemo(() => {
+        const loadedTools = toolProvider.getLoadedTools()
+        return { ...loadedTools, ...discoveryTools }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [toolProvider, discoveryTools, version])
+
+    // Wrap tools with callback
+    const wrappedTools = useMemo(() => {
+        return wrapToolsWithCallback(allTools, onToolExecution)
+    }, [allTools, onToolExecution])
+
+    // Build dynamic instructions with skill prompts
+    const instructions = useMemo(() => {
+        const skillAddition = skillProvider.getSystemPromptAddition()
+        return BASE_AGENT_INSTRUCTIONS + skillAddition
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [skillProvider, version])
+
+    // Create agent (recreated when tools or skills change)
     const agent = useMemo(() => new ToolLoopAgent({
         model: deepseek("deepseek-chat"),
         stopWhen: stepCountIs(100),
-        instructions: AGENT_INSTRUCTIONS,
+        instructions,
         tools: wrappedTools,
-    }), [wrappedTools])
+    }), [wrappedTools, instructions])
 
     // Stream with abort support and history messages
-    const stream = useCallback(async (options: { 
+    const stream = useCallback(async (options: {
         prompt: string
         messages?: Array<{ role: 'user' | 'assistant'; content: string }>
     }) => {
@@ -199,12 +293,12 @@ export const useEditorAgentOptimized = (
 
         // Build initial messages array for conversation context
         const initialMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
-        
+
         // Add history messages if provided
         if (options.messages && options.messages.length > 0) {
             initialMessages.push(...options.messages)
         }
-        
+
         // Add current prompt as the latest user message
         initialMessages.push({
             role: 'user',
@@ -235,6 +329,11 @@ export const useEditorAgentOptimized = (
         agent,
         stream,
         stop,
-        isGenerating
+        isGenerating,
+        // New exports for progressive discovery
+        toolProvider,
+        skillProvider,
+        skillRegistry,
+        version
     }
 }

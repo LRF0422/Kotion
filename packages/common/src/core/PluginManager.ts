@@ -431,6 +431,57 @@ export class PluginManager {
     }
 
     /**
+     * Resolve all skills from plugin editor extensions
+     * Returns an array of skill definitions with plugin metadata
+     */
+    resolveSkills(): Array<{
+        name: string
+        description: string
+        requiredTools: string[]
+        optionalTools?: string[]
+        systemPromptFragment?: string
+        tags?: string[]
+        source: 'plugin'
+        pluginName: string
+    }> {
+        const skills: Array<{
+            name: string
+            description: string
+            requiredTools: string[]
+            optionalTools?: string[]
+            systemPromptFragment?: string
+            tags?: string[]
+            source: 'plugin'
+            pluginName: string
+        }> = []
+
+        const extensions = this.resloveEditorExtension()
+
+        for (const ext of extensions) {
+            if (!ext.skills) continue
+
+            const extSkills = Array.isArray(ext.skills) ? ext.skills : [ext.skills]
+
+            for (const skill of extSkills) {
+                if (!skill || !skill.name) {
+                    logger.warn('Invalid skill detected, skipping')
+                    continue
+                }
+
+                skills.push({
+                    ...skill,
+                    source: 'plugin',
+                    pluginName: ext.name
+                })
+                logger.debug('Resolved skill:', skill.name, 'from plugin:', ext.name)
+            }
+        }
+
+        logger.debug('Total resolved skills:', skills.length)
+        return skills
+    }
+
+    /**
      * Load external plugins and extract their editor extensions.
      * This method is used for collaboration scenarios where we need to load
      * another user's plugins without affecting the current user's plugin list.

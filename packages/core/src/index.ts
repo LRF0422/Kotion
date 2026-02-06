@@ -11,6 +11,7 @@ export * from "./ai"
 export { type GlobalState } from "./store"
 export { MobilePageHeaderProvider, useMobilePageHeader, type MobilePageHeaderInfo } from "./context/MobilePageHeaderContext"
 export { MessageBox } from "./components/MessageBox"
+export * from "./components/Skills"
 export { APIS } from "./api"
 
 import deepEqual from "deep-equal"
