@@ -256,7 +256,7 @@ export const PageEditor: React.FC = () => {
     }
 
     return pageLoading ? <div className="w-full h-full" ref={ref}>
-        <header className="h-11 w-full flex flex-row justify-between px-1 border-b">
+        <header className="h-11 w-full flex flex-row justify-between px-1 border-b relative z-50">
             <div className="flex flex-row items-center gap-2 px-1">
                 <Skeleton className="h-5 w-48" />
             </div>
@@ -291,7 +291,7 @@ export const PageEditor: React.FC = () => {
             </div>
         </main>
     </div> : (page && <div className="w-full h-full" ref={ref}>
-        <header className="h-11 w-full flex flex-row justify-between px-1 border-b">
+        <header className="h-11 w-full flex flex-row justify-between px-1 border-b relative z-50">
             <div className="flex flex-row items-center gap-2 px-1 text-sm flex-1 min-w-0 overflow-hidden">
                 <PageBreadcrumb
                     currentPageId={params.pageId!}

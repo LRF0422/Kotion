@@ -7,7 +7,31 @@ import { PDFExporter, PDFExportOptions } from './PDFExporter';
  * @param options - PDF导出选项
  */
 export async function exportToPDF(view: EditorView, options: PDFExportOptions = {}) {
-  return await PDFExporter.export(view, options);
+  // 显示加载提示
+  const loadingEl = document.createElement('div');
+  loadingEl.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 20px 40px;
+    border-radius: 8px;
+    z-index: 10000;
+    font-size: 16px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  `;
+  loadingEl.textContent = 'Generating PDF...';
+  document.body.appendChild(loadingEl);
+
+  try {
+    const result = await PDFExporter.export(view, options);
+    return result;
+  } finally {
+    // 移除加载提示
+    document.body.removeChild(loadingEl);
+  }
 }
 
 /**

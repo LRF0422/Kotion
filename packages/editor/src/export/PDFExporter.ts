@@ -53,71 +53,52 @@ export class PDFExporter {
         } = options;
 
         try {
-            // 获取编辑器内容元素
-            const editorElement = view.dom.closest('.ProseMirror') as HTMLElement;
-            if (!editorElement) {
-                console.error('Could not find editor content element');
+            // 获取 ProseMirror 编辑器元素 (实际内容所在)
+            const proseMirrorElement = view.dom.closest('.ProseMirror') as HTMLElement;
+
+            if (!proseMirrorElement) {
+                console.error('Could not find ProseMirror editor element');
                 return false;
             }
 
-            // 创建临时克隆元素以进行样式处理
-            const cloneElement = editorElement.cloneNode(true) as HTMLElement;
-
-            // 设置克隆元素的样式以便于PDF导出
-            cloneElement.style.position = 'fixed';
-            cloneElement.style.left = '-9999px';
-            cloneElement.style.top = '0';
-            cloneElement.style.width = orientation === 'landscape' ? '16in' : '12in';
-            cloneElement.style.height = 'auto';
-            cloneElement.style.background = 'white';
-            cloneElement.style.overflow = 'visible';
-            cloneElement.style.transform = 'scale(0.8)';
-            cloneElement.style.transformOrigin = 'top left';
-
-            // 确保克隆元素包含中文字体样式
-            const styleElement = document.createElement('style');
-            styleElement.textContent = `
-                * { 
-                    font-family: "Microsoft YaHei", "SimSun", "STSong", "Hiragino Sans GB", sans-serif, serif !important; 
-                }
-            `;
-            cloneElement.appendChild(styleElement);
-
-            document.body.appendChild(cloneElement);
-
-            // 如果需要包含样式，则复制页面中的CSS样式
-            if (includeStyles) {
-                const styles = document.querySelectorAll('style, link[rel="stylesheet"]');
-                styles.forEach(style => {
-                    if (style.tagName === 'LINK') {
-                        const link = style.cloneNode(true) as HTMLLinkElement;
-                        cloneElement.appendChild(link);
-                    } else {
-                        const styleClone = style.cloneNode(true) as HTMLStyleElement;
-                        cloneElement.appendChild(styleClone);
-                    }
+            // 等待所有组件渲染完成
+            // 强制布局重新计算，确保所有组件都已渲染
+            await new Promise(resolve => {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        setTimeout(resolve, 500); // 额外等待React组件完全渲染
+                    });
                 });
-            }
+            });
 
-            // 确保中文字体加载完成
-            await ensureChineseFontLoaded(cloneElement);
-
-            // 等待一段时间确保所有资源加载完成
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            // 使用html2canvas将DOM转换为图片
-            const canvas = await html2canvas(cloneElement, {
-                scale: 2, // 提高分辨率
+            // 直接使用 html2canvas 捕获原始元素，不进行克隆
+            // 这样可以保留所有计算样式和布局
+            const canvas = await html2canvas(proseMirrorElement, {
+                scale: 2, // 降低到2x以提高性能和兼容性
                 useCORS: true,
                 allowTaint: true,
                 backgroundColor: '#ffffff',
                 logging: false,
-                width: cloneElement.scrollWidth,
-                height: cloneElement.scrollHeight,
+                width: proseMirrorElement.offsetWidth,
+                height: proseMirrorElement.scrollHeight,
+                windowWidth: proseMirrorElement.offsetWidth,
+                windowHeight: proseMirrorElement.scrollHeight,
+                // 确保捕获所有样式
+                foreignObjectRendering: false, // 禁用foreignObject以提高兼容性
+                // 忽略某些元素
+                ignoreElements: (element) => {
+                    // 忽略固定定位的元素（如 ToC 按钮）
+                    const style = window.getComputedStyle(element);
+                    if (style.position === 'fixed') {
+                        return true;
+                    }
+                    // 忽略按钮
+                    if (element.tagName === 'BUTTON' && element.getAttribute('role') === 'button') {
+                        return true;
+                    }
+                    return false;
+                }
             });
-
-            // 移除临时克隆元素
-            document.body.removeChild(cloneElement);
 
             // 创建PDF文档
             const pdf = new jsPDF({
@@ -127,28 +108,54 @@ export class PDFExporter {
                 compress: true
             });
 
-            // 获取页面尺寸
+            // 获取页面尺寸（毫米）
             const pageWidth = pdf.internal.pageSize.getWidth();
             const pageHeight = pdf.internal.pageSize.getHeight();
 
-            // 计算缩放比例
+            // 计算可用内容区域（减去边距）
+            const contentWidth = pageWidth - (margin * 2);
+            const contentHeight = pageHeight - (margin * 2);
+
+            // Canvas 尺寸（像素）
             const imgWidth = canvas.width;
             const imgHeight = canvas.height;
-            const ratio = Math.min(imgWidth, imgHeight) / Math.min(pageWidth * 3.78, pageHeight * 3.78); // 3.78 = px per mm at 96 DPI
-            const imgX = margin;
-            const imgY = margin;
 
-            let heightLeft = imgHeight / ratio;
-            let position = margin;
+            // 计算宽度缩放比例：将 canvas 宽度适配到 PDF 内容宽度
+            // contentWidth (mm) * 3.78 = 对应的像素数（96 DPI时，1mm ≈ 3.78px）
+            // 由于我们使用了 scale: 2，实际像素是 contentWidth * 3.78 * 2
+            const scaleX = imgWidth / (contentWidth * 3.78 * 2);
 
-            // 添加第一页
-            const pageImg = canvas.toDataURL('image/jpeg', quality);
+            // 计算实际在 PDF 中的图片尺寸（毫米）
+            const pdfImgWidth = contentWidth; // 图片宽度填满内容区域
+            const pdfImgHeight = (imgHeight / scaleX) / 3.78; // 按比例计算高度
+
+            // 使用 PNG 格式以获得更好的文本清晰度
+            const pageImg = canvas.toDataURL('image/png', quality);
 
             // 处理多页内容
+            let heightLeft = pdfImgHeight;
+            let position = 0;
             let currentPage = 0;
-            while (heightLeft >= 0) {
+
+            while (heightLeft > 0) {
+                if (currentPage > 0) {
+                    pdf.addPage();
+                }
+
+                // 计算当前页要显示的内容
+                const yOffset = currentPage * contentHeight;
+
                 // 添加页面内容
-                pdf.addImage(pageImg, 'JPEG', imgX, position, imgWidth / ratio, imgHeight / ratio, undefined, 'FAST');
+                pdf.addImage(
+                    pageImg,
+                    'PNG',
+                    margin,                    // x position
+                    margin - yOffset,          // y position (offset for multi-page)
+                    pdfImgWidth,               // width in mm
+                    pdfImgHeight,              // height in mm
+                    undefined,
+                    'FAST'
+                );
 
                 // 添加水印
                 if (watermark) {
@@ -177,13 +184,8 @@ export class PDFExporter {
                     }
                 }
 
-                heightLeft -= (pageHeight - margin * 2);
+                heightLeft -= contentHeight;
                 currentPage++;
-
-                if (heightLeft >= 0) {
-                    position = heightLeft - imgHeight / ratio;
-                    pdf.addPage();
-                }
             }
 
             // 保存PDF文件
