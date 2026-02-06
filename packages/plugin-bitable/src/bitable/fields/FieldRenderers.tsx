@@ -20,6 +20,7 @@ interface FieldEditorProps {
     field: FieldConfig;
     onChange: (value: any) => void;
     editor?: Editor;
+    onCommit?: () => void;
 }
 
 // 文本字段渲染器
@@ -27,12 +28,23 @@ export const TextRenderer: React.FC<FieldRendererProps> = ({ value }) => {
     return <div className="text-sm text-gray-900 dark:text-white truncate">{value || ''}</div>;
 };
 
-export const TextEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
+export const TextEditor: React.FC<FieldEditorProps> = ({ value, onChange, onCommit }) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            onCommit?.();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.currentTarget.blur();
+        }
+    };
+
     return (
         <Input
             autoFocus
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
             className="h-full border-0 bg-white dark:bg-[#252525] text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
         />
     );
@@ -43,13 +55,30 @@ export const NumberRenderer: React.FC<FieldRendererProps> = ({ value }) => {
     return <div className="text-sm text-gray-900 dark:text-white">{typeof value === 'number' ? value : ''}</div>;
 };
 
-export const NumberEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
+export const NumberEditor: React.FC<FieldEditorProps> = ({ value, onChange, onCommit }) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            onCommit?.();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.currentTarget.blur();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            onChange((Number(value) || 0) + 1);
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            onChange((Number(value) || 0) - 1);
+        }
+    };
+
     return (
         <Input
             autoFocus
             type="number"
             value={value || 0}
             onChange={(e) => onChange(Number(e.target.value))}
+            onKeyDown={handleKeyDown}
             className="h-full border-0 bg-white dark:bg-[#252525] text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
         />
     );
@@ -92,19 +121,67 @@ export const SelectRenderer: React.FC<FieldRendererProps> = ({ value, field }) =
 };
 
 export const SelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChange }) => {
+    const [isOpen, setIsOpen] = React.useState(true);
+    const [highlightedIndex, setHighlightedIndex] = React.useState(0);
+    const options = field.options || [];
+
+    React.useEffect(() => {
+        const currentIndex = options.findIndex((opt: SelectOption) => opt.id === value);
+        if (currentIndex >= 0) {
+            setHighlightedIndex(currentIndex);
+        }
+    }, [value, options]);
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (!isOpen) return;
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                setHighlightedIndex((prev) => (prev + 1) % options.length);
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setHighlightedIndex((prev) => (prev - 1 + options.length) % options.length);
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (highlightedIndex >= 0 && highlightedIndex < options.length) {
+                    onChange(options[highlightedIndex].id);
+                    setIsOpen(false);
+                }
+                break;
+            case 'Escape':
+                e.preventDefault();
+                setIsOpen(false);
+                break;
+        }
+    };
+
     return (
-        <select
-            value={value || ''}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-full h-full px-2 border-0 bg-white dark:bg-[#252525] text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500 rounded"
+        <div
+            className="w-full h-full relative"
+            onKeyDown={handleKeyDown}
+            tabIndex={0}
         >
-            <option value="">请选择</option>
-            {field.options?.map((opt: SelectOption) => (
-                <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                </option>
-            ))}
-        </select>
+            <select
+                value={value || ''}
+                onChange={(e) => {
+                    onChange(e.target.value);
+                    setIsOpen(false);
+                }}
+                onFocus={() => setIsOpen(true)}
+                className="w-full h-full px-2 border-0 bg-white dark:bg-[#252525] text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500 rounded"
+                autoFocus
+            >
+                <option value="">请选择</option>
+                {options.map((opt: SelectOption) => (
+                    <option key={opt.id} value={opt.id}>
+                        {opt.label}
+                    </option>
+                ))}
+            </select>
+        </div>
     );
 };
 
@@ -151,11 +228,43 @@ export const MultiSelectRenderer: React.FC<FieldRendererProps> = ({ value, field
 
 export const MultiSelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChange }) => {
     const selectedValues = Array.isArray(value) ? value : [];
+    const [focusedIndex, setFocusedIndex] = React.useState(0);
+    const options = field.options || [];
+
+    const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                setFocusedIndex((prev) => Math.min(prev + 1, options.length - 1));
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setFocusedIndex((prev) => Math.max(prev - 1, 0));
+                break;
+            case 'Enter':
+            case ' ':
+                e.preventDefault();
+                const opt = options[index];
+                if (opt) {
+                    if (selectedValues.includes(opt.id)) {
+                        onChange(selectedValues.filter((id) => id !== opt.id));
+                    } else {
+                        onChange([...selectedValues, opt.id]);
+                    }
+                }
+                break;
+        }
+    };
 
     return (
         <div className="p-2 space-y-1 bg-white dark:bg-[#252525]">
-            {field.options?.map((opt: SelectOption) => (
-                <label key={opt.id} className="flex items-center gap-2 cursor-pointer text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-[#333] p-1 rounded">
+            {options.map((opt: SelectOption, index: number) => (
+                <label
+                    key={opt.id}
+                    className="flex items-center gap-2 cursor-pointer text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-[#333] p-1 rounded focus-within:ring-2 focus-within:ring-blue-500"
+                    onKeyDown={(e) => handleKeyDown(e, index)}
+                    tabIndex={0}
+                >
                     <Checkbox
                         checked={selectedValues.includes(opt.id)}
                         onCheckedChange={(checked) => {
@@ -228,15 +337,22 @@ export const ProgressRenderer: React.FC<FieldRendererProps> = ({ value }) => {
 };
 
 export const ProgressEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
+    const progress = typeof value === 'number' ? value : 0;
+    
     return (
-        <Input
-            type="range"
-            min="0"
-            max="100"
-            value={value || 0}
-            onChange={(e) => onChange(Number(e.target.value))}
-            className="h-full"
-        />
+        <div className="flex items-center gap-3 px-2 py-1">
+            <Slider
+                value={[progress]}
+                onValueChange={(values) => onChange(values[0])}
+                min={0}
+                max={100}
+                step={1}
+                className="flex-1"
+            />
+            <span className="text-sm font-medium text-gray-900 dark:text-white w-12 text-right">
+                {progress}%
+            </span>
+        </div>
     );
 };
 

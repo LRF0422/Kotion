@@ -242,9 +242,9 @@ export const TableView: React.FC<TableViewProps> = (props) => {
             {/* 自定义样式 */}
             <style>{`
                 .bitable-data-grid.rdg-light {
-                    --rdg-background-color: #fff;
-                    --rdg-header-background-color: #f9fafb;
-                    --rdg-row-hover-background-color: #f3f4f6;
+                    --rdg-background-color: transparent;
+                    --rdg-header-background-color: rgba(249, 250, 251, 0.4);
+                    --rdg-row-hover-background-color: rgba(243, 244, 246, 0.5);
                     --rdg-selection-color: #3b82f6;
                     --rdg-border-color: #e5e7eb;
                     --rdg-color: #111827;
@@ -254,7 +254,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                 }
 
                 .bitable-data-grid.rdg-light .rdg-header-row {
-                    background-color: #f9fafb;
+                    background-color: rgba(249, 250, 251, 0.4);
                     border-bottom: 1px solid #e5e7eb;
                 }
 
@@ -264,25 +264,25 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                 }
 
                 .bitable-data-grid.rdg-light .rdg-row {
-                    background-color: #fff;
-                    border-bottom: 1px solid #f3f4f6;
+                    background-color: transparent;
+                    border-bottom: 1px solid #e5e7eb;
                 }
 
                 .bitable-data-grid.rdg-light .rdg-row:hover {
-                    background-color: #f9fafb;
+                    background-color: rgba(249, 250, 251, 0.5);
                 }
 
                 .bitable-data-grid.rdg-light .rdg-cell {
-                    border-right: 1px solid #f3f4f6;
+                    border-right: 1px solid #e5e7eb;
                     padding: 0 8px;
                 }
 
                 .bitable-data-grid.rdg-dark {
-                    --rdg-background-color: #191919;
-                    --rdg-header-background-color: #191919;
-                    --rdg-row-hover-background-color: #252525;
+                    --rdg-background-color: transparent;
+                    --rdg-header-background-color: rgba(25, 25, 25, 0.4);
+                    --rdg-row-hover-background-color: rgba(37, 37, 37, 0.5);
                     --rdg-selection-color: #3b82f6;
-                    --rdg-border-color: #333;
+                    --rdg-border-color: #4a4a4a;
                     --rdg-color: #fff;
                     --rdg-header-color: #9ca3af;
                     --rdg-cell-padding-inline: 8px;
@@ -290,26 +290,26 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                 }
 
                 .bitable-data-grid.rdg-dark .rdg-header-row {
-                    background-color: #191919;
-                    border-bottom: 1px solid #333;
+                    background-color: rgba(25, 25, 25, 0.4);
+                    border-bottom: 1px solid #4a4a4a;
                 }
 
                 .bitable-data-grid.rdg-dark .rdg-header-row .rdg-cell {
-                    border-right: 1px solid #333;
+                    border-right: 1px solid #4a4a4a;
                     font-weight: 400;
                 }
 
                 .bitable-data-grid.rdg-dark .rdg-row {
-                    background-color: #191919;
-                    border-bottom: 1px solid #2a2a2a;
+                    background-color: transparent;
+                    border-bottom: 1px solid #4a4a4a;
                 }
 
                 .bitable-data-grid.rdg-dark .rdg-row:hover {
-                    background-color: #252525;
+                    background-color: rgba(37, 37, 37, 0.5);
                 }
 
                 .bitable-data-grid.rdg-dark .rdg-cell {
-                    border-right: 1px solid #2a2a2a;
+                    border-right: 1px solid #4a4a4a;
                     padding: 0 8px;
                 }
 

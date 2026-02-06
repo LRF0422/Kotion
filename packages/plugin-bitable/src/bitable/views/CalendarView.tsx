@@ -280,7 +280,7 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
         <div className="space-y-4">
             {/* 设置面板 */}
             {showSettings && editable && (
-                <div className="p-4 border rounded-lg bg-muted/50 space-y-4">
+                <div className="p-4 bg-muted/50 space-y-4">
                     <div className="flex items-center justify-between">
                         <h3 className="font-medium">日历视图设置</h3>
                         <Button variant="ghost" size="sm" onClick={() => setShowSettings(false)}>

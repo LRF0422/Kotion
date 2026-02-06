@@ -93,7 +93,7 @@ export const ClientContainer: React.FC<IProps> = (props) => {
   }, [filteredEvents]);
 
   return (
-    <div className="overflow-hidden rounded-xl border not-prose shadow-md">
+    <div className="overflow-hidden not-prose">
       <CalendarHeader view={view} events={filteredEvents} />
 
       <DndProviderWrapper>

@@ -27,6 +27,77 @@ import {
     Alert,
     AlertDescription,
 } from "@kn/ui";
+
+// 预设颜色 - 适配深浅色模式
+const PRESET_COLORS = [
+    { value: '#3b82f6', name: 'Blue', light: '#eff6ff', dark: '#1e3a8a' },
+    { value: '#10b981', name: 'Green', light: '#d1fae5', dark: '#064e3b' },
+    { value: '#f59e0b', name: 'Amber', light: '#fef3c7', dark: '#78350f' },
+    { value: '#ef4444', name: 'Red', light: '#fee2e2', dark: '#7f1d1d' },
+    { value: '#8b5cf6', name: 'Purple', light: '#ede9fe', dark: '#4c1d95' },
+    { value: '#ec4899', name: 'Pink', light: '#fce7f3', dark: '#831843' },
+    { value: '#14b8a6', name: 'Teal', light: '#ccfbf1', dark: '#134e4a' },
+    { value: '#f97316', name: 'Orange', light: '#ffedd5', dark: '#7c2d12' },
+    { value: '#6366f1', name: 'Indigo', light: '#e0e7ff', dark: '#312e81' },
+    { value: '#06b6d4', name: 'Cyan', light: '#cffafe', dark: '#164e63' },
+    { value: '#84cc16', name: 'Lime', light: '#ecfccb', dark: '#365314' },
+    { value: '#a855f7', name: 'Violet', light: '#f3e8ff', dark: '#581c87' },
+];
+
+// 颜色选择器组件
+const ColorPicker: React.FC<{
+    value: string;
+    onChange: (color: string) => void;
+}> = ({ value, onChange }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    return (
+        <Popover open={isOpen} onOpenChange={setIsOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="outline"
+                    className="w-8 h-8 p-0 border-2"
+                    style={{ backgroundColor: value }}
+                >
+                    <span className="sr-only">选择颜色</span>
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-3" align="start">
+                <div className="space-y-3">
+                    <Label className="text-xs font-medium">选择颜色</Label>
+                    <div className="grid grid-cols-6 gap-2">
+                        {PRESET_COLORS.map((color) => (
+                            <button
+                                key={color.value}
+                                onClick={() => {
+                                    onChange(color.value);
+                                    setIsOpen(false);
+                                }}
+                                className={`w-8 h-8 rounded border-2 transition-all hover:scale-110 ${value === color.value
+                                        ? 'border-gray-900 dark:border-white ring-2 ring-offset-2 ring-gray-900 dark:ring-white'
+                                        : 'border-gray-200 dark:border-gray-700'
+                                    }`}
+                                style={{ backgroundColor: color.value }}
+                                title={color.name}
+                            />
+                        ))}
+                    </div>
+                    <Separator />
+                    <div className="flex items-center gap-2">
+                        <Label htmlFor="custom-color" className="text-xs">自定义</Label>
+                        <input
+                            id="custom-color"
+                            type="color"
+                            value={value}
+                            onChange={(e) => onChange(e.target.value)}
+                            className="w-full h-8 rounded border cursor-pointer"
+                        />
+                    </div>
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
+};
 import {
     DragDropContext,
     Droppable,
@@ -183,11 +254,9 @@ const FieldConfigPopover: React.FC<FieldConfigPopoverProps> = ({
                         <div className="space-y-2 max-h-[200px] overflow-y-auto">
                             {localOptions.map((option) => (
                                 <div key={option.id} className="flex items-center gap-2">
-                                    <input
-                                        type="color"
+                                    <ColorPicker
                                         value={option.color}
-                                        onChange={(e) => updateOption(option.id, { color: e.target.value })}
-                                        className="w-6 h-6 rounded border cursor-pointer"
+                                        onChange={(color) => updateOption(option.id, { color })}
                                     />
                                     <Input
                                         value={option.label}
@@ -718,9 +787,9 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                             <div className="mt-2 space-y-2">
                                 {newFieldOptions.map((option) => (
                                     <div key={option.id} className="flex items-center gap-2">
-                                        <div
-                                            className="w-4 h-4 rounded"
-                                            style={{ backgroundColor: option.color }}
+                                        <ColorPicker
+                                            value={option.color}
+                                            onChange={(color) => updateNewOption(option.id, { color })}
                                         />
                                         <Input
                                             value={option.label}
@@ -728,14 +797,6 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                                                 updateNewOption(option.id, { label: e.target.value })
                                             }
                                             className="h-8 flex-1"
-                                        />
-                                        <input
-                                            type="color"
-                                            value={option.color}
-                                            onChange={(e) =>
-                                                updateNewOption(option.id, { color: e.target.value })
-                                            }
-                                            className="w-8 h-8 rounded border cursor-pointer"
                                         />
                                         <Button
                                             size="sm"

@@ -470,7 +470,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
     return (
         <NodeViewWrapper className="node-bitable-wrapper" contentEditable={false}>
-            <div className="bitable-container min-h-[400px] w-full rounded-lg bg-white dark:bg-[#191919] text-gray-900 dark:text-white border border-gray-200 dark:border-transparent">
+            <div className="bitable-container min-h-[400px] w-full rounded-lg bg-transparent text-gray-900 dark:text-white">
                 {/* 视图标签页和工具栏 */}
                 <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-[#333]">
                     {/* 左侧：视图标签 */}
@@ -496,9 +496,9 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                             {attrs.views.map((view) => (
                                 <div
                                     key={view.id}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md cursor-pointer transition-all whitespace-nowrap flex-shrink-0 text-sm border ${currentViewId === view.id
-                                        ? 'border-blue-500 bg-blue-500/10 text-blue-500 dark:text-blue-400 font-medium'
-                                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-[#ffffff08]'
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md cursor-pointer transition-all whitespace-nowrap flex-shrink-0 text-sm ${currentViewId === view.id
+                                        ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium'
+                                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-[#ffffff08]'
                                         }`}
                                     onClick={() => {
                                         if (editingViewId !== view.id) {

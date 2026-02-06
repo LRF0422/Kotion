@@ -275,7 +275,7 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
 
     return (
         <div className={cn("relative", isFullscreen && "fixed inset-0 z-50 bg-background p-4")}>
-            <Card className={cn(isFullscreen && "h-full flex flex-col")}>
+            <Card className={cn("border-none shadow-none", isFullscreen && "h-full flex flex-col")}>
                 <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                         <div className="flex-1">

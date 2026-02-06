@@ -529,7 +529,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
 
     return (
         <div
-            className="space-y-4 p-4"
+            className="space-y-4"
             onMouseMove={dragState ? handleDragMove : undefined}
             onMouseUp={dragState ? handleDragEnd : undefined}
             onMouseLeave={dragState ? handleDragEnd : undefined}
@@ -718,7 +718,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
             )}
 
             {/* 工具栏 */}
-            <div className="flex items-center justify-between p-2">
+            <div className="flex items-center justify-between px-2 py-2">
                 <div className="flex items-center gap-2">
                     <Button size="sm" variant="outline" onClick={goToPrevious}>
                         <ChevronLeft className="h-4 w-4" />
@@ -776,7 +776,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                         <div className="h-12 border-b flex items-center px-4 font-semibold bg-muted/50">
                             任务名称
                         </div>
-                        <div className="overflow-y-auto p-2" style={{ maxHeight: '600px' }}>
+                        <div className="overflow-y-auto" style={{ maxHeight: '600px' }}>
                             {Object.entries(groupedRecords).map(([groupId, records]) => (
                                 <div key={groupId}>
                                     {groupByField && (
@@ -803,7 +803,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                     </div>
 
                     {/* 右侧时间轴 */}
-                    <div className="flex-1 overflow-x-auto p-2" ref={scrollRef}>
+                    <div className="flex-1 overflow-x-auto" ref={scrollRef}>
                         <div style={{ minWidth: `${timeScale.length * columnWidth}px` }}>
                             {/* 时间刻度头部 */}
                             <div className="h-12 border-b flex bg-muted/50">

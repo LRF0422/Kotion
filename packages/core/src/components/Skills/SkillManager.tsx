@@ -222,9 +222,9 @@ export const SkillManager: React.FC<SkillManagerProps> = ({ className }) => {
                     </TabsList>
                 </div>
 
-                <ScrollArea className="flex-1 min-h-0 p-4">
+                <ScrollArea className="flex-1 min-h-0 p-4 pb-8">
                     {/* Installed Skills */}
-                    <TabsContent value="installed" className="mt-0">
+                    <TabsContent value="installed" className="mt-0 pb-8">
                         {loading ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {[1, 2, 3].map(i => (
@@ -279,7 +279,7 @@ export const SkillManager: React.FC<SkillManagerProps> = ({ className }) => {
                     </TabsContent>
 
                     {/* SkillsMP Marketplace */}
-                    <TabsContent value="marketplace" className="mt-0">
+                    <TabsContent value="marketplace" className="mt-0 pb-8">
                         <SkillsMPMarketplace
                             apiKey="sk_live_skillsmp_FRFtbtfIbMoCSyxEwJ2J5Ke4I2HxRzKzU8vP-j8Tj54"
                             onInstall={handleInstall}
@@ -293,7 +293,7 @@ export const SkillManager: React.FC<SkillManagerProps> = ({ className }) => {
                     </TabsContent>
 
                     {/* Examples */}
-                    <TabsContent value="examples" className="mt-0">
+                    <TabsContent value="examples" className="mt-0 pb-8">
                         <div className="mb-4">
                             <p className="text-sm text-muted-foreground">
                                 内置示例技能 - 可直接安装使用
