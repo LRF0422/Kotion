@@ -35,23 +35,47 @@ const getBlockPreview = (block: BlockInfo): string => {
             ? JSON.parse(block.content)
             : block.content;
 
-        // Try to extract text from content
-        if (content?.content) {
-            const extractText = (node: any): string => {
-                if (typeof node === 'string') return node;
-                if (node?.text) return node.text;
-                if (Array.isArray(node?.content)) {
-                    return node.content.map(extractText).join('');
-                }
-                return '';
-            };
-            const text = extractText(content);
-            return text.slice(0, 100) || `Block (${block.type})`;
+        // Recursively extract all text from content
+        const extractText = (node: any): string => {
+            if (!node) return '';
+            if (typeof node === 'string') return node;
+            if (node.text) return node.text;
+            if (Array.isArray(node)) {
+                return node.map(extractText).filter(Boolean).join('');
+            }
+            if (node.content) {
+                return extractText(node.content);
+            }
+            return '';
+        };
+
+        const text = extractText(content).trim();
+        if (text) {
+            return text.slice(0, 120);
         }
-        return `Block (${block.type})`;
+        return '';
     } catch {
-        return `Block (${block.type})`;
+        return '';
     }
+};
+
+/** Get block type label */
+const getBlockTypeLabel = (type: string): string => {
+    const typeLabels: Record<string, string> = {
+        'title': 'Title',
+        'heading': 'Heading',
+        'paragraph': 'Paragraph',
+        'bulletList': 'List',
+        'orderedList': 'Numbered List',
+        'taskList': 'Task List',
+        'codeBlock': 'Code',
+        'blockquote': 'Quote',
+        'table': 'Table',
+        'mermaid': 'Diagram',
+        'image': 'Image',
+        'video': 'Video',
+    };
+    return typeLabels[type] || type;
 };
 
 /** Block item component */
@@ -60,27 +84,47 @@ const BlockItem = React.memo<{
     isSelected: boolean;
     onSelect: () => void;
     onHover: () => void;
-}>(({ block, isSelected, onSelect, onHover }) => (
-    <div
-        className={cn(
-            "flex items-start gap-2 p-2 rounded-md cursor-pointer transition-colors",
-            "hover:bg-muted",
-            isSelected && "bg-muted ring-1 ring-primary/20"
-        )}
-        onClick={onSelect}
-        onMouseEnter={onHover}
-        role="option"
-        aria-selected={isSelected}
-    >
-        <SquareDashedBottom className="h-4 w-4 text-purple-500 flex-shrink-0 mt-0.5" />
-        <div className="flex-1 min-w-0">
-            <div className="text-xs text-muted-foreground font-mono truncate">
-                {block.id.slice(0, 8)}...
+}>(({ block, isSelected, onSelect, onHover }) => {
+    const preview = getBlockPreview(block);
+    const typeLabel = getBlockTypeLabel(block.type);
+    
+    return (
+        <div
+            className={cn(
+                "flex items-start gap-3 p-2.5 rounded-md cursor-pointer transition-colors",
+                "hover:bg-muted",
+                isSelected && "bg-muted ring-1 ring-primary/20"
+            )}
+            onClick={onSelect}
+            onMouseEnter={onHover}
+            role="option"
+            aria-selected={isSelected}
+        >
+            <SquareDashedBottom className="h-4 w-4 text-purple-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+                {preview ? (
+                    <>
+                        <div className="text-sm line-clamp-2">{preview}</div>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                {typeLabel}
+                            </span>
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground italic">
+                            {typeLabel} block
+                        </span>
+                        <span className="text-xs text-muted-foreground/70 font-mono">
+                            ({block.id.slice(0, 8)}...)
+                        </span>
+                    </div>
+                )}
             </div>
-            <div className="text-sm truncate">{getBlockPreview(block)}</div>
         </div>
-    </div>
-));
+    );
+});
 BlockItem.displayName = 'BlockItem';
 
 /** Loading skeleton */
