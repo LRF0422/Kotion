@@ -4,6 +4,42 @@
  */
 
 /**
+ * Backlink source type
+ */
+export type BacklinkSourceType = 'PAGE' | 'BLOCK';
+
+/**
+ * Backlink kind
+ */
+export type BacklinkKind = 'NORMAL' | 'MENTION' | 'EMBED';
+
+/**
+ * Backlink information structure
+ * Represents a reference from another page/block to the current page/block
+ */
+export interface BacklinkVO {
+    /** Type of source: PAGE or BLOCK */
+    sourceType: BacklinkSourceType;
+    /** Source ID (page ID as string or block ID) */
+    sourceId: string;
+    /** Page ID containing the link */
+    sourcePageId: number;
+    /** Title of the source page */
+    sourcePageTitle: string;
+    /** Block ID if source is a block */
+    sourceBlockId: string | null;
+    /** Text snippet around the link */
+    snippet: string;
+    /** Link kind: NORMAL, MENTION, EMBED */
+    linkKind: BacklinkKind;
+    /** Icon of source page */
+    sourcePageIcon: {
+        type: string;
+        icon: string;
+    } | null;
+}
+
+/**
  * Block information structure
  */
 export interface BlockInfo {
@@ -111,6 +147,12 @@ export interface SpaceService {
     getPage: (pageId: string) => Promise<PageInfo | null>;
     /** Create a new page */
     createPage: (params: CreatePageParams) => Promise<PageInfo>;
+    /** Get backlinks for a page */
+    getPageBacklinks?: (pageId: number) => Promise<BacklinkVO[]>;
+    /** Get backlinks for a block */
+    getBlockBacklinks?: (blockId: string) => Promise<BacklinkVO[]>;
+    /** Search pages for link picker */
+    getPageTree?: (spaceId: string, searchValue?: string) => Promise<PageInfo[]>;
 }
 
 // Module augmentation to register SpaceService in the Services interface

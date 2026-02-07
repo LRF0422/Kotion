@@ -6,14 +6,16 @@ import { computePosition, flip, posToDOMRect, ReactRenderer } from "@kn/editor";
 import { PageSelector } from "./PageSelector";
 import { BlockSelector } from "./BlockSelector";
 import { BlockReference } from "./block-references";
+import { PageLink, BlockLink, LinkTrigger } from "../../bidirectional-link";
 
 /**
  * Block Reference Extension
  * Provides slash commands for creating and linking page/block references
+ * Also provides bidirectional linking with [[ and (( syntax
  */
 export const BlockReferenceExtension: ExtensionWrapper = {
     name: "blockReference",
-    extendsion: [PageReference, BlockReference],
+    extendsion: [PageReference, BlockReference, PageLink, BlockLink, LinkTrigger],
     slashConfig: [
         {
             divider: true,

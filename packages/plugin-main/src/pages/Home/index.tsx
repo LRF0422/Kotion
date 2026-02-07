@@ -8,7 +8,6 @@ import { BanIcon, Book, Box, Clock, LayoutTemplate, Moon, Plus, Sun, Sunset, Use
 import React, { useEffect, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { useTranslation } from "@kn/common";
-import { SpaceHub } from "../SpaceHub";
 import { format, parseISO, formatDistanceToNow } from "@kn/ui";
 
 
@@ -112,11 +111,14 @@ export const Home: React.FC = () => {
                         <div className="flex items-center gap-2">
                             <Clock size={14} className="text-muted-foreground" />
                             <span className="font-medium text-sm">{t("home.rs") || "Recent Spaces"}</span>
-                            <SpaceHub>
-                                <Button variant="link" size="sm" className="text-xs text-muted-foreground px-2">
-                                    {t("home.all") || "View All"}
-                                </Button>
-                            </SpaceHub>
+                            <Button
+                                variant="link"
+                                size="sm"
+                                className="text-xs text-muted-foreground px-2"
+                                onClick={() => navigator.go({ to: '/all-spaces' })}
+                            >
+                                {t("home.all") || "View All"}
+                            </Button>
                         </div>
                         <CreateSpaceDlg
                             trigger={

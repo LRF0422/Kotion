@@ -5,6 +5,7 @@ import { PageViewer } from './pages/SpaceDetail/PageViewer'
 import { PageEditor } from './pages/SpaceDetail/PageEditor'
 import { SpaceSettings } from './pages/SpaceDetail/Settings'
 import { InviteCollaboration } from './pages/InviteCollaboration'
+import { SpaceHub } from './pages/SpaceHub'
 import { KPlugin, PluginConfig } from '@kn/common'
 import React from 'react'
 import { LayoutGrid } from '@kn/icon'
@@ -32,6 +33,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
     { name: '/', path: '/', element: <Home /> },
     { name: '/home', path: '/home', element: <Home /> },
     { name: '/spaces', path: '/spaces', element: <Spaces /> },
+    { name: '/all-spaces', path: '/all-spaces', element: <SpaceHub /> },
     { name: '/collaborate/:token', path: '/collaborate/:token', element: <InviteCollaboration /> },
     {
       name: '/space-detail/:id',
@@ -89,7 +91,23 @@ export const DefaultPluginInstance = new DefaultPlugin({
           }
         },
         "space-hub": {
-          "all-space": "所有空间"
+          "all-space": "所有空间",
+          "subtitle": "管理和探索您的所有知识空间",
+          "create-space": "创建空间",
+          "favorites": "收藏",
+          "all-spaces": "所有空间",
+          "stat-total": "空间总数",
+          "stat-favorites": "已收藏",
+          "stat-current": "当前页",
+          "stat-pages": "总页数",
+          "no-favorites": "暂无收藏空间",
+          "no-favorites-hint": "给空间加星标即可添加到收藏",
+          "no-spaces": "暂无空间",
+          "create-first": "创建您的第一个空间开始使用",
+          "try-different": "尝试其他搜索词",
+          "no-results": "未找到匹配的空间",
+          "search-placeholder": "搜索空间...",
+          "no-description": "暂无描述"
         },
         "toc": {
           "title": "目录",
@@ -211,7 +229,23 @@ export const DefaultPluginInstance = new DefaultPlugin({
           }
         },
         "space-hub": {
-          "all-space": "All Spaces"
+          "all-space": "All Spaces",
+          "subtitle": "Manage and explore all your knowledge spaces",
+          "create-space": "Create Space",
+          "favorites": "Favorites",
+          "all-spaces": "All Spaces",
+          "stat-total": "Total Spaces",
+          "stat-favorites": "Favorites",
+          "stat-current": "Current Page",
+          "stat-pages": "Total Pages",
+          "no-favorites": "No favorite spaces yet",
+          "no-favorites-hint": "Star a space to add it to your favorites",
+          "no-spaces": "No spaces available",
+          "create-first": "Create your first space to get started",
+          "try-different": "Try a different search term",
+          "no-results": "No spaces found matching your search",
+          "search-placeholder": "Search spaces...",
+          "no-description": "No description"
         },
         "toc": {
           "title": "Table of Contents",
