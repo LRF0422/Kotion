@@ -20,7 +20,10 @@ export const ESSENTIAL_TOOLS = [
     'insertAtEnd',
     'replaceContent',
     // Interaction tools
-    'askUserChoice'
+    'askUserChoice',
+    // Structure tools
+    'convertBlock',
+    'formatText'
 ] as const
 
 // Category descriptions
@@ -28,6 +31,7 @@ export const CATEGORY_DESCRIPTIONS: Record<ToolCategory, string> = {
     'document-read': '文档读取工具 - 用于获取文档结构、内容和搜索',
     'document-write': '文档写入工具 - 用于插入、更新和替换内容',
     'document-delete': '文档删除工具 - 用于删除内容和块',
+    'document-structure': '结构工具 - 用于转换块类型、移动块、格式化文本、表格操作',
     'layout': '布局工具 - 用于管理多列布局',
     'interaction': '交互工具 - 用于与用户交互',
     'web': '网络工具 - 用于网页搜索和获取',
@@ -277,6 +281,80 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         description: '高亮显示文本范围',
         priority: 5,
         tags: ['highlight', 'visual', 'feedback'],
+        loaded: false,
+        source: 'builtin'
+    },
+
+    // ===== Document Structure Tools =====
+    {
+        name: 'convertBlock',
+        category: 'document-structure',
+        description: '转换块类型（段落/标题/引用/代码块/列表互转）',
+        priority: 7,
+        tags: ['convert', 'block', 'type', 'heading', 'list', 'essential'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'moveBlock',
+        category: 'document-structure',
+        description: '移动块到新位置（上移/下移/指定位置）',
+        priority: 5,
+        tags: ['move', 'block', 'reorder'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'setBlockAlignment',
+        category: 'document-structure',
+        description: '设置块的文本对齐方式（左/中/右/两端）',
+        priority: 5,
+        tags: ['align', 'text', 'block'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'formatText',
+        category: 'document-structure',
+        description: '为已有文本应用内联格式（加粗/斜体/下划线/删除线/代码）',
+        priority: 7,
+        tags: ['format', 'bold', 'italic', 'underline', 'essential'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'insertTable',
+        category: 'document-structure',
+        description: '插入新表格，可指定行列数和是否含表头',
+        priority: 6,
+        tags: ['table', 'insert', 'create'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'getTableInfo',
+        category: 'document-structure',
+        description: '获取文档中表格的结构信息和单元格内容',
+        priority: 5,
+        tags: ['table', 'info', 'read'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'editTable',
+        category: 'document-structure',
+        description: '表格结构操作（添加/删除行列、合并/拆分单元格）',
+        priority: 6,
+        tags: ['table', 'edit', 'row', 'column'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'editTableCell',
+        category: 'document-structure',
+        description: '编辑表格中指定单元格的内容',
+        priority: 5,
+        tags: ['table', 'cell', 'edit', 'content'],
         loaded: false,
         source: 'builtin'
     },

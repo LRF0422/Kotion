@@ -110,6 +110,7 @@ export type ToolCategory =
     | 'document-read'      // 文档读取
     | 'document-write'     // 文档写入
     | 'document-delete'    // 文档删除
+    | 'document-structure' // 文档结构操作
     | 'layout'             // 布局操作
     | 'interaction'        // 用户交互
     | 'web'                // 网络操作

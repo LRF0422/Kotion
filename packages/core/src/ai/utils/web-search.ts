@@ -3,52 +3,107 @@ import { WEB_SEARCH_API_URL, WEB_SEARCH_MAX_RESULTS } from "../types"
 import type { WebSearchResult } from "../types"
 
 /**
- * Perform web search using Bocha API as primary provider, with fallbacks
- * 
+ * Perform web search using multiple providers with fallbacks
+ *
  * The function tries multiple search providers in this order:
- * 1. Bocha API (primary) - Requires VITE_BOCHA_API_KEY environment variable
- * 2. Backend API (/api/web-search)
- * 3. DuckDuckGo API (fallback)
- * 
- * Bocha API provides high-quality, semantic search results suitable for AI applications.
- * It offers better results for Chinese content and has lower latency compared to global alternatives.
+ * 1. Tavily API (primary) - Requires VITE_TAVILY_API_KEY environment variable
+ * 2. Bocha API (fallback) - Requires VITE_BOCHA_API_KEY environment variable
+ * 3. Backend API (/api/web-search)
+ * 4. DuckDuckGo API (final fallback)
  */
 export const performWebSearch = async (
     query: string,
     maxResults: number = 10
 ): Promise<WebSearchResult[]> => {
     try {
-        // Try Bocha API as primary provider
-        const bochaApiKey = "sk-7382a61a8da5451a90ab6dc041e8a3e5";
+        // Try Tavily API as primary provider
+        // Use literal process.env.VITE_* so Vite can statically replace at build time
+        const tavilyApiKey = process.env.VITE_TAVILY_API_KEY;
+
+        if (tavilyApiKey) {
+            try {
+                const tavilyResponse = await axios.post('https://api.tavily.com/search', {
+                    query,
+                    max_results: maxResults,
+                    search_depth: 'basic',
+                    include_answer: true,
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${tavilyApiKey}`,
+                        'Content-Type': 'application/json',
+                    },
+                    timeout: 10000,
+                    validateStatus: (status) => status < 500
+                });
+
+                console.log('tavilyResults', tavilyResponse.data);
+
+                if (tavilyResponse.data?.results) {
+                    const tavilyResults: WebSearchResult[] = [];
+
+                    // If Tavily returned an answer, add it as the first result
+                    if (tavilyResponse.data.answer) {
+                        tavilyResults.push({
+                            title: 'AI Answer',
+                            url: tavilyResponse.data.results[0]?.url || `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+                            snippet: tavilyResponse.data.answer,
+                            source: 'Tavily'
+                        });
+                    }
+
+                    // Map Tavily results to WebSearchResult format
+                    for (const item of tavilyResponse.data.results.slice(0, maxResults)) {
+                        tavilyResults.push({
+                            title: item.title || 'No title',
+                            url: item.url,
+                            snippet: item.content || '',
+                            source: 'Tavily'
+                        });
+                    }
+
+                    if (tavilyResults.length > 0) {
+                        return tavilyResults;
+                    }
+                }
+            } catch (tavilyError) {
+                console.error('Tavily search failed, falling back:', tavilyError);
+            }
+        }
+
+        // Fallback: Try Bocha API
+        const bochaApiKey = process.env.VITE_BOCHA_API_KEY;
 
         if (bochaApiKey) {
-            // Call Bocha API with correct endpoint and parameters
-            const bochaResponse = await axios.post('https://api.bochaai.com/v1/web-search', {
-                query: query,
-                summary: true,
-                count: maxResults,
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${bochaApiKey}`,
-                    'Content-Type': 'application/json',
-                },
-                timeout: 10000,
-                validateStatus: (status) => status < 500
-            });
-            console.log('bochaResults', bochaResponse.data);
-            if (bochaResponse.data.data.webPages?.value) {
-                // Transform Bocha results to WebSearchResult format
-                console.log('bochaResults', bochaResponse.data);
-                const bochaResults: WebSearchResult[] = bochaResponse.data.data.webPages.value.slice(0, maxResults).map((item: any) => ({
-                    title: item.name || 'No title',
-                    url: item.url,
-                    snippet: item.summary || item.snippet || item.description || '',
-                    source: item.source || '博查AI'
-                }));
+            try {
+                const bochaResponse = await axios.post('https://api.bochaai.com/v1/web-search', {
+                    query: query,
+                    summary: true,
+                    count: maxResults,
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${bochaApiKey}`,
+                        'Content-Type': 'application/json',
+                    },
+                    timeout: 10000,
+                    validateStatus: (status) => status < 500
+                });
 
-                if (bochaResults.length > 0) {
-                    return bochaResults;
+                console.log('bochaResults', bochaResponse.data);
+
+                if (bochaResponse.data?.data?.webPages?.value) {
+                    const bochaResults: WebSearchResult[] = bochaResponse.data.data.webPages.value.slice(0, maxResults).map((item: any) => ({
+                        title: item.name || 'No title',
+                        url: item.url,
+                        snippet: item.summary || item.snippet || item.description || '',
+                        source: item.source || '博查AI'
+                    }));
+
+                    if (bochaResults.length > 0) {
+                        return bochaResults;
+                    }
                 }
+            } catch (bochaError) {
+                console.error('Bocha search failed, falling back:', bochaError);
             }
         }
 
