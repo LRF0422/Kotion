@@ -264,6 +264,15 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         loaded: false,
         source: 'builtin'
     },
+    {
+        name: 'insertNestedColumns',
+        category: 'layout',
+        description: '在已有分栏列内插入嵌套分栏布局',
+        priority: 5,
+        tags: ['columns', 'nested', 'layout', 'insert'],
+        loaded: false,
+        source: 'builtin'
+    },
 
     // ===== Interaction Tools =====
     {

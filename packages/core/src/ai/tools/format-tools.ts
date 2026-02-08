@@ -3,6 +3,7 @@ import { z } from "@kn/ui"
 import type { ToolsRecord } from "../types"
 import { discoverBlocks } from "../utils/block-utils"
 import { findTextPosition, findTablesInDocument, findTableCellPosition } from "../utils/block-utils"
+import { scrollToPosition } from "../utils/editor-effects"
 
 /**
  * Create format and table tools for AI agent
@@ -28,8 +29,8 @@ export const createFormatTools = (editor: Editor): ToolsRecord => ({
                     return { error: `未找到文本: "${searchText}"` }
                 }
 
-                // Select the text range
-                editor.chain().focus().setTextSelection({ from: pos.from, to: pos.to }).run()
+                // Select the text range and scroll to it
+                editor.chain().focus().setTextSelection({ from: pos.from, to: pos.to }).scrollIntoView().run()
 
                 // Apply format
                 let success = false
@@ -95,8 +96,8 @@ export const createFormatTools = (editor: Editor): ToolsRecord => ({
                         return { error: `块索引越界。有效范围: 0-${blocks.length - 1}，请求: ${blockIndex}` }
                     }
                     const block = blocks[blockIndex]
-                    // Position at end of the target block
-                    editor.chain().focus().setTextSelection(block.contentEnd).run()
+                    // Position at end of the target block and scroll to it
+                    editor.chain().focus().setTextSelection(block.contentEnd).scrollIntoView().run()
                 }
 
                 const success = editor.commands.insertTable({
@@ -241,8 +242,8 @@ export const createFormatTools = (editor: Editor): ToolsRecord => ({
                     return { error: '无法定位目标单元格' }
                 }
 
-                // Set cursor inside the cell (+1 to enter cell content)
-                editor.chain().focus().setTextSelection(cellPos.pos + 1).run()
+                // Set cursor inside the cell (+1 to enter cell content) and scroll to it
+                editor.chain().focus().setTextSelection(cellPos.pos + 1).scrollIntoView().run()
 
                 let success = false
                 switch (action) {
@@ -362,6 +363,7 @@ export const createFormatTools = (editor: Editor): ToolsRecord => ({
                             .focus()
                             .setTextSelection({ from: innerStart, to: innerEnd })
                             .insertContent(content)
+                            .scrollIntoView()
                             .run()
                         break
                     case 'append':
@@ -369,6 +371,7 @@ export const createFormatTools = (editor: Editor): ToolsRecord => ({
                             .focus()
                             .setTextSelection(innerEnd)
                             .insertContent(content)
+                            .scrollIntoView()
                             .run()
                         break
                     case 'prepend':
@@ -376,6 +379,7 @@ export const createFormatTools = (editor: Editor): ToolsRecord => ({
                             .focus()
                             .setTextSelection(innerStart)
                             .insertContent(content)
+                            .scrollIntoView()
                             .run()
                         break
                 }

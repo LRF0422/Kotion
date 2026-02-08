@@ -3,58 +3,83 @@ import { z } from "@kn/ui"
 import type { ToolsRecord } from "../types"
 import { Node as PmNode } from "@kn/editor"
 import { parseMarkdownToNodes } from "../utils/markdown-parser"
+import { scrollToPosition } from "../utils/editor-effects"
 
 /**
- * Helper: Find all columns nodes in the document
+ * Columns info with nesting support
  */
-const findColumnsInDocument = (editor: Editor): Array<{
+interface ColumnsInfo {
     pos: number
     node: PmNode
-    index: number
+    index: number          // 全局扁平索引（保持向后兼容）
     columnsCount: number
     layout: string
-}> => {
-    const results: Array<{
-        pos: number
-        node: PmNode
-        index: number
-        columnsCount: number
-        layout: string
-    }> = []
+    depth: number          // 嵌套深度：0=顶层，1=一级嵌套...
+    parentPath: number[]   // 父分栏路径 [parentColumnsIndex, parentColumnIndex, ...]
+}
 
-    let index = 0
-    editor.state.doc.descendants((node, pos) => {
-        if (node.type.name === 'columns') {
-            results.push({
-                pos,
-                node,
-                index: index++,
-                columnsCount: node.childCount,
-                layout: node.attrs.type || 'none'
-            })
-            return false
-        }
-    })
+/**
+ * Helper: Find all columns nodes in the document (supports nested columns)
+ */
+const findColumnsInDocument = (editor: Editor): ColumnsInfo[] => {
+    const results: ColumnsInfo[] = []
+    let globalIndex = 0
 
+    const traverse = (node: PmNode, pos: number, depth: number, parentPath: number[]) => {
+        node.forEach((child, offset) => {
+            const childPos = pos + offset + 1
+            if (child.type.name === 'columns') {
+                const currentIndex = globalIndex++
+                results.push({
+                    pos: childPos,
+                    node: child,
+                    index: currentIndex,
+                    columnsCount: child.childCount,
+                    layout: child.attrs.type || 'none',
+                    depth,
+                    parentPath: [...parentPath]
+                })
+                // 递归进入 columns 的 column 子节点，发现更深层嵌套
+                child.forEach((col, colOffset, colIdx) => {
+                    traverse(col, childPos + colOffset + 1, depth + 1, [...parentPath, currentIndex, colIdx])
+                })
+            } else if (child.childCount > 0) {
+                // 非 columns 节点，继续向下搜索
+                traverse(child, childPos, depth, parentPath)
+            }
+        })
+    }
+
+    traverse(editor.state.doc, 0, 0, [])
     return results
 }
 
 /**
- * Helper: Get column content as text
+ * Helper: Get column content as text, with optional nested columns annotation
  */
-const getColumnContent = (column: PmNode): {
+const getColumnContent = (column: PmNode, nestedColumnsMap?: Map<number, number>): {
     text: string
-    blocks: Array<{ type: string; text: string }>
+    blocks: Array<{ type: string; text: string; hasNestedColumns?: boolean; nestedColumnsIndex?: number }>
 } => {
-    const blocks: Array<{ type: string; text: string }> = []
+    const blocks: Array<{ type: string; text: string; hasNestedColumns?: boolean; nestedColumnsIndex?: number }> = []
     let fullText = ''
+    let blockOffset = 0
 
     column.forEach((child) => {
-        blocks.push({
+        const block: { type: string; text: string; hasNestedColumns?: boolean; nestedColumnsIndex?: number } = {
             type: child.type.name,
             text: child.textContent
-        })
+        }
+        if (child.type.name === 'columns' && nestedColumnsMap) {
+            block.hasNestedColumns = true
+            const nestedIdx = nestedColumnsMap.get(blockOffset)
+            if (nestedIdx !== undefined) {
+                block.nestedColumnsIndex = nestedIdx
+            }
+        }
+        blocks.push(block)
         fullText += child.textContent + '\n'
+        blockOffset++
     })
 
     return { text: fullText.trim(), blocks }
@@ -111,6 +136,7 @@ export const createColumnsTools = (editor: Editor): ToolsRecord => ({
 
                 const allColumns = findColumnsInDocument(editor)
                 const newColumns = allColumns[allColumns.length - 1]
+                if (newColumns) scrollToPosition(editor, newColumns.pos)
 
                 return {
                     success: true,
@@ -150,12 +176,34 @@ export const createColumnsTools = (editor: Editor): ToolsRecord => ({
                     }
 
                     const target = allColumns[columnsIndex]
+
+                    // Build a map of nested columns within this target's columns
+                    // For each column child, track which block offsets are nested columns
                     const columnsData: Array<{ index: number; content: ReturnType<typeof getColumnContent> }> = []
 
-                    target.node.forEach((column, _, idx) => {
+                    target.node.forEach((column, _, colIdx) => {
+                        // Build nestedColumnsMap: blockOffset -> globalColumnsIndex
+                        const nestedColumnsMap = new Map<number, number>()
+                        let blockOffset = 0
+                        column.forEach((child) => {
+                            if (child.type.name === 'columns') {
+                                // Find the matching entry in allColumns
+                                const nested = allColumns.find(c =>
+                                    c.depth === target.depth + 1 &&
+                                    c.parentPath.length >= 2 &&
+                                    c.parentPath[c.parentPath.length - 2] === target.index &&
+                                    c.parentPath[c.parentPath.length - 1] === colIdx
+                                )
+                                if (nested) {
+                                    nestedColumnsMap.set(blockOffset, nested.index)
+                                }
+                            }
+                            blockOffset++
+                        })
+
                         columnsData.push({
-                            index: idx,
-                            content: getColumnContent(column)
+                            index: colIdx,
+                            content: getColumnContent(column, nestedColumnsMap)
                         })
                     })
 
@@ -165,6 +213,8 @@ export const createColumnsTools = (editor: Editor): ToolsRecord => ({
                         pos: target.pos,
                         columnsCount: target.columnsCount,
                         layout: target.layout,
+                        depth: target.depth,
+                        parentPath: target.parentPath,
                         columns: columnsData
                     }
                 }
@@ -178,7 +228,9 @@ export const createColumnsTools = (editor: Editor): ToolsRecord => ({
                         index: c.index,
                         pos: c.pos,
                         columnsCount: c.columnsCount,
-                        layout: c.layout
+                        layout: c.layout,
+                        depth: c.depth,
+                        parentPath: c.parentPath
                     }))
                 }
             } catch (error) {
@@ -240,16 +292,19 @@ export const createColumnsTools = (editor: Editor): ToolsRecord => ({
                         .focus()
                         .deleteRange({ from: contentStart, to: contentEnd })
                         .insertContentAt(contentStart, contentNodes)
+                        .scrollIntoView()
                         .run()
                 } else if (mode === 'append') {
                     success = editor.chain()
                         .focus()
                         .insertContentAt(contentEnd, contentNodes)
+                        .scrollIntoView()
                         .run()
                 } else {
                     success = editor.chain()
                         .focus()
                         .insertContentAt(contentStart, contentNodes)
+                        .scrollIntoView()
                         .run()
                 }
 
@@ -294,6 +349,7 @@ export const createColumnsTools = (editor: Editor): ToolsRecord => ({
                     .focus()
                     .setNodeSelection(target.pos)
                     .updateAttributes('columns', { type: layout })
+                    .scrollIntoView()
                     .run()
 
                 if (!success) {
@@ -339,7 +395,7 @@ export const createColumnsTools = (editor: Editor): ToolsRecord => ({
 
                 // Focus into the columns first
                 const focusPos = target.pos + 2
-                editor.chain().focus().setTextSelection(focusPos).run()
+                editor.chain().focus().setTextSelection(focusPos).scrollIntoView().run()
 
                 const success = position === 'before'
                     ? editor.commands.addColBefore()
@@ -396,7 +452,7 @@ export const createColumnsTools = (editor: Editor): ToolsRecord => ({
                     columnPos += target.node.child(i).nodeSize
                 }
 
-                editor.chain().focus().setTextSelection(columnPos + 1).run()
+                editor.chain().focus().setTextSelection(columnPos + 1).scrollIntoView().run()
 
                 const success = editor.commands.deleteCol()
 
@@ -433,12 +489,16 @@ export const createColumnsTools = (editor: Editor): ToolsRecord => ({
 
                 const target = allColumns[columnsIndex]
 
+                // Scroll to show the columns before deleting
+                scrollToPosition(editor, target.pos)
+
                 const success = editor.chain()
                     .focus()
                     .deleteRange({
                         from: target.pos,
                         to: target.pos + target.node.nodeSize
                     })
+                    .scrollIntoView()
                     .run()
 
                 if (!success) {
@@ -453,6 +513,102 @@ export const createColumnsTools = (editor: Editor): ToolsRecord => ({
                 }
             } catch (error) {
                 return { error: `删除分栏失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
+    },
+
+    insertNestedColumns: {
+        description: '在已有分栏的指定列内插入嵌套分栏布局，实现更复杂的布局',
+        inputSchema: z.object({
+            columnsIndex: z.number().describe("父分栏索引（从0开始）"),
+            columnIndex: z.number().describe("在哪一列内插入（从0开始）"),
+            cols: z.number().min(2).max(4).optional()
+                .describe("子分栏列数（2-4，默认2）"),
+            layout: z.enum(['none', 'left', 'right', 'center']).optional()
+                .describe("子分栏布局类型"),
+            position: z.enum(['start', 'end']).optional()
+                .describe("插入到列的开头还是末尾（默认end）")
+        }),
+        execute: async ({
+            columnsIndex,
+            columnIndex,
+            cols = 2,
+            layout = 'none',
+            position = 'end'
+        }: {
+            columnsIndex: number
+            columnIndex: number
+            cols?: number
+            layout?: 'none' | 'left' | 'right' | 'center'
+            position?: 'start' | 'end'
+        }) => {
+            try {
+                const allColumns = findColumnsInDocument(editor)
+
+                if (columnsIndex < 0 || columnsIndex >= allColumns.length) {
+                    return { error: `分栏索引 ${columnsIndex} 超出范围，共 ${allColumns.length} 个分栏` }
+                }
+
+                const target = allColumns[columnsIndex]
+
+                if (columnIndex < 0 || columnIndex >= target.columnsCount) {
+                    return { error: `列索引 ${columnIndex} 超出范围，该分栏共 ${target.columnsCount} 列` }
+                }
+
+                const colCount = Math.min(Math.max(2, cols), 4)
+
+                // Calculate position of the target column
+                let columnPos = target.pos + 1
+                for (let i = 0; i < columnIndex; i++) {
+                    columnPos += target.node.child(i).nodeSize
+                }
+
+                const targetColumn = target.node.child(columnIndex)
+                const contentStart = columnPos + 1
+                const contentEnd = columnPos + targetColumn.nodeSize - 1
+
+                // Create nested columns node
+                const nestedColumnsNode = editor.schema.nodes['columns'].createChecked(
+                    { cols: colCount, type: layout },
+                    Array.from({ length: colCount }, (_, i) =>
+                        editor.schema.nodes['column'].createAndFill({ index: i, type: layout, cols: colCount })!
+                    )
+                )
+
+                if (!nestedColumnsNode) {
+                    return { error: '创建嵌套分栏节点失败' }
+                }
+
+                const insertPos = position === 'start' ? contentStart : contentEnd
+                const success = editor.commands.insertContentAt(insertPos, nestedColumnsNode)
+
+                if (!success) {
+                    return { error: '插入嵌套分栏失败' }
+                }
+
+                scrollToPosition(editor, insertPos)
+
+                // Re-discover to get updated indices
+                const updatedColumns = findColumnsInDocument(editor)
+                const nestedEntry = updatedColumns.find(c =>
+                    c.depth === target.depth + 1 &&
+                    c.parentPath.length >= 2 &&
+                    c.parentPath[c.parentPath.length - 2] === columnsIndex &&
+                    c.parentPath[c.parentPath.length - 1] === columnIndex
+                )
+
+                return {
+                    success: true,
+                    parentColumnsIndex: columnsIndex,
+                    parentColumnIndex: columnIndex,
+                    nestedColumnsIndex: nestedEntry?.index,
+                    nestedColumnsCount: colCount,
+                    layout,
+                    position,
+                    message: `已在第 ${columnsIndex + 1} 个分栏的第 ${columnIndex + 1} 列${position === 'start' ? '开头' : '末尾'}插入 ${colCount} 列嵌套布局`
+                }
+            } catch (error) {
+                return { error: `插入嵌套分栏失败: ${error instanceof Error ? error.message : '未知错误'}` }
             }
         }
     }

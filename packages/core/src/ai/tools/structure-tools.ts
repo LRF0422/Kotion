@@ -2,6 +2,7 @@ import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord } from "../types"
 import { discoverBlocks, findBlockByText } from "../utils/block-utils"
+import { scrollToPosition } from "../utils/editor-effects"
 
 /**
  * Create document structure manipulation tools
@@ -48,9 +49,9 @@ export const createStructureTools = (editor: Editor): ToolsRecord => ({
 
                 const previousType = block.type
 
-                // Set selection into the block
+                // Set selection into the block and scroll to it
                 const selPos = block.contentStart + 1
-                editor.chain().focus().setTextSelection(selPos).run()
+                editor.chain().focus().setTextSelection(selPos).scrollIntoView().run()
 
                 let success = false
                 const chain = editor.chain().focus()
@@ -181,6 +182,8 @@ export const createStructureTools = (editor: Editor): ToolsRecord => ({
                     return { error: '移动块失败：插入内容失败' }
                 }
 
+                scrollToPosition(editor, insertPos)
+
                 return {
                     success: true,
                     fromIndex: blockIndex,
@@ -228,9 +231,9 @@ export const createStructureTools = (editor: Editor): ToolsRecord => ({
                     return { error: '必须提供 blockIndex 或 searchText 来定位块' }
                 }
 
-                // Set selection into the block
+                // Set selection into the block and scroll to it
                 const selPos = block.contentStart + 1
-                editor.chain().focus().setTextSelection(selPos).run()
+                editor.chain().focus().setTextSelection(selPos).scrollIntoView().run()
 
                 const success = editor.commands.setTextAlign(alignment)
 

@@ -3,6 +3,7 @@ import { z } from "@kn/ui"
 import type { ToolsRecord } from "../types"
 import { discoverBlocks, findTextPosition } from "../utils/block-utils"
 import { validateRange } from "../utils/document-utils"
+import { scrollToPosition } from "../utils/editor-effects"
 
 /**
  * Create document deletion tools
@@ -25,9 +26,13 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
                 return { error: validation.error }
             }
 
+            // Scroll to show the target range before deleting
+            editor.chain().focus().setTextSelection({ from, to }).scrollIntoView().run()
+
             const success = editor.chain()
                 .focus()
                 .deleteRange({ from, to })
+                .scrollIntoView()
                 .run()
 
             if (!success) {
@@ -36,6 +41,8 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
 
             const newDocSize = editor.state.doc.nodeSize
             const deletedSize = docSize - newDocSize
+
+            scrollToPosition(editor, from)
 
             return {
                 success: true,
@@ -154,10 +161,14 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
 
                 const textToDelete = editor.state.doc.textBetween(from, to, '', '')
 
+                // Scroll to show the matched text before deleting
+                editor.chain().focus().setTextSelection({ from, to }).scrollIntoView().run()
+
                 const success = editor.chain()
                     .focus()
                     .setTextSelection({ from, to })
                     .deleteSelection()
+                    .scrollIntoView()
                     .run()
 
                 if (!success) {
@@ -220,9 +231,13 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
                     }
                 }
 
+                // Scroll to show the target block before deleting
+                editor.chain().focus().setTextSelection(targetBlock.pos + 1).scrollIntoView().run()
+
                 const success = editor.chain()
                     .focus()
                     .deleteRange({ from: targetBlock.pos, to: targetBlock.pos + targetBlock.size })
+                    .scrollIntoView()
                     .run()
 
                 if (!success) {
