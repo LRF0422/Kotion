@@ -22,9 +22,10 @@ export interface PluginSettingsConfig {
      */
     icon?: React.ReactNode;
     /**
-     * Settings component to render
+     * Settings component to render.
+     * Receives an optional `pluginKey` prop for config persistence.
      */
-    component: React.ComponentType<any>;
+    component: React.ComponentType<{ pluginKey?: string }>;
     /**
      * Description of the settings panel
      */

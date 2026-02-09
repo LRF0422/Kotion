@@ -190,7 +190,7 @@ export const Templates: React.FC = () => {
                             <input
                                 type="text"
                                 placeholder={t("templates.search-placeholder")}
-                                className="w-full pl-12 pr-4 py-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all shadow-lg"
+                                className="w-full pl-12 pr-4 py-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all shadow-lg"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -241,7 +241,7 @@ export const Templates: React.FC = () => {
                         <div className="flex items-center gap-3">
                             <span className="text-sm text-notion-light">{t("templates.sort-by")}</span>
                             <Select defaultValue="popular">
-                                <SelectTrigger className="w-[140px] h-10 rounded-xl">
+                                <SelectTrigger className="w-[140px] h-10 rounded-lg">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -274,7 +274,7 @@ export const Templates: React.FC = () => {
                                     {getTemplatePreview(index)}
                                     {/* Hover Overlay */}
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                        <Button className="rounded-xl shadow-lg">
+                                        <Button className="rounded-lg shadow-lg">
                                             {t("templates.preview")}
                                         </Button>
                                     </div>
@@ -348,10 +348,10 @@ export const Templates: React.FC = () => {
                                 {t("templates.cta-desc")}
                             </p>
                             <div className="flex flex-col sm:flex-row justify-center gap-4">
-                                <Button size="lg" className="bg-white text-purple-600 hover:bg-gray-100 rounded-xl px-8">
+                                <Button size="lg" className="bg-white text-purple-600 hover:bg-gray-100 rounded-lg px-8">
                                     {t("templates.request-template")}
                                 </Button>
-                                <Button size="lg" variant="outline" className="border-white text-white hover:bg-white/10 rounded-xl px-8">
+                                <Button size="lg" variant="outline" className="border-white text-white hover:bg-white/10 rounded-lg px-8">
                                     {t("templates.share-template")}
                                 </Button>
                             </div>
@@ -369,17 +369,17 @@ export const Templates: React.FC = () => {
                             <div className="bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/20 rounded-3xl p-8">
                                 <div className="relative h-64 flex items-center justify-center">
                                     {/* Central element */}
-                                    <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl shadow-xl flex items-center justify-center">
+                                    <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg shadow-xl flex items-center justify-center">
                                         <FileText className="w-12 h-12 text-white" />
                                     </div>
                                     {/* Orbiting elements */}
-                                    <div className="absolute top-4 right-1/4 bg-white dark:bg-gray-800 rounded-xl p-3 shadow-lg float-animation">
+                                    <div className="absolute top-4 right-1/4 bg-white dark:bg-gray-800 rounded-lg p-3 shadow-lg float-animation">
                                         <span className="text-2xl">💰</span>
                                     </div>
-                                    <div className="absolute bottom-4 left-1/4 bg-white dark:bg-gray-800 rounded-xl p-3 shadow-lg float-animation" style={{ animationDelay: '0.5s' }}>
+                                    <div className="absolute bottom-4 left-1/4 bg-white dark:bg-gray-800 rounded-lg p-3 shadow-lg float-animation" style={{ animationDelay: '0.5s' }}>
                                         <span className="text-2xl">⭐</span>
                                     </div>
-                                    <div className="absolute top-1/2 left-4 bg-white dark:bg-gray-800 rounded-xl p-3 shadow-lg float-animation" style={{ animationDelay: '1s' }}>
+                                    <div className="absolute top-1/2 left-4 bg-white dark:bg-gray-800 rounded-lg p-3 shadow-lg float-animation" style={{ animationDelay: '1s' }}>
                                         <span className="text-2xl">🎨</span>
                                     </div>
                                 </div>
@@ -418,7 +418,7 @@ export const Templates: React.FC = () => {
                                     <span className="text-notion">{t("templates.creator-benefit-3")}</span>
                                 </div>
                             </div>
-                            <Button size="lg" className="rounded-xl px-8">
+                            <Button size="lg" className="rounded-lg px-8">
                                 {t("templates.get-started")}
                                 <ArrowRight className="ml-2 h-4 w-4" />
                             </Button>

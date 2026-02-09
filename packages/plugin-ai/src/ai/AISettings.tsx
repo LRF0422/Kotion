@@ -1,10 +1,10 @@
 import React from "react";
 import { Label, Input, Button, Separator, Switch } from "@kn/ui";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@kn/ui";
-import { Save, Key, Globe, Sparkles } from "@kn/icon";
-import { useSafeState } from "ahooks";
+import { Save, Key, Globe, Sparkles, Loader2 } from "@kn/icon";
+import { PluginConfigData, usePluginConfig } from "@kn/core";
 
-interface AISettingsState {
+interface AISettingsState extends PluginConfigData {
     apiEndpoint: string;
     apiKey: string;
     imageApiEndpoint: string;
@@ -13,28 +13,40 @@ interface AISettingsState {
     maxTokens: string;
 }
 
-export const AISettings: React.FC = () => {
-    const [settings, setSettings] = useSafeState<AISettingsState>({
-        apiEndpoint: '',
-        apiKey: '',
-        imageApiEndpoint: '',
-        enableAutoComplete: true,
-        enableSuggestions: true,
-        maxTokens: '2048'
+const DEFAULT_AI_CONFIG: AISettingsState = {
+    apiEndpoint: '',
+    apiKey: '',
+    imageApiEndpoint: '',
+    enableAutoComplete: true,
+    enableSuggestions: true,
+    maxTokens: '2048',
+};
+
+export const AISettings: React.FC<{ pluginKey?: string }> = ({ pluginKey = 'ai-assistant' }) => {
+    const {
+        config: settings,
+        loading,
+        saving,
+        updateConfig,
+        saveConfig,
+        resetConfig,
+        isDirty,
+    } = usePluginConfig<AISettingsState>({
+        pluginKey,
+        defaultConfig: DEFAULT_AI_CONFIG,
     });
 
-    const [saved, setSaved] = useSafeState(false);
-
-    const handleSave = () => {
-        // In a real implementation, this would save to localStorage or backend
-        console.log('Saving AI settings:', settings);
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
+    const handleSave = async () => {
+        await saveConfig();
     };
 
-    const updateSetting = <K extends keyof AISettingsState>(key: K, value: AISettingsState[K]) => {
-        setSettings(prev => ({ ...prev, [key]: value }));
-    };
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-32">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -60,7 +72,7 @@ export const AISettings: React.FC = () => {
                             id="apiEndpoint"
                             placeholder="https://api.openai.com/v1/chat/completions"
                             value={settings.apiEndpoint}
-                            onChange={(e) => updateSetting('apiEndpoint', e.target.value)}
+                            onChange={(e) => updateConfig({ apiEndpoint: e.target.value })}
                             className="h-9"
                         />
                         <p className="text-xs text-muted-foreground">
@@ -76,7 +88,7 @@ export const AISettings: React.FC = () => {
                             id="imageApiEndpoint"
                             placeholder="https://api.openai.com/v1/images/generations"
                             value={settings.imageApiEndpoint}
-                            onChange={(e) => updateSetting('imageApiEndpoint', e.target.value)}
+                            onChange={(e) => updateConfig({ imageApiEndpoint: e.target.value })}
                             className="h-9"
                         />
                         <p className="text-xs text-muted-foreground">
@@ -96,7 +108,7 @@ export const AISettings: React.FC = () => {
                             type="password"
                             placeholder="sk-..."
                             value={settings.apiKey}
-                            onChange={(e) => updateSetting('apiKey', e.target.value)}
+                            onChange={(e) => updateConfig({ apiKey: e.target.value })}
                             className="h-9 font-mono"
                         />
                         <p className="text-xs text-muted-foreground">
@@ -129,7 +141,7 @@ export const AISettings: React.FC = () => {
                         </div>
                         <Switch
                             checked={settings.enableAutoComplete}
-                            onCheckedChange={(checked) => updateSetting('enableAutoComplete', checked)}
+                            onCheckedChange={(checked) => updateConfig({ enableAutoComplete: checked })}
                         />
                     </div>
 
@@ -144,7 +156,7 @@ export const AISettings: React.FC = () => {
                         </div>
                         <Switch
                             checked={settings.enableSuggestions}
-                            onCheckedChange={(checked) => updateSetting('enableSuggestions', checked)}
+                            onCheckedChange={(checked) => updateConfig({ enableSuggestions: checked })}
                         />
                     </div>
 
@@ -159,7 +171,7 @@ export const AISettings: React.FC = () => {
                             type="number"
                             placeholder="2048"
                             value={settings.maxTokens}
-                            onChange={(e) => updateSetting('maxTokens', e.target.value)}
+                            onChange={(e) => updateConfig({ maxTokens: e.target.value })}
                             className="h-9 w-32"
                         />
                         <p className="text-xs text-muted-foreground">
@@ -169,11 +181,20 @@ export const AISettings: React.FC = () => {
                 </CardContent>
             </Card>
 
-            {/* Save Button */}
-            <div className="flex justify-end">
-                <Button onClick={handleSave} className="gap-2">
-                    <Save className="h-4 w-4" />
-                    {saved ? '已保存' : '保存设置'}
+            {/* Save / Reset Buttons */}
+            <div className="flex justify-end gap-2">
+                {isDirty && (
+                    <Button variant="outline" onClick={resetConfig}>
+                        取消修改
+                    </Button>
+                )}
+                <Button onClick={handleSave} disabled={!isDirty || saving} className="gap-2">
+                    {saving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <Save className="h-4 w-4" />
+                    )}
+                    {saving ? '保存中...' : '保存设置'}
                 </Button>
             </div>
         </div>

@@ -76,7 +76,7 @@ export const Header: React.FC = () => {
                         <Button variant="ghost" size="sm" className="font-medium">
                             {t("header.login")}
                         </Button>
-                        <Button size="sm" className="font-medium rounded-xl">
+                        <Button size="sm" className="font-medium rounded-lg">
                             {t("header.get-for-free")}
                         </Button>
                     </div>
@@ -108,50 +108,50 @@ export const Header: React.FC = () => {
             <div className="glass border-t border-gray-200/50 dark:border-gray-800/50 px-4 py-4 space-y-1">
                 <a
                     href="#features"
-                    className="block px-4 py-3 rounded-xl text-base font-medium text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                    className="block px-4 py-3 rounded-lg text-base font-medium text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
                     onClick={() => setMobileMenuOpen(false)}
                 >
                     {t("header.feature")}
                 </a>
                 <a
                     href="#templates"
-                    className="block px-4 py-3 rounded-xl text-base font-medium text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                    className="block px-4 py-3 rounded-lg text-base font-medium text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
                     onClick={() => setMobileMenuOpen(false)}
                 >
                     {t("header.template")}
                 </a>
                 <a
                     href="#pricing"
-                    className="block px-4 py-3 rounded-xl text-base font-medium text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                    className="block px-4 py-3 rounded-lg text-base font-medium text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
                     onClick={() => setMobileMenuOpen(false)}
                 >
                     {t("header.price")}
                 </a>
                 <Link
                     to="/doc"
-                    className="block px-4 py-3 rounded-xl text-base font-medium text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                    className="block px-4 py-3 rounded-lg text-base font-medium text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
                     onClick={() => setMobileMenuOpen(false)}
                 >
                     {t("header.doc")}
                 </Link>
                 <Link
                     to="/templates"
-                    className="block px-4 py-3 rounded-xl text-base font-medium text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                    className="block px-4 py-3 rounded-lg text-base font-medium text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
                     onClick={() => setMobileMenuOpen(false)}
                 >
                     {t("header.template-market")}
                 </Link>
                 <Link
                     to="/plugins"
-                    className="block px-4 py-3 rounded-xl text-base font-medium text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                    className="block px-4 py-3 rounded-lg text-base font-medium text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
                     onClick={() => setMobileMenuOpen(false)}
                 >
                     {t("header.plugins")}
                 </Link>
 
                 <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-700 flex flex-col gap-3">
-                    <Button variant="outline" className="w-full rounded-xl">{t("header.login")}</Button>
-                    <Button className="w-full rounded-xl">{t("header.get-for-free")}</Button>
+                    <Button variant="outline" className="w-full rounded-lg">{t("header.login")}</Button>
+                    <Button className="w-full rounded-lg">{t("header.get-for-free")}</Button>
                 </div>
             </div>
         </div>

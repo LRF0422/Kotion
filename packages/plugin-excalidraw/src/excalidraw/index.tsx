@@ -131,6 +131,272 @@ const createArrow = (
 };
 
 // ============================================================
+// Graph layout: constants, types, and utilities
+// ============================================================
+const COLOR_MAP: Record<string, string> = {
+    blue: '#a5d8ff', green: '#b2f2bb', yellow: '#ffec99',
+    red: '#ffc9c9', purple: '#d0bfff', orange: '#ffd8a8',
+    pink: '#fcc2d7', gray: '#dee2e6', cyan: '#99e9f2', lime: '#d8f5a2'
+};
+const resolveColor = (color?: string) => !color ? 'transparent' : COLOR_MAP[color.toLowerCase()] || color;
+
+const NODE_DEFAULTS: Record<string, { width: number; height: number }> = {
+    rectangle: { width: 160, height: 60 },
+    ellipse: { width: 160, height: 80 },
+    diamond: { width: 140, height: 100 }
+};
+const LAYOUT_SPACING = { horizontal: 100, vertical: 120 };
+const TITLE_OFFSET_Y = 40;
+
+interface GraphNode { id: string; label: string; type?: 'rectangle' | 'ellipse' | 'diamond'; color?: string }
+interface GraphEdge { from: string; to: string; label?: string }
+
+interface LayoutNode {
+    id: string; label: string; type: 'rectangle' | 'ellipse' | 'diamond';
+    color: string; x: number; y: number; width: number; height: number;
+}
+interface LayoutEdge {
+    from: string; to: string; label?: string;
+    startX: number; startY: number; endX: number; endY: number;
+}
+interface LayoutResult {
+    nodes: LayoutNode[]; edges: LayoutEdge[];
+    totalWidth: number; totalHeight: number;
+}
+
+// ============================================================
+// Graph layout algorithm (Kahn's topological sort + BFS layering)
+// ============================================================
+const computeGraphLayout = (
+    nodes: GraphNode[],
+    edges: GraphEdge[],
+    direction: 'vertical' | 'horizontal' = 'vertical'
+): LayoutResult => {
+    const nodeMap = new Map<string, GraphNode>();
+    nodes.forEach(n => nodeMap.set(n.id, n));
+
+    // Build adjacency and in-degree
+    const adj = new Map<string, string[]>();
+    const inDegree = new Map<string, number>();
+    nodes.forEach(n => { adj.set(n.id, []); inDegree.set(n.id, 0); });
+
+    const validEdges = edges.filter(e => e.from !== e.to && nodeMap.has(e.from) && nodeMap.has(e.to));
+    validEdges.forEach(e => {
+        adj.get(e.from)!.push(e.to);
+        inDegree.set(e.to, (inDegree.get(e.to) || 0) + 1);
+    });
+
+    // BFS layering
+    const layers: string[][] = [];
+    const assigned = new Set<string>();
+    let queue = nodes.filter(n => inDegree.get(n.id) === 0).map(n => n.id);
+
+    while (assigned.size < nodes.length) {
+        if (queue.length === 0) {
+            // Handle cycles: pick first unassigned node
+            const unassigned = nodes.find(n => !assigned.has(n.id));
+            if (unassigned) queue = [unassigned.id];
+            else break;
+        }
+        const layer: string[] = [];
+        const nextQueue: string[] = [];
+        for (const id of queue) {
+            if (assigned.has(id)) continue;
+            assigned.add(id);
+            layer.push(id);
+        }
+        if (layer.length === 0) break;
+        layers.push(layer);
+
+        // Reduce in-degree for next layer
+        for (const id of layer) {
+            for (const neighbor of (adj.get(id) || [])) {
+                if (assigned.has(neighbor)) continue;
+                const newDeg = (inDegree.get(neighbor) || 1) - 1;
+                inDegree.set(neighbor, newDeg);
+                if (newDeg <= 0) nextQueue.push(neighbor);
+            }
+        }
+        queue = nextQueue;
+    }
+
+    // Compute node sizes (adaptive width)
+    const nodeSizes = new Map<string, { width: number; height: number }>();
+    nodes.forEach(n => {
+        const type = n.type || 'rectangle';
+        const defaults = NODE_DEFAULTS[type] || NODE_DEFAULTS.rectangle;
+        const labelWidth = n.label.length * 10 + 40;
+        nodeSizes.set(n.id, {
+            width: Math.max(defaults.width, labelWidth),
+            height: defaults.height
+        });
+    });
+
+    // Compute positions based on direction
+    const isVertical = direction === 'vertical';
+    const layoutNodes: LayoutNode[] = [];
+    const nodePositions = new Map<string, { x: number; y: number; width: number; height: number }>();
+
+    let mainOffset = 0; // offset along main axis (y for vertical, x for horizontal)
+
+    for (const layer of layers) {
+        // Compute layer cross-axis total size for centering
+        let crossTotal = 0;
+        const sizes = layer.map(id => nodeSizes.get(id)!);
+        sizes.forEach((s, i) => {
+            crossTotal += isVertical ? s.width : s.height;
+            if (i < sizes.length - 1) crossTotal += LAYOUT_SPACING[isVertical ? 'horizontal' : 'vertical'];
+        });
+
+        let crossOffset = -crossTotal / 2; // center around 0
+
+        // Max main-axis size in this layer (for spacing to next layer)
+        let maxMain = 0;
+
+        for (let i = 0; i < layer.length; i++) {
+            const id = layer[i];
+            const size = sizes[i];
+            const node = nodeMap.get(id)!;
+
+            let x: number, y: number;
+            if (isVertical) {
+                x = crossOffset;
+                y = mainOffset;
+                maxMain = Math.max(maxMain, size.height);
+            } else {
+                x = mainOffset;
+                y = crossOffset;
+                maxMain = Math.max(maxMain, size.width);
+            }
+
+            nodePositions.set(id, { x, y, width: size.width, height: size.height });
+            layoutNodes.push({
+                id, label: node.label,
+                type: (node.type || 'rectangle') as 'rectangle' | 'ellipse' | 'diamond',
+                color: resolveColor(node.color),
+                x, y, width: size.width, height: size.height
+            });
+
+            crossOffset += (isVertical ? size.width : size.height) + LAYOUT_SPACING[isVertical ? 'horizontal' : 'vertical'];
+        }
+
+        mainOffset += maxMain + LAYOUT_SPACING[isVertical ? 'vertical' : 'horizontal'];
+    }
+
+    // Normalize positions so minimum x,y is at a comfortable offset
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    layoutNodes.forEach(n => {
+        minX = Math.min(minX, n.x);
+        minY = Math.min(minY, n.y);
+        maxX = Math.max(maxX, n.x + n.width);
+        maxY = Math.max(maxY, n.y + n.height);
+    });
+    const padX = 50 - minX;
+    const padY = 50 + TITLE_OFFSET_Y - minY; // leave room for title
+    layoutNodes.forEach(n => { n.x += padX; n.y += padY; });
+    // Update nodePositions too
+    nodePositions.forEach((pos, id) => { pos.x += padX; pos.y += padY; });
+
+    // Compute edges with arrow start/end points
+    const layoutEdges: LayoutEdge[] = validEdges.map(e => {
+        const fromPos = nodePositions.get(e.from)!;
+        const toPos = nodePositions.get(e.to)!;
+        let startX: number, startY: number, endX: number, endY: number;
+
+        if (isVertical) {
+            // From bottom-center to top-center
+            startX = fromPos.x + fromPos.width / 2;
+            startY = fromPos.y + fromPos.height;
+            endX = toPos.x + toPos.width / 2;
+            endY = toPos.y;
+        } else {
+            // From right-center to left-center
+            startX = fromPos.x + fromPos.width;
+            startY = fromPos.y + fromPos.height / 2;
+            endX = toPos.x;
+            endY = toPos.y + toPos.height / 2;
+        }
+
+        return { from: e.from, to: e.to, label: e.label, startX, startY, endX, endY };
+    });
+
+    const totalWidth = (maxX + padX) - (minX + padX) + 100;
+    const totalHeight = (maxY + padY) - (minY + padY) + 100;
+
+    return { nodes: layoutNodes, edges: layoutEdges, totalWidth, totalHeight };
+};
+
+// ============================================================
+// Build Excalidraw elements from layout result
+// ============================================================
+const buildExcalidrawElements = (
+    layout: LayoutResult,
+    title?: string
+): any[] => {
+    const elements: any[] = [];
+
+    // Title text
+    if (title) {
+        const totalWidth = layout.totalWidth;
+        const titleWidth = title.length * 12 + 20;
+        const titleX = 50 + (totalWidth - titleWidth) / 2;
+        elements.push(createText(titleX, 20, title, { fontSize: 24 }));
+    }
+
+    // Create shapes + bound text
+    for (const node of layout.nodes) {
+        const shapeId = generateId();
+        const textId = generateId();
+        const shapeOverrides = {
+            id: shapeId,
+            backgroundColor: node.color,
+            boundElements: [{ id: textId, type: 'text' }]
+        };
+
+        let shape: any;
+        switch (node.type) {
+            case 'ellipse':
+                shape = createEllipse(node.x, node.y, node.width, node.height, shapeOverrides);
+                break;
+            case 'diamond':
+                shape = createDiamond(node.x, node.y, node.width, node.height, shapeOverrides);
+                break;
+            default:
+                shape = createRectangle(node.x, node.y, node.width, node.height, {
+                    ...shapeOverrides, roundness: { type: 3 }
+                });
+        }
+        elements.push(shape);
+
+        // Bound text (centered inside shape)
+        const textWidth = node.label.length * 10;
+        const textX = node.x + (node.width - textWidth) / 2;
+        const textY = node.y + (node.height - 25) / 2;
+        elements.push(createText(textX, textY, node.label, {
+            id: textId,
+            containerId: shapeId,
+            width: textWidth,
+            height: 25
+        }));
+    }
+
+    // Create arrows + labels
+    for (const edge of layout.edges) {
+        elements.push(createArrow(
+            [[edge.startX, edge.startY], [edge.endX, edge.endY]]
+        ));
+
+        if (edge.label) {
+            const midX = (edge.startX + edge.endX) / 2;
+            const midY = (edge.startY + edge.endY) / 2 - 18;
+            elements.push(createText(midX, midY, edge.label, { fontSize: 14 }));
+        }
+    }
+
+    return elements;
+};
+
+// ============================================================
 // Excalidraw templates
 // ============================================================
 const EXCALIDRAW_TEMPLATES: Record<string, { description: string; build: () => any[] }> = {
@@ -683,6 +949,185 @@ export const ExcalidrawExtension: ExtensionWrapper = {
                     message: `Template for ${templateType} retrieved successfully`
                 };
             }
+        },
+
+        // Tool 6: Create Excalidraw from Graph Description
+        {
+            name: 'createExcalidrawFromGraph',
+            description: `从逻辑图描述（节点+边）自动创建布局合理的 Excalidraw 图表。
+AI 只需描述图的逻辑结构，工具自动计算所有坐标和布局。
+
+**优先使用此工具**而非手动指定坐标的 insertExcalidrawDiagram。
+
+节点类型：rectangle（流程步骤）、ellipse（起止/数据）、diamond（判断/条件）
+颜色名：blue, green, yellow, red, purple, orange, pink, gray, cyan, lime，或直接用 hex
+布局方向：vertical（层级/流程图）、horizontal（时间线/管道）`,
+            inputSchema: z.object({
+                title: z.string().describe("图表标题（可选）").optional(),
+                nodes: z.array(z.object({
+                    id: z.string().describe("节点唯一标识"),
+                    label: z.string().describe("节点显示文字"),
+                    type: z.enum(['rectangle', 'ellipse', 'diamond']).describe("形状类型").optional(),
+                    color: z.string().describe("背景色名称或 hex 值").optional()
+                })).describe("图中的节点列表"),
+                edges: z.array(z.object({
+                    from: z.string().describe("起始节点 id"),
+                    to: z.string().describe("目标节点 id"),
+                    label: z.string().describe("连线标签").optional()
+                })).describe("节点之间的连线"),
+                layout: z.enum(['vertical', 'horizontal']).describe("布局方向，默认 vertical").optional(),
+                position: z.number().describe("插入位置（可选）").optional()
+            }),
+            execute: (editor: Editor) => async (params: {
+                title?: string;
+                nodes: GraphNode[];
+                edges: GraphEdge[];
+                layout?: 'vertical' | 'horizontal';
+                position?: number;
+            }) => {
+                try {
+                    const { title, nodes, edges, layout = 'vertical', position } = params;
+
+                    // Validate
+                    if (!nodes || nodes.length === 0) {
+                        return { success: false, error: 'nodes 数组不能为空' };
+                    }
+                    const nodeIds = new Set(nodes.map(n => n.id));
+                    const invalidEdges = edges.filter(e => !nodeIds.has(e.from) || !nodeIds.has(e.to));
+                    if (invalidEdges.length > 0) {
+                        return {
+                            success: false,
+                            error: `以下边引用了不存在的节点: ${invalidEdges.map(e => `${e.from}->${e.to}`).join(', ')}`,
+                            availableNodeIds: [...nodeIds]
+                        };
+                    }
+
+                    // Compute layout and build elements
+                    const layoutResult = computeGraphLayout(nodes, edges, layout);
+                    const elements = buildExcalidrawElements(layoutResult, title);
+
+                    // Insert into document
+                    if (position !== undefined) {
+                        const docSize = editor.state.doc.nodeSize;
+                        if (position < 0 || position > docSize - 2) {
+                            return { success: false, error: `Invalid position: ${position}. Document size is ${docSize}` };
+                        }
+                        editor.chain().focus().insertContentAt(position, {
+                            type: 'excalidraw',
+                            attrs: { elements, appState: { isLoading: false } }
+                        }).run();
+                    } else {
+                        editor.commands.insertExcalidraw(elements);
+                    }
+
+                    return {
+                        success: true,
+                        message: `图表创建成功：${nodes.length} 个节点，${edges.length} 条边，方向=${layout}`,
+                        nodeCount: nodes.length,
+                        edgeCount: edges.length,
+                        elementCount: elements.length,
+                        layout
+                    };
+                } catch (error) {
+                    return {
+                        success: false,
+                        error: `Failed to create graph diagram: ${error instanceof Error ? error.message : String(error)}`
+                    };
+                }
+            }
         }
-    ]
+    ],
+
+    skills: [{
+        name: 'excalidraw-drawing',
+        description: 'Excalidraw 绘图技能：将用户需求转化为结构化图表',
+        requiredTools: ['createExcalidrawFromGraph', 'insertExcalidrawDiagram',
+                        'listExcalidrawDiagrams', 'updateExcalidrawDiagram',
+                        'deleteExcalidrawDiagram', 'getExcalidrawTemplates'],
+        tags: ['excalidraw', 'drawing', 'diagram', 'graph', 'flowchart'],
+        systemPromptFragment: `# Excalidraw 绘图技能
+
+## 工具选择优先级
+1. **createExcalidrawFromGraph** — 首选！只需描述节点和边，自动布局
+2. **insertExcalidrawDiagram + templateType** — 用于标准模板（flowchart/architecture/mindmap/sequence）
+3. **insertExcalidrawDiagram + elements** — 最后手段，需要手动坐标
+
+## 思维方式
+用户请求 → 识别实体为节点 → 识别关系为边 → 选择形状/颜色/方向 → 调用 createExcalidrawFromGraph
+
+## 形状语义
+- **rectangle** — 流程步骤、服务、模块、普通节点（默认）
+- **ellipse** — 起点/终点、数据存储、外部系统
+- **diamond** — 判断条件、决策点、分支
+
+## 颜色语义
+- **blue** — 入口、起点、用户操作
+- **green** — 成功、完成、正常路径
+- **yellow** — 数据、警告、中间状态
+- **red** — 错误、失败、异常路径
+- **purple** — 外部系统、第三方服务
+- **orange** — 处理中、队列、缓冲
+- **gray** — 可选、禁用、次要
+
+## 方向选择
+- **vertical**（默认）— 层级结构、流程图、决策树
+- **horizontal** — 时间线、管道、数据流
+
+## 示例 1：用户登录流程
+\`\`\`json
+{
+  "title": "用户登录流程",
+  "nodes": [
+    { "id": "start", "label": "用户访问", "type": "ellipse", "color": "blue" },
+    { "id": "input", "label": "输入账号密码", "color": "blue" },
+    { "id": "validate", "label": "验证凭证", "type": "diamond", "color": "yellow" },
+    { "id": "success", "label": "登录成功", "color": "green" },
+    { "id": "fail", "label": "登录失败", "color": "red" },
+    { "id": "retry", "label": "重试/找回密码", "color": "orange" }
+  ],
+  "edges": [
+    { "from": "start", "to": "input" },
+    { "from": "input", "to": "validate" },
+    { "from": "validate", "to": "success", "label": "通过" },
+    { "from": "validate", "to": "fail", "label": "失败" },
+    { "from": "fail", "to": "retry" },
+    { "from": "retry", "to": "input" }
+  ],
+  "layout": "vertical"
+}
+\`\`\`
+
+## 示例 2：微服务架构
+\`\`\`json
+{
+  "title": "微服务架构",
+  "nodes": [
+    { "id": "client", "label": "Web Client", "type": "ellipse", "color": "blue" },
+    { "id": "gateway", "label": "API Gateway", "color": "purple" },
+    { "id": "auth", "label": "Auth Service", "color": "green" },
+    { "id": "user", "label": "User Service", "color": "green" },
+    { "id": "order", "label": "Order Service", "color": "green" },
+    { "id": "db", "label": "Database", "type": "ellipse", "color": "yellow" },
+    { "id": "cache", "label": "Redis Cache", "type": "ellipse", "color": "orange" }
+  ],
+  "edges": [
+    { "from": "client", "to": "gateway", "label": "HTTPS" },
+    { "from": "gateway", "to": "auth", "label": "JWT" },
+    { "from": "gateway", "to": "user" },
+    { "from": "gateway", "to": "order" },
+    { "from": "user", "to": "db" },
+    { "from": "order", "to": "db" },
+    { "from": "auth", "to": "cache" }
+  ],
+  "layout": "vertical"
+}
+\`\`\`
+
+## 注意事项
+- 节点 id 用英文小写，简短有意义
+- label 用中文或英文均可，保持简洁（建议 2-8 个字）
+- 边的 label 只在需要说明关系类型时添加
+- 不要超过 15 个节点，太多会影响可读性
+- 更新已有图表时，先用 listExcalidrawDiagrams 获取位置`
+    }]
 }

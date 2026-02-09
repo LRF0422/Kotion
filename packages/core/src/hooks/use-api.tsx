@@ -30,6 +30,8 @@ const urlToIpcChannel: Record<string, string> = {
     '/knowledge-wiki/plugin/install/list': 'plugin:getInstalled',
     '/knowledge-wiki/plugin/uninstall': 'plugin:uninstall',
     '/knowledge-wiki/plugin/update': 'plugin:update',
+    // Plugin Config
+    '/knowledge-wiki/plugin-config': 'pluginConfig:getAll',
     // File
     '/knowledge-resource/oss/endpoint/put-file': 'file:upload',
     '/knowledge-file-center/folder/root': 'file:getRootFolder',
@@ -69,6 +71,7 @@ const getIpcChannel = (url: string, method: string): string | null => {
         { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/collaborators/, channel: 'page:getCollaborators' },
         { pattern: /\/knowledge-wiki\/space\/([^/]+)\/favorite/, channel: 'space:addFavorite' },
         { pattern: /\/knowledge-wiki\/space\/([^/]+)\/members/, channel: 'space:getMembers' },
+        { pattern: /\/knowledge-wiki\/plugin-config\/([^/]+)/, channel: 'pluginConfig:getOrSave' },
         { pattern: /\/knowledge-wiki\/plugin\/([^/]+)/, channel: 'plugin:get' },
         { pattern: /\/knowledge-wiki\/favorite\/([^/]+)/, channel: 'page:removeFavorite' },
         // IM patterns removed - use HTTP for WebSocket operations
@@ -102,6 +105,7 @@ const extractIdFromUrl = (url: string): string | null => {
         /\/page\/([^/]+)\/collaborators$/,
         /\/space\/([^/]+)\/favorite$/,
         /\/space\/([^/]+)\/members$/,
+        /\/plugin-config\/([^/]+)$/,
         /\/plugin\/([^/]+)$/,
         /\/favorite\/([^/]+)$/,
         // IM patterns removed - use HTTP for WebSocket operations
