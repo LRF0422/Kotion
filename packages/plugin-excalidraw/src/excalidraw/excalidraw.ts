@@ -6,7 +6,7 @@ import { ExcalidrawView } from "./ExcalidrawView";
 declare module "@kn/editor" {
     interface Commands<ReturnType> {
         excalidraw: {
-            insertExcalidraw: () => ReturnType;
+            insertExcalidraw: (elements?: any[], appState?: Record<string, any>) => ReturnType;
         }
     }
 }
@@ -46,13 +46,14 @@ export const Excalidraw = Node.create({
     },
     addCommands() {
         return {
-            insertExcalidraw: () => ({ commands }) => {
+            insertExcalidraw: (elements?: any[], appState?: Record<string, any>) => ({ commands }) => {
                 return commands.insertContent({
                     type: this.name,
                     attrs: {
-                        elements: [],
+                        elements: elements || [],
                         appState: {
-                            isLoading: false
+                            isLoading: false,
+                            ...appState
                         }
                     }
                 })
