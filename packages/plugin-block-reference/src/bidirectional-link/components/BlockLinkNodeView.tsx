@@ -7,7 +7,7 @@
  */
 
 import React, { useMemo, useCallback, useRef, useContext, useEffect, useState } from "react";
-import { NodeViewWrapper, type NodeViewProps, AnyExtension, EditorContent, StyledEditor, useEditor, useEditorExtension, PageContext } from "@kn/editor";
+import { NodeViewWrapper, type NodeViewProps, AnyExtension, EditorContent, StyledEditor, useEditor, useEditorExtension, PageContext, JSONContent } from "@kn/editor";
 import { useHover, useNavigator } from "@kn/core";
 import { ArrowUpRight, RefreshCcw, Trash2 } from "@kn/icon";
 import { cn, IconButton, Skeleton, Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@kn/ui";
@@ -102,7 +102,7 @@ export const BlockLinkView: React.FC<NodeViewProps> = React.memo((props) => {
     const editorContent = useMemo(() => {
         if (!content) return { type: "doc", content: [] };
         // If the block type is 'doc', use it directly; otherwise wrap in doc
-        return { type: "doc", content: content };
+        return { type: "doc", content: content } as JSONContent;
     }, [content]);
 
     const blockEditor = useEditor({

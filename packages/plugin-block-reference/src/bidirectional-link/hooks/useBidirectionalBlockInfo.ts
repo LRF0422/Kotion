@@ -8,13 +8,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { useApi } from "@kn/core";
 import { APIS } from "../api";
+import { JSONContent } from "@kn/editor";
 
 export interface BlockInfoData {
     id: string;
     pageId: number;
     spaceId: number;
     type: string;
-    content: string;
+    content: JSONContent;
 }
 
 /**

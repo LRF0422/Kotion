@@ -292,7 +292,7 @@ export const useEditorAgentOptimized = (
         abortControllerRef.current = new AbortController()
 
         // Build initial messages array for conversation context
-        const initialMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
+        const initialMessages: any[] = []
 
         // Add history messages if provided
         if (options.messages && options.messages.length > 0) {
@@ -307,7 +307,6 @@ export const useEditorAgentOptimized = (
 
         return agent.stream({
             prompt: options.prompt,
-            initialMessages,
             abortSignal: abortControllerRef.current.signal
         })
     }, [agent])
