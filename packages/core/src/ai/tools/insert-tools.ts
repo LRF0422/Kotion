@@ -9,6 +9,7 @@ import {
 } from "../utils/block-utils"
 import { contentItemsToNodes, parseMarkdownToNodes } from "../utils/markdown-parser"
 import { validateRange } from "../utils/document-utils"
+import { scrollToPosition } from "../utils/editor-effects"
 
 /**
  * Create document insertion tools
@@ -48,6 +49,7 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     .focus()
                     .setTextSelection({ from: contentStart, to: contentEnd })
                     .insertContent(newTitle)
+                    .scrollIntoView()
                     .run()
 
                 if (!success) {
@@ -105,6 +107,7 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     return { error: `插入失败，位置: ${insertPos}` }
                 }
 
+                scrollToPosition(editor, insertPos)
                 const newDocSize = editor.state.doc.nodeSize
 
                 return {
@@ -144,12 +147,14 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     success = editor.chain()
                         .focus('end')
                         .insertContent(nodes)
+                        .scrollIntoView()
                         .run()
                 } else {
                     nodes = [{ type: 'paragraph', content: [{ type: 'text', text }] }]
                     success = editor.chain()
                         .focus('end')
                         .insertContent(nodes)
+                        .scrollIntoView()
                         .run()
                 }
 
@@ -205,11 +210,13 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                         .focus()
                         .setTextSelection(pos)
                         .insertContent(content)
+                        .scrollIntoView()
                         .run()
                 } else {
                     // Insert as new paragraph
                     const insertContent = [{ type: 'paragraph', content: [{ type: 'text', text: content }] }]
                     success = editor.commands.insertContentAt(pos, insertContent)
+                    if (success) scrollToPosition(editor, pos)
                 }
 
                 if (!success) {
@@ -268,6 +275,7 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     return { error: '插入失败' }
                 }
 
+                scrollToPosition(editor, insertPos)
                 const newDocSize = editor.state.doc.nodeSize
 
                 return {
@@ -325,10 +333,12 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     case 'before':
                         success = editor.commands.insertContentAt(foundBlock.pos, nodes)
                         insertedAt = foundBlock.pos
+                        if (success) scrollToPosition(editor, foundBlock.pos)
                         break
                     case 'after':
                         success = editor.commands.insertContentAt(foundBlock.pos + foundBlock.size, nodes)
                         insertedAt = foundBlock.pos + foundBlock.size
+                        if (success) scrollToPosition(editor, foundBlock.pos + foundBlock.size)
                         break
                     case 'start':
                         // Inline insertion - parse inline markdown only
@@ -336,6 +346,7 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                             .focus()
                             .setTextSelection(foundBlock.contentStart)
                             .insertContent(text)
+                            .scrollIntoView()
                             .run()
                         insertedAt = foundBlock.contentStart
                         break
@@ -345,6 +356,7 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                             .focus()
                             .setTextSelection(foundBlock.contentEnd)
                             .insertContent(text)
+                            .scrollIntoView()
                             .run()
                         insertedAt = foundBlock.contentEnd
                         break
@@ -428,6 +440,7 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     return { error: '批量插入失败' }
                 }
 
+                scrollToPosition(editor, insertPos)
                 const newDocSize = editor.state.doc.nodeSize
 
                 return {
@@ -521,6 +534,7 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                         .focus()
                         .setTextSelection({ from: match.from, to: match.to })
                         .insertContent(replaceWith)
+                        .scrollIntoView()
                         .run()
                     if (!result) success = false
                 }
@@ -617,6 +631,7 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     return { error: 'Failed to insert markdown content' };
                 }
 
+                scrollToPosition(editor, insertPos);
                 const newDocSize = editor.state.doc.nodeSize;
 
                 return {

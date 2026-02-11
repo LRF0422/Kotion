@@ -11,3 +11,6 @@ export * from "./discovery"
 
 // Skills
 export * from "./skills"
+
+// Inline AI Menu (trigger in bubble menu + panel via floatingUI)
+export { AiInlineTrigger, AiInlinePanel } from "./AiInlineMenu"

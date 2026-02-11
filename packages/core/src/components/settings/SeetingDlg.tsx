@@ -43,7 +43,7 @@ const PluginSettingsLoader: React.FC<{ config: PluginSettingsWithMeta }> = ({ co
                     title={config.label}
                     description={config.description}
                 />
-                <Component />
+                <Component pluginKey={config.key} />
             </div>
         </Suspense>
     );

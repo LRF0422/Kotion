@@ -35,8 +35,9 @@ export const App: React.FC = () => {
                     <Route path="/" element={<Home />} />
                     <Route path="/templates" element={<Templates />} />
                     <Route path="/plugins" element={<Plugins />} />
-                </Route>,
-                <Route path="/doc" element={<Docs />} />
+                    <Route path="/doc" element={<Docs />} />
+                    <Route path="/doc/:section" element={<Docs />} />
+                </Route>
             ]
         )
     )

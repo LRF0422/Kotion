@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(npx tsc:*)",
-      "Bash(npx rollup:*)"
+      "Bash(npx rollup:*)",
+      "WebFetch(domain:vite.dev)",
+      "Bash(pnpm list:*)",
+      "Bash(pnpm build:*)",
+      "Bash(if exist \"C:\\\\Users\\\\albus\\\\.claude\\\\settings.json\" type \"C:\\\\Users\\\\albus\\\\.claude\\\\settings.json\")",
+      "Bash(find:*)",
+      "Bash(pnpm build:core:*)"
     ]
   }
 }

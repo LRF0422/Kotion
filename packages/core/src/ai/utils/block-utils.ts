@@ -1,4 +1,5 @@
 import type { Editor } from "@kn/editor"
+import { Node as PmNode } from "@kn/editor"
 import type { BlockInfo } from "../types"
 
 /**
@@ -171,6 +172,79 @@ export const findTextPosition = (
             }
         }
         return true
+    })
+
+    return result
+}
+
+/**
+ * Find all table nodes in the document
+ */
+export const findTablesInDocument = (editor: Editor): Array<{
+    pos: number
+    node: PmNode
+    index: number
+    rows: number
+    cols: number
+}> => {
+    const results: Array<{
+        pos: number
+        node: PmNode
+        index: number
+        rows: number
+        cols: number
+    }> = []
+
+    let index = 0
+    editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'table') {
+            let rows = 0
+            let cols = 0
+            node.forEach((row) => {
+                rows++
+                if (rows === 1) {
+                    cols = row.childCount
+                }
+            })
+            results.push({ pos, node, index: index++, rows, cols })
+            return false
+        }
+    })
+
+    return results
+}
+
+/**
+ * Find the position of a specific cell in a table
+ */
+export const findTableCellPosition = (
+    tableNode: PmNode,
+    tablePos: number,
+    rowIndex: number,
+    colIndex: number
+): { pos: number; node: PmNode } | null => {
+    let currentRow = 0
+    let result: { pos: number; node: PmNode } | null = null
+
+    // pos after the table opening tag
+    let offset = tablePos + 1
+
+    tableNode.forEach((row) => {
+        if (result) return
+        if (currentRow === rowIndex) {
+            let currentCol = 0
+            let colOffset = offset + 1 // +1 for row opening tag
+            row.forEach((cell) => {
+                if (result) return
+                if (currentCol === colIndex) {
+                    result = { pos: colOffset, node: cell }
+                }
+                colOffset += cell.nodeSize
+                currentCol++
+            })
+        }
+        offset += row.nodeSize
+        currentRow++
     })
 
     return result

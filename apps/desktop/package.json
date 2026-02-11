@@ -45,18 +45,18 @@
         "@types/node": "^22.7.4",
         "@types/react": "^18.3.23",
         "@types/react-dom": "^18.3.1",
-        "@vitejs/plugin-react": "^4.3.4",
+        "@vitejs/plugin-react": "^5.1.3",
         "autoprefixer": "^10.4.21",
         "electron": "^33.2.1",
         "electron-builder": "^25.1.8",
-        "electron-vite": "^2.3.0",
+        "electron-vite": "^5.0.0",
         "eslint": "^8.57.0",
         "eslint-plugin-react": "^7.37.2",
         "postcss": "^8.5.6",
         "tailwindcss": "^3.4.17",
         "typescript": "^5.8.3",
-        "vite": "^5.4.8",
-        "vite-tsconfig-paths": "^5.1.4"
+        "vite": "^7.3.1",
+        "vite-tsconfig-paths": "^6.1.0"
     },
     "build": {
         "appId": "com.kn.desktop",

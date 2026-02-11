@@ -104,7 +104,7 @@ export const Plugins: React.FC = () => {
                             <input
                                 type="text"
                                 placeholder={t("plugins.search-placeholder")}
-                                className="w-full pl-12 pr-4 py-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-lg"
+                                className="w-full pl-12 pr-4 py-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-lg"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -155,7 +155,7 @@ export const Plugins: React.FC = () => {
                         <div className="flex items-center gap-3">
                             <span className="text-sm text-notion-light">{t("plugins.sort-by")}</span>
                             <Select defaultValue="popular">
-                                <SelectTrigger className="w-[140px] h-10 rounded-xl">
+                                <SelectTrigger className="w-[140px] h-10 rounded-lg">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -180,7 +180,7 @@ export const Plugins: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                         {plugins.map((plugin: any, index: number) => (
                             <div
-                                className="group bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-5 hover:shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-gray-200 dark:hover:border-gray-700"
+                                className="group bg-white dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 p-5 hover:shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-gray-200 dark:hover:border-gray-700"
                                 key={index}
                             >
                                 {/* Plugin Header */}
@@ -190,7 +190,7 @@ export const Plugins: React.FC = () => {
                                         <img
                                             src={usePath(plugin.icon)}
                                             alt={plugin.name}
-                                            className="w-12 h-12 rounded-xl"
+                                            className="w-12 h-12 rounded-lg"
                                         />
                                         {index < 3 && (
                                             <div className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center">
@@ -237,11 +237,11 @@ export const Plugins: React.FC = () => {
                                 <div className="flex gap-2">
                                     <Dialog>
                                         <DialogTrigger asChild>
-                                            <Button variant="outline" className="flex-1 rounded-xl h-9 text-sm">
+                                            <Button variant="outline" className="flex-1 rounded-lg h-9 text-sm">
                                                 {t("plugins.view-details")}
                                             </Button>
                                         </DialogTrigger>
-                                        <DialogContent className="w-[900px] max-w-none rounded-2xl">
+                                        <DialogContent className="w-[900px] max-w-none rounded-lg">
                                             <DialogHeader>
                                                 <DialogTitle className="text-2xl">{plugin.name}</DialogTitle>
                                                 <DialogDescription />
@@ -249,7 +249,7 @@ export const Plugins: React.FC = () => {
                                             <div className="p-6">
                                                 <div className="grid grid-cols-12 gap-6">
                                                     <div className="col-span-7">
-                                                        <div className="rounded-xl overflow-hidden shadow-lg">
+                                                        <div className="rounded-lg overflow-hidden shadow-lg">
                                                             <img
                                                                 src={usePath(plugin.screenShot)}
                                                                 alt="Plugin Preview"
@@ -262,7 +262,7 @@ export const Plugins: React.FC = () => {
                                                             <img
                                                                 src={usePath(plugin.icon)}
                                                                 alt="Plugin Icon"
-                                                                className="w-16 h-16 rounded-xl shadow-lg"
+                                                                className="w-16 h-16 rounded-lg shadow-lg"
                                                             />
                                                             <div>
                                                                 <div className="flex items-center gap-2 mb-1">
@@ -302,10 +302,10 @@ export const Plugins: React.FC = () => {
                                                         </div>
 
                                                         <div className="flex gap-2 pt-4">
-                                                            <Button className="flex-1 rounded-xl" onClick={() => gotoInstall(plugin.id)}>
+                                                            <Button className="flex-1 rounded-lg" onClick={() => gotoInstall(plugin.id)}>
                                                                 {t("plugins.add-to-kotion")}
                                                             </Button>
-                                                            <Button variant="outline" className="rounded-xl">
+                                                            <Button variant="outline" className="rounded-lg">
                                                                 <HeartIcon className="h-4 w-4" />
                                                             </Button>
                                                         </div>
@@ -315,7 +315,7 @@ export const Plugins: React.FC = () => {
                                         </DialogContent>
                                     </Dialog>
                                     <Button
-                                        className="rounded-xl h-9 px-3"
+                                        className="rounded-lg h-9 px-3"
                                         onClick={() => gotoInstall(plugin.id)}
                                     >
                                         <DownloadIcon className="h-4 w-4" />
@@ -343,10 +343,10 @@ export const Plugins: React.FC = () => {
                                 {t("plugins.cta-desc")}
                             </p>
                             <div className="flex flex-col sm:flex-row justify-center gap-4">
-                                <Button size="lg" className="rounded-xl px-8">
+                                <Button size="lg" className="rounded-lg px-8">
                                     {t("plugins.request-plugin")}
                                 </Button>
-                                <Button size="lg" variant="outline" className="rounded-xl px-8">
+                                <Button size="lg" variant="outline" className="rounded-lg px-8">
                                     {t("plugins.share-plugin")}
                                 </Button>
                             </div>
@@ -364,17 +364,17 @@ export const Plugins: React.FC = () => {
                             <div className="bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-3xl p-8">
                                 <div className="relative h-64 flex items-center justify-center">
                                     {/* Central element */}
-                                    <div className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-xl flex items-center justify-center">
+                                    <div className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg shadow-xl flex items-center justify-center">
                                         <FaPlug className="w-12 h-12 text-white" />
                                     </div>
                                     {/* Orbiting elements */}
-                                    <div className="absolute top-4 left-1/4 bg-white dark:bg-gray-800 rounded-xl p-3 shadow-lg float-animation">
+                                    <div className="absolute top-4 left-1/4 bg-white dark:bg-gray-800 rounded-lg p-3 shadow-lg float-animation">
                                         <span className="text-2xl">💰</span>
                                     </div>
-                                    <div className="absolute bottom-4 right-1/4 bg-white dark:bg-gray-800 rounded-xl p-3 shadow-lg float-animation" style={{ animationDelay: '0.5s' }}>
+                                    <div className="absolute bottom-4 right-1/4 bg-white dark:bg-gray-800 rounded-lg p-3 shadow-lg float-animation" style={{ animationDelay: '0.5s' }}>
                                         <span className="text-2xl">⭐</span>
                                     </div>
-                                    <div className="absolute top-1/2 right-4 bg-white dark:bg-gray-800 rounded-xl p-3 shadow-lg float-animation" style={{ animationDelay: '1s' }}>
+                                    <div className="absolute top-1/2 right-4 bg-white dark:bg-gray-800 rounded-lg p-3 shadow-lg float-animation" style={{ animationDelay: '1s' }}>
                                         <span className="text-2xl">🚀</span>
                                     </div>
                                 </div>
@@ -413,7 +413,7 @@ export const Plugins: React.FC = () => {
                                     <span className="text-notion">{t("plugins.creator-benefit-3")}</span>
                                 </div>
                             </div>
-                            <Button size="lg" className="rounded-xl px-8">
+                            <Button size="lg" className="rounded-lg px-8">
                                 {t("plugins.get-started")}
                                 <ArrowRight className="ml-2 h-4 w-4" />
                             </Button>

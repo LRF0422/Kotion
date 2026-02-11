@@ -107,5 +107,22 @@ export const APIS = {
     IM_GET_ONLINE_COUNT: {
         url: '/instant-message/online-count',
         method: 'GET'
+    } as API,
+
+    // ==================== Plugin Config APIs ====================
+    /** Get a single plugin's config */
+    GET_PLUGIN_CONFIG: {
+        url: '/knowledge-wiki/plugin-config/:pluginKey',
+        method: 'GET'
+    } as API,
+    /** Save a plugin's config (use POST because existing PUT handler doesn't pass body) */
+    SAVE_PLUGIN_CONFIG: {
+        url: '/knowledge-wiki/plugin-config/:pluginKey',
+        method: 'POST'
+    } as API,
+    /** Get all plugin configs */
+    GET_ALL_PLUGIN_CONFIGS: {
+        url: '/knowledge-wiki/plugin-config',
+        method: 'GET'
     } as API
 }

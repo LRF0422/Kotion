@@ -26,6 +26,8 @@ import { createInsertTools } from '../tools/insert-tools'
 import { createDeleteTools } from '../tools/delete-tools'
 import { createMiscTools } from '../tools/misc-tools'
 import { createColumnsTools } from '../tools/columns-tools'
+import { createStructureTools } from '../tools/structure-tools'
+import { createFormatTools } from '../tools/format-tools'
 
 interface ToolProviderOptions {
     editor: Editor
@@ -83,13 +85,17 @@ export class ToolProvider {
         const deleteTools = createDeleteTools(this.editor)
         const miscTools = createMiscTools(this.editor, this.onUserChoiceRequest)
         const columnsTools = createColumnsTools(this.editor)
+        const structureTools = createStructureTools(this.editor)
+        const formatTools = createFormatTools(this.editor)
 
         const allTools = {
             ...readTools,
             ...insertTools,
             ...deleteTools,
             ...miscTools,
-            ...columnsTools
+            ...columnsTools,
+            ...structureTools,
+            ...formatTools
         }
 
         // Register each tool as a factory

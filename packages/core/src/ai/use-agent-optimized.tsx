@@ -86,6 +86,10 @@ You start with a minimal set of essential tools. When you need additional capabi
 - 粗体/斜体: **bold** *italic*
 - 链接: [text](url)
 
+### Structure & Formatting
+- convertBlock: 转换块类型（paragraph/heading/blockquote/codeBlock/bulletList/orderedList/taskList）
+- formatText: 为已有文本添加格式（bold/italic/underline/strike/code）
+
 ### Interaction
 - askUserChoice: Confirm with user
 
@@ -93,7 +97,8 @@ You start with a minimal set of essential tools. When you need additional capabi
 - document-read: Reading and analyzing document content
 - document-write: Inserting and updating content
 - document-delete: Deleting content (requires confirmation)
-- layout: Multi-column layouts
+- document-structure: 块类型转换、移动、格式化、对齐、表格操作
+- layout: Multi-column layouts (supports nested columns for complex layouts)
 - interaction: User interaction
 - web: Web search and fetch
 - plugin: Tools from installed plugins
