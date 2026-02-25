@@ -423,6 +423,49 @@ export function setupIpcHandlers() {
     }
   });
 
+  // ==================== Plugin Config Handlers ====================
+
+  ipcMain.handle('pluginConfig:getAll', async () => {
+    const db = getDatabaseManager().getDatabase();
+    const rows = db.prepare(
+      "SELECT key, value FROM settings WHERE key LIKE 'plugin_config:%'"
+    ).all() as { key: string; value: string }[];
+    const list = rows.map((row) => {
+      const pluginKey = row.key.replace('plugin_config:', '');
+      const config = JSON.parse(row.value);
+      return { pluginKey, config, updatedAt: config._updatedAt || '' };
+    });
+    return { code: 200, data: list };
+  });
+
+  ipcMain.handle('pluginConfig:getOrSave', async (_event, data: any) => {
+    const db = getDatabaseManager().getDatabase();
+
+    if (typeof data === 'string') {
+      // GET single config – data is the pluginKey
+      const row = db.prepare(
+        "SELECT value FROM settings WHERE key = ?"
+      ).get(`plugin_config:${data}`) as { value: string } | undefined;
+      if (!row) return { code: 200, data: null };
+      const config = JSON.parse(row.value);
+      return { code: 200, data: { pluginKey: data, config, updatedAt: config._updatedAt || '' } };
+    }
+
+    // POST save – data is { config: {...}, _id: pluginKey } (combined by handleElectronRequest)
+    if (data && typeof data === 'object' && data.config && data._id) {
+      const pluginKey = data._id;
+      const config = data.config;
+      const now = Date.now();
+      const value = JSON.stringify({ ...config, _updatedAt: new Date(now).toISOString() });
+      db.prepare(
+        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)"
+      ).run(`plugin_config:${pluginKey}`, value, now);
+      return { code: 200, data: { pluginKey, config }, msg: 'ok' };
+    }
+
+    return { code: 400, msg: 'Invalid plugin config request' };
+  });
+
   // ==================== Plugin Handlers ====================
 
   ipcMain.handle('plugin:search', async (_event, dto: any) => {

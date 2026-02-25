@@ -54,7 +54,11 @@ const httpOnlyUrls = [
     '/knowledge-auth/token',           // Login
     '/knowledge-system/user/register', // Register
     '/instant-message/',               // All IM/WebSocket operations
-    '/knowledge-wiki/plugin',          // Plugin marketplace - always fetch from server
+]
+
+// URLs that require exact match for HTTP-only check (no substring matching)
+const httpOnlyExactPrefixes = [
+    '/knowledge-wiki/plugin',          // Plugin marketplace - always fetch from server (NOT plugin-config)
 ]
 
 // Get IPC channel from URL
@@ -151,7 +155,12 @@ const handleElectronRequest = async (api: API, param?: any, body?: any): Promise
     // Prepare data for IPC
     let ipcData: any = body || param || {}
     if (id && !ipcData.id) {
-        ipcData = id
+        if (body && typeof body === 'object' && Object.keys(body).length > 0) {
+            // POST with path param + body: combine both so IPC handler gets full context
+            ipcData = { ...body, _id: id }
+        } else {
+            ipcData = id
+        }
     }
 
     // Special handling for specific channels
@@ -199,6 +208,14 @@ export const handleRequest = (api: API, param?: any, body?: any, header?: Record
 
     // Check if this URL should always use HTTP (e.g., login, register)
     const shouldUseHttp = httpOnlyUrls.some(url => filledUrl.includes(url))
+        || httpOnlyExactPrefixes.some(prefix => {
+            // Match exact path or path with trailing slash/query, but NOT longer path segments
+            // e.g., '/knowledge-wiki/plugin' matches '/knowledge-wiki/plugin' and '/knowledge-wiki/plugin/install'
+            // but NOT '/knowledge-wiki/plugin-config/xxx'
+            if (!filledUrl.startsWith(prefix)) return false
+            const rest = filledUrl.slice(prefix.length)
+            return rest === '' || rest.startsWith('/') || rest.startsWith('?')
+        })
 
     // Use Electron IPC if available and URL is not HTTP-only
     if (isElectron() && !shouldUseHttp) {

@@ -1,14 +1,14 @@
 import React, { useState } from 'react'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, Input, Button, Badge, Label, Switch, cn } from '@kn/ui'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, Input, Label, Switch, Button, cn } from '@kn/ui'
 import { usePluginConfig } from '@kn/core'
 import type { GitHubPluginConfig } from '../types/config'
 import { DEFAULT_GITHUB_CONFIG } from '../types/config'
 import { testConnection } from '../services/github-client'
 import { GITHUB_PLUGIN_KEY } from '../hooks/use-github-config'
-import { RefreshCw, CheckCircle2, XCircle, Eye, EyeOff, Save } from '@kn/icon'
+import { RefreshCw, CheckCircle2, XCircle, Eye, EyeOff } from '@kn/icon'
 
 export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
-    const { config, updateConfig, saveConfig, saving, isDirty } = usePluginConfig<GitHubPluginConfig>({
+    const { config, updateConfig, saving, saveError, isDirty } = usePluginConfig<GitHubPluginConfig>({
         pluginKey: GITHUB_PLUGIN_KEY,
         defaultConfig: DEFAULT_GITHUB_CONFIG,
     })
@@ -142,12 +142,23 @@ export const GitHubSettings: React.FC<{ pluginKey?: string }> = () => {
                 </CardContent>
             </Card>
 
-            {/* Save */}
-            <div className="flex justify-end">
-                <Button onClick={saveConfig} disabled={saving || !isDirty} size="sm">
-                    {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
-                    Save Settings
-                </Button>
+            {/* Status */}
+            <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
+                {saving && (
+                    <span className="flex items-center gap-1">
+                        <RefreshCw className="h-3 w-3 animate-spin" /> Saving...
+                    </span>
+                )}
+                {!saving && !isDirty && !saveError && (
+                    <span className="flex items-center gap-1 text-green-600">
+                        <CheckCircle2 className="h-3 w-3" /> Saved
+                    </span>
+                )}
+                {saveError && (
+                    <span className="flex items-center gap-1 text-red-500">
+                        <XCircle className="h-3 w-3" /> Sync failed: {saveError}
+                    </span>
+                )}
             </div>
         </div>
     )

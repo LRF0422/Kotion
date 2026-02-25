@@ -156,12 +156,8 @@ export class HybridPluginConfigStorage implements PluginConfigStorageAdapter {
     async save(pluginKey: string, config: PluginConfigData): Promise<void> {
         // Always save to local first (immediate persistence)
         await this.local.save(pluginKey, config)
-        // Then try remote (best-effort)
-        try {
-            await this.api.save(pluginKey, config)
-        } catch (error) {
-            logger.warn(`Failed to sync plugin config "${pluginKey}" to server, saved locally only:`, error)
-        }
+        // Then sync to remote – propagate errors so callers can show feedback
+        await this.api.save(pluginKey, config)
     }
 }
 
