@@ -1,0 +1,39 @@
+{
+  "name": "@kn/plugin-github",
+  "version": "0.0.1",
+  "description": "GitHub integration plugin for Knowledge Repo - embed Issues, PRs, Repos, and Code snippets",
+  "main": "src/index.tsx",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "registry": "http://localhost:8081/repository/npm-hosted/"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "github",
+    "issue",
+    "pull-request",
+    "code",
+    "editor",
+    "plugin"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@kn/common": "workspace:*",
+    "@kn/core": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/ui": "workspace:*",
+    "@octokit/rest": "^21.0.0"
+  },
+  "devDependencies": {
+    "@kn/rollup-config": "workspace:*",
+    "@kn/typescript-config": "workspace:*",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0"
+  }
+}

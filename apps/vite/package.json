@@ -28,6 +28,7 @@
     "@kn/plugin-bitable": "workspace:*",
     "@kn/plugin-weaver-oa": "workspace:*",
     "@kn/plugin-bilibili": "workspace:*",
+    "@kn/plugin-github": "workspace:*",
     "evaluatex": "^2.2.0",
     "event-source-polyfill": "^1.0.31",
     "lodash": "^4.17.21",

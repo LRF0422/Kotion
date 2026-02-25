@@ -16,8 +16,9 @@ import { ai } from "@kn/plugin-ai"
 import { bitable } from "@kn/plugin-bitable"
 // import { weaverOA } from "@kn/plugin-weaver-oa"
 // import { bilibili } from "@kn/plugin-bilibili"
+import { github } from "@kn/plugin-github"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[DefaultPluginInstance, fileManager, mermaid, excalidraw, blockReference, ai, bitable]} />
+  <App plugins={[DefaultPluginInstance, fileManager, mermaid, excalidraw, blockReference, ai, bitable, github]} />
 )
