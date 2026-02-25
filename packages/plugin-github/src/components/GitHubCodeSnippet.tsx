@@ -1,6 +1,6 @@
 import React from 'react'
 import { NodeViewWrapper, NodeViewProps } from '@kn/editor'
-import { Card, Button, cn } from '@kn/ui'
+import { Card, cn } from '@kn/ui'
 import { RefreshCw, ExternalLink, Copy, FileCode } from '@kn/icon'
 import { GitHubUrlInput } from './shared/GitHubUrlInput'
 import { useGitHubData } from '../hooks/use-github-data'
