@@ -3,7 +3,6 @@ import { z } from '@kn/ui'
 import { PluginConfigStore } from '@kn/core'
 import { getIssue, listIssues, createIssue, updateIssue, getIssueComments, addIssueComment } from '../../services/github-issue-service'
 import type { GitHubPluginConfig } from '../../types/config'
-import { DEFAULT_GITHUB_CONFIG } from '../../types/config'
 import { GITHUB_PLUGIN_KEY } from '../../hooks/use-github-config'
 
 async function getToken(): Promise<string> {
