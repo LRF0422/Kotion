@@ -99,6 +99,36 @@ export async function getRepoCommits(
     return commits
 }
 
+export async function getFileContent(
+    token: string,
+    owner: string,
+    repo: string,
+    path: string,
+    ref?: string,
+): Promise<{ content: string; size: number; encoding: string }> {
+    const cacheKey = `file:${owner}/${repo}:${path}:${ref || 'default'}`
+    const cached = githubCache.get<{ content: string; size: number; encoding: string }>(cacheKey)
+    if (cached) return cached
+
+    const octokit = getOctokit(token)
+    const { data } = await octokit.repos.getContent({
+        owner,
+        repo,
+        path,
+        ...(ref ? { ref } : {}),
+    })
+
+    if (Array.isArray(data) || !('content' in (data as any))) {
+        throw new Error('Not a file')
+    }
+
+    const raw = data as any
+    const decoded = atob(raw.content?.replace(/\n/g, '') || '')
+    const result = { content: decoded, size: raw.size || 0, encoding: raw.encoding || 'base64' }
+    githubCache.set(cacheKey, result, 2)
+    return result
+}
+
 export async function getReadme(
     token: string,
     owner: string,

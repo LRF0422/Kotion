@@ -1,13 +1,13 @@
 import React, { useState, useCallback } from 'react'
 import { NodeViewWrapper, NodeViewProps } from '@kn/editor'
-import { Card, Badge, cn, Tabs, TabsList, TabsTrigger, TabsContent, ScrollArea } from '@kn/ui'
+import { Card, Badge, cn, Tabs, TabsList, TabsTrigger, TabsContent, ScrollArea, CodeEditor } from '@kn/ui'
 import {
     RefreshCw, ExternalLink, Star, GitFork, CircleDot,
-    Folder, FileText, GitCommit, ChevronRight,
+    Folder, FileText, GitCommit, ChevronRight, ArrowLeft, Copy, Check,
 } from '@kn/icon'
 import { GitHubUrlInput } from './shared/GitHubUrlInput'
 import { useGitHubData } from '../hooks/use-github-data'
-import { getRepo, getRepoContents, getRepoCommits } from '../services/github-repo-service'
+import { getRepo, getRepoContents, getRepoCommits, getFileContent } from '../services/github-repo-service'
 import type { GitHubTreeItem, GitHubCommit as GitHubCommitType } from '../types/github'
 
 function formatCount(n: number): string {
@@ -38,6 +38,127 @@ function shortenSha(sha: string): string {
     return sha.substring(0, 7)
 }
 
+const MAX_VIEWABLE_SIZE = 256 * 1024 // 256KB
+
+function isTextFile(name: string): boolean {
+    const textExts = [
+        'txt', 'md', 'markdown', 'rst', 'adoc',
+        'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs',
+        'py', 'rb', 'go', 'rs', 'java', 'kt', 'scala', 'cs', 'c', 'cpp', 'h', 'hpp',
+        'swift', 'dart', 'lua', 'r', 'pl', 'php', 'sh', 'bash', 'zsh', 'fish', 'ps1',
+        'html', 'htm', 'css', 'scss', 'sass', 'less', 'vue', 'svelte',
+        'json', 'yaml', 'yml', 'toml', 'xml', 'csv', 'tsv', 'ini', 'cfg', 'conf',
+        'sql', 'graphql', 'gql', 'proto',
+        'dockerfile', 'makefile', 'cmake',
+        'gitignore', 'gitattributes', 'editorconfig', 'env', 'env.example',
+        'lock', 'log',
+        'license', 'readme', 'changelog',
+    ]
+    const lower = name.toLowerCase()
+    const ext = lower.includes('.') ? lower.split('.').pop()! : lower
+    return textExts.includes(ext)
+}
+
+// --- File Viewer Sub-component ---
+const FileViewer: React.FC<{
+    owner: string
+    repo: string
+    defaultBranch: string
+    token: string
+    filePath: string
+    fileName: string
+    fileSize: number
+    htmlUrl: string
+    onBack: () => void
+}> = ({ owner, repo, defaultBranch, token, filePath, fileName, fileSize, htmlUrl, onBack }) => {
+    const [content, setContent] = useState<string | null>(null)
+    const [fileLoading, setFileLoading] = useState(true)
+    const [fileError, setFileError] = useState<string | null>(null)
+    const [copied, setCopied] = useState(false)
+
+    React.useEffect(() => {
+        let cancelled = false
+        const load = async () => {
+            setFileLoading(true)
+            setFileError(null)
+            try {
+                const result = await getFileContent(token, owner, repo, filePath, defaultBranch)
+                if (!cancelled) setContent(result.content)
+            } catch (err: any) {
+                if (!cancelled) setFileError(err.message || 'Failed to load file')
+            } finally {
+                if (!cancelled) setFileLoading(false)
+            }
+        }
+        load()
+        return () => { cancelled = true }
+    }, [token, owner, repo, filePath, defaultBranch])
+
+    const handleCopy = () => {
+        if (!content) return
+        navigator.clipboard.writeText(content)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    const lineCount = content ? content.split('\n').length : 0
+
+    return (
+        <div className="mt-2">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5 text-xs min-w-0">
+                    <button
+                        onClick={onBack}
+                        className="flex items-center gap-0.5 text-muted-foreground hover:text-foreground"
+                    >
+                        <ArrowLeft className="h-3 w-3" />
+                    </button>
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="font-medium truncate">{fileName}</span>
+                    <span className="text-muted-foreground flex-shrink-0">{formatSize(fileSize)}</span>
+                    {lineCount > 0 && (
+                        <span className="text-muted-foreground flex-shrink-0">{lineCount} lines</span>
+                    )}
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                    {content && (
+                        <button onClick={handleCopy} className="p-0.5 hover:bg-muted rounded" title="Copy content">
+                            {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+                        </button>
+                    )}
+                    <a href={htmlUrl} target="_blank" rel="noopener noreferrer" className="p-0.5 hover:bg-muted rounded" title="Open on GitHub">
+                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                    </a>
+                </div>
+            </div>
+
+            {fileLoading && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground py-4 justify-center">
+                    <RefreshCw className="h-3 w-3 animate-spin" /> Loading file...
+                </div>
+            )}
+
+            {fileError && (
+                <div className="text-xs text-red-500 py-2">{fileError}</div>
+            )}
+
+            {!fileLoading && !fileError && content !== null && (
+                <div className="border rounded-md overflow-hidden">
+                    <CodeEditor
+                        value={content}
+                        readOnly
+                        editable={false}
+                        basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: false }}
+                        maxHeight="360px"
+                        className="text-xs [&_.cm-editor]:!border-0 [&_.cm-gutters]:!border-r [&_.cm-gutters]:!border-border"
+                    />
+                </div>
+            )}
+        </div>
+    )
+}
+
 // --- File Browser Sub-component ---
 const FileBrowser: React.FC<{
     owner: string
@@ -50,11 +171,13 @@ const FileBrowser: React.FC<{
     const [filesLoading, setFilesLoading] = useState(false)
     const [filesError, setFilesError] = useState<string | null>(null)
     const [loaded, setLoaded] = useState(false)
+    const [viewingFile, setViewingFile] = useState<GitHubTreeItem | null>(null)
 
     const loadFiles = useCallback(async (path: string) => {
         if (!token) return
         setFilesLoading(true)
         setFilesError(null)
+        setViewingFile(null)
         try {
             const items = await getRepoContents(token, owner, repo, path, defaultBranch)
             setFiles(items)
@@ -73,6 +196,23 @@ const FileBrowser: React.FC<{
             loadFiles('')
         }
     }, [loaded, token, loadFiles])
+
+    // If viewing a file, show the file viewer
+    if (viewingFile && token) {
+        return (
+            <FileViewer
+                owner={owner}
+                repo={repo}
+                defaultBranch={defaultBranch}
+                token={token}
+                filePath={viewingFile.path}
+                fileName={viewingFile.name}
+                fileSize={viewingFile.size}
+                htmlUrl={viewingFile.html_url}
+                onBack={() => setViewingFile(null)}
+            />
+        )
+    }
 
     const pathParts = currentPath ? currentPath.split('/') : []
 
@@ -143,6 +283,8 @@ const FileBrowser: React.FC<{
                                     onClick={() => {
                                         if (item.type === 'dir') {
                                             loadFiles(item.path)
+                                        } else if (isTextFile(item.name) && item.size <= MAX_VIEWABLE_SIZE) {
+                                            setViewingFile(item)
                                         } else {
                                             window.open(item.html_url, '_blank')
                                         }
@@ -160,11 +302,25 @@ const FileBrowser: React.FC<{
                                         {item.name}
                                     </span>
                                 </button>
-                                {item.type !== 'dir' && item.size > 0 && (
-                                    <span className="text-muted-foreground ml-2 flex-shrink-0">
-                                        {formatSize(item.size)}
-                                    </span>
-                                )}
+                                <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
+                                    {item.type !== 'dir' && item.size > 0 && (
+                                        <span className="text-muted-foreground">
+                                            {formatSize(item.size)}
+                                        </span>
+                                    )}
+                                    {item.type !== 'dir' && (
+                                        <a
+                                            href={item.html_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="p-0.5 hover:bg-accent rounded opacity-0 group-hover:opacity-100"
+                                            title="Open on GitHub"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                                        </a>
+                                    )}
+                                </div>
                             </div>
                         ))}
                         {files.length === 0 && (
@@ -275,8 +431,9 @@ const CommitsList: React.FC<{
 
 // --- Main Card ---
 export const GitHubRepoCard: React.FC<NodeViewProps> = ({ node, updateAttributes, editor, deleteNode }) => {
-    const { owner, repo, description, language, stars, forks, openIssues, topics, visibility, htmlUrl, defaultBranch } = node.attrs
-    const [activeTab, setActiveTab] = useState('overview')
+    const { owner, repo, description, language, stars, forks, openIssues, topics, visibility, htmlUrl, defaultBranch, activeTab: savedTab } = node.attrs
+    const activeTab = savedTab || 'overview'
+    const setActiveTab = (tab: string) => updateAttributes({ activeTab: tab })
 
     const isConfigured = owner && repo
 

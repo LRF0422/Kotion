@@ -20,6 +20,7 @@ export const GitHubRepoNode = Node.create({
             visibility: { default: 'public' },
             htmlUrl: { default: '' },
             defaultBranch: { default: 'main' },
+            activeTab: { default: 'overview' },
             lastSyncAt: { default: '' },
         }
     },
