@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { generateFieldId, generateOptionId } from "../../utils/id";
+import { getRandomOptionColor } from "../../utils/colors";
 import { useTranslation } from "@kn/common";
 import { getConversionWarning } from "../../utils/fieldConversion";
 import {
@@ -48,7 +49,8 @@ const PRESET_COLORS = [
 const ColorPicker: React.FC<{
     value: string;
     onChange: (color: string) => void;
-}> = ({ value, onChange }) => {
+    t: (key: string) => string;
+}> = ({ value, onChange, t }) => {
     const [isOpen, setIsOpen] = useState(false);
 
     return (
@@ -59,12 +61,12 @@ const ColorPicker: React.FC<{
                     className="w-8 h-8 p-0 border-2"
                     style={{ backgroundColor: value }}
                 >
-                    <span className="sr-only">选择颜色</span>
+                    <span className="sr-only">{t('bitable.fieldConfig.selectColor')}</span>
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-64 p-3" align="start">
                 <div className="space-y-3">
-                    <Label className="text-xs font-medium">选择颜色</Label>
+                    <Label className="text-xs font-medium">{t('bitable.fieldConfig.selectColor')}</Label>
                     <div className="grid grid-cols-6 gap-2">
                         {PRESET_COLORS.map((color) => (
                             <button
@@ -84,7 +86,7 @@ const ColorPicker: React.FC<{
                     </div>
                     <Separator />
                     <div className="flex items-center gap-2">
-                        <Label htmlFor="custom-color" className="text-xs">自定义</Label>
+                        <Label htmlFor="custom-color" className="text-xs">{t('bitable.fieldConfig.custom')}</Label>
                         <input
                             id="custom-color"
                             type="color"
@@ -142,6 +144,9 @@ const getFieldTypeOptions = (t: (key: string) => string) => [
     { value: FieldType.URL, label: t('bitable.fieldTypes.url') },
     { value: FieldType.EMAIL, label: t('bitable.fieldTypes.email') },
     { value: FieldType.PHONE, label: t('bitable.fieldTypes.phone') },
+    { value: FieldType.CREATED_TIME, label: t('bitable.fieldTypes.createdTime') },
+    { value: FieldType.UPDATED_TIME, label: t('bitable.fieldTypes.updatedTime') },
+    { value: FieldType.AUTO_NUMBER, label: t('bitable.fieldTypes.autoNumber') },
 ];
 
 // Single field configuration popover component
@@ -186,15 +191,6 @@ const FieldConfigPopover: React.FC<FieldConfigPopoverProps> = ({
         setLocalDescription(field.description || "");
     }, [field]);
 
-    // Get random color for new options
-    const getRandomColor = (): string => {
-        const colors = [
-            "#3b82f6", "#10b981", "#f59e0b", "#ef4444",
-            "#8b5cf6", "#ec4899", "#14b8a6", "#f97316",
-        ];
-        return colors[Math.floor(Math.random() * colors.length)] as string;
-    };
-
     // Handle save on popover close
     const handleSave = () => {
         const updates: Partial<FieldConfig> = {};
@@ -225,7 +221,7 @@ const FieldConfigPopover: React.FC<FieldConfigPopoverProps> = ({
         const newOption: SelectOption = {
             id: generateOptionId(),
             label: newOptionLabel.trim(),
-            color: getRandomColor(),
+            color: getRandomOptionColor(),
         };
         setLocalOptions([...localOptions, newOption]);
         setNewOptionLabel("");
@@ -257,6 +253,7 @@ const FieldConfigPopover: React.FC<FieldConfigPopoverProps> = ({
                                     <ColorPicker
                                         value={option.color}
                                         onChange={(color) => updateOption(option.id, { color })}
+                                        t={t}
                                     />
                                     <Input
                                         value={option.label}
@@ -595,7 +592,7 @@ const FieldConfigPopover: React.FC<FieldConfigPopoverProps> = ({
                                                     setConversionOptions([...conversionOptions, {
                                                         id: generateOptionId(),
                                                         label: `Option ${conversionOptions.length + 1}`,
-                                                        color: getRandomColor(),
+                                                        color: getRandomOptionColor(),
                                                     }]);
                                                 }}
                                             >
@@ -757,7 +754,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
         const newOption: SelectOption = {
             id: generateOptionId(),
             label: newOptionLabel.trim(),
-            color: getRandomColor(),
+            color: getRandomOptionColor(),
         };
         setNewFieldOptions([...newFieldOptions, newOption]);
         setNewOptionLabel("");
@@ -790,6 +787,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                                         <ColorPicker
                                             value={option.color}
                                             onChange={(color) => updateNewOption(option.id, { color })}
+                                            t={t}
                                         />
                                         <Input
                                             value={option.label}
@@ -962,15 +960,6 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
             default:
                 return null;
         }
-    };
-
-    // 获取随机颜色
-    const getRandomColor = (): string => {
-        const colors = [
-            "#3b82f6", "#10b981", "#f59e0b", "#ef4444",
-            "#8b5cf6", "#ec4899", "#14b8a6", "#f97316",
-        ];
-        return colors[Math.floor(Math.random() * colors.length)] as string;
     };
 
     return (

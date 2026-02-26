@@ -1,25 +1,7 @@
 import { useMemo } from "react";
+import { useTranslation } from "@kn/common";
 import { FieldConfig, RecordData, ViewConfig, ChartType, FieldType, YAxisConfig } from "../../types";
-
-// 色彩方案
-const COLOR_SCHEMES = {
-    default: [
-        "#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6",
-        "#ec4899", "#06b6d4", "#f97316", "#14b8a6", "#a855f7"
-    ],
-    warm: [
-        "#ef4444", "#f97316", "#f59e0b", "#eab308", "#fbbf24",
-        "#d97706", "#ea580c", "#dc2626", "#f43f5e", "#e11d48"
-    ],
-    cool: [
-        "#3b82f6", "#06b6d4", "#14b8a6", "#22c55e", "#10b981",
-        "#0ea5e9", "#6366f1", "#8b5cf6", "#a855f7", "#0891b2"
-    ],
-    monochrome: [
-        "#1e293b", "#334155", "#475569", "#64748b", "#94a3b8",
-        "#cbd5e1", "#e2e8f0", "#f1f5f9", "#0f172a", "#020617"
-    ],
-};
+import { COLOR_SCHEMES } from "../../utils/chartColors";
 
 interface ChartDataResult {
     chartData: Record<string, any>[];
@@ -45,6 +27,7 @@ export const useChartData = (
     fields: FieldConfig[],
     data: RecordData[]
 ): ChartDataResult => {
+    const { t } = useTranslation();
     const chartConfig = view.chartConfig || {
         chartType: ChartType.BAR,
         xAxisField: '',
@@ -268,7 +251,7 @@ export const useChartData = (
             const others = result.slice(chartConfig.topN).reduce((sum, item) => sum + item.value, 0);
             result = result.slice(0, chartConfig.topN);
             if (others > 0) {
-                result.push({ name: 'Others', value: others, fill: '#9ca3af' }); // TODO: Use translation
+                result.push({ name: t('bitable.chartView.others'), value: others, fill: '#9ca3af' });
             }
         }
 
@@ -331,7 +314,7 @@ export const useChartData = (
 
         if (chartConfig.aggregation === 'count') {
             config['count'] = {
-                label: 'Count', // TODO: Use translation
+                label: t('bitable.chartView.count'),
                 color: currentColors[0],
             };
         } else {

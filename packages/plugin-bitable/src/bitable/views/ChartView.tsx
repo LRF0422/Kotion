@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
     Card,
     CardContent,
@@ -43,6 +43,16 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
     const [configOpen, setConfigOpen] = useState(false);
     const [activeConfigTab, setActiveConfigTab] = useState('basic');
     const [isFullscreen, setIsFullscreen] = useState(false);
+
+    // ESC to exit fullscreen
+    useEffect(() => {
+        if (!isFullscreen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setIsFullscreen(false);
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isFullscreen]);
 
     const chartConfig = view.chartConfig || {
         chartType: ChartType.BAR,

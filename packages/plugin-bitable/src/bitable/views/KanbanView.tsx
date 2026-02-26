@@ -2,6 +2,7 @@ import React, { useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader } from "@kn/ui";
 import { Button, Badge } from "@kn/ui";
 import { Plus } from "@kn/icon";
+import { useTranslation } from "@kn/common";
 import { FieldConfig, RecordData, ViewConfig, SelectOption } from "../../types";
 import { getFieldRenderer } from "../fields/FieldRenderers";
 import {
@@ -19,10 +20,12 @@ interface KanbanViewProps {
     onUpdateRecord: (recordId: string, updates: Partial<RecordData>) => void;
     onDeleteRecord: (recordIds: string[]) => void;
     editable: boolean;
+    onRecordClick?: (record: RecordData) => void;
 }
 
 export const KanbanView: React.FC<KanbanViewProps> = (props) => {
-    const { view, fields, data, onAddRecord, onUpdateRecord, editable } = props;
+    const { view, fields, data, onAddRecord, onUpdateRecord, onDeleteRecord, editable, onRecordClick } = props;
+    const { t } = useTranslation();
 
     const groupByField = fields.find(f => f.id === view.kanbanConfig?.groupByField);
 
@@ -73,7 +76,7 @@ export const KanbanView: React.FC<KanbanViewProps> = (props) => {
     };
 
     const getGroupLabel = (optionId: string) => {
-        if (optionId === 'unassigned') return '未分组';
+        if (optionId === 'unassigned') return t('bitable.kanbanView.uncategorized');
         const option = (groupByField?.options || []).find((o: SelectOption) => o.id === optionId);
         return option?.label || optionId;
     };
@@ -81,14 +84,22 @@ export const KanbanView: React.FC<KanbanViewProps> = (props) => {
     if (!groupByField) {
         return (
             <div className="text-center py-8 text-muted-foreground">
-                请配置看板视图的分组字段
+                {t('bitable.kanbanView.configureGroupField')}
+            </div>
+        );
+    }
+
+    if (groupByField.type !== 'select') {
+        return (
+            <div className="text-center py-8 text-muted-foreground">
+                {t('bitable.kanbanView.notSelectType')}
             </div>
         );
     }
 
     // Render card content
     const renderCardContent = (record: RecordData) => (
-        <Card className="hover:shadow-md transition-shadow bg-background">
+        <Card className="hover:shadow-md transition-shadow bg-background cursor-pointer" onClick={() => onRecordClick?.(record)}>
             <CardContent className="p-3 space-y-2">
                 {fields
                     .filter(f => f.isShow !== false && f.id !== groupByField?.id)

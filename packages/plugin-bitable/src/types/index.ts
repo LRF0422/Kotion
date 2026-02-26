@@ -58,7 +58,7 @@ export interface FieldConfig {
     type: FieldType;
     width?: number;
     isShow?: boolean;
-    options?: SelectOption[] | any;
+    options?: SelectOption[];
     formula?: string;
     relationTableId?: string;
     format?: string;
@@ -173,22 +173,6 @@ export interface YAxisConfig {
     color: string;
     label?: string;
     stackId?: string;  // For stacked charts
-}
-
-// 图表高级配置
-export interface ChartAdvancedConfig {
-    chartHeight?: number;           // Custom chart height
-    isHorizontal?: boolean;         // Horizontal bar chart
-    showDataLabels?: boolean;       // Show values on data points
-    showYAxis?: boolean;            // Show Y axis
-    enableAnimation?: boolean;      // Enable chart animations
-    sortOrder?: 'asc' | 'desc' | 'none';  // Sort data
-    topN?: number;                  // Show top N items only
-    innerRadius?: number;           // For pie/donut charts (0-100)
-    outerRadius?: number;           // For pie/donut charts
-    colorScheme?: 'default' | 'warm' | 'cool' | 'monochrome';  // Color scheme
-    showTrendLine?: boolean;        // Show trend line for line/scatter
-    smoothLine?: boolean;           // Smooth line for line charts
 }
 
 // 筛选配置

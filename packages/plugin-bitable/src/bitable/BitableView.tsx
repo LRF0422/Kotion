@@ -53,19 +53,26 @@ import { FieldConfigPanel } from "./components/FieldConfigPanel";
 import { ExcelImportDialog } from "./components/ExcelImportDialog";
 import { generateRecordId, generateViewId } from "../utils/id";
 import { convertFieldValue, generateSelectOptionsFromData } from "../utils/fieldConversion";
+import { applyFilters, applySorts } from "../utils/dataProcessing";
+import { SortPanel } from "./components/SortPanel";
+import { FilterPanel } from "./components/FilterPanel";
+import { RecordDetailSheet } from "./components/RecordDetailSheet";
 
 export const BitableView: React.FC<NodeViewProps> = (props) => {
     const { node, updateAttributes, deleteNode, editor } = props;
     const attrs = node.attrs as BitableAttrs;
     const { t } = useTranslation();
 
-    const [data, setData] = useState<RecordData[]>(attrs.data || []);
+    const data: RecordData[] = attrs.data || [];
     const [currentViewId, setCurrentViewId] = useState(attrs.currentView);
     const [fieldConfigOpen, setFieldConfigOpen] = useState(false);
     const [excelImportOpen, setExcelImportOpen] = useState(false);
     // 搜索状态
     const [showSearch, setShowSearch] = useState(false);
     const [searchText, setSearchText] = useState('');
+
+    // Record detail
+    const [selectedRecord, setSelectedRecord] = useState<RecordData | null>(null);
 
     // 视图编辑状态
     const [editingViewId, setEditingViewId] = useState<string | null>(null);
@@ -74,10 +81,6 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
     // Synchronize local state with node attributes when they change
-    useEffect(() => {
-        setData(attrs.data || []);
-    }, [attrs.data]);
-
     useEffect(() => {
         setCurrentViewId(attrs.currentView);
     }, [attrs.currentView]);
@@ -127,7 +130,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     }, []);
 
     // 获取当前视图
-    const currentView: any = useMemo(() => {
+    const currentView: ViewConfig = useMemo(() => {
         return attrs.views.find(v => v.id === currentViewId) || attrs.views[0];
     }, [attrs.views, currentViewId]);
 
@@ -156,7 +159,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                     newRecord[field.id] = [];
                     break;
                 case 'id':
-                    newRecord[field.id] = currentData.length + 1;
+                    const existingIds = currentData.map((r: RecordData) => Number(r[field.id]) || 0);
+                    newRecord[field.id] = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
                     break;
                 default:
                     newRecord[field.id] = null;
@@ -164,7 +168,6 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         });
 
         const newData = [...currentData, newRecord];
-        setData(newData);
         updateAttributes({ ...attrs, data: newData });
     }, [attrs, updateAttributes]);
 
@@ -177,7 +180,6 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 ? { ...record, ...updates, updatedTime: new Date().toISOString() }
                 : record
         );
-        setData(newData);
         updateAttributes({ ...attrs, data: newData });
     }, [attrs, updateAttributes]);
 
@@ -186,7 +188,6 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         // Use attrs.data directly to avoid stale closure issues
         const currentData = attrs.data || [];
         const newData = currentData.filter((record: any) => !recordIds.includes(record.id));
-        setData(newData);
         updateAttributes({ ...attrs, data: newData });
     }, [attrs, updateAttributes]);
 
@@ -214,7 +215,6 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             const { [fieldId]: _, ...rest } = record;
             return rest;
         }) as RecordData[];
-        setData(newData);
         updateAttributes({ ...attrs, fields: newFields, data: newData });
     }, [attrs, updateAttributes]);
 
@@ -268,7 +268,6 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             };
         });
 
-        setData(newData);
         updateAttributes({ ...attrs, fields: newFields, data: newData });
     }, [attrs, updateAttributes]);
 
@@ -290,7 +289,6 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         // 合并数据
         const mergedData = [...currentData, ...recordsWithId];
 
-        setData(mergedData);
         updateAttributes({
             ...attrs,
             fields: mergedFields,
@@ -413,12 +411,24 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         updateAttributes({ ...attrs, views: newViews });
     }, [attrs, updateAttributes]);
 
+    // Apply filters and sorts to data
+    const processedData = useMemo(() => {
+        let result = data;
+        if (currentView?.filters?.length) {
+            result = applyFilters(result, currentView.filters, attrs.fields);
+        }
+        if (currentView?.sorts?.length) {
+            result = applySorts(result, currentView.sorts, attrs.fields);
+        }
+        return result;
+    }, [data, currentView?.filters, currentView?.sorts, attrs.fields]);
+
     // 渲染视图内容
     const renderViewContent = () => {
         const viewProps = {
             view: currentView,
             fields: attrs.fields,
-            data: data,
+            data: processedData,
             onAddRecord: handleAddRecord,
             onUpdateRecord: handleUpdateRecord,
             onDeleteRecord: handleDeleteRecord,
@@ -428,11 +438,12 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             onUpdateView: handleUpdateView,
             editable: editor.isEditable,
             editor: editor,
+            onRecordClick: (record: RecordData) => setSelectedRecord(record),
         };
 
         switch (currentView?.type) {
             case ViewType.TABLE:
-                return <TableView {...viewProps} />;
+                return <TableView {...viewProps} searchText={searchText} />;
             case ViewType.KANBAN:
                 return <KanbanView {...viewProps} />;
             case ViewType.GALLERY:
@@ -472,7 +483,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         <NodeViewWrapper className="node-bitable-wrapper" contentEditable={false}>
             <div className="bitable-container min-h-[400px] w-full rounded-lg bg-transparent text-gray-900 dark:text-white">
                 {/* 视图标签页和工具栏 */}
-                <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-[#333]">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-border">
                     {/* 左侧：视图标签 */}
                     <div className="flex items-center gap-1">
                         {/* 左滚动按钮 */}
@@ -480,7 +491,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                             <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-7 w-7 flex-shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                                className="h-7 w-7 flex-shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
                                 onClick={() => scrollViewTabs('left')}
                             >
                                 <ChevronLeft className="h-4 w-4" />
@@ -578,7 +589,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                             {editor.isEditable && (
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]">
+                                        <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent">
                                             <Plus className="h-4 w-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
@@ -619,7 +630,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                             <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-7 w-7 flex-shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                                className="h-7 w-7 flex-shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
                                 onClick={() => scrollViewTabs('right')}
                             >
                                 <ChevronRight className="h-4 w-4" />
@@ -633,35 +644,33 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                         <Button
                             size="icon"
                             variant="ghost"
-                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
                             onClick={() => setFieldConfigOpen(true)}
                         >
                             <EyeOff className="h-4 w-4" />
                         </Button>
 
                         {/* 排序 */}
-                        <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
-                        >
-                            <ArrowUpDown className="h-4 w-4" />
-                        </Button>
+                        <SortPanel
+                            view={currentView}
+                            fields={attrs.fields}
+                            onUpdateView={handleUpdateView}
+                        />
 
                         {/* 筛选 */}
-                        <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
-                        >
-                            <Filter className="h-4 w-4" />
-                        </Button>
+                        <FilterPanel
+                            view={currentView}
+                            fields={attrs.fields}
+                            onUpdateView={handleUpdateView}
+                        />
 
                         {/* 闪电 */}
                         <Button
                             size="icon"
                             variant="ghost"
-                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                            className="h-8 w-8 text-gray-500 dark:text-gray-400 cursor-not-allowed opacity-50"
+                            title={t('bitable.actions.comingSoon')}
+                            disabled
                         >
                             <Zap className="h-4 w-4" />
                         </Button>
@@ -670,7 +679,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                         <Button
                             size="icon"
                             variant="ghost"
-                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
                             onClick={() => setShowSearch(!showSearch)}
                         >
                             <Search className="h-4 w-4" />
@@ -680,7 +689,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                         <Button
                             size="icon"
                             variant="ghost"
-                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
                             onClick={() => setFieldConfigOpen(true)}
                         >
                             <Settings className="h-4 w-4" />
@@ -691,7 +700,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                             <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#333]"
+                                className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
                                 onClick={() => setExcelImportOpen(true)}
                             >
                                 <Upload className="h-4 w-4" />
@@ -706,11 +715,11 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                                         size="sm"
                                         className="ml-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 h-8"
                                     >
-                                        New
+                                        {t('bitable.actions.new')}
                                         <ChevronDown className="h-4 w-4 ml-1" />
                                     </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent className="bg-[#252525] border-[#333] text-white">
+                                <DropdownMenuContent>
                                     <DropdownMenuItem onClick={handleAddRecord}>
                                         <Plus className="h-4 w-4 mr-2" />
                                         {t('bitable.actions.addRecord')}
@@ -724,7 +733,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                             <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-[#333]"
+                                className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-accent"
                                 onClick={deleteNode}
                             >
                                 <Trash2 className="h-4 w-4" />
@@ -735,7 +744,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
                 {/* 搜索框 */}
                 {showSearch && (
-                    <div className="px-4 py-2 border-b border-gray-200 dark:border-[#333]">
+                    <div className="px-4 py-2 border-b border-gray-200 dark:border-border">
                         <Input
                             className="w-64 h-8"
                             placeholder={t('bitable.search.placeholder') || 'Search...'}
@@ -752,9 +761,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 </div>
 
                 {/* 底部统计 */}
-                <div className="px-4 py-3 text-xs text-gray-500 flex items-center justify-between border-t border-gray-200 dark:border-[#333]">
+                <div className="px-4 py-3 text-xs text-gray-500 flex items-center justify-between border-t border-gray-200 dark:border-border">
                     <span>{t('bitable.stats.totalRecords', { count: data.length })}</span>
-                    <span className="text-gray-400 dark:text-gray-600">RANGE 15 days</span>
                 </div>
             </div>
 
@@ -800,6 +808,17 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Record detail panel */}
+            <RecordDetailSheet
+                open={selectedRecord !== null}
+                onOpenChange={(open) => { if (!open) setSelectedRecord(null); }}
+                record={selectedRecord}
+                fields={attrs.fields}
+                onUpdateRecord={handleUpdateRecord}
+                editable={editor.isEditable}
+                editor={editor}
+            />
         </NodeViewWrapper>
     );
 };

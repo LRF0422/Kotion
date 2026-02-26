@@ -282,7 +282,7 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
                         newField.options = Array.from(uniqueValues).slice(0, 20).map((label, i) => ({
                             id: String(i + 1),
                             label,
-                            color: ['#gray', '#blue', '#green', '#yellow', '#red', '#purple'][i % 6],
+                            color: ['#6b7280', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][i % 6],
                         }));
                     }
 
@@ -344,21 +344,21 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
             [FieldType.DATE]: t('bitable.fieldTypes.date'),
             [FieldType.CHECKBOX]: t('bitable.fieldTypes.checkbox'),
             [FieldType.PERSON]: t('bitable.fieldTypes.person'),
-            [FieldType.ATTACHMENT]: 'Attachment',
+            [FieldType.ATTACHMENT]: t('bitable.fieldTypes.attachment'),
             [FieldType.IMAGE]: t('bitable.fieldTypes.image'),
             [FieldType.URL]: t('bitable.fieldTypes.url'),
             [FieldType.EMAIL]: t('bitable.fieldTypes.email'),
             [FieldType.PHONE]: t('bitable.fieldTypes.phone'),
             [FieldType.RATING]: t('bitable.fieldTypes.rating'),
             [FieldType.PROGRESS]: t('bitable.fieldTypes.progress'),
-            [FieldType.FORMULA]: 'Formula',
-            [FieldType.RELATION]: 'Relation',
-            [FieldType.CREATED_TIME]: 'Created Time',
-            [FieldType.UPDATED_TIME]: 'Updated Time',
-            [FieldType.CREATED_BY]: 'Created By',
-            [FieldType.UPDATED_BY]: 'Updated By',
-            [FieldType.AUTO_NUMBER]: 'Auto Number',
-            [FieldType.ID]: 'ID',
+            [FieldType.FORMULA]: t('bitable.fieldTypes.formula'),
+            [FieldType.RELATION]: t('bitable.fieldTypes.relation'),
+            [FieldType.CREATED_TIME]: t('bitable.fieldTypes.createdTime'),
+            [FieldType.UPDATED_TIME]: t('bitable.fieldTypes.updatedTime'),
+            [FieldType.CREATED_BY]: t('bitable.fieldTypes.createdBy'),
+            [FieldType.UPDATED_BY]: t('bitable.fieldTypes.updatedBy'),
+            [FieldType.AUTO_NUMBER]: t('bitable.fieldTypes.autoNumber'),
+            [FieldType.ID]: t('bitable.fieldTypes.id'),
         };
         return typeNames[type] || type;
     };

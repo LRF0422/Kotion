@@ -1,5 +1,6 @@
 import { FieldType, FieldConfig, SelectOption, RecordData } from '../types';
 import { generateOptionId } from './id';
+import { OPTION_COLORS } from './colors';
 
 /**
  * Convert a value from one field type to another
@@ -333,15 +334,10 @@ export function generateSelectOptionsFromData(
         }
     });
 
-    const colors = [
-        '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
-        '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
-    ];
-
     return Array.from(uniqueValues).slice(0, 50).map((label, index) => ({
         id: generateOptionId(),
         label,
-        color: colors[index % colors.length] as string,
+        color: OPTION_COLORS[index % OPTION_COLORS.length] as string,
     }));
 }
 

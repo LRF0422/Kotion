@@ -1,7 +1,10 @@
 import React, { useState } from "react";
 import { ImageIcon } from "@kn/icon";
+import { useTranslation } from "@kn/common";
 import { FieldConfig, RecordData, ViewConfig, FieldType } from "../../types";
 import { cn } from "@kn/ui";
+import { Checkbox } from "@kn/ui";
+import { Rate } from "@kn/ui";
 
 interface GalleryViewProps {
     view: ViewConfig;
@@ -63,11 +66,17 @@ const formatFieldValue = (value: any, field: FieldConfig): string => {
             }
             return '';
         case FieldType.CHECKBOX:
-            return value ? '✓' : '';
-        case FieldType.SELECT:
+            return value ? '\u2713' : '';
+        case FieldType.SELECT: {
+            const opt = field.options?.find((o: any) => o.id === value);
+            return opt?.label || String(value);
+        }
         case FieldType.MULTI_SELECT:
             if (Array.isArray(value)) {
-                return value.join(', ');
+                return value.map((id: string) => {
+                    const opt = field.options?.find((o: any) => o.id === id);
+                    return opt?.label || id;
+                }).join(', ');
             }
             return String(value);
         case FieldType.PROGRESS:
@@ -99,11 +108,14 @@ const GalleryCard: React.FC<{
 
     return (
         <div
-            className="group bg-white dark:bg-[#252525] rounded-lg border border-gray-200 dark:border-[#333] overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md hover:border-gray-300 dark:hover:border-[#444]"
+            role="button"
+            tabIndex={0}
+            className="group bg-card rounded-lg border border-border overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600"
             onClick={onClick}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
         >
             {/* 封面图片区域 */}
-            <div className="relative aspect-[4/3] bg-gray-100 dark:bg-[#1a1a1a] overflow-hidden">
+            <div className="relative aspect-[4/3] bg-gray-100 dark:bg-muted overflow-hidden">
                 {coverUrl && !imageError ? (
                     <>
                         <img
@@ -119,7 +131,7 @@ const GalleryCard: React.FC<{
                         />
                         {!imageLoaded && (
                             <div className="absolute inset-0 flex items-center justify-center">
-                                <div className="w-6 h-6 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                                <div className="w-6 h-6 border-2 border-gray-300 dark:border-gray-600 border-t-transparent rounded-full animate-spin" />
                             </div>
                         )}
                     </>
@@ -160,10 +172,10 @@ const GalleryCard: React.FC<{
                     </div>
                 )}
 
-                {/* 如果没有标题也没有字段显示 */}
+                {/* 如果没有标题也没有字段显示 - use i18n via parent */}
                 {!title && displayFields.length === 0 && (
                     <div className="text-xs text-gray-400 dark:text-gray-500">
-                        无内容
+                        -
                     </div>
                 )}
             </div>
@@ -173,6 +185,7 @@ const GalleryCard: React.FC<{
 
 export const GalleryView: React.FC<GalleryViewProps> = (props) => {
     const { view, fields, data, onRecordClick } = props;
+    const { t } = useTranslation();
 
     const cardSize = view.galleryConfig?.cardSize || 'medium';
     const fitType = view.galleryConfig?.fitType || 'cover';
@@ -218,7 +231,7 @@ export const GalleryView: React.FC<GalleryViewProps> = (props) => {
         return (
             <div className="flex flex-col items-center justify-center py-16 text-gray-400 dark:text-gray-500">
                 <ImageIcon className="h-12 w-12 mb-3" />
-                <p className="text-sm">暂无数据</p>
+                <p className="text-sm">{t('bitable.galleryView.noData')}</p>
             </div>
         );
     }

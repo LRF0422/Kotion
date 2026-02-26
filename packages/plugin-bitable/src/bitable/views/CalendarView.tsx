@@ -8,6 +8,7 @@ import { TEventFormData } from "../components/calendar/schemas";
 import { parseISO, format } from "date-fns";
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Label } from "@kn/ui";
 import { Settings, X } from "@kn/icon";
+import { useTranslation } from "@kn/common";
 import { Editor } from "@kn/editor";
 
 interface CalendarViewProps {
@@ -45,6 +46,7 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
         editor
     } = props;
 
+    const { t } = useTranslation();
     const [showSettings, setShowSettings] = useState(false);
 
     // 用于跟踪待处理的事件数据
@@ -143,11 +145,16 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
                         ? String(record[titleField.id])
                         : `Record ${index + 1}`;
 
-                    // 分配颜色（根据记录索引循环使用颜色）
-                    const color = EVENT_COLORS[index % EVENT_COLORS.length]!;
+                    // 分配颜色（根据 record ID hash 保持稳定）
+                    const colorIdx = Math.abs(record.id.split('').reduce((acc, c) => ((acc << 5) - acc + c.charCodeAt(0)) | 0, 0));
+                    const color = EVENT_COLORS[Math.abs(colorIdx) % EVENT_COLORS.length]!;
+
+                    // Generate stable numeric ID from record.id string hash
+                    const hashId = record.id.split('').reduce((acc, char) => ((acc << 5) - acc + char.charCodeAt(0)) | 0, 0);
+                    const stableId = Math.abs(hashId) || index + 1;
 
                     return {
-                        id: parseInt(record.id) || index + 1,
+                        id: stableId,
                         startDate,
                         endDate,
                         title,
@@ -239,18 +246,18 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
         return (
             <div className="flex flex-col items-center justify-center p-8 space-y-4 text-center">
                 <div className="text-muted-foreground">
-                    <p className="text-lg font-medium mb-2">配置日历视图</p>
-                    <p className="text-sm">请选择一个日期字段来显示日历视图</p>
+                    <p className="text-lg font-medium mb-2">{t('bitable.calendarView.configure')}</p>
+                    <p className="text-sm">{t('bitable.calendarView.configureDesc')}</p>
                 </div>
                 <div className="w-full max-w-xs space-y-4">
                     <div className="space-y-2">
-                        <Label>日期字段 *</Label>
+                        <Label>{t('bitable.calendarView.dateField')}</Label>
                         <Select
                             value={config.dateField}
                             onValueChange={(value) => handleConfigChange('dateField', value)}
                         >
                             <SelectTrigger>
-                                <SelectValue placeholder="选择日期字段" />
+                                <SelectValue placeholder={t('bitable.calendarView.selectDateField')} />
                             </SelectTrigger>
                             <SelectContent>
                                 {dateFields.map(field => (
@@ -270,8 +277,8 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
     if (dateFields.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
-                <p className="text-lg font-medium mb-2">暂无可用日期字段</p>
-                <p className="text-sm">请先添加一个日期类型的字段来使用日历视图</p>
+                <p className="text-lg font-medium mb-2">{t('bitable.calendarView.noDateFields')}</p>
+                <p className="text-sm">{t('bitable.calendarView.noDateFieldsDesc')}</p>
             </div>
         );
     }
@@ -282,20 +289,20 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
             {showSettings && editable && (
                 <div className="p-4 bg-muted/50 space-y-4">
                     <div className="flex items-center justify-between">
-                        <h3 className="font-medium">日历视图设置</h3>
+                        <h3 className="font-medium">{t('bitable.calendarView.settings')}</h3>
                         <Button variant="ghost" size="sm" onClick={() => setShowSettings(false)}>
                             <X className="h-4 w-4" />
                         </Button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
-                            <Label>开始日期字段 *</Label>
+                            <Label>{t('bitable.calendarView.startDateField')}</Label>
                             <Select
                                 value={config.dateField}
                                 onValueChange={(value) => handleConfigChange('dateField', value)}
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder="选择日期字段" />
+                                    <SelectValue placeholder={t('bitable.calendarView.selectDateField')} />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {dateFields.map(field => (
@@ -307,16 +314,16 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>结束日期字段</Label>
+                            <Label>{t('bitable.calendarView.endDateField')}</Label>
                             <Select
                                 value={config.endDateField || ''}
                                 onValueChange={(value) => handleConfigChange('endDateField', value)}
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder="选择结束日期字段（可选）" />
+                                    <SelectValue placeholder={t('bitable.calendarView.selectEndDateField')} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="null">无</SelectItem>
+                                    <SelectItem value="null">{t('bitable.calendarView.noneField')}</SelectItem>
                                     {dateFields.map(field => (
                                         <SelectItem key={field.id} value={field.id}>
                                             {field.title}
@@ -326,16 +333,16 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>标题字段</Label>
+                            <Label>{t('bitable.calendarView.titleField')}</Label>
                             <Select
                                 value={config.titleField || ''}
                                 onValueChange={(value) => handleConfigChange('titleField', value)}
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder="选择标题字段（可选）" />
+                                    <SelectValue placeholder={t('bitable.calendarView.selectTitleField')} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="auto">自动</SelectItem>
+                                    <SelectItem value="auto">{t('bitable.calendarView.auto')}</SelectItem>
                                     {textFields.map(field => (
                                         <SelectItem key={field.id} value={field.id}>
                                             {field.title}

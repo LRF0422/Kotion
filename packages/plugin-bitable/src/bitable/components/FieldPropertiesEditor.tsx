@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { generateOptionId } from "../../utils/id";
+import { getRandomOptionColor } from "../../utils/colors";
+import { useTranslation } from "@kn/common";
 import {
     Accordion,
     AccordionContent,
@@ -33,6 +35,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
     field,
     onUpdateField,
 }) => {
+    const { t } = useTranslation();
     const [newOptionLabel, setNewOptionLabel] = useState("");
 
     // Render properties based on field type
@@ -70,7 +73,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
             const newOption: SelectOption = {
                 id: generateOptionId(),
                 label: newOptionLabel.trim(),
-                color: getRandomColor(),
+                color: getRandomOptionColor(),
             };
 
             onUpdateField({
@@ -94,7 +97,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
         return (
             <div className="space-y-3">
                 <div>
-                    <Label className="text-xs font-semibold">选项列表</Label>
+                    <Label className="text-xs font-semibold">{t('bitable.formats.optionsList')}</Label>
                     <div className="mt-2 space-y-2">
                         {options.map((option) => (
                             <div key={option.id} className="flex items-center gap-2">
@@ -132,7 +135,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
                     <Input
                         value={newOptionLabel}
                         onChange={(e) => setNewOptionLabel(e.target.value)}
-                        placeholder="新选项名称"
+                        placeholder={t('bitable.fieldConfig.newOptionPlaceholder')}
                         className="h-8 flex-1"
                         onKeyDown={(e) => {
                             if (e.key === "Enter") addOption();
@@ -140,7 +143,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
                     />
                     <Button size="sm" onClick={addOption} disabled={!newOptionLabel.trim()}>
                         <Plus className="h-4 w-4 mr-1" />
-                        添加
+                        {t('bitable.actions.add')}
                     </Button>
                 </div>
             </div>
@@ -153,7 +156,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
             <div className="space-y-3">
                 <div>
                     <Label htmlFor="format" className="text-xs">
-                        数字格式
+                        {t('bitable.formats.numberFormat')}
                     </Label>
                     <Select
                         value={field.format || "number"}
@@ -163,10 +166,10 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="number">数字</SelectItem>
-                            <SelectItem value="currency">货币</SelectItem>
-                            <SelectItem value="percent">百分比</SelectItem>
-                            <SelectItem value="decimal">小数</SelectItem>
+                            <SelectItem value="number">{t('bitable.formats.number')}</SelectItem>
+                            <SelectItem value="currency">{t('bitable.formats.currency')}</SelectItem>
+                            <SelectItem value="percent">{t('bitable.formats.percent')}</SelectItem>
+                            <SelectItem value="decimal">{t('bitable.formats.decimal')}</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -180,7 +183,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
             <div className="space-y-3">
                 <div>
                     <Label htmlFor="dateFormat" className="text-xs">
-                        日期格式
+                        {t('bitable.formats.dateFormat')}
                     </Label>
                     <Select
                         value={field.format || "yyyy-MM-dd"}
@@ -211,7 +214,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
             <div className="space-y-3">
                 <div>
                     <Label htmlFor="textFormat" className="text-xs">
-                        文本类型
+                        {t('bitable.formats.textType')}
                     </Label>
                     <Select
                         value={field.format || "single"}
@@ -221,8 +224,8 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="single">单行文本</SelectItem>
-                            <SelectItem value="multi">多行文本</SelectItem>
+                            <SelectItem value="single">{t('bitable.formats.singleLine')}</SelectItem>
+                            <SelectItem value="multi">{t('bitable.formats.multiLine')}</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -236,7 +239,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
             <div className="space-y-3">
                 <div>
                     <Label htmlFor="maxRating" className="text-xs">
-                        最大评分
+                        {t('bitable.formats.maxRating')}
                     </Label>
                     <Select
                         value={field.format || "5"}
@@ -246,8 +249,8 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="5">5星</SelectItem>
-                            <SelectItem value="10">10星</SelectItem>
+                            <SelectItem value="5">{t('bitable.formats.stars5')}</SelectItem>
+                            <SelectItem value="10">{t('bitable.formats.stars10')}</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -261,7 +264,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
             <div className="space-y-3">
                 <div>
                     <Label htmlFor="progressFormat" className="text-xs">
-                        进度显示
+                        {t('bitable.formats.progressDisplay')}
                     </Label>
                     <Select
                         value={field.format || "bar"}
@@ -271,9 +274,9 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="bar">进度条</SelectItem>
-                            <SelectItem value="ring">环形</SelectItem>
-                            <SelectItem value="number">数字</SelectItem>
+                            <SelectItem value="bar">{t('bitable.formats.progressBar')}</SelectItem>
+                            <SelectItem value="ring">{t('bitable.formats.progressRing')}</SelectItem>
+                            <SelectItem value="number">{t('bitable.formats.progressNumber')}</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -287,7 +290,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
             <div className="space-y-3">
                 <div className="flex items-center justify-between">
                     <Label htmlFor="openInNewTab" className="text-xs">
-                        新标签页打开
+                        {t('bitable.formats.newTabOpen')}
                     </Label>
                     <Switch
                         id="openInNewTab"
@@ -307,13 +310,13 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
             <div className="space-y-3">
                 <div>
                     <Label htmlFor="description" className="text-xs">
-                        字段描述
+                        {t('bitable.fieldConfig.fieldDescription')}
                     </Label>
                     <Textarea
                         id="description"
                         value={field.description || ""}
                         onChange={(e) => onUpdateField({ description: e.target.value })}
-                        placeholder="为字段添加描述信息..."
+                        placeholder={t('bitable.fieldConfig.fieldDescriptionPlaceholder')}
                         className="mt-1 min-h-[60px]"
                     />
                 </div>
@@ -327,7 +330,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
                 <AccordionTrigger className="text-xs font-semibold py-2">
                     <div className="flex items-center gap-2">
                         <Settings2 className="h-3 w-3" />
-                        字段属性配置
+                        {t('bitable.fieldConfig.fieldProperties')}
                     </div>
                 </AccordionTrigger>
                 <AccordionContent>
@@ -340,7 +343,7 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
                         {/* Common properties */}
                         <div>
                             <Label htmlFor="width" className="text-xs">
-                                列宽
+                                {t('bitable.fieldConfig.columnWidth')}
                             </Label>
                             <Input
                                 id="width"
@@ -357,13 +360,13 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
 
                         <div>
                             <Label htmlFor="description" className="text-xs">
-                                字段描述
+                                {t('bitable.fieldConfig.fieldDescription')}
                             </Label>
                             <Textarea
                                 id="description"
                                 value={field.description || ""}
                                 onChange={(e) => onUpdateField({ description: e.target.value })}
-                                placeholder="为字段添加描述信息..."
+                                placeholder={t('bitable.fieldConfig.fieldDescriptionPlaceholder')}
                                 className="mt-1 min-h-[60px]"
                             />
                         </div>
@@ -372,19 +375,4 @@ export const FieldPropertiesEditor: React.FC<FieldPropertiesEditorProps> = ({
             </AccordionItem>
         </Accordion>
     );
-};
-
-// Helper function to generate random colors for options
-const getRandomColor = (): string => {
-    const colors = [
-        "#3b82f6", // blue
-        "#10b981", // green
-        "#f59e0b", // yellow
-        "#ef4444", // red
-        "#8b5cf6", // purple
-        "#ec4899", // pink
-        "#14b8a6", // teal
-        "#f97316", // orange
-    ];
-    return colors[Math.floor(Math.random() * colors.length)] as string;
 };

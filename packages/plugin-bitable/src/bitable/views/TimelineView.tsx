@@ -574,8 +574,6 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                                 <SelectContent>
                                     <SelectItem value="null">无</SelectItem>
                                     {dateFields.map(field => {
-                                        console.log('field', dateFields);
-
                                         return (
                                             <SelectItem key={field.id} value={field.id}>
                                                 {field.title}

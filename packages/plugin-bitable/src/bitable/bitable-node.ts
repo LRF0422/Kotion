@@ -35,9 +35,9 @@ const getDefaultFields = (customFields?: string[]) => {
             width: 150,
             isShow: true,
             options: [
-                { id: '1', label: '未开始', color: '#gray' },
-                { id: '2', label: '进行中', color: '#blue' },
-                { id: '3', label: '已完成', color: '#green' },
+                { id: '1', label: '未开始', color: '#6b7280' },
+                { id: '2', label: '进行中', color: '#3b82f6' },
+                { id: '3', label: '已完成', color: '#10b981' },
             ]
         },
         {
@@ -47,9 +47,9 @@ const getDefaultFields = (customFields?: string[]) => {
             width: 120,
             isShow: true,
             options: [
-                { id: '1', label: '低', color: '#green' },
-                { id: '2', label: '中', color: '#yellow' },
-                { id: '3', label: '高', color: '#red' },
+                { id: '1', label: '低', color: '#10b981' },
+                { id: '2', label: '中', color: '#f59e0b' },
+                { id: '3', label: '高', color: '#ef4444' },
             ]
         },
         {
@@ -177,15 +177,16 @@ export const Bitable = Node.create({
     atom: true,
 
     addAttributes() {
+        const defaultViews = getDefaultViews();
         return {
             fields: {
                 default: getDefaultFields(),
             },
             views: {
-                default: getDefaultViews(),
+                default: defaultViews,
             },
             currentView: {
-                default: getDefaultViews()[0]?.id,
+                default: defaultViews[0]?.id,
             },
             data: {
                 default: [],
@@ -214,12 +215,13 @@ export const Bitable = Node.create({
     addCommands() {
         return {
             insertBitable: (customFields?: string[], data: any[] = []) => ({ commands }) => {
+                const views = getDefaultViews();
                 return commands.insertContent({
                     type: this.name,
                     attrs: {
                         fields: getDefaultFields(customFields),
-                        views: getDefaultViews(),
-                        currentView: getDefaultViews()[0]?.id,
+                        views,
+                        currentView: views[0]?.id,
                         data: data
                     }
                 });

@@ -22,8 +22,10 @@ import {
     Circle,
     FileText,
     MessageSquare,
-    ImageIcon
+    ImageIcon,
+    Maximize2,
 } from "@kn/icon";
+import { useTranslation } from "@kn/common";
 import { FieldConfig, RecordData, ViewConfig, FieldType } from "../../types";
 import DataGrid, { SelectColumn } from 'react-data-grid';
 import 'react-data-grid/lib/styles.css';
@@ -34,38 +36,38 @@ import { getFieldRenderer, getFieldEditor } from "../fields/FieldRenderers";
 const getFieldTypeIcon = (type: FieldType) => {
     switch (type) {
         case FieldType.TEXT:
-            return <Type className="h-3.5 w-3.5 text-gray-500" />;
+            return <Type className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         case FieldType.NUMBER:
-            return <Hash className="h-3.5 w-3.5 text-gray-500" />;
+            return <Hash className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         case FieldType.DATE:
-            return <Calendar className="h-3.5 w-3.5 text-gray-500" />;
+            return <Calendar className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         case FieldType.CHECKBOX:
-            return <CheckSquare className="h-3.5 w-3.5 text-gray-500" />;
+            return <CheckSquare className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         case FieldType.URL:
-            return <Link className="h-3.5 w-3.5 text-gray-500" />;
+            return <Link className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         case FieldType.EMAIL:
-            return <Mail className="h-3.5 w-3.5 text-gray-500" />;
+            return <Mail className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         case FieldType.PHONE:
-            return <Phone className="h-3.5 w-3.5 text-gray-500" />;
+            return <Phone className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         case FieldType.RATING:
-            return <Star className="h-3.5 w-3.5 text-gray-500" />;
+            return <Star className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         case FieldType.PROGRESS:
-            return <BarChart2 className="h-3.5 w-3.5 text-gray-500" />;
+            return <BarChart2 className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         case FieldType.SELECT:
         case FieldType.MULTI_SELECT:
-            return <Circle className="h-3.5 w-3.5 text-gray-500" />;
+            return <Circle className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         case FieldType.IMAGE:
-            return <ImageIcon className="h-3.5 w-3.5 text-gray-500" />;
+            return <ImageIcon className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         case FieldType.ATTACHMENT:
-            return <Paperclip className="h-3.5 w-3.5 text-gray-500" />;
+            return <Paperclip className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         case FieldType.CREATED_TIME:
         case FieldType.UPDATED_TIME:
-            return <Clock className="h-3.5 w-3.5 text-gray-500" />;
+            return <Clock className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         case FieldType.ID:
         case FieldType.AUTO_NUMBER:
-            return <Hash className="h-3.5 w-3.5 text-gray-500" />;
+            return <Hash className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
         default:
-            return <Type className="h-3.5 w-3.5 text-gray-500" />;
+            return <Type className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />;
     }
 };
 
@@ -82,6 +84,8 @@ interface TableViewProps {
     onUpdateView: (viewId: string, updates: Partial<ViewConfig>) => void;
     editable: boolean;
     editor?: Editor;
+    searchText?: string;
+    onRecordClick?: (record: RecordData) => void;
 }
 
 export const TableView: React.FC<TableViewProps> = (props) => {
@@ -92,12 +96,15 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         onUpdateRecord,
         onDeleteRecord,
         editable,
-        editor
+        editor,
+        searchText: searchTextProp,
+        onRecordClick
     } = props;
 
     const { theme } = useTheme();
+    const { t } = useTranslation();
     const [selectedRows, setSelectedRows] = useState<ReadonlySet<string>>(new Set());
-    const [searchText, setSearchText] = useState('');
+    const searchText = searchTextProp || '';
 
     // Use ref to store latest onUpdateRecord to avoid stale closure without triggering re-renders
     const onUpdateRecordRef = useRef(onUpdateRecord);
@@ -142,6 +149,22 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                 },
                 renderCell: (cellProps: any) => {
                     const Renderer = getFieldRenderer(field.type);
+                    if (field.type === FieldType.ID) {
+                        return (
+                            <div className="flex items-center h-full py-1 group/id">
+                                <Renderer value={cellProps.row[field.id]} field={field} />
+                                <button
+                                    className="ml-auto opacity-0 group-hover/id:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 dark:hover:bg-accent"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onRecordClick?.(cellProps.row);
+                                    }}
+                                >
+                                    <Maximize2 className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" />
+                                </button>
+                            </div>
+                        );
+                    }
                     return (
                         <div className="flex items-center h-full py-1">
                             <Renderer value={cellProps.row[field.id]} field={field} />
@@ -149,16 +172,16 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                     );
                 },
                 renderEditCell: (editProps: any) => {
-                    const Editor = getFieldEditor(field.type);
+                    const EditorComponent = getFieldEditor(field.type);
+                    const isSelectType = field.type === FieldType.SELECT;
                     return (
-                        <Editor
+                        <EditorComponent
                             value={editProps.row[field.id]}
                             field={field}
-                            onChange={(value: any) => {
-                                // Update the row in DataGrid's local state
-                                const updatedRow = { ...editProps.row, [field.id]: value };
-                                // Pass false to allow continuous editing without committing
-                                editProps.onRowChange(updatedRow, false);
+                            onChange={(newValue: any) => {
+                                const updatedRow = { ...editProps.row, [field.id]: newValue };
+                                // 单选字段选中后直接提交关闭编辑态
+                                editProps.onRowChange(updatedRow, isSelectType);
                             }}
                             editor={editor}
                         />
@@ -178,18 +201,18 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         <div className="bitable-table-view">
             {/* 工具栏 - 已移到BitableView */}
             {editable && selectedRows.size > 0 && (
-                <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-[#252525] border-b border-gray-200 dark:border-[#333]">
+                <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-card border-b border-gray-200 dark:border-border">
                     <Button
                         size="sm"
                         variant="ghost"
-                        className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-[#333]"
+                        className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-accent"
                         onClick={handleDeleteSelected}
                     >
                         <Trash2 className="h-4 w-4 mr-1" />
-                        删除 ({selectedRows.size})
+                        {t('bitable.tableView.deleteSelected', { count: selectedRows.size })}
                     </Button>
-                    <span className="text-sm text-gray-500">
-                        已选择 {selectedRows.size} 项
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {t('bitable.tableView.selectedCount', { count: selectedRows.size })}
                     </span>
                 </div>
             )}
@@ -231,11 +254,11 @@ export const TableView: React.FC<TableViewProps> = (props) => {
             {/* 添加新行按钮 */}
             {editable && (
                 <div
-                    className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:bg-gray-50 dark:hover:bg-[#252525] cursor-pointer transition-colors border-b border-gray-200 dark:border-[#333]"
+                    className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:bg-gray-50 dark:hover:bg-card cursor-pointer transition-colors border-b border-gray-200 dark:border-border"
                     onClick={onAddRecord}
                 >
                     <Plus className="h-4 w-4" />
-                    <span className="text-sm">New page</span>
+                    <span className="text-sm">{t('bitable.actions.newPage')}</span>
                 </div>
             )}
 
@@ -334,6 +357,16 @@ export const TableView: React.FC<TableViewProps> = (props) => {
 
                 .bitable-data-grid.rdg-dark .rdg-row-selected:hover {
                     background-color: rgba(59, 130, 246, 0.15);
+                }
+
+                /* 允许编辑单元格中的下拉菜单溢出 */
+                .bitable-data-grid .rdg-cell[aria-selected="true"] {
+                    overflow: visible;
+                    position: relative;
+                }
+
+                .bitable-data-grid .rdg-cell-editor {
+                    overflow: visible;
                 }
             `}</style>
         </div>

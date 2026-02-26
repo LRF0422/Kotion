@@ -4,9 +4,11 @@ import { FieldType, FieldConfig, SelectOption } from "../../types";
 import { Badge, Checkbox, Slider, Input, Button } from "@kn/ui";
 import { Star, Link as LinkIcon, Mail, Phone, ImageIcon, X, Upload, Folder } from "@kn/icon";
 import { DateTimePicker, Rate } from "@kn/ui";
+import { useTranslation } from "@kn/common";
 import { format } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { zhCN, enUS } from "date-fns/locale";
 import { useFileService } from "@kn/core";
+import { getTagStyle } from "../../utils/colors";
 
 // 字段渲染器接口
 interface FieldRendererProps {
@@ -40,19 +42,35 @@ export const TextEditor: React.FC<FieldEditorProps> = ({ value, onChange, onComm
     };
 
     return (
-        <Input
+        <input
             autoFocus
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="h-full border-0 bg-white dark:bg-[#252525] text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
+            className="w-full h-full px-2 bg-transparent text-sm text-gray-900 dark:text-white outline-none caret-blue-500 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+            placeholder="..."
         />
     );
 };
 
 // 数字字段
-export const NumberRenderer: React.FC<FieldRendererProps> = ({ value }) => {
-    return <div className="text-sm text-gray-900 dark:text-white">{typeof value === 'number' ? value : ''}</div>;
+export const NumberRenderer: React.FC<FieldRendererProps> = ({ value, field }) => {
+    if (typeof value !== 'number') return <div></div>;
+    let formatted: string;
+    switch (field.format) {
+        case 'currency':
+            formatted = `¥${value.toLocaleString()}`;
+            break;
+        case 'percent':
+            formatted = `${value}%`;
+            break;
+        case 'decimal':
+            formatted = value.toFixed(2);
+            break;
+        default:
+            formatted = value.toLocaleString();
+    }
+    return <div className="text-sm text-gray-900 dark:text-white text-right tabular-nums">{formatted}</div>;
 };
 
 export const NumberEditor: React.FC<FieldEditorProps> = ({ value, onChange, onCommit }) => {
@@ -79,7 +97,7 @@ export const NumberEditor: React.FC<FieldEditorProps> = ({ value, onChange, onCo
             value={value || 0}
             onChange={(e) => onChange(Number(e.target.value))}
             onKeyDown={handleKeyDown}
-            className="h-full border-0 bg-white dark:bg-[#252525] text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
+            className="h-full border-0 bg-white dark:bg-card text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
         />
     );
 };
@@ -88,22 +106,6 @@ export const NumberEditor: React.FC<FieldEditorProps> = ({ value, onChange, onCo
 export const SelectRenderer: React.FC<FieldRendererProps> = ({ value, field }) => {
     const option = field.options?.find((opt: SelectOption) => opt.id === value);
     if (!option) return <div></div>;
-
-    // Notion-style tag colors
-    const getTagStyle = (color: string) => {
-        // Map colors to Notion-like tag styles
-        const colorMap: Record<string, { bg: string; text: string }> = {
-            '#3b82f6': { bg: 'rgba(59, 130, 246, 0.2)', text: '#60a5fa' },
-            '#10b981': { bg: 'rgba(16, 185, 129, 0.2)', text: '#34d399' },
-            '#f59e0b': { bg: 'rgba(245, 158, 11, 0.2)', text: '#fbbf24' },
-            '#ef4444': { bg: 'rgba(239, 68, 68, 0.2)', text: '#f87171' },
-            '#8b5cf6': { bg: 'rgba(139, 92, 246, 0.2)', text: '#a78bfa' },
-            '#ec4899': { bg: 'rgba(236, 72, 153, 0.2)', text: '#f472b6' },
-            '#14b8a6': { bg: 'rgba(20, 184, 166, 0.2)', text: '#2dd4bf' },
-            '#f97316': { bg: 'rgba(249, 115, 22, 0.2)', text: '#fb923c' },
-        };
-        return colorMap[color] || { bg: `${color}20`, text: color };
-    };
 
     const style = getTagStyle(option.color);
 
@@ -121,8 +123,8 @@ export const SelectRenderer: React.FC<FieldRendererProps> = ({ value, field }) =
 };
 
 export const SelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChange }) => {
-    const [isOpen, setIsOpen] = React.useState(true);
     const [highlightedIndex, setHighlightedIndex] = React.useState(0);
+    const containerRef = React.useRef<HTMLDivElement>(null);
     const options = field.options || [];
 
     React.useEffect(() => {
@@ -130,11 +132,13 @@ export const SelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChang
         if (currentIndex >= 0) {
             setHighlightedIndex(currentIndex);
         }
-    }, [value, options]);
+    }, []);
+
+    React.useEffect(() => {
+        containerRef.current?.focus();
+    }, []);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (!isOpen) return;
-
         switch (e.key) {
             case 'ArrowDown':
                 e.preventDefault();
@@ -148,39 +152,48 @@ export const SelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChang
                 e.preventDefault();
                 if (highlightedIndex >= 0 && highlightedIndex < options.length) {
                     onChange(options[highlightedIndex].id);
-                    setIsOpen(false);
                 }
                 break;
             case 'Escape':
                 e.preventDefault();
-                setIsOpen(false);
+                containerRef.current?.blur();
                 break;
         }
     };
 
     return (
         <div
-            className="w-full h-full relative"
+            ref={containerRef}
+            className="absolute left-0 top-full z-50 w-max min-w-full bg-popover border border-border rounded-md shadow-md p-1 space-y-0.5 overflow-auto max-h-[200px]"
             onKeyDown={handleKeyDown}
             tabIndex={0}
         >
-            <select
-                value={value || ''}
-                onChange={(e) => {
-                    onChange(e.target.value);
-                    setIsOpen(false);
-                }}
-                onFocus={() => setIsOpen(true)}
-                className="w-full h-full px-2 border-0 bg-white dark:bg-[#252525] text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500 rounded"
-                autoFocus
-            >
-                <option value="">请选择</option>
-                {options.map((opt: SelectOption) => (
-                    <option key={opt.id} value={opt.id}>
-                        {opt.label}
-                    </option>
-                ))}
-            </select>
+            {options.map((opt: SelectOption, index: number) => {
+                const style = getTagStyle(opt.color);
+                const isSelected = opt.id === value;
+                return (
+                    <div
+                        key={opt.id}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                            index === highlightedIndex ? 'bg-accent' : 'hover:bg-accent/50'
+                        }`}
+                        onClick={() => onChange(opt.id)}
+                        onMouseEnter={() => setHighlightedIndex(index)}
+                    >
+                        <span
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                            style={{ backgroundColor: style.bg, color: style.text }}
+                        >
+                            {opt.label}
+                        </span>
+                        {isSelected && (
+                            <svg className="ml-auto h-3.5 w-3.5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                        )}
+                    </div>
+                );
+            })}
         </div>
     );
 };
@@ -188,20 +201,6 @@ export const SelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChang
 // 多选字段
 export const MultiSelectRenderer: React.FC<FieldRendererProps> = ({ value, field }) => {
     if (!Array.isArray(value) || value.length === 0) return <div></div>;
-
-    const getTagStyle = (color: string) => {
-        const colorMap: Record<string, { bg: string; text: string }> = {
-            '#3b82f6': { bg: 'rgba(59, 130, 246, 0.2)', text: '#60a5fa' },
-            '#10b981': { bg: 'rgba(16, 185, 129, 0.2)', text: '#34d399' },
-            '#f59e0b': { bg: 'rgba(245, 158, 11, 0.2)', text: '#fbbf24' },
-            '#ef4444': { bg: 'rgba(239, 68, 68, 0.2)', text: '#f87171' },
-            '#8b5cf6': { bg: 'rgba(139, 92, 246, 0.2)', text: '#a78bfa' },
-            '#ec4899': { bg: 'rgba(236, 72, 153, 0.2)', text: '#f472b6' },
-            '#14b8a6': { bg: 'rgba(20, 184, 166, 0.2)', text: '#2dd4bf' },
-            '#f97316': { bg: 'rgba(249, 115, 22, 0.2)', text: '#fb923c' },
-        };
-        return colorMap[color] || { bg: `${color}20`, text: color };
-    };
 
     return (
         <div className="flex flex-wrap gap-1">
@@ -229,9 +228,22 @@ export const MultiSelectRenderer: React.FC<FieldRendererProps> = ({ value, field
 export const MultiSelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChange }) => {
     const selectedValues = Array.isArray(value) ? value : [];
     const [focusedIndex, setFocusedIndex] = React.useState(0);
+    const containerRef = React.useRef<HTMLDivElement>(null);
     const options = field.options || [];
 
-    const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
+    React.useEffect(() => {
+        containerRef.current?.focus();
+    }, []);
+
+    const toggleOption = (optId: string) => {
+        if (selectedValues.includes(optId)) {
+            onChange(selectedValues.filter((id) => id !== optId));
+        } else {
+            onChange([...selectedValues, optId]);
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
         switch (e.key) {
             case 'ArrowDown':
                 e.preventDefault();
@@ -244,65 +256,81 @@ export const MultiSelectEditor: React.FC<FieldEditorProps> = ({ value, field, on
             case 'Enter':
             case ' ':
                 e.preventDefault();
-                const opt = options[index];
-                if (opt) {
-                    if (selectedValues.includes(opt.id)) {
-                        onChange(selectedValues.filter((id) => id !== opt.id));
-                    } else {
-                        onChange([...selectedValues, opt.id]);
-                    }
+                if (focusedIndex >= 0 && focusedIndex < options.length) {
+                    toggleOption(options[focusedIndex].id);
                 }
+                break;
+            case 'Escape':
+                e.preventDefault();
+                containerRef.current?.blur();
                 break;
         }
     };
 
     return (
-        <div className="p-2 space-y-1 bg-white dark:bg-[#252525]">
-            {options.map((opt: SelectOption, index: number) => (
-                <label
-                    key={opt.id}
-                    className="flex items-center gap-2 cursor-pointer text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-[#333] p-1 rounded focus-within:ring-2 focus-within:ring-blue-500"
-                    onKeyDown={(e) => handleKeyDown(e, index)}
-                    tabIndex={0}
-                >
-                    <Checkbox
-                        checked={selectedValues.includes(opt.id)}
-                        onCheckedChange={(checked) => {
-                            if (checked) {
-                                onChange([...selectedValues, opt.id]);
-                            } else {
-                                onChange(selectedValues.filter((id) => id !== opt.id));
-                            }
-                        }}
-                    />
-                    <span className="text-sm">{opt.label}</span>
-                </label>
-            ))}
+        <div
+            ref={containerRef}
+            className="absolute left-0 top-full z-50 w-max min-w-full bg-popover border border-border rounded-md shadow-md p-1 space-y-0.5 overflow-auto max-h-[200px]"
+            onKeyDown={handleKeyDown}
+            tabIndex={0}
+        >
+            {options.map((opt: SelectOption, index: number) => {
+                const isChecked = selectedValues.includes(opt.id);
+                const style = getTagStyle(opt.color);
+                return (
+                    <div
+                        key={opt.id}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                            index === focusedIndex ? 'bg-accent' : 'hover:bg-accent/50'
+                        }`}
+                        onClick={() => toggleOption(opt.id)}
+                        onMouseEnter={() => setFocusedIndex(index)}
+                    >
+                        <Checkbox
+                            checked={isChecked}
+                            className="pointer-events-none"
+                        />
+                        <span
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                            style={{ backgroundColor: style.bg, color: style.text }}
+                        >
+                            {opt.label}
+                        </span>
+                    </div>
+                );
+            })}
         </div>
     );
 };
 
+// Helper to get date-fns locale based on i18n language
+const useDateLocale = () => {
+    const { i18n } = useTranslation();
+    return i18n.language?.startsWith('zh') ? zhCN : enUS;
+};
+
 // 日期字段
 export const DateRenderer: React.FC<FieldRendererProps> = ({ value, field }) => {
+    const locale = useDateLocale();
     if (!value) return <div></div>;
     try {
         const dateFormat = field.format || 'yyyy-MM-dd';
-        // Use a more readable format like "September 12, 2024"
         const formatStr = dateFormat.includes('HH')
             ? 'MMMM d, yyyy h:mm a'
             : 'MMMM d, yyyy';
-        return <div className="text-sm text-gray-600 dark:text-gray-400">{format(new Date(value), formatStr, { locale: zhCN })}</div>;
+        return <div className="text-sm text-gray-600 dark:text-gray-400">{format(new Date(value), formatStr, { locale })}</div>;
     } catch {
         return <div></div>;
     }
 };
 
 export const DateEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
+    const locale = useDateLocale();
     return (
         <DateTimePicker
             value={value ? new Date(value) : undefined}
             onChange={(date) => onChange(date?.toISOString())}
-            locale={zhCN}
+            locale={locale}
             weekStartsOn={1}
             showWeekNumber={true}
             showOutsideDays={true}
@@ -313,7 +341,7 @@ export const DateEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
 
 // 复选框字段
 export const CheckboxRenderer: React.FC<FieldRendererProps> = ({ value }) => {
-    return <Checkbox checked={Boolean(value)} disabled className="border-gray-600" />;
+    return <Checkbox checked={Boolean(value)} disabled className="border-gray-400 dark:border-gray-500" />;
 };
 
 export const CheckboxEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
@@ -321,8 +349,30 @@ export const CheckboxEditor: React.FC<FieldEditorProps> = ({ value, onChange }) 
 };
 
 // 进度字段
-export const ProgressRenderer: React.FC<FieldRendererProps> = ({ value }) => {
+export const ProgressRenderer: React.FC<FieldRendererProps> = ({ value, field }) => {
     const progress = typeof value === 'number' ? value : 0;
+
+    if (field.format === 'ring') {
+        const radius = 12;
+        const circumference = 2 * Math.PI * radius;
+        const offset = circumference - (progress / 100) * circumference;
+        return (
+            <div className="flex items-center gap-1.5">
+                <svg width="30" height="30" viewBox="0 0 30 30">
+                    <circle cx="15" cy="15" r={radius} fill="none" stroke="currentColor" className="text-gray-200 dark:text-gray-700" strokeWidth="3" />
+                    <circle cx="15" cy="15" r={radius} fill="none" stroke="#3b82f6" strokeWidth="3"
+                        strokeDasharray={circumference} strokeDashoffset={offset}
+                        strokeLinecap="round" transform="rotate(-90 15 15)" />
+                </svg>
+                <span className="text-xs text-gray-600 dark:text-gray-400">{progress}%</span>
+            </div>
+        );
+    }
+
+    if (field.format === 'number') {
+        return <div className="text-sm text-gray-900 dark:text-white tabular-nums">{progress}%</div>;
+    }
+
     return (
         <div className="flex items-center gap-2">
             <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -400,7 +450,7 @@ export const URLEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
             placeholder="https://"
-            className="h-full border-0 bg-white dark:bg-[#252525] text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
+            className="h-full border-0 bg-white dark:bg-card text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
         />
     );
 };
@@ -423,7 +473,7 @@ export const EmailEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => 
             type="email"
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
-            className="h-full border-0 bg-white dark:bg-[#252525] text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
+            className="h-full border-0 bg-white dark:bg-card text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
         />
     );
 };
@@ -446,29 +496,29 @@ export const PhoneEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => 
             type="tel"
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
-            className="h-full border-0 bg-white dark:bg-[#252525] text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
+            className="h-full border-0 bg-white dark:bg-card text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
         />
     );
 };
 
 // ID字段（只读）
 export const IDRenderer: React.FC<FieldRendererProps> = ({ value }) => {
-    return <div className="text-sm font-mono text-gray-500 dark:text-gray-500">{value}</div>;
+    return <div className="text-sm font-mono text-gray-500 dark:text-gray-400">{value}</div>;
 };
 
 export const IDEditor: React.FC<FieldEditorProps> = ({ value }) => {
-    return <div className="text-sm font-mono text-gray-500 p-2">{value}</div>;
+    return <div className="text-sm font-mono text-gray-500 dark:text-gray-400 p-2">{value}</div>;
 };
 
 // 图片字段
 export const ImageRenderer: React.FC<FieldRendererProps> = ({ value, field }) => {
-    if (!value) return <div className="text-sm text-gray-400">-</div>;
+    if (!value) return <div className="text-sm text-gray-400 dark:text-gray-500">-</div>;
 
     // 支持单个图片URL或图片数组
     const images = Array.isArray(value) ? value : [value];
     const firstImage = images[0];
 
-    if (!firstImage) return <div className="text-sm text-gray-400">-</div>;
+    if (!firstImage) return <div className="text-sm text-gray-400 dark:text-gray-500">-</div>;
 
     // 解析format设置: "single:small" | "multiple:medium" etc.
     const formatParts = field.format?.split(':') || ['multiple', 'medium'];
@@ -494,7 +544,7 @@ export const ImageRenderer: React.FC<FieldRendererProps> = ({ value, field }) =>
                 }}
             />
             {images.length > 1 && (
-                <span className="text-xs text-gray-500">+{images.length - 1}</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">+{images.length - 1}</span>
             )}
         </div>
     );
@@ -606,7 +656,7 @@ export const ImageEditor: React.FC<FieldEditorProps> = ({ value, field, onChange
     };
 
     return (
-        <div className="space-y-2 bg-white dark:bg-[#252525] min-w-[200px] w-max">
+        <div className="space-y-2 bg-white dark:bg-card min-w-[200px] w-max">
             {/* 已添加的图片 */}
             {images.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
@@ -723,6 +773,9 @@ export function getFieldRenderer(fieldType: FieldType): React.FC<FieldRendererPr
         case FieldType.ID:
         case FieldType.AUTO_NUMBER:
             return IDRenderer;
+        case FieldType.CREATED_TIME:
+        case FieldType.UPDATED_TIME:
+            return DateRenderer;
         default:
             return TextRenderer;
     }
@@ -757,7 +810,9 @@ export function getFieldEditor(fieldType: FieldType): React.FC<FieldEditorProps>
             return ImageEditor;
         case FieldType.ID:
         case FieldType.AUTO_NUMBER:
-            return IDEditor;
+        case FieldType.CREATED_TIME:
+        case FieldType.UPDATED_TIME:
+            return IDEditor; // Read-only
         default:
             return TextEditor;
     }

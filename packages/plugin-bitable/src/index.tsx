@@ -29,6 +29,7 @@ export const bitable = new BitablePlugin({
                     "actions": {
                         "addView": "Add View",
                         "deleteView": "Delete View",
+                        "renameView": "Rename View",
                         "configureColumns": "Configure Columns",
                         "addRecord": "Add Record",
                         "delete": "Delete",
@@ -36,7 +37,21 @@ export const bitable = new BitablePlugin({
                         "confirm": "Confirm",
                         "save": "Save",
                         "add": "Add",
-                        "importExcel": "Import Excel"
+                        "importExcel": "Import Excel",
+                        "new": "New",
+                        "newPage": "New page",
+                        "comingSoon": "Coming soon"
+                    },
+                    // Dialog
+                    "dialog": {
+                        "deleteViewTitle": "Delete View",
+                        "deleteViewDescription": "Are you sure you want to delete this view? This action cannot be undone.",
+                        "cancel": "Cancel",
+                        "delete": "Delete"
+                    },
+                    // Search
+                    "search": {
+                        "placeholder": "Search..."
                     },
                     // Record stats
                     "stats": {
@@ -56,7 +71,16 @@ export const bitable = new BitablePlugin({
                         "url": "URL",
                         "email": "Email",
                         "phone": "Phone",
-                        "person": "Person"
+                        "person": "Person",
+                        "attachment": "Attachment",
+                        "formula": "Formula",
+                        "relation": "Relation",
+                        "createdTime": "Created Time",
+                        "updatedTime": "Updated Time",
+                        "createdBy": "Created By",
+                        "updatedBy": "Updated By",
+                        "autoNumber": "Auto Number",
+                        "id": "ID"
                     },
                     // Field configuration
                     "fieldConfig": {
@@ -80,7 +104,11 @@ export const bitable = new BitablePlugin({
                         "newType": "New Type",
                         "convertButton": "Convert",
                         "conversionWarning": "Warning: Some data may be lost during conversion.",
-                        "autoGenerateOptions": "Auto-generate options from existing data"
+                        "autoGenerateOptions": "Auto-generate options from existing data",
+                        "selectColor": "Select color",
+                        "custom": "Custom",
+                        "fieldProperties": "Field Properties",
+                        "change": "Change"
                     },
                     // Field formats
                     "formats": {
@@ -107,7 +135,17 @@ export const bitable = new BitablePlugin({
                         "thumbnailSize": "Thumbnail Size",
                         "sizeSmall": "Small (32px)",
                         "sizeMedium": "Medium (64px)",
-                        "sizeLarge": "Large (128px)"
+                        "sizeLarge": "Large (128px)",
+                        "optionsList": "Options List",
+                        "newTabOpen": "Open in New Tab"
+                    },
+                    // Image editor
+                    "imageEditor": {
+                        "selectImage": "Select Image",
+                        "inputLink": "Input Link",
+                        "collapse": "Collapse",
+                        "add": "Add",
+                        "imageLinkPlaceholder": "Enter image URL..."
                     },
                     // Tips
                     "tips": {
@@ -142,28 +180,72 @@ export const bitable = new BitablePlugin({
                     // Table view
                     "tableView": {
                         "noData": "No data",
-                        "addRow": "Add Row"
+                        "addRow": "Add Row",
+                        "deleteSelected": "Delete ({{count}})",
+                        "selectedCount": "{{count}} selected"
                     },
                     // Kanban view
                     "kanbanView": {
                         "uncategorized": "Uncategorized",
-                        "addCard": "Add Card"
+                        "addCard": "Add Card",
+                        "configureGroupField": "Please configure the group field for the Kanban view",
+                        "notSelectType": "The group field must be a Select type"
                     },
                     // Gallery view
                     "galleryView": {
-                        "noCover": "No Cover"
+                        "noCover": "No Cover",
+                        "noContent": "No content",
+                        "noData": "No data"
                     },
                     // Timeline view
                     "timelineView": {
                         "today": "Today",
-                        "noDate": "No Date"
+                        "noDate": "No Date",
+                        "allTasks": "All Tasks",
+                        "uncategorized": "Uncategorized",
+                        "taskName": "Task Name",
+                        "noDateFields": "No available date fields",
+                        "noDateFieldsDesc": "Please add a date type field to use the Gantt view",
+                        "settings": "Gantt View Settings",
+                        "startDateField": "Start Date Field *",
+                        "endDateField": "End Date Field",
+                        "titleField": "Title Field",
+                        "progressField": "Progress Field",
+                        "groupByField": "Group By Field",
+                        "scaleUnit": "Scale Unit",
+                        "day": "Day",
+                        "week": "Week",
+                        "month": "Month",
+                        "none": "None",
+                        "selectField": "Select field",
+                        "selectOptional": "Select (optional)",
+                        "tasksWithoutDate": "{{count}} tasks without date",
+                        "showSettings": "Settings",
+                        "milestoneField": "Milestone Field",
+                        "dependencyField": "Dependency Field",
+                        "criticalPath": "Critical Path",
+                        "customColors": "Custom Colors"
                     },
                     // Calendar view
                     "calendarView": {
                         "today": "Today",
                         "month": "Month",
                         "week": "Week",
-                        "day": "Day"
+                        "day": "Day",
+                        "configure": "Configure Calendar View",
+                        "configureDesc": "Please select a date field to display the calendar view",
+                        "noDateFields": "No available date fields",
+                        "noDateFieldsDesc": "Please add a date type field to use the calendar view",
+                        "dateField": "Date Field *",
+                        "settings": "Calendar View Settings",
+                        "startDateField": "Start Date Field *",
+                        "endDateField": "End Date Field",
+                        "titleField": "Title Field",
+                        "selectDateField": "Select date field",
+                        "selectEndDateField": "Select end date field (optional)",
+                        "selectTitleField": "Select title field (optional)",
+                        "auto": "Auto",
+                        "noneField": "None"
                     },
                     // Chart view
                     "chartView": {
@@ -288,6 +370,7 @@ export const bitable = new BitablePlugin({
                     "actions": {
                         "addView": "添加视图",
                         "deleteView": "删除视图",
+                        "renameView": "重命名视图",
                         "configureColumns": "配置列",
                         "addRecord": "添加记录",
                         "delete": "删除",
@@ -295,7 +378,21 @@ export const bitable = new BitablePlugin({
                         "confirm": "确认",
                         "save": "保存",
                         "add": "添加",
-                        "importExcel": "导入Excel"
+                        "importExcel": "导入Excel",
+                        "new": "新建",
+                        "newPage": "新建记录",
+                        "comingSoon": "即将推出"
+                    },
+                    // Dialog
+                    "dialog": {
+                        "deleteViewTitle": "删除视图",
+                        "deleteViewDescription": "确定要删除此视图吗？此操作无法撤销。",
+                        "cancel": "取消",
+                        "delete": "删除"
+                    },
+                    // Search
+                    "search": {
+                        "placeholder": "搜索..."
                     },
                     // Record stats
                     "stats": {
@@ -315,7 +412,16 @@ export const bitable = new BitablePlugin({
                         "url": "链接",
                         "email": "邮箱",
                         "phone": "电话",
-                        "person": "人员"
+                        "person": "人员",
+                        "attachment": "附件",
+                        "formula": "公式",
+                        "relation": "关联",
+                        "createdTime": "创建时间",
+                        "updatedTime": "更新时间",
+                        "createdBy": "创建人",
+                        "updatedBy": "更新人",
+                        "autoNumber": "自动编号",
+                        "id": "ID"
                     },
                     // Field configuration
                     "fieldConfig": {
@@ -339,7 +445,11 @@ export const bitable = new BitablePlugin({
                         "newType": "新类型",
                         "convertButton": "转换",
                         "conversionWarning": "警告：转换过程中可能会丢失部分数据。",
-                        "autoGenerateOptions": "从现有数据自动生成选项"
+                        "autoGenerateOptions": "从现有数据自动生成选项",
+                        "selectColor": "选择颜色",
+                        "custom": "自定义",
+                        "fieldProperties": "字段属性配置",
+                        "change": "更改"
                     },
                     // Field formats
                     "formats": {
@@ -366,7 +476,17 @@ export const bitable = new BitablePlugin({
                         "thumbnailSize": "缩略图大小",
                         "sizeSmall": "小 (32px)",
                         "sizeMedium": "中 (64px)",
-                        "sizeLarge": "大 (128px)"
+                        "sizeLarge": "大 (128px)",
+                        "optionsList": "选项列表",
+                        "newTabOpen": "新标签页打开"
+                    },
+                    // Image editor
+                    "imageEditor": {
+                        "selectImage": "选择图片",
+                        "inputLink": "输入链接",
+                        "collapse": "收起",
+                        "add": "添加",
+                        "imageLinkPlaceholder": "输入图片链接..."
                     },
                     // Tips
                     "tips": {
@@ -401,28 +521,72 @@ export const bitable = new BitablePlugin({
                     // Table view
                     "tableView": {
                         "noData": "暂无数据",
-                        "addRow": "添加行"
+                        "addRow": "添加行",
+                        "deleteSelected": "删除 ({{count}})",
+                        "selectedCount": "已选择 {{count}} 项"
                     },
                     // Kanban view
                     "kanbanView": {
-                        "uncategorized": "未分类",
-                        "addCard": "添加卡片"
+                        "uncategorized": "未分组",
+                        "addCard": "添加卡片",
+                        "configureGroupField": "请配置看板视图的分组字段",
+                        "notSelectType": "分组字段必须为单选类型"
                     },
                     // Gallery view
                     "galleryView": {
-                        "noCover": "无封面"
+                        "noCover": "无封面",
+                        "noContent": "无内容",
+                        "noData": "暂无数据"
                     },
                     // Timeline view
                     "timelineView": {
                         "today": "今天",
-                        "noDate": "无日期"
+                        "noDate": "无日期",
+                        "allTasks": "所有任务",
+                        "uncategorized": "未分组",
+                        "taskName": "任务名称",
+                        "noDateFields": "暂无可用日期字段",
+                        "noDateFieldsDesc": "请先添加一个日期类型的字段来使用甘特图视图",
+                        "settings": "甘特图视图设置",
+                        "startDateField": "开始日期字段 *",
+                        "endDateField": "结束日期字段",
+                        "titleField": "标题字段",
+                        "progressField": "进度字段",
+                        "groupByField": "分组字段",
+                        "scaleUnit": "时间刻度",
+                        "day": "日",
+                        "week": "周",
+                        "month": "月",
+                        "none": "无",
+                        "selectField": "选择字段",
+                        "selectOptional": "选择（可选）",
+                        "tasksWithoutDate": "{{count}} 个任务未设置日期",
+                        "showSettings": "设置",
+                        "milestoneField": "里程碑字段",
+                        "dependencyField": "依赖字段",
+                        "criticalPath": "关键路径",
+                        "customColors": "自定义颜色"
                     },
                     // Calendar view
                     "calendarView": {
                         "today": "今天",
                         "month": "月",
                         "week": "周",
-                        "day": "日"
+                        "day": "日",
+                        "configure": "配置日历视图",
+                        "configureDesc": "请选择一个日期字段来显示日历视图",
+                        "noDateFields": "暂无可用日期字段",
+                        "noDateFieldsDesc": "请先添加一个日期类型的字段来使用日历视图",
+                        "dateField": "日期字段 *",
+                        "settings": "日历视图设置",
+                        "startDateField": "开始日期字段 *",
+                        "endDateField": "结束日期字段",
+                        "titleField": "标题字段",
+                        "selectDateField": "选择日期字段",
+                        "selectEndDateField": "选择结束日期字段（可选）",
+                        "selectTitleField": "选择标题字段（可选）",
+                        "auto": "自动",
+                        "noneField": "无"
                     },
                     // Chart view
                     "chartView": {
