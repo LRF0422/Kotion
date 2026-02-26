@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "turbo build",
+    "build:select": "bash scripts/build.sh",
     "build:core": "pnpm --filter @kn/core build",
     "build:icon": "pnpm --filter @kn/icon build",
     "build:ui": "pnpm --filter @kn/ui build",

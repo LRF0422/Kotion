@@ -164,3 +164,8 @@
   border-radius: 2px;
   pointer-events: none;
 }
+
+/* Gapcursor styles */
+.dark .ProseMirror-gapcursor:after {
+  border-top-color: white;
+}
