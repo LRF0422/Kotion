@@ -52,3 +52,4 @@ nginx/*.crt
 .idea
 
 .history
+.VSCodeCounter
