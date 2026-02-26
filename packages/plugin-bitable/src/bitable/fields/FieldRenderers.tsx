@@ -1,8 +1,8 @@
 import React, { useState, useRef } from "react";
 import { Editor } from "@kn/editor";
 import { FieldType, FieldConfig, SelectOption } from "../../types";
-import { Badge, Checkbox, Slider, Input, Button } from "@kn/ui";
-import { Star, Link as LinkIcon, Mail, Phone, ImageIcon, X, Upload, Folder } from "@kn/icon";
+import { Checkbox, Slider, Input, Button } from "@kn/ui";
+import { Link as LinkIcon, Mail, Phone, X, Folder } from "@kn/icon";
 import { DateTimePicker, Rate } from "@kn/ui";
 import { useTranslation } from "@kn/common";
 import { format } from "date-fns";
@@ -174,9 +174,8 @@ export const SelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChang
                 return (
                     <div
                         key={opt.id}
-                        className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
-                            index === highlightedIndex ? 'bg-accent' : 'hover:bg-accent/50'
-                        }`}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${index === highlightedIndex ? 'bg-accent' : 'hover:bg-accent/50'
+                            }`}
                         onClick={() => onChange(opt.id)}
                         onMouseEnter={() => setHighlightedIndex(index)}
                     >
@@ -280,9 +279,8 @@ export const MultiSelectEditor: React.FC<FieldEditorProps> = ({ value, field, on
                 return (
                     <div
                         key={opt.id}
-                        className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
-                            index === focusedIndex ? 'bg-accent' : 'hover:bg-accent/50'
-                        }`}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${index === focusedIndex ? 'bg-accent' : 'hover:bg-accent/50'
+                            }`}
                         onClick={() => toggleOption(opt.id)}
                         onMouseEnter={() => setFocusedIndex(index)}
                     >
@@ -388,7 +386,7 @@ export const ProgressRenderer: React.FC<FieldRendererProps> = ({ value, field })
 
 export const ProgressEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
     const progress = typeof value === 'number' ? value : 0;
-    
+
     return (
         <div className="flex items-center gap-3 px-2 py-1">
             <Slider
