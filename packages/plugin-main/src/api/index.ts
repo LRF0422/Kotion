@@ -109,6 +109,10 @@ export const APIS = {
         url: '/knowledge-wiki/space/page/block',
         method: 'GET'
     } as API,
+    DELETE_TEMPLATE: {
+        url: '/knowledge-wiki/space/page/template/:id',
+        method: 'DELETE'
+    } as API,
     SAVE_SPACE_AS_TEMPLATE: {
         url: '/knowledge-wiki/space/template',
         method: 'POST'

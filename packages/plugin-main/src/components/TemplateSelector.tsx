@@ -1,83 +1,9 @@
 import { Card, Input, MultiSelect, Sheet, SheetContent, SheetTitle, Button, toast } from "@kn/ui";
 import { useApi, useUploadFile } from "@kn/core"
-import { UserCircle } from "@kn/icon";
-import React, { useState, useEffect } from "react";
+import { UserCircle, Trash2, FileText } from "@kn/icon";
+import React, { useState, useEffect, useCallback } from "react";
 import { APIS } from "../api";
-
-// Mock template data
-const MOCK_TEMPLATES = [
-    {
-        id: "1",
-        title: "Project Management",
-        description: "A comprehensive template for managing projects with timelines, tasks, and team collaboration.",
-        cover: "/api/placeholder/300/200",
-        author: "Leong",
-        category: "Work",
-        downloads: 1245,
-        rating: 4.8,
-    },
-    {
-        id: "2",
-        title: "Personal Budget Planner",
-        description: "Track your income, expenses, and savings goals in one place.",
-        cover: "/api/placeholder/300/200",
-        author: "Leong",
-        category: "Finance",
-        downloads: 876,
-        rating: 4.6,
-    },
-    {
-        id: "3",
-        title: "Meeting Notes",
-        description: "Structured template for capturing meeting agendas, decisions, and action items.",
-        cover: "/api/placeholder/300/200",
-        author: "Leong",
-        category: "Productivity",
-        downloads: 2103,
-        rating: 4.9,
-    },
-    {
-        id: "4",
-        title: "Habit Tracker",
-        description: "Build and maintain healthy habits with daily tracking and progress visualization.",
-        cover: "/api/placeholder/300/200",
-        author: "Leong",
-        category: "Personal",
-        downloads: 1542,
-        rating: 4.7,
-    },
-    {
-        id: "5",
-        title: "Content Calendar",
-        description: "Plan and organize your content strategy across multiple channels.",
-        cover: "/api/placeholder/300/200",
-        author: "Leong",
-        category: "Marketing",
-        downloads: 932,
-        rating: 4.5,
-    },
-    {
-        id: "6",
-        title: "Study Planner",
-        description: "Organize your study schedule, track progress, and manage learning materials.",
-        cover: "/api/placeholder/300/200",
-        author: "Leong",
-        category: "Education",
-        downloads: 765,
-        rating: 4.4,
-    }
-];
-
-const MOCK_CATEGORIES = [
-    { id: "all", text: "All Templates" },
-    { id: "work", text: "Work" },
-    { id: "productivity", text: "Productivity" },
-    { id: "personal", text: "Personal" },
-    { id: "finance", text: "Finance" },
-    { id: "education", text: "Education" },
-    { id: "marketing", text: "Marketing" },
-    { id: "health", text: "Health" },
-];
+import { Template } from "../model/Template";
 
 interface TemplateSelectorProps {
     open: boolean;
@@ -90,10 +16,10 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     onOpenChange,
     onCreateFromTemplate
 }) => {
-    const [allTemplates, setAllTemplates] = useState<any[]>(MOCK_TEMPLATES);
-    const [filteredTemplates, setFilteredTemplates] = useState<any[]>(MOCK_TEMPLATES);
+    const [allTemplates, setAllTemplates] = useState<Template[]>([]);
+    const [filteredTemplates, setFilteredTemplates] = useState<Template[]>([]);
     const [searchValue, setSearchValue] = useState<string>("");
-    const [categories, setCategories] = useState<{ id: string; text: string }[]>(MOCK_CATEGORIES);
+    const [categories, setCategories] = useState<{ id: string; text: string }[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
 
     const { usePath } = useUploadFile();
@@ -114,8 +40,8 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
         // Apply search filter
         if (searchValue.trim() !== "") {
             result = result.filter(template =>
-                template.title.toLowerCase().includes(searchValue.toLowerCase()) ||
-                template.description.toLowerCase().includes(searchValue.toLowerCase())
+                template.title?.toLowerCase().includes(searchValue.toLowerCase()) ||
+                template.description?.toLowerCase().includes(searchValue.toLowerCase())
             );
         }
 
@@ -123,7 +49,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
         if (selectedCategories.length > 0 && !selectedCategories.includes('all')) {
             result = result.filter(template =>
                 selectedCategories.some(category =>
-                    template.category.toLowerCase().includes(category.toLowerCase())
+                    template.category?.toLowerCase().includes(category.toLowerCase())
                 )
             );
         }
@@ -134,22 +60,46 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     const loadTemplates = async () => {
         setLoading(true);
         try {
-            // Fetch user's templates
             const templateResponse = await useApi(APIS.QUERY_TEMPLATE);
-            const templatesData = Array.isArray(templateResponse.data) ? templateResponse.data : [];
-            setAllTemplates(MOCK_TEMPLATES);
+            const templatesData: Template[] = Array.isArray(templateResponse.data) ? templateResponse.data : [];
+            setAllTemplates(templatesData);
             setFilteredTemplates(templatesData);
+
+            // Extract categories dynamically from templates
+            const categorySet = new Map<string, string>();
+            templatesData.forEach(t => {
+                if (t.category) {
+                    categorySet.set(t.category.toLowerCase(), t.category);
+                }
+                if (t.categories) {
+                    t.categories.forEach(c => categorySet.set(c.id, c.text));
+                }
+            });
+            const dynamicCategories = [
+                { id: 'all', text: 'All Templates' },
+                ...Array.from(categorySet.entries()).map(([id, text]) => ({ id, text }))
+            ];
+            setCategories(dynamicCategories);
         } catch (error) {
             console.error("Error loading templates:", error);
-            // Use mock data as fallback
-            setAllTemplates(MOCK_TEMPLATES);
-            setFilteredTemplates(MOCK_TEMPLATES);
-            setCategories(MOCK_CATEGORIES);
-            toast.error("Using sample templates");
+            setAllTemplates([]);
+            setFilteredTemplates([]);
+            toast.error("加载模板失败");
         } finally {
             setLoading(false);
         }
     };
+
+    const handleDeleteTemplate = useCallback(async (e: React.MouseEvent, templateId: string) => {
+        e.stopPropagation();
+        try {
+            await useApi(APIS.DELETE_TEMPLATE, { id: templateId });
+            setAllTemplates(prev => prev.filter(t => t.id !== templateId));
+            toast.success("删除模板成功");
+        } catch (error) {
+            toast.error("删除模板失败");
+        }
+    }, []);
 
     const handleCategoryChange = (value: string[]) => {
         setSelectedCategories(value);
@@ -170,14 +120,16 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                             value={searchValue}
                             onChange={(e) => setSearchValue(e.target.value)}
                         />
-                        <MultiSelect
-                            placeholder="模板类型"
-                            className="h-9 min-w-[180px]"
-                            options={categories.map(cat => ({ value: cat.id, label: cat.text }))}
-                            defaultValue={[]}
-                            value={selectedCategories}
-                            onValueChange={handleCategoryChange}
-                        />
+                        {categories.length > 1 && (
+                            <MultiSelect
+                                placeholder="模板类型"
+                                className="h-9 min-w-[180px]"
+                                options={categories.map(cat => ({ value: cat.id, label: cat.text }))}
+                                defaultValue={[]}
+                                value={selectedCategories}
+                                onValueChange={handleCategoryChange}
+                            />
+                        )}
                     </div>
 
                     {loading ? (
@@ -186,44 +138,57 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                            {filteredTemplates.map((item: any, index: number) => (
+                            {filteredTemplates.map((item, index) => (
                                 <div key={`${item.id}-${index}`} className="flex flex-col gap-3">
                                     <Card
-                                        className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow h-[200px] cursor-pointer group"
+                                        className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow h-[200px] cursor-pointer group relative"
                                         onClick={() => {
                                             onCreateFromTemplate(item.id);
-                                            onOpenChange(false); // Close the sheet after selection
+                                            onOpenChange(false);
                                         }}
                                     >
-                                        <div className="w-full h-32 bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-                                            {/* Placeholder for cover image */}
-                                            <div className="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 flex items-center justify-center text-gray-500">
-                                                📝
-                                            </div>
+                                        {/* Delete button - visible on hover */}
+                                        <button
+                                            className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-background/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive hover:text-destructive-foreground"
+                                            onClick={(e) => handleDeleteTemplate(e, item.id)}
+                                            title="删除模板"
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+
+                                        <div className="w-full h-32 bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-950 dark:to-indigo-900 flex items-center justify-center overflow-hidden">
+                                            {item.cover && item.cover.length > 0 ? (
+                                                <img
+                                                    src={item.cover[0].startsWith('http') ? item.cover[0] : usePath(item.cover[0])}
+                                                    alt={item.title}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                <FileText className="h-10 w-10 text-muted-foreground/40" />
+                                            )}
                                         </div>
                                         <div className="p-3">
                                             <h3 className="font-semibold text-sm truncate" title={item.title}>{item.title}</h3>
-                                            <p className="text-xs text-gray-500 mt-1 line-clamp-2" title={item.description}>{item.description}</p>
+                                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2" title={item.description}>{item.description}</p>
                                         </div>
                                     </Card>
-                                    <div className="flex flex-row justify-between items-center text-xs text-gray-500">
+                                    <div className="flex flex-row justify-between items-center text-xs text-muted-foreground">
                                         <div className="flex items-center gap-1">
                                             <UserCircle className="h-3 w-3" />
                                             <span>{item.author}</span>
                                         </div>
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-yellow-500">★</span>
-                                            <span>{item.rating}</span>
-                                        </div>
+                                        {item.category && (
+                                            <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{item.category}</span>
+                                        )}
                                     </div>
                                     <Button
                                         size="sm"
                                         variant="outline"
                                         className="w-full"
                                         onClick={(e) => {
-                                            e.stopPropagation(); // Prevent card click event
+                                            e.stopPropagation();
                                             onCreateFromTemplate(item.id);
-                                            onOpenChange(false); // Close the sheet after selection
+                                            onOpenChange(false);
                                         }}
                                     >
                                         使用此模板
@@ -231,13 +196,12 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                                 </div>
                             ))}
                             {filteredTemplates.length === 0 && (
-                                <div className="col-span-full text-center py-12 text-gray-500">
-                                    <div className="flex justify-center mb-4">
-                                        <div className="bg-gray-100 border-2 border-dashed rounded-xl w-16 h-16 flex items-center justify-center text-gray-400">
-                                            📄
-                                        </div>
-                                    </div>
-                                    <p>没有找到匹配您搜索的模板。</p>
+                                <div className="col-span-full text-center py-16 text-muted-foreground">
+                                    <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
+                                    <p className="text-base font-medium mb-1">暂无模板</p>
+                                    <p className="text-sm">
+                                        {searchValue ? "没有找到匹配的模板，请尝试其他关键词" : "在编辑器中保存页面为模板后，将在此处显示"}
+                                    </p>
                                 </div>
                             )}
                         </div>

@@ -450,6 +450,9 @@ importers:
       '@kn/plugin-mindmap-canvas':
         specifier: workspace:*
         version: link:../../packages/plugin-mindmap-canvas
+      '@kn/plugin-netease-music':
+        specifier: workspace:*
+        version: link:../../packages/plugin-netease-music
       '@kn/plugin-weaver-oa':
         specifier: workspace:*
         version: link:../../packages/plugin-weaver-oa
@@ -1442,6 +1445,37 @@ importers:
       '@types/react-dom':
         specifier: ^18.3.1
         version: 18.3.7(@types/react@18.3.28)
+
+  packages/plugin-netease-music:
+    dependencies:
+      '@kn/common':
+        specifier: workspace:*
+        version: link:../common
+      '@kn/core':
+        specifier: workspace:*
+        version: link:../core
+      '@kn/editor':
+        specifier: workspace:*
+        version: link:../editor
+      '@kn/icon':
+        specifier: workspace:*
+        version: link:../icon
+      '@kn/ui':
+        specifier: workspace:*
+        version: link:../ui
+    devDependencies:
+      '@kn/rollup-config':
+        specifier: workspace:*
+        version: link:../rollup-config
+      '@kn/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@types/node':
+        specifier: ^20.11.24
+        version: 20.19.32
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
 
   packages/plugin-weaver-oa:
     dependencies:
@@ -3830,7 +3864,7 @@ packages:
     resolution: {integrity: sha512-gWp7NfQW27LaBQz3TITS8L7ZCQ0TLvtmI//4OwlQRx4rnWxcPNIYjxZpDcN4+UlGxgm3jS5QPz8IPTCkb59wZA==}
     engines: {node: ^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0}
     dependencies:
-      '@types/node': 22.19.9
+      '@types/node': 20.19.32
       jest-regex-util: 30.0.1
     dev: true
 
@@ -3849,7 +3883,7 @@ packages:
       '@jest/schemas': 30.0.5
       '@types/istanbul-lib-coverage': 2.0.6
       '@types/istanbul-reports': 3.0.4
-      '@types/node': 22.19.9
+      '@types/node': 20.19.32
       '@types/yargs': 17.0.35
       chalk: 4.1.2
     dev: true
@@ -9063,7 +9097,7 @@ packages:
     dependencies:
       '@types/http-cache-semantics': 4.2.0
       '@types/keyv': 3.1.4
-      '@types/node': 22.19.9
+      '@types/node': 20.19.32
       '@types/responselike': 1.0.3
 
   /@types/d3-array@3.2.2:
@@ -9285,7 +9319,7 @@ packages:
   /@types/fs-extra@9.0.13:
     resolution: {integrity: sha512-nEnwB++1u5lVDM2UI4c1+5R+FYaKfaAzS4OococimjVm3nQw3TuzH5UNsocrcTBbhnerblyHj4A49qXbIiZdpA==}
     dependencies:
-      '@types/node': 22.19.9
+      '@types/node': 20.19.32
     dev: true
 
   /@types/geojson@7946.0.16:
@@ -9348,7 +9382,7 @@ packages:
   /@types/jsonfile@6.1.4:
     resolution: {integrity: sha512-D5qGUYwjvnNNextdU59/+fI+spnwtTFmyQP0h+PfIOSkNfpU6AOICUOkm4i0OnSk+NyjdPJrxCDro0sJsWlRpQ==}
     dependencies:
-      '@types/node': 22.19.9
+      '@types/node': 20.19.32
     dev: true
 
   /@types/katex@0.16.8:
@@ -9357,7 +9391,7 @@ packages:
   /@types/keyv@3.1.4:
     resolution: {integrity: sha512-BQ5aZNSCpj7D6K2ksrRCTmKRLEpnPvWDiLPfoGyhZ++8YtiK9d/3DBKPJgry359X/P1PfruyYwvnvwFjuEiEIg==}
     dependencies:
-      '@types/node': 22.19.9
+      '@types/node': 20.19.32
 
   /@types/linkify-it@3.0.5:
     resolution: {integrity: sha512-yg6E+u0/+Zjva+buc3EIb+29XEg4wltq7cSmd4Uc2EE/1nUVmxyzpX6gUXD0V8jIrG0r7YeOGVIbYRkxeooCtw==}
@@ -9538,7 +9572,7 @@ packages:
   /@types/responselike@1.0.3:
     resolution: {integrity: sha512-H/+L+UkTV33uf49PH5pCAUBVPNj2nDBXTN+qS1dOwyyg24l3CcicicCA7ca+HMvJBZcFgl5r8e+RR6elsb4Lyw==}
     dependencies:
-      '@types/node': 22.19.9
+      '@types/node': 20.19.32
 
   /@types/semver@7.7.1:
     resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
@@ -15333,7 +15367,7 @@ packages:
     engines: {node: ^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0}
     dependencies:
       '@jest/types': 30.2.0
-      '@types/node': 22.19.9
+      '@types/node': 20.19.32
       jest-util: 30.2.0
     dev: true
 
@@ -15347,7 +15381,7 @@ packages:
     engines: {node: ^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0}
     dependencies:
       '@jest/types': 30.2.0
-      '@types/node': 22.19.9
+      '@types/node': 20.19.32
       chalk: 4.1.2
       ci-info: 4.4.0
       graceful-fs: 4.2.11
@@ -15358,7 +15392,7 @@ packages:
     resolution: {integrity: sha512-KWYVV1c4i+jbMpaBC+U++4Va0cp8OisU185o73T1vo99hqi7w8tSJfUXYswwqqrjzwxa6KpRK54WhPvwf5w6PQ==}
     engines: {node: '>= 10.13.0'}
     dependencies:
-      '@types/node': 22.19.9
+      '@types/node': 20.19.32
       merge-stream: 2.0.0
       supports-color: 7.2.0
     dev: false

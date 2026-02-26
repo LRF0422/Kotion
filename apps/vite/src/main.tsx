@@ -17,6 +17,7 @@ import { bitable } from "@kn/plugin-bitable"
 // import { weaverOA } from "@kn/plugin-weaver-oa"
 // import { bilibili } from "@kn/plugin-bilibili"
 import { github } from "@kn/plugin-github"
+// import { neteaseMusic } from "@kn/plugin-netease-music"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

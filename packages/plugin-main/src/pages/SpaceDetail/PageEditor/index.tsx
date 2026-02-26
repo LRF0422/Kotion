@@ -28,6 +28,7 @@ import { useParams } from "@kn/common";
 import { toast } from "@kn/ui";
 import { CollaborationInvitationDlg } from "../../components/CollaborationInvitationDlg";
 import { PageBreadcrumb } from "../../../components/PageBreadcrumb";
+import { TemplateCreator } from "../TemplateCreator";
 
 // Status display configuration for auto-save
 const getStatusDisplay = (autoSaveStatus: AutoSaveStatus, isManualSaving: boolean) => {
@@ -249,12 +250,6 @@ export const PageEditor: React.FC = () => {
     const statusDisplay = getStatusDisplay(autoSaveStatus, isManualSaving)
 
 
-    const handleSaveAsTemplate = () => {
-        useApi(APIS.SAVE_AS_TEMPLATE, { id: params.pageId }).then(() => {
-            toast.success("保存成功")
-        })
-    }
-
     return pageLoading ? <div className="w-full h-full" ref={ref}>
         <header className="h-11 w-full flex flex-row justify-between px-1 border-b relative z-50">
             <div className="flex flex-row items-center gap-2 px-1">
@@ -455,12 +450,10 @@ export const PageEditor: React.FC = () => {
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
-                            <DropdownMenuItem onClick={handleSaveAsTemplate}>
-                                <div className="flex flex-row items-center gap-1">
-                                    <BookTemplate className="h-4 w-4" />
-                                    <span>save as template</span>
-                                </div>
-                            </DropdownMenuItem>
+                            <TemplateCreator mode="page" pageId={params.pageId!} defaultName={page?.title} className="flex flex-row items-center gap-1 w-full relative select-none rounded-sm px-2 py-1.5 text-sm outline-none cursor-default hover:bg-accent hover:text-accent-foreground">
+                                <BookTemplate className="h-4 w-4" />
+                                <span>save as template</span>
+                            </TemplateCreator>
                             <DropdownMenuItem onClick={() => {
                                 toast.success("copy success")
                             }}>

@@ -513,7 +513,7 @@ export const SpaceDetail: React.FC = () => {
             id: "",
             key: "",
             icon: <></>,
-            customerRender: <TemplateCreator space={space} className="flex flex-row gap-2 items-center w-full px-2 py-2 rounded-sm text-xs sm:text-sm hover:bg-muted transition-colors">
+            customerRender: <TemplateCreator mode="space" space={space} className="flex flex-row gap-2 items-center w-full px-2 py-2 rounded-sm text-xs sm:text-sm hover:bg-muted transition-colors">
                 <CircleArrowUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 <div>Save as Template</div>
             </TemplateCreator>

@@ -3,66 +3,99 @@ import { GlobalState, useApi, useUploadFile } from "@kn/core";
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel,
     AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-    AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, Avatar, Button, Controller, Field,
+    AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, Avatar, Controller, Field,
     FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet, FileUploader, Input, ScrollArea, TagInput, Textarea, cn, toast, useForm, z, zodResolver
 } from "@kn/ui";
-import React, { PropsWithChildren, useRef } from "react";
+import React, { PropsWithChildren, useState, type Dispatch, type SetStateAction } from "react";
 import { APIS } from "../../../api";
 
 
-export interface TemplateCreatorProps extends PropsWithChildren {
-    space: any,
-    className?: string
+type PageMode = {
+    mode: 'page'
+    pageId: string
+    defaultName?: string
 }
 
+type SpaceMode = {
+    mode: 'space'
+    space: any
+}
+
+export type TemplateCreatorProps = PropsWithChildren<{
+    className?: string
+} & (PageMode | SpaceMode)>
+
 const formSchema = z.object({
-    spaceId: z.string(),
-    name: z.string(),
-    description: z.string(),
-    cover: z.array(z.string()),
+    name: z.string().min(1, "模板名称不能为空"),
+    description: z.string().optional().default(""),
+    cover: z.array(z.string()).optional().default([]),
     categories: z.array(z.object({
         id: z.string(),
         text: z.string()
-    })),
+    })).optional().default([]),
 })
 
 export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
-    const { space, className } = props
+    const { className } = props
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { usePath, uploadFile } = useUploadFile()
-    const ref = useRef<HTMLFormElement>(null)
+    const [open, setOpen] = useState(false)
+    const [activeTagIndex, setActiveTagIndex] = useState<number | null>(null)
+
+    const defaultValues = props.mode === 'space'
+        ? {
+            name: props.space.name || '',
+            description: props.space.description || '',
+            cover: props.space.cover || [],
+            categories: props.space.categories || [],
+        }
+        : {
+            name: props.defaultName || '',
+            description: '',
+            cover: [],
+            categories: [],
+        }
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
-        defaultValues: {
-            name: space.name,
-            spaceId: space.id,
-            description: space.description,
-            cover: space.cover,
-            categories: space.categories
-        }
+        defaultValues
     })
 
-    const onSubmit = (values: z.infer<typeof formSchema>) => {
-        console.log(values)
-        useApi(APIS.SAVE_SPACE_AS_TEMPLATE, null, values).then(() => {
-            toast.success("创建成功")
-        })
+    const onSubmit = async (values: z.infer<typeof formSchema>) => {
+        try {
+            if (props.mode === 'space') {
+                await useApi(APIS.SAVE_SPACE_AS_TEMPLATE, null, {
+                    ...values,
+                    spaceId: props.space.id,
+                })
+            } else {
+                await useApi(APIS.SAVE_AS_TEMPLATE, { id: props.pageId }, {
+                    ...values,
+                })
+            }
+            toast.success("保存模板成功")
+            setOpen(false)
+            form.reset(defaultValues)
+        } catch (error) {
+            toast.error("保存模板失败")
+        }
     }
 
-    return <AlertDialog>
+    return <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogTrigger className={className}>{props.children}</AlertDialogTrigger>
-        <AlertDialogContent className={cn(" max-w-none w-[80%] max-h-[90%] 3xl:w-[60%]")}>
+        <AlertDialogContent className={cn("max-w-none w-[80%] max-h-[90%] 3xl:w-[60%]")}>
             <AlertDialogHeader>
-                <AlertDialogTitle>Save as template</AlertDialogTitle>
-                <AlertDialogDescription />
+                <AlertDialogTitle>Save as Template</AlertDialogTitle>
+                <AlertDialogDescription>
+                    填写模板信息，方便后续快速使用
+                </AlertDialogDescription>
                 <ScrollArea className="h-[90%]">
-                    <form ref={ref} action="#" onSubmit={form.handleSubmit(onSubmit)} id="template-form">
+                    <form onSubmit={form.handleSubmit(onSubmit)} id="template-form">
                         <FieldGroup>
                             <FieldSet className="p-2">
-                                <FieldLegend>Payment Method</FieldLegend>
+                                <FieldLegend>模板信息</FieldLegend>
                                 <FieldDescription>
-                                    All transactions are secure and encrypted
+                                    设置模板名称、描述和封面等信息
                                 </FieldDescription>
                                 <FieldGroup>
                                     <Field>
@@ -74,10 +107,13 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                                     <Controller
                                         name="name"
                                         control={form.control}
-                                        render={({ field }) => (
+                                        render={({ field, fieldState }) => (
                                             <Field>
-                                                <FieldLabel>Template Nane</FieldLabel>
-                                                <Input {...field} />
+                                                <FieldLabel>Template Name *</FieldLabel>
+                                                <Input {...field} placeholder="输入模板名称" />
+                                                {fieldState.error && (
+                                                    <p className="text-sm text-destructive">{fieldState.error.message}</p>
+                                                )}
                                             </Field>
                                         )}
                                     />
@@ -105,7 +141,23 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                                         render={({ field }) => (
                                             <Field>
                                                 <FieldLabel>Description</FieldLabel>
-                                                <Textarea {...field} />
+                                                <Textarea {...field} placeholder="输入模板描述" />
+                                            </Field>
+                                        )}
+                                    />
+                                    <Controller
+                                        name="categories"
+                                        control={form.control}
+                                        render={({ field }) => (
+                                            <Field>
+                                                <FieldLabel>Categories</FieldLabel>
+                                                <TagInput
+                                                    tags={field.value || []}
+                                                    setTags={field.onChange as Dispatch<SetStateAction<{ id: string; text: string }[]>>}
+                                                    activeTagIndex={activeTagIndex}
+                                                    setActiveTagIndex={setActiveTagIndex}
+                                                    placeholder="输入分类后按回车添加"
+                                                />
                                             </Field>
                                         )}
                                     />
@@ -115,12 +167,13 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                     </form>
                 </ScrollArea>
                 <AlertDialogFooter>
-                    <AlertDialogAction onClick={() => {
-                        ref.current?.submit()
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={(e) => {
+                        e.preventDefault()
+                        form.handleSubmit(onSubmit)()
                     }}>
                         Confirm
                     </AlertDialogAction>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
                 </AlertDialogFooter>
             </AlertDialogHeader>
         </AlertDialogContent>

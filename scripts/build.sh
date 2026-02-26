@@ -27,6 +27,7 @@ MODULES=(
   "plugin-mermaid:@kn/mermaid-plugin"
   "plugin-drawnix:@kn/plugin-drawnix"
   "plugin-bilibili:@kn/plugin-bilibili"
+  "plugin-netease-music:@kn/plugin-netease-music"
   "plugin-block-reference:@kn/plugin-block-reference"
   "plugin-drawio-v2:@kn/plugin-drawio-v2"
   "plugin-file-manager:@kn/file-manager"
