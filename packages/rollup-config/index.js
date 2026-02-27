@@ -53,12 +53,21 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
       babelHelpers: "bundled",
       exclude: "../../node_modules/**",
     }),
+    // PostCSS for node_modules CSS (no transformation, just bundle)
     postcss({
-      // Process Tailwind CSS and other PostCSS plugins
+      plugins: [],
+      extensions: [".css"],
+      extract: false,
+      minimize: true,
+      include: /node_modules/,
+    }),
+    // PostCSS for source files with Tailwind CSS and other transformations
+    postcss({
       plugins: [postcssCascadeLayers(),cssnext(), nested(),tailwindcss(), autoprefixer()],
       extensions: [".css"],
       extract: false,
       minimize: true,
+      exclude: /node_modules/,
     }),
     typescript({
       tsconfigOverride: {
