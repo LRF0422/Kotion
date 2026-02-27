@@ -37,6 +37,7 @@ export const usePageActions = ({
         const param = {
             spaceId,
             parentId,
+            title: 'Untitled',
             content: JSON.stringify({
                 type: 'doc',
                 content: [

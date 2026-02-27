@@ -9,7 +9,7 @@ import { Switch } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
 import { CollaborationEditor, exportToPDF, useAutoSave, AutoSaveStatus, TiptapCollabProvider } from "@kn/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
-import { useApi, useService, deepEqual, useUploadFile } from "@kn/core";
+import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes } from '@kn/core';
 import { useNavigator } from "@kn/core";
 import { GlobalState } from "@kn/core";
 import { Editor } from "@kn/editor";
@@ -17,7 +17,7 @@ import * as Y from "@kn/editor";
 import { useKeyPress, useToggle } from "@kn/core";
 import {
     ALargeSmall, ArrowLeft, BookTemplate, CircleArrowUp,
-    Contact2, Download, FileIcon,
+    Contact2, Download, FileIcon, FileText,
     Link, LoaderCircle, LockIcon, MessageSquareText,
     MoreHorizontal, MoveDownRight, Save, Trash2, Upload, List,
     Check, CloudOff, UserPlus
@@ -240,6 +240,72 @@ export const PageEditor: React.FC = () => {
             setIsManualSaving(false);
         }
     }, [editor, page, params.pageId, params.id, getTitleContent, getIcon, toggle, navigator, markAsSaved])
+
+    // Markdown import handler
+    const handleImportMarkdown = useCallback(() => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.md,.markdown,.txt';
+        input.style.display = 'none';
+
+        input.onchange = async (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                const editorInstance = editor.current;
+                if (!editorInstance) return;
+
+                // Parse the markdown to extract title and body
+                const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                const lines = normalizedText.split('\n');
+                let title = file.name.replace(/\.(md|markdown|txt)$/i, '');
+                let bodyStartIndex = 0;
+
+                // Extract first H1 as title
+                for (let i = 0; i < lines.length; i++) {
+                    const trimmed = lines[i].trim();
+                    if (trimmed === '') continue;
+                    if (trimmed.startsWith('# ')) {
+                        title = trimmed.substring(2).trim();
+                        bodyStartIndex = i + 1;
+                    }
+                    break;
+                }
+
+                const bodyMarkdown = lines.slice(bodyStartIndex).join('\n').trim();
+
+                // Parse body markdown to ProseMirror-compatible nodes
+                const contentNodes = bodyMarkdown ? parseMarkdownToNodes(bodyMarkdown) : [];
+
+                // Construct proper document JSON with title + content
+                const docContent = {
+                    type: 'doc',
+                    content: [
+                        {
+                            type: 'title',
+                            content: [{
+                                type: 'heading',
+                                content: [{ type: 'text', text: title }]
+                            }]
+                        },
+                        ...(contentNodes.length > 0 ? contentNodes : [{ type: 'paragraph' }])
+                    ]
+                };
+
+                editorInstance.commands.setContent(docContent);
+                toast.success(`Imported "${file.name}" successfully`);
+            } catch (err) {
+                console.error('Error importing markdown:', err);
+                toast.error('Failed to import markdown file');
+            }
+        };
+
+        document.body.appendChild(input);
+        input.click();
+        document.body.removeChild(input);
+    }, [editor]);
 
     useKeyPress(["ctrl.s"], (e) => {
         e.preventDefault();
@@ -483,12 +549,24 @@ export const PageEditor: React.FC = () => {
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
-                            <DropdownMenuItem>
-                                <div className="flex flex-row items-center gap-1">
-                                    <Download className="h-4 w-4" />
-                                    <span>import</span>
-                                </div>
-                            </DropdownMenuItem>
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                    <div className="flex flex-row items-center gap-1">
+                                        <Download className="h-4 w-4" />
+                                        <span>import</span>
+                                    </div>
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuPortal>
+                                    <DropdownMenuSubContent>
+                                        <DropdownMenuItem onClick={handleImportMarkdown}>
+                                            <div className="flex flex-row items-center gap-1">
+                                                <FileText className="h-4 w-4" />
+                                                <span>from Markdown</span>
+                                            </div>
+                                        </DropdownMenuItem>
+                                    </DropdownMenuSubContent>
+                                </DropdownMenuPortal>
+                            </DropdownMenuSub>
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
                                     <div className="flex flex-row items-center gap-1">

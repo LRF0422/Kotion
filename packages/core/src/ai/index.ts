@@ -12,5 +12,8 @@ export * from "./discovery"
 // Skills
 export * from "./skills"
 
+// Utils
+export { parseMarkdownToNodes } from "./utils/markdown-parser"
+
 // Inline AI Menu (trigger in bubble menu + panel via floatingUI)
 export { AiInlineTrigger, AiInlinePanel } from "./AiInlineMenu"

@@ -140,6 +140,7 @@ export const SpaceDetail: React.FC = () => {
         const param = {
             spaceId: params.id,
             parentId: parentId,
+            title: "Untitled",
             content: JSON.stringify({
                 "type": "doc",
                 "content": [
