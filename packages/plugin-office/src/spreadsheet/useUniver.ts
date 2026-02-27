@@ -1,5 +1,5 @@
-import { useEffect, useRef, useCallback } from "react"
-import { createUniver, defaultTheme, FUniver, LocaleType } from "@univerjs/presets"
+import { useEffect, useRef, useCallback, type RefObject } from "react"
+import { createUniver, defaultTheme, LocaleType } from "@univerjs/presets"
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core"
 import sheetsLocaleEnUS from "@univerjs/preset-sheets-core/locales/en-US"
 import sheetsLocaleZhCN from "@univerjs/preset-sheets-core/locales/zh-CN"
@@ -7,14 +7,18 @@ import "@univerjs/preset-sheets-core/lib/index.css"
 import { SAVE_THROTTLE_MS } from "./constants"
 
 interface UseUniverOptions {
-    container: HTMLDivElement | null
+    containerRef: RefObject<HTMLDivElement | null>
     workbookData: Record<string, any> | null
     readOnly: boolean
     darkMode: boolean
     onSave: (data: Record<string, any>) => void
 }
 
-export function useUniver({ container, workbookData, readOnly, darkMode, onSave }: UseUniverOptions) {
+interface UseUniverReturn {
+    importWorkbookData: (data: Record<string, any>) => void
+}
+
+export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSave }: UseUniverOptions): UseUniverReturn {
     const univerRef = useRef<any>(null)
     const univerAPIRef = useRef<any>(null)
     const disposeRef = useRef<(() => void) | null>(null)
@@ -39,6 +43,7 @@ export function useUniver({ container, workbookData, readOnly, darkMode, onSave 
     }, [])
 
     useEffect(() => {
+        const container = containerRef.current
         if (!container || initializedRef.current) return
         initializedRef.current = true
 
@@ -81,7 +86,7 @@ export function useUniver({ container, workbookData, readOnly, darkMode, onSave 
                 })
                 disposeRef.current = () => {
                     if (typeof disposable === 'function') {
-                        disposable()
+                        (disposable as Function)()
                     } else if (disposable && typeof disposable.dispose === 'function') {
                         disposable.dispose()
                     }
@@ -118,13 +123,59 @@ export function useUniver({ container, workbookData, readOnly, darkMode, onSave 
             }
             initializedRef.current = false
         }
-    }, [container]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [containerRef]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Toggle dark mode dynamically when theme changes
+    // Toggle dark mode dynamically — only fires when theme actually changes
     useEffect(() => {
         const api = univerAPIRef.current
         if (api && initializedRef.current) {
             api.toggleDarkMode(darkMode)
         }
     }, [darkMode])
+
+    const importWorkbookData = useCallback((data: Record<string, any>) => {
+        const api = univerAPIRef.current
+        if (!api) return
+
+        // Dispose current workbook
+        const currentWorkbook = api.getActiveWorkbook()
+        if (currentWorkbook && typeof currentWorkbook.dispose === 'function') {
+            currentWorkbook.dispose()
+        }
+
+        // Create new workbook with imported data
+        api.createWorkbook(data)
+
+        // Re-attach change listener for auto-save
+        if (!readOnly) {
+            if (disposeRef.current) {
+                disposeRef.current()
+                disposeRef.current = null
+            }
+            const workbook = api.getActiveWorkbook()
+            if (workbook && typeof workbook.onCommandExecuted === 'function') {
+                const disposable = workbook.onCommandExecuted(() => {
+                    throttledSave()
+                })
+                disposeRef.current = () => {
+                    if (typeof disposable === 'function') {
+                        disposable()
+                    } else if (disposable && typeof disposable.dispose === 'function') {
+                        disposable.dispose()
+                    }
+                }
+            }
+        }
+
+        // Trigger immediate save of imported data
+        const workbook = api.getActiveWorkbook()
+        if (workbook) {
+            const snapshot = workbook.getSnapshot()
+            if (snapshot) {
+                onSaveRef.current(snapshot)
+            }
+        }
+    }, [readOnly, throttledSave])
+
+    return { importWorkbookData }
 }

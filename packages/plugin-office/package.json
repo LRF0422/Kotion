@@ -18,7 +18,8 @@
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",
     "@univerjs/presets": "^0.15.5",
-    "@univerjs/preset-sheets-core": "^0.15.5"
+    "@univerjs/preset-sheets-core": "^0.15.5",
+    "xlsx": "^0.18.5"
   },
   "keywords": [],
   "author": "",
