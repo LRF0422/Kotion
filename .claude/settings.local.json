@@ -9,7 +9,12 @@
       "Bash(if exist \"C:\\\\Users\\\\albus\\\\.claude\\\\settings.json\" type \"C:\\\\Users\\\\albus\\\\.claude\\\\settings.json\")",
       "Bash(find:*)",
       "Bash(pnpm build:core:*)",
-      "Bash(find \"D:\\\\workspace\\\\knowledge-repo\\\\knowledge-repo\\\\packages\\\\common\\\\src\" -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" \\\\\\) | xargs grep -l \"PluginSettingsConfig\" 2>/dev/null)"
+      "Bash(find \"D:\\\\workspace\\\\knowledge-repo\\\\knowledge-repo\\\\packages\\\\common\\\\src\" -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" \\\\\\) | xargs grep -l \"PluginSettingsConfig\" 2>/dev/null)",
+      "WebFetch(domain:docs.univer.ai)",
+      "WebSearch",
+      "Bash(pnpm install:*)",
+      "Bash(node:*)",
+      "Bash(grep:*)"
     ]
   }
 }

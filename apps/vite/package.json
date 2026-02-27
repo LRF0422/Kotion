@@ -30,6 +30,7 @@
     "@kn/plugin-bilibili": "workspace:*",
     "@kn/plugin-netease-music": "workspace:*",
     "@kn/plugin-github": "workspace:*",
+    "@kn/plugin-office": "workspace:*",
     "evaluatex": "^2.2.0",
     "event-source-polyfill": "^1.0.31",
     "lodash": "^4.17.21",

@@ -1,0 +1,29 @@
+{
+  "name": "@kn/plugin-office",
+  "version": "0.0.1",
+  "description": "Office plugin for Knowledge Repo - spreadsheet powered by Univer",
+  "main": "src/index.tsx",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts"
+  },
+  "scripts": {
+    "build": "NODE_ENV=production rollup -c",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@kn/common": "workspace:*",
+    "@kn/core": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/ui": "workspace:*",
+    "@univerjs/presets": "^0.15.5",
+    "@univerjs/preset-sheets-core": "^0.15.5"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@kn/rollup-config": "workspace:*"
+  }
+}

@@ -17,9 +17,10 @@ import { bitable } from "@kn/plugin-bitable"
 // import { weaverOA } from "@kn/plugin-weaver-oa"
 // import { bilibili } from "@kn/plugin-bilibili"
 import { github } from "@kn/plugin-github"
+import { office } from "@kn/plugin-office"
 // import { neteaseMusic } from "@kn/plugin-netease-music"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[DefaultPluginInstance, fileManager, mermaid, excalidraw, blockReference, ai, bitable, github]} />
+  <App plugins={[DefaultPluginInstance, fileManager, mermaid, excalidraw, blockReference, ai, bitable, github, office]} />
 )
