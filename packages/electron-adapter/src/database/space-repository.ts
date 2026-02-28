@@ -1,8 +1,7 @@
-import Database from 'better-sqlite3';
 import { Space, Page, SyncStatus } from '../types';
 
 export class SpaceRepository {
-  constructor(private db: Database.Database) { }
+  constructor(private db: any) { }
 
   /**
    * Create space
@@ -209,7 +208,7 @@ export class SpaceRepository {
 }
 
 export class PageRepository {
-  constructor(private db: Database.Database) { }
+  constructor(private db: any) { }
 
   /**
    * Create page

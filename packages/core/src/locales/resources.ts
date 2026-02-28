@@ -127,7 +127,9 @@ export const resources = {
                     "prev": "上一步",
                     "next": "下一步",
                     "submit": "提交审核",
-                    "submitting": "提交中..."
+                    "submitting": "提交中...",
+                    "aiGenerate": "AI 生成",
+                    "aiGenerating": "生成中..."
                 },
                 "exitDialog": {
                     "title": "确认退出？",
@@ -148,7 +150,8 @@ export const resources = {
                     "formIncomplete": "请完善必填信息后再继续",
                     "fileRequired": "请先上传插件文件（.js 格式）",
                     "validationError": "表单验证失败，请检查输入",
-                    "keepOneTab": "至少保留一个描述分类"
+                    "keepOneTab": "至少保留一个描述分类",
+                    "fillBasicFirst": "请先填写插件名称等基本信息"
                 },
                 "toast": {
                     "submitSuccess": "🎉 插件提交成功！审核通过后将自动上架",
@@ -157,7 +160,9 @@ export const resources = {
                     "iconUploadFailed": "图标上传失败，请检查图片格式",
                     "iconRemoved": "图标已移除，可重新上传",
                     "fileUploaded": "✅ 文件上传成功：{{filename}}",
-                    "fileUploadFailed": "文件上传失败，请检查网络后重试"
+                    "fileUploadFailed": "文件上传失败，请检查网络后重试",
+                    "aiGenerated": "✨ AI 内容生成成功",
+                    "aiGenerateFailed": "AI 生成失败，请稍后重试"
                 }
             },
             "pluginManager": {
@@ -440,7 +445,9 @@ export const resources = {
                     "prev": "Previous",
                     "next": "Next",
                     "submit": "Submit for Review",
-                    "submitting": "Submitting..."
+                    "submitting": "Submitting...",
+                    "aiGenerate": "AI Generate",
+                    "aiGenerating": "Generating..."
                 },
                 "exitDialog": {
                     "title": "Confirm Exit?",
@@ -461,7 +468,8 @@ export const resources = {
                     "formIncomplete": "Please complete all required fields before continuing",
                     "fileRequired": "Please upload a plugin file (.js format)",
                     "validationError": "Form validation failed, please check your input",
-                    "keepOneTab": "Keep at least one description category"
+                    "keepOneTab": "Keep at least one description category",
+                    "fillBasicFirst": "Please fill in the plugin name and basic info first"
                 },
                 "toast": {
                     "submitSuccess": "🎉 Plugin submitted successfully! It will be published after review",
@@ -470,7 +478,9 @@ export const resources = {
                     "iconUploadFailed": "Icon upload failed, please check image format",
                     "iconRemoved": "Icon removed, you can upload a new one",
                     "fileUploaded": "✅ File uploaded: {{filename}}",
-                    "fileUploadFailed": "File upload failed, please check your network and try again"
+                    "fileUploadFailed": "File upload failed, please check your network and try again",
+                    "aiGenerated": "✨ AI content generated successfully",
+                    "aiGenerateFailed": "AI generation failed, please try again later"
                 }
             },
             "pluginManager": {

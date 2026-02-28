@@ -3,6 +3,8 @@ import { SpreadsheetNode } from "./spreadsheet-node"
 import { Sheet } from "@kn/icon"
 import React from "react"
 import { triggerExcelFileImport, parseExcelToUniverData } from "./excel-to-univer"
+import { spreadsheetTools } from "./tools"
+import { spreadsheetExpertSkill } from "./skills"
 
 const importExcelAction = async (editor: any) => {
     const file = await triggerExcelFileImport()
@@ -52,4 +54,6 @@ export const SpreadsheetExtension: ExtensionWrapper = {
             action: importExcelAction,
         },
     ],
+    tools: spreadsheetTools,
+    skills: [spreadsheetExpertSkill],
 }

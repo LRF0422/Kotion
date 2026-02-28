@@ -8,12 +8,13 @@ import {
 } from "@kn/ui";
 import React, { PropsWithChildren, useCallback, useMemo } from "react";
 import { z } from "@kn/ui";
-import { CheckCircle2, PlusIcon, TrashIcon, Loader2Icon, XIcon, UploadIcon, ImageIcon } from "@kn/icon";
-import { CollaborationEditor, JSONContent } from "@kn/editor";
+import { CheckCircle2, PlusIcon, TrashIcon, Loader2Icon, XIcon, UploadIcon, ImageIcon, Sparkles } from "@kn/icon";
+import { CollaborationEditor, JSONContent, Editor } from "@kn/editor";
 import { useTranslation } from "@kn/common";
 import { useApi, useUploadFile } from "../../../hooks";
 import { useSafeState } from "ahooks";
 import { APIS } from "../../../api";
+import { generateText, parseMarkdownToNodes } from "../../../ai";
 
 interface Description {
     label: string,
@@ -47,6 +48,8 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
         { label: "ChangeLog", content: {} },
     ]);
     const [activeDescTab, setActiveDescTab] = React.useState("Feature");
+    const [isAiGenerating, setIsAiGenerating] = useSafeState(false);
+    const editorRefs = React.useRef<Record<string, Editor | null>>({});
 
     const formSchema = z.object({
         name: z.string()
@@ -243,6 +246,61 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
             setActiveDescTab(newDescriptions[0].label);
         }
     };
+
+    const handleAiGenerate = useCallback(async () => {
+        const formValues = form.getValues();
+        const tabLabel = activeDescTab;
+
+        if (!formValues.name) {
+            toast.warning(t('pluginUploader.validation.fillBasicFirst'));
+            return;
+        }
+
+        setIsAiGenerating(true);
+
+        const pluginInfo = [
+            `Plugin Name: ${formValues.name}`,
+            formValues.pluginKey ? `Plugin Key: ${formValues.pluginKey}` : '',
+            formValues.version ? `Version: ${formValues.version}` : '',
+            formValues.tags?.length ? `Tags: ${formValues.tags.map((t: any) => t.text).join(', ')}` : '',
+            formValues.description ? `Description: ${formValues.description}` : '',
+        ].filter(Boolean).join('\n');
+
+        const tabPrompts: Record<string, string> = {
+            "Feature": `Based on the following plugin information, generate a Feature description document in Markdown format. Include the main features with brief descriptions, organized with headings and bullet points.\n\n${pluginInfo}`,
+            "Detail": `Based on the following plugin information, generate a detailed usage documentation in Markdown format. Include installation, configuration, usage examples, and API reference if applicable.\n\n${pluginInfo}`,
+            "ChangeLog": `Based on the following plugin information, generate a ChangeLog document in Markdown format. Include version ${formValues.version || '1.0.0'} as the initial release with key changes and features.\n\n${pluginInfo}`,
+        };
+
+        const prompt = tabPrompts[tabLabel] || `Based on the following plugin information, generate a ${tabLabel} document in Markdown format.\n\n${pluginInfo}`;
+
+        try {
+            let fullText = "";
+            const { textStream } = generateText(`${prompt}\n\nPlease output Markdown content directly without any extra conversation.`);
+
+            for await (const part of textStream) {
+                fullText += part;
+            }
+
+            const nodes = parseMarkdownToNodes(fullText);
+            const content: JSONContent = { type: 'doc', content: nodes };
+
+            const editorInstance = editorRefs.current[tabLabel];
+            if (editorInstance) {
+                editorInstance.commands.setContent(content);
+            }
+
+            setDescriptions(prev => prev.map(item =>
+                item.label === tabLabel ? { ...item, content } : item
+            ));
+
+            toast.success(t('pluginUploader.toast.aiGenerated'));
+        } catch (error: any) {
+            toast.error(error?.message || t('pluginUploader.toast.aiGenerateFailed'));
+        } finally {
+            setIsAiGenerating(false);
+        }
+    }, [activeDescTab, form, t]);
 
     // Step 1: Basic Info
     const renderBasicInfo = () => (
@@ -461,10 +519,26 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                             </TabsTrigger>
                         ))}
                     </TabsList>
-                    <IconButton
-                        icon={<PlusIcon className="h-4 w-4" />}
-                        onClick={handleAddDescriptionTab}
-                    />
+                    <div className="flex items-center gap-1">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleAiGenerate}
+                            disabled={isAiGenerating}
+                            className="gap-1.5 text-xs h-7 text-purple-600 border-purple-200 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-800 dark:hover:bg-purple-950/30"
+                        >
+                            {isAiGenerating ? (
+                                <Loader2Icon className="h-3 w-3 animate-spin" />
+                            ) : (
+                                <Sparkles className="h-3 w-3" />
+                            )}
+                            {isAiGenerating ? t('pluginUploader.buttons.aiGenerating') : t('pluginUploader.buttons.aiGenerate')}
+                        </Button>
+                        <IconButton
+                            icon={<PlusIcon className="h-4 w-4" />}
+                            onClick={handleAddDescriptionTab}
+                        />
+                    </div>
                 </div>
 
                 {/* Tab hint */}
@@ -476,6 +550,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                     {descriptions.map((item: any, index) => (
                         <TabsContent key={index} value={item.label} className="m-0">
                             <CollaborationEditor
+                                ref={(editor: Editor | null) => { editorRefs.current[item.label] = editor; }}
                                 id=""
                                 content={item.content}
                                 isEditable
@@ -657,7 +732,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                 <DialogTrigger asChild onClick={() => setOpen(true)}>
                     {children}
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl w-full max-h-[90vh] flex flex-col p-0">
+                <DialogContent className="max-w-2xl w-full max-h-[90vh] flex flex-col p-0 overflow-hidden">
                     <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
                         <DialogTitle className="text-lg flex items-center gap-2">
                             <span>{t('pluginUploader.dialogTitle')}</span>
@@ -672,7 +747,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="flex-1 overflow-hidden flex flex-col">
+                    <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                         {/* Stepper */}
                         <div className="px-6 py-4 border-b bg-muted/30 flex-shrink-0">
                             <Stepper
@@ -683,7 +758,7 @@ export const PluginUploader: React.FC<PropsWithChildren> = ({ children }) => {
                         </div>
 
                         {/* Content */}
-                        <ScrollArea className="flex-1">
+                        <ScrollArea className="flex-1 min-h-0">
                             <div className="px-6 py-5">
                                 {render()}
                             </div>

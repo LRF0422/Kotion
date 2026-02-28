@@ -2,6 +2,7 @@ import { NodeViewProps, NodeViewWrapper } from "@kn/editor"
 import { useTheme } from "@kn/ui"
 import { Maximize2, X } from "@kn/icon"
 import React, { useCallback, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { useUniver } from "./useUniver"
 import { triggerExcelFileImport, parseExcelToUniverData } from "./excel-to-univer"
 
@@ -54,41 +55,60 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         }
     }, [importWorkbookData])
 
-    return (
-        <NodeViewWrapper
-            className={
-                isFullscreen
-                    ? "fixed inset-0 z-50 flex flex-col bg-background"
-                    : "relative my-2 rounded-md border shadow-sm"
-            }
-        >
-            <div className="flex items-center gap-1 border-b px-2 py-1">
-                {editor.isEditable && (
-                    <button
-                        className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
-                        onClick={handleImportExcel}
-                        disabled={importing}
-                    >
-                        {importing ? '导入中...' : '导入 Excel'}
-                    </button>
-                )}
-                <div className="flex-1" />
+    // Toolbar shared between inline and fullscreen modes
+    const toolbar = (
+        <div className="flex items-center gap-1 border-b px-2 py-1">
+            {editor.isEditable && (
                 <button
-                    className="inline-flex items-center justify-center rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                    onClick={() => setIsFullscreen(!isFullscreen)}
-                    title={isFullscreen ? '退出全屏' : '放大编辑'}
+                    className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+                    onClick={handleImportExcel}
+                    disabled={importing}
                 >
-                    {isFullscreen
-                        ? <X className="h-4 w-4" />
-                        : <Maximize2 className="h-4 w-4" />
-                    }
+                    {importing ? '导入中...' : '导入 Excel'}
                 </button>
-            </div>
-            <div
-                ref={containerRef}
-                style={{ height: isFullscreen ? '100%' : height }}
-                className={isFullscreen ? "flex-1" : undefined}
-            />
+            )}
+            <div className="flex-1" />
+            <button
+                className="inline-flex items-center justify-center rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                title={isFullscreen ? '退出全屏' : '放大编辑'}
+            >
+                {isFullscreen
+                    ? <X className="h-4 w-4" />
+                    : <Maximize2 className="h-4 w-4" />
+                }
+            </button>
+        </div>
+    )
+
+    // Fullscreen: portal to document.body to escape parent stacking context
+    // The editor wrapper creates a stacking context (z-30) that caps child z-index.
+    const fullscreenOverlay = isFullscreen
+        ? createPortal(
+            <div className="fixed inset-0 z-[9998] flex flex-col bg-background">
+                {toolbar}
+                <div
+                    ref={containerRef}
+                    className="flex-1"
+                    style={{ height: '100%' }}
+                />
+            </div>,
+            document.body
+        )
+        : null
+
+    return (
+        <NodeViewWrapper className="relative my-2 rounded-md border shadow-sm">
+            {!isFullscreen && (
+                <>
+                    {toolbar}
+                    <div
+                        ref={containerRef}
+                        style={{ height }}
+                    />
+                </>
+            )}
+            {fullscreenOverlay}
         </NodeViewWrapper>
     )
 }, (prevProps, nextProps) => {

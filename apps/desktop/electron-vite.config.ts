@@ -9,7 +9,7 @@ export default defineConfig({
         input: {
           main: resolve(__dirname, 'src/main/index.ts'),
         },
-        external: ['electron', 'better-sqlite3', 'fs-extra'],
+        external: ['electron', 'fs-extra'],
       },
     },
     resolve: {

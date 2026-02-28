@@ -1,15 +1,14 @@
-import Database from 'better-sqlite3';
 import { InstalledPlugin } from '../types';
 
 export class PluginRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private db: any) { }
 
   /**
    * Install plugin
    */
   install(plugin: Omit<InstalledPlugin, 'installedAt'>): void {
     const now = Date.now();
-    
+
     this.db
       .prepare(
         `INSERT INTO plugins (
@@ -113,7 +112,7 @@ export class PluginRepository {
     downloadUrl?: string;
   }): void {
     const now = Date.now();
-    
+
     this.db
       .prepare(
         `INSERT OR REPLACE INTO plugin_cache (

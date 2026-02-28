@@ -1,26 +1,17 @@
-import Database from 'better-sqlite3';
 import { DB_SCHEMA_VERSION } from '../config';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 
 export class DatabaseManager {
-  private db: Database.Database;
+  private db: any;
   private dbPath: string;
 
   constructor(dbPath: string) {
     this.dbPath = dbPath;
-    
+
     // Ensure directory exists
     const dir = path.dirname(dbPath);
     fs.ensureDirSync(dir);
-
-    // Open database
-    this.db = new Database(dbPath);
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
-
-    // Initialize schema
-    this.initSchema();
   }
 
   private initSchema() {
@@ -296,17 +287,17 @@ export class DatabaseManager {
 
   private migrate(fromVersion: number, toVersion: number): void {
     console.log(`Migrating database from version ${fromVersion} to ${toVersion}`);
-    
+
     // Add migration logic here when schema changes
     // For now, we only have version 1
-    
+
     this.setSchemaVersion(toVersion);
   }
 
   /**
    * Get database instance
    */
-  getDatabase(): Database.Database {
+  getDatabase(): any {
     return this.db;
   }
 

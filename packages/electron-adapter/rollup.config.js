@@ -28,7 +28,6 @@ export default {
   ],
   external: [
     'electron',
-    'better-sqlite3',
     'fs-extra',
     'axios',
     'uuid',

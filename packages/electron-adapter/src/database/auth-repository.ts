@@ -1,15 +1,14 @@
-import Database from 'better-sqlite3';
 import { AuthInfo, UserInfo, MembershipInfo, UserRole } from '../types';
 
 export class AuthRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private db: any) { }
 
   /**
    * Save auth info
    */
   saveAuthInfo(auth: AuthInfo, role: UserRole = UserRole.AUTHENTICATED): void {
     const now = Date.now();
-    
+
     this.db
       .prepare(
         `INSERT OR REPLACE INTO auth_info (
@@ -81,7 +80,7 @@ export class AuthRepository {
    */
   saveUserInfo(user: UserInfo): void {
     const now = Date.now();
-    
+
     this.db
       .prepare(
         `INSERT OR REPLACE INTO user_info (
@@ -139,7 +138,7 @@ export class AuthRepository {
    */
   saveMembershipInfo(membership: MembershipInfo): void {
     const now = Date.now();
-    
+
     this.db
       .prepare(
         `INSERT OR REPLACE INTO membership_info (
