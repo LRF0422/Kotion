@@ -2,8 +2,8 @@ import { BubbleMenu, BubbleMenuProps } from "@editor/components";
 import { Editor, getMarkRange, isMarkActive, posToDOMRect } from "@tiptap/core";
 import React, { useCallback, useMemo } from "react";
 import type { CommentItem as CommentItemType } from "../types";
-import { IconButton, ScrollArea } from "@kn/ui";
-import { CheckIcon, Trash2 } from "@kn/icon";
+import { Button, ScrollArea } from "@kn/ui";
+import { CheckIcon } from "@kn/icon";
 import { useAttributes } from "@editor/hooks";
 import { CommentItem } from "./CommentItem";
 import { CommentInput } from "./CommentInput";
@@ -42,7 +42,6 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
         if (!content.trim()) return;
 
         if (isNewThread && threadId) {
-            // This is a new thread with empty first comment - we need to resolve and recreate
             editor.commands.resolveThread(threadId);
             editor.commands.addComment(content);
         } else if (threadId) {
@@ -80,59 +79,50 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
             forNode
             getReferenceClientRect={getReferenceClientRect}
             options={{
-                placement: "top"
+                placement: "bottom-start"
             }}
         >
-            <div className="w-[320px] max-h-[400px] flex flex-col bg-background border rounded-lg shadow-lg">
-                {/* Header */}
-                <div className="flex justify-between items-center p-3 border-b">
-                    <div className="text-sm font-semibold flex items-center gap-2">
-                        <span>Comments</span>
-                        {!isNewThread && (
-                            <span className="text-xs text-muted-foreground">
-                                ({comments.length})
-                            </span>
-                        )}
+            <div className="w-[340px] max-h-[420px] flex flex-col bg-popover rounded-md shadow-[0_4px_24px_rgba(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.04)]">
+                {/* Header - only show for existing threads */}
+                {!isNewThread && (
+                    <div className="flex justify-between items-center px-3 pt-3 pb-1">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Thread
+                        </span>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+                            onClick={handleResolveThread}
+                        >
+                            <CheckIcon className="h-3.5 w-3.5" />
+                            Resolve
+                        </Button>
                     </div>
-                    {!isNewThread && (
-                        <div className="flex items-center gap-1">
-                            <IconButton
-                                icon={<CheckIcon className="h-4 w-4" />}
-                                onClick={handleResolveThread}
-                            />
-                            <IconButton
-                                icon={<Trash2 className="h-4 w-4" />}
-                                onClick={handleResolveThread}
-                            />
-                        </div>
-                    )}
-                </div>
+                )}
 
                 {/* Comments List */}
                 {!isNewThread && (
-                    <ScrollArea className="flex-1 p-2 max-h-[200px]">
-                        {comments.length > 0 ? (
-                            comments.map((comment) => (
+                    <ScrollArea className="flex-1 max-h-[260px]">
+                        <div className="px-3 py-1">
+                            {comments.map((comment, index) => (
                                 <CommentItem
                                     key={comment.id}
                                     comment={comment}
                                     onReply={handleReply}
                                     onDelete={handleDeleteComment}
                                     isReply={!!comment.parentId}
+                                    isLast={index === comments.length - 1}
                                 />
-                            ))
-                        ) : (
-                            <div className="p-4 text-center text-sm text-muted-foreground">
-                                No comments yet
-                            </div>
-                        )}
+                            ))}
+                        </div>
                     </ScrollArea>
                 )}
 
                 {/* Comment Input */}
                 <CommentInput
                     onSubmit={handleAddComment}
-                    placeholder={isNewThread ? "Add your comment..." : "Reply to this thread..."}
+                    placeholder={isNewThread ? "Comment..." : "Reply..."}
                     autoFocus={isNewThread}
                     onCancel={isNewThread ? handleCancelNewComment : undefined}
                 />

@@ -67,7 +67,8 @@ const Comments = Mark.create<CommentOptions, CommentStorage>({
         return {
             user: { id: '', name: 'Anonymous', avatar: '' },
             HTMLAttributes: {
-                class: 'bg-muted/50 cursor-pointer p-1 rounded-md hover:bg-muted outline'
+                class: 'comment-highlight',
+                style: 'background-color: rgb(255 212 0 / 0.14); border-bottom: 2px solid rgb(255 212 0 / 0.4); cursor: pointer; padding-bottom: 1px; transition: background-color 0.2s;',
             },
         };
     },

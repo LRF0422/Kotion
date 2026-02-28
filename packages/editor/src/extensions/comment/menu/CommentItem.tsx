@@ -1,13 +1,14 @@
 import React, { useMemo, useState } from "react";
 import type { CommentItem as CommentItemType } from "../types";
-import { Avatar, AvatarFallback, AvatarImage, IconButton, Separator, Textarea } from "@kn/ui";
-import { CheckIcon, ReplyIcon, Trash2, XIcon } from "@kn/icon";
+import { Avatar, AvatarFallback, AvatarImage, Button, Textarea } from "@kn/ui";
+import { CornerDownRight, Trash2 } from "@kn/icon";
 
 export interface CommentItemProps {
     comment: CommentItemType;
     onReply?: (parentId: string, content: string) => void;
     onDelete?: (commentId: string) => void;
     isReply?: boolean;
+    isLast?: boolean;
 }
 
 export const CommentItem: React.FC<CommentItemProps> = ({
@@ -15,6 +16,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
     onReply,
     onDelete,
     isReply = false,
+    isLast = false,
 }) => {
     const [isReplying, setIsReplying] = useState(false);
     const [replyText, setReplyText] = useState('');
@@ -28,14 +30,13 @@ export const CommentItem: React.FC<CommentItemProps> = ({
         const diffDays = Math.floor(diffMs / 86400000);
 
         if (diffMins < 1) return 'just now';
-        if (diffMins < 60) return `${diffMins}m ago`;
-        if (diffHours < 24) return `${diffHours}h ago`;
-        if (diffDays < 7) return `${diffDays}d ago`;
+        if (diffMins < 60) return `${diffMins}m`;
+        if (diffHours < 24) return `${diffHours}h`;
+        if (diffDays < 30) return `${diffDays}d`;
 
         return date.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
+            month: 'short',
+            day: 'numeric',
         });
     }, [comment.createdAt]);
 
@@ -47,65 +48,96 @@ export const CommentItem: React.FC<CommentItemProps> = ({
         }
     };
 
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            handleReplySubmit();
+        }
+        if (e.key === 'Escape') {
+            setReplyText('');
+            setIsReplying(false);
+        }
+    };
+
     return (
-        <div className={`space-y-1 ${isReply ? 'ml-4 border-l-2 border-muted pl-2' : ''}`}>
-            <div className="p-1 flex items-start gap-2">
-                <Avatar className="h-7 w-7 flex-shrink-0">
+        <div className={`group ${isReply ? 'pl-7' : ''} ${!isLast ? 'mb-1' : ''}`}>
+            <div className="flex items-start gap-2.5 py-1.5 rounded-md">
+                <Avatar className="h-6 w-6 flex-shrink-0 mt-0.5">
                     <AvatarImage src={comment.user.avatar} alt={comment.user.name} />
-                    <AvatarFallback className="text-xs">
+                    <AvatarFallback className="text-[10px] font-medium bg-muted">
                         {comment.user.name.charAt(0).toUpperCase()}
                     </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm truncate">{comment.user.name}</span>
-                        <span className="text-xs text-muted-foreground flex-shrink-0">{formattedDate}</span>
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="font-medium text-[13px] leading-tight truncate">
+                            {comment.user.name}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground/70 flex-shrink-0">
+                            {formattedDate}
+                        </span>
                     </div>
-                    <div className="text-sm whitespace-pre-wrap break-words mt-0.5">
+                    <p className="text-[13px] leading-relaxed text-foreground/90 whitespace-pre-wrap break-words mt-0.5">
                         {comment.content}
-                    </div>
+                    </p>
+
+                    {/* Action buttons - show on hover */}
+                    {!isReplying && (
+                        <div className="flex items-center gap-0.5 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+                                onClick={() => setIsReplying(true)}
+                            >
+                                <CornerDownRight className="h-3 w-3 mr-0.5" />
+                                Reply
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-1.5 text-[11px] text-muted-foreground hover:text-destructive"
+                                onClick={() => onDelete?.(comment.id)}
+                            >
+                                <Trash2 className="h-3 w-3" />
+                            </Button>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {isReplying ? (
-                <div className="ml-9 space-y-2">
+            {/* Inline reply */}
+            {isReplying && (
+                <div className="pl-8 pb-1">
                     <Textarea
                         spellCheck={false}
-                        placeholder="Write a reply..."
+                        placeholder="Reply..."
                         value={replyText}
                         onChange={(e) => setReplyText(e.target.value)}
-                        className="min-h-[60px] resize-none text-sm"
+                        onKeyDown={handleKeyDown}
+                        className="min-h-[56px] resize-none text-[13px] border-muted bg-muted/30 focus-visible:ring-1 focus-visible:ring-ring/30"
                         autoFocus
                     />
-                    <div className="flex gap-1 justify-end">
-                        <IconButton
-                            className="h-7 w-7"
-                            icon={<XIcon className="h-4 w-4" />}
+                    <div className="flex gap-1.5 justify-end mt-1.5">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2.5 text-xs"
                             onClick={() => { setReplyText(''); setIsReplying(false); }}
-                        />
-                        <IconButton
-                            className="h-7 w-7"
-                            icon={<CheckIcon className="h-4 w-4" />}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            size="sm"
+                            className="h-7 px-2.5 text-xs"
                             onClick={handleReplySubmit}
                             disabled={!replyText.trim()}
-                        />
+                        >
+                            Reply
+                        </Button>
                     </div>
                 </div>
-            ) : (
-                <div className="ml-9 flex items-center gap-1">
-                    <IconButton
-                        className="h-6 w-6"
-                        icon={<ReplyIcon className="h-3.5 w-3.5" />}
-                        onClick={() => setIsReplying(true)}
-                    />
-                    <IconButton
-                        className="h-6 w-6"
-                        icon={<Trash2 className="h-3.5 w-3.5" />}
-                        onClick={() => onDelete?.(comment.id)}
-                    />
-                </div>
             )}
-            <Separator orientation="horizontal" />
         </div>
     );
 };
