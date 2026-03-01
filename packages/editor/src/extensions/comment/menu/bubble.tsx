@@ -11,8 +11,23 @@ import { CommentInput } from "./CommentInput";
 export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
     const { editor } = props;
 
+    const isEditable = editor.isEditable;
+
     const shouldShow = useCallback<BubbleMenuProps["shouldShow"]>(() => {
-        return isMarkActive(editor.state, 'comment');
+        if (!isMarkActive(editor.state, 'comment')) return false;
+
+        // In read-only mode, don't show for empty/new threads
+        if (!editor.isEditable) {
+            try {
+                const attrs = editor.getAttributes('comment');
+                const comments = JSON.parse(attrs.comments || '[]');
+                if (comments.length === 0 || (comments.length === 1 && !comments[0].content)) {
+                    return false;
+                }
+            } catch { /* show by default */ }
+        }
+
+        return true;
     }, [editor]);
 
     const attrs = useAttributes(editor, 'comment', { thread_id: '', comments: '[]' });
@@ -42,8 +57,10 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
         if (!content.trim()) return;
 
         if (isNewThread && threadId) {
-            editor.commands.resolveThread(threadId);
-            editor.commands.addComment(content);
+            // Update the existing mark in a single transaction instead of
+            // resolveThread + addComment (which removes the mark first,
+            // causing the selection/range to be lost before re-adding).
+            editor.commands.setFirstComment(threadId, content);
         } else if (threadId) {
             editor.commands.replyComment(threadId, content);
         }
@@ -89,15 +106,17 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
                         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             Thread
                         </span>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
-                            onClick={handleResolveThread}
-                        >
-                            <CheckIcon className="h-3.5 w-3.5" />
-                            Resolve
-                        </Button>
+                        {isEditable && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+                                onClick={handleResolveThread}
+                            >
+                                <CheckIcon className="h-3.5 w-3.5" />
+                                Resolve
+                            </Button>
+                        )}
                     </div>
                 )}
 
@@ -109,8 +128,9 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
                                 <CommentItem
                                     key={comment.id}
                                     comment={comment}
-                                    onReply={handleReply}
-                                    onDelete={handleDeleteComment}
+                                    onReply={isEditable ? handleReply : undefined}
+                                    onDelete={isEditable ? handleDeleteComment : undefined}
+                                    readOnly={!isEditable}
                                     isReply={!!comment.parentId}
                                     isLast={index === comments.length - 1}
                                 />
@@ -119,13 +139,15 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
                     </ScrollArea>
                 )}
 
-                {/* Comment Input */}
-                <CommentInput
-                    onSubmit={handleAddComment}
-                    placeholder={isNewThread ? "Comment..." : "Reply..."}
-                    autoFocus={isNewThread}
-                    onCancel={isNewThread ? handleCancelNewComment : undefined}
-                />
+                {/* Comment Input - only in edit mode */}
+                {isEditable && (
+                    <CommentInput
+                        onSubmit={handleAddComment}
+                        placeholder={isNewThread ? "Comment..." : "Reply..."}
+                        autoFocus={isNewThread}
+                        onCancel={isNewThread ? handleCancelNewComment : undefined}
+                    />
+                )}
             </div>
         </BubbleMenu>
     );

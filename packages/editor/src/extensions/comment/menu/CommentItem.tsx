@@ -9,6 +9,7 @@ export interface CommentItemProps {
     onDelete?: (commentId: string) => void;
     isReply?: boolean;
     isLast?: boolean;
+    readOnly?: boolean;
 }
 
 export const CommentItem: React.FC<CommentItemProps> = ({
@@ -17,6 +18,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
     onDelete,
     isReply = false,
     isLast = false,
+    readOnly = false,
 }) => {
     const [isReplying, setIsReplying] = useState(false);
     const [replyText, setReplyText] = useState('');
@@ -81,8 +83,8 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                         {comment.content}
                     </p>
 
-                    {/* Action buttons - show on hover */}
-                    {!isReplying && (
+                    {/* Action buttons - show on hover, hidden in read-only mode */}
+                    {!isReplying && !readOnly && (
                         <div className="flex items-center gap-0.5 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Button
                                 variant="ghost"
@@ -106,8 +108,8 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                 </div>
             </div>
 
-            {/* Inline reply */}
-            {isReplying && (
+            {/* Inline reply - hidden in read-only mode */}
+            {isReplying && !readOnly && (
                 <div className="pl-8 pb-1">
                     <Textarea
                         spellCheck={false}

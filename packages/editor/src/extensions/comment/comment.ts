@@ -1,5 +1,7 @@
 import { Mark, mergeAttributes } from "@tiptap/core";
 import { v4 as uuidv4 } from "uuid";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { TextSelection } from "@tiptap/pm/state";
 import type { CommentItem, CommentOptions, CommentStorage } from "./types";
 import "./types";
 
@@ -117,6 +119,35 @@ const Comments = Mark.create<CommentOptions, CommentStorage>({
                 });
             },
 
+            setFirstComment: (threadId: string, content: string) => ({ tr, state }) => {
+                const markType = state.schema.marks.comment;
+                const range = findMarkRange(state.doc, markType, threadId);
+                if (!range) return false;
+
+                const user = this.options.user?.id
+                    ? this.options.user
+                    : { id: 'anonymous', name: 'Anonymous', avatar: '' };
+
+                const newItem: CommentItem = {
+                    id: uuidv4(),
+                    user,
+                    content: content.trim(),
+                    createdAt: Date.now(),
+                    parentId: null,
+                };
+
+                const newMark = markType.create({
+                    thread_id: threadId,
+                    comments: JSON.stringify([newItem]),
+                });
+
+                tr.removeMark(range.from, range.to, markType);
+                tr.addMark(range.from, range.to, newMark);
+                tr.setMeta('addToHistory', false);
+
+                return true;
+            },
+
             replyComment: (threadId: string, content: string, parentId?: string) => ({ tr, state }) => {
                 const markType = state.schema.marks.comment;
                 const range = findMarkRange(state.doc, markType, threadId);
@@ -184,6 +215,53 @@ const Comments = Mark.create<CommentOptions, CommentStorage>({
                 return true;
             },
         };
+    },
+
+    addProseMirrorPlugins() {
+        const editor = this.editor;
+
+        return [
+            new Plugin({
+                key: new PluginKey('commentClick'),
+                props: {
+                    handleDOMEvents: {
+                        click: (view, event) => {
+                            // Only handle in non-editable mode
+                            if (editor.isEditable) return false;
+
+                            const target = event.target as HTMLElement;
+                            const commentSpan = target.closest('[data-thread-id]') as HTMLElement;
+
+                            if (commentSpan) {
+                                const threadId = commentSpan.getAttribute('data-thread-id');
+                                if (threadId) {
+                                    const markType = view.state.schema.marks.comment;
+                                    const range = findMarkRange(view.state.doc, markType, threadId);
+                                    if (range) {
+                                        const tr = view.state.tr.setSelection(
+                                            TextSelection.create(view.state.doc, range.from, range.to)
+                                        );
+                                        view.dispatch(tr);
+                                    }
+                                }
+                                return true;
+                            }
+
+                            // Click outside comment span - reset selection to hide popup
+                            try {
+                                const tr = view.state.tr.setSelection(
+                                    TextSelection.create(view.state.doc, 1)
+                                );
+                                view.dispatch(tr);
+                            } catch {
+                                // Ignore - position might be invalid
+                            }
+                            return true;
+                        },
+                    },
+                },
+            }),
+        ];
     },
 
     onSelectionUpdate() {

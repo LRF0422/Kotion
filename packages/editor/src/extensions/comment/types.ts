@@ -25,6 +25,7 @@ declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         comment: {
             addComment: (content: string) => ReturnType;
+            setFirstComment: (threadId: string, content: string) => ReturnType;
             replyComment: (threadId: string, content: string, parentId?: string) => ReturnType;
             deleteComment: (threadId: string, commentId: string) => ReturnType;
             resolveThread: (threadId: string) => ReturnType;

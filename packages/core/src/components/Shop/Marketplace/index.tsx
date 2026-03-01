@@ -97,18 +97,18 @@ export const Marketplace: React.FC = () => {
         </div>
         <div className="w-full px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 h-[calc(100vh-89px)] sm:h-[calc(100vh-73px)] overflow-auto">
             {/* Hero Section */}
-            <div className="w-full max-w-7xl mx-auto text-center py-6 sm:py-8 space-y-3 sm:space-y-4 px-2">
+            <div className="w-full max-w-7xl mx-auto text-left py-6 sm:py-8 space-y-3 sm:space-y-4 px-2">
                 <div className="space-y-2 sm:space-y-3">
                     <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
                         {t("marketplace.title", "Enhance your Kotion experience")}
                     </h1>
-                    <p className="text-sm sm:text-base md:text-lg text-muted-foreground max-w-3xl mx-auto font-light px-4">
+                    <p className="text-sm sm:text-base md:text-lg text-muted-foreground max-w-3xl font-light">
                         {t("marketplace.description", "Discover plugins that extend Kotion's capabilities and help you work more efficiently.")}
                     </p>
                 </div>
 
                 {/* Category Pills */}
-                <div className="flex gap-2 items-center justify-center flex-wrap pt-3 sm:pt-4">
+                <div className="flex gap-2 items-center justify-start flex-wrap pt-3 sm:pt-4">
                     {
                         categories.map((it, index) => <button
                             onClick={() => setSelectCategory(it)}
@@ -151,7 +151,7 @@ export const Marketplace: React.FC = () => {
                     showLoading ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 3xl:grid-cols-5 gap-3 sm:gap-4 w-full">
                             {Array.from({ length: 8 }).map((_, index) => (
-                                <Card key={index} className="relative animate-pulse border-2 shadow-lg" style={{
+                                <Card key={index} className="relative animate-pulse border shadow-lg" style={{
                                     animationDelay: `${index * 50}ms`,
                                     animationDuration: '1.5s'
                                 }}>
@@ -193,7 +193,7 @@ export const Marketplace: React.FC = () => {
                         {
                             plugins.map((plugin, index) => (
                                 <div key={index} className="group">
-                                    <Card className="relative h-full border-2 hover:border-primary/50 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-card overflow-hidden">
+                                    <Card className="relative h-full border hover:border-primary/50 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-card overflow-hidden">
                                         <div className="absolute right-0 top-0 px-2.5 py-1 text-[10px] font-semibold rounded-bl-xl bg-primary/10 text-primary border-l border-b border-primary/20">
                                             {plugin?.category?.value}
                                         </div>

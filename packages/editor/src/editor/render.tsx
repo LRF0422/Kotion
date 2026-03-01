@@ -1,4 +1,5 @@
 import React, {
+  ElementType,
   ReactNode,
   forwardRef,
   useImperativeHandle
@@ -56,7 +57,7 @@ export const EditorRender = forwardRef<
     width = 'w-[calc(100vw-350px)]'
   } = props;
 
-  const [exts] = useEditorExtension(undefined, withTitle)
+  const [exts, extensionWrappers] = useEditorExtension(undefined, withTitle)
   const [items, setItems] = useSafeState<any[]>([])
   const [tocVisible, setTocVisible] = useSafeState(false)
 
@@ -105,6 +106,14 @@ export const EditorRender = forwardRef<
               <EditorContent editor={editor} />
             </StyledEditor>
           </div>
+          {/* Render bubble menus (e.g., comment read-only popup) */}
+          {editor && extensionWrappers?.map((wrapper, idx) => {
+            if (!wrapper.bubbleMenu) return null;
+            const menus: ElementType[] = Array.isArray(wrapper.bubbleMenu) ? wrapper.bubbleMenu : [wrapper.bubbleMenu];
+            return menus.map((Menu, j) => (
+              <Menu key={`render-bubble-${idx}-${j}`} editor={editor} />
+            ));
+          })}
           {/* ToC - fixed position */}
           {toc && (
             <>
