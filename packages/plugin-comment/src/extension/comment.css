@@ -1,0 +1,4 @@
+.comment-highlight:hover {
+    background-color: rgb(255 212 0 / 0.28) !important;
+    border-bottom-color: rgb(255 212 0 / 0.6) !important;
+}

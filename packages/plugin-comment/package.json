@@ -1,0 +1,30 @@
+{
+  "name": "@kn/plugin-comment",
+  "version": "0.0.16",
+  "description": "Comment plugin for Knowledge Repo editor",
+  "main": "src/index.tsx",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "registry": "http://localhost:8081/repository/npm-hosted/"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@kn/common": "workspace:*",
+    "@kn/core": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/ui": "workspace:*",
+    "@tiptap/core": "3.15.3",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@kn/rollup-config": "workspace:*"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

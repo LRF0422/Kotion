@@ -1,7 +1,5 @@
-import React, { ReactNode, forwardRef, useImperativeHandle, useEffect, useRef } from "react";
+import React, { ReactNode, forwardRef, useImperativeHandle } from "react";
 import { AnyExtension, Editor, JSONContent, getSchema } from "@tiptap/core";
-import { Doc as YDoc, XmlFragment, XmlElement } from "yjs";
-import * as Y from "yjs";
 
 import { EditorRenderProps } from "./render";
 import { TiptapCollabProvider } from "@hocuspocus/provider";

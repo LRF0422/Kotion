@@ -1,10 +1,10 @@
-import { BubbleMenu, BubbleMenuProps } from "@editor/components";
+import { BubbleMenu, type BubbleMenuProps } from "@kn/editor";
 import { Editor, getMarkRange, isMarkActive, posToDOMRect } from "@tiptap/core";
 import React, { useCallback, useMemo } from "react";
 import type { CommentItem as CommentItemType } from "../types";
 import { Button, ScrollArea } from "@kn/ui";
 import { CheckIcon } from "@kn/icon";
-import { useAttributes } from "@editor/hooks";
+import { useAttributes } from "@kn/editor";
 import { CommentItem } from "./CommentItem";
 import { CommentInput } from "./CommentInput";
 

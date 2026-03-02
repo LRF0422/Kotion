@@ -13,7 +13,6 @@ export interface CommentItem {
 }
 
 export interface CommentOptions {
-    user: CommentUser;
     HTMLAttributes: Record<string, any>;
 }
 
@@ -21,7 +20,7 @@ export interface CommentStorage {
     activeThreadId: string | null;
 }
 
-declare module '@tiptap/core' {
+declare module '@kn/editor' {
     interface Commands<ReturnType> {
         comment: {
             addComment: (content: string) => ReturnType;

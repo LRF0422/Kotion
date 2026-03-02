@@ -1,0 +1,37 @@
+{
+  "name": "@kn/plugin-speech-to-text",
+  "version": "0.0.1",
+  "description": "Speech to text plugin for Knowledge Repo - convert voice to text using Web Speech API",
+  "main": "src/index.tsx",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "registry": "http://localhost:8081/repository/npm-hosted/"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "speech-to-text",
+    "voice",
+    "transcription",
+    "editor",
+    "plugin"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@kn/common": "workspace:*",
+    "@kn/core": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@kn/rollup-config": "workspace:*",
+    "@kn/typescript-config": "workspace:*",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0"
+  }
+}

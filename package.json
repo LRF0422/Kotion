@@ -21,6 +21,7 @@
     "build:bilibili": "pnpm --filter @kn/plugin-bilibili build",
     "build:netease-music": "pnpm --filter @kn/plugin-netease-music build",
     "build:drawnix": "pnpm --filter @kn/plugin-drawnix build",
+    "build:speech-to-text": "pnpm --filter @kn/plugin-speech-to-text build",
     "build:editor": "pnpm --filter @kn/editor build",
     "build:main": "pnpm --filter @kn/plugin-main build",
     "build:app": "pnpm --filter vite build",

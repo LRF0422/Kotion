@@ -1,11 +1,27 @@
-import { Mark, mergeAttributes } from "@tiptap/core";
+import { Mark, mergeAttributes, Plugin, PluginKey, TextSelection } from "@kn/editor";
 import { v4 as uuidv4 } from "uuid";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
-import { TextSelection } from "@tiptap/pm/state";
-import type { CommentItem, CommentOptions, CommentStorage } from "./types";
+import { store } from "@kn/core";
+import type { CommentUser, CommentItem, CommentOptions, CommentStorage } from "./types";
 import "./types";
+import "./comment.css";
 
 export type { CommentUser, CommentItem, CommentOptions, CommentStorage } from "./types";
+
+/**
+ * Get the current user info from the Redux store.
+ */
+function getCurrentUser(): CommentUser {
+    const state = store.getState();
+    const userInfo = state.userInfo;
+    if (userInfo?.id) {
+        return {
+            id: userInfo.id,
+            name: userInfo.name || 'Anonymous',
+            avatar: userInfo.avatar || '',
+        };
+    }
+    return { id: 'anonymous', name: 'Anonymous', avatar: '' };
+}
 
 /**
  * Find the range of a comment mark with a specific thread_id in the document.
@@ -67,7 +83,6 @@ const Comments = Mark.create<CommentOptions, CommentStorage>({
 
     addOptions() {
         return {
-            user: { id: '', name: 'Anonymous', avatar: '' },
             HTMLAttributes: {
                 class: 'comment-highlight',
                 style: 'background-color: rgb(255 212 0 / 0.14); border-bottom: 2px solid rgb(255 212 0 / 0.4); cursor: pointer; padding-bottom: 1px; transition: background-color 0.2s;',
@@ -99,9 +114,7 @@ const Comments = Mark.create<CommentOptions, CommentStorage>({
     addCommands() {
         return {
             addComment: (content: string) => ({ commands }) => {
-                const user = this.options.user?.id
-                    ? this.options.user
-                    : { id: 'anonymous', name: 'Anonymous', avatar: '' };
+                const user = getCurrentUser();
 
                 const item: CommentItem = {
                     id: uuidv4(),
@@ -124,9 +137,7 @@ const Comments = Mark.create<CommentOptions, CommentStorage>({
                 const range = findMarkRange(state.doc, markType, threadId);
                 if (!range) return false;
 
-                const user = this.options.user?.id
-                    ? this.options.user
-                    : { id: 'anonymous', name: 'Anonymous', avatar: '' };
+                const user = getCurrentUser();
 
                 const newItem: CommentItem = {
                     id: uuidv4(),
@@ -153,9 +164,7 @@ const Comments = Mark.create<CommentOptions, CommentStorage>({
                 const range = findMarkRange(state.doc, markType, threadId);
                 if (!range) return false;
 
-                const user = this.options.user?.id
-                    ? this.options.user
-                    : { id: 'anonymous', name: 'Anonymous', avatar: '' };
+                const user = getCurrentUser();
 
                 const existingComments: CommentItem[] = JSON.parse(range.mark.attrs.comments || '[]');
 

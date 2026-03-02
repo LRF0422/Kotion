@@ -1,4 +1,4 @@
-import { useActive } from "@editor/hooks";
+import { useActive } from "@kn/editor";
 import { Toggle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
 import { Editor } from "@tiptap/core";
 import React, { useCallback } from "react";

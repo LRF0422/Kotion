@@ -4,7 +4,7 @@ import { GlobalState } from "./GlobalState";
 export * from "./GlobalState"
 
 
-export default createStore((state: GlobalState = {
+const store = createStore((state: GlobalState = {
     tabs: [],
     activeTabKey: '',
     collpase: false,
@@ -69,3 +69,6 @@ export default createStore((state: GlobalState = {
     }
     return state;
 })
+
+export { store }
+export default store

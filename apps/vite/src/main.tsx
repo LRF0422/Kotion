@@ -5,9 +5,9 @@ import { DefaultPluginInstance } from '@kn/plugin-main'
 import React from 'react'
 import "@kn/ui/globals.css"
 import { fileManager } from '@kn/file-manager'
-// import { mermaid } from "@kn/mermaid-plugin"
+import { mermaid } from "@kn/mermaid-plugin"
 // import { database } from "@kn/plugin-database"
-// import { excalidraw } from "@kn/plugin-excalidraw"
+import { excalidraw } from "@kn/plugin-excalidraw"
 // import { drawnix } from "@kn/plugin-drawnix"
 // import { drawio } from "@kn/plugin-drawio"
 // import { drawioV2 } from "@kn/plugin-drawio-v2"
@@ -17,10 +17,12 @@ import { bitable } from "@kn/plugin-bitable"
 // import { weaverOA } from "@kn/plugin-weaver-oa"
 // import { bilibili } from "@kn/plugin-bilibili"
 import { github } from "@kn/plugin-github"
-import { office } from "@kn/plugin-office"
-// import { neteaseMusic } from "@kn/plugin-netease-music"
+import { office } from '@kn/plugin-office'
+import { comment } from '@kn/plugin-comment'
+import { speechToText } from '@kn/plugin-speech-to-text'
+// import { neteaseMusic } from '@kn/plugin-netease-music'
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[DefaultPluginInstance, fileManager, bitable, ai, github, office]} />
+  <App plugins={[DefaultPluginInstance, fileManager, bitable, ai, github, office, excalidraw, mermaid, comment, speechToText]} />
 )
