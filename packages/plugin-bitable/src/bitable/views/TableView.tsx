@@ -283,6 +283,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
 
                 .bitable-data-grid.rdg-light .rdg-header-row .rdg-cell {
                     border-right: 1px solid #e5e7eb;
+                    border-bottom: 1px solid #e5e7eb;
                     font-weight: 400;
                 }
 
@@ -297,6 +298,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
 
                 .bitable-data-grid.rdg-light .rdg-cell {
                     border-right: 1px solid #e5e7eb;
+                    border-bottom: 1px solid #e5e7eb;
                     padding: 0 8px;
                 }
 
@@ -319,6 +321,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
 
                 .bitable-data-grid.rdg-dark .rdg-header-row .rdg-cell {
                     border-right: 1px solid #4a4a4a;
+                    border-bottom: 1px solid #4a4a4a;
                     font-weight: 400;
                 }
 
@@ -333,6 +336,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
 
                 .bitable-data-grid.rdg-dark .rdg-cell {
                     border-right: 1px solid #4a4a4a;
+                    border-bottom: 1px solid #4a4a4a;
                     padding: 0 8px;
                 }
 

@@ -5,6 +5,7 @@ import sheetsLocaleEnUS from "@univerjs/preset-sheets-core/locales/en-US"
 import sheetsLocaleZhCN from "@univerjs/preset-sheets-core/locales/zh-CN"
 import "@univerjs/preset-sheets-core/lib/index.css"
 import { SAVE_THROTTLE_MS } from "./constants"
+import { CustomMenuPlugin, type ICustomMenuPluginConfig } from "./univer-custom-menu-plugin"
 
 interface UseUniverOptions {
     containerRef: RefObject<HTMLDivElement | null>
@@ -12,13 +13,15 @@ interface UseUniverOptions {
     readOnly: boolean
     darkMode: boolean
     onSave: (data: Record<string, any>) => void
+    onImportExcel?: () => void
+    onToggleFullscreen?: () => void
 }
 
 interface UseUniverReturn {
     importWorkbookData: (data: Record<string, any>) => void
 }
 
-export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSave }: UseUniverOptions): UseUniverReturn {
+export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSave, onImportExcel, onToggleFullscreen }: UseUniverOptions): UseUniverReturn {
     const univerRef = useRef<any>(null)
     const univerAPIRef = useRef<any>(null)
     const disposeRef = useRef<(() => void) | null>(null)
@@ -26,6 +29,10 @@ export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSa
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const onSaveRef = useRef(onSave)
     onSaveRef.current = onSave
+    const onImportExcelRef = useRef(onImportExcel)
+    onImportExcelRef.current = onImportExcel
+    const onToggleFullscreenRef = useRef(onToggleFullscreen)
+    onToggleFullscreenRef.current = onToggleFullscreen
 
     const throttledSave = useCallback(() => {
         if (saveTimerRef.current) return
@@ -48,6 +55,11 @@ export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSa
         initializedRef.current = true
 
         const isZhCN = navigator.language.startsWith('zh')
+        const pluginConfig: ICustomMenuPluginConfig = {
+            onImportExcel: () => onImportExcelRef.current?.(),
+            onToggleFullscreen: () => onToggleFullscreenRef.current?.(),
+        }
+
         const { univer, univerAPI } = createUniver({
             theme: defaultTheme,
             darkMode,
@@ -60,6 +72,9 @@ export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSa
                 UniverSheetsCorePreset({
                     container,
                 }),
+            ],
+            plugins: [
+                [CustomMenuPlugin, pluginConfig],
             ],
         })
 
