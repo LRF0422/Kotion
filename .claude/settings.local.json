@@ -14,7 +14,9 @@
       "WebSearch",
       "Bash(pnpm install:*)",
       "Bash(node:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(pnpm --filter @kn/plugin-comment lint 2>&1 | head -50)",
+      "Bash(pnpm exec tsc --noEmit -p packages/editor/tsconfig.json 2>&1 | head -30)"
     ]
   }
 }

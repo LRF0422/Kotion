@@ -2,8 +2,8 @@ import { BubbleMenu, type BubbleMenuProps } from "@kn/editor";
 import { Editor, getMarkRange, isMarkActive, posToDOMRect } from "@tiptap/core";
 import React, { useCallback, useMemo } from "react";
 import type { CommentItem as CommentItemType } from "../types";
-import { Button, ScrollArea } from "@kn/ui";
-import { CheckIcon } from "@kn/icon";
+import { Button, ScrollArea, Separator } from "@kn/ui";
+import { CheckIcon, MessageCircle } from "@kn/icon";
 import { useAttributes } from "@kn/editor";
 import { CommentItem } from "./CommentItem";
 import { CommentInput } from "./CommentInput";
@@ -99,18 +99,24 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
                 placement: "bottom-start"
             }}
         >
-            <div className="w-[340px] max-h-[420px] flex flex-col bg-popover rounded-md shadow-[0_4px_24px_rgba(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.04)]">
+            <div className="w-[360px] max-h-[460px] flex flex-col bg-popover rounded-xl shadow-lg border border-border/50 overflow-hidden">
                 {/* Header - only show for existing threads */}
                 {!isNewThread && (
-                    <div className="flex justify-between items-center px-3 pt-3 pb-1">
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Thread
-                        </span>
+                    <div className="flex justify-between items-center px-4 py-3 bg-muted/30">
+                        <div className="flex items-center gap-2">
+                            <MessageCircle className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-xs font-semibold text-foreground/80 tracking-wide">
+                                Comments
+                            </span>
+                            <span className="text-[11px] text-muted-foreground/60 bg-muted/60 px-1.5 py-0.5 rounded-full">
+                                {comments.length}
+                            </span>
+                        </div>
                         {isEditable && (
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+                                className="h-7 px-2.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30 gap-1.5"
                                 onClick={handleResolveThread}
                             >
                                 <CheckIcon className="h-3.5 w-3.5" />
@@ -122,8 +128,8 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
 
                 {/* Comments List */}
                 {!isNewThread && (
-                    <ScrollArea className="flex-1 max-h-[260px]">
-                        <div className="px-3 py-1">
+                    <ScrollArea className="flex-1 max-h-[280px]">
+                        <div className="px-4 py-3 space-y-1">
                             {comments.map((comment, index) => (
                                 <CommentItem
                                     key={comment.id}
@@ -141,12 +147,15 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
 
                 {/* Comment Input - only in edit mode */}
                 {isEditable && (
-                    <CommentInput
-                        onSubmit={handleAddComment}
-                        placeholder={isNewThread ? "Comment..." : "Reply..."}
-                        autoFocus={isNewThread}
-                        onCancel={isNewThread ? handleCancelNewComment : undefined}
-                    />
+                    <>
+                        {!isNewThread && <Separator className="opacity-50" />}
+                        <CommentInput
+                            onSubmit={handleAddComment}
+                            placeholder={isNewThread ? "Write a comment..." : "Add a reply..."}
+                            autoFocus={isNewThread}
+                            onCancel={isNewThread ? handleCancelNewComment : undefined}
+                        />
+                    </>
                 )}
             </div>
         </BubbleMenu>
