@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SupportedLanguage } from '../types';
 import { Editor } from '@kn/editor';
+import { toast } from '@kn/ui';
 
 export interface UseSpeechRecognitionOptions {
     language?: SupportedLanguage;
@@ -24,6 +25,7 @@ export const useSpeechRecognition = (
 
     const recognitionRef = useRef<any>(null);
     const editorRef = useRef<Editor>(editor);
+    const toastIdRef = useRef<string | number | null>(null);
 
     // Keep editorRef in sync
     useEffect(() => {
@@ -52,6 +54,9 @@ export const useSpeechRecognition = (
         recognition.onstart = () => {
             setIsRecording(true);
             setError(null);
+            toastIdRef.current = toast.loading('语音识别中...', {
+                duration: Infinity,
+            });
         };
 
         recognition.onresult = (event: any) => {
@@ -68,6 +73,12 @@ export const useSpeechRecognition = (
 
         recognition.onerror = (event: any) => {
             console.error('Speech recognition error:', event.error);
+
+            // Dismiss loading toast
+            if (toastIdRef.current !== null) {
+                toast.dismiss(toastIdRef.current);
+                toastIdRef.current = null;
+            }
 
             let errorMessage = 'An error occurred during speech recognition.';
 
@@ -92,12 +103,18 @@ export const useSpeechRecognition = (
 
             if (event.error !== 'aborted') {
                 setError(errorMessage);
+                toast.error(errorMessage);
             }
             setIsRecording(false);
         };
 
         recognition.onend = () => {
             setIsRecording(false);
+            if (toastIdRef.current !== null) {
+                toast.dismiss(toastIdRef.current);
+                toast.success('语音识别已结束');
+                toastIdRef.current = null;
+            }
         };
 
         recognitionRef.current = recognition;

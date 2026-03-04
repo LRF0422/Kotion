@@ -113,56 +113,6 @@ module.exports = {
             height: "0",
           },
         },
-        // Animations from Login page
-        "blob": {
-          "0%, 100%": {
-            transform: "translate(0px, 0px) scale(1)",
-          },
-          "33%": {
-            transform: "translate(30px, -50px) scale(1.1)",
-          },
-          "66%": {
-            transform: "translate(-20px, 20px) scale(0.9)",
-          },
-        },
-        "fade-in-up": {
-          from: {
-            opacity: "0",
-            transform: "translateY(30px)",
-          },
-          to: {
-            opacity: "1",
-            transform: "translateY(0)",
-          },
-        },
-        "fade-in": {
-          from: {
-            opacity: "0",
-          },
-          to: {
-            opacity: "1",
-          },
-        },
-        "scale-in": {
-          from: {
-            opacity: "0",
-            transform: "scale(0.8)",
-          },
-          to: {
-            opacity: "1",
-            transform: "scale(1)",
-          },
-        },
-        "slide-in-left": {
-          from: {
-            opacity: "0",
-            transform: "translateX(-30px)",
-          },
-          to: {
-            opacity: "1",
-            transform: "translateX(0)",
-          },
-        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",

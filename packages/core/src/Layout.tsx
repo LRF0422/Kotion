@@ -90,14 +90,6 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const [open, setOpen] = useState(false)
     const [requestPlugin, setRequestPlugin] = useState<any>()
     const { usePath } = useUploadFile()
-    const [showOnboarding, setShowOnboarding] = useState(false);
-
-    useEffect(() => {
-        const flag = localStorage.getItem("showOnboarding");
-        if (!flag) {
-            setShowOnboarding(true);
-        }
-    }, [])
 
     // Plugin loading logic moved from App.tsx
     useEffect(() => {
