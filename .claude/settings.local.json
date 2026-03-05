@@ -16,7 +16,14 @@
       "Bash(node:*)",
       "Bash(grep:*)",
       "Bash(pnpm --filter @kn/plugin-comment lint 2>&1 | head -50)",
-      "Bash(pnpm exec tsc --noEmit -p packages/editor/tsconfig.json 2>&1 | head -30)"
+      "Bash(pnpm exec tsc --noEmit -p packages/editor/tsconfig.json 2>&1 | head -30)",
+      "Bash(pnpm info:*)",
+      "Bash(npm search:*)",
+      "Bash(npm info:*)",
+      "Bash(npm run:*)",
+      "Bash(dir:*)",
+      "Bash(findstr univer:*)",
+      "Bash(npm view:*)"
     ]
   }
 }

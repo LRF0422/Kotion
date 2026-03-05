@@ -1,7 +1,7 @@
 {
   "name": "@kn/plugin-office",
   "version": "0.0.1",
-  "description": "Office plugin for Knowledge Repo - spreadsheet powered by Univer",
+  "description": "Office plugin for Knowledge Repo - spreadsheet, document, and presentation powered by Univer",
   "main": "src/index.tsx",
   "publishConfig": {
     "main": "dist/index.js",
@@ -17,8 +17,11 @@
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",
-    "@univerjs/presets": "^0.15.5",
-    "@univerjs/preset-sheets-core": "^0.15.5",
+    "@univerjs/presets": "^0.16.1",
+    "@univerjs/preset-sheets-core": "^0.16.1",
+    "@univerjs/preset-docs-core": "^0.16.1",
+    "@univerjs/slides": "^0.16.1",
+    "@univerjs/slides-ui": "^0.16.1",
     "xlsx": "^0.18.5"
   },
   "keywords": [],
