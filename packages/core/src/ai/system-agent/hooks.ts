@@ -75,10 +75,6 @@ export function useSystemAgentStream(options: UseSystemAgentStreamOptions = {}):
 
     // Sync content from agent state
     useEffect(() => {
-        const unsubscribe = agent.state.streamingContent !== contentRef.current
-            ? () => {}
-            : () => {}
-
         // Update local content when agent content changes
         if (agent.state.streamingContent !== contentRef.current) {
             contentRef.current = agent.state.streamingContent
@@ -221,7 +217,6 @@ export interface QuickActionOptions {
  * ```
  */
 export function useQuickAction(options: QuickActionOptions) {
-    const { editor } = options as any
     const agent = useSystemAgent()
     const [content, setContent] = useState('')
     const [isGenerating, setIsGenerating] = useState(false)

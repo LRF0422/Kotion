@@ -4,6 +4,7 @@ import { Editor, Plugin, PluginKey, Decoration, DecorationSet } from '@kn/editor
 import { Sparkles, Send, X, Loader2, CheckCircle2, XCircle, MessageSquare } from '@kn/icon'
 import { Button, Badge, Streamdown } from '@kn/ui'
 import { useEditorAgentOptimized } from './use-agent-optimized'
+import { useStreamBuffer } from './utils/use-stream-buffer'
 import type { ToolExecutionEvent, UserChoiceRequest } from './types'
 
 // ─── shared ─────────────────────────────────────────────────────
@@ -130,8 +131,16 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
     const panelRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLTextAreaElement>(null)
     const stepsRef = useRef<ExecutionStep[]>([])
-    const bufferRef = useRef('')
-    const rafRef = useRef<number | null>(null)
+
+    // Use shared streaming buffer hook instead of manual RAF management
+    const streamBuffer = useStreamBuffer()
+
+    // Sync streaming buffer content to streamText state
+    useEffect(() => {
+        if (streamBuffer.content) {
+            setStreamText(streamBuffer.content)
+        }
+    }, [streamBuffer.content])
 
     // ── register / unregister decoration plugin ──
     useEffect(() => {
@@ -139,36 +148,10 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
         editor.registerPlugin(plugin)
         return () => {
             // clear decoration before unregistering
-            try { setVirtualSelection(editor, null) } catch {}
+            try { setVirtualSelection(editor, null) } catch { }
             editor.unregisterPlugin(aiSelectionKey)
         }
     }, [editor])
-
-    // ── streaming buffer ──
-    const flushBuffer = useCallback(() => {
-        setStreamText(bufferRef.current)
-        rafRef.current = null
-    }, [])
-
-    const appendBuffer = useCallback((chunk: string) => {
-        bufferRef.current += chunk
-        if (rafRef.current === null) {
-            rafRef.current = requestAnimationFrame(flushBuffer)
-        }
-    }, [flushBuffer])
-
-    const resetBuffer = useCallback(() => {
-        if (rafRef.current !== null) {
-            cancelAnimationFrame(rafRef.current)
-            rafRef.current = null
-        }
-        bufferRef.current = ''
-        setStreamText(null)
-    }, [])
-
-    useEffect(() => {
-        return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current) }
-    }, [])
 
     // ── agent callbacks ──
     const handleToolExecution = useCallback((event: ToolExecutionEvent) => {
@@ -240,7 +223,13 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
 
         dom.addEventListener(AI_INLINE_EVENT, onOpen)
         return () => dom.removeEventListener(AI_INLINE_EVENT, onOpen)
-    }, [editor, resetBuffer])
+    }, [editor])
+
+    // Reset helper
+    const resetBuffer = useCallback(() => {
+        streamBuffer.reset()
+        setStreamText(null)
+    }, [streamBuffer])
 
     // ── close ──
     const handleClose = useCallback(() => {
@@ -249,7 +238,7 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
         selectionRef.current = null
         resetBuffer()
         // Clear virtual selection highlight
-        try { setVirtualSelection(editor, null) } catch {}
+        try { setVirtualSelection(editor, null) } catch { }
     }, [isLoading, stop, resetBuffer, editor])
 
     // Escape
@@ -281,7 +270,12 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
 
         const selectedText = selectionRef.current?.text || ''
         const prompt = selectedText
-            ? `用户选中了以下文本:\n\`\`\`\n${selectedText}\n\`\`\`\n\n用户指令: ${input.trim()}`
+            ? `用户选中了以下文本:
+\`\`\`
+${selectedText}
+\`\`\`
+
+用户指令: ${input.trim()}`
             : input.trim()
 
         setIsLoading(true)
@@ -294,13 +288,13 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
         try {
             const { textStream } = await stream({ prompt })
             for await (const part of textStream) {
-                appendBuffer(part)
+                streamBuffer.append(part)
             }
-            setResponse(bufferRef.current)
+            setResponse(streamBuffer.getRawContent())
             resetBuffer()
         } catch (err: any) {
             if (err?.name === 'AbortError' || err?.message?.includes('abort')) {
-                const content = bufferRef.current
+                const content = streamBuffer.getRawContent()
                 if (content) setResponse(content)
                 resetBuffer()
             } else {
@@ -310,7 +304,7 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
         } finally {
             setIsLoading(false)
         }
-    }, [input, isLoading, stream, resetBuffer, appendBuffer])
+    }, [input, isLoading, stream, resetBuffer, streamBuffer])
 
     const handleInputKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

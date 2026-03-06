@@ -10,6 +10,8 @@ import type { Editor } from '@kn/editor'
 import type { AIAgent, StreamResult, AgentOptions } from '../foundation/types'
 import type { OnToolExecution, OnUserChoiceRequest } from '../types'
 import { useAIFoundation } from '../foundation'
+import { useStreamBuffer } from '../utils/use-stream-buffer'
+import { SYSTEM_AGENT_PROMPT } from '../constants'
 
 // ============ Types ============
 
@@ -82,40 +84,6 @@ export interface SystemAgentProviderProps {
 
 const SystemAgentContext = createContext<SystemAgentContextValue | null>(null)
 
-// ============ Default System Prompt ============
-
-const SYSTEM_AGENT_PROMPT = `You are an intelligent assistant integrated into a knowledge management application. You help users with document editing, content organization, and various tasks.
-
-# CAPABILITIES
-
-You can:
-- Read and analyze documents
-- Edit and modify content
-- Search and find information
-- Organize and structure content
-- Answer questions about the content
-- Help with writing and editing
-
-# BEHAVIOR GUIDELINES
-
-1. **Be helpful and concise** - Provide clear, actionable responses
-2. **Preserve content** - Never delete content without explicit user confirmation
-3. **Respect context** - Consider the current document and selection
-4. **Use tools wisely** - Only use tools when necessary
-5. **Communicate clearly** - Explain what you're doing when using tools
-
-# LANGUAGE
-
-Respond in the same language the user uses.
-
-# TOOLS
-
-You have access to various tools for document manipulation. Use them when appropriate:
-- Reading tools to understand the document
-- Writing tools to make changes
-- Structure tools to organize content
-- Interaction tools to confirm with users`
-
 // ============ Provider ============
 
 export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
@@ -135,14 +103,18 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         activeSkills: []
     })
 
+    // Use ref for activeSkills to avoid stale closure in stream callback
+    const activeSkillsRef = useRef<string[]>([])
+
+    // Shared streaming buffer
+    const streamBuffer = useStreamBuffer()
+
     // Refs
     const agentRef = useRef<AIAgent | null>(null)
     const editorRef = useRef<Editor | null>(null)
     const abortControllerRef = useRef<AbortController | null>(null)
     const onToolExecutionRef = useRef<OnToolExecution | undefined>(initialOnToolExecution)
     const onUserChoiceRequestRef = useRef<OnUserChoiceRequest | undefined>(initialOnUserChoiceRequest)
-    const contentBufferRef = useRef('')
-    const rafRef = useRef<number | null>(null)
     const stepCounterRef = useRef(0)
 
     // Initialize agent
@@ -177,36 +149,12 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         return editorRef.current
     }, [])
 
-    // Streaming buffer management
-    const flushBuffer = useCallback(() => {
-        setState(prev => ({ ...prev, streamingContent: contentBufferRef.current }))
-        rafRef.current = null
-    }, [])
-
-    const appendToBuffer = useCallback((chunk: string) => {
-        contentBufferRef.current += chunk
-        if (rafRef.current === null) {
-            rafRef.current = requestAnimationFrame(flushBuffer)
-        }
-    }, [flushBuffer])
-
-    const resetBuffer = useCallback(() => {
-        if (rafRef.current !== null) {
-            cancelAnimationFrame(rafRef.current)
-            rafRef.current = null
-        }
-        contentBufferRef.current = ''
-        setState(prev => ({ ...prev, streamingContent: '' }))
-    }, [])
-
-    // Cleanup RAF on unmount
+    // Sync streaming buffer content to state
     useEffect(() => {
-        return () => {
-            if (rafRef.current !== null) {
-                cancelAnimationFrame(rafRef.current)
-            }
+        if (streamBuffer.content) {
+            setState(prev => ({ ...prev, streamingContent: streamBuffer.content }))
         }
-    }, [])
+    }, [streamBuffer.content])
 
     // Stream function
     const stream = useCallback(async (prompt: string, options?: StreamPromptOptions): Promise<void> => {
@@ -228,13 +176,13 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         }
 
         // Reset state
-        resetBuffer()
+        streamBuffer.reset()
         setState({
             isGenerating: true,
             streamingContent: '',
             error: null,
             executionSteps: [],
-            activeSkills: state.activeSkills
+            activeSkills: activeSkillsRef.current
         })
 
         try {
@@ -253,7 +201,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
                         // Handle different chunk formats
                         const text = chunk?.text || chunk?.content || chunk?.delta || ''
                         if (text) {
-                            appendToBuffer(text)
+                            streamBuffer.append(text)
                         }
                     }
                 } catch (streamError: any) {
@@ -266,14 +214,14 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             setState(prev => ({
                 ...prev,
                 isGenerating: false,
-                streamingContent: contentBufferRef.current
+                streamingContent: streamBuffer.getRawContent()
             }))
         } catch (error: any) {
             if (error.name === 'AbortError') {
                 setState(prev => ({
                     ...prev,
                     isGenerating: false,
-                    streamingContent: contentBufferRef.current
+                    streamingContent: streamBuffer.getRawContent()
                 }))
                 return
             }
@@ -284,7 +232,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             }))
             throw error
         }
-    }, [setEditor, resetBuffer, appendToBuffer, state.activeSkills])
+    }, [setEditor, streamBuffer])
 
     // Stop function
     const stop = useCallback(() => {
@@ -298,14 +246,16 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         setState(prev => ({ ...prev, isGenerating: false }))
     }, [])
 
-    // Skill management
+    // Skill management - update ref when skills change
     const activateSkill = useCallback((skillName: string) => {
         if (agentRef.current) {
             const result = agentRef.current.activateSkill(skillName)
             if (result.success) {
+                const skills = agentRef.current?.getActiveSkills() || []
+                activeSkillsRef.current = skills
                 setState(prev => ({
                     ...prev,
-                    activeSkills: agentRef.current?.getActiveSkills() || []
+                    activeSkills: skills
                 }))
             }
         }
@@ -315,9 +265,11 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         if (agentRef.current) {
             const result = agentRef.current.deactivateSkill(skillName)
             if (result.success) {
+                const skills = agentRef.current?.getActiveSkills() || []
+                activeSkillsRef.current = skills
                 setState(prev => ({
                     ...prev,
-                    activeSkills: agentRef.current?.getActiveSkills() || []
+                    activeSkills: skills
                 }))
             }
         }
@@ -326,7 +278,8 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
     // Reset
     const reset = useCallback(() => {
         stop()
-        resetBuffer()
+        streamBuffer.reset()
+        activeSkillsRef.current = []
         setState({
             isGenerating: false,
             streamingContent: '',
@@ -334,7 +287,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             executionSteps: [],
             activeSkills: []
         })
-    }, [stop, resetBuffer])
+    }, [stop, streamBuffer])
 
     // Callback setters
     const setOnToolExecution = useCallback((callback: OnToolExecution | undefined) => {

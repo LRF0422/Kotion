@@ -18,30 +18,7 @@ import type {
 import type { GlobalToolRegistryImpl } from '../registry/tool-registry'
 import type { SkillActivationResult } from '../../types'
 import { deepseek } from '../../ai-utils'
-
-// Base agent instructions
-const BASE_AGENT_INSTRUCTIONS = `You are an intelligent document editing assistant. Help users edit, organize, and improve their documents.
-
-# CRITICAL RULES
-
-1. **ALWAYS read the document first** before making any changes
-2. **NEVER delete content** without calling askUserChoice first
-3. **Use search-based tools** (searchText) instead of position-based when possible
-4. **Confirm with user** when the request is ambiguous
-5. **For title changes, ALWAYS use updateTitle** - never insert a new heading for title updates
-6. **markdown数据不能含有换行符,不要一次性插入大量的markdown内容**
-
-# WORKFLOW
-
-1. Understand the user's intent
-2. Read relevant document sections (getDocumentStructure, searchInDocument)
-3. If modifying title → use updateTitle
-4. If destructive action → askUserChoice to confirm
-5. Execute the operation
-6. Verify the result
-
-# LANGUAGE
-Respond in the same language the user uses.`
+import { FOUNDATION_AGENT_PROMPT, DEFAULT_MAX_STEPS } from '../../constants'
 
 type AgentDestroyCallback = () => void
 
@@ -54,6 +31,11 @@ class AIAgentImpl implements AIAgent {
     private activeSkills: Set<string> = new Set()
     private abortController: AbortController | null = null
     private onDestroy?: AgentDestroyCallback
+
+    // Caching for expensive operations
+    private cachedInstructions: string | null = null
+    private cachedToolsHash: string | null = null
+    private needsRecreation: boolean = false
 
     constructor(
         id: string,
@@ -85,7 +67,7 @@ class AIAgentImpl implements AIAgent {
 
         return new ToolLoopAgent({
             model,
-            stopWhen: stepCountIs(this.options.maxSteps || 100),
+            stopWhen: stepCountIs(this.options.maxSteps || DEFAULT_MAX_STEPS),
             instructions,
             tools
         })
@@ -120,7 +102,7 @@ class AIAgentImpl implements AIAgent {
     }
 
     private buildInstructions(): string {
-        let instructions = this.options.systemPrompt || BASE_AGENT_INSTRUCTIONS
+        let instructions = this.options.systemPrompt || FOUNDATION_AGENT_PROMPT
 
         // Add skill prompt fragments
         if (this.skillRegistry && this.activeSkills.size > 0) {
@@ -138,6 +120,32 @@ class AIAgentImpl implements AIAgent {
         return instructions
     }
 
+    /**
+     * Check if the agent needs recreation based on instruction changes.
+     * Returns true only if instructions have actually changed.
+     */
+    private checkNeedsRecreation(): boolean {
+        const newInstructions = this.buildInstructions()
+        if (newInstructions !== this.cachedInstructions) {
+            this.cachedInstructions = newInstructions
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Lazily recreate the agent only if pending changes exist.
+     * Called before stream to avoid unnecessary recreation.
+     */
+    private ensureAgent(): void {
+        if (this.needsRecreation) {
+            if (this.checkNeedsRecreation()) {
+                this.agent = this.createAgent()
+            }
+            this.needsRecreation = false
+        }
+    }
+
     async stream(options: StreamOptions): Promise<StreamResult> {
         // Abort any previous stream
         if (this.abortController) {
@@ -153,8 +161,12 @@ class AIAgentImpl implements AIAgent {
         // Handle system prompt override
         if (options.systemPrompt) {
             this.options.systemPrompt = options.systemPrompt
-            this.agent = this.createAgent()
+            this.cachedInstructions = null // Invalidate cache
+            this.needsRecreation = true
         }
+
+        // Ensure agent is up to date before streaming
+        this.ensureAgent()
 
         try {
             const stream = await this.agent.stream({
@@ -192,8 +204,9 @@ class AIAgentImpl implements AIAgent {
 
     setTools(toolNames: string[]): void {
         this.options.tools = toolNames
-        // Recreate agent with new tools
-        this.agent = this.createAgent()
+        // Mark for lazy recreation on next stream call
+        this.needsRecreation = true
+        this.cachedInstructions = null
     }
 
     activateSkill(skillName: string): SkillActivationResult {
@@ -218,11 +231,8 @@ class AIAgentImpl implements AIAgent {
         const loadedTools: string[] = []
         const failedTools: string[] = []
 
-        // For now, just mark as active
-        // Tool loading would be handled by the skill registry
-
-        // Recreate agent with updated instructions
-        this.agent = this.createAgent()
+        // Mark for lazy recreation - only recreate when actually streaming
+        this.needsRecreation = true
 
         return {
             success: true,
@@ -243,8 +253,8 @@ class AIAgentImpl implements AIAgent {
 
         this.activeSkills.delete(skillName)
 
-        // Recreate agent with updated instructions
-        this.agent = this.createAgent()
+        // Mark for lazy recreation - only recreate when actually streaming
+        this.needsRecreation = true
 
         return {
             success: true,
