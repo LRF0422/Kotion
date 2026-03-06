@@ -14,6 +14,11 @@ import React from "react"
 import { useUploadFile } from "./hooks"
 import { useAsyncEffect } from "ahooks"
 import { MobilePageHeaderProvider, useMobilePageHeader } from "./context/MobilePageHeaderContext"
+import {
+    SystemAgentProvider,
+    AIAssistantPanel,
+    useAIAssistantShortcut
+} from "./ai/system-agent"
 
 interface LayoutProps {
     onPluginsReady: (ready: boolean) => void
@@ -84,6 +89,10 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const { pluginManager } = useContext(AppContext)
     const [pluginsLoaded, setPluginsLoaded] = useState(false)
     const [refreshFlag, setRefreshFlag] = useState(0)
+    const [aiPanelOpen, setAiPanelOpen] = useState(false)
+
+    // AI Assistant keyboard shortcut
+    useAIAssistantShortcut(aiPanelOpen, setAiPanelOpen)
 
     const searchParams = new URLSearchParams(window.location.search);
     const requestPluginId = searchParams.get('requestPluginId');
@@ -208,10 +217,18 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const [sidebarOpen, setSidebarOpen] = useState(false)
 
     return (
-        <MobilePageHeaderProvider>
-            <div>
-                {/* Show loading overlay while plugins are loading */}
-                {!pluginsLoaded && (
+        <SystemAgentProvider>
+            <MobilePageHeaderProvider>
+                <div>
+                    {/* AI Assistant Panel */}
+                    <AIAssistantPanel
+                        open={aiPanelOpen}
+                        onOpenChange={setAiPanelOpen}
+                        position="bottom-right"
+                    />
+
+                    {/* Show loading overlay while plugins are loading */}
+                    {!pluginsLoaded && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
                         <div className="flex flex-col items-center gap-4">
                             <SparklesText className="text-[60px]" sparklesCount={8} text="KN" />
@@ -297,5 +314,6 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                 </div>
             </div>
         </MobilePageHeaderProvider>
+    </SystemAgentProvider>
     )
 }

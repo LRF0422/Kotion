@@ -17,3 +17,9 @@ export { parseMarkdownToNodes } from "./utils/markdown-parser"
 
 // Inline AI Menu (trigger in bubble menu + panel via floatingUI)
 export { AiInlineTrigger, AiInlinePanel } from "./AiInlineMenu"
+
+// Foundation - Global AI Architecture
+export * from "./foundation"
+
+// System Agent - Default AI functionality
+export * from "./system-agent"

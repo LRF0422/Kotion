@@ -76,10 +76,51 @@ export interface FileService {
 }
 
 /**
+ * AIFoundation interface - Global AI service for the entire application
+ * Provides unified access to AI capabilities across all plugins and components
+ */
+export interface AIFoundation {
+    // Configuration
+    getConfig(): any;
+    setConfig(config: Partial<any>): void;
+
+    // Tool Management
+    getToolRegistry(): any;
+    registerTool(name: string, tool: any, meta?: Partial<any>): void;
+    unregisterTool(name: string): void;
+
+    // Skill Management
+    getSkillRegistry(): any;
+    installSkill(skill: any): Promise<{ success: boolean; message: string }>;
+
+    // Context Management
+    setEditorContext(editor: any, documentId?: string): void;
+    getEditorContext(): any;
+    setContext<T>(context: any): void;
+    getContext<T = any>(id: string): any;
+    getActiveContext(): any;
+
+    // Agent Management
+    createAgent(options?: any): any;
+    getDefaultAgent(): any;
+    getAgent(id: string): any;
+    destroyAgent(id: string): void;
+
+    // Events
+    subscribe(listener: (event: any) => void): () => void;
+    emit(event: any): void;
+
+    // Lifecycle
+    initialize(): Promise<void>;
+    isInitialized(): boolean;
+    dispose(): void;
+}
+
+/**
  * Plugin services registry
  * Plugins can register their services here to be accessed via useService hook
  * Use module augmentation to add new services:
- * 
+ *
  * @example
  * ```typescript
  * declare module '@kn/common' {
@@ -91,4 +132,5 @@ export interface FileService {
  */
 export interface Services {
     fileService?: FileService;
+    aiFoundation?: AIFoundation;
 }

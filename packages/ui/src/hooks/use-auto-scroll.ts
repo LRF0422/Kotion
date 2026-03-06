@@ -79,6 +79,7 @@ export function useAutoScroll(options: UseAutoScrollOptions = {}) {
         return () => element.removeEventListener("scroll", handleScroll);
     }, [handleScroll]);
 
+    // Auto-scroll when content changes
     useEffect(() => {
         const scrollElement = scrollRef.current;
         if (!scrollElement) return;
@@ -96,18 +97,26 @@ export function useAutoScroll(options: UseAutoScrollOptions = {}) {
         }
     }, [content, scrollState.autoScrollEnabled, scrollToBottom]);
 
+    // Use MutationObserver to detect content changes for better auto-follow
     useEffect(() => {
         const element = scrollRef.current;
         if (!element) return;
 
-        const resizeObserver = new ResizeObserver(() => {
+        const mutationObserver = new MutationObserver(() => {
             if (scrollState.autoScrollEnabled) {
-                scrollToBottom(true);
+                requestAnimationFrame(() => {
+                    scrollToBottom(true);
+                });
             }
         });
 
-        resizeObserver.observe(element);
-        return () => resizeObserver.disconnect();
+        mutationObserver.observe(element, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+        });
+
+        return () => mutationObserver.disconnect();
     }, [scrollState.autoScrollEnabled, scrollToBottom]);
 
     const disableAutoScroll = useCallback(() => {

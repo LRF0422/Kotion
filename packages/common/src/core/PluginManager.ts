@@ -539,4 +539,21 @@ export class PluginManager {
     get pluginServices(): Services {
         return this._pluginServices
     }
+
+    /**
+     * Register a core service
+     * Core services are services provided by the application itself, not plugins
+     */
+    registerCoreService<K extends keyof Services>(name: K, service: Services[K]): void {
+        this._pluginServices[name] = service
+        logger.debug(`Core service registered: ${name}`)
+    }
+
+    /**
+     * Unregister a core service
+     */
+    unregisterCoreService(name: keyof Services): void {
+        delete this._pluginServices[name]
+        logger.debug(`Core service unregistered: ${name}`)
+    }
 }

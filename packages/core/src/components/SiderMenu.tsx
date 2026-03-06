@@ -1,7 +1,7 @@
 import { useNavigator } from "../hooks/use-navigator";
 import { Blocks, LayoutDashboard, Power, Settings, UserRoundPlus } from "@kn/icon";
 import React, { useContext, useEffect, useMemo, useState, useCallback, memo } from "react";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile } from "@kn/ui";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile, Button } from "@kn/ui";
 import { useLocation } from "react-router-dom";
 import { cn } from "@kn/ui";
 import { useSelector } from "@kn/common";
@@ -17,6 +17,8 @@ import { event } from "@kn/common";
 import { useUploadFile } from "../hooks";
 import { LanguageToggle } from "../locales/LanguageToggle";
 import { MessageBox } from "./MessageBox";
+import { Sparkles } from "@kn/icon";
+import { useAIAssistantShortcut } from "../ai/system-agent";
 
 // Memoized menu item component for better performance
 interface MenuItemProps {
@@ -89,6 +91,10 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
     const { pluginManager } = useContext(AppContext)
     const [flag, setFlag] = useState(0)
     const { usePath } = useUploadFile()
+    const [aiPanelOpen, setAiPanelOpen] = useState(false)
+
+    // AI Assistant keyboard shortcut
+    useAIAssistantShortcut(aiPanelOpen, setAiPanelOpen)
 
     // Memoized handlers for better performance
     const handleLogout = useCallback(() => {
@@ -121,6 +127,29 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
 
         return [
             ...pluginMenus as SiderMenuItemProps[],
+            {
+                name: 'AI Assistant',
+                icon: (
+                    <button
+                        onClick={() => setAiPanelOpen(true)}
+                        className={cn(
+                            "rounded-md flex items-center justify-center p-2 cursor-pointer",
+                            "hover:bg-muted transition-all duration-200 ease-in-out",
+                            aiPanelOpen && "bg-muted shadow-sm"
+                        )}
+                        aria-label="AI Assistant"
+                    >
+                        <div className="p-0.5 rounded-md bg-gradient-to-br from-indigo-500 to-purple-600">
+                            <Sparkles className="h-4 w-4 text-white" />
+                        </div>
+                    </button>
+                ),
+                key: '/ai-assistant',
+                attachTabs: false,
+                id: '/ai-assistant',
+                isGroup: true,
+                onClick: () => setAiPanelOpen(true)
+            },
             {
                 name: 'Shop',
                 icon: <Blocks className="h-5 w-5" id="welcome-title" />,
@@ -217,7 +246,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                 onClick: () => { }
             }
         ]
-    }, [pluginManager?.plugins, flag, userInfo, usePath, handleLogout, handleGoToPersonalSpace])
+    }, [pluginManager?.plugins, flag, userInfo, usePath, handleLogout, handleGoToPersonalSpace, aiPanelOpen])
 
     // Memoized click handler
     const handleMenuClick = useCallback((item: SiderMenuItemProps) => {
@@ -231,45 +260,47 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
     }, [navigator, onItemClick]);
 
     return (
-        <TooltipProvider delayDuration={300}>
-            <nav
-                className={cn(
-                    "flex flex-col gap-3 py-2",
-                    isMobile ? "items-stretch px-2" : "items-center"
-                )}
-                aria-label="Main navigation"
-            >
-                {/* Main menu items */}
-                <div className={cn(
-                    "flex flex-col gap-2",
-                    isMobile ? "items-stretch" : "items-center"
-                )}>
-                    {menus.map((item, index) => {
-                        const isActive = location.pathname === item.id || location.pathname.startsWith(item.id + '/');
-                        return (
-                            <MenuItem
-                                key={item.key || index}
-                                item={item}
-                                isActive={isActive}
-                                onClick={() => handleMenuClick(item)}
-                                isMobile={isMobile}
-                            />
-                        );
-                    })}
-                </div>
+        <>
+            <TooltipProvider delayDuration={300}>
+                <nav
+                    className={cn(
+                        "flex flex-col gap-3 py-2",
+                        isMobile ? "items-stretch px-2" : "items-center"
+                    )}
+                    aria-label="Main navigation"
+                >
+                    {/* Main menu items */}
+                    <div className={cn(
+                        "flex flex-col gap-2",
+                        isMobile ? "items-stretch" : "items-center"
+                    )}>
+                        {menus.map((item, index) => {
+                            const isActive = location.pathname === item.id || location.pathname.startsWith(item.id + '/');
+                            return (
+                                <MenuItem
+                                    key={item.key || index}
+                                    item={item}
+                                    isActive={isActive}
+                                    onClick={() => handleMenuClick(item)}
+                                    isMobile={isMobile}
+                                />
+                            );
+                        })}
+                    </div>
 
-                {/* Utility controls separator */}
-                <Separator className={isMobile ? "my-2" : "w-8 my-1"} />
+                    {/* Utility controls separator */}
+                    <Separator className={isMobile ? "my-2" : "w-8 my-1"} />
 
-                {/* Utility controls */}
-                <div className={cn(
-                    "flex gap-2",
-                    isMobile ? "flex-row justify-center" : "flex-col items-center"
-                )}>
-                    <ModeToggle />
-                    <LanguageToggle />
-                </div>
-            </nav>
-        </TooltipProvider>
+                    {/* Utility controls */}
+                    <div className={cn(
+                        "flex gap-2",
+                        isMobile ? "flex-row justify-center" : "flex-col items-center"
+                    )}>
+                        <ModeToggle />
+                        <LanguageToggle />
+                    </div>
+                </nav>
+            </TooltipProvider>
+        </>
     );
 }

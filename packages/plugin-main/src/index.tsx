@@ -65,7 +65,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
       key: '/home',
       attachTabs: true,
       id: '/home'
-    },
+    }
   ]
   ,
   editorExtension: [],
