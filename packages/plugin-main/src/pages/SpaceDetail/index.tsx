@@ -310,9 +310,15 @@ export const SpaceDetail: React.FC = () => {
                 id: treeNode.id,
                 children: treeNode.children.map((i: any) => resolve(i)),
                 onClick: () => {
-                    navigator.go({
-                        to: `/space-detail/${params.id}/page/${treeNode.id}`
-                    })
+                    if (treeNode.isDraft) {
+                        navigator.go({
+                            to: `/space-detail/${params.id}/page/edit/${treeNode.id}`
+                        })
+                    } else {
+                        navigator.go({
+                            to: `/space-detail/${params.id}/page/${treeNode.id}`
+                        })
+                    }
                 }
             }
         }

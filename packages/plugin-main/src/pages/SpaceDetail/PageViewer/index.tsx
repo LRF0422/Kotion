@@ -36,6 +36,14 @@ export const PageViewer: React.FC = () => {
     useEffect(() => {
         toggle()
         useApi(APIS.GET_PAGE_CONTENT, { id: params.pageId }).then((res) => {
+            // If the page is a draft, redirect to edit mode directly
+            if (res.data?.isDraft) {
+                navigator.go({
+                    to: `/space-detail/${params.id}/page/edit/${params.pageId}`,
+                    options: { replace: true }
+                })
+                return
+            }
             setPage(res.data)
         }).finally(() => {
             setTimeout(() => {

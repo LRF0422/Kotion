@@ -1,7 +1,7 @@
 import { XIcon } from "@kn/icon";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, cn } from "@kn/ui";
 import { isNumber } from "lodash";
-import React, { PropsWithChildren, ReactNode, createContext, useContext, useState } from "react";
+import React, { PropsWithChildren, ReactNode, createContext, useCallback, useContext, useRef, useState } from "react";
 
 
 export interface ModalCTX {
@@ -36,10 +36,15 @@ export const ModalProvider: React.FC<PropsWithChildren> = ({ children }) => {
         width: 600,
         height: 800
     });
+    const cleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const openModal = (config: Omit<ModalState, 'isOpen'>) => {
+    const openModal = useCallback((config: Omit<ModalState, 'isOpen'>) => {
+        // Clear any pending cleanup timer when opening a new modal
+        if (cleanupTimerRef.current) {
+            clearTimeout(cleanupTimerRef.current);
+            cleanupTimerRef.current = null;
+        }
         setModalState({
-            ...modalState,
             isOpen: true,
             title: config.title,
             content: config.content,
@@ -48,19 +53,24 @@ export const ModalProvider: React.FC<PropsWithChildren> = ({ children }) => {
             simple: config.simple,
             width: config.width || 600,
             height: config.height || 'auto'
-        })
-    }
+        });
+    }, []);
 
-    const closeModal = () => {
-        setModalState({
-            ...modalState,
-            isOpen: false,
-            title: null,
-            content: null,
-            desc: null,
-            footer: null
-        })
-    }
+    const closeModal = useCallback(() => {
+        // First set isOpen to false to trigger the close animation
+        setModalState(prev => ({ ...prev, isOpen: false }));
+        // Clear content after animation completes (duration-200 = 200ms)
+        cleanupTimerRef.current = setTimeout(() => {
+            setModalState(prev => ({
+                ...prev,
+                title: null,
+                content: null,
+                desc: null,
+                footer: null
+            }));
+            cleanupTimerRef.current = null;
+        }, 250);
+    }, []);
 
     return <ModalContext.Provider
         value={{
@@ -70,10 +80,11 @@ export const ModalProvider: React.FC<PropsWithChildren> = ({ children }) => {
     >
         <Dialog open={modalState.isOpen}
             onOpenChange={(value) => {
-                setModalState({
-                    ...modalState,
-                    isOpen: value
-                })
+                if (value) {
+                    setModalState(prev => ({ ...prev, isOpen: true }));
+                } else {
+                    closeModal();
+                }
             }}>
             <DialogTrigger asChild>
                 {children}
