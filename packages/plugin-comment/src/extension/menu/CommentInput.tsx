@@ -24,9 +24,11 @@ export const CommentInput: React.FC<CommentInputProps> = ({
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSubmit();
+            // Blur to exit edit mode
+            (e.target as HTMLTextAreaElement).blur();
         }
         if (e.key === 'Escape' && onCancel) {
             onCancel();
@@ -48,7 +50,7 @@ export const CommentInput: React.FC<CommentInputProps> = ({
             </div>
             <div className="flex items-center justify-between mt-2.5">
                 <span className="text-[11px] text-muted-foreground/50 font-medium">
-                    ⌘ + Enter
+                    Enter to send, Esc to cancel
                 </span>
                 <div className="flex gap-2">
                     {onCancel && (

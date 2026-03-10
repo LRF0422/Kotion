@@ -4,8 +4,24 @@ import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core"
 import sheetsLocaleEnUS from "@univerjs/preset-sheets-core/locales/en-US"
 import sheetsLocaleZhCN from "@univerjs/preset-sheets-core/locales/zh-CN"
 import "@univerjs/preset-sheets-core/lib/index.css"
-import { SAVE_THROTTLE_MS } from "./constants"
+import { SAVE_THROTTLE_MS, LARGE_DATA_CONFIG } from "./constants"
 import { CustomMenuPlugin, type ICustomMenuPluginConfig } from "./univer-custom-menu-plugin"
+
+// 计算工作簿数据中的单元格数量
+function countCells(data: Record<string, any> | null): number {
+    if (!data || !data.sheets) return 0
+    let count = 0
+    for (const sheet of Object.values(data.sheets) as any[]) {
+        if (sheet?.cellData) {
+            for (const row of Object.values(sheet.cellData) as any[]) {
+                if (row) {
+                    count += Object.keys(row).length
+                }
+            }
+        }
+    }
+    return count
+}
 
 interface UseUniverOptions {
     containerRef: RefObject<HTMLDivElement | null>
@@ -34,6 +50,12 @@ export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSa
     const onToggleFullscreenRef = useRef(onToggleFullscreen)
     onToggleFullscreenRef.current = onToggleFullscreen
 
+    // 检测是否为大数据量
+    const isLargeData = countCells(workbookData) > LARGE_DATA_CONFIG.virtualScrollThreshold
+
+    // 大数据量时增加节流时间，减少保存频率
+    const saveThrottleMs = isLargeData ? SAVE_THROTTLE_MS * 2 : SAVE_THROTTLE_MS
+
     const throttledSave = useCallback(() => {
         if (saveTimerRef.current) return
         saveTimerRef.current = setTimeout(() => {
@@ -46,8 +68,8 @@ export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSa
             if (snapshot) {
                 onSaveRef.current(snapshot)
             }
-        }, SAVE_THROTTLE_MS)
-    }, [])
+        }, saveThrottleMs)
+    }, [saveThrottleMs])
 
     useEffect(() => {
         const container = containerRef.current

@@ -27,10 +27,29 @@ interface FieldEditorProps {
 
 // 文本字段渲染器
 export const TextRenderer: React.FC<FieldRendererProps> = ({ value }) => {
+    // 处理对象类型的数据（可能是从其他字段类型转换过来的）
+    if (value && typeof value === 'object') {
+        // 如果对象有 content 或 text 属性，优先使用
+        if (typeof value.content === 'string') {
+            return <div className="text-sm text-gray-900 dark:text-white truncate">{value.content}</div>;
+        }
+        if (typeof value.text === 'string') {
+            return <div className="text-sm text-gray-900 dark:text-white truncate">{value.text}</div>;
+        }
+        // 如果有 label 属性（通常是选择类型的值）
+        if (typeof value.label === 'string') {
+            return <div className="text-sm text-gray-900 dark:text-white truncate">{value.label}</div>;
+        }
+        // 其他情况尝试 JSON 序列化
+        return <div className="text-sm text-gray-900 dark:text-white truncate">{JSON.stringify(value)}</div>;
+    }
     return <div className="text-sm text-gray-900 dark:text-white truncate">{value || ''}</div>;
 };
 
 export const TextEditor: React.FC<FieldEditorProps> = ({ value, onChange, onCommit }) => {
+    // 确保 value 是字符串类型
+    const displayValue = typeof value === 'string' ? value : (value?.content || value?.text || value?.label || '');
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -44,7 +63,7 @@ export const TextEditor: React.FC<FieldEditorProps> = ({ value, onChange, onComm
     return (
         <input
             autoFocus
-            value={value || ''}
+            value={displayValue}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
             className="w-full h-full px-2 bg-transparent text-sm text-gray-900 dark:text-white outline-none caret-blue-500 placeholder:text-gray-400 dark:placeholder:text-gray-500"

@@ -1,5 +1,4 @@
 import { APIS } from "../../api";
-import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import { Badge } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { Separator } from "@kn/ui";

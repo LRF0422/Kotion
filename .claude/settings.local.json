@@ -23,7 +23,9 @@
       "Bash(npm run:*)",
       "Bash(dir:*)",
       "Bash(findstr univer:*)",
-      "Bash(npm view:*)"
+      "Bash(npm view:*)",
+      "WebFetch(domain:minimax-algeng-chat-tts.oss-cn-wulanchabu.aliyuncs.com)",
+      "Bash(git:*)"
     ]
   }
 }

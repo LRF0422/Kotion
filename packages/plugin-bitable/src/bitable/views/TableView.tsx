@@ -125,6 +125,11 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         });
     }, [data, searchText, fields]);
 
+    // 虚拟滚动阈值
+    const VIRTUALIZED_THRESHOLD = 500;
+    // 数据超过阈值时启用虚拟滚动
+    const enableVirtualization = filteredData.length > VIRTUALIZED_THRESHOLD;
+
     // 转换为DataGrid列
     const columns = useMemo(() => {
         const baseColumns = fields
@@ -218,7 +223,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
             )}
 
             {/* 数据表格 */}
-            <div className="bitable-grid-container">
+            <div className="bitable-grid-container" style={{ height: enableVirtualization ? 'calc(100vh - 300px)' : 'auto', minHeight: enableVirtualization ? 400 : 'auto' }}>
                 <DataGrid
                     columns={columns}
                     rows={filteredData}
@@ -242,12 +247,13 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                         theme === 'dark' ? "rdg-dark" : "rdg-light"
                     )}
                     style={{
-                        height: 'auto',
+                        height: '100%',
                         minHeight: 400,
                         border: 'none'
                     }}
                     rowHeight={40}
                     headerRowHeight={36}
+                    virtualized={enableVirtualization}
                 />
             </div>
 

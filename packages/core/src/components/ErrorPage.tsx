@@ -142,8 +142,8 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({ error: propsError, resetEr
                 </div>
 
                 {/* Help Text */}
-                <div className="text-center text-sm text-muted-foreground space-y-1">
-                    <p>{t("errorPage.helpTitle")}</p>
+                <div className="text-sm text-muted-foreground space-y-1 w-full max-w-md">
+                    <p className="text-center">{t("errorPage.helpTitle")}</p>
                     <ul className="list-disc list-inside space-y-1">
                         <li>{t("errorPage.helpClearCache")}</li>
                         <li>{t("errorPage.helpCheckConnection")}</li>

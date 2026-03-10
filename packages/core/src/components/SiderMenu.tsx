@@ -91,10 +91,6 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
     const { pluginManager } = useContext(AppContext)
     const [flag, setFlag] = useState(0)
     const { usePath } = useUploadFile()
-    const [aiPanelOpen, setAiPanelOpen] = useState(false)
-
-    // AI Assistant keyboard shortcut
-    useAIAssistantShortcut(aiPanelOpen, setAiPanelOpen)
 
     // Memoized handlers for better performance
     const handleLogout = useCallback(() => {
@@ -129,26 +125,10 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
             ...pluginMenus as SiderMenuItemProps[],
             {
                 name: 'AI Assistant',
-                icon: (
-                    <button
-                        onClick={() => setAiPanelOpen(true)}
-                        className={cn(
-                            "rounded-md flex items-center justify-center p-2 cursor-pointer",
-                            "hover:bg-muted transition-all duration-200 ease-in-out",
-                            aiPanelOpen && "bg-muted shadow-sm"
-                        )}
-                        aria-label="AI Assistant"
-                    >
-                        <div className="p-0.5 rounded-md bg-gradient-to-br from-indigo-500 to-purple-600">
-                            <Sparkles className="h-4 w-4 text-white" />
-                        </div>
-                    </button>
-                ),
+                icon: <Sparkles className="h-5 w-5" />,
                 key: '/ai-assistant',
-                attachTabs: false,
-                id: '/ai-assistant',
-                isGroup: true,
-                onClick: () => setAiPanelOpen(true)
+                attachTabs: true,
+                id: '/ai-assistant'
             },
             {
                 name: 'Shop',
@@ -246,7 +226,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                 onClick: () => { }
             }
         ]
-    }, [pluginManager?.plugins, flag, userInfo, usePath, handleLogout, handleGoToPersonalSpace, aiPanelOpen])
+    }, [pluginManager?.plugins, flag, userInfo, usePath, handleLogout, handleGoToPersonalSpace])
 
     // Memoized click handler
     const handleMenuClick = useCallback((item: SiderMenuItemProps) => {

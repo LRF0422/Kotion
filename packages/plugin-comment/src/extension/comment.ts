@@ -270,6 +270,45 @@ const Comments = Mark.create<CommentOptions, CommentStorage>({
                     },
                 },
             }),
+            new Plugin({
+                key: new PluginKey('commentKeyDown'),
+                props: {
+                    handleKeyDown(view, evt) {
+                        if (evt.key !== 'Enter') return false;
+                        if (!editor.isActive('comment')) return false;
+
+                        const { state, dispatch } = view;
+                        const { $from } = state.selection;
+
+                        // Find the end position of the comment mark
+                        const commentMarkType = state.schema.marks.comment;
+                        let endPos = $from.pos;
+
+                        // Find the end of the current comment mark
+                        for (let d = $from.depth; d > 0; d--) {
+                            const node = $from.node(d);
+                            if (node.marks.some((m) => m.type === commentMarkType)) {
+                                const index = $from.index(d);
+                                if (index + 1 < node.childCount) {
+                                    // Move to after this node
+                                    endPos = $from.pos - $from.parentOffset + node.nodeSize;
+                                    break;
+                                } else {
+                                    // Last child, go to end of this node
+                                    endPos = $from.pos + 1;
+                                }
+                                break;
+                            }
+                        }
+
+                        const tr = state.tr.setSelection(
+                            TextSelection.create(state.doc, Math.min(endPos, state.doc.content.size))
+                        );
+                        if (dispatch) dispatch(tr);
+                        return true;
+                    },
+                },
+            }),
         ];
     },
 

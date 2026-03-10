@@ -57,9 +57,6 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
         if (!content.trim()) return;
 
         if (isNewThread && threadId) {
-            // Update the existing mark in a single transaction instead of
-            // resolveThread + addComment (which removes the mark first,
-            // causing the selection/range to be lost before re-adding).
             editor.commands.setFirstComment(threadId, content);
         } else if (threadId) {
             editor.commands.replyComment(threadId, content);
@@ -99,7 +96,7 @@ export const CommentBubbleView: React.FC<{ editor: Editor }> = (props) => {
                 placement: "bottom-start"
             }}
         >
-            <div className="w-[360px] max-h-[460px] flex flex-col bg-popover rounded-xl shadow-lg border border-border/50 overflow-hidden">
+            <div className="w-[360px] max-h-[460px] flex flex-col bg-popover rounded-xl shadow-lg overflow-hidden">
                 {/* Header - only show for existing threads */}
                 {!isNewThread && (
                     <div className="flex justify-between items-center px-4 py-3 bg-muted/30">

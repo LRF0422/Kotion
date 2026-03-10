@@ -4,8 +4,8 @@ module.exports = {
   content: [
     "./src/**/*.{ts,tsx}",
     // Scan all workspace packages for Tailwind classes
-    // "../../packages/*/src/**/*.{ts,tsx,jsx,js}",
-    // "../../apps/*/src/**/*.{ts,tsx,jsx,js}",
+    "../../packages/*/src/**/*.{ts,tsx,jsx,js}",
+    "../../apps/*/src/**/*.{ts,tsx,jsx,js}",
     "./node_modules/@kn/**/*.{ts,tsx}",
     "./node_modules/streamdown/dist/*.js",
   ],
@@ -22,6 +22,19 @@ module.exports = {
     {
       // Match common dynamic utility patterns (includes arbitrary values like w-[100vh])
       pattern: /^(w|h|max-w|max-h|min-w|min-h)-(\d+|\[.+\]|full|screen|auto)$/,
+    },
+    // Sheet and Dialog animations from tailwindcss-animate
+    {
+      pattern: /^animate-(in|out)$/,
+    },
+    {
+      pattern: /^fade-(in|out)-0$/,
+    },
+    {
+      pattern: /^slide-in-from-(top|bottom|left|right)$/,
+    },
+    {
+      pattern: /^slide-out-to-(top|bottom|left|right)$/,
     },
   ],
   theme: {

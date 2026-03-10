@@ -17,3 +17,5 @@ export const REFRESH_PLUSINS = "REFRESH_PLUSINS"
 export const BUSINESS_TOPIC = {
     PAGE_COOPERATION_INVITE: "space.page.cooperation.invite"
 }
+
+export const TOGGLE_AI_ASSISTANT = "TOGGLE_AI_ASSISTANT"
