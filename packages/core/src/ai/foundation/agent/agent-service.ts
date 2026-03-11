@@ -6,7 +6,6 @@
  */
 
 import { stepCountIs, ToolLoopAgent } from 'ai'
-import type { Editor } from '@kn/editor'
 import type {
     AIAgent,
     AgentOptions,
