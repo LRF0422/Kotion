@@ -13,15 +13,21 @@ import type {
 } from '../types'
 import type { SkillDefinition, SkillActivationOptions, SkillDeactivationResult } from '../skills/types'
 import type { ToolProvider } from './ToolProvider'
+import type { Editor } from '@kn/editor'
+import type { PluginManager } from '@kn/common'
 
 interface SkillProviderOptions {
     toolProvider: ToolProvider
     onReload?: ReloadCallback
+    pluginManager?: PluginManager
+    editor?: Editor
 }
 
 export class SkillProvider {
     private toolProvider: ToolProvider
     private onReload?: ReloadCallback
+    private pluginManager?: PluginManager
+    private editor?: Editor
 
     // Skill registries
     private skills: Map<string, SkillDefinition> = new Map()
@@ -33,6 +39,38 @@ export class SkillProvider {
     constructor(options: SkillProviderOptions) {
         this.toolProvider = options.toolProvider
         this.onReload = options.onReload
+        this.pluginManager = options.pluginManager
+        this.editor = options.editor
+    }
+
+    /**
+     * Set plugin manager after construction (for late binding)
+     */
+    setPluginManager(pluginManager: PluginManager, editor: Editor): void {
+        this.pluginManager = pluginManager
+        this.editor = editor
+    }
+
+    /**
+     * Load plugin tools for a specific plugin
+     * This registers the plugin's tools with the ToolProvider if not already registered
+     */
+    private loadPluginTools(pluginName: string): void {
+        if (!this.pluginManager || !this.editor) return
+
+        // Get plugin tools from PluginManager
+        const pluginTools = this.pluginManager.resloveTools(this.editor)
+
+        // Check if the plugin has tools
+        const hasTools = Object.keys(pluginTools).some(name => {
+            // Check if tool belongs to this plugin by looking at its metadata
+            const tool = pluginTools[name]
+            return tool && typeof tool === 'object'
+        })
+
+        if (hasTools) {
+            this.toolProvider.registerPluginTools(pluginTools, pluginName)
+        }
     }
 
     /**
@@ -96,6 +134,11 @@ export class SkillProvider {
             ...skill.requiredTools,
             ...(options.skipOptional ? [] : skill.optionalTools || [])
         ]
+
+        // If this is a plugin skill, load plugin tools first
+        if (skill.source === 'plugin' && this.pluginManager && this.editor && skill.pluginName) {
+            this.loadPluginTools(skill.pluginName)
+        }
 
         const loadResult = this.toolProvider.loadTools(toolsToLoad)
 

@@ -4,6 +4,7 @@ import { ExtensionWrapper } from '@kn/common';
 import { RiBilibiliFill } from '@kn/icon';
 import React from 'react';
 import { bilibiliTools } from './tools';
+import { bilibiliSkill } from './skills/bilibili-skill';
 
 declare module '@kn/editor' {
     interface Commands<ReturnType> {
@@ -81,5 +82,6 @@ export const BilibiliExt: ExtensionWrapper = {
             }
         }
     ],
-    tools: bilibiliTools
+    tools: bilibiliTools,
+    skills: [bilibiliSkill]
 }

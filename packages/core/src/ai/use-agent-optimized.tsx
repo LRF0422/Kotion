@@ -69,12 +69,14 @@ export const useEditorAgentOptimized = (
     const skillProvider = useMemo(() => {
         const provider = new SkillProvider({
             toolProvider,
-            onReload: handleReload
+            onReload: handleReload,
+            pluginManager,
+            editor
         })
         // Register built-in skills
         provider.registerSkills(builtinSkills)
         return provider
-    }, [toolProvider, handleReload])
+    }, [toolProvider, handleReload, pluginManager, editor])
 
     // Initialize skill registry and load installed skills
     useEffect(() => {
@@ -114,19 +116,14 @@ export const useEditorAgentOptimized = (
         }
     }, [skillRegistry, skillProvider, handleReload])
 
-    // Register plugin tools
+    // Register plugin skills (tools are loaded on-demand when skill is activated)
     useMemo(() => {
-        const pluginTools = pluginManager?.resloveTools(editor) || {}
-        if (Object.keys(pluginTools).length > 0) {
-            toolProvider.registerPluginTools(pluginTools, 'plugins')
-        }
-
         // Register plugin skills if available
         const pluginSkills = pluginManager?.resolveSkills?.() || []
         if (pluginSkills.length > 0) {
             skillProvider.registerSkills(pluginSkills)
         }
-    }, [pluginManager, editor, toolProvider, skillProvider])
+    }, [pluginManager, skillProvider])
 
     // Create discovery tools
     const discoveryTools = useMemo(() => {

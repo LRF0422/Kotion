@@ -3,6 +3,7 @@ import { Folder } from "./folder"
 import { FolderIcon } from "@kn/icon"
 import React from "react"
 import { fileManagerTools } from "./tools"
+import { fileManagerSkill } from "./skills/file-manager-skill"
 
 
 declare module '@kn/editor' {
@@ -26,5 +27,6 @@ export const FolderExtension: ExtensionWrapper = {
             }
         }
     ],
-    tools: fileManagerTools
+    tools: fileManagerTools,
+    skills: [fileManagerSkill]
 }

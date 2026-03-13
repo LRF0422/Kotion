@@ -4,6 +4,7 @@ import { ChartPieIcon } from "@kn/icon";
 import React from "react";
 import { z } from "@kn/ui";
 import type { Editor } from "@kn/editor";
+import { mermaidSkill } from "./skills/mermaid-skill";
 
 /**
  * Mermaid chart type templates for Agent reference
@@ -402,5 +403,6 @@ export const MermaidExtension: ExtensionWrapper = {
                 };
             }
         }
-    ]
+    ],
+    skills: [mermaidSkill]
 }

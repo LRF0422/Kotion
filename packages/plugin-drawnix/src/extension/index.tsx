@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import { Editor } from "@kn/editor";
 import { parseMarkdownToDrawnix } from "@plait-board/markdown-to-drawnix";
 import { parseMermaidToDrawnix } from "@plait-board/mermaid-to-drawnix";
+import { drawnixSkill } from "./skills/drawnix-skill";
 
 // Helper: Find all drawnix nodes in document
 function findAllDrawnixNodes(editor: Editor): Array<{ pos: number; data: any }> {
@@ -439,5 +440,6 @@ export const DrawnixExtension: ExtensionWrapper = {
                 };
             }
         }
-    ]
+    ],
+    skills: [drawnixSkill]
 }
