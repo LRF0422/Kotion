@@ -56,21 +56,21 @@ export function useResume(initialData?: ResumeData) {
       id: uuidv4(),
       type,
       data: getDefaultBlockData(type),
-      order: resume.blocks.length
+      order: (resume.blocks || []).length
     };
     setResume(prev => ({
       ...prev,
-      blocks: [...prev.blocks, newBlock],
+      blocks: [...(prev.blocks || []), newBlock],
       updatedAt: new Date().toISOString()
     }));
     setIsDirty(true);
     return newBlock.id;
-  }, [resume.blocks.length]);
+  }, [(resume.blocks || []).length]);
 
   const updateBlock = useCallback((id: string, data: Partial<BlockData>) => {
     setResume(prev => ({
       ...prev,
-      blocks: prev.blocks.map(b => b.id === id ? { ...b, data: { ...b.data, ...data } } : b),
+      blocks: (prev.blocks || []).map(b => b.id === id ? { ...b, data: { ...b.data, ...data } } : b),
       updatedAt: new Date().toISOString()
     }));
     setIsDirty(true);
@@ -79,7 +79,7 @@ export function useResume(initialData?: ResumeData) {
   const removeBlock = useCallback((id: string) => {
     setResume(prev => ({
       ...prev,
-      blocks: prev.blocks.filter(b => b.id !== id).map((b, i) => ({ ...b, order: i })),
+      blocks: (prev.blocks || []).filter(b => b.id !== id).map((b, i) => ({ ...b, order: i })),
       updatedAt: new Date().toISOString()
     }));
     setIsDirty(true);
@@ -87,7 +87,7 @@ export function useResume(initialData?: ResumeData) {
 
   const moveBlock = useCallback((id: string, direction: 'up' | 'down') => {
     setResume(prev => {
-      const blocks = [...prev.blocks];
+      const blocks = [...(prev.blocks || [])];
       const index = blocks.findIndex(b => b.id === id);
       if (index === -1) return prev;
 

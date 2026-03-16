@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { Button } from '@kn/ui';
 import { Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
-import { Column as ColumnType, ResumeBlock } from '../../types/resume';
+import { Column as ColumnType, ResumeBlock, BlockType } from '../../types/resume';
 import { BasicInfoBlock, EducationBlock, WorkBlock, SkillBlock, ProjectBlock, AwardBlock, CustomBlock } from '../ResumeBlocks';
 
 interface ColumnProps {
   column: ColumnType;
   columnIndex: number;
   totalColumns: number;
-  onAddBlock: (type: string) => void;
+  onAddBlock: (type: BlockType) => void;
   onRemoveBlock: (blockId: string) => void;
   onMoveBlock: (blockId: string, direction: 'up' | 'down') => void;
   onUpdateBlock: (blockId: string, data: any) => void;
@@ -18,7 +18,7 @@ interface ColumnProps {
 export function Column({ column, columnIndex, totalColumns, onAddBlock, onRemoveBlock, onMoveBlock, onUpdateBlock, onDeleteColumn }: ColumnProps) {
   const [showBlockPicker, setShowBlockPicker] = useState(false);
 
-  const blockTypes = [
+  const blockTypes: { type: BlockType; label: string; icon: string }[] = [
     { type: 'basicInfo', label: '基础信息', icon: '👤' },
     { type: 'education', label: '教育经历', icon: '🎓' },
     { type: 'work', label: '工作经历', icon: '💼' },
@@ -32,19 +32,19 @@ export function Column({ column, columnIndex, totalColumns, onAddBlock, onRemove
     const { type, data, id } = block;
     switch (type) {
       case 'basicInfo':
-        return <BasicInfoBlock data={data} onChange={(d) => onUpdateBlock(id, d)} />;
+        return <BasicInfoBlock data={data as any} onChange={(d) => onUpdateBlock(id, d)} />;
       case 'education':
-        return <EducationBlock data={data} onChange={(d) => onUpdateBlock(id, d)} />;
+        return <EducationBlock data={data as any} onChange={(d) => onUpdateBlock(id, d)} />;
       case 'work':
-        return <WorkBlock data={data} onChange={(d) => onUpdateBlock(id, d)} />;
+        return <WorkBlock data={data as any} onChange={(d) => onUpdateBlock(id, d)} />;
       case 'skill':
-        return <SkillBlock data={data} onChange={(d) => onUpdateBlock(id, d)} />;
+        return <SkillBlock data={data as any} onChange={(d) => onUpdateBlock(id, d)} />;
       case 'project':
-        return <ProjectBlock data={data} onChange={(d) => onUpdateBlock(id, d)} />;
+        return <ProjectBlock data={data as any} onChange={(d) => onUpdateBlock(id, d)} />;
       case 'award':
-        return <AwardBlock data={data} onChange={(d) => onUpdateBlock(id, d)} />;
+        return <AwardBlock data={data as any} onChange={(d) => onUpdateBlock(id, d)} />;
       case 'custom':
-        return <CustomBlock data={data} onChange={(d) => onUpdateBlock(id, d)} />;
+        return <CustomBlock data={data as any} onChange={(d) => onUpdateBlock(id, d)} />;
       default:
         return null;
     }
