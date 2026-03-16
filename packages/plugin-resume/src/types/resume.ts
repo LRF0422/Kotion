@@ -5,9 +5,9 @@ export interface ResumeData {
   createdAt?: string;
   updatedAt?: string;
   version?: number;
-  // Multi-column layout (new)
-  columns?: Column[];
-  // Legacy: backward compatibility for old single-column layout
+  // Multi-column layout
+  columns: Column[];
+  // Legacy: backward compatibility for old single-column layout (deprecated)
   blocks?: ResumeBlock[];
 }
 
