@@ -2,13 +2,14 @@
 export interface ResumeData {
   id: string;
   title: string;
-  createdAt: string;
-  updatedAt: string;
-  version: number;
+  createdAt?: string;
+  updatedAt?: string;
+  version?: number;
+  // Multi-column layout
   columns: Column[];
+  // Legacy: backward compatibility for old single-column layout (deprecated)
+  blocks?: ResumeBlock[];
 }
-
-// 简历列
 export interface Column {
   id: string;
   width: number; // 宽度权重 1-3
