@@ -14,9 +14,17 @@ interface ResumeData {
 
 interface Column {
   id: string;
-  width: number;      // 宽度百分比 20-50
+  width: number;      // 宽度权重 1-3，默认1
   blocks: ResumeBlock[];  // 列内的组件块
 }
+
+interface ResumeBlock {
+  id: string;
+  type: BlockType;
+  data: BasicInfoData | EducationData | WorkData | SkillData | ProjectData | AwardData | CustomData;
+}
+
+type BlockType = 'basicInfo' | 'education' | 'work' | 'skill' | 'project' | 'award' | 'custom';
 ```
 
 ### 组件块类型
@@ -33,9 +41,11 @@ interface Column {
 
 ### 多列网格系统
 - 支持 2-4 列
-- 每列宽度可调（20%-50%）
+- 每列宽度用权重表示（1-3），默认都是1
 - 列之间有固定间距（16px）
-- 使用 CSS Grid 或 Flex 实现
+- 使用 CSS Flexbox 实现，均分宽度后按权重分配
+- 2列：各50%；3列：各33%；4列：各25%
+- 权重调整后重新计算实际宽度
 
 ### 布局示意
 ```
@@ -81,6 +91,17 @@ interface Column {
 1. 拖拽列边缘调整宽度
 2. 拖拽列顶部移动整列顺序
 3. 点击删除按钮移除列（保留组件）
+
+## 5. 边界情况处理
+
+- **空列显示**：显示虚线边框 + "点击添加组件" 提示
+- **删除列**：弹出确认，列内组件自动合并到相邻列或删除
+- **列数限制**：4列时"添加列"按钮自动禁用
+- **响应式断点**：
+  - 桌面端 (>1024px)：2-4 列并行
+  - 平板端 (768-1024px)：最多3列
+  - 移动端 (<768px)：自动转为单列堆叠
+- **数据迁移**：旧版单列数据自动转为 2 列布局，blocks 放入第1列
 
 ## 5. 技术实现
 
