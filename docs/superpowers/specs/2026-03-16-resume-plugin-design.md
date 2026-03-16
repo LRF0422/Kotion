@@ -4,7 +4,7 @@
 
 - **项目名称**: Resume Plugin (简历插件)
 - **项目类型**: 知识库插件
-- **核心功能**: 提供简历创建、编辑、预览和管理功能，用户通过表单填写信息，系统自动生成美观排版的简历
+- **核心功能**: 提供简历原子组件，用户通过拖拽组件块到页面进行排版，所见即所得
 - **目标用户**: 知识库用户（求职者、职场人士、学生）
 
 ## 2. 功能列表
@@ -26,9 +26,10 @@
    - 展示所有已创建的简历卡片
    - 支持创建新简历、复制、删除操作
 
-2. **简历编辑页面**
-   - 左侧：分类型的表单填写区域
-   - 右侧：实时简历预览
+2. **简历编辑器**（所见即所得）
+   - 通过拖拽组件块到页面进行排版
+   - 每个组件块可直接编辑内容
+   - 支持自由调整组件顺序和位置
    - 自动保存到 localStorage（防丢失）
 
 3. **风格设置面板**
@@ -42,7 +43,6 @@
    - 从知识库页面加载简历数据
 
 5. **导出功能**
-   - 导出为知识库页面（Markdown渲染）
    - 导出为 PDF（html2canvas + jsPDF）
 
 ## 3. 技术架构
@@ -54,30 +54,29 @@ packages/plugin-resume/
 ├── src/
 │   ├── index.tsx                 # 插件入口
 │   ├── pages/
+│   │   ├── ResumeList.tsx        # 简历列表页
 │   │   └── ResumeEditor.tsx      # 简历编辑器主页面
 │   ├── components/
-│   │   ├── ResumeForm/           # 表单组件
-│   │   │   ├── BasicInfoForm.tsx
-│   │   │   ├── EducationForm.tsx
-│   │   │   ├── WorkForm.tsx
-│   │   │   ├── SkillForm.tsx
-│   │   │   ├── ProjectForm.tsx
-│   │   │   └── AwardForm.tsx
-│   │   ├── ResumePreview/       # 预览组件
-│   │   │   ├── ResumePreview.tsx
-│   │   │   └── templates/       # 布局模板
-│   │   │       ├── SingleColumn.tsx
-│   │   │       ├── DoubleColumn.tsx
-│   │   │       └── TripleColumn.tsx
+│   │   ├── ResumeBlocks/         # 原子组件块
+│   │   │   ├── BasicInfoBlock.tsx
+│   │   │   ├── EducationBlock.tsx
+│   │   │   ├── WorkBlock.tsx
+│   │   │   ├── SkillBlock.tsx
+│   │   │   ├── ProjectBlock.tsx
+│   │   │   └── AwardBlock.tsx
+│   │   ├── BlockPicker/         # 组件选择面板
+│   │   │   └── BlockPicker.tsx
 │   │   ├── StyleSettings/       # 风格设置
 │   │   │   └── StylePanel.tsx
-│   │   └── EditorExtension/     # 编辑器扩展（可选）
+│   │   └── EditorExtension/     # 编辑器扩展
+│   │       └── ResumeExtension.ts
 │   ├── types/
 │   │   └── resume.ts            # 类型定义
 │   ├── hooks/
-│   │   └── useResume.ts         # 简历数据管理
+│   │   └── useResume.ts        # 简历数据管理
 │   └── utils/
-│       └── templates.ts         # 模板配置
+│       ├── templates.ts         # 模板配置
+│       └── themes.ts            # 主题色配置
 ```
 
 ### 3.2 数据结构
@@ -90,16 +89,19 @@ interface ResumeData {
   createdAt: string;
   updatedAt: string;
   version: number;  // 乐观锁
-  basicInfo: BasicInfo;
-  education: Education[];
-  work: WorkExperience[];
-  skills: Skill[];
-  projects: Project[];
-  awards: Award[];
+  blocks: ResumeBlock[];  // 组件块列表（顺序即排版）
+}
+
+// 组件块（支持任意顺序排列）
+interface ResumeBlock {
+  id: string;
+  type: 'basicInfo' | 'education' | 'work' | 'skill' | 'project' | 'award' | 'custom';
+  data: BasicInfoData | EducationData | WorkData | SkillData | ProjectData | AwardData | CustomData;
+  order: number;  // 排序
 }
 
 // 基础信息
-interface BasicInfo {
+interface BasicInfoData {
   name: string;
   email: string;
   phone: string;
@@ -109,30 +111,30 @@ interface BasicInfo {
 }
 
 // 教育经历 - 支持"进行中"状态
-interface Education {
+interface EducationData {
   id: string;
   school: string;
   degree: string;
   major: string;
   startDate: string;
   endDate: string | null;
-  isOngoing: boolean;  // 进行中
+  isOngoing: boolean;
   description?: string;
 }
 
 // 工作经历 - 支持"进行中"状态
-interface WorkExperience {
+interface WorkData {
   id: string;
   company: string;
   position: string;
   startDate: string;
   endDate: string | null;
-  isOngoing: boolean;  // 进行中
+  isOngoing: boolean;
   description?: string;
 }
 
 // 技能
-interface Skill {
+interface SkillData {
   id: string;
   name: string;
   level: 'beginner' | 'familiar' | 'expert';
@@ -140,7 +142,7 @@ interface Skill {
 }
 
 // 项目经验
-interface Project {
+interface ProjectData {
   id: string;
   name: string;
   time: string;
@@ -150,12 +152,18 @@ interface Project {
 }
 
 // 证书奖项
-interface Award {
+interface AwardData {
   id: string;
   name: string;
   issuer: string;
   date: string;
   description?: string;
+}
+
+// 自定义文本块
+interface CustomData {
+  content: string;
+  style?: 'normal' | 'heading' | 'quote';
 }
 
 // 风格配置
@@ -186,42 +194,55 @@ interface ResumeBlock {
 
 ## 4. UI 设计方向
 
-### 4.1 编辑器布局
+### 4.1 编辑器布局（所见即所得）
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  简历编辑器                              [保存] [导出PDF]   │
-├────────────────────┬────────────────────────────────────────┤
-│                    │                                        │
-│  基础信息          │         实时预览区域                    │
-│  ┌──────────────┐ │    ┌──────────────────────────┐      │
-│  │ 姓名: ____   │ │    │     张三                   │      │
-│  │ 邮箱: ____   │ │    │     前端工程师             │      │
-│  │ 电话: ____   │ │    │     email@xxx.com          │      │
-│  └──────────────┘ │    └──────────────────────────┘      │
-│                    │                                        │
-│  教育经历          │    教育背景                            │
-│  [+ 添加]          │    ▪ 清华大学 - 计算机科学硕士          │
-│                    │      2020-2023                         │
-│  工作经历          │                                        │
-│  [+ 添加]          │    工作经历                            │
-│                    │    ▪ xx公司 - 前端工程师                │
-│  技能              │      2023-至今                         │
-│  [+ 添加]          │                                        │
-│  ...               │    技能                                │
-│                    │    ▪ React, TypeScript, Node.js       │
-│  [风格设置]        │                                        │
-└────────────────────┴────────────────────────────────────────┘
+│  简历编辑器              [添加组件] [风格设置] [导出PDF]     │
+├─────────────────────────────────────────────────────────────┤
+│                                                            │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ 基础信息块（可拖拽）                                 │   │
+│  │ ┌───────┐  张三                                      │   │
+│  │ │ 头像 │  前端工程师                                 │   │
+│  │ └───────┘  email@xxx.com | 138xxxx8888              │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                            │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ 教育经历块（可拖拽）                                 │   │
+│  │ ▸ 清华大学 - 计算机科学硕士                           │   │
+│  │   2020-2023 | 点击编辑                               │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                            │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ 工作经历块（可拖拽）                                 │   │
+│  │ ▸ xx公司 - 前端工程师                               │   │
+│  │   2023-至今 | 点击编辑                              │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                            │
+│  [拖拽组件到此处添加]                                     │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 风格设置面板
+### 4.2 组件面板
+
+点击"添加组件"弹出组件选择面板，用户选择后添加到页面：
+- 基础信息
+- 教育经历
+- 工作经历
+- 技能列表
+- 项目经验
+- 证书奖项
+- 自定义文本
+
+### 4.3 风格设置面板
 
 ```
 ┌─────────────────────┐
 │  风格设置           │
 ├─────────────────────┤
 │  主题色             │
-│  ● ○ ○ ○ ○         │
+│  ● ○ ○ ○ ○        │
 │                     │
 │  布局               │
 │  [单栏] [双栏] [三栏]│
@@ -241,15 +262,15 @@ interface ResumeBlock {
 
 ### 第一阶段（MVP）
 - 简历列表页
-- 基础信息、教育、工作、技能、项目、证书奖项组件
-- 单栏布局模板
+- 基础信息、教育、工作、技能、项目、证书奖项组件块
+- 组件添加和拖拽排序
 - 保存/加载功能
 - 自动保存到 localStorage
 
 ### 第二阶段
-- 双栏/三栏布局
 - 主题色切换
 - 字体设置
+- 布局模板切换
 - 简历复制功能
 
 ### 第三阶段
@@ -259,9 +280,10 @@ interface ResumeBlock {
 
 ## 6. 验收标准
 
-1. 用户可以填写所有类型的简历信息
-2. 实时预览正确显示填写的内容
-3. 风格设置可以改变预览效果
-4. 简历可以保存到知识库页面
-5. 再次打开可以加载已有简历
-6. 布局模板切换正常工作
+1. 用户可以通过添加组件创建各类简历块
+2. 用户可以拖拽调整组件块的顺序
+3. 用户可以直接编辑每个组件块的内容
+4. 风格设置可以改变简历外观效果
+5. 简历可以保存到知识库页面
+6. 再次打开可以加载已有简历
+7. 布局模板切换正常工作
