@@ -4,11 +4,15 @@ import { Card, Button } from '@kn/ui';
 import { Plus, Edit } from 'lucide-react';
 import { Column } from './Column';
 import { ColumnResizer } from './ColumnResizer';
-import { ResumeData, Column as ColumnType, ResumeBlock as ResumeBlockType, BlockType } from '../../types/resume';
+import { ResumeData, Column as ColumnData, ResumeBlock as ResumeBlockType, BlockType } from '../../types/resume';
+
+// 本地类型：保证 columns 一定存在
+type ResumeDataWithColumns = Omit<ResumeData, 'columns'> & { columns: ColumnData[] };
 
 export function ResumeNodeView(props: any) {
   const { node, updateAttributes } = props;
-  const data: ResumeData = node.attrs.data || createDefaultData();
+  const rawData = node.attrs.data;
+  const data: ResumeDataWithColumns = rawData ? migrateToColumnLayout(rawData) : createDefaultData();
   const [isEditing, setIsEditing] = useState(false);
 
   const addColumn = () => {
@@ -21,12 +25,12 @@ export function ResumeNodeView(props: any) {
   };
 
   const deleteColumn = (columnId: string) => {
-    const newColumns = data.columns.filter((c: ColumnType) => c.id !== columnId);
+    const newColumns = data.columns.filter((c: ColumnData) => c.id !== columnId);
     updateAttributes({ data: { ...data, columns: newColumns } });
   };
 
   const addBlock = (columnId: string, type: BlockType) => {
-    const newColumns = data.columns.map((col: ColumnType) => {
+    const newColumns = data.columns.map((col: ColumnData) => {
       if (col.id === columnId) {
         return {
           ...col,
@@ -43,7 +47,7 @@ export function ResumeNodeView(props: any) {
   };
 
   const removeBlock = (columnId: string, blockId: string) => {
-    const newColumns = data.columns.map((col: ColumnType) => {
+    const newColumns = data.columns.map((col: ColumnData) => {
       if (col.id === columnId) {
         return {
           ...col,
@@ -56,7 +60,7 @@ export function ResumeNodeView(props: any) {
   };
 
   const moveBlock = (columnId: string, blockId: string, direction: 'up' | 'down') => {
-    const newColumns = data.columns.map((col: ColumnType) => {
+    const newColumns = data.columns.map((col: ColumnData) => {
       if (col.id === columnId) {
         const blocks = [...col.blocks];
         const index = blocks.findIndex((b: ResumeBlockType) => b.id === blockId);
@@ -74,7 +78,7 @@ export function ResumeNodeView(props: any) {
   };
 
   const updateBlock = (columnId: string, blockId: string, blockData: any) => {
-    const newColumns = data.columns.map((col: ColumnType) => {
+    const newColumns = data.columns.map((col: ColumnData) => {
       if (col.id === columnId) {
         return {
           ...col,
@@ -89,7 +93,7 @@ export function ResumeNodeView(props: any) {
   };
 
   const updateColumnWidth = (columnId: string, width: number) => {
-    const newColumns = data.columns.map((col: ColumnType) =>
+    const newColumns = data.columns.map((col: ColumnData) =>
       col.id === columnId ? { ...col, width } : col
     );
     updateAttributes({ data: { ...data, columns: newColumns } });
@@ -118,7 +122,7 @@ export function ResumeNodeView(props: any) {
             </div>
 
             <div className="flex gap-2">
-              {data.columns.map((column: ColumnType, index: number) => (
+              {data.columns.map((column: ColumnData, index: number) => (
                 <React.Fragment key={column.id}>
                   <div style={{ flex: column.width }} className="min-w-0">
                     <Column
@@ -156,7 +160,28 @@ export function ResumeNodeView(props: any) {
   );
 }
 
-function createDefaultData(): ResumeData {
+function migrateToColumnLayout(data: any): ResumeDataWithColumns {
+  // 如果已经是 columns 格式，直接返回
+  if (data && data.columns && Array.isArray(data.columns)) {
+    return data as ResumeDataWithColumns;
+  }
+
+  // 旧格式：直接是 blocks 数组
+  // 迁移到 2 列布局
+  const blocks = data?.blocks || [];
+  const midpoint = Math.ceil(blocks.length / 2);
+
+  return {
+    id: data?.id || uuidv4(),
+    title: data?.title || '我的简历',
+    columns: [
+      { id: uuidv4(), width: 1, blocks: blocks.slice(0, midpoint) },
+      { id: uuidv4(), width: 1, blocks: blocks.slice(midpoint) }
+    ]
+  };
+}
+
+function createDefaultData(): ResumeDataWithColumns {
   return {
     id: uuidv4(),
     title: '我的简历',
@@ -167,7 +192,7 @@ function createDefaultData(): ResumeData {
   };
 }
 
-function getTotalBlocks(data: ResumeData): number {
+function getTotalBlocks(data: ResumeDataWithColumns): number {
   return data.columns.reduce((sum, col) => sum + col.blocks.length, 0);
 }
 
