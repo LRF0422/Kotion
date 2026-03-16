@@ -5,6 +5,13 @@ export interface ResumeData {
   createdAt: string;
   updatedAt: string;
   version: number;
+  columns: Column[];
+}
+
+// 简历列
+export interface Column {
+  id: string;
+  width: number; // 宽度权重 1-3
   blocks: ResumeBlock[];
 }
 

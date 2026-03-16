@@ -16,7 +16,10 @@ function createDefaultResumeData() {
   return {
     id: uuidv4(),
     title: '我的简历',
-    blocks: []
+    columns: [
+      { id: uuidv4(), width: 1, blocks: [] },
+      { id: uuidv4(), width: 1, blocks: [] }
+    ]
   };
 }
 
