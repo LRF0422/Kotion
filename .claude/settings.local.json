@@ -25,7 +25,9 @@
       "Bash(findstr univer:*)",
       "Bash(npm view:*)",
       "WebFetch(domain:minimax-algeng-chat-tts.oss-cn-wulanchabu.aliyuncs.com)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(pnpm --filter @kn/resume-plugin build)",
+      "Bash(cd /home/Leong/Desktop/knowledge-repo/.worktrees/resume-column && pnpm -F @kn/resume-plugin build 2>&1 | tail -20)"
     ]
   }
 }
