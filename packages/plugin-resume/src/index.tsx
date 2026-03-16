@@ -1,3 +1,4 @@
+import React from 'react';
 import { KPlugin, PluginConfig } from '@kn/common';
 import { ResumeEditor } from './pages/ResumeEditor';
 

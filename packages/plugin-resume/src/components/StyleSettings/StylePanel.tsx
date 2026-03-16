@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleConfig } from '../../types/resume';
-import { Card } from '@kn/ui/components/ui/card';
-import { Button } from '@kn/ui/components/ui/button';
+import { Card, Button } from '@kn/ui';
 
 interface StylePanelProps {
   style: StyleConfig;

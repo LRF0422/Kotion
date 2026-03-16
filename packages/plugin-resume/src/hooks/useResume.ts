@@ -145,6 +145,6 @@ function getDefaultBlockData(type: BlockType): BlockData {
     case 'custom':
       return { content: '', style: 'normal' };
     default:
-      return {};
+      return { name: '', email: '', phone: '' } as BlockData;
   }
 }

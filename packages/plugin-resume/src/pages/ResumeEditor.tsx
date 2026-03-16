@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, ChangeEvent } from 'react';
 import { useResume } from '../hooks/useResume';
-import { BlockType, ResumeBlock } from '../types/resume';
+import { BlockType, ResumeBlock, BasicInfoData, EducationData, WorkData, SkillData, ProjectData, AwardData, CustomData } from '../types/resume';
 import { BlockPicker } from '../components/BlockPicker/BlockPicker';
 import {
   BasicInfoBlock,
@@ -11,9 +11,7 @@ import {
   AwardBlock,
   CustomBlock
 } from '../components/ResumeBlocks';
-import { Button } from '@kn/ui/components/ui/button';
-import { Input } from '@kn/ui/components/ui/input';
-import { Card } from '@kn/ui/components/ui/card';
+import { Button, Input, Card } from '@kn/ui';
 import { ChevronUp, ChevronDown, Trash2, Plus } from 'lucide-react';
 
 interface ResumeEditorProps {
@@ -40,27 +38,61 @@ export function ResumeEditor({ initialData, onSave }: ResumeEditorProps) {
     clearDraft();
   };
 
-  const renderBlockContent = (block: ResumeBlock) => {
-    const commonProps = {
-      data: block.data,
-      onChange: (data: any) => updateBlock(block.id, data)
-    };
+  const handleTitleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    updateTitle(e.target.value);
+  };
 
+  const renderBlockContent = (block: ResumeBlock) => {
     switch (block.type) {
       case 'basicInfo':
-        return <BasicInfoBlock {...commonProps} />;
+        return (
+          <BasicInfoBlock
+            data={block.data as BasicInfoData}
+            onChange={(data) => updateBlock(block.id, data)}
+          />
+        );
       case 'education':
-        return <EducationBlock {...commonProps} />;
+        return (
+          <EducationBlock
+            data={block.data as EducationData}
+            onChange={(data) => updateBlock(block.id, data)}
+          />
+        );
       case 'work':
-        return <WorkBlock {...commonProps} />;
+        return (
+          <WorkBlock
+            data={block.data as WorkData}
+            onChange={(data) => updateBlock(block.id, data)}
+          />
+        );
       case 'skill':
-        return <SkillBlock {...commonProps} />;
+        return (
+          <SkillBlock
+            data={block.data as SkillData}
+            onChange={(data) => updateBlock(block.id, data)}
+          />
+        );
       case 'project':
-        return <ProjectBlock {...commonProps} />;
+        return (
+          <ProjectBlock
+            data={block.data as ProjectData}
+            onChange={(data) => updateBlock(block.id, data)}
+          />
+        );
       case 'award':
-        return <AwardBlock {...commonProps} />;
+        return (
+          <AwardBlock
+            data={block.data as AwardData}
+            onChange={(data) => updateBlock(block.id, data)}
+          />
+        );
       case 'custom':
-        return <CustomBlock {...commonProps} />;
+        return (
+          <CustomBlock
+            data={block.data as CustomData}
+            onChange={(data) => updateBlock(block.id, data)}
+          />
+        );
       default:
         return null;
     }
@@ -85,7 +117,7 @@ export function ResumeEditor({ initialData, onSave }: ResumeEditorProps) {
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <Input
           value={resume.title}
-          onChange={e => updateTitle(e.target.value)}
+          onChange={handleTitleChange}
           className="text-lg font-semibold w-64"
         />
         <div className="flex gap-2">

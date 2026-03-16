@@ -1,8 +1,6 @@
 import React from 'react';
 import { EducationData } from '../../types/resume';
-import { Input } from '@kn/ui/components/ui/input';
-import { Textarea } from '@kn/ui/components/ui/textarea';
-import { Checkbox } from '@kn/ui/components/ui/checkbox';
+import { Input, Textarea, Checkbox } from '@kn/ui';
 
 interface EducationBlockProps {
   data: EducationData;

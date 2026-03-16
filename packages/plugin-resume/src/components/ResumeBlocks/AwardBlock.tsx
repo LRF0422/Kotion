@@ -1,7 +1,6 @@
 import React from 'react';
 import { AwardData } from '../../types/resume';
-import { Input } from '@kn/ui/components/ui/input';
-import { Textarea } from '@kn/ui/components/ui/textarea';
+import { Input, Textarea } from '@kn/ui';
 
 interface AwardBlockProps {
   data: AwardData;

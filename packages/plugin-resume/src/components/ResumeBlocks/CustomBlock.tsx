@@ -1,13 +1,6 @@
 import React from 'react';
 import { CustomData } from '../../types/resume';
-import { Textarea } from '@kn/ui/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@kn/ui/components/ui/select';
+import { Textarea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@kn/ui';
 
 interface CustomBlockProps {
   data: CustomData;

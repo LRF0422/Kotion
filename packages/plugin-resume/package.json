@@ -16,6 +16,7 @@
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",
+    "lucide-react": "^0.454.0",
     "uuid": "^9.0.0"
   },
   "devDependencies": {

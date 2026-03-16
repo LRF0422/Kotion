@@ -1,13 +1,6 @@
 import React from 'react';
 import { SkillData } from '../../types/resume';
-import { Input } from '@kn/ui/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@kn/ui/components/ui/select';
+import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@kn/ui';
 
 interface SkillBlockProps {
   data: SkillData;
