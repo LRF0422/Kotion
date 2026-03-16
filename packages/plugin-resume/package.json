@@ -1,0 +1,24 @@
+{
+  "name": "@kn/resume-plugin",
+  "version": "0.0.1",
+  "description": "简历插件 - 提供简历原子组件",
+  "main": "src/index.tsx",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts"
+  },
+  "scripts": {
+    "build": "rollup -c"
+  },
+  "dependencies": {
+    "@kn/common": "workspace:*",
+    "@kn/core": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/ui": "workspace:*",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@kn/rollup-config": "workspace:*"
+  }
+}
