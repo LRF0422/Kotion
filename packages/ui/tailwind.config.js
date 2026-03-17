@@ -4,8 +4,8 @@ module.exports = {
   content: [
     "./src/**/*.{ts,tsx}",
     // Scan all workspace packages for Tailwind classes
-    "../../packages/*/src/**/*.{ts,tsx,jsx,js}",
-    "../../apps/*/src/**/*.{ts,tsx,jsx,js}",
+    // "../../packages/*/src/**/*.{ts,tsx,jsx,js}",
+    // "../../apps/*/src/**/*.{ts,tsx,jsx,js}",
     "./node_modules/@kn/**/*.{ts,tsx}",
     "./node_modules/streamdown/dist/*.js",
   ],

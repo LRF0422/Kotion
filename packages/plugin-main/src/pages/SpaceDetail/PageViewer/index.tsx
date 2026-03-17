@@ -213,8 +213,8 @@ export const PageViewer: React.FC = () => {
                     }}>
                         {
                             page.favorite ? <Star
-                                fill=""
-                                className="h-5 w-5" /> : <Star className="h-5 w-5" />
+                                fill="#F59E0B"
+                                className="h-5 w-5 text-amber-500" /> : <Star className="h-5 w-5" />
                         }
                     </Button>
                     <Button variant="ghost" size="icon"><MessageCircleCode className="h-5 w-5" /></Button>

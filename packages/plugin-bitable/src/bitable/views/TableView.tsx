@@ -253,7 +253,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                     }}
                     rowHeight={40}
                     headerRowHeight={36}
-                    virtualized={enableVirtualization}
+                // virtualized={enableVirtualization}
                 />
             </div>
 
