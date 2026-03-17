@@ -33,7 +33,6 @@
     "@kn/plugin-office": "workspace:*",
     "@kn/plugin-comment": "workspace:*",
     "@kn/plugin-speech-to-text": "workspace:*",
-    "@kn/resume-plugin": "workspace:*",
     "evaluatex": "^2.2.0",
     "event-source-polyfill": "^1.0.31",
     "lodash": "^4.17.21",

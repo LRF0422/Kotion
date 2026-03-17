@@ -465,9 +465,6 @@ importers:
       '@kn/plugin-weaver-oa':
         specifier: workspace:*
         version: link:../../packages/plugin-weaver-oa
-      '@kn/resume-plugin':
-        specifier: workspace:*
-        version: link:../../packages/plugin-resume
       '@kn/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -1543,40 +1540,6 @@ importers:
       xlsx:
         specifier: ^0.18.5
         version: 0.18.5
-    devDependencies:
-      '@kn/rollup-config':
-        specifier: workspace:*
-        version: link:../rollup-config
-
-  packages/plugin-resume:
-    dependencies:
-      '@kn/common':
-        specifier: workspace:*
-        version: link:../common
-      '@kn/core':
-        specifier: workspace:*
-        version: link:../core
-      '@kn/editor':
-        specifier: workspace:*
-        version: link:../editor
-      '@kn/icon':
-        specifier: workspace:*
-        version: link:../icon
-      '@kn/ui':
-        specifier: workspace:*
-        version: link:../ui
-      '@tiptap/core':
-        specifier: 3.15.3
-        version: 3.15.3(@tiptap/pm@3.20.0)
-      '@tiptap/react':
-        specifier: 3.15.3
-        version: 3.15.3(@floating-ui/dom@1.7.5)(@tiptap/core@3.15.3(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
-      lucide-react:
-        specifier: ^0.454.0
-        version: 0.454.0(react@19.2.4)
-      uuid:
-        specifier: ^9.0.0
-        version: 9.0.1
     devDependencies:
       '@kn/rollup-config':
         specifier: workspace:*
@@ -9669,11 +9632,6 @@ packages:
     resolution: {integrity: sha512-jumlc0BIUrS3qJGgIkWZsyfAM7NCWiBcCDhnd+3NNM5KbBmLTgHVfWBcg6W+rLUsIpzpERPsvwUP7CckAQSOoA==}
     engines: {node: '>=12'}
 
-  lucide-react@0.454.0:
-    resolution: {integrity: sha512-hw7zMDwykCLnEzgncEEjHeA6+45aeEzRYuKHuyRSOPkhko+J3ySGjGIzu+mmMfDFG1vazHepMaYFYHbTFAZAAQ==}
-    peerDependencies:
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0-rc
-
   lucide-react@0.541.0:
     resolution: {integrity: sha512-s0Vircsu5WaGv2KoJZ5+SoxiAJ3UXV5KqEM3eIFDHaHkcLIFdIWgXtZ412+Gh02UsdS7Was+jvEpBvPCWQISlg==}
     peerDependencies:
@@ -16975,13 +16933,6 @@ snapshots:
       '@tiptap/core': 3.15.3(@tiptap/pm@3.15.3)
       '@tiptap/pm': 3.15.3
 
-  '@tiptap/extension-bubble-menu@3.15.3(@tiptap/core@3.15.3(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)':
-    dependencies:
-      '@floating-ui/dom': 1.7.5
-      '@tiptap/core': 3.15.3(@tiptap/pm@3.20.0)
-      '@tiptap/pm': 3.20.0
-    optional: true
-
   '@tiptap/extension-bullet-list@2.27.2(@tiptap/core@2.27.2(@tiptap/pm@2.27.2))':
     dependencies:
       '@tiptap/core': 2.27.2(@tiptap/pm@2.27.2)
@@ -17074,13 +17025,6 @@ snapshots:
       '@floating-ui/dom': 1.7.5
       '@tiptap/core': 3.15.3(@tiptap/pm@3.15.3)
       '@tiptap/pm': 3.15.3
-    optional: true
-
-  '@tiptap/extension-floating-menu@3.20.0(@floating-ui/dom@1.7.5)(@tiptap/core@3.15.3(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)':
-    dependencies:
-      '@floating-ui/dom': 1.7.5
-      '@tiptap/core': 3.15.3(@tiptap/pm@3.20.0)
-      '@tiptap/pm': 3.20.0
     optional: true
 
   '@tiptap/extension-gapcursor@2.27.2(@tiptap/core@2.27.2(@tiptap/pm@2.27.2))(@tiptap/pm@2.27.2)':
@@ -17373,23 +17317,6 @@ snapshots:
     optionalDependencies:
       '@tiptap/extension-bubble-menu': 3.15.3(@tiptap/core@3.15.3(@tiptap/pm@3.15.3))(@tiptap/pm@3.15.3)
       '@tiptap/extension-floating-menu': 3.20.0(@floating-ui/dom@1.7.5)(@tiptap/core@3.15.3(@tiptap/pm@3.15.3))(@tiptap/pm@3.15.3)
-    transitivePeerDependencies:
-      - '@floating-ui/dom'
-
-  '@tiptap/react@3.15.3(@floating-ui/dom@1.7.5)(@tiptap/core@3.15.3(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@19.2.4))(react@19.2.4)':
-    dependencies:
-      '@tiptap/core': 3.15.3(@tiptap/pm@3.20.0)
-      '@tiptap/pm': 3.20.0
-      '@types/react': 18.3.28
-      '@types/react-dom': 18.3.7(@types/react@18.3.28)
-      '@types/use-sync-external-store': 0.0.6
-      fast-equals: 5.4.0
-      react: 19.2.4
-      react-dom: 18.3.1(react@19.2.4)
-      use-sync-external-store: 1.6.0(react@19.2.4)
-    optionalDependencies:
-      '@tiptap/extension-bubble-menu': 3.15.3(@tiptap/core@3.15.3(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)
-      '@tiptap/extension-floating-menu': 3.20.0(@floating-ui/dom@1.7.5)(@tiptap/core@3.15.3(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)
     transitivePeerDependencies:
       - '@floating-ui/dom'
 
@@ -23300,10 +23227,6 @@ snapshots:
       yallist: 4.0.0
 
   lru-cache@7.18.3: {}
-
-  lucide-react@0.454.0(react@19.2.4):
-    dependencies:
-      react: 19.2.4
 
   lucide-react@0.541.0(react@19.2.4):
     dependencies:
