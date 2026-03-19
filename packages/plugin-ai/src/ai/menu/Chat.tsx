@@ -311,16 +311,19 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
             }
         >
             {/* Header with message count badge */}
-            <ExpandableChatHeader className="flex items-center justify-between p-4 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-b">
+            <ExpandableChatHeader className="flex items-center justify-between px-4 py-3 border-b bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500">
-                        <Sparkles className="h-5 w-5 text-white" />
+                    <div className="relative">
+                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-xl blur-md opacity-30" />
+                        <div className="relative p-2 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 shadow-lg shadow-indigo-500/20">
+                            <Sparkles className="h-5 w-5 text-white" />
+                        </div>
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
                             <h1 className="text-base font-semibold text-foreground">AI Assistant</h1>
                             {messageCount > 0 && (
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
                                     {messageCount}
                                 </Badge>
                             )}
@@ -338,7 +341,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => setShowSteps(!showSteps)}
-                                    className={`h-8 w-8 p-0 text-muted-foreground hover:text-foreground ${showSteps ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20' : 'hover:text-indigo-500'}`}
+                                    className={`h-8 w-8 p-0 text-muted-foreground hover:text-foreground transition-colors ${showSteps ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20' : 'hover:text-indigo-500'}`}
                                 >
                                     <Terminal className="h-4 w-4" />
                                 </Button>
@@ -353,7 +356,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                     variant="ghost"
                                     size="sm"
                                     onClick={handleClearChat}
-                                    className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
+                                    className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500 transition-colors"
                                 >
                                     <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -396,7 +399,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                 src={AI_AVATAR_URL}
                                 fallback={AVATAR_FALLBACKS.ai}
                             />
-                            <ChatBubbleMessage className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-200/50 dark:border-indigo-800/50 shadow-sm p-4 max-w-full overflow-x-auto">
+                            <ChatBubbleMessage className="bg-gradient-to-br from-indigo-50/80 to-purple-50/80 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-200/60 dark:border-indigo-800/60 shadow-sm shadow-indigo-500/5 p-4 rounded-2xl rounded-tl-sm">
                                 <Streamdown isAnimating>{buffer.displayText}</Streamdown>
                             </ChatBubbleMessage>
                         </ChatBubble>
@@ -410,20 +413,23 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                 src={AI_AVATAR_URL}
                                 fallback={AVATAR_FALLBACKS.ai}
                             />
-                            <ChatBubbleMessage isLoading className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-200/50 dark:border-indigo-800/50 shadow-sm p-4 max-w-full overflow-x-auto" />
+                            <ChatBubbleMessage isLoading className="bg-gradient-to-br from-indigo-50/80 to-purple-50/80 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-200/60 dark:border-indigo-800/60 shadow-sm shadow-indigo-500/5 p-4 rounded-2xl rounded-tl-sm" />
                         </ChatBubble>
                     )}
 
                     {/* User Choice Dialog */}
                     {pendingChoice && (
-                        <div className="mx-4 my-3 p-4 rounded-xl bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/20 dark:to-purple-950/20 border border-indigo-200/50 dark:border-indigo-800/50 shadow-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-300 max-w-full overflow-x-auto">
+                        <div className="mx-4 my-3 p-4 rounded-2xl bg-gradient-to-br from-indigo-50/80 to-purple-50/80 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-200/60 dark:border-indigo-800/60 shadow-lg shadow-indigo-500/5 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
                             <div className="flex items-start gap-3 mb-3">
-                                <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 shrink-0">
-                                    <HelpCircle className="h-4 w-4 text-white" />
+                                <div className="relative">
+                                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg blur-sm opacity-30" />
+                                    <div className="relative p-2 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 shadow-lg">
+                                        <HelpCircle className="h-4 w-4 text-white" />
+                                    </div>
                                 </div>
-                                <div className="flex-1 min-w-0">
+                                <div className="flex-1 min-w-0 pt-1">
                                     <p className="font-medium text-sm text-foreground">{pendingChoice.request.question}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">Please select an option to continue</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">Please select an option to continue</p>
                                 </div>
                             </div>
 
@@ -432,28 +438,28 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                     <button
                                         key={option.id}
                                         onClick={() => handleOptionSelect(option.id)}
-                                        className="w-full p-3 rounded-lg border border-indigo-200/50 dark:border-indigo-800/50 bg-background hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-all text-left group max-w-full overflow-x-auto"
+                                        className="w-full p-3 rounded-xl border border-indigo-200/60 dark:border-indigo-800/60 bg-background/80 hover:bg-indigo-50/80 dark:hover:bg-indigo-950/40 transition-all text-left group"
                                     >
                                         <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 rounded-full bg-indigo-500 group-hover:bg-purple-500 transition-colors" />
-                                            <span className="font-medium text-sm truncate">{option.label}</span>
+                                            <div className="w-2 h-2 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 group-hover:scale-125 transition-transform" />
+                                            <span className="font-medium text-sm">{option.label}</span>
                                         </div>
                                         {option.description && (
-                                            <p className="text-xs text-muted-foreground mt-1 ml-4 truncate max-w-full overflow-x-auto">{option.description}</p>
+                                            <p className="text-xs text-muted-foreground mt-1 ml-4 line-clamp-2">{option.description}</p>
                                         )}
                                     </button>
                                 ))}
                             </div>
 
                             {pendingChoice.request.allowCustomInput && (
-                                <div className="mt-4 pt-3 border-t border-indigo-200/50 dark:border-indigo-800/50 max-w-full overflow-x-auto">
+                                <div className="mt-4 pt-3 border-t border-indigo-200/50 dark:border-indigo-800/50">
                                     <p className="text-xs text-muted-foreground mb-2">Or provide a custom response:</p>
                                     <div className="flex gap-2">
                                         <Input
                                             value={customInput}
                                             onChange={(e) => setCustomInput(e.target.value)}
                                             placeholder="Type your response..."
-                                            className="flex-1 h-9 text-sm max-w-full overflow-x-auto"
+                                            className="flex-1 h-9 text-sm"
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter' && customInput.trim()) {
                                                     e.preventDefault()
@@ -465,7 +471,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                             size="sm"
                                             onClick={handleCustomSubmit}
                                             disabled={!customInput.trim()}
-                                            className="h-9 px-3 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600"
+                                            className="h-9 px-3 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 shadow-lg shadow-indigo-500/20"
                                         >
                                             <Send className="h-4 w-4" />
                                         </Button>
@@ -478,7 +484,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                     variant="outline"
                                     size="sm"
                                     onClick={handleCancelChoice}
-                                    className="h-8 px-3 border-red-200 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                    className="h-8 px-3 border-red-200/60 text-red-500 hover:bg-red-50/80 dark:hover:bg-red-950/30"
                                 >
                                     <XCircle className="h-4 w-4 mr-1" />
                                     Cancel
@@ -499,10 +505,10 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
             </ExpandableChatBody>
 
             {/* Footer */}
-            <ExpandableChatFooter className="bg-background p-4 border-t">
+            <ExpandableChatFooter className="bg-background/80 backdrop-blur-sm p-4 border-t">
                 <form
                     onSubmit={handleSubmit}
-                    className="relative rounded-lg border bg-background focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary/50 transition-all shadow-sm max-w-full overflow-x-auto"
+                    className="relative rounded-2xl border border-border/80 bg-background/50 focus-within:ring-2 focus-within:ring-indigo-500/30 focus-within:border-indigo-500/50 transition-all shadow-sm"
                 >
                     <ChatInput
                         value={input}
@@ -510,7 +516,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                         onKeyDown={handleKeyDown}
                         placeholder="Ask anything... (Enter to send)"
                         disabled={isLoading}
-                        className="min-h-[48px] resize-none rounded-lg bg-background border-0 px-4 py-3 text-sm shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/60 max-w-full overflow-x-auto"
+                        className="min-h-[52px] resize-none rounded-2xl bg-transparent border-0 px-4 py-3 text-sm shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
                     />
                     <div className="flex items-center px-3 pb-3 pt-0 justify-between">
                         <div className="flex gap-1">
@@ -523,7 +529,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                             type="button"
                                             onClick={handleAttachFile}
                                             disabled={isLoading}
-                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                            className="h-9 w-9 text-muted-foreground/60 hover:text-foreground hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition-colors"
                                         >
                                             <Paperclip className="h-4 w-4" />
                                         </Button>
@@ -539,7 +545,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                             type="button"
                                             onClick={handleMicrophoneClick}
                                             disabled={isLoading}
-                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                            className="h-9 w-9 text-muted-foreground/60 hover:text-foreground hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition-colors"
                                         >
                                             <Mic className="h-4 w-4" />
                                         </Button>
@@ -556,11 +562,11 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                             type="button"
                                             size="sm"
                                             variant="destructive"
-                                            className="h-9 px-3 gap-1.5 rounded-lg"
+                                            className="h-9 px-4 gap-2 rounded-xl shadow-lg"
                                             onClick={handleStop}
                                         >
                                             <Square className="h-4 w-4" />
-                                            <span className="text-xs">Stop</span>
+                                            <span className="text-xs font-medium">Stop</span>
                                         </Button>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="text-xs">Stop generation</TooltipContent>
@@ -570,11 +576,11 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                             <Button
                                 type="submit"
                                 size="sm"
-                                className="h-9 px-3 gap-1.5 rounded-lg"
+                                className="h-9 px-4 gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 shadow-lg shadow-indigo-500/20 transition-all"
                                 disabled={!isInputValid}
                             >
                                 <Send className="h-4 w-4" />
-                                <span className="text-xs">Send</span>
+                                <span className="text-xs font-medium">Send</span>
                             </Button>
                         )}
                     </div>

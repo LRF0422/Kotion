@@ -4,6 +4,7 @@ import React from "react";
 import { Mic, MicOff } from "@kn/icon";
 import { cn } from "@kn/ui";
 import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
+import { dispatchSpeechPanelOpen } from "./SpeechToTextPanel";
 
 export const SpeechToTextStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
     const {
@@ -17,7 +18,8 @@ export const SpeechToTextStaticMenu: React.FC<{ editor: Editor }> = ({ editor })
         if (isRecording) {
             stopRecording();
         } else {
-            startRecording();
+            // Open the panel instead of directly starting recording
+            dispatchSpeechPanelOpen();
         }
     };
 
@@ -35,6 +37,7 @@ export const SpeechToTextStaticMenu: React.FC<{ editor: Editor }> = ({ editor })
                         onClick={handleToggle}
                         aria-label="Toggle speech to text"
                         className={cn(isRecording && "text-destructive")}
+                        data-speech-to-text-trigger
                     >
                         {isRecording
                             ? <MicOff className={cn("h-4 w-4", isRecording && "animate-pulse")} />

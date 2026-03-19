@@ -8,9 +8,9 @@
 import type { SerializableSkill } from '../skill-registry'
 
 /**
- * Translation Assistant Skill
+ * Translation Assistant Skill (Example)
  */
-export const translationSkill: SerializableSkill = {
+export const exampleTranslationSkill: SerializableSkill = {
     id: 'translation-assistant',
     name: 'translation-assistant',
     displayName: '翻译助手',
@@ -241,7 +241,7 @@ You are now in writing enhancement mode. Follow these guidelines:
  * All example skills
  */
 export const exampleSkills: SerializableSkill[] = [
-    translationSkill,
+    exampleTranslationSkill,
     codeDocumentationSkill,
     meetingNotesSkill,
     writingEnhancementSkill

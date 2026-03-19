@@ -38,25 +38,15 @@
   box-shadow: 0 0 0 1px #0C66E4;
 }
 
-/* Selection styles */
+/* Selection styles - Notion-like selection overlay */
 .selected-node {
-  outline: 2px solid rgba(12, 102, 228, 0.4);
-  outline-offset: 1px;
-  border-radius: 4px;
-  transition: outline 0.15s ease-in-out;
-}
-
-.selected-node:hover {
-  outline-color: rgba(12, 102, 228, 0.6);
+  /* Notion uses semi-transparent blue background, no border */
+  background-color: rgba(12, 102, 228, 0.1);
 }
 
 /* Dark mode selection styles */
 .dark .selected-node {
-  outline-color: rgba(59, 130, 246, 0.5);
-}
-
-.dark .selected-node:hover {
-  outline-color: rgba(59, 130, 246, 0.7);
+  background-color: rgba(59, 130, 246, 0.2);
 }
 
 /* Theme-adaptive table cell background colors */

@@ -292,7 +292,7 @@ const AIChatInterface: React.FC = () => {
                                         {message.role === 'assistant' && message.content && (
                                             <div className={cn(
                                                 "flex items-center gap-1 mt-2",
-                                                message.role === 'user' ? "justify-end" : "justify-start"
+                                                "justify-start"
                                             )}>
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
