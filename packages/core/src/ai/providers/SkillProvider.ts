@@ -56,21 +56,48 @@ export class SkillProvider {
      * This registers the plugin's tools with the ToolProvider if not already registered
      */
     private loadPluginTools(pluginName: string): void {
-        if (!this.pluginManager || !this.editor) return
+        if (!this.pluginManager || !this.editor) {
+            console.warn('[SkillProvider] Cannot load plugin tools: missing pluginManager or editor')
+            return
+        }
 
         // Get plugin tools from PluginManager
-        const pluginTools = this.pluginManager.resloveTools(this.editor)
+        const allPluginTools = this.pluginManager.resloveTools(this.editor)
 
-        // Check if the plugin has tools
-        const hasTools = Object.keys(pluginTools).some(name => {
-            // Check if tool belongs to this plugin by looking at its metadata
-            const tool = pluginTools[name]
-            return tool && typeof tool === 'object'
-        })
+        // Filter tools to only include those from the specified plugin
+        // First, get the plugin's extensions to identify its tools
+        const extensions = this.pluginManager.resloveEditorExtension()
+        const pluginExtension = extensions.find(ext => ext.name === pluginName)
 
-        if (hasTools) {
-            this.toolProvider.registerPluginTools(pluginTools, pluginName)
+        if (!pluginExtension) {
+            console.warn(`[SkillProvider] Plugin "${pluginName}" not found in extensions`)
+            return
         }
+
+        // Get the tool names defined in this plugin's extension
+        const pluginToolNames = pluginExtension.tools
+            ? (Array.isArray(pluginExtension.tools) 
+                ? pluginExtension.tools 
+                : [pluginExtension.tools])
+                .map(t => t.name)
+            : []
+
+        // Filter to only include tools from this plugin
+        const filteredTools: Record<string, any> = {}
+        for (const name of pluginToolNames) {
+            if (allPluginTools[name]) {
+                filteredTools[name] = allPluginTools[name]
+            }
+        }
+
+        if (Object.keys(filteredTools).length === 0) {
+            console.warn(`[SkillProvider] No tools found for plugin "${pluginName}"`)
+            return
+        }
+
+        console.log(`[SkillProvider] Loading ${Object.keys(filteredTools).length} tools for plugin "${pluginName}"`, Object.keys(filteredTools))
+
+        this.toolProvider.registerPluginTools(filteredTools, pluginName)
     }
 
     /**
@@ -109,6 +136,7 @@ export class SkillProvider {
         const skill = this.skills.get(skillName)
 
         if (!skill) {
+            console.warn(`[SkillProvider] Skill "${skillName}" not found`)
             return {
                 success: false,
                 skillName,
@@ -135,12 +163,20 @@ export class SkillProvider {
             ...(options.skipOptional ? [] : skill.optionalTools || [])
         ]
 
+        console.log(`[SkillProvider] Activating skill "${skillName}" (source: ${skill.source}, pluginName: ${skill.pluginName || 'none'})`, {
+            requiredTools: skill.requiredTools,
+            optionalTools: skill.optionalTools,
+            toolsToLoad
+        })
+
         // If this is a plugin skill, load plugin tools first
         if (skill.source === 'plugin' && this.pluginManager && this.editor && skill.pluginName) {
+            console.log(`[SkillProvider] Loading plugin tools for "${skill.pluginName}"`)
             this.loadPluginTools(skill.pluginName)
         }
 
         const loadResult = this.toolProvider.loadTools(toolsToLoad)
+        console.log(`[SkillProvider] Tool loading result:`, loadResult)
 
         // Check if all required tools loaded successfully
         const failedRequired = skill.requiredTools.filter(
@@ -148,6 +184,7 @@ export class SkillProvider {
         )
 
         if (failedRequired.length > 0) {
+            console.error(`[SkillProvider] Failed to load required tools:`, failedRequired)
             return {
                 success: false,
                 skillName,

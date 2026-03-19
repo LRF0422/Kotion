@@ -73,13 +73,13 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
         return (
             <NodeViewWrapper
                 as="span"
-                className="inline-flex items-center max-w-[300px]"
+                className="inline-flex max-w-[300px]"
                 contentEditable={false}
                 style={{ display: 'inline-flex' }}
             >
                 <span
                     className={cn(
-                        "inline-flex items-center gap-1.5 px-2 py-1 rounded-md",
+                        "inline-flex items-center gap-1.5 px-2 py-1 rounded-md flex-wrap",
                         "bg-muted hover:bg-muted/80 transition-colors",
                         "border border-border",
                         "cursor-pointer group",
@@ -87,12 +87,11 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
                         !editor.isEditable && "cursor-default"
                     )}
                     onClick={handleDownload}
-                    title={`Download ${name}`}
-                    style={{ minWidth: 'fit-content' }}
                 >
                     {getFileIcon(name)}
                     <span
-                        className="text-sm font-medium max-w-[200px]"
+                        className="text-sm font-medium"
+                        style={{ wordBreak: 'break-word' }}
                     >
                         {name}
                     </span>
@@ -101,7 +100,7 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
                             ({formatFileSize(size)})
                         </span>
                     )}
-                    <DownloadIcon className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <DownloadIcon className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                 </span>
             </NodeViewWrapper>
         );
@@ -117,7 +116,7 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
         >
             <div
                 className={cn(
-                    "flex items-center gap-4 p-4 rounded-lg w-full",
+                    "flex flex-wrap items-center gap-4 p-4 rounded-lg w-full",
                     "bg-muted/50 hover:bg-muted/70 transition-all duration-200",
                     "border border-border hover:border-primary/50",
                     "cursor-pointer group",
@@ -146,12 +145,13 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
 
                 {/* File Info - More spacing and larger text */}
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span
-                            className="font-semibold text-base truncate"
+                            className="font-semibold text-base"
                             style={{
                                 color: 'var(--foreground, #000)',
-                                display: 'inline-block'
+                                display: 'inline-block',
+                                wordBreak: 'break-word'
                             }}
                         >
                             {name}

@@ -13,27 +13,32 @@
 - [mindmap-canvas.tsx](file://packages/plugin-mindmap-canvas/src/nodes/mindmap-canvas.tsx)
 - [MindmapCanvasView.tsx](file://packages/plugin-mindmap-canvas/src/views/MindmapCanvasView.tsx)
 - [default-data.ts](file://packages/plugin-mindmap-canvas/src/nodes/default-data.ts)
+- [PluginManager.ts](file://packages/common/src/core/PluginManager.ts)
+- [App.tsx](file://packages/core/src/App.tsx)
+- [Layout.tsx](file://packages/core/src/Layout.tsx)
+- [main.tsx](file://apps/vite/src/main.tsx)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 新增子节点添加功能，支持在选中节点下创建新的子节点
-- 新增递归删除功能，支持删除选中节点及其所有子节点
-- 增强了节点编辑交互能力，提供更完整的思维导图编辑体验
-- 优化了节点选择状态管理，支持选中节点的可视化反馈
+- 更新插件状态：Drawnix插件已从应用入口移除，默认不再作为内置插件安装
+- 新增插件管理机制说明：通过插件商店和远程插件系统进行安装和管理
+- 更新使用方式：需要手动安装后才能使用思维导图功能
+- 新增插件状态标注：明确标识当前插件的可用状态
 
 ## 目录
 1. [简介](#简介)
-2. [项目结构](#项目结构)
-3. [核心组件](#核心组件)
-4. [架构总览](#架构总览)
-5. [组件详解](#组件详解)
-6. [新增功能详解](#新增功能详解)
-7. [依赖关系分析](#依赖关系分析)
-8. [性能与可扩展性](#性能与可扩展性)
-9. [使用示例](#使用示例)
-10. [故障排查](#故障排查)
-11. [结论](#结论)
+2. [插件状态说明](#插件状态说明)
+3. [项目结构](#项目结构)
+4. [核心组件](#核心组件)
+5. [架构总览](#架构总览)
+6. [组件详解](#组件详解)
+7. [新增功能详解](#新增功能详解)
+8. [依赖关系分析](#依赖关系分析)
+9. [性能与可扩展性](#性能与可扩展性)
+10. [使用示例](#使用示例)
+11. [故障排查](#故障排查)
+12. [结论](#结论)
 
 ## 简介
 本文件面向Drawnix思维导图插件的使用者与维护者，系统化阐述该插件在知识仓库编辑器中的集成方式与实现细节。内容涵盖：
@@ -42,9 +47,49 @@
 - 交互逻辑与布局适配
 - 样式定制与主题切换
 - **新增功能**：子节点添加与递归删除能力
+- **插件状态更新**：当前插件已从应用入口移除，需要手动安装
 - 使用示例：创建、编辑、导出
 - 协作编辑能力与数据导入导出格式建议
 - 性能优化策略与最佳实践
+
+## 插件状态说明
+
+### 当前状态
+**重要更新**：Drawnix思维导图插件已从应用入口移除，不再是默认安装的插件。
+
+#### 状态详情
+- **插件名称**：Drawnix
+- **当前状态**：未安装（需要手动安装）
+- **安装方式**：通过插件商店或远程插件系统安装
+- **默认配置**：在应用入口文件中已被注释掉
+
+#### 安装前状态
+在应用入口文件中，Drawnix插件曾被注释掉：
+```typescript
+// import { drawnix } from "@kn/plugin-drawnix"
+```
+
+#### 插件管理机制
+插件通过以下机制进行管理：
+- **插件商店**：提供插件下载和安装功能
+- **远程插件系统**：支持动态加载和卸载插件
+- **插件管理器**：统一管理插件的生命周期
+
+```mermaid
+flowchart TD
+Start(["应用启动"]) --> CheckInstalled{"检查已安装插件"}
+CheckInstalled --> |未安装| ShowMarketplace["显示插件商店"]
+CheckInstalled --> |已安装| LoadPlugin["加载插件"]
+ShowMarketplace --> InstallPlugin["用户安装插件"]
+InstallPlugin --> LoadPlugin
+LoadPlugin --> Ready["插件就绪"]
+```
+
+**章节来源**
+- [main.tsx](file://apps/vite/src/main.tsx#L11-L18)
+- [PluginManager.ts](file://packages/common/src/core/PluginManager.ts#L150-L248)
+- [App.tsx](file://packages/core/src/App.tsx#L113-L145)
+- [Layout.tsx](file://packages/core/src/Layout.tsx#L131-L161)
 
 ## 项目结构
 Drawnix插件位于packages/plugin-drawnix目录下，采用"扩展+视图+数据初始化"的分层组织方式：
@@ -73,19 +118,19 @@ G --> F
 ```
 
 **图表来源**
-- [drawnix.ts](file://packages/plugin-drawnix/src/extension/drawnix.ts#L1-L43)
+- [drawnix.ts](file://packages/plugin-drawnix/src/extension/drawnix.ts#L1-L236)
 - [DrawnixView.tsx](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)
 - [only-mind.tsx](file://packages/plugin-drawnix/src/extension/only-mind.tsx#L1-L67)
 - [data.ts](file://packages/plugin-drawnix/src/extension/data.ts#L1-L212)
-- [index.tsx（扩展入口）](file://packages/plugin-drawnix/src/extension/index.tsx#L1-L20)
+- [index.tsx（扩展入口）](file://packages/plugin-drawnix/src/extension/index.tsx#L1-L443)
 - [index.tsx（插件装配）](file://packages/plugin-drawnix/src/index.tsx#L2-L14)
 
 **章节来源**
-- [drawnix.ts](file://packages/plugin-drawnix/src/extension/drawnix.ts#L1-L43)
+- [drawnix.ts](file://packages/plugin-drawnix/src/extension/drawnix.ts#L1-L236)
 - [DrawnixView.tsx](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)
 - [only-mind.tsx](file://packages/plugin-drawnix/src/extension/only-mind.tsx#L1-L67)
 - [data.ts](file://packages/plugin-drawnix/src/extension/data.ts#L1-L212)
-- [index.tsx（扩展入口）](file://packages/plugin-drawnix/src/extension/index.tsx#L1-L20)
+- [index.tsx（扩展入口）](file://packages/plugin-drawnix/src/extension/index.tsx#L1-L443)
 - [index.tsx（插件装配）](file://packages/plugin-drawnix/src/index.tsx#L2-L14)
 
 ## 核心组件
@@ -111,19 +156,21 @@ G --> F
 - 扩展装配（extension/index.tsx）
   - 将Drawnix扩展注册为编辑器扩展
   - 提供slash命令"/drawnix"，一键插入思维导图节点
+  - 提供丰富的工具函数，支持从多种格式导入思维导图
 - 插件装配（src/index.tsx）
   - 将DrawnixExtension注册为插件，供上层应用加载
 
 **章节来源**
-- [drawnix.ts](file://packages/plugin-drawnix/src/extension/drawnix.ts#L1-L43)
+- [drawnix.ts](file://packages/plugin-drawnix/src/extension/drawnix.ts#L1-L236)
 - [DrawnixView.tsx](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)
 - [only-mind.tsx](file://packages/plugin-drawnix/src/extension/only-mind.tsx#L1-L67)
 - [data.ts](file://packages/plugin-drawnix/src/extension/data.ts#L1-L212)
-- [index.tsx（扩展入口）](file://packages/plugin-drawnix/src/extension/index.tsx#L1-L20)
+- [index.tsx（扩展入口）](file://packages/plugin-drawnix/src/extension/index.tsx#L1-L443)
 - [index.tsx（插件装配）](file://packages/plugin-drawnix/src/index.tsx#L2-L14)
 
 ## 架构总览
 Drawnix插件的运行链路如下：
+- 用户通过插件商店安装插件后，插件管理系统加载插件
 - 编辑器通过slash命令触发插入节点
 - 节点扩展创建drawnix节点并渲染视图
 - 视图组件加载OnlyMind，传入初始数据与主题
@@ -133,11 +180,18 @@ Drawnix插件的运行链路如下：
 ```mermaid
 sequenceDiagram
 participant U as "用户"
+participant PS as "插件商店"
+participant PM as "插件管理器"
 participant E as "编辑器"
 participant X as "Drawnix扩展"
 participant V as "DrawnixView"
 participant M as "OnlyMind"
 participant B as "Plait Board"
+U->>PS : 访问插件商店
+PS-->>U : 显示可用插件
+U->>PM : 安装Drawnix插件
+PM->>PM : 加载插件模块
+PM-->>E : 注册插件扩展
 U->>E : 输入"/drawnix"
 E->>X : 执行insertDrawnix命令
 X-->>E : 插入drawnix节点
@@ -152,10 +206,11 @@ V->>X : updateAttributes写回节点属性
 ```
 
 **图表来源**
-- [index.tsx（扩展入口）](file://packages/plugin-drawnix/src/extension/index.tsx#L1-L20)
-- [drawnix.ts](file://packages/plugin-drawnix/src/extension/drawnix.ts#L1-L43)
+- [index.tsx（扩展入口）](file://packages/plugin-drawnix/src/extension/index.tsx#L1-L443)
+- [drawnix.ts](file://packages/plugin-drawnix/src/extension/drawnix.ts#L1-L236)
 - [DrawnixView.tsx](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)
 - [only-mind.tsx](file://packages/plugin-drawnix/src/extension/only-mind.tsx#L1-L67)
+- [PluginManager.ts](file://packages/common/src/core/PluginManager.ts#L150-L248)
 
 ## 组件详解
 
@@ -426,55 +481,86 @@ N --> NA["nanoid"]
   - **新增**：对于大量节点的操作，可考虑批量更新以提升性能
 
 ## 使用示例
-以下示例均以路径引用代替代码片段：
 
-- 创建思维导图
-  - 在编辑器中输入"/drawnix"并回车，触发插入命令
-  - 参考路径：[扩展装配](file://packages/plugin-drawnix/src/extension/index.tsx#L1-L20)，[节点扩展](file://packages/plugin-drawnix/src/extension/drawnix.ts#L1-L43)
+### 安装和启用插件
+由于Drawnix插件已从应用入口移除，需要手动安装：
 
-- 编辑思维导图
-  - 在思维导图区域内进行节点增删改查、拖拽、缩放等操作
-  - **新增功能**：选中节点后可添加子节点或删除节点
-  - 变更通过onChange回写至节点属性，参考路径：[视图组件](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)
+1. **通过插件商店安装**
+   - 访问应用的插件商店页面
+   - 搜索"Drawnix"思维导图插件
+   - 点击安装按钮进行安装
+   - 安装完成后重启应用
 
-- **新增功能使用示例**
-  - 添加子节点：选中目标节点，使用addChildNode函数为其添加新的子节点
-  - 删除节点：选中目标节点，使用deleteNode函数删除该节点及其所有子节点
-  - 根节点保护：删除操作会自动保护根节点不被删除
+2. **手动安装方式**
+   ```typescript
+   // 在应用入口文件中取消注释
+   import { drawnix } from "@kn/plugin-drawnix"
+   
+   // 在插件数组中添加
+   ReactDOM.createRoot(document.getElementById('root')!).render(
+     <App plugins={[drawnix]} />
+   )
+   ```
 
-- 导出思维导图
-  - 当前实现未内置导出功能。建议通过Plait Board提供的导出接口或截图方案实现导出
-  - 参考路径：[OnlyMind回调](file://packages/plugin-drawnix/src/extension/only-mind.tsx#L1-L67)
+### 创建思维导图
+- 在编辑器中输入"/drawnix"并回车，触发插入命令
+- 参考路径：[扩展装配](file://packages/plugin-drawnix/src/extension/index.tsx#L1-L443)，[节点扩展](file://packages/plugin-drawnix/src/extension/drawnix.ts#L1-L236)
 
-- 导入数据
-  - 可将外部思维导图数据转换为initializeData格式，或在afterInit中调用Board API批量写入元素
-  - 参考路径：[默认数据结构](file://packages/plugin-drawnix/src/extension/data.ts#L1-L212)，[OnlyMind回调](file://packages/plugin-drawnix/src/extension/only-mind.tsx#L1-L67)
+### 编辑思维导图
+- 在思维导图区域内进行节点增删改查、拖拽、缩放等操作
+- **新增功能**：选中节点后可添加子节点或删除节点
+- 变更通过onChange回写至节点属性，参考路径：[视图组件](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)
 
-- 协作编辑
-  - 插件未内置协同库。可结合编辑器的协作扩展，在onChange中进行增量同步
-  - 参考路径：[节点扩展命令](file://packages/plugin-drawnix/src/extension/drawnix.ts#L1-L43)，[视图组件写回](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)
+### 新增功能使用示例
+- 添加子节点：选中目标节点，使用addChildNode函数为其添加新的子节点
+- 删除节点：选中目标节点，使用deleteNode函数删除该节点及其所有子节点
+- 根节点保护：删除操作会自动保护根节点不被删除
+
+### 导出思维导图
+- 当前实现未内置导出功能。建议通过Plait Board提供的导出接口或截图方案实现导出
+- 参考路径：[OnlyMind回调](file://packages/plugin-drawnix/src/extension/only-mind.tsx#L1-L67)
+
+### 导入数据
+- 可将外部思维导图数据转换为initializeData格式，或在afterInit中调用Board API批量写入元素
+- 插件还支持从多种格式导入：
+  - Markdown大纲格式
+  - Mermaid图表代码
+  - 结构化JSON数据
+- 参考路径：[默认数据结构](file://packages/plugin-drawnix/src/extension/data.ts#L1-L212)，[OnlyMind回调](file://packages/plugin-drawnix/src/extension/only-mind.tsx#L1-L67)
+
+### 协作编辑
+- 插件未内置协同库。可结合编辑器的协作扩展，在onChange中进行增量同步
+- 参考路径：[节点扩展命令](file://packages/plugin-drawnix/src/extension/drawnix.ts#L1-L236)，[视图组件写回](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)
 
 ## 故障排查
-- 插件未生效
-  - 确认插件已正确装配并注册到编辑器扩展体系
-  - 参考路径：[插件装配](file://packages/plugin-drawnix/src/index.tsx#L2-L14)，[扩展装配](file://packages/plugin-drawnix/src/extension/index.tsx#L1-L20)
 
-- 无法渲染或样式异常
-  - 检查样式资源是否正确引入，确认viewport容器尺寸覆盖
-  - 参考路径：[样式引入](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)，[样式覆盖](file://packages/plugin-drawnix/src/extension/style/index.css#L1-L4)
+### 插件未生效
+- **检查插件安装状态**
+  - 确认插件已在插件商店中安装
+  - 检查插件管理器是否正确加载插件
+  - 参考路径：[插件管理器](file://packages/common/src/core/PluginManager.ts#L150-L248)
 
-- 主题切换无效
-  - 确保useTheme返回值与主题切换逻辑一致，并在afterInit后更新Board主题
-  - 参考路径：[主题切换](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)
+- **检查应用配置**
+  - 确认应用入口文件中已正确导入插件
+  - 检查插件是否在plugins数组中正确配置
+  - 参考路径：[应用入口](file://apps/vite/src/main.tsx#L11-L23)
 
-- 交互无响应
-  - 检查readonly状态与编辑器可编辑状态是否冲突
-  - 参考路径：[只读控制](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)，[OnlyMind配置](file://packages/plugin-drawnix/src/extension/only-mind.tsx#L1-L67)
+### 无法渲染或样式异常
+- 检查样式资源是否正确引入，确认viewport容器尺寸覆盖
+- 参考路径：[样式引入](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)，[样式覆盖](file://packages/plugin-drawnix/src/extension/style/index.css#L1-L4)
 
-- **新增功能问题排查**
-  - 子节点添加失败：检查Board实例是否存在，确认选中节点状态正常
-  - 删除功能无效：确认不是在删除根节点，检查节点ID是否正确
-  - 递归删除不完整：检查节点树结构，确认所有子节点都被正确过滤
+### 主题切换无效
+- 确保useTheme返回值与主题切换逻辑一致，并在afterInit后更新Board主题
+- 参考路径：[主题切换](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)
+
+### 交互无响应
+- 检查readonly状态与编辑器可编辑状态是否冲突
+- 参考路径：[只读控制](file://packages/plugin-drawnix/src/extension/DrawnixView.tsx#L1-L137)，[OnlyMind配置](file://packages/plugin-drawnix/src/extension/only-mind.tsx#L1-L67)
+
+### 新增功能问题排查
+- 子节点添加失败：检查Board实例是否存在，确认选中节点状态正常
+- 删除功能无效：确认不是在删除根节点，检查节点ID是否正确
+- 递归删除不完整：检查节点树结构，确认所有子节点都被正确过滤
 
 ## 结论
 Drawnix思维导图插件通过清晰的分层设计与Plait生态的深度集成，实现了在编辑器内的所见即所得思维导图编辑体验。其核心优势在于：
@@ -482,6 +568,7 @@ Drawnix思维导图插件通过清晰的分层设计与Plait生态的深度集�
 - 以OnlyMind聚焦思维导图能力，提供丰富的交互与主题支持
 - 通过默认数据与回调机制，实现数据的稳定回写与扩展空间
 - **新增功能**：完善的节点编辑能力，支持子节点添加和递归删除，提供更完整的思维导图编辑体验
+- **插件状态更新**：当前插件已从应用入口移除，需要用户手动安装，体现了更加灵活的插件管理模式
 
 未来可进一步完善：
 - 增加导出与导入能力（如Markdown/Mermaid互转）
@@ -489,3 +576,4 @@ Drawnix思维导图插件通过清晰的分层设计与Plait生态的深度集�
 - 提供更多布局与样式定制选项
 - **新增**：支持批量节点操作和撤销重做功能
 - **新增**：提供节点复制粘贴和拖拽重组功能
+- **新增**：优化插件安装和管理体验

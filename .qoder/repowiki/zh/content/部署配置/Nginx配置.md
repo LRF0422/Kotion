@@ -1,283 +1,403 @@
 # Nginx配置
 
 <cite>
-**本文引用的文件**
+**本文档引用的文件**
 - [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf)
-- [apps/vite/nginx/kotion.top.pem](file://apps/vite/nginx/kotion.top.pem)
-- [apps/vite/nginx/kotion.top.key](file://apps/vite/nginx/kotion.top.key)
-- [apps/vite/Dockerfile](file://apps/vite/Dockerfile)
-- [apps/vite/vite.config.ts](file://apps/vite/vite.config.ts)
 - [apps/landing-page-vite/nginx/nginx.conf](file://apps/landing-page-vite/nginx/nginx.conf)
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf)
+- [apps/vite/Dockerfile](file://apps/vite/Dockerfile)
 - [apps/landing-page-vite/Dockerfile](file://apps/landing-page-vite/Dockerfile)
+- [apps/vite/vite.config.ts](file://apps/vite/vite.config.ts)
 - [apps/landing-page-vite/vite.config.ts](file://apps/landing-page-vite/vite.config.ts)
-- [README.md](file://README.md)
-- [package.json](file://package.json)
+- [packages/room-server/src/server.mjs](file://packages/room-server/src/server.mjs)
 </cite>
+
+## 更新摘要
+**所做更改**
+- 新增完整的多服务路由配置章节，涵盖Vite应用、落地页应用和房间服务器的Nginx配置
+- 更新WebSocket升级机制说明，包含现代SSL/TLS设置和连接升级映射
+- 增加房间服务器专用的WebSocket代理配置和健康检查端点
+- 完善HTTPS配置章节，包含SSL证书管理和现代TLS参数设置
+- 新增多应用部署架构图和流量转发流程图
 
 ## 目录
 1. [简介](#简介)
 2. [项目结构](#项目结构)
 3. [核心组件](#核心组件)
-4. [架构总览](#架构总览)
-5. [详细组件分析](#详细组件分析)
-6. [依赖关系分析](#依赖关系分析)
-7. [性能考虑](#性能考虑)
-8. [故障排查指南](#故障排查指南)
-9. [结论](#结论)
-10. [附录](#附录)
+4. [多服务路由配置](#多服务路由配置)
+5. [HTTPS与SSL配置](#https与ssl配置)
+6. [WebSocket升级机制](#websocket升级机制)
+7. [反向代理配置详解](#反向代理配置详解)
+8. [静态资源与SPA路由](#静态资源与spa路由)
+9. [错误处理与健康检查](#错误处理与健康检查)
+10. [部署架构与流量转发](#部署架构与流量转发)
+11. [性能优化建议](#性能优化建议)
+12. [故障排查指南](#故障排查指南)
+13. [结论](#结论)
+14. [附录](#附录)
 
 ## 简介
-本文件面向知识库管理系统的Nginx反向代理与Web服务器配置，基于仓库内现有Vite应用的Nginx配置进行系统化整理与扩展说明。内容涵盖：
-- nginx.conf的结构与关键指令：server块、location规则、静态文件处理
-- HTTPS配置：SSL证书安装、TLS版本与安全加密参数建议
-- 反向代理：将前端请求转发至后端API服务（含WebSocket升级）
-- 缓存策略：静态资源缓存、浏览器缓存头、压缩配置
-- Gzip压缩、HTTP/2支持与安全头部配置
-- 性能优化：连接池、超时设置、上游健康与负载均衡策略
+本文件面向知识库管理系统的Nginx反向代理与Web服务器配置，基于仓库内现有Vite应用、落地页应用和房间服务器的完整Nginx配置进行系统化整理与扩展说明。内容涵盖：
+- 多应用路由配置：支持Vite前端应用、落地页应用和房间服务器的统一代理
+- 现代SSL/TLS配置：包括证书管理、TLS版本控制和加密套件优化
+- WebSocket升级机制：完整的连接升级映射和多服务路由支持
+- 反向代理策略：API请求转发、静态资源处理和错误页面管理
+- 性能优化：连接池配置、超时设置、缓冲策略和健康检查
 
 ## 项目结构
-本仓库采用多包管理（Turborepo），其中Vite应用通过Nginx容器化部署。Nginx配置位于各应用的nginx目录，并由对应Dockerfile在构建阶段复制到容器镜像中。
+本仓库采用多包管理（Turborepo），包含三个主要应用的Nginx配置，分别服务于不同的业务场景：
 
 ```mermaid
 graph TB
 subgraph "应用层"
 ViteApp["Vite 应用<br/>apps/vite"]
-LandingApp["Landing Vite 应用<br/>apps/landing-page-vite"]
+LandingApp["落地页应用<br/>apps/landing-page-vite"]
+RoomServer["房间服务器<br/>packages/room-server"]
 end
 subgraph "容器层"
 NginxImg["Nginx 镜像"]
-ViteDocker["Dockerfile 构建<br/>apps/vite/Dockerfile"]
-LandingDocker["Dockerfile 构建<br/>apps/landing-page-vite/Dockerfile"]
+ViteDocker["Vite Dockerfile"]
+LandingDocker["落地页Dockerfile"]
+RoomDocker["房间服务器Dockerfile"]
 end
 subgraph "配置层"
-ViteConf["Nginx 配置<br/>apps/vite/nginx/nginx.conf"]
-LandingConf["Nginx 配置<br/>apps/landing-page-vite/nginx/nginx.conf"]
-CertPem["证书文件<br/>kotion.top.pem"]
-CertKey["私钥文件<br/>kotion.top.key"]
+ViteConf["Vite Nginx配置<br/>apps/vite/nginx/nginx.conf"]
+LandingConf["落地页Nginx配置<br/>apps/landing-page-vite/nginx/nginx.conf"]
+RoomConf["房间服务器Nginx配置<br/>packages/room-server/nginx/nginx.conf"]
+CertFiles["SSL证书文件"]
 end
 ViteApp --> ViteDocker
 LandingApp --> LandingDocker
+RoomServer --> RoomDocker
 ViteDocker --> NginxImg
 LandingDocker --> NginxImg
+RoomDocker --> NginxImg
 ViteConf --> NginxImg
 LandingConf --> NginxImg
-CertPem --> NginxImg
-CertKey --> NginxImg
+RoomConf --> NginxImg
+CertFiles --> NginxImg
 ```
 
-图表来源
-- [apps/vite/Dockerfile](file://apps/vite/Dockerfile#L1-L12)
+**图表来源**
+- [apps/vite/Dockerfile](file://apps/vite/Dockerfile#L1-L10)
 - [apps/landing-page-vite/Dockerfile](file://apps/landing-page-vite/Dockerfile#L1-L12)
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L1-L113)
-- [apps/landing-page-vite/nginx/nginx.conf](file://apps/landing-page-vite/nginx/nginx.conf#L1-L113)
-- [apps/vite/nginx/kotion.top.pem](file://apps/vite/nginx/kotion.top.pem#L1-L62)
-- [apps/vite/nginx/kotion.top.key](file://apps/vite/nginx/kotion.top.key#L1-L28)
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L1-L135)
 
-章节来源
-- [apps/vite/Dockerfile](file://apps/vite/Dockerfile#L1-L12)
+**章节来源**
+- [apps/vite/Dockerfile](file://apps/vite/Dockerfile#L1-L10)
 - [apps/landing-page-vite/Dockerfile](file://apps/landing-page-vite/Dockerfile#L1-L12)
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L1-L113)
-- [apps/landing-page-vite/nginx/nginx.conf](file://apps/landing-page-vite/nginx/nginx.conf#L1-L113)
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L1-L135)
 
 ## 核心组件
-- Nginx主配置与模块加载：包含mime类型、日志格式、访问日志、sendfile、keepalive超时、客户端上传大小限制、Gzip开关等。
-- 两个server块：
-  - 80端口：HTTP回退与静态资源处理，包含/api反向代理与WebSocket升级。
-  - 888端口：HTTPS监听，使用证书与私钥，其余逻辑同HTTP。
-- 通用location规则：
-  - 根路径：index.html回退与SPA路由支持（try_files）。
-  - /api：代理到后端服务，设置必要的头部，启用HTTP/1.1与升级头。
-- WebSocket升级映射：根据请求头动态选择连接升级行为。
+Nginx配置包含以下核心组件：
 
-章节来源
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L14-L112)
-- [apps/landing-page-vite/nginx/nginx.conf](file://apps/landing-page-vite/nginx/nginx.conf#L14-L112)
+### 主配置组件
+- **事件模块**：worker_connections设置为1024，支持高并发连接
+- **HTTP模块**：包含MIME类型、日志格式、访问日志、sendfile优化、keepalive超时和客户端上传大小限制
+- **Gzip压缩**：在Vite应用中启用，在落地页应用中可选
 
-## 架构总览
-下图展示了从客户端到Nginx再到后端API的典型请求链路，以及静态资源与API的分流策略。
+### 服务器配置
+- **HTTPS服务器**：监听888端口，使用kotion.top.pem证书和kotion.top.key私钥
+- **HTTP服务器**：监听80端口，提供HTTP到HTTPS的重定向
+- **映射规则**：定义$connection_upgrade变量，支持WebSocket连接升级
+
+**章节来源**
+- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L9-L30)
+- [apps/landing-page-vite/nginx/nginx.conf](file://apps/landing-page-vite/nginx/nginx.conf#L9-L30)
+
+## 多服务路由配置
+系统支持三种主要服务的路由配置：
+
+### Vite应用路由
+- **静态资源**：根路径/指向/usr/share/nginx/html，支持SPA路由回退
+- **API代理**：/api路径转发到后端服务192.168.3.43:88
+- **开发代理**：Vite开发服务器配置，支持/api路径代理
+
+### 落地页应用路由
+- **独立域名**：www.simple-platform.cn，使用相同的证书配置
+- **端口分离**：监听889端口，避免与Vite应用冲突
+- **相同代理规则**：/api路径转发到同一后端服务
+
+### 房间服务器专用路由
+- **WebSocket服务**：/ws路径专门用于WebSocket连接
+- **后端API**：/api/路径转发到后端服务，支持Spring Gateway兼容
+- **健康检查**：/health端点提供服务状态检查
+
+```mermaid
+flowchart TD
+Client["客户端请求"] --> Route{"路由匹配"}
+Route --> |根路径| Static["静态资源处理"]
+Route --> |/api| ApiProxy["API代理转发"]
+Route --> |/ws| WsProxy["WebSocket代理"]
+Route --> |/health| Health["健康检查"]
+Static --> Html["HTML/CSS/JS文件"]
+ApiProxy --> Backend["后端服务:88"]
+WsProxy --> WsServer["WebSocket服务:1234"]
+Health --> Status["服务状态: OK"]
+Html --> Response["返回响应"]
+Backend --> Response
+WsServer --> Response
+Status --> Response
+```
+
+**图表来源**
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L58-L110)
+
+**章节来源**
+- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L40-L58)
+- [apps/landing-page-vite/nginx/nginx.conf](file://apps/landing-page-vite/nginx/nginx.conf#L40-L58)
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L58-L110)
+
+## HTTPS与SSL配置
+系统采用现代SSL/TLS配置，确保安全通信和最佳性能：
+
+### 证书配置
+- **证书文件**：kotion.top.pem（包含完整的证书链）
+- **私钥文件**：kotion.top.key（私有密钥）
+- **证书路径**：/usr/share/nginx/目录下
+
+### TLS参数优化
+- **协议版本**：TLSv1.2和TLSv1.3，禁用过时的SSLv2/SSLv3
+- **加密套件**：ECDHE-ECDSA和ECDHE-RSA系列，支持AES-GCM和ChaCha20-Poly1305
+- **会话管理**：1天会话超时，共享SSL缓存50MB
+- **安全参数**：禁用SSL会话票据，优先使用服务器加密套件
+
+### 证书部署
+- **Vite应用**：监听888端口，提供HTTPS服务
+- **落地页应用**：监听889端口，使用相同证书
+- **房间服务器**：监听8877端口，提供高级WebSocket支持
+
+**章节来源**
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L44-L56)
+- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L35-L36)
+- [apps/landing-page-vite/nginx/nginx.conf](file://apps/landing-page-vite/nginx/nginx.conf#L35-L36)
+
+## WebSocket升级机制
+系统实现了完整的WebSocket连接升级机制，支持实时通信：
+
+### 升级映射配置
+```nginx
+map $http_upgrade $connection_upgrade {
+    default        close;      # 默认关闭连接
+    websocket      upgrade;    # WebSocket升级
+}
+```
+
+### WebSocket代理配置
+- **升级头设置**：自动传递Upgrade和Connection头部
+- **HTTP版本**：使用proxy_http_version 1.1支持升级
+- **超时配置**：7天连接超时，适合长时间WebSocket会话
+- **缓冲禁用**：proxy_buffering off，确保实时数据传输
+
+### 多服务支持
+- **房间服务器**：专门的/ws路径，端口1234
+- **后端API**：/api/路径支持WebSocket，便于Spring Gateway集成
+- **连接复用**：同一后端服务支持HTTP和WebSocket协议
 
 ```mermaid
 sequenceDiagram
 participant Client as "客户端"
-participant Nginx as "Nginx 反向代理"
-participant Static as "静态资源<br/>/usr/share/nginx/html"
-participant API as "后端API服务"
-Client->>Nginx : "HTTP/HTTPS 请求"
-alt "静态资源请求"
-Nginx->>Static : "读取HTML/CSS/JS等"
-Static-->>Nginx : "返回静态文件"
-Nginx-->>Client : "返回静态响应"
-else "/api 请求"
-Nginx->>API : "转发代理请求<br/>携带Host/Real-IP/Forwarded等头部"
-API-->>Nginx : "返回API响应"
-Nginx-->>Client : "返回代理响应"
-end
+participant Nginx as "Nginx代理"
+participant WS_Server as "WebSocket服务器"
+Client->>Nginx : "GET /ws HTTP/1.1"
+Nginx->>Nginx : "检查Upgrade头部"
+Nginx->>WS_Server : "建立WebSocket连接"
+WS_Server-->>Nginx : "连接建立确认"
+Nginx-->>Client : "101 Switching Protocols"
+Client->>WS_Server : "实时数据传输"
+WS_Server->>Client : "实时响应"
 ```
 
-图表来源
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L31-L95)
-- [apps/landing-page-vite/nginx/nginx.conf](file://apps/landing-page-vite/nginx/nginx.conf#L31-L95)
+**图表来源**
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L58-L83)
 
-## 详细组件分析
+**章节来源**
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L24-L28)
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L58-L83)
 
-### Nginx主配置与模块加载
-- 关键点
-  - 日志格式与访问日志路径
-  - sendfile开启与keepalive_timeout
-  - 客户端上传大小限制
-  - Gzip压缩开关
-- 建议
-  - 在生产环境开启Gzip并结合浏览器缓存策略提升性能
-  - 合理设置client_max_body_size以适配业务上传需求
+## 反向代理配置详解
+系统采用智能反向代理策略，支持多种协议和场景：
 
-章节来源
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L14-L30)
-- [apps/landing-page-vite/nginx/nginx.conf](file://apps/landing-page-vite/nginx/nginx.conf#L14-L30)
+### 代理头部配置
+- **Host头部**：传递原始主机名
+- **X-Real-IP**：传递真实客户端IP
+- **X-Forwarded-For**：传递完整的代理链
+- **X-Forwarded-Proto**：传递原始协议（http/https）
+- **X-Forwarded-Host**：传递原始主机名
+- **X-Forwarded-Port**：传递原始端口
 
-### HTTPS配置与证书安装
-- 证书与私钥
-  - 证书文件：kotion.top.pem（包含链式证书）
-  - 私钥文件：kotion.top.key
-- 配置要点
-  - HTTPS监听端口与server_name
-  - ssl_certificate与ssl_certificate_key路径
-- 安全建议
-  - 使用强密码学套件与TLS版本控制（见“性能考虑”）
-  - 将私钥权限严格限制，避免泄露
+### 超时配置优化
+- **连接超时**：3秒快速失败
+- **发送超时**：3600秒（1小时）适用于长连接
+- **读取超时**：3600秒（1小时）适用于WebSocket
+- **WebSocket超时**：7天，支持长时间会话
 
-章节来源
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L31-L37)
-- [apps/vite/nginx/kotion.top.pem](file://apps/vite/nginx/kotion.top.pem#L1-L62)
-- [apps/vite/nginx/kotion.top.key](file://apps/vite/nginx/kotion.top.key#L1-L28)
+### URL重写规则
+- **API路径重写**：^/api/(.*)$ -> /$1，移除/api前缀
+- **SPA路由支持**：try_files $uri /index.html，支持前端路由
 
-### 反向代理与WebSocket升级
-- /api代理规则
-  - 设置Host、X-Real-IP、X-Forwarded-For等头部
-  - 超时设置：proxy_connect_timeout、proxy_send_timeout、proxy_read_timeout
-  - 重写规则：将/api前缀去除后转发
-  - HTTP/1.1与Upgrade/Connection头部用于WebSocket支持
-- 升级映射
-  - 根据$http_upgrade动态设置$connection_upgrade，区分普通HTTP与WebSocket
-
-```mermaid
-flowchart TD
-Start(["进入 /api location"]) --> SetHeaders["设置代理头部<br/>Host/Real-IP/Forwarded"]
-SetHeaders --> TimeoutCfg["设置超时参数"]
-TimeoutCfg --> Rewrite["重写URL去除/api前缀"]
-Rewrite --> HttpVer["设置HTTP/1.1与升级头"]
-HttpVer --> Pass["proxy_pass 转发到后端"]
-Pass --> UpgradeMap["根据Upgrade决定连接升级"]
-UpgradeMap --> End(["完成代理"])
-```
-
-图表来源
+**章节来源**
 - [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L45-L58)
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L108-L112)
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L86-L110)
 
-章节来源
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L45-L58)
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L108-L112)
+## 静态资源与SPA路由
+系统提供高效的静态资源处理和SPA路由支持：
 
-### 静态文件处理与SPA路由
-- 根路径location
-  - index回退与SPA路由支持（try_files）
-- 部署路径
-  - root指向/usr/share/nginx/html，由Dockerfile在构建时复制静态产物
+### 静态资源优化
+- **根目录配置**：/usr/share/nginx/html作为静态资源根目录
+- **MIME类型**：自动识别HTML、CSS、JavaScript、图片等文件类型
+- **缓存策略**：结合浏览器缓存和ETag机制
 
-章节来源
+### SPA路由支持
+- **回退机制**：所有未匹配的路径回退到index.html
+- **前端路由**：支持React Router等前端路由框架
+- **SEO友好**：静态资源直接访问，动态路由通过JavaScript处理
+
+### 开发与生产差异
+- **开发环境**：Vite开发服务器提供热重载和代理功能
+- **生产环境**：Nginx直接提供静态资源和API代理
+- **代理一致性**：开发和生产环境的/api路径代理保持一致
+
+**章节来源**
 - [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L40-L43)
-- [apps/vite/Dockerfile](file://apps/vite/Dockerfile#L1-L12)
+- [apps/vite/vite.config.ts](file://apps/vite/vite.config.ts#L15-L24)
 
-### 错误页面与通用错误处理
-- 500/502/503/504统一错误页
-- 错误页根路径与静态资源位置
+## 错误处理与健康检查
+系统提供完善的错误处理和健康检查机制：
 
-章节来源
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L60-L68)
+### 统一错误页面
+- **错误码覆盖**：500、502、503、504错误统一处理
+- **静态页面**：/50x.html作为错误页面模板
+- **根目录配置**：错误页面位于/usr/share/nginx/html
 
-### 前端开发代理与生产反向代理差异
-- 前端开发代理（Vite配置）
-  - 本地开发时将/api代理到https://kotion.top:888/api
-  - 重写规则去除/api前缀
-- 生产环境反向代理（Nginx配置）
-  - 将/api转发到后端服务地址
-  - 保留/去除前缀策略需与后端保持一致
+### 健康检查端点
+- **简单检查**：/health端点返回"OK"文本
+- **无日志记录**：健康检查不产生访问日志
+- **快速响应**：轻量级检查，不影响服务性能
 
-章节来源
-- [apps/vite/vite.config.ts](file://apps/vite/vite.config.ts#L10-L18)
-- [apps/landing-page-vite/vite.config.ts](file://apps/landing-page-vite/vite.config.ts#L10-L18)
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L45-L58)
+### HTTP到HTTPS重定向
+- **端口监听**：80端口监听HTTP请求
+- **域名匹配**：仅对kotion.top域名进行重定向
+- **永久重定向**：301状态码，利于SEO优化
 
-## 依赖关系分析
-- 构建与运行依赖
-  - Dockerfile负责将构建产物与Nginx配置复制进镜像
-  - Nginx配置依赖证书与私钥文件
-  - 前端Vite配置与后端API地址保持一致，确保开发与生产的代理行为一致
+**章节来源**
+- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L64-L67)
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L112-L122)
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L125-L133)
+
+## 部署架构与流量转发
+系统采用多层代理架构，实现灵活的服务路由：
 
 ```mermaid
-graph LR
-ViteBuild["Vite 构建产物"] --> CopyDist["Dockerfile 复制到 /usr/share/nginx/html"]
-NginxConf["Nginx 配置"] --> CopyConf["Dockerfile 复制到 /etc/nginx/nginx.conf"]
-CertPem["证书"] --> CopyCert["Dockerfile 复制到 /usr/share/nginx"]
-CertKey["私钥"] --> CopyKey["Dockerfile 复制到 /usr/share/nginx"]
-CopyDist --> RunNginx["容器运行 Nginx"]
-CopyConf --> RunNginx
-CopyCert --> RunNginx
-CopyKey --> RunNginx
+graph TB
+subgraph "外部访问层"
+Internet["互联网用户"]
+DNS["DNS解析<br/>kotion.top/www.simple-platform.cn"]
+end
+subgraph "负载均衡层"
+LB["负载均衡器<br/>Nginx集群"]
+end
+subgraph "应用服务层"
+ViteApp["Vite应用<br/>:888/:889"]
+RoomWS["房间服务器<br/>:8877/:1234"]
+BackendAPI["后端API<br/>:88"]
+end
+subgraph "存储层"
+DB["数据库"]
+Redis["Redis缓存"]
+end
+Internet --> DNS --> LB
+LB --> ViteApp
+LB --> RoomWS
+LB --> BackendAPI
+RoomWS --> DB
+RoomWS --> Redis
+BackendAPI --> DB
+BackendAPI --> Redis
 ```
 
-图表来源
-- [apps/vite/Dockerfile](file://apps/vite/Dockerfile#L1-L12)
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L14-L30)
+**图表来源**
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L30-L37)
 
-章节来源
-- [apps/vite/Dockerfile](file://apps/vite/Dockerfile#L1-L12)
-- [apps/landing-page-vite/Dockerfile](file://apps/landing-page-vite/Dockerfile#L1-L12)
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L14-L30)
+### 流量转发流程
+1. **域名解析**：用户访问kotion.top或www.simple-platform.cn
+2. **负载均衡**：Nginx根据路径和端口转发到相应服务
+3. **静态资源**：直接从/usr/share/nginx/html提供
+4. **API请求**：转发到后端服务192.168.3.43:88
+5. **WebSocket**：转发到房间服务器192.168.3.43:1234
 
-## 性能考虑
-- 连接与超时
-  - keepalive_timeout：维持长连接，降低握手开销
-  - proxy_connect_timeout/proxy_send_timeout/proxy_read_timeout：合理设置以避免慢连接占用资源
-- 压缩与缓存
-  - Gzip：在生产环境开启，减少传输体积
-  - 浏览器缓存：对静态资源设置合理的Cache-Control与ETag/Last-Modified
-- TLS与安全
-  - 明确TLS版本与加密套件（建议禁用过时协议与弱算法）
-  - 启用HSTS与安全头部（如X-Frame-Options、X-Content-Type-Options、Referrer-Policy）
-- 上游健康与负载均衡
-  - 使用多个后端实例并配置健康检查
-  - 合理设置超时与重试策略，避免单点瓶颈
+**章节来源**
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L30-L37)
+
+## 性能优化建议
+基于现有配置，提出以下性能优化建议：
+
+### 连接优化
+- **worker连接数**：当前1024连接数可根据实际负载调整
+- **keepalive超时**：65秒的keepalive超时适合大多数场景
+- **连接池配置**：后端服务应配置相应的连接池参数
+
+### 缓存策略
+- **静态资源缓存**：浏览器端长期缓存HTML、CSS、JS文件
+- **API缓存**：针对非实时数据设置适当的缓存头
+- **压缩配置**：在Vite应用中启用Gzip压缩，提升传输效率
+
+### 安全增强
+- **HSTS配置**：添加Strict-Transport-Security头
+- **安全头**：添加X-Frame-Options、X-Content-Type-Options等
+- **证书更新**：定期更新SSL证书，监控到期时间
+
+### 监控与日志
+- **访问日志**：启用详细的访问日志记录
+- **错误日志**：配置合适的错误日志级别
+- **性能监控**：监控连接数、响应时间和错误率
 
 ## 故障排查指南
-- 证书相关
-  - 检查证书与私钥路径是否正确，权限是否足够
-  - 确认证书链完整，避免中间证书缺失导致浏览器警告
-- 代理失败
-  - 查看Nginx错误日志与访问日志定位问题
-  - 确认后端服务可达，代理目标地址与端口正确
-- CORS与头部
-  - 确保代理头部（Host、X-Real-IP、X-Forwarded-For）按需传递
-  - 如涉及跨域，确认后端已正确响应CORS头
-- SPA路由
-  - 确认根路径location中的try_files配置，避免刷新或直连路由404
+针对常见问题提供排查方法：
 
-章节来源
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L18-L23)
-- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L60-L68)
+### 证书相关问题
+- **证书路径**：确认证书文件位于/usr/share/nginx/目录
+- **文件权限**：确保证书文件具有正确的读取权限
+- **证书链**：验证kotion.top.pem包含完整的证书链
+
+### 代理配置问题
+- **后端服务**：确认192.168.3.43:88和192.168.3.43:1234服务正常
+- **网络连通性**：测试从Nginx服务器到后端服务的网络连通性
+- **防火墙规则**：检查防火墙是否允许相关端口通信
+
+### WebSocket连接问题
+- **升级头**：确认客户端正确发送Upgrade和Connection头部
+- **超时设置**：检查WebSocket超时配置是否合理
+- **缓冲设置**：确保proxy_buffering off正确配置
+
+### SPA路由问题
+- **try_files配置**：确认根路径location中的try_files设置
+- **前端路由**：检查前端应用的路由配置
+- **构建产物**：验证静态资源已正确部署到/usr/share/nginx/html
+
+**章节来源**
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L44-L46)
+- [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L50-L58)
 
 ## 结论
-本仓库的Nginx配置提供了清晰的静态资源分发与API反向代理能力，结合HTTPS证书与WebSocket升级映射，满足现代Web应用的部署需求。建议在生产环境中进一步完善TLS安全参数、缓存与压缩策略，并配合健康检查与负载均衡实现高可用与高性能。
+本仓库的Nginx配置提供了完整的多服务路由解决方案，支持Vite应用、落地页应用和房间服务器的统一代理。通过现代SSL/TLS配置、WebSocket升级机制和智能反向代理策略，系统能够满足知识库管理系统的高性能、高可用部署需求。建议在生产环境中进一步完善监控告警、安全加固和性能调优，以确保系统的稳定运行。
 
 ## 附录
-- 快速对照表（关键指令与用途）
-  - events：worker_connections 控制并发连接数
-  - http：log_format/access_log/sendfile/keepalive_timeout/client_max_body_size/gzip
-  - server（HTTP/HTTPS）：listen、server_name、root、ssl_certificate、ssl_certificate_key
-  - location（根路径）：index、try_files
-  - location（/api）：proxy_set_header、proxy_pass、rewrite、proxy_http_version、Upgrade/Connection
-  - map：$http_upgrade → $connection_upgrade
 
-章节来源
+### 快速配置对照表
+- **核心指令**：events(worker_connections)、http(log_format、access_log、sendfile、keepalive_timeout、client_max_body_size、gzip)
+- **服务器配置**：listen(80/888/889/8877)、server_name、root、ssl_certificate、ssl_certificate_key
+- **代理配置**：proxy_set_header、proxy_pass、rewrite、proxy_http_version、Upgrade/Connection
+- **映射规则**：map($http_upgrade, $connection_upgrade)
+- **上游服务**：upstream(backend_service, websocket_service)
+
+### 部署清单
+- **容器镜像**：基于官方nginx镜像，包含配置文件和静态资源
+- **证书管理**：SSL证书文件部署到/usr/share/nginx/目录
+- **端口开放**：80(HTTP重定向)、888(HTTPS)、889(HTTPS-落地页)、8877(HTTPS-房间服务器)
+- **后端服务**：192.168.3.43:88(API服务)、192.168.3.43:1234(WebSocket服务)
+
+**章节来源**
 - [apps/vite/nginx/nginx.conf](file://apps/vite/nginx/nginx.conf#L9-L112)
 - [apps/landing-page-vite/nginx/nginx.conf](file://apps/landing-page-vite/nginx/nginx.conf#L9-L112)
+- [packages/room-server/nginx/nginx.conf](file://packages/room-server/nginx/nginx.conf#L1-L135)

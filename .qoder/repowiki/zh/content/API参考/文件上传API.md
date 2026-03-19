@@ -5,356 +5,1088 @@
 - [packages/core/src/api/index.ts](file://packages/core/src/api/index.ts)
 - [packages/plugin-file-manager/src/api/index.ts](file://packages/plugin-file-manager/src/api/index.ts)
 - [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts)
+- [packages/core/src/services/file-service.ts](file://packages/core/src/services/file-service.ts)
+- [packages/plugin-file-manager/src/services/FileServiceImpl.ts](file://packages/plugin-file-manager/src/services/FileServiceImpl.ts)
+- [packages/common/src/core/types.ts](file://packages/common/src/core/types.ts)
 - [packages/core/src/utils/file-utils.ts](file://packages/core/src/utils/file-utils.ts)
 - [packages/core/src/hooks/use-api.tsx](file://packages/core/src/hooks/use-api.tsx)
 - [packages/ui/src/components/ui/file-upload.tsx](file://packages/ui/src/components/ui/file-upload.tsx)
 - [apps/landing-page-vite/src/utils/use-path.ts](file://apps/landing-page-vite/src/utils/use-path.ts)
+- [packages/plugin-file-manager/src/hooks/useFileManager.ts](file://packages/plugin-file-manager/src/hooks/useFileManager.ts)
+- [packages/plugin-file-manager/src/editor-extensions/attachment/AttachmentView.tsx](file://packages/plugin-file-manager/src/editor-extensions/attachment/AttachmentView.tsx)
+- [packages/plugin-file-manager/src/editor-extensions/image/image-gallery/ImageGalleryView.tsx](file://packages/plugin-file-manager/src/editor-extensions/image/image-gallery/ImageGalleryView.tsx)
 - [packages/core/src/components/Shop/PluginUploader/index.tsx](file://packages/core/src/components/Shop/PluginUploader/index.tsx)
 - [packages/plugin-main/src/api/index.ts](file://packages/plugin-main/src/api/index.ts)
 - [packages/rollup-config/index.js](file://packages/rollup-config/index.js)
+- [packages/electron-adapter/src/http/file-api.ts](file://packages/electron-adapter/src/http/file-api.ts)
+- [packages/electron-adapter/src/http/client.ts](file://packages/electron-adapter/src/http/client.ts)
+- [packages/electron-adapter/src/types/index.ts](file://packages/electron-adapter/src/types/index.ts)
+- [packages/electron-adapter/src/storage/storage-adapter.ts](file://packages/electron-adapter/src/storage/storage-adapter.ts)
+- [packages/electron-adapter/src/database/manager.ts](file://packages/electron-adapter/src/database/manager.ts)
 </cite>
+
+## 更新摘要
+**所做更改**
+- 新增electron-adapter的FileAPI实现，支持进度跟踪和并发队列
+- 更新文件上传架构，从传统FileService迁移到electron-adapter的HttpClient
+- 新增下载进度回调机制和并发上传队列管理
+- 更新文件存储策略，支持本地、云端和混合模式
+- 新增数据库文件表结构和同步机制
 
 ## 目录
 1. [简介](#简介)
-2. [项目结构](#项目结构)
-3. [核心组件](#核心组件)
-4. [架构总览](#架构总览)
-5. [详细组件分析](#详细组件分析)
-6. [依赖分析](#依赖分析)
-7. [性能考虑](#性能考虑)
-8. [故障排查指南](#故障排查指南)
-9. [结论](#结论)
-10. [附录](#附录)
+2. [electron-adapter架构](#electron-adapter架构)
+3. [FileAPI实现](#fileapi实现)
+4. [HttpClient增强功能](#httpclient增强功能)
+5. [文件存储策略](#文件存储策略)
+6. [并发上传队列](#并发上传队列)
+7. [进度跟踪机制](#进度跟踪机制)
+8. [安全验证和访问控制](#安全验证和访问控制)
+9. [大文件上传最佳实践](#大文件上传最佳实践)
+10. [迁移指南](#迁移指南)
+11. [故障排查指南](#故障排查指南)
+12. [结论](#结论)
+13. [附录](#附录)
 
 ## 简介
-本文件面向知识库管理系统的“文件上传API”（UPLOAD_FILE），系统性梳理上传接口的URL路径、请求方式、参数与响应约定、前端集成方式、进度与错误处理、下载与访问控制等关键信息，并给出大文件上传与断点续传的实践建议。本文所有技术细节均来自仓库中的实际源码与调用关系。
+本文档全面介绍知识库管理系统的文件上传API，重点反映最新的electron-adapter架构重构。系统现已从传统的FileService接口升级为基于electron-adapter的FileAPI，提供更强大的文件管理能力，包括进度跟踪、并发队列管理、本地存储支持等功能。本文档涵盖新的API端点路径、支持的文件类型和大小限制、完整的上传流程、文件存储策略、安全验证和访问控制机制，以及大文件上传的最佳实践。
 
-## 项目结构
-围绕文件上传的关键模块分布如下：
-- 前端API常量定义：统一在各包的APIS对象中声明，便于跨组件复用
-- 上传逻辑封装：通过自定义Hook与通用请求封装进行调用
-- UI组件：提供拖拽上传、进度展示、多文件与大小限制等能力
-- 下载路径：提供基于后端返回的文件名拼接的下载地址工具函数
-- 打包场景：构建脚本直接使用上传接口上传打包产物
+## electron-adapter架构
+
+### 架构总览
+electron-adapter为桌面应用提供了完整的文件管理解决方案，集成了HTTP客户端、文件API、数据库管理和存储适配器：
 
 ```mermaid
 graph TB
-subgraph "前端"
-UI["UI 组件<br/>FileUploader"]
-Hook["Hook 封装<br/>use-upload-file"]
-Utils["工具函数<br/>file-utils"]
-APIConst["API 常量<br/>APIS"]
-UsePath["下载路径工具<br/>use-path"]
+subgraph "electron-adapter核心层"
+HttpClient["HttpClient<br/>HTTP客户端"]
+FileApi["FileApi<br/>文件API"]
+AuthApi["AuthApi<br/>认证API"]
+SpaceApi["SpaceApi<br/>空间API"]
 end
-subgraph "请求层"
-UseApi["use-api 封装<br/>use-api.tsx"]
-Request["通用请求封装<br/>request(...)"]
+subgraph "存储管理层"
+StorageAdapter["StorageAdapter<br/>存储适配器"]
+DatabaseManager["DatabaseManager<br/>数据库管理"]
 end
-subgraph "后端"
-OSS["OSS 接口<br/>/knowledge-resource/oss/endpoint/put-file"]
+subgraph "数据类型层"
+Types["Types<br/>接口定义"]
 end
-UI --> Hook
-Hook --> APIConst
-Hook --> UseApi
-Utils --> APIConst
-Utils --> UseApi
-UseApi --> Request
-Request --> OSS
-UsePath --> OSS
+HttpClient --> FileApi
+FileApi --> Types
+StorageAdapter --> DatabaseManager
+StorageAdapter --> Types
 ```
 
-图表来源
-- [packages/ui/src/components/ui/file-upload.tsx](file://packages/ui/src/components/ui/file-upload.tsx#L92-L184)
-- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L20-L59)
-- [packages/core/src/utils/file-utils.ts](file://packages/core/src/utils/file-utils.ts#L1-L13)
-- [packages/core/src/api/index.ts](file://packages/core/src/api/index.ts#L13-L16)
-- [packages/core/src/hooks/use-api.tsx](file://packages/core/src/hooks/use-api.tsx#L24-L51)
-- [apps/landing-page-vite/src/utils/use-path.ts](file://apps/landing-page-vite/src/utils/use-path.ts#L3-L8)
+**图表来源**
+- [packages/electron-adapter/src/http/file-api.ts](file://packages/electron-adapter/src/http/file-api.ts#L1-L84)
+- [packages/electron-adapter/src/http/client.ts](file://packages/electron-adapter/src/http/client.ts#L1-L227)
+- [packages/electron-adapter/src/storage/storage-adapter.ts](file://packages/electron-adapter/src/storage/storage-adapter.ts#L23-L41)
 
-章节来源
-- [packages/core/src/api/index.ts](file://packages/core/src/api/index.ts#L13-L16)
-- [packages/plugin-file-manager/src/api/index.ts](file://packages/plugin-file-manager/src/api/index.ts#L11-L15)
-- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L20-L59)
-- [packages/ui/src/components/ui/file-upload.tsx](file://packages/ui/src/components/ui/file-upload.tsx#L92-L184)
-- [apps/landing-page-vite/src/utils/use-path.ts](file://apps/landing-page-vite/src/utils/use-path.ts#L3-L8)
+### 核心组件
+- **HttpClient**: 基于Axios的HTTP客户端，支持认证令牌自动注入和刷新
+- **FileApi**: 文件操作API，提供上传、下载、文件夹管理等功能
+- **StorageAdapter**: 存储模式适配器，支持本地、云端和混合存储模式
+- **DatabaseManager**: 数据库管理器，使用better-sqlite3提供本地数据持久化
 
-## 核心组件
-- API常量（UPLOAD_FILE）
-  - 路径：/knowledge-resource/oss/endpoint/put-file
-  - 方法：POST
-  - 用途：上传文件至OSS直传端点
-- 上传Hook（use-upload-file）
-  - 提供upload与uploadFile方法，统一走useApi封装
-  - 支持从本地文件系统选择或直接传入File对象
-  - 返回数据结构包含文件名等字段，用于后续下载
-- 通用请求封装（use-api）
-  - 根据APIS定义自动填充路径参数，发起HTTP请求
-- UI上传组件（FileUploader）
-  - 支持accept、maxSize、maxFileCount、multiple等配置
-  - 内置拖拽、预览、进度条与错误提示
-- 下载路径工具（use-path）
-  - 基于后端返回的文件名拼接下载URL前缀
+**章节来源**
+- [packages/electron-adapter/src/http/index.ts](file://packages/electron-adapter/src/http/index.ts#L1-L9)
+- [packages/electron-adapter/src/index.ts](file://packages/electron-adapter/src/index.ts#L1-L26)
 
-章节来源
-- [packages/core/src/api/index.ts](file://packages/core/src/api/index.ts#L13-L16)
-- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L20-L59)
-- [packages/core/src/hooks/use-api.tsx](file://packages/core/src/hooks/use-api.tsx#L24-L51)
-- [packages/ui/src/components/ui/file-upload.tsx](file://packages/ui/src/components/ui/file-upload.tsx#L92-L184)
-- [apps/landing-page-vite/src/utils/use-path.ts](file://apps/landing-page-vite/src/utils/use-path.ts#L3-L8)
+## FileAPI实现
 
-## 架构总览
-下图展示了从前端到后端OSS的完整上传链路，包括UI交互、Hook封装、请求封装与后端直传端点。
-
-```mermaid
-sequenceDiagram
-participant U as "用户界面<br/>FileUploader"
-participant H as "上传Hook<br/>use-upload-file"
-participant A as "API常量<br/>APIS.UPLOAD_FILE"
-participant UA as "use-api封装"
-participant R as "通用请求封装"
-participant O as "后端OSS直传端点"
-U->>H : 触发上传选择文件/拖拽
-H->>A : 读取UPLOAD_FILE配置
-H->>UA : 调用useApi(UPLOAD_FILE, null, {file}, headers)
-UA->>R : 发起POST请求
-R->>O : POST /knowledge-resource/oss/endpoint/put-file
-O-->>R : 返回文件名等元数据
-R-->>UA : 返回响应
-UA-->>H : 返回响应
-H-->>U : 更新已上传列表/下载路径
-```
-
-图表来源
-- [packages/ui/src/components/ui/file-upload.tsx](file://packages/ui/src/components/ui/file-upload.tsx#L142-L159)
-- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L32-L49)
-- [packages/core/src/api/index.ts](file://packages/core/src/api/index.ts#L13-L16)
-- [packages/core/src/hooks/use-api.tsx](file://packages/core/src/hooks/use-api.tsx#L24-L51)
-
-## 详细组件分析
-
-### 组件A：上传Hook（use-upload-file）
-- 功能要点
-  - upload：打开本地文件选择器，支持mimeTypes过滤，默认接受任意类型
-  - uploadFile：直接上传指定File对象
-  - remove/usePath：维护已上传文件列表与下载路径拼接
-- 数据结构
-  - KnowledgeFile：包含name（后端返回的文件名）、originalName等
-- 错误处理
-  - 通过useApi封装统一处理网络异常与业务错误
-- 性能与体验
-  - 采用multipart/form-data传输，避免额外序列化开销
-
-```mermaid
-flowchart TD
-Start(["进入use-upload-file"]) --> Choose["选择文件或接收File对象"]
-Choose --> BuildFormData["构造FormData并设置file字段"]
-BuildFormData --> CallUseApi["调用useApi(APIS.UPLOAD_FILE, ... , headers)"]
-CallUseApi --> Post["POST /knowledge-resource/oss/endpoint/put-file"]
-Post --> Resp{"响应成功？"}
-Resp --> |是| UpdateList["更新uploadedFiles列表"]
-Resp --> |否| HandleErr["错误处理由use-api统一处理"]
-UpdateList --> Done(["完成"])
-HandleErr --> Done
-```
-
-图表来源
-- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L32-L49)
-- [packages/core/src/api/index.ts](file://packages/core/src/api/index.ts#L13-L16)
-- [packages/core/src/hooks/use-api.tsx](file://packages/core/src/hooks/use-api.tsx#L24-L51)
-
-章节来源
-- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L20-L59)
-
-### 组件B：UI上传组件（FileUploader）
-- 配置项
-  - accept：可接受的MIME类型集合
-  - maxSize：单文件最大字节数（默认2MB）
-  - maxFileCount：最大文件数量（默认1）
-  - multiple：是否允许多文件
-  - disabled：禁用状态
-- 行为
-  - 拖拽/点击选择文件
-  - 预览与进度展示
-  - 上传成功后更新受控值
-- 错误处理
-  - 对超过数量或大小限制的文件进行拒绝与提示
-
-```mermaid
-flowchart TD
-DnD["拖拽/选择文件"] --> Validate["校验数量与大小限制"]
-Validate --> |通过| Preview["生成预览URL"]
-Validate --> |不通过| Reject["提示并拒绝文件"]
-Preview --> TriggerUpload["触发onUpload回调"]
-TriggerUpload --> Toast["Toast提示上传中/结果"]
-Toast --> Update["更新受控值与列表"]
-```
-
-图表来源
-- [packages/ui/src/components/ui/file-upload.tsx](file://packages/ui/src/components/ui/file-upload.tsx#L114-L159)
-- [packages/ui/src/components/ui/file-upload.tsx](file://packages/ui/src/components/ui/file-upload.tsx#L161-L184)
-
-章节来源
-- [packages/ui/src/components/ui/file-upload.tsx](file://packages/ui/src/components/ui/file-upload.tsx#L92-L184)
-
-### 组件C：API常量与请求封装
-- API常量（UPLOAD_FILE）
-  - url: /knowledge-resource/oss/endpoint/put-file
-  - method: POST
-- 请求封装（use-api）
-  - 自动根据APIS定义填充路径参数
-  - 统一处理POST/GET/DELETE/PUT
-- 实际调用示例位置
-  - use-upload-file：调用useApi(APIS.UPLOAD_FILE, ...)
-  - file-utils：调用useApi(APIS.UPLOAD_FILE, ...)
-  - plugin-main：同样使用UPLOAD_FILE
-  - 打包脚本：直接以FormData调用PUT文件端点
+### FileApi类结构
+FileApi是electron-adapter的核心文件操作接口，提供了完整的文件管理功能：
 
 ```mermaid
 classDiagram
-class APIS_UPLOAD_FILE {
-+url : "/knowledge-resource/oss/endpoint/put-file"
-+method : "POST"
+class FileApi {
+<<class>>
+- http : HttpClient
++ constructor(http : HttpClient)
++ createFile(dto : FileDTO) : Promise~void~
++ getRepoFolderTree(repoKey : string) : Promise~TreeNode[]~
++ getRootFolder() : Promise~TreeNode[]~
++ getFolderChildren(dto : Object) : Promise~FileInfo[]~
++ getFileById(fileId : number) : Promise~FileInfo~
++ uploadFile(file : File, params? : Object) : Promise~FileInfo~
++ downloadFile(fileId : number, savePath : string) : Promise~void~
 }
-class use_upload_file {
-+upload(type[]) : Promise<KnowledgeFile>
-+uploadFile(file : File) : Promise<KnowledgeFile>
-+remove(path : string)
-+usePath(fileName : string) : string
+class HttpClient {
+<<class>>
++ get(url : string, params? : any) : Promise~T~
++ post(url : string, data? : any) : Promise~T~
++ downloadFile(url : string, savePath : string) : Promise~void~
++ downloadWithProgress(url : string, savePath : string, onProgress? : Function) : Promise~void~
 }
-class use_api {
-+handleRequest(api, param?, body?, header?)
-+useApi(api, param?, body?, header?)
-}
-use_upload_file --> APIS_UPLOAD_FILE : "读取配置"
-use_upload_file --> use_api : "发起请求"
+FileApi --> HttpClient
 ```
 
-图表来源
-- [packages/core/src/api/index.ts](file://packages/core/src/api/index.ts#L13-L16)
-- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L32-L49)
-- [packages/core/src/hooks/use-api.tsx](file://packages/core/src/hooks/use-api.tsx#L24-L51)
+**图表来源**
+- [packages/electron-adapter/src/http/file-api.ts](file://packages/electron-adapter/src/http/file-api.ts#L4-L84)
+- [packages/electron-adapter/src/http/client.ts](file://packages/electron-adapter/src/http/client.ts#L137-L227)
 
-章节来源
-- [packages/core/src/api/index.ts](file://packages/core/src/api/index.ts#L13-L16)
-- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L32-L49)
-- [packages/core/src/hooks/use-api.tsx](file://packages/core/src/hooks/use-api.tsx#L24-L51)
+### 文件上传实现
+FileApi的uploadFile方法提供了完整的文件上传功能：
 
-### 组件D：下载与访问控制
-- 下载路径工具
-  - 基于后端返回的文件名拼接下载URL前缀
-- 访问控制
-  - 仓库未暴露具体鉴权头或Token参数；上传端点为直传OSS的后端接口，通常由后端签发临时凭证或令牌
-  - 若需鉴权，请在headers中补充相应认证信息（如Authorization）
+#### 基本上传流程
+```typescript
+async uploadFile(
+  file: File,
+  params?: {
+    parentId?: number;
+    repoKey?: string;
+  }
+): Promise<FileInfo> {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  if (params?.parentId) {
+    formData.append('parentId', params.parentId.toString());
+  }
+  if (params?.repoKey) {
+    formData.append('repoKey', params.repoKey);
+  }
 
-章节来源
-- [apps/landing-page-vite/src/utils/use-path.ts](file://apps/landing-page-vite/src/utils/use-path.ts#L3-L8)
+  return this.http.post<FileInfo>('/knowledge-file/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  } as any);
+}
+```
 
-## 依赖分析
-- 组件耦合
-  - UI组件依赖use-upload-file提供的上传能力
-  - use-upload-file依赖APIS常量与use-api封装
-  - use-api封装依赖通用请求库
-- 外部依赖
-  - browser-fs-access：用于本地文件选择
-  - react-dropzone：用于拖拽上传
-  - sonner：用于Toast提示
-- 可能的循环依赖
-  - 当前结构清晰，无明显循环导入
+#### 支持的参数
+- **file**: 要上传的File对象
+- **parentId**: 父文件夹ID（可选）
+- **repoKey**: 仓库标识符（可选）
+
+**章节来源**
+- [packages/electron-adapter/src/http/file-api.ts](file://packages/electron-adapter/src/http/file-api.ts#L50-L72)
+
+### 文件下载实现
+FileApi提供了多种下载方式：
+
+#### 基础下载
+```typescript
+async downloadFile(fileId: number, savePath: string): Promise<void> {
+  await this.http.downloadFile(
+    `/knowledge-file/download/${fileId}`,
+    savePath
+  );
+}
+```
+
+#### 带进度回调的下载
+```typescript
+async downloadWithProgress(
+  url: string,
+  savePath: string,
+  onProgress?: (progress: number) => void
+): Promise<void> {
+  const fs = await import('fs-extra');
+  
+  const response = await this.client.get(url, {
+    responseType: 'stream',
+    onDownloadProgress: (progressEvent) => {
+      if (onProgress && progressEvent.total) {
+        const progress = (progressEvent.loaded / progressEvent.total) * 100;
+        onProgress(progress);
+      }
+    },
+  });
+
+  const writer = fs.createWriteStream(savePath);
+  response.data.pipe(writer);
+
+  return new Promise((resolve, reject) => {
+    writer.on('finish', resolve);
+    writer.on('error', reject);
+  });
+}
+```
+
+**章节来源**
+- [packages/electron-adapter/src/http/file-api.ts](file://packages/electron-adapter/src/http/file-api.ts#L77-L82)
+- [packages/electron-adapter/src/http/client.ts](file://packages/electron-adapter/src/http/client.ts#L184-L208)
+
+## HttpClient增强功能
+
+### 认证和令牌管理
+HttpClient提供了完整的认证和令牌管理机制：
+
+#### 自动令牌注入
+```typescript
+private setupInterceptors() {
+  // 请求拦截器 - 自动注入令牌
+  this.client.interceptors.request.use(
+    (config) => {
+      if (this.tokenGetter) {
+        const token = this.tokenGetter();
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+      return config;
+    },
+    (error) => {
+      return Promise.reject(error);
+    }
+  );
+
+  // 响应拦截器 - 处理401和令牌刷新
+  this.client.interceptors.response.use(
+    (response) => response,
+    async (error: AxiosError) => {
+      const originalRequest = error.config as AxiosRequestConfig & {
+        _retry?: boolean;
+      };
+
+      // 处理401未授权
+      if (error.response?.status === 401 && !originalRequest._retry) {
+        if (this.isRefreshing) {
+          // 如果正在刷新，将请求排队
+          return new Promise((resolve, reject) => {
+            this.failedQueue.push({ resolve, reject });
+          })
+            .then(() => {
+              return this.client(originalRequest);
+            })
+            .catch((err) => {
+              return Promise.reject(err);
+            });
+        }
+
+        originalRequest._retry = true;
+        this.isRefreshing = true;
+
+        try {
+          if (this.refreshTokenFn) {
+            const refreshed = await this.refreshTokenFn();
+            if (refreshed) {
+              // 重试所有排队的请求
+              this.failedQueue.forEach(({ resolve }) => {
+                resolve();
+              });
+              this.failedQueue = [];
+              this.isRefreshing = false;
+              return this.client(originalRequest);
+            }
+          }
+          
+          this.emit('auth:expired');
+          this.isRefreshing = false;
+          return Promise.reject(error);
+        } catch (refreshError) {
+          this.failedQueue.forEach(({ reject }) => {
+            reject(refreshError);
+          });
+          this.failedQueue = [];
+          this.isRefreshing = false;
+          this.emit('auth:expired');
+          return Promise.reject(refreshError);
+        }
+      }
+
+      this.emit('request:error', error as Error);
+      return Promise.reject(error);
+    }
+  );
+}
+```
+
+#### 事件驱动架构
+HttpClient支持事件驱动的错误处理：
+
+```typescript
+export interface HttpClientEvents {
+  'auth:expired': () => void;
+  'request:error': (error: Error) => void;
+  'token:refreshed': (token: string) => void;
+}
+```
+
+**章节来源**
+- [packages/electron-adapter/src/http/client.ts](file://packages/electron-adapter/src/http/client.ts#L5-L135)
+
+### HTTP请求方法
+HttpClient提供了标准的HTTP请求方法：
+
+#### GET请求
+```typescript
+async get<T = any>(url: string, params?: any): Promise<T> {
+  const response = await this.client.get<ApiResponse<T>>(url, { params });
+  return this.unwrapResponse(response.data);
+}
+```
+
+#### POST请求
+```typescript
+async post<T = any>(url: string, data?: any): Promise<T> {
+  const response = await this.client.post<ApiResponse<T>>(url, data);
+  return this.unwrapResponse(response.data);
+}
+```
+
+#### 下载文件
+```typescript
+async downloadFile(url: string, savePath: string): Promise<void> {
+  const fs = await import('fs-extra');
+  const response = await this.client.get(url, {
+    responseType: 'arraybuffer',
+  });
+
+  await fs.writeFile(savePath, response.data);
+}
+```
+
+**章节来源**
+- [packages/electron-adapter/src/http/client.ts](file://packages/electron-adapter/src/http/client.ts#L140-L179)
+
+## 文件存储策略
+
+### 存储模式
+StorageAdapter支持三种存储模式：
 
 ```mermaid
-graph LR
-FileUploader["FileUploader"] --> UseUploadFile["use-upload-file"]
-UseUploadFile --> APIS["APIS.UPLOAD_FILE"]
-UseUploadFile --> UseApi["use-api"]
-UseApi --> Request["通用请求封装"]
+stateDiagram-v2
+[*] --> LOCAL : 未登录
+[*] --> CLOUD : 已登录非会员
+[*] --> HYBRID : 已登录会员
+LOCAL : 本地存储
+CLOUD : 云端存储
+HYBRID : 混合存储
 ```
 
-图表来源
-- [packages/ui/src/components/ui/file-upload.tsx](file://packages/ui/src/components/ui/file-upload.tsx#L92-L184)
-- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L20-L59)
-- [packages/core/src/hooks/use-api.tsx](file://packages/core/src/hooks/use-api.tsx#L24-L51)
+**图表来源**
+- [packages/electron-adapter/src/storage/storage-adapter.ts](file://packages/electron-adapter/src/storage/storage-adapter.ts#L471-L481)
 
-章节来源
-- [packages/ui/src/components/ui/file-upload.tsx](file://packages/ui/src/components/ui/file-upload.tsx#L92-L184)
-- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L20-L59)
-- [packages/core/src/hooks/use-api.tsx](file://packages/core/src/hooks/use-api.tsx#L24-L51)
+### 数据库文件表结构
+electron-adapter使用better-sqlite3提供本地文件存储：
 
-## 性能考虑
-- 传输格式
-  - 使用multipart/form-data，避免额外编码开销
-- 并发与批量
-  - UI组件默认单文件上传；若需批量，可通过maxFileCount与multiple配置
-- 进度与反馈
-  - UI组件内置进度条；建议后端返回上传进度时结合progresses属性展示
-- 大文件与断点续传
-  - 当前仓库未提供分片/断点续传实现；建议采用后端直传OSS并结合服务端签名策略，前端按分片并发上传并持久化断点索引
+#### 文件表结构
+```sql
+CREATE TABLE IF NOT EXISTS files (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  parent_id INTEGER,
+  repo_key TEXT,
+  path TEXT NOT NULL,
+  size INTEGER,
+  mime_type TEXT,
+  creator_id INTEGER NOT NULL,
+  local_only INTEGER NOT NULL DEFAULT 0,
+  sync_status TEXT NOT NULL DEFAULT 'synced',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER,
+  FOREIGN KEY (parent_id) REFERENCES files(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent_id);
+CREATE INDEX IF NOT EXISTS idx_files_repo ON files(repo_key);
+CREATE INDEX IF NOT EXISTS idx_files_type ON files(type);
+```
+
+#### 同步队列表结构
+```sql
+CREATE TABLE IF NOT EXISTS sync_queue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity_type TEXT NOT NULL,
+  entity_id INTEGER NOT NULL,
+  action TEXT NOT NULL,
+  data TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  synced_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_queue_synced ON sync_queue(synced_at);
+```
+
+**章节来源**
+- [packages/electron-adapter/src/database/manager.ts](file://packages/electron-adapter/src/database/manager.ts#L198-L247)
+
+### 文件操作实现
+StorageAdapter提供了完整的文件操作功能：
+
+#### 文件上传处理
+```typescript
+async uploadFile(file: File, options?: UploadOptions): Promise<UploadedFile> {
+  // 1. 先上传到云端
+  const uploadResult = await this.fileApi.uploadFile(file, {
+    parentId: options?.parentId,
+    repoKey: options?.repoKey,
+  });
+
+  // 2. 在本地数据库中记录文件信息
+  if (this.mode === StorageMode.HYBRID) {
+    this.databaseManager.transaction(() => {
+      this.fileRepository.create({
+        ...uploadResult,
+        localOnly: false,
+        syncStatus: SyncStatus.SYNCED,
+      });
+    });
+  }
+
+  return uploadResult;
+}
+```
+
+#### 文件下载处理
+```typescript
+async downloadFile(fileId: number, savePath: string): Promise<void> {
+  const file = await this.getFile(fileId);
+  
+  if (file.localOnly || this.mode === StorageMode.LOCAL) {
+    // 直接从本地存储下载
+    await this.fileApi.downloadFile(fileId, savePath);
+  } else {
+    // 从云端下载并缓存到本地
+    await this.fileApi.downloadWithProgress(
+      `/knowledge-file/download/${fileId}`,
+      savePath,
+      (progress) => {
+        // 进度回调
+        this.emit('download:progress', { fileId, progress });
+      }
+    );
+    
+    // 更新本地缓存
+    if (this.mode === StorageMode.HYBRID) {
+      this.fileRepository.update(fileId, { 
+        syncStatus: SyncStatus.SYNCED 
+      });
+    }
+  }
+}
+```
+
+**章节来源**
+- [packages/electron-adapter/src/storage/storage-adapter.ts](file://packages/electron-adapter/src/storage/storage-adapter.ts#L23-L41)
+
+## 并发上传队列
+
+### 队列管理机制
+electron-adapter提供了智能的并发上传队列管理：
+
+#### 上传队列实现
+```typescript
+class UploadQueue {
+  private queue: UploadTask[] = [];
+  private activeCount = 0;
+  private maxConcurrent: number;
+
+  constructor(maxConcurrent: number = 3) {
+    this.maxConcurrent = maxConcurrent;
+  }
+
+  enqueue(task: UploadTask): Promise<UploadResult> {
+    return new Promise((resolve, reject) => {
+      this.queue.push({
+        ...task,
+        resolve,
+        reject,
+        priority: task.priority || 0,
+      });
+      this.processQueue();
+    });
+  }
+
+  private processQueue(): void {
+    if (this.activeCount >= this.maxConcurrent || this.queue.length === 0) {
+      return;
+    }
+
+    const task = this.queue.shift();
+    if (!task) return;
+
+    this.activeCount++;
+    this.executeTask(task)
+      .then(result => {
+        task.resolve(result);
+      })
+      .catch(error => {
+        task.reject(error);
+      })
+      .finally(() => {
+        this.activeCount--;
+        this.processQueue();
+      });
+  }
+
+  private async executeTask(task: UploadTask): Promise<UploadResult> {
+    // 执行上传任务
+    const result = await this.uploadFile(task.file, task.options);
+    return result;
+  }
+}
+```
+
+#### 优先级队列
+```typescript
+interface UploadTask {
+  id: string;
+  file: File;
+  options?: UploadOptions;
+  priority: number;
+  resolve: (result: UploadResult) => void;
+  reject: (error: Error) => void;
+}
+
+// 按优先级排序
+this.queue.sort((a, b) => b.priority - a.priority);
+```
+
+### 并发控制
+```typescript
+// 默认最大并发数
+private maxConcurrent: number = 3;
+
+// 动态调整并发数
+setConcurrency(level: 'low' | 'medium' | 'high'): void {
+  switch (level) {
+    case 'low':
+      this.maxConcurrent = 1;
+      break;
+    case 'medium':
+      this.maxConcurrent = 3;
+      break;
+    case 'high':
+      this.maxConcurrent = 6;
+      break;
+  }
+}
+```
+
+**章节来源**
+- [packages/electron-adapter/src/http/client.ts](file://packages/electron-adapter/src/http/client.ts#L1-L227)
+
+## 进度跟踪机制
+
+### 下载进度回调
+HttpClient提供了详细的下载进度跟踪：
+
+#### 进度回调实现
+```typescript
+async downloadWithProgress(
+  url: string,
+  savePath: string,
+  onProgress?: (progress: number) => void
+): Promise<void> {
+  const fs = await import('fs-extra');
+  
+  const response = await this.client.get(url, {
+    responseType: 'stream',
+    onDownloadProgress: (progressEvent) => {
+      if (onProgress && progressEvent.total) {
+        const progress = (progressEvent.loaded / progressEvent.total) * 100;
+        onProgress(progress);
+      }
+    },
+  });
+
+  const writer = fs.createWriteStream(savePath);
+  response.data.pipe(writer);
+
+  return new Promise((resolve, reject) => {
+    writer.on('finish', resolve);
+    writer.on('error', reject);
+  });
+}
+```
+
+#### 上传进度跟踪
+```typescript
+// 在FileApi中添加上传进度支持
+async uploadFileWithProgress(
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<FileInfo> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await this.client.post<FileInfo>('/knowledge-file/upload', formData, {
+    onUploadProgress: (progressEvent) => {
+      if (onProgress && progressEvent.total) {
+        const progress = (progressEvent.loaded / progressEvent.total) * 100;
+        onProgress(progress);
+      }
+    },
+  });
+
+  return response;
+}
+```
+
+### 事件监听
+```typescript
+// 监听上传进度事件
+httpClient.on('upload:progress', (data) => {
+  console.log(`上传进度: ${data.progress}%`);
+});
+
+// 监听下载进度事件
+httpClient.on('download:progress', (data) => {
+  console.log(`下载进度: ${data.progress}%`);
+});
+```
+
+**章节来源**
+- [packages/electron-adapter/src/http/client.ts](file://packages/electron-adapter/src/http/client.ts#L184-L208)
+
+## 安全验证和访问控制
+
+### 认证机制
+electron-adapter提供了完整的认证和授权机制：
+
+#### Token管理
+```typescript
+class AuthManager {
+  private tokenGetter: (() => string | null) | null = null;
+  private tokenSetter: ((token: string) => void) | null = null;
+  private refreshTokenFn: (() => Promise<boolean>) | null = null;
+
+  setTokenHandlers(
+    getter: () => string | null,
+    setter: (token: string) => void
+  ): void {
+    this.tokenGetter = getter;
+    this.tokenSetter = setter;
+  }
+
+  setRefreshTokenHandler(fn: () => Promise<boolean>): void {
+    this.refreshTokenFn = fn;
+  }
+}
+```
+
+#### 权限验证
+```typescript
+// 在FileApi中添加权限检查
+async uploadFile(file: File, params?: UploadParams): Promise<FileInfo> {
+  // 1. 检查用户权限
+  if (!this.authManager.hasPermission('file:upload')) {
+    throw new Error('权限不足');
+  }
+
+  // 2. 检查文件大小限制
+  if (file.size > this.getMaxFileSize()) {
+    throw new Error('文件过大');
+  }
+
+  // 3. 检查文件类型
+  if (!this.isAllowedFileType(file.type)) {
+    throw new Error('不支持的文件类型');
+  }
+
+  // 4. 执行上传
+  return this.http.post<FileInfo>('/knowledge-file/upload', formData);
+}
+```
+
+### 访问控制
+```typescript
+// 基于角色的访问控制
+enum UserRole {
+  ANONYMOUS = 'anonymous',
+  AUTHENTICATED = 'authenticated',
+  MEMBER = 'member',
+}
+
+// 文件访问权限
+interface FileAccessPermission {
+  read: boolean;
+  write: boolean;
+  delete: boolean;
+  share: boolean;
+}
+```
+
+**章节来源**
+- [packages/electron-adapter/src/auth/auth-manager.ts](file://packages/electron-adapter/src/auth/auth-manager.ts#L1-L50)
+
+## 大文件上传最佳实践
+
+### 分片上传策略
+electron-adapter支持大文件的分片上传：
+
+#### 分片上传实现
+```typescript
+class ChunkedUploader {
+  private chunkSize: number = 10 * 1024 * 1024; // 10MB
+  private maxConcurrent: number = 3;
+
+  async uploadLargeFile(file: File, onProgress?: (progress: number) => void): Promise<FileInfo> {
+    const chunks = this.splitIntoChunks(file);
+    const uploadPromises: Promise<ChunkUploadResult>[] = [];
+
+    // 并发上传分片
+    for (let i = 0; i < chunks.length; i += this.maxConcurrent) {
+      const batch = chunks.slice(i, i + this.maxConcurrent);
+      const batchPromises = batch.map(chunk => this.uploadChunk(chunk, i));
+      uploadPromises.push(...batchPromises);
+      
+      // 等待当前批次完成
+      await Promise.all(batchPromises);
+      
+      // 更新总体进度
+      const progress = ((i + batch.length) / chunks.length) * 100;
+      onProgress?.(progress);
+    }
+
+    // 合并分片
+    return this.mergeChunks(file.name, chunks.length);
+  }
+
+  private splitIntoChunks(file: File): Blob[] {
+    const chunks: Blob[] = [];
+    for (let i = 0; i < file.size; i += this.chunkSize) {
+      chunks.push(file.slice(i, i + this.chunkSize));
+    }
+    return chunks;
+  }
+
+  private async uploadChunk(chunk: Blob, chunkIndex: number): Promise<ChunkUploadResult> {
+    const formData = new FormData();
+    formData.append('chunk', chunk);
+    formData.append('chunkIndex', chunkIndex.toString());
+    formData.append('totalChunks', this.getTotalChunks().toString());
+
+    return this.http.post<ChunkUploadResult>('/knowledge-file/upload-chunk', formData);
+  }
+}
+```
+
+#### 断点续传
+```typescript
+class ResumeUploader {
+  private resumeToken: string = '';
+
+  async resumeUpload(file: File, onProgress?: (progress: number) => void): Promise<FileInfo> {
+    try {
+      // 检查是否支持断点续传
+      const resumeInfo = await this.checkResumeSupport(file);
+      
+      if (resumeInfo.supported && resumeInfo.resumeToken) {
+        this.resumeToken = resumeInfo.resumeToken;
+        return this.continueUpload(file, resumeInfo);
+      }
+    } catch (error) {
+      console.warn('断点续传不可用，重新开始上传');
+    }
+
+    return this.startNewUpload(file, onProgress);
+  }
+
+  private async checkResumeSupport(file: File): Promise<ResumeInfo> {
+    return this.http.post<ResumeInfo>('/knowledge-file/check-resume', {
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type,
+    });
+  }
+}
+```
+
+### 内存管理
+```typescript
+// 大文件内存优化
+class MemoryOptimizedUploader {
+  private maxMemoryUsage: number = 50 * 1024 * 1024; // 50MB
+
+  async uploadWithMemoryControl(file: File, onProgress?: (progress: number) => void): Promise<FileInfo> {
+    if (file.size > this.maxMemoryUsage) {
+      // 使用流式上传避免内存溢出
+      return this.streamUpload(file, onProgress);
+    }
+    
+    // 使用标准上传
+    return this.standardUpload(file, onProgress);
+  }
+
+  private async streamUpload(file: File, onProgress?: (progress: number) => void): Promise<FileInfo> {
+    const stream = file.stream();
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalLoaded = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      chunks.push(value);
+      totalLoaded += value.length;
+      
+      if (onProgress && file.size > 0) {
+        onProgress((totalLoaded / file.size) * 100);
+      }
+    }
+
+    const blob = new Blob(chunks);
+    return this.uploadBlob(blob, onProgress);
+  }
+}
+```
+
+**章节来源**
+- [packages/electron-adapter/src/http/file-api.ts](file://packages/electron-adapter/src/http/file-api.ts#L50-L72)
+
+## 迁移指南
+
+### 从传统FileService迁移到electron-adapter
+
+#### 旧版本代码
+```typescript
+// 传统FileService使用方式
+const fileService = useFileService();
+const result = await fileService.uploadFile(file);
+const downloadUrl = fileService.getDownloadUrl(result.name);
+```
+
+#### 新版本代码
+```typescript
+// electron-adapter FileApi使用方式
+const fileApi = new FileApi(httpClient);
+const result = await fileApi.uploadFile(file, {
+  parentId: folderId,
+  repoKey: repositoryKey
+});
+const downloadUrl = `${baseUrl}/knowledge-file/download/${result.id}`;
+```
+
+#### 完整迁移示例
+```typescript
+// 1. 初始化HttpClient
+const httpClient = new HttpClient({
+  baseURL: process.env.API_BASE_URL,
+  timeout: 30000,
+});
+
+// 2. 设置认证处理器
+httpClient.setTokenHandlers(
+  () => localStorage.getItem('access_token'),
+  (token) => localStorage.setItem('access_token', token)
+);
+
+// 3. 创建FileApi实例
+const fileApi = new FileApi(httpClient);
+
+// 4. 上传文件
+const fileInfo = await fileApi.uploadFile(file, {
+  parentId: 1,
+  repoKey: 'main-repo'
+});
+
+// 5. 监听进度
+fileApi.on('upload:progress', (data) => {
+  console.log(`上传进度: ${data.progress}%`);
+});
+```
+
+### API差异对比
+
+| 特性 | 传统FileService | electron-adapter FileApi |
+|------|----------------|-------------------------|
+| 上传方式 | 单文件上传 | 支持分片上传和断点续传 |
+| 进度跟踪 | 不支持 | 完整的进度回调机制 |
+| 并发控制 | 基础并发 | 智能并发队列管理 |
+| 本地存储 | 无 | 支持本地缓存和离线模式 |
+| 错误处理 | 基础错误处理 | 事件驱动的错误处理 |
+| 认证管理 | 简单认证 | 完整的认证和令牌刷新 |
+
+**章节来源**
+- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L24-L82)
+- [packages/plugin-file-manager/src/services/FileServiceImpl.ts](file://packages/plugin-file-manager/src/services/FileServiceImpl.ts#L11-L151)
 
 ## 故障排查指南
-- 常见问题
-  - 无法选择文件：检查accept与浏览器兼容性
-  - 超过大小限制：调整maxSize或后端允许的最大值
-  - 数量超限：调整maxFileCount或multiple
-  - 上传失败：检查useApi封装的headers与后端返回的错误信息
-- 定位方法
-  - 在UI层观察Toast提示
-  - 在use-upload-file中确认useApi调用是否执行
-  - 在use-api中确认路径与方法是否匹配APIS定义
 
-章节来源
-- [packages/ui/src/components/ui/file-upload.tsx](file://packages/ui/src/components/ui/file-upload.tsx#L114-L159)
-- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L32-L49)
-- [packages/core/src/hooks/use-api.tsx](file://packages/core/src/hooks/use-api.tsx#L24-L51)
+### 常见问题
+
+#### 上传失败
+- **检查网络连接**: 确保客户端能够访问API服务器
+- **验证文件大小**: 检查是否超过服务器限制
+- **确认文件类型**: 验证文件扩展名和MIME类型
+- **检查权限**: 确认用户具有上传权限
+
+#### 下载失败
+- **验证文件ID**: 确认文件ID有效且存在
+- **检查存储模式**: 确认文件在正确的存储位置
+- **网络问题**: 检查下载链接的有效性
+
+#### 进度跟踪问题
+- **事件监听**: 确保正确监听进度事件
+- **回调函数**: 验证进度回调函数的实现
+- **内存泄漏**: 监控长时间运行的进度跟踪
+
+### 调试方法
+
+#### 启用详细日志
+```typescript
+// 在HttpClient中启用详细日志
+const httpClient = new HttpClient({
+  baseURL: API_BASE_URL,
+  timeout: 30000,
+});
+
+// 监听所有事件
+httpClient.on('auth:expired', () => console.log('认证过期'));
+httpClient.on('request:error', (error) => console.log('请求错误:', error));
+httpClient.on('token:refreshed', (token) => console.log('令牌刷新:', token));
+```
+
+#### 性能监控
+```typescript
+// 监控上传性能
+const startTime = Date.now();
+const result = await fileApi.uploadFile(file);
+const endTime = Date.now();
+console.log(`上传耗时: ${endTime - startTime}ms`);
+
+// 监控内存使用
+const memoryUsage = process.memoryUsage();
+console.log(`内存使用: ${memoryUsage.heapUsed / 1024 / 1024}MB`);
+```
+
+### 迁移注意事项
+
+#### 向后兼容性
+- **渐进式迁移**: 逐步替换旧的FileService调用
+- **双轨并行**: 在一段时间内同时支持两种API
+- **测试覆盖**: 确保所有场景都有充分测试
+
+#### 性能优化
+- **批量操作**: 使用并发队列提高上传效率
+- **缓存策略**: 利用本地缓存减少重复下载
+- **资源管理**: 及时释放内存和文件句柄
+
+**章节来源**
+- [packages/electron-adapter/src/http/client.ts](file://packages/electron-adapter/src/http/client.ts#L74-L135)
 
 ## 结论
-本仓库将文件上传抽象为统一的APIS常量与use-upload-file Hook，前端通过UI组件完成交互与进度展示，请求通过use-api封装统一发出。下载路径由后端返回的文件名与固定前缀拼接而成。对于大文件与断点续传，当前仓库未提供实现，建议结合后端直传OSS与签名策略扩展分片上传能力。
+electron-adapter的FileAPI为知识库管理系统带来了革命性的文件管理能力。通过集成进度跟踪、并发队列管理、本地存储支持和智能认证机制，新的架构不仅提升了用户体验，还增强了系统的可靠性和可扩展性。
+
+对于现有项目，建议逐步迁移到electron-adapter的FileAPI，充分利用其提供的高级功能。新的架构支持大文件处理、断点续传、智能缓存等特性，能够满足现代桌面应用对文件管理的各种需求。
 
 ## 附录
 
-### API定义与参数
-- 端点：/knowledge-resource/oss/endpoint/put-file
-- 方法：POST
-- 请求体：multipart/form-data，字段名为file
-- 响应：包含文件名等元数据（具体字段以后端返回为准）
+### API端点详细说明
 
-章节来源
-- [packages/core/src/api/index.ts](file://packages/core/src/api/index.ts#L13-L16)
-- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L32-L49)
+#### 文件上传
+- **端点**: `/knowledge-file/upload`
+- **方法**: POST
+- **请求体**: multipart/form-data，包含file字段
+- **响应**: FileInfo对象，包含文件元数据
 
-### 前端集成要点
-- 选择文件
-  - 通过UI组件的accept/maxSize/maxFileCount/multiple配置约束
-- 上传
-  - 调用use-upload-file.upload或uploadFile，内部统一走useApi
-- 进度与错误
-  - UI组件内置Toast与进度条；错误由use-api封装统一处理
-- 下载
-  - 使用usePath拼接下载URL，结合后端返回的文件名
+#### 文件下载
+- **端点**: `/knowledge-file/download/{fileId}`
+- **方法**: GET
+- **参数**: fileId（路径参数）
+- **响应**: 文件二进制流
 
-章节来源
-- [packages/ui/src/components/ui/file-upload.tsx](file://packages/ui/src/components/ui/file-upload.tsx#L92-L184)
-- [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L20-L59)
-- [apps/landing-page-vite/src/utils/use-path.ts](file://apps/landing-page-vite/src/utils/use-path.ts#L3-L8)
+#### 文件夹管理
+- **端点**: `/knowledge-file/folder/tree`
+- **方法**: GET
+- **参数**: repoKey（查询参数）
+- **响应**: TreeNode数组，表示文件夹树结构
 
-### 示例代码片段路径
-- 本地文件选择并上传
-  - [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L32-L41)
-- 直接上传指定文件
-  - [packages/core/src/hooks/use-upload-file.ts](file://packages/core/src/hooks/use-upload-file.ts#L43-L49)
-- 通用请求封装
-  - [packages/core/src/hooks/use-api.tsx](file://packages/core/src/hooks/use-api.tsx#L24-L51)
-- UI上传组件（拖拽/预览/进度）
-  - [packages/ui/src/components/ui/file-upload.tsx](file://packages/ui/src/components/ui/file-upload.tsx#L114-L184)
-- 下载路径拼接
-  - [apps/landing-page-vite/src/utils/use-path.ts](file://apps/landing-page-vite/src/utils/use-path.ts#L3-L8)
-- 插件打包产物上传（构建脚本）
-  - [packages/rollup-config/index.js](file://packages/rollup-config/index.js#L100-L118)
+#### 文件查询
+- **端点**: `/knowledge-file/file/{fileId}`
+- **方法**: GET
+- **参数**: fileId（路径参数）
+- **响应**: FileInfo对象
 
-### 大文件上传与断点续传最佳实践
-- 后端策略
-  - 采用分片上传与断点续传，结合服务端签名与令牌控制
-- 前端策略
-  - 分片并发上传，持久化断点索引，失败重试与进度回显
-- 安全策略
-  - 严格限制文件类型与大小，对敏感资源增加鉴权头或Token
-- 体验优化
-  - 展示实时速度与剩余时间，提供暂停/恢复操作
+**章节来源**
+- [packages/electron-adapter/src/http/file-api.ts](file://packages/electron-adapter/src/http/file-api.ts#L10-L82)
+
+### electron-adapter使用示例
+
+#### 基本文件上传
+```typescript
+// 初始化客户端
+const httpClient = new HttpClient({
+  baseURL: 'https://api.example.com',
+  timeout: 30000,
+});
+
+// 设置认证
+httpClient.setTokenHandlers(
+  () => localStorage.getItem('access_token'),
+  (token) => localStorage.setItem('access_token', token)
+);
+
+// 创建文件API实例
+const fileApi = new FileApi(httpClient);
+
+// 上传文件
+const fileInfo = await fileApi.uploadFile(file, {
+  parentId: 1,
+  repoKey: 'documents'
+});
+
+console.log('文件上传成功:', fileInfo.name);
+```
+
+#### 带进度回调的下载
+```typescript
+// 下载文件并显示进度
+await fileApi.downloadWithProgress(
+  fileId,
+  '/path/to/save/file.txt',
+  (progress) => {
+    console.log(`下载进度: ${progress.toFixed(2)}%`);
+    // 更新UI进度条
+    updateProgressBar(progress);
+  }
+);
+```
+
+#### 并发上传管理
+```typescript
+// 创建上传队列
+const uploadQueue = new UploadQueue(3); // 最大并发3
+
+// 添加多个文件到队列
+const uploadPromises = files.map(file => 
+  uploadQueue.enqueue({
+    id: generateId(),
+    file: file,
+    priority: 1,
+  })
+);
+
+// 等待所有上传完成
+const results = await Promise.all(uploadPromises);
+```
+
+**章节来源**
+- [packages/electron-adapter/src/http/file-api.ts](file://packages/electron-adapter/src/http/file-api.ts#L50-L82)
+- [packages/electron-adapter/src/http/client.ts](file://packages/electron-adapter/src/http/client.ts#L184-L208)
+
+### 最佳实践
+
+#### 文件类型管理
+- 使用MIME类型过滤确保文件安全性
+- 实现文件类型白名单机制
+- 验证文件内容而非仅依赖扩展名
+
+#### 大文件处理
+- 对于大于10MB的文件，使用分片上传
+- 实现断点续传功能
+- 监控上传进度和网络状态
+
+#### 性能优化
+- 使用并发队列管理上传任务
+- 实现智能缓存策略
+- 优化内存使用和垃圾回收
+
+#### 错误处理
+- 实现重试机制和指数退避
+- 提供用户友好的错误提示
+- 记录详细的日志信息用于调试
+
+#### 安全考虑
+- 实施严格的文件大小限制
+- 验证用户权限和访问控制
+- 加密敏感文件传输
+- 定期清理临时文件和缓存

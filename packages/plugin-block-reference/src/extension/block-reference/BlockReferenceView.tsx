@@ -2,7 +2,7 @@ import { AnyExtension, Content, EditorContent, NodeViewProps, NodeViewWrapper, S
 import React, { useCallback, useMemo, useRef } from "react";
 import { useHover, useNavigator, useToggle } from "@kn/core";
 import { ArrowUpRight, RefreshCcw, Trash2 } from "@kn/icon";
-import { cn, IconButton, Skeleton, Tooltip, TooltipContent, TooltipTrigger } from "@kn/ui";
+import { cn, IconButton, Skeleton, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
 import { useBlockInfo } from "../../hooks";
 import type { BlockReferenceAttrs } from "../../types";
 
@@ -13,19 +13,21 @@ const ToolbarButton = React.memo<{
     label: string;
     disabled?: boolean;
 }>(({ icon, onClick, label, disabled }) => (
-    <Tooltip>
-        <TooltipTrigger asChild>
-            <IconButton
-                icon={icon}
-                onClick={onClick}
-                aria-label={label}
-                disabled={disabled}
-            />
-        </TooltipTrigger>
-        <TooltipContent side="bottom" className="text-xs">
-            {label}
-        </TooltipContent>
-    </Tooltip>
+    <TooltipProvider>
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <IconButton
+                    icon={icon}
+                    onClick={onClick}
+                    aria-label={label}
+                    disabled={disabled}
+                />
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+                {label}
+            </TooltipContent>
+        </Tooltip>
+    </TooltipProvider>
 ));
 ToolbarButton.displayName = 'ToolbarButton';
 

@@ -1,8 +1,8 @@
 import React, { useState, useRef } from "react";
 import { Editor } from "@kn/editor";
 import { FieldType, FieldConfig, SelectOption } from "../../types";
-import { Checkbox, Slider, Input, Button } from "@kn/ui";
-import { Link as LinkIcon, Mail, Phone, X, Folder } from "@kn/icon";
+import { Checkbox, Slider, Input, Button, Popover, PopoverTrigger, PopoverContent } from "@kn/ui";
+import { Link as LinkIcon, Mail, Phone, X, Folder, ImageIcon, Plus } from "@kn/icon";
 import { DateTimePicker, Rate } from "@kn/ui";
 import { useTranslation } from "@kn/common";
 import { format } from "date-fns";
@@ -23,6 +23,7 @@ interface FieldEditorProps {
     onChange: (value: any) => void;
     editor?: Editor;
     onCommit?: () => void;
+    onSave?: (value: any) => void; // 直接持久化（用于 Popover 编辑器）
 }
 
 // 文本字段渲染器
@@ -567,9 +568,10 @@ export const ImageRenderer: React.FC<FieldRendererProps> = ({ value, field }) =>
     );
 };
 
-export const ImageEditor: React.FC<FieldEditorProps> = ({ value, field, onChange, editor }) => {
+export const ImageEditor: React.FC<FieldEditorProps> = ({ value, field, onChange, onSave, editor }) => {
     const [inputUrl, setInputUrl] = useState('');
     const [showUrlInput, setShowUrlInput] = useState(false);
+    const [open, setOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const fileService = useFileService();
 
@@ -672,24 +674,54 @@ export const ImageEditor: React.FC<FieldEditorProps> = ({ value, field, onChange
         }
     };
 
-    return (
-        <div className="space-y-2 bg-white dark:bg-card min-w-[200px] w-max">
-            {/* 已添加的图片 */}
+    // 渲染触发器（单元格内显示）
+    const renderTrigger = () => {
+        if (images.length === 0) {
+            return (
+                <div className="flex items-center gap-1 text-gray-400 dark:text-gray-500">
+                    <ImageIcon className="h-4 w-4" />
+                    <Plus className="h-3 w-3" />
+                </div>
+            );
+        }
+        return (
+            <div className="flex items-center gap-1 flex-wrap">
+                {images.slice(0, 3).map((img, index) => (
+                    <img
+                        key={index}
+                        src={img}
+                        alt=""
+                        className={`${getThumbnailSize()} object-cover rounded border flex-shrink-0`}
+                        onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect fill="%23f0f0f0" width="40" height="40"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23999" font-size="8">Error</text></svg>';
+                        }}
+                    />
+                ))}
+                {images.length > 3 && (
+                    <span className="text-xs text-gray-500 dark:text-gray-400">+{images.length - 3}</span>
+                )}
+            </div>
+        );
+    };
+
+    // Popover 编辑器内容
+    const editorContent = (
+        <div className="space-y-2 w-72">
             {images.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-2">
+                <div className="flex flex-wrap gap-2">
                     {images.map((img, index) => (
                         <div key={index} className="relative group">
                             <img
                                 src={img}
                                 alt=""
-                                className={`${getThumbnailSize()} object-cover rounded border`}
+                                className="h-14 w-14 object-cover rounded border"
                                 onError={(e) => {
-                                    (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect fill="%23f0f0f0" width="64" height="64"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23999" font-size="10">Error</text></svg>';
+                                    (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56"><rect fill="%23f0f0f0" width="56" height="56"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23999" font-size="8">Error</text></svg>';
                                 }}
                             />
                             <button
                                 onClick={() => removeImage(index)}
-                                className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="absolute -top-1.5 -right-1.5 p-0.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
                             >
                                 <X className="h-3 w-3" />
                             </button>
@@ -698,7 +730,6 @@ export const ImageEditor: React.FC<FieldEditorProps> = ({ value, field, onChange
                 </div>
             )}
 
-            {/* 隐藏的文件输入 */}
             <input
                 ref={fileInputRef}
                 type="file"
@@ -707,18 +738,16 @@ export const ImageEditor: React.FC<FieldEditorProps> = ({ value, field, onChange
                 className="hidden"
             />
 
-            {/* 主操作按钮: 从文件管理器选择 */}
             <Button
                 size="sm"
                 variant="outline"
                 onClick={handleSelectFromFileManager}
-                className="w-full h-8 text-sm whitespace-nowrap"
+                className="w-full h-8 text-sm"
             >
                 <Folder className="h-4 w-4 mr-1.5 flex-shrink-0" />
                 选择图片
             </Button>
 
-            {/* 分隔线和链接输入切换 */}
             <div className="flex items-center gap-2">
                 <div className="flex-1 border-t border-gray-200 dark:border-gray-600" />
                 <button
@@ -730,7 +759,6 @@ export const ImageEditor: React.FC<FieldEditorProps> = ({ value, field, onChange
                 <div className="flex-1 border-t border-gray-200 dark:border-gray-600" />
             </div>
 
-            {/* URL输入（可折叠） */}
             {showUrlInput && (
                 <div className="flex gap-2">
                     <Input
@@ -757,6 +785,43 @@ export const ImageEditor: React.FC<FieldEditorProps> = ({ value, field, onChange
                 </div>
             )}
         </div>
+    );
+
+    // 计算当前编辑后的值
+    const currentValue = images.length === 1 ? images[0] : (images.length === 0 ? null : images);
+
+    const handleClose = () => {
+        setOpen(false);
+        // 直接通过 onSave 持久化，跳过 DataGrid 的 commit 机制
+        onSave?.(currentValue);
+    };
+
+    return (
+        <Popover open={open} onOpenChange={(isOpen) => {
+            setOpen(isOpen);
+            if (!isOpen) {
+                handleClose();
+            }
+        }}>
+            <PopoverTrigger asChild>
+                <div
+                    className="w-full h-full flex items-center cursor-pointer px-1"
+                    onMouseDown={(e) => {
+                        e.preventDefault();
+                    }}
+                >
+                    {renderTrigger()}
+                </div>
+            </PopoverTrigger>
+            <PopoverContent
+                align="start"
+                sideOffset={4}
+                className="bg-white dark:bg-card p-3 w-80"
+                onOpenAutoFocus={(e) => e.preventDefault()}
+            >
+                {editorContent}
+            </PopoverContent>
+        </Popover>
     );
 };
 

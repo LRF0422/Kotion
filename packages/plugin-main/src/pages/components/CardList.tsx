@@ -15,6 +15,7 @@ export interface CardListProps {
     containerClassName?: string
     className?: string
     config?: { desc?: string, cover?: string, name?: string }
+    descFormatter?: (data: any) => ReactNode
 }
 
 export const CardList: React.FC<CardListProps> = (props) => {
@@ -37,8 +38,9 @@ export const CardList: React.FC<CardListProps> = (props) => {
                             {props.extra && props.extra(it)}
                         </CardHeader>
                         {
-                            props.config?.name && <CardContent className=" text-nowrap overflow-hidden text-ellipsis">
-                                <p className="text-base h-[50px] font-bold text-ellipsis overflow-hidden">{it[props.config.name]}</p>
+                            (props.config?.name || props.config?.desc) && <CardContent className=" text-nowrap overflow-hidden text-ellipsis">
+                                {props.config?.name && <p className="text-base font-bold text-ellipsis overflow-hidden">{it[props.config.name]}</p>}
+                                {props.config?.desc && <p className="text-xs text-muted-foreground text-ellipsis overflow-hidden">{props.descFormatter ? props.descFormatter(it) : it[props.config.desc]}</p>}
                             </CardContent>
                         }
                     </Card>

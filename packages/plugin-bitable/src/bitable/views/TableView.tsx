@@ -189,6 +189,9 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                                 editProps.onRowChange(updatedRow, isSelectType);
                             }}
                             editor={editor}
+                            onSave={field.type === FieldType.IMAGE ? (value: any) => {
+                                onUpdateRecord(editProps.row.id, { [field.id]: value });
+                            } : undefined}
                         />
                     );
                 }

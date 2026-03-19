@@ -151,32 +151,30 @@ export const Home: React.FC = () => {
                             data={recentSpaces}
                             className={cn(
                                 "hover:shadow-md transition-shadow",
-                                isMobile ? "h-[140px]" : "h-[180px]"
+                                isMobile ? "h-[100px]" : "h-[120px]"
                             )}
                             containerClassName={isMobile ? "grid-cols-2" : "grid-cols-4"}
                             emptyProps={{
                                 button: <CreateSpaceDlg trigger={<Button>{t("home.create-space") || "Create Space"}</Button>} />
                             }}
+                            icon={(data: any) => data.icon?.icon}
                             config={{
-                                cover: 'cover',
+                                name: 'name',
+                                desc: 'updateTime',
+                            }}
+                            descFormatter={(data: any) => {
+                                if (!data.updateTime) return ''
+                                try {
+                                    return formatDistanceToNow(parseISO(data.updateTime), { addSuffix: true })
+                                } catch {
+                                    return data.updateTime
+                                }
                             }}
                             onClick={(data: any) => {
                                 navigator.go({
                                     to: `/space-detail/${data.id}`
                                 })
                             }}
-                            footer={(data: any) => (
-                                <div className="text-sm mt-2 space-y-0.5">
-                                    <div className="flex items-center gap-1.5 font-medium">
-                                        <span>{data.icon?.icon}</span>
-                                        <span className="truncate">{data.name}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                        <UserCircle className="h-3 w-3" />
-                                        <span className={isMobile ? "truncate" : ""}>Last update by Leong</span>
-                                    </div>
-                                </div>
-                            )}
                         />
                     )}
                 </div>

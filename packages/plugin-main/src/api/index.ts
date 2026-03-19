@@ -1,5 +1,4 @@
 import { API } from "@kn/core";
-import { method } from "lodash";
 
 
 export const APIS = {
@@ -106,7 +105,7 @@ export const APIS = {
         method: 'GET'
     } as API,
     GET_BLOCK_INFO: {
-        url: '/knowledge-wiki/space/page/block',
+        url: '/knowledge-wiki/space/page/block/detail/:id',
         method: 'GET'
     } as API,
     DELETE_TEMPLATE: {
