@@ -16,7 +16,7 @@ import type {
 } from '../types'
 import type { GlobalToolRegistryImpl } from '../registry/tool-registry'
 import type { SkillActivationResult } from '../../types'
-import { deepseek } from '../../ai-utils'
+import { createKnowledgeModel } from '../../model-provider/knowledge-provider'
 import { FOUNDATION_AGENT_PROMPT, DEFAULT_MAX_STEPS } from '../../constants'
 
 type AgentDestroyCallback = () => void
@@ -73,12 +73,9 @@ class AIAgentImpl implements AIAgent {
     }
 
     private getModel(config?: AIModelConfig) {
-        const provider = config?.provider || 'deepseek'
         const modelName = config?.model || 'deepseek-chat'
-
-        // Currently only supporting deepseek
-        // In the future, we can add support for other providers
-        return deepseek(modelName)
+        const apiBase = config?.apiBaseUrl
+        return createKnowledgeModel(modelName, apiBase)
     }
 
     private getTools(): Record<string, any> {

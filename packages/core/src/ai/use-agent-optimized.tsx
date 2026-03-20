@@ -2,7 +2,6 @@ import { AppContext } from "@kn/common"
 import { Editor } from "@kn/editor"
 import { stepCountIs, ToolLoopAgent } from "ai"
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
-import { deepseek } from "./ai-utils"
 
 // Types
 import type { OnToolExecution, OnUserChoiceRequest, ToolsRecord } from "./types"
@@ -31,6 +30,7 @@ import { wrapToolsWithCallback } from "./utils/tool-wrapper"
 
 // Shared constants
 import { EDITOR_AGENT_PROMPT, DEFAULT_MAX_STEPS } from "./constants"
+import { createKnowledgeModel } from "./model-provider/knowledge-provider"
 
 /**
  * Optimized editor agent hook with progressive tool discovery and skills
@@ -44,6 +44,16 @@ export const useEditorAgentOptimized = (
 
     // AbortController ref for stopping generation
     const abortControllerRef = useRef<AbortController | null>(null)
+
+    // Ref to hold the current agent
+    const agentRef = useRef<ToolLoopAgent | null>(null)
+
+    // Track whether we're currently streaming
+    const isStreamingRef = useRef(false)
+
+    // Ref for latest tools and instructions (always up to date)
+    const latestToolsRef = useRef<ToolsRecord>({})
+    const latestInstructionsRef = useRef<string>('')
 
     // Version state for reactive updates when tools/skills change
     const [version, setVersion] = useState(0)
@@ -161,13 +171,21 @@ export const useEditorAgentOptimized = (
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [skillProvider, version])
 
-    // Create agent (recreated when tools or skills change)
-    const agent = useMemo(() => new ToolLoopAgent({
-        model: deepseek("deepseek-chat"),
-        stopWhen: stepCountIs(DEFAULT_MAX_STEPS),
-        instructions,
-        tools: wrappedTools,
-    }), [wrappedTools, instructions])
+    // Keep refs updated with latest values and conditionally recreate agent
+    useEffect(() => {
+        latestToolsRef.current = wrappedTools
+        latestInstructionsRef.current = instructions
+
+        // Only recreate agent if NOT currently streaming
+        if (!isStreamingRef.current) {
+            agentRef.current = new ToolLoopAgent({
+                model: createKnowledgeModel(),
+                stopWhen: stepCountIs(DEFAULT_MAX_STEPS),
+                instructions,
+                tools: wrappedTools,
+            })
+        }
+    }, [wrappedTools, instructions])
 
     // Stream with abort support and history messages
     const stream = useCallback(async (options: {
@@ -178,32 +196,52 @@ export const useEditorAgentOptimized = (
         if (abortControllerRef.current) {
             abortControllerRef.current.abort()
         }
-
-        // Create new AbortController
         abortControllerRef.current = new AbortController()
 
-        // Build initial messages array for conversation context
-        const initialMessages: any[] = []
-
-        // Add history messages if provided
-        if (options.messages && options.messages.length > 0) {
-            initialMessages.push(...options.messages)
+        // Ensure agent exists with latest tools/instructions
+        if (!agentRef.current) {
+            agentRef.current = new ToolLoopAgent({
+                model: createKnowledgeModel(),
+                stopWhen: stepCountIs(DEFAULT_MAX_STEPS),
+                instructions: latestInstructionsRef.current,
+                tools: latestToolsRef.current,
+            })
         }
 
-        // Add current prompt as the latest user message
-        initialMessages.push({
-            role: 'user',
-            content: options.prompt
-        })
+        // Build prompt with conversation context
+        let fullPrompt = options.prompt
+        if (options.messages && options.messages.length > 0) {
+            const contextParts = options.messages.map(m =>
+                `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
+            )
+            fullPrompt = `## Conversation History\n${contextParts.join('\n\n')}\n\n## Current Request\n${options.prompt}`
+        }
 
-        return agent.stream({
-            prompt: options.prompt,
-            abortSignal: abortControllerRef.current.signal
-        })
-    }, [agent])
+        isStreamingRef.current = true
+        try {
+            const result = agentRef.current.stream({
+                prompt: fullPrompt,
+                abortSignal: abortControllerRef.current.signal
+            })
+            return result
+        } finally {
+            // Mark streaming as done when the stream call resolves
+            // Note: the actual streaming continues asynchronously,
+            // but the agent.stream() promise resolves once the stream is set up
+            isStreamingRef.current = false
+            // Recreate agent with latest tools for next call
+            agentRef.current = new ToolLoopAgent({
+                model: createKnowledgeModel(),
+                stopWhen: stepCountIs(DEFAULT_MAX_STEPS),
+                instructions: latestInstructionsRef.current,
+                tools: latestToolsRef.current,
+            })
+        }
+    }, [])
 
     // Stop current generation
     const stop = useCallback(() => {
+        isStreamingRef.current = false
         if (abortControllerRef.current) {
             abortControllerRef.current.abort()
             abortControllerRef.current = null
@@ -216,7 +254,7 @@ export const useEditorAgentOptimized = (
     }, [])
 
     return {
-        agent,
+        agent: agentRef.current,
         stream,
         stop,
         isGenerating,
