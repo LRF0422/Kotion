@@ -21,7 +21,6 @@ export const contentGenerationSkill: Skill = {
         'insertNear',
         'searchInDocument',
         'replaceContent',
-        'webSearch',
         'insertAfterBlock',
         'convertBlock',
         'formatText'

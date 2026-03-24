@@ -2,9 +2,13 @@ import { API } from "../hooks/use-api";
 
 export const APIS = {
     LOGIN: {
-        url: '/knowledge-auth/token',
+        url: '/knowledge-auth/oauth2/token',
         method: 'POST',
         name: 'Login'
+    } as API,
+    REFRESH_TOKEN: {
+        url: '/knowledge-auth/token/refresh',
+        method: 'POST',
     } as API,
     GET_USER_INFO: {
         url: '/knowledge-system/user/info',

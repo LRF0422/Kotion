@@ -4,8 +4,6 @@ import type { Editor, Node } from "@kn/editor"
 export const MAX_CHUNK_SIZE = 2000
 export const MAX_NODES_PER_READ = 50
 export const CONTEXT_WINDOW = 500
-export const WEB_SEARCH_API_URL = '/api/web-search'
-export const WEB_SEARCH_MAX_RESULTS = 10
 
 // ============ Block Types ============
 export interface BlockInfo {
@@ -47,14 +45,6 @@ export interface DocumentStructure {
         size: number
         textInsertPos?: number
     }>
-}
-
-// ============ Web Search Types ============
-export interface WebSearchResult {
-    title: string
-    url: string
-    snippet: string
-    source?: string
 }
 
 // ============ Tool Execution Types ============

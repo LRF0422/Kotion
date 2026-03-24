@@ -25,7 +25,6 @@ export const exampleTranslationSkill: SerializableSkill = {
         'askUserChoice'
     ],
     optionalTools: [
-        'webSearch',
         'insertNear',
         'batchInsert'
     ],

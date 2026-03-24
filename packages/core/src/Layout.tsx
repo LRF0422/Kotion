@@ -19,6 +19,7 @@ import {
     AIAssistantPanel,
     useAIAssistantShortcut
 } from "./ai/system-agent"
+import { getAccessToken, clearTokens } from "./utils/auth"
 
 interface LayoutProps {
     onPluginsReady: (ready: boolean) => void
@@ -122,7 +123,7 @@ export function Layout({ onPluginsReady }: LayoutProps) {
         console.log('enter layout');
 
         try {
-            const token = localStorage.getItem("knowledge-token")
+            const token = getAccessToken()
             console.log('Token check:', token ? 'present' : 'missing')
 
             if (token) {
@@ -178,7 +179,7 @@ export function Layout({ onPluginsReady }: LayoutProps) {
             return
         }
 
-        const token = localStorage.getItem("knowledge-token")
+        const token = getAccessToken()
         if (!token) {
             console.log('No token for user info, skipping')
             return
@@ -194,7 +195,7 @@ export function Layout({ onPluginsReady }: LayoutProps) {
             // Only redirect if we have a token but it's invalid (401)
             // Don't redirect on network errors
             if (e?.response?.status === 401 || e?.code === 401) {
-                localStorage.removeItem("knowledge-token")
+                clearTokens()
                 navigator.go({
                     to: '/login'
                 })
@@ -229,91 +230,91 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
                     {/* Show loading overlay while plugins are loading */}
                     {!pluginsLoaded && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
-                        <div className="flex flex-col items-center gap-4">
-                            <SparklesText className="text-[60px]" sparklesCount={8} text="KN" />
-                            <div className="flex items-center gap-2 text-lg text-muted-foreground">
-                                <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
-                                <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
-                                <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
-                            </div>
-                            <p className="text-sm text-muted-foreground">Loading workspace...</p>
-                        </div>
-                    </div>
-                )}
-
-                <div className={cn(
-                    "grid min-h-screen w-full transition-all",
-                    isMobile ? "grid-cols-1" : "grid-cols-[70px_1fr]",
-                    !pluginsLoaded && "opacity-0"
-                )} >
-                    {/* Desktop Sidebar */}
-                    {!isMobile && (
-                        <div className="border-r">
-                            <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4 electron-sidebar-padding">
-                                {/* Draggable area for window movement */}
-                                <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region" />
-                                <SparklesText className="text-[30px]" sparklesCount={5} text="KN" />
-                                <div className="flex-1 px-2">
-                                    <SiderMenu />
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
+                            <div className="flex flex-col items-center gap-4">
+                                <SparklesText className="text-[60px]" sparklesCount={8} text="KN" />
+                                <div className="flex items-center gap-2 text-lg text-muted-foreground">
+                                    <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
+                                    <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
+                                    <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
                                 </div>
+                                <p className="text-sm text-muted-foreground">Loading workspace...</p>
                             </div>
                         </div>
                     )}
 
-                    {/* Mobile Header + Content */}
-                    <div className="flex flex-col h-screen w-full relative">
-                        {/* Draggable region at the top of main content area */}
-                        {!isMobile && <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region z-10" />}
-                        {/* Mobile Header */}
-                        {isMobile && (
-                            <MobileHeader sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+                    <div className={cn(
+                        "grid min-h-screen w-full transition-all",
+                        isMobile ? "grid-cols-1" : "grid-cols-[70px_1fr]",
+                        !pluginsLoaded && "opacity-0"
+                    )} >
+                        {/* Desktop Sidebar */}
+                        {!isMobile && (
+                            <div className="border-r">
+                                <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4 electron-sidebar-padding">
+                                    {/* Draggable area for window movement */}
+                                    <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region" />
+                                    <SparklesText className="text-[30px]" sparklesCount={5} text="KN" />
+                                    <div className="flex-1 px-2">
+                                        <SiderMenu />
+                                    </div>
+                                </div>
+                            </div>
                         )}
 
-                        <main className={cn(
-                            "w-full overflow-hidden",
-                            isMobile ? "flex-1" : "h-screen"
-                        )}>
-                            {pluginsLoaded ? <Outlet /> : null}
-                        </main>
-                    </div>
-                    <AlertDialog open={open} onOpenChange={setOpen}>
-                        <AlertDialogTrigger />
-                        <AlertDialogContent>
-                            <AlertDialogTitle>Sure to install ?</AlertDialogTitle>
-                            <AlertDialogDescription className=" hidden" />
-                            {requestPlugin &&
-                                <Item variant="muted" className=" hover:shadow-sm transition-shadow duration-300">
-                                    <ItemContent>
-                                        <ItemTitle className="flex gap-2">
-                                            <img src={usePath(requestPlugin.icon)} className="w-10 h-10" />
-                                            <div>
-                                                <div>
-                                                    {requestPlugin.name}
-                                                    <Badge className=" ml-2">{requestPlugin.category.value}</Badge>
-                                                </div>
+                        {/* Mobile Header + Content */}
+                        <div className="flex flex-col h-screen w-full relative">
+                            {/* Draggable region at the top of main content area */}
+                            {!isMobile && <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region z-10" />}
+                            {/* Mobile Header */}
+                            {isMobile && (
+                                <MobileHeader sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+                            )}
 
-                                                <div className="text-xs italic text-gray-400">
-                                                    {requestPlugin.developer} / {requestPlugin.maintainer}
+                            <main className={cn(
+                                "w-full overflow-hidden",
+                                isMobile ? "flex-1" : "h-screen"
+                            )}>
+                                {pluginsLoaded ? <Outlet /> : null}
+                            </main>
+                        </div>
+                        <AlertDialog open={open} onOpenChange={setOpen}>
+                            <AlertDialogTrigger />
+                            <AlertDialogContent>
+                                <AlertDialogTitle>Sure to install ?</AlertDialogTitle>
+                                <AlertDialogDescription className=" hidden" />
+                                {requestPlugin &&
+                                    <Item variant="muted" className=" hover:shadow-sm transition-shadow duration-300">
+                                        <ItemContent>
+                                            <ItemTitle className="flex gap-2">
+                                                <img src={usePath(requestPlugin.icon)} className="w-10 h-10" />
+                                                <div>
+                                                    <div>
+                                                        {requestPlugin.name}
+                                                        <Badge className=" ml-2">{requestPlugin.category.value}</Badge>
+                                                    </div>
+
+                                                    <div className="text-xs italic text-gray-400">
+                                                        {requestPlugin.developer} / {requestPlugin.maintainer}
+                                                    </div>
+                                                    <Rate rating={requestPlugin.rating} disabled variant="yellow" />
                                                 </div>
-                                                <Rate rating={requestPlugin.rating} disabled variant="yellow" />
-                                            </div>
-                                        </ItemTitle>
-                                        <ItemDescription>{requestPlugin.description}</ItemDescription>
-                                    </ItemContent>
-                                </Item>
-                            }
-                            <AlertDialogFooter>
-                                <AlertDialogAction onClick={() => {
-                                    install(requestPlugin.currentVersion.id)
-                                }}>Confirm</AlertDialogAction>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
+                                            </ItemTitle>
+                                            <ItemDescription>{requestPlugin.description}</ItemDescription>
+                                        </ItemContent>
+                                    </Item>
+                                }
+                                <AlertDialogFooter>
+                                    <AlertDialogAction onClick={() => {
+                                        install(requestPlugin.currentVersion.id)
+                                    }}>Confirm</AlertDialogAction>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </div>
                 </div>
-            </div>
-        </MobilePageHeaderProvider>
-    </SystemAgentProvider>
+            </MobilePageHeaderProvider>
+        </SystemAgentProvider>
     )
 }

@@ -367,26 +367,6 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         loaded: false,
         source: 'builtin'
     },
-
-    // ===== Web Tools =====
-    {
-        name: 'webSearch',
-        category: 'web',
-        description: '执行网络搜索',
-        priority: 6,
-        tags: ['search', 'web', 'internet'],
-        loaded: false,
-        source: 'builtin'
-    },
-    {
-        name: 'fetchWebPage',
-        category: 'web',
-        description: '获取网页内容',
-        priority: 5,
-        tags: ['fetch', 'web', 'content'],
-        loaded: false,
-        source: 'builtin'
-    }
 ]
 
 /**

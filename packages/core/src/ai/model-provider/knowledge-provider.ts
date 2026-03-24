@@ -8,16 +8,7 @@ import type {
     LanguageModelV2CallOptions,
     LanguageModelV2Prompt,
 } from '@ai-sdk/provider';
-
-/**
- * Get authentication token from localStorage.
- */
-function getAuthToken(): string | null {
-    if (typeof localStorage !== 'undefined') {
-        return localStorage.getItem('knowledge-token');
-    }
-    return null;
-}
+import { getBearerHeader } from '../../utils/auth';
 
 /**
  * Fetch with retry logic and exponential backoff.
@@ -187,14 +178,13 @@ export function createKnowledgeModel(
         supportedUrls: {} as Record<string, RegExp[]>,
 
         async doGenerate(options) {
-            const authToken = getAuthToken();
             const messages = convertPromptToMessages(options.prompt);
 
             const res = await fetchWithRetry(`${API_BASE}/chat/completions`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    ...(authToken ? { 'Knowledge-auth': authToken } : {}),
+                    ...getBearerHeader(),
                 },
                 body: JSON.stringify({
                     model: modelId,
@@ -244,14 +234,13 @@ export function createKnowledgeModel(
         },
 
         async doStream(options) {
-            const authToken = getAuthToken();
             const messages = convertPromptToMessages(options.prompt);
 
             const res = await fetchWithRetry(`${API_BASE}/chat/completions`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    ...(authToken ? { 'Knowledge-auth': authToken } : {}),
+                    ...getBearerHeader(),
                 },
                 body: JSON.stringify({
                     model: modelId,

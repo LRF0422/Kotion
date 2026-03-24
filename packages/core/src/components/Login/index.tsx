@@ -8,6 +8,7 @@ import { z } from "@kn/ui"
 import { zodResolver } from '@kn/ui';
 import { useApi } from "../../hooks/use-api"
 import { APIS } from "../../api"
+import { saveTokens } from "../../utils/auth"
 import { useState } from "react"
 import { Loader2 } from "@kn/icon"
 import { ModeToggle } from "@kn/ui"
@@ -19,7 +20,6 @@ import { LanguageToggle } from "../../locales/LanguageToggle"
 export function Login() {
 
     const [loading, setLoading] = useState(false)
-    const { usePath } = useUploadFile()
     const navigate = useNavigate()
 
     const formSchema = z.object({
@@ -44,7 +44,7 @@ export function Login() {
         useApi(APIS.LOGIN, value).then(res => {
 
             const { data } = res
-            localStorage.setItem('knowledge-token', `bearer ${data.accessToken}`)
+            saveTokens(data.access_token, data.refresh_token)
             localStorage.setItem("isLogin", "false")
 
             // Check if this is first login (no welcome completed)

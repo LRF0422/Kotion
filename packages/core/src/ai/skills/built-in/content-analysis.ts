@@ -17,7 +17,6 @@ export const contentAnalysisSkill: Skill = {
         'getDocumentSize'
     ],
     optionalTools: [
-        'webSearch',
         'highlight',
         'askUserChoice',
         'write',

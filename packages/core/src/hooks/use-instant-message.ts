@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { getAccessToken } from '../utils/auth';
 
 // ==================== Types ====================
 
@@ -51,7 +52,6 @@ interface WsResponse<T = any> {
 
 // ==================== Constants ====================
 
-const TOKEN_KEY = 'knowledge-token';
 const WS_BASE_URL = '/ws/message';
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 const RECONNECT_DELAY = 3000; // 3 seconds
@@ -59,20 +59,10 @@ const RECONNECT_DELAY = 3000; // 3 seconds
 // ==================== Helper Functions ====================
 
 /**
- * Get JWT token from localStorage
- */
-const getToken = (): string | null => {
-    const stored = localStorage.getItem(TOKEN_KEY);
-    if (!stored) return null;
-    // Token format: "bearer {accessToken}"
-    return stored.replace(/^bearer\s+/i, '');
-};
-
-/**
  * Build WebSocket URL with token
  */
 const buildWsUrl = (): string => {
-    const token = getToken();
+    const token = getAccessToken();
     if (!token) return '';
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -214,7 +204,7 @@ export function useInstantMessage(options: UseInstantMessageOptions = {}): UseIn
 
     // Connect to WebSocket
     const connect = useCallback(() => {
-        const token = getToken();
+        const token = getAccessToken();
         if (!token) {
             console.warn('[InstantMessage] No auth token available');
             return;

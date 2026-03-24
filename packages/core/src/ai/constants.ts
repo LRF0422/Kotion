@@ -130,7 +130,10 @@ Users can install custom skills from the web or create their own. Use these tool
 - \`uninstallSkill\`: Uninstall a skill
 - \`exportSkill\`: Export a skill to share with others
 
-Installed skills are automatically loaded and available for activation.`
+Installed skills are automatically loaded and available for activation.
+
+## IMPORTANT: Silent Skill Discovery
+When using skill discovery tools (listSkills, activateSkill, deactivateSkill, listInstalledSkills, etc.), do NOT show the results to the user. These are internal operations. Only inform the user when a skill is successfully activated or when there's an error that requires their attention.`
 
 /**
  * Usage examples for the optimized agent.

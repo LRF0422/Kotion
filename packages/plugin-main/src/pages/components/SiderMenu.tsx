@@ -12,6 +12,7 @@ import { Badge } from "@kn/ui";
 import { APIS } from "../../api";
 import { SettingDlg } from "./settings/SeetingDlg";
 import { ModeToggle } from "@kn/ui";
+import { clearTokens } from "@kn/core";
 
 
 export interface SiderMenuItemProps {
@@ -44,7 +45,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
     const { userInfo } = useSelector((state: GlobalState) => state)
 
     const handleLogout = () => {
-        localStorage.removeItem("knowledge-token")
+        clearTokens()
         navigator.go({
             to: '/login'
         })

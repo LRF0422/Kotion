@@ -19,6 +19,7 @@ import { LanguageToggle } from "../locales/LanguageToggle";
 import { MessageBox } from "./MessageBox";
 import { Sparkles } from "@kn/icon";
 import { useAIAssistantShortcut } from "../ai/system-agent";
+import { clearTokens } from "../utils/auth";
 
 // Memoized menu item component for better performance
 interface MenuItemProps {
@@ -94,7 +95,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
 
     // Memoized handlers for better performance
     const handleLogout = useCallback(() => {
-        localStorage.removeItem("knowledge-token")
+        clearTokens()
         window.location.href = '/login'
     }, [])
 

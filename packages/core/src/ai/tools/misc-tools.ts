@@ -1,9 +1,7 @@
 import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord, UserChoiceOption, OnUserChoiceRequest } from "../types"
-import { WEB_SEARCH_MAX_RESULTS } from "../types"
 import { validateRange } from "../utils/document-utils"
-import { performWebSearch, fetchWebPage } from "../utils/web-search"
 
 /**
  * Create user interaction tools
@@ -117,86 +115,6 @@ export const createHighlightTools = (editor: Editor): ToolsRecord => ({
 })
 
 /**
- * Create web search tools
- */
-export const createWebSearchTools = (): ToolsRecord => ({
-    webSearch: {
-        description: '搜索互联网获取最新信息',
-        inputSchema: z.object({
-            query: z.string().describe("搜索查询关键词"),
-            maxResults: z.number().optional().describe("返回的最大结果数量")
-        }),
-        execute: async ({ query, maxResults = 5 }: {
-            query: string
-            maxResults?: number
-        }) => {
-            if (!query || query.trim().length === 0) {
-                return { error: 'Search query cannot be empty' }
-            }
-
-            const effectiveMaxResults = Math.min(maxResults, WEB_SEARCH_MAX_RESULTS)
-
-            try {
-                const results = await performWebSearch(query.trim(), effectiveMaxResults)
-
-                return {
-                    success: true,
-                    query: query.trim(),
-                    results,
-                    totalResults: results.length,
-                    message: results.length > 0
-                        ? `Found ${results.length} result(s) for "${query}"`
-                        : `No results found for "${query}"`
-                }
-            } catch (error) {
-                return {
-                    error: `Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                    query: query.trim()
-                }
-            }
-        }
-    },
-
-    fetchWebPage: {
-        description: '获取网页内容',
-        inputSchema: z.object({
-            url: z.string().describe("要获取内容的网页URL"),
-            extractText: z.boolean().optional().describe("是否只提取纯文本内容")
-        }),
-        execute: async ({ url, extractText = true }: {
-            url: string
-            extractText?: boolean
-        }) => {
-            if (!url || !url.startsWith('http')) {
-                return { error: 'Invalid URL. URL must start with http:// or https://' }
-            }
-
-            try {
-                const result = await fetchWebPage(url, extractText)
-
-                if (result.success) {
-                    return {
-                        success: true,
-                        url,
-                        title: result.title,
-                        content: result.content,
-                        contentLength: result.content?.length || 0,
-                        truncated: (result.content?.length || 0) > 5000
-                    }
-                }
-
-                return { error: result.error || 'Failed to fetch webpage', url }
-            } catch (error) {
-                return {
-                    error: `Fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                    url
-                }
-            }
-        }
-    }
-})
-
-/**
  * Create all misc tools
  */
 export const createMiscTools = (
@@ -205,5 +123,4 @@ export const createMiscTools = (
 ): ToolsRecord => ({
     ...createUserChoiceTool(onUserChoiceRequest),
     ...createHighlightTools(editor),
-    ...createWebSearchTools()
 })
