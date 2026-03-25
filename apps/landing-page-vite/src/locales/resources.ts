@@ -420,8 +420,7 @@ export const resources = {
                 "ai-cat-layout-desc": "创建/编辑/删除分栏布局（2-6列），支持嵌套",
                 "ai-cat-interaction": "交互工具",
                 "ai-cat-interaction-desc": "向用户提问、高亮文本",
-                "ai-cat-web": "网络工具",
-                "ai-cat-web-desc": "网页搜索和内容抓取",
+
                 "ai-cat-plugin": "插件工具",
                 "ai-cat-plugin-tools": "由各插件提供（如 Excalidraw 绘图、Bitable 操作等）",
                 "ai-cat-plugin-desc": "来自已安装插件的扩展工具，通过工具发现机制自动注册",
@@ -961,8 +960,7 @@ export const resources = {
                 "ai-cat-layout-desc": "Create / edit / delete column layouts (2-6 columns), supports nesting",
                 "ai-cat-interaction": "Interaction Tools",
                 "ai-cat-interaction-desc": "Ask user questions, highlight text",
-                "ai-cat-web": "Web Tools",
-                "ai-cat-web-desc": "Web search and content scraping",
+
                 "ai-cat-plugin": "Plugin Tools",
                 "ai-cat-plugin-tools": "Provided by plugins (e.g., Excalidraw drawing, Bitable operations)",
                 "ai-cat-plugin-desc": "Extension tools from installed plugins, automatically registered via tool discovery",

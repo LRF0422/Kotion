@@ -46,11 +46,6 @@ highlight: {
     priority: 3,   // 低优先级辅助工具
     tags: ["highlight", "selection", "visual", "annotation"]
 }
-
-webSearch: {
-    priority: 5,   // 中等优先级
-    tags: ["web", "search", "internet", "information", "external"]
-}
 ```
 
 #### Read 工具 (阅读)

@@ -17,15 +17,19 @@
 - [packages/common/src/core/PluginManager.ts](file://packages/common/src/core/PluginManager.ts)
 - [packages/common/src/core/editor.ts](file://packages/common/src/core/editor.ts)
 - [packages/plugin-ai/src/ai/menu/Chat.tsx](file://packages/plugin-ai/src/ai/menu/Chat.tsx)
+- [packages/core/src/ai/model-provider/knowledge-provider.ts](file://packages/core/src/ai/model-provider/knowledge-provider.ts)
+- [packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts)
+- [packages/core/src/ai/constants.ts](file://packages/core/src/ai/constants.ts)
+- [packages/core/src/ai/types.ts](file://packages/core/src/ai/types.ts)
+- [packages/core/src/ai/foundation/hooks/use-streaming.ts](file://packages/core/src/ai/foundation/hooks/use-streaming.ts)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 新增PluginManager插件管理器，支持插件技能和工具的动态解析
-- 增强SkillProvider的插件管理能力，实现插件技能的按需加载
-- 新增ExtensionWrapper类型定义，规范插件扩展结构
-- 改进工具注册表系统，支持插件工具的动态注册机制
-- 优化AI代理初始化流程，支持插件技能的自动注册
+- 在use-agent-optimized.tsx中将DeepSeek集成替换为新的Knowledge Provider
+- 新增基于引用的状态跟踪机制，改进流式状态和工具配置管理
+- 保持向后兼容性，继续支持原有的AI提供商
+- 增强资源管理和清理机制，确保适当的内存和连接管理
 
 ## 目录
 1. [简介](#简介)
@@ -34,18 +38,20 @@
 4. [架构概览](#架构概览)
 5. [详细组件分析](#详细组件分析)
 6. [插件管理系统](#插件管理系统)
-7. [依赖关系分析](#依赖关系分析)
-8. [性能考虑](#性能考虑)
-9. [故障排除指南](#故障排除指南)
-10. [结论](#结论)
+7. [AI模型提供者优化](#ai模型提供者优化)
+8. [流式状态管理改进](#流式状态管理改进)
+9. [依赖关系分析](#依赖关系分析)
+10. [性能考虑](#性能考虑)
+11. [故障排除指南](#故障排除指南)
+12. [结论](#结论)
 
 ## 简介
 
 知识仓库（Knowledge Repo）是一个强大的协作式知识管理平台，集成了丰富的文本编辑、AI驱动功能和广泛的插件生态系统。该项目采用现代Web技术构建，具备实时协作能力和多维度表格、可视化绘图、文件管理等核心功能。
 
-本项目特别专注于AI技能增强系统，通过模块化的AI基础架构为各种AI能力提供统一的接口和管理机制。该系统支持多种AI模型提供商（DeepSeek、Anthropic、OpenAI），具备工具注册表、技能管理系统、代理模式等功能。
+本项目特别专注于AI技能增强系统，通过模块化的AI基础架构为各种AI能力提供统一的接口和管理机制。该系统支持多种AI模型提供商（包括新的Knowledge Provider），具备工具注册表、技能管理系统、代理模式等功能。
 
-**更新** 新增了完整的插件管理系统，支持插件技能和动态工具加载机制，增强了SkillProvider的插件管理能力。
+**更新** 新增了基于引用的状态跟踪机制，改进了流式状态和工具配置管理，同时在use-agent-optimized.tsx中替换了DeepSeek集成为新的Knowledge Provider，保持向后兼容性。
 
 ## 项目结构
 
@@ -235,6 +241,7 @@ SkillRegistry[技能注册表]
 ProviderManager[提供商管理器]
 end
 subgraph "AI提供商层"
+KnowledgeProvider[Knowledge Provider]
 DeepSeek[DeepSeek AI]
 Anthropic[Anthropic]
 OpenAI[OpenAI]
@@ -254,6 +261,7 @@ AIFoundation --> ToolRegistry
 AIFoundation --> SkillRegistry
 ToolRegistry --> ProviderManager
 SkillRegistry --> ProviderManager
+ProviderManager --> KnowledgeProvider
 ProviderManager --> DeepSeek
 ProviderManager --> Anthropic
 ProviderManager --> OpenAI
@@ -529,6 +537,122 @@ SkillProvider-->>User : 技能激活完成
 - [packages/core/src/ai/providers/SkillProvider.ts:58-101](file://packages/core/src/ai/providers/SkillProvider.ts#L58-L101)
 - [packages/core/src/ai/use-agent-optimized.tsx:119-126](file://packages/core/src/ai/use-agent-optimized.tsx#L119-L126)
 
+## AI模型提供者优化
+
+### Knowledge Provider集成
+
+**更新** 新增了Knowledge Provider作为主要的AI模型提供者，替代了原有的DeepSeek集成：
+
+```mermaid
+classDiagram
+class KnowledgeProvider {
++modelId string
++provider "knowledge"
++specificationVersion "v2"
++doGenerate(options) Promise~LanguageModelV2Response~
++doStream(options) Promise~LanguageModelV2Stream~
++convertPromptToMessages(prompt) any[]
++convertToolsToOpenAI(tools) any[]
++fetchWithRetry(url, options, maxRetries) Promise~Response~
+}
+class ToolLoopAgent {
++model KnowledgeProvider
++stream(options) Promise~StreamResult~
++stop() void
+}
+class useEditorAgentOptimized {
++agentRef useRef<ToolLoopAgent>
++isStreamingRef useRef<boolean>
++latestToolsRef useRef<ToolsRecord>
++latestInstructionsRef useRef<string>
++stream(options) Promise~StreamResult~
++stop() void
+}
+ToolLoopAgent --> KnowledgeProvider : "使用"
+useEditorAgentOptimized --> ToolLoopAgent : "管理"
+useEditorAgentOptimized --> KnowledgeProvider : "创建"
+```
+
+**图表来源**
+- [packages/core/src/ai/model-provider/knowledge-provider.ts:168-354](file://packages/core/src/ai/model-provider/knowledge-provider.ts#L168-L354)
+- [packages/core/src/ai/use-agent-optimized.tsx:33-33](file://packages/core/src/ai/use-agent-optimized.tsx#L33-L33)
+
+### DeepSeek兼容性层
+
+系统保持了对DeepSeek的向后兼容性，通过兼容性层支持原有API：
+
+```mermaid
+flowchart LR
+KnowledgeProvider[Knowledge Provider] --> AI_SDK[AI SDK 5]
+DeepSeek[DeepSeek Compatibility Layer] --> AI_SDK
+Compatibility[Compatibility Functions] --> KnowledgeProvider
+Compatibility --> DeepSeek
+API_Compatibility[API Compatibility] --> KnowledgeProvider
+API_Compatibility --> DeepSeek
+```
+
+**图表来源**
+- [packages/core/src/ai/ai-utils.ts:1-63](file://packages/core/src/ai/ai-utils.ts#L1-L63)
+- [packages/core/src/ai/constants.ts:16-20](file://packages/core/src/ai/constants.ts#L16-L20)
+
+**章节来源**
+- [packages/core/src/ai/model-provider/knowledge-provider.ts:1-359](file://packages/core/src/ai/model-provider/knowledge-provider.ts#L1-L359)
+- [packages/core/src/ai/ai-utils.ts:1-63](file://packages/core/src/ai/ai-utils.ts#L1-L63)
+- [packages/core/src/ai/constants.ts:16-20](file://packages/core/src/ai/constants.ts#L16-L20)
+
+## 流式状态管理改进
+
+### 基于引用的状态跟踪
+
+**更新** 新增了基于引用的方法来跟踪流式状态和工具配置，确保适当的清理和资源管理：
+
+```mermaid
+sequenceDiagram
+participant Component as React组件
+participant AgentRef as agentRef
+participant IsStreamingRef as isStreamingRef
+participant LatestToolsRef as latestToolsRef
+participant LatestInstructionsRef as latestInstructionsRef
+Component->>AgentRef : 设置代理实例
+Component->>IsStreamingRef : 跟踪流式状态
+Component->>LatestToolsRef : 存储最新工具配置
+Component->>LatestInstructionsRef : 存储最新指令
+Component->>Component : 使用useEffect更新引用
+Component->>Component : 使用useCallback处理流式操作
+Component->>Component : 清理资源和停止生成
+```
+
+**图表来源**
+- [packages/core/src/ai/use-agent-optimized.tsx:45-59](file://packages/core/src/ai/use-agent-optimized.tsx#L45-L59)
+
+### 资源管理优化
+
+改进的资源管理确保适当的清理和内存管理：
+
+```mermaid
+flowchart TD
+Start([开始流式操作]) --> AbortPrevious{检查之前的流式操作}
+AbortPrevious --> |存在| AbortStream["中止之前的流式操作"]
+AbortPrevious --> |不存在| CreateAbortController["创建新的AbortController"]
+AbortStream --> CreateAbortController
+CreateAbortController --> CheckAgent{检查代理实例}
+CheckAgent --> |不存在| CreateAgent["创建新的ToolLoopAgent"]
+CheckAgent --> |存在| UseExistingAgent["使用现有代理"]
+CreateAgent --> SetRefs["设置引用值"]
+UseExistingAgent --> SetRefs
+SetRefs --> StartStreaming["标记为正在流式传输"]
+StartStreaming --> ProcessStream["处理流式响应"]
+ProcessStream --> Cleanup["清理资源"]
+Cleanup --> ResetAgent["重置代理实例"]
+ResetAgent --> End([结束])
+```
+
+**图表来源**
+- [packages/core/src/ai/use-agent-optimized.tsx:190-240](file://packages/core/src/ai/use-agent-optimized.tsx#L190-L240)
+
+**章节来源**
+- [packages/core/src/ai/use-agent-optimized.tsx:45-240](file://packages/core/src/ai/use-agent-optimized.tsx#L45-L240)
+
 ## 依赖关系分析
 
 ### 包依赖关系
@@ -622,6 +746,7 @@ Workspace --> Turbo
 2. **工具缓存机制**：智能缓存已加载的工具，避免重复初始化
 3. **并发控制**：限制同时进行的AI操作数量，防止资源耗尽
 4. **内存管理**：定期清理未使用的AI代理和工具实例
+5. **基于引用的状态跟踪**：使用ref对象跟踪状态，避免不必要的重渲染
 
 ### 插件系统性能优化
 
@@ -641,6 +766,7 @@ Workspace --> Turbo
 - 内存使用情况
 - 并发请求数量
 - 错误率统计
+- 流式操作的资源使用情况
 
 ## 故障排除指南
 
@@ -693,9 +819,24 @@ Workspace --> Turbo
    - 检查工具和技能注册状态
    - 验证插件扩展结构
 
+#### 流式状态管理问题
+
+当遇到流式状态管理问题时：
+
+1. **检查引用状态**
+   - 验证isStreamingRef的状态
+   - 检查agentRef的实例状态
+   - 确认AbortController的正确使用
+
+2. **查看清理机制**
+   - 分析流式操作结束后的清理过程
+   - 检查代理实例的重置逻辑
+   - 验证资源释放是否正常
+
 **章节来源**
 - [packages/core/src/ai/foundation/types.ts:214-236](file://packages/core/src/ai/foundation/types.ts#L214-L236)
 - [packages/core/src/ai/providers/SkillProvider.ts:58-101](file://packages/core/src/ai/providers/SkillProvider.ts#L58-L101)
+- [packages/core/src/ai/use-agent-optimized.tsx:190-240](file://packages/core/src/ai/use-agent-optimized.tsx#L190-L240)
 
 ## 结论
 
@@ -706,9 +847,11 @@ Workspace --> Turbo
 3. **插件生态系统**：新增的PluginManager提供了完整的插件管理能力
 4. **动态加载机制**：支持插件技能和工具的按需加载
 5. **性能优化**：采用流式处理、缓存机制等优化策略
-6. **易于集成**：标准化的插件接口便于第三方开发者集成
+6. **资源管理改进**：基于引用的状态跟踪确保适当的清理和资源管理
+7. **向后兼容性**：保持对原有AI提供商的支持
+8. **易于集成**：标准化的插件接口便于第三方开发者集成
 
-**更新** 新增的插件管理系统显著增强了系统的可扩展性和灵活性，为知识管理平台提供了更加强大的AI能力，能够显著提升用户的知识创作和协作效率。
+**更新** 新增的Knowledge Provider作为主要AI模型提供者，替代了原有的DeepSeek集成，同时保持了向后兼容性。基于引用的状态跟踪机制改进了流式状态和工具配置管理，确保适当的清理和资源管理。这些优化显著提升了系统的稳定性和性能。
 
 未来的发展方向包括：
 - 增强离线模式支持
@@ -717,5 +860,6 @@ Workspace --> Turbo
 - 完善技能市场功能
 - 增强插件安全机制
 - 优化插件加载性能
+- 进一步改进流式状态管理
 
 该系统为知识管理平台提供了强大的AI能力，能够显著提升用户的知识创作和协作效率。

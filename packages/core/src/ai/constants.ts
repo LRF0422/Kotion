@@ -108,7 +108,6 @@ You start with a minimal set of essential tools. When you need additional capabi
 - document-structure: 块类型转换、移动、格式化、对齐、表格操作
 - layout: Multi-column layouts (supports nested columns for complex layouts)
 - interaction: User interaction
-- web: Web search and fetch
 - plugin: Tools from installed plugins`
 
 /**

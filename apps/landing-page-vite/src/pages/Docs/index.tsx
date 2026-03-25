@@ -612,7 +612,6 @@ const AIFeaturesContent: React.FC<{ t: (key: string) => string }> = ({ t }) => (
                 { category: t("docs.ai-cat-structure"), tools: "convertBlock, moveBlock, setBlockAlignment, formatText, insertTable, editTable, editTableCell", desc: t("docs.ai-cat-structure-desc") },
                 { category: t("docs.ai-cat-layout"), tools: "insertColumns, getColumnsInfo, updateColumnContent, setColumnsLayout, insertNestedColumns", desc: t("docs.ai-cat-layout-desc") },
                 { category: t("docs.ai-cat-interaction"), tools: "askUserChoice, highlight", desc: t("docs.ai-cat-interaction-desc") },
-                { category: t("docs.ai-cat-web"), tools: "webSearch, fetchWebPage", desc: t("docs.ai-cat-web-desc") },
                 { category: t("docs.ai-cat-plugin"), tools: t("docs.ai-cat-plugin-tools"), desc: t("docs.ai-cat-plugin-desc") },
             ].map(c => (
                 <div key={c.category} className="p-4 rounded-lg border border-gray-100 dark:border-gray-800">
@@ -1062,13 +1061,12 @@ export const Docs: React.FC = () => {
                                     <div key={section.id}>
                                         <Link
                                             to={`/doc/${section.id}`}
-                                            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                                                isActive
+                                            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
                                                     ? 'bg-primary/10 text-primary'
                                                     : isParentActive
-                                                    ? 'text-notion'
-                                                    : 'text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800'
-                                            }`}
+                                                        ? 'text-notion'
+                                                        : 'text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800'
+                                                }`}
                                         >
                                             <span className={isActive ? 'text-primary' : 'text-gray-400'}>{section.icon}</span>
                                             {t(`docs.nav-${section.id}`)}

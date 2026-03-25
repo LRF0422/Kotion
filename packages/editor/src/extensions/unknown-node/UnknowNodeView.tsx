@@ -9,7 +9,7 @@ import React from "react";
 export const UnknownNodeView: React.FC<NodeViewProps> = (props) => {
     const nodeType = props.node.attrs.nodeType || 'Unknown';
 
-    return <NodeViewWrapper className="w-full flex items-center justify-center py-12">
+    return <NodeViewWrapper className="w-full h-full flex items-center justify-center">
         <EmptyState
             className="w-full max-w-none"
             title={`Plugin Not Available: "${nodeType}"`}

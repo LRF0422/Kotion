@@ -23,5 +23,5 @@ import { speechToText } from '@kn/plugin-speech-to-text'
 // import { neteaseMusic } from '@kn/plugin-netease-music'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[DefaultPluginInstance, fileManager, ai]} />
+  <App plugins={[DefaultPluginInstance, fileManager, ai, bitable]} />
 )
