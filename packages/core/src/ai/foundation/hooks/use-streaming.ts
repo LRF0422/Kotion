@@ -13,6 +13,8 @@ export interface UseStreamingResult {
     isStreaming: boolean
     /** Error if any */
     error: Error | null
+    /** Annotations received from Data Stream v2 */
+    annotations: any[]
     /** Append text to content */
     append: (text: string) => void
     /** Set full content */
@@ -25,6 +27,8 @@ export interface UseStreamingResult {
     stopStreaming: () => void
     /** Set error */
     setError: (error: Error | null) => void
+    /** Add annotations */
+    addAnnotations: (annotations: any[]) => void
 }
 
 /**
@@ -50,6 +54,7 @@ export function useStreaming(initialContent: string = ''): UseStreamingResult {
     const [content, setContentState] = useState(initialContent)
     const [isStreaming, setIsStreaming] = useState(false)
     const [error, setErrorState] = useState<Error | null>(null)
+    const [annotations, setAnnotations] = useState<any[]>([])
     const abortControllerRef = useRef<AbortController | null>(null)
 
     const append = useCallback((text: string) => {
@@ -64,6 +69,7 @@ export function useStreaming(initialContent: string = ''): UseStreamingResult {
         setContentState(initialContent)
         setIsStreaming(false)
         setErrorState(null)
+        setAnnotations([])
         if (abortControllerRef.current) {
             abortControllerRef.current.abort()
             abortControllerRef.current = null
@@ -73,6 +79,7 @@ export function useStreaming(initialContent: string = ''): UseStreamingResult {
     const startStreaming = useCallback(() => {
         setIsStreaming(true)
         setErrorState(null)
+        setAnnotations([])
         abortControllerRef.current = new AbortController()
     }, [])
 
@@ -91,17 +98,28 @@ export function useStreaming(initialContent: string = ''): UseStreamingResult {
         }
     }, [])
 
+    const addAnnotations = useCallback((newAnnotations: any[]) => {
+        setAnnotations(prev => [...prev, ...newAnnotations])
+    }, [])
+
     return {
         content,
         isStreaming,
         error,
+        annotations,
         append,
         setContent,
         reset,
         startStreaming,
         stopStreaming,
-        setError
+        setError,
+        addAnnotations
     }
+}
+
+export interface UseStreamProcessorOptions {
+    /** Callback for annotation events from Data Stream v2 */
+    onAnnotation?: (annotations: any[]) => void
 }
 
 /**
@@ -116,7 +134,7 @@ export function useStreaming(initialContent: string = ''): UseStreamingResult {
  *     await processStream(result.stream)
  * }
  */
-export function useStreamProcessor() {
+export function useStreamProcessor(options?: UseStreamProcessorOptions) {
     const streaming = useStreaming()
 
     const processStream = useCallback(async (stream: AsyncIterable<any>) => {
@@ -124,6 +142,14 @@ export function useStreamProcessor() {
 
         try {
             for await (const chunk of stream) {
+                // Handle annotation events (Data Stream v2 protocol code 8:)
+                if (chunk.type === 'annotation' || chunk.annotations) {
+                    const annotations = chunk.annotations || [chunk.data]
+                    streaming.addAnnotations(annotations)
+                    options?.onAnnotation?.(annotations)
+                    continue
+                }
+
                 // Handle different chunk formats
                 const text = chunk.text || chunk.content || chunk.delta || ''
                 if (text) {
@@ -137,7 +163,7 @@ export function useStreamProcessor() {
         } finally {
             streaming.stopStreaming()
         }
-    }, [streaming])
+    }, [streaming, options])
 
     return {
         ...streaming,

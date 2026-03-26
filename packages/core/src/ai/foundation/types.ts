@@ -172,6 +172,12 @@ export interface StreamOptions {
     abortSignal?: AbortSignal
     /** System prompt override */
     systemPrompt?: string
+    /** Session ID for conversation continuity */
+    sessionId?: string
+    /** Conversation ID for multi-turn conversations */
+    conversationId?: string
+    /** Callback for annotation events from Data Stream v2 */
+    onAnnotation?: (annotations: any[]) => void
 }
 
 export interface StreamResult {
@@ -183,6 +189,8 @@ export interface StreamResult {
     toolCalls?: any[]
     /** Whether completed successfully */
     finished: boolean
+    /** Annotations received from Data Stream v2 */
+    annotations?: any[]
 }
 
 export interface AIAgent {

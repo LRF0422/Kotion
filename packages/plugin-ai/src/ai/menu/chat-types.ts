@@ -84,3 +84,95 @@ export function formatToolName(toolName: string) {
         .replace(/^./, str => str.toUpperCase())
         .trim()
 }
+
+// ============ AgentTeam Status Types ============
+
+export type TeamMemberStatus = 'pending' | 'working' | 'completed' | 'error'
+
+export type TeamPhase = 'planning' | 'assembling' | 'executing' | 'synthesizing' | 'completed'
+
+export interface TeamMember {
+    id: string
+    name: string
+    subTask: string
+    dependencyLevel: number
+    status: TeamMemberStatus
+    detail?: string
+}
+
+export interface TeamState {
+    members: TeamMember[]
+    phase: TeamPhase | ''
+    orchestrationMessage: string
+}
+
+// Team assembled event
+export interface TeamAssembledEvent {
+    type: 'team_status'
+    event: 'team_assembled'
+    members: TeamMember[]
+}
+
+// Member status change event
+export interface MemberStatusEvent {
+    type: 'team_status'
+    event: 'member_status'
+    memberId: string
+    memberName: string
+    status: TeamMemberStatus
+    detail?: string
+}
+
+// Team phase event
+export interface TeamPhaseEvent {
+    type: 'team_status'
+    event: 'team_phase'
+    phase: TeamPhase
+}
+
+// Orchestration status event (legacy compat)
+export interface OrchestrationStatusEvent {
+    type: 'orchestration_status'
+    phase: TeamPhase
+    message: string
+}
+
+export type TeamStatusEvent =
+    | TeamAssembledEvent
+    | MemberStatusEvent
+    | TeamPhaseEvent
+    | OrchestrationStatusEvent
+
+// ============ Session Types ============
+
+export interface SessionInfo {
+    type?: 'session_info'    // Discriminant for union type narrowing
+    sessionId: string
+    conversationId: string
+    executionMode?: 'SOLO' | 'TEAM'
+    status?: 'RUNNING' | 'COMPLETED' | 'ERROR'
+}
+
+// ============ Stream Event Types ============
+
+export interface StreamFinishEvent {
+    finishReason: 'stop' | 'length' | 'tool-calls' | 'error'
+    usage: {
+        promptTokens: number
+        completionTokens: number
+    }
+}
+
+export interface StreamToolCallEvent {
+    toolCallId: string
+    toolName: string
+    args: Record<string, any>
+}
+
+export interface StreamErrorEvent {
+    error: string
+}
+
+// ============ Annotation Data Types ============
+
+export type AnnotationData = TeamStatusEvent | SessionInfo | Record<string, any>

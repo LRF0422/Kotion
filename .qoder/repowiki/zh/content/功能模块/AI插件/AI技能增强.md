@@ -22,10 +22,16 @@
 - [packages/core/src/ai/constants.ts](file://packages/core/src/ai/constants.ts)
 - [packages/core/src/ai/types.ts](file://packages/core/src/ai/types.ts)
 - [packages/core/src/ai/foundation/hooks/use-streaming.ts](file://packages/core/src/ai/foundation/hooks/use-streaming.ts)
+- [packages/core/src/ai/discovery/tool-metadata.ts](file://packages/core/src/ai/discovery/tool-metadata.ts)
+- [packages/core/src/ai/discovery/tool-discovery-tools.ts](file://packages/core/src/ai/discovery/tool-discovery-tools.ts)
+- [packages/core/src/ai/providers/ToolProvider.ts](file://packages/core/src/ai/providers/ToolProvider.ts)
 </cite>
 
 ## 更新摘要
 **变更内容**
+- 移除了webSearch工具，完全移除了web工具类别
+- 更新了工具分类描述，移除了web分类的说明
+- 反映了架构决策将Web搜索功能从核心AI系统中解耦
 - 在use-agent-optimized.tsx中将DeepSeek集成替换为新的Knowledge Provider
 - 新增基于引用的状态跟踪机制，改进流式状态和工具配置管理
 - 保持向后兼容性，继续支持原有的AI提供商
@@ -40,10 +46,11 @@
 6. [插件管理系统](#插件管理系统)
 7. [AI模型提供者优化](#ai模型提供者优化)
 8. [流式状态管理改进](#流式状态管理改进)
-9. [依赖关系分析](#依赖关系分析)
-10. [性能考虑](#性能考虑)
-11. [故障排除指南](#故障排除指南)
-12. [结论](#结论)
+9. [工具分类系统更新](#工具分类系统更新)
+10. [依赖关系分析](#依赖关系分析)
+11. [性能考虑](#性能考虑)
+12. [故障排除指南](#故障排除指南)
+13. [结论](#结论)
 
 ## 简介
 
@@ -51,7 +58,7 @@
 
 本项目特别专注于AI技能增强系统，通过模块化的AI基础架构为各种AI能力提供统一的接口和管理机制。该系统支持多种AI模型提供商（包括新的Knowledge Provider），具备工具注册表、技能管理系统、代理模式等功能。
 
-**更新** 新增了基于引用的状态跟踪机制，改进了流式状态和工具配置管理，同时在use-agent-optimized.tsx中替换了DeepSeek集成为新的Knowledge Provider，保持向后兼容性。
+**更新** 移除了Web搜索功能，完全移除了webSearch工具和web工具类别，反映了架构决策将Web搜索功能从核心AI系统中解耦。同时，在use-agent-optimized.tsx中替换了DeepSeek集成为新的Knowledge Provider，新增了基于引用的状态跟踪机制，改进了流式状态和工具配置管理，保持向后兼容性。
 
 ## 项目结构
 
@@ -653,6 +660,90 @@ ResetAgent --> End([结束])
 **章节来源**
 - [packages/core/src/ai/use-agent-optimized.tsx:45-240](file://packages/core/src/ai/use-agent-optimized.tsx#L45-L240)
 
+## 工具分类系统更新
+
+### 工具分类描述更新
+
+**更新** 移除了web工具类别，更新了工具分类描述：
+
+```mermaid
+classDiagram
+class ToolCategory {
+<<enumeration>>
+'document-read'
+'document-write'
+'document-delete'
+'document-structure'
+'layout'
+'interaction'
+'plugin'
+'discovery'
+}
+class CategoryDescriptions {
+'document-read' : '文档读取工具 - 用于获取文档结构、内容和搜索'
+'document-write' : '文档写入工具 - 用于插入、更新和替换内容'
+'document-delete' : '文档删除工具 - 用于删除内容和块'
+'document-structure' : '结构工具 - 用于转换块类型、移动块、格式化文本、表格操作'
+'document-layout' : '布局工具 - 用于管理多列布局'
+'interaction' : '交互工具 - 用于与用户交互'
+'plugin' : '插件工具 - 来自已安装插件的工具'
+'discovery' : '发现工具 - 用于发现和加载其他工具'
+}
+ToolCategory --> CategoryDescriptions : "描述"
+```
+
+**图表来源**
+- [packages/core/src/ai/discovery/tool-metadata.ts:29-40](file://packages/core/src/ai/discovery/tool-metadata.ts#L29-L40)
+
+### 工具发现工具更新
+
+**更新** 移除了web分类的工具发现功能：
+
+```mermaid
+sequenceDiagram
+participant User as 用户
+participant DiscoveryTools as 发现工具
+participant ToolProvider as 工具提供者
+User->>DiscoveryTools : discoverTools()
+DiscoveryTools->>ToolProvider : 获取工具分类
+ToolProvider-->>DiscoveryTools : 返回分类信息不含web
+DiscoveryTools-->>User : 显示可用分类
+User->>DiscoveryTools : exploreCategory('web')
+DiscoveryTools->>DiscoveryTools : 报告分类不存在
+DiscoveryTools-->>User : 提示分类不存在
+```
+
+**图表来源**
+- [packages/core/src/ai/discovery/tool-discovery-tools.ts:53-87](file://packages/core/src/ai/discovery/tool-discovery-tools.ts#L53-L87)
+
+### 工具提供者更新
+
+**更新** 工具提供者现在不包含web分类：
+
+```mermaid
+classDiagram
+class ToolProvider {
++getCategories() CategoryInfo[]
++getToolsByCategory(category) ToolMetadata[]
++searchTools(query) ToolMetadata[]
+}
+class CategoryInfo {
+category ToolCategory
+description string
+toolCount number
+loadedCount number
+}
+ToolProvider --> CategoryInfo : "返回分类信息"
+```
+
+**图表来源**
+- [packages/core/src/ai/providers/ToolProvider.ts:225-257](file://packages/core/src/ai/providers/ToolProvider.ts#L225-L257)
+
+**章节来源**
+- [packages/core/src/ai/discovery/tool-metadata.ts:29-40](file://packages/core/src/ai/discovery/tool-metadata.ts#L29-L40)
+- [packages/core/src/ai/discovery/tool-discovery-tools.ts:53-87](file://packages/core/src/ai/discovery/tool-discovery-tools.ts#L53-L87)
+- [packages/core/src/ai/providers/ToolProvider.ts:225-257](file://packages/core/src/ai/providers/ToolProvider.ts#L225-L257)
+
 ## 依赖关系分析
 
 ### 包依赖关系
@@ -833,10 +924,26 @@ Workspace --> Turbo
    - 检查代理实例的重置逻辑
    - 验证资源释放是否正常
 
+#### 工具分类问题
+
+**更新** 当遇到工具分类问题时：
+
+1. **检查分类列表**
+   - 验证工具分类是否包含web分类
+   - 确认分类描述是否正确
+   - 检查工具数量统计
+
+2. **验证工具发现**
+   - 测试discoverTools功能
+   - 检查exploreCategory是否返回web分类
+   - 验证searchAvailableTools是否包含web工具
+
 **章节来源**
 - [packages/core/src/ai/foundation/types.ts:214-236](file://packages/core/src/ai/foundation/types.ts#L214-L236)
 - [packages/core/src/ai/providers/SkillProvider.ts:58-101](file://packages/core/src/ai/providers/SkillProvider.ts#L58-L101)
 - [packages/core/src/ai/use-agent-optimized.tsx:190-240](file://packages/core/src/ai/use-agent-optimized.tsx#L190-L240)
+- [packages/core/src/ai/discovery/tool-metadata.ts:29-40](file://packages/core/src/ai/discovery/tool-metadata.ts#L29-L40)
+- [packages/core/src/ai/discovery/tool-discovery-tools.ts:53-87](file://packages/core/src/ai/discovery/tool-discovery-tools.ts#L53-L87)
 
 ## 结论
 
@@ -851,7 +958,7 @@ Workspace --> Turbo
 7. **向后兼容性**：保持对原有AI提供商的支持
 8. **易于集成**：标准化的插件接口便于第三方开发者集成
 
-**更新** 新增的Knowledge Provider作为主要AI模型提供者，替代了原有的DeepSeek集成，同时保持了向后兼容性。基于引用的状态跟踪机制改进了流式状态和工具配置管理，确保适当的清理和资源管理。这些优化显著提升了系统的稳定性和性能。
+**更新** 移除了Web搜索功能，完全移除了webSearch工具和web工具类别，反映了架构决策将Web搜索功能从核心AI系统中解耦。新增的Knowledge Provider作为主要AI模型提供者，替代了原有的DeepSeek集成，同时保持了向后兼容性。基于引用的状态跟踪机制改进了流式状态和工具配置管理，确保适当的清理和资源管理。这些优化显著提升了系统的稳定性和性能。
 
 未来的发展方向包括：
 - 增强离线模式支持
@@ -861,5 +968,6 @@ Workspace --> Turbo
 - 增强插件安全机制
 - 优化插件加载性能
 - 进一步改进流式状态管理
+- 重新评估Web搜索功能的替代方案
 
 该系统为知识管理平台提供了强大的AI能力，能够显著提升用户的知识创作和协作效率。

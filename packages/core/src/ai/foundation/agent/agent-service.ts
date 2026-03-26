@@ -16,7 +16,8 @@ import type {
 } from '../types'
 import type { GlobalToolRegistryImpl } from '../registry/tool-registry'
 import type { SkillActivationResult } from '../../types'
-import { createKnowledgeModel } from '../../model-provider/knowledge-provider'
+import { createDeepSeekDirectModel } from '../../model-provider/deepseek-direct-provider'
+import { createBackendTools } from '../../tools/backend-tools'
 import { FOUNDATION_AGENT_PROMPT, DEFAULT_MAX_STEPS } from '../../constants'
 
 type AgentDestroyCallback = () => void
@@ -35,6 +36,10 @@ class AIAgentImpl implements AIAgent {
     private cachedInstructions: string | null = null
     private cachedToolsHash: string | null = null
     private needsRecreation: boolean = false
+
+    // Session tracking
+    private currentSessionId: string | null = null
+    private currentConversationId: string | null = null
 
     constructor(
         id: string,
@@ -74,8 +79,7 @@ class AIAgentImpl implements AIAgent {
 
     private getModel(config?: AIModelConfig) {
         const modelName = config?.model || 'deepseek-chat'
-        const apiBase = config?.apiBaseUrl
-        return createKnowledgeModel(modelName, apiBase)
+        return createDeepSeekDirectModel(modelName)
     }
 
     private getTools(): Record<string, any> {
@@ -93,6 +97,9 @@ class AIAgentImpl implements AIAgent {
             // Get all loaded tools
             Object.assign(tools, this.toolRegistry.getLoaded())
         }
+
+        // Always include backend tools (generateContent)
+        Object.assign(tools, createBackendTools())
 
         return tools
     }
@@ -161,6 +168,14 @@ class AIAgentImpl implements AIAgent {
             this.needsRecreation = true
         }
 
+        // Update session tracking if provided (kept for backward compatibility)
+        if (options.sessionId !== undefined) {
+            this.currentSessionId = options.sessionId || null
+        }
+        if (options.conversationId !== undefined) {
+            this.currentConversationId = options.conversationId || null
+        }
+
         // Ensure agent is up to date before streaming
         this.ensureAgent()
 
@@ -173,14 +188,16 @@ class AIAgentImpl implements AIAgent {
             return {
                 text: '',
                 stream,
-                finished: true
+                finished: true,
+                annotations: []
             }
         } catch (error: any) {
             if (error.name === 'AbortError') {
                 return {
                     text: '',
                     stream: [][Symbol.iterator]() as any,
-                    finished: false
+                    finished: false,
+                    annotations: []
                 }
             }
             throw error

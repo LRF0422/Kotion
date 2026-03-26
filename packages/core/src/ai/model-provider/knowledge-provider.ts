@@ -1,11 +1,20 @@
-// lib/knowledge-provider.ts
+/**
+ * Knowledge Backend Provider
+ * 
+ * This provider is used internally for communicating with the backend agent API
+ * for content generation tasks. It is NOT the main model provider for the agent loop.
+ * The main agent loop uses deepseek-direct-provider.ts which calls DeepSeek API directly.
+ * 
+ * This provider handles:
+ * - Backend agent API communication (/api/knowledge-agent/api/v1/chat/completions)
+ * - Data Stream Protocol v2 parsing (for backend responses)
+ * - Session and annotation handling (for backend conversation continuity)
+ */
 import type {
     LanguageModelV2,
     LanguageModelV2StreamPart,
     LanguageModelV2FinishReason,
-    LanguageModelV2FunctionTool,
     LanguageModelV2Content,
-    LanguageModelV2CallOptions,
     LanguageModelV2Prompt,
 } from '@ai-sdk/provider';
 import { getBearerHeader } from '../../utils/auth';
@@ -50,23 +59,6 @@ async function fetchWithRetry(
     }
 
     throw lastError || new Error('Request failed after retries');
-}
-
-/**
- * Convert AI SDK V2 tool definitions to OpenAI-compatible tool format.
- */
-function convertToolsToOpenAI(tools?: LanguageModelV2CallOptions['tools']) {
-    if (!tools || tools.length === 0) return undefined;
-    return tools
-        .filter((t): t is LanguageModelV2FunctionTool => t.type === 'function')
-        .map(t => ({
-            type: 'function' as const,
-            function: {
-                name: t.name,
-                description: t.description,
-                parameters: t.inputSchema,
-            },
-        }));
 }
 
 /**
@@ -160,14 +152,28 @@ function convertPromptToMessages(prompt: LanguageModelV2Prompt): any[] {
 }
 
 /**
+ * Options for Knowledge model session and callbacks
+ */
+export interface KnowledgeModelOptions {
+    /** Session ID for conversation continuity */
+    sessionId?: string
+    /** Conversation ID for multi-turn conversations */
+    conversationId?: string
+    /** Callback for annotation events from Data Stream v2 */
+    onAnnotation?: (annotations: any[]) => void
+}
+
+/**
  * Create a Knowledge provider model that implements LanguageModelV2.
  * 
  * @param modelId - The model ID to use (default: 'deepseek-chat')
  * @param apiBase - Optional custom API base URL (default: '/api/knowledge-agent/api/v1')
+ * @param options - Optional session configuration and callbacks
  */
 export function createKnowledgeModel(
     modelId: string = 'deepseek-chat',
-    apiBase?: string
+    apiBase?: string,
+    modelOptions?: KnowledgeModelOptions
 ): LanguageModelV2 {
     const API_BASE = apiBase || '/api/knowledge-agent/api/v1';
 
@@ -190,8 +196,8 @@ export function createKnowledgeModel(
                     model: modelId,
                     messages,
                     stream: false,
-                    ...(options.tools?.length ? { tools: convertToolsToOpenAI(options.tools) } : {}),
-                    ...(options.toolChoice ? { tool_choice: options.toolChoice } : {}),
+                    ...(modelOptions?.sessionId ? { sessionId: modelOptions.sessionId } : {}),
+                    ...(modelOptions?.conversationId ? { conversationId: modelOptions.conversationId } : {}),
                 }),
                 signal: options.abortSignal,
             });
@@ -247,8 +253,8 @@ export function createKnowledgeModel(
                     messages,
                     stream: true,
                     streamProtocol: 'data',
-                    ...(options.tools?.length ? { tools: convertToolsToOpenAI(options.tools) } : {}),
-                    ...(options.toolChoice ? { tool_choice: options.toolChoice } : {}),
+                    ...(modelOptions?.sessionId ? { sessionId: modelOptions.sessionId } : {}),
+                    ...(modelOptions?.conversationId ? { conversationId: modelOptions.conversationId } : {}),
                 }),
                 signal: options.abortSignal,
             });
@@ -295,10 +301,10 @@ export function createKnowledgeModel(
                                         // Tool call delta (incremental streaming)
                                         const delta = JSON.parse(payload);
                                         controller.enqueue({
-                                            type: 'tool-input-delta' as LanguageModelV2StreamPart['type'],
+                                            type: 'tool-input-delta',
                                             id: delta.toolCallId || crypto.randomUUID(),
                                             delta: typeof delta.argsTextDelta === 'string' ? delta.argsTextDelta : JSON.stringify(delta.argsTextDelta),
-                                        });
+                                        } as any);
                                         break;
                                     }
 
@@ -333,6 +339,23 @@ export function createKnowledgeModel(
                                         // Error event
                                         const e = JSON.parse(payload);
                                         controller.enqueue({ type: 'error', error: new Error(e.error) });
+                                        break;
+                                    }
+
+                                    case '8': {
+                                        // Annotation event (Data Stream v2)
+                                        // Note: Don't enqueue as 'annotation' type - AI SDK doesn't recognize it
+                                        // and will throw "Unhandled chunk type: annotation"
+                                        // Instead, call the onAnnotation callback directly
+                                        try {
+                                            const annotations = JSON.parse(payload);
+                                            const annotationArray = Array.isArray(annotations) ? annotations : [annotations];
+                                            if (modelOptions?.onAnnotation) {
+                                                modelOptions.onAnnotation(annotationArray);
+                                            }
+                                        } catch (annotationError) {
+                                            console.warn('[KnowledgeProvider] Failed to parse annotation:', payload, annotationError);
+                                        }
                                         break;
                                     }
                                 }

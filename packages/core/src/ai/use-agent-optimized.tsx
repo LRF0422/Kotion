@@ -30,7 +30,8 @@ import { wrapToolsWithCallback } from "./utils/tool-wrapper"
 
 // Shared constants
 import { EDITOR_AGENT_PROMPT, DEFAULT_MAX_STEPS } from "./constants"
-import { createKnowledgeModel } from "./model-provider/knowledge-provider"
+import { createDeepSeekDirectModel } from "./model-provider/deepseek-direct-provider"
+import { createBackendTools } from "./tools/backend-tools"
 
 /**
  * Optimized editor agent hook with progressive tool discovery and skills
@@ -152,12 +153,15 @@ export const useEditorAgentOptimized = (
         return { ...toolDiscovery, ...skillDiscovery, ...skillManagement }
     }, [toolProvider, skillProvider, skillRegistry, handleReload])
 
-    // Combine all tools: loaded tools + discovery tools
+    // Create backend tools (generateContent)
+    const backendTools = useMemo(() => createBackendTools(), [])
+
+    // Combine all tools: loaded tools + discovery tools + backend tools
     const allTools = useMemo(() => {
         const loadedTools = toolProvider.getLoadedTools()
-        return { ...loadedTools, ...discoveryTools }
+        return { ...loadedTools, ...discoveryTools, ...backendTools }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [toolProvider, discoveryTools, version])
+    }, [toolProvider, discoveryTools, backendTools, version])
 
     // Wrap tools with callback
     const wrappedTools = useMemo(() => {
@@ -179,7 +183,7 @@ export const useEditorAgentOptimized = (
         // Only recreate agent if NOT currently streaming
         if (!isStreamingRef.current) {
             agentRef.current = new ToolLoopAgent({
-                model: createKnowledgeModel(),
+                model: createDeepSeekDirectModel(),
                 stopWhen: stepCountIs(DEFAULT_MAX_STEPS),
                 instructions,
                 tools: wrappedTools,
@@ -191,22 +195,15 @@ export const useEditorAgentOptimized = (
     const stream = useCallback(async (options: {
         prompt: string
         messages?: Array<{ role: 'user' | 'assistant'; content: string }>
+        sessionId?: string
+        conversationId?: string
+        onAnnotation?: (annotations: any[]) => void
     }) => {
         // Abort any previous stream
         if (abortControllerRef.current) {
             abortControllerRef.current.abort()
         }
         abortControllerRef.current = new AbortController()
-
-        // Ensure agent exists with latest tools/instructions
-        if (!agentRef.current) {
-            agentRef.current = new ToolLoopAgent({
-                model: createKnowledgeModel(),
-                stopWhen: stepCountIs(DEFAULT_MAX_STEPS),
-                instructions: latestInstructionsRef.current,
-                tools: latestToolsRef.current,
-            })
-        }
 
         // Build prompt with conversation context
         let fullPrompt = options.prompt
@@ -217,25 +214,26 @@ export const useEditorAgentOptimized = (
             fullPrompt = `## Conversation History\n${contextParts.join('\n\n')}\n\n## Current Request\n${options.prompt}`
         }
 
+        // Create a new ToolLoopAgent for this stream
+        // Note: Direct provider doesn't need session/annotation params since main loop doesn't go through backend
+        const model = createDeepSeekDirectModel()
+
+        const agent = new ToolLoopAgent({
+            model,
+            stopWhen: stepCountIs(DEFAULT_MAX_STEPS),
+            instructions: latestInstructionsRef.current,
+            tools: latestToolsRef.current,
+        })
+
         isStreamingRef.current = true
         try {
-            const result = agentRef.current.stream({
+            const result = agent.stream({
                 prompt: fullPrompt,
-                abortSignal: abortControllerRef.current.signal
+                abortSignal: abortControllerRef.current.signal,
             })
             return result
         } finally {
-            // Mark streaming as done when the stream call resolves
-            // Note: the actual streaming continues asynchronously,
-            // but the agent.stream() promise resolves once the stream is set up
             isStreamingRef.current = false
-            // Recreate agent with latest tools for next call
-            agentRef.current = new ToolLoopAgent({
-                model: createKnowledgeModel(),
-                stopWhen: stepCountIs(DEFAULT_MAX_STEPS),
-                instructions: latestInstructionsRef.current,
-                tools: latestToolsRef.current,
-            })
         }
     }, [])
 

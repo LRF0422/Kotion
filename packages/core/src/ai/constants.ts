@@ -101,6 +101,10 @@ You start with a minimal set of essential tools. When you need additional capabi
 ### Interaction
 - askUserChoice: Confirm with user
 
+### Content Generation
+- generateContent: Generate text content using backend AI (summaries, rewrites, translations, new content)
+  Use this when you need to produce original text. Provide instruction + relevant document context.
+
 ## Tool Categories
 - document-read: Reading and analyzing document content
 - document-write: Inserting and updating content
@@ -108,7 +112,12 @@ You start with a minimal set of essential tools. When you need additional capabi
 - document-structure: 块类型转换、移动、格式化、对齐、表格操作
 - layout: Multi-column layouts (supports nested columns for complex layouts)
 - interaction: User interaction
-- plugin: Tools from installed plugins`
+- plugin: Tools from installed plugins
+
+## WORKFLOW FOR CONTENT TASKS
+1. Read relevant document sections using read tools (getDocumentStructure, readChunk, searchInDocument)
+2. Call generateContent with a clear instruction and the gathered context
+3. Use write tools (write, insertNear, insertAtEnd) to insert the generated content into the document`
 
 /**
  * Skill instructions for the optimized agent.

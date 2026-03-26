@@ -1,6 +1,8 @@
 {
   // "extends": "@kn/typescript-config/react-library.json",
   "compilerOptions": {
+    "target": "ES2020",
+    "module": "ES2020",
     "baseUrl": ".",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,

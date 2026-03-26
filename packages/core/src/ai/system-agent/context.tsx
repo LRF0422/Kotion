@@ -36,6 +36,10 @@ export interface SystemAgentState {
     executionSteps: ExecutionStep[]
     /** Active skills */
     activeSkills: string[]
+    /** Annotations received from Data Stream v2 */
+    annotations: any[]
+    /** Current session ID */
+    sessionId: string | null
 }
 
 export interface StreamPromptOptions {
@@ -47,6 +51,12 @@ export interface StreamPromptOptions {
     abortSignal?: AbortSignal
     /** Editor to use (overrides current editor) */
     editor?: Editor
+    /** Session ID for conversation continuity */
+    sessionId?: string
+    /** Conversation ID for multi-turn conversations */
+    conversationId?: string
+    /** Callback for annotation events */
+    onAnnotation?: (annotations: any[]) => void
 }
 
 export interface SystemAgentContextValue {
@@ -70,6 +80,8 @@ export interface SystemAgentContextValue {
     setOnToolExecution: (callback: OnToolExecution | undefined) => void
     /** Set user choice request callback */
     setOnUserChoiceRequest: (callback: OnUserChoiceRequest | undefined) => void
+    /** Set session ID */
+    setSessionId: (sessionId: string | null) => void
 }
 
 export interface SystemAgentProviderProps {
@@ -100,11 +112,14 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         streamingContent: '',
         error: null,
         executionSteps: [],
-        activeSkills: []
+        activeSkills: [],
+        annotations: [],
+        sessionId: null
     })
 
     // Use ref for activeSkills to avoid stale closure in stream callback
     const activeSkillsRef = useRef<string[]>([])
+    const sessionIdRef = useRef<string | null>(null)
 
     // Shared streaming buffer
     const streamBuffer = useStreamBuffer()
@@ -182,15 +197,31 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             streamingContent: '',
             error: null,
             executionSteps: [],
-            activeSkills: activeSkillsRef.current
+            activeSkills: activeSkillsRef.current,
+            annotations: [],
+            sessionId: options?.sessionId || sessionIdRef.current
         })
+
+        // Track annotations locally
+        const collectedAnnotations: any[] = []
+        const handleAnnotation = (annotations: any[]) => {
+            collectedAnnotations.push(...annotations)
+            setState(prev => ({
+                ...prev,
+                annotations: [...prev.annotations, ...annotations]
+            }))
+            options?.onAnnotation?.(annotations)
+        }
 
         try {
             const result = await agentRef.current.stream({
                 prompt,
                 messages: options?.messages,
                 abortSignal: options?.abortSignal || abortControllerRef.current.signal,
-                systemPrompt: options?.systemPrompt
+                systemPrompt: options?.systemPrompt,
+                sessionId: options?.sessionId || sessionIdRef.current || undefined,
+                conversationId: options?.conversationId,
+                onAnnotation: handleAnnotation
             })
 
             // Process the stream
@@ -285,9 +316,17 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             streamingContent: '',
             error: null,
             executionSteps: [],
-            activeSkills: []
+            activeSkills: [],
+            annotations: [],
+            sessionId: sessionIdRef.current
         })
     }, [stop, streamBuffer])
+
+    // Session management
+    const setSessionId = useCallback((sessionId: string | null) => {
+        sessionIdRef.current = sessionId
+        setState(prev => ({ ...prev, sessionId }))
+    }, [])
 
     // Callback setters
     const setOnToolExecution = useCallback((callback: OnToolExecution | undefined) => {
@@ -309,7 +348,8 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         deactivateSkill,
         reset,
         setOnToolExecution,
-        setOnUserChoiceRequest
+        setOnUserChoiceRequest,
+        setSessionId
     }), [
         state,
         stream,
@@ -320,7 +360,8 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         deactivateSkill,
         reset,
         setOnToolExecution,
-        setOnUserChoiceRequest
+        setOnUserChoiceRequest,
+        setSessionId
     ])
 
     return (

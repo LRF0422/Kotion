@@ -20,14 +20,17 @@
 - [docs/api/skills-api.md](file://docs/api/skills-api.md)
 - [packages/core/src/ai/ARCHITECTURE.md](file://packages/core/src/ai/ARCHITECTURE.md)
 - [packages/core/src/ai/INTEGRATION_GUIDE.md](file://packages/core/src/ai/INTEGRATION_GUIDE.md)
+- [packages/core/src/ai/skills/skill-registry.ts](file://packages/core/src/ai/skills/skill-registry.ts)
+- [packages/core/src/ai/providers/ToolProvider.ts](file://packages/core/src/ai/providers/ToolProvider.ts)
+- [packages/core/src/ai/tools/backend-tools.ts](file://packages/core/src/ai/tools/backend-tools.ts)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 新增文档结构工具和格式化工具的详细说明
-- 更新工具元数据系统和分类体系
-- 增强渐进式工具发现系统的架构说明
-- 完善工具适配指南和开发流程
+- 更新了工具元数据系统，移除了web分类的描述
+- 更新了技能API文档中optionalTools数组的描述，反映了Web搜索功能不再作为标准可选工具
+- 更新了渐进式工具发现系统的架构说明，移除了web搜索相关的工具引用
+- 增强了工具分类体系的准确性
 
 ## 目录
 1. [简介](#简介)
@@ -111,12 +114,12 @@ Core --> APIServer
 ```
 
 **图表来源**
-- [pnpm-workspace.yaml](file://pnpm-workspace.yaml#L1-L4)
-- [package.json](file://package.json#L1-L120)
+- [pnpm-workspace.yaml:1-4](file://pnpm-workspace.yaml#L1-L4)
+- [package.json:1-120](file://package.json#L1-L120)
 
 **章节来源**
-- [README.md](file://README.md#L66-L97)
-- [pnpm-workspace.yaml](file://pnpm-workspace.yaml#L1-L4)
+- [README.md:66-97](file://README.md#L66-L97)
+- [pnpm-workspace.yaml:1-4](file://pnpm-workspace.yaml#L1-L4)
 
 ## 核心组件
 
@@ -152,8 +155,8 @@ PluginManager --> Routes : 解析路由
 ```
 
 **图表来源**
-- [packages/core/src/App.tsx](file://packages/core/src/App.tsx#L56-L162)
-- [packages/core/src/index.ts](file://packages/core/src/index.ts#L1-L23)
+- [packages/core/src/App.tsx:56-162](file://packages/core/src/App.tsx#L56-L162)
+- [packages/core/src/index.ts:1-23](file://packages/core/src/index.ts#L1-L23)
 
 ### AI技能系统
 
@@ -191,13 +194,13 @@ SkillRegistryState --> Skill : 管理
 ```
 
 **图表来源**
-- [packages/core/src/ai/types.ts](file://packages/core/src/ai/types.ts#L138-L165)
-- [packages/core/src/ai/skills/types.ts](file://packages/core/src/ai/skills/types.ts#L10-L37)
+- [packages/core/src/ai/types.ts:138-165](file://packages/core/src/ai/types.ts#L138-L165)
+- [packages/core/src/ai/skills/types.ts:10-37](file://packages/core/src/ai/skills/types.ts#L10-L37)
 
 **章节来源**
-- [packages/core/src/App.tsx](file://packages/core/src/App.tsx#L1-L162)
-- [packages/core/src/ai/types.ts](file://packages/core/src/ai/types.ts#L1-L165)
-- [packages/core/src/ai/skills/types.ts](file://packages/core/src/ai/skills/types.ts#L1-L37)
+- [packages/core/src/App.tsx:1-162](file://packages/core/src/App.tsx#L1-L162)
+- [packages/core/src/ai/types.ts:1-165](file://packages/core/src/ai/types.ts#L1-L165)
+- [packages/core/src/ai/skills/types.ts:1-37](file://packages/core/src/ai/skills/types.ts#L1-L37)
 
 ## 架构概览
 
@@ -241,8 +244,8 @@ AIProviders --> APIs
 ```
 
 **图表来源**
-- [packages/core/src/App.tsx](file://packages/core/src/App.tsx#L1-L162)
-- [packages/plugin-main/src/index.tsx](file://packages/plugin-main/src/index.tsx#L1-L354)
+- [packages/core/src/App.tsx:1-162](file://packages/core/src/App.tsx#L1-L162)
+- [packages/plugin-main/src/index.tsx:1-354](file://packages/plugin-main/src/index.tsx#L1-L354)
 
 ## 详细组件分析
 
@@ -269,8 +272,8 @@ App->>Router : 创建路由器
 ```
 
 **图表来源**
-- [packages/core/src/App.tsx](file://packages/core/src/App.tsx#L102-L148)
-- [packages/plugin-main/src/index.tsx](file://packages/plugin-main/src/index.tsx#L29-L74)
+- [packages/core/src/App.tsx:102-148](file://packages/core/src/App.tsx#L102-L148)
+- [packages/plugin-main/src/index.tsx:29-74](file://packages/plugin-main/src/index.tsx#L29-L74)
 
 ### AI技能执行流程
 
@@ -296,8 +299,8 @@ Complete --> End
 ```
 
 **图表来源**
-- [packages/core/src/ai/types.ts](file://packages/core/src/ai/types.ts#L138-L165)
-- [packages/core/src/ai/skills/types.ts](file://packages/core/src/ai/skills/types.ts#L19-L37)
+- [packages/core/src/ai/types.ts:138-165](file://packages/core/src/ai/types.ts#L138-L165)
+- [packages/core/src/ai/skills/types.ts:19-37](file://packages/core/src/ai/skills/types.ts#L19-L37)
 
 ### 主插件功能
 
@@ -339,10 +342,10 @@ DefaultPlugin --> SpaceDetail : 提供页面
 ```
 
 **图表来源**
-- [packages/plugin-main/src/index.tsx](file://packages/plugin-main/src/index.tsx#L25-L74)
+- [packages/plugin-main/src/index.tsx:25-74](file://packages/plugin-main/src/index.tsx#L25-L74)
 
 **章节来源**
-- [packages/plugin-main/src/index.tsx](file://packages/plugin-main/src/index.tsx#L1-L354)
+- [packages/plugin-main/src/index.tsx:1-354](file://packages/plugin-main/src/index.tsx#L1-L354)
 
 ## AI工具系统增强
 
@@ -384,93 +387,12 @@ OnDemandLoader --> InteractionTools
 ```
 
 **图表来源**
-- [packages/core/src/ai/discovery/tool-discovery-tools.ts](file://packages/core/src/ai/discovery/tool-discovery-tools.ts#L21-L156)
-- [packages/core/src/ai/discovery/tool-metadata.ts](file://packages/core/src/ai/discovery/tool-metadata.ts#L42-L390)
+- [packages/core/src/ai/discovery/tool-discovery-tools.ts:21-156](file://packages/core/src/ai/discovery/tool-discovery-tools.ts#L21-L156)
+- [packages/core/src/ai/discovery/tool-metadata.ts:42-390](file://packages/core/src/ai/discovery/tool-metadata.ts#L42-L390)
 
-### 新增工具分类
+### 工具元数据系统更新
 
-系统新增了专门的文档结构和格式化工具分类，提供更精细的工具管理：
-
-#### 文档结构工具 (document-structure)
-
-文档结构工具专注于文档块级别的操作，包括块类型转换、移动和对齐设置：
-
-```mermaid
-classDiagram
-class StructureTools {
-+convertBlock : ToolDefinition
-+moveBlock : ToolDefinition
-+setBlockAlignment : ToolDefinition
-}
-class BlockConverter {
-+targetType : BlockType
-+headingLevel : number
-+blockIndex : number
-+searchText : string
-+execute() : ConvertResult
-}
-class BlockMover {
-+blockIndex : number
-+direction : MoveDirection
-+toIndex : number
-+execute() : MoveResult
-}
-class AlignmentSetter {
-+alignment : TextAlignment
-+blockIndex : number
-+searchText : string
-+execute() : AlignResult
-}
-StructureTools --> BlockConverter
-StructureTools --> BlockMover
-StructureTools --> AlignmentSetter
-```
-
-**图表来源**
-- [packages/core/src/ai/tools/structure-tools.ts](file://packages/core/src/ai/tools/structure-tools.ts#L10-L257)
-
-#### 格式化工具 (document-structure)
-
-格式化工具提供文档内容的样式设置和表格操作功能：
-
-```mermaid
-classDiagram
-class FormatTools {
-+formatText : ToolDefinition
-+insertTable : ToolDefinition
-+getTableInfo : ToolDefinition
-+editTable : ToolDefinition
-+editTableCell : ToolDefinition
-}
-class TextFormatter {
-+searchText : string
-+format : InlineFormat
-+occurrence : number
-+execute() : FormatResult
-}
-class TableCreator {
-+rows : number
-+cols : number
-+withHeaderRow : boolean
-+blockIndex : number
-+execute() : TableResult
-}
-class TableEditor {
-+action : TableAction
-+tableIndex : number
-+rowIndex : number
-+colIndex : number
-+execute() : TableActionResult
-}
-FormatTools --> TextFormatter
-FormatTools --> TableCreator
-FormatTools --> TableEditor
-```
-
-**图表来源**
-- [packages/core/src/ai/tools/format-tools.ts](file://packages/core/src/ai/tools/format-tools.ts#L11-L406)
-
-### 工具元数据系统
+**更新** 移除了web分类的描述，反映了Web搜索功能已被移除
 
 系统实现了完整的工具元数据管理系统，为工具发现和智能推荐提供支持：
 
@@ -503,10 +425,12 @@ EssentialTools --> ToolMetadata
 ```
 
 **图表来源**
-- [packages/core/src/ai/types.ts](file://packages/core/src/ai/types.ts#L120-L136)
-- [packages/core/src/ai/discovery/tool-metadata.ts](file://packages/core/src/ai/discovery/tool-metadata.ts#L11-L419)
+- [packages/core/src/ai/types.ts:120-136](file://packages/core/src/ai/types.ts#L120-L136)
+- [packages/core/src/ai/discovery/tool-metadata.ts:11-419](file://packages/core/src/ai/discovery/tool-metadata.ts#L11-L419)
 
-#### 分类描述系统
+#### 分类描述系统更新
+
+**更新** 移除了web分类的描述，反映了Web搜索功能不再作为标准可选工具
 
 系统为每个工具分类提供了详细的描述信息，帮助AI代理更好地理解工具的功能和用途：
 
@@ -518,12 +442,57 @@ EssentialTools --> ToolMetadata
 | document-structure | 9 | 结构工具 - 用于转换块类型、移动块、格式化文本、表格操作 |
 | layout | 7 | 布局工具 - 用于管理多列布局 |
 | interaction | 5 | 交互工具 - 用于与用户交互 |
-| web | 2 | 网络工具 - 用于网页搜索和获取 |
 | plugin | N | 插件工具 - 来自已安装插件的工具 |
+| discovery | 4 | 发现工具 - 用于发现和加载其他工具 |
 
 **章节来源**
-- [packages/core/src/ai/discovery/tool-metadata.ts](file://packages/core/src/ai/discovery/tool-metadata.ts#L29-L40)
-- [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L28-L367)
+- [packages/core/src/ai/discovery/tool-metadata.ts:29-40](file://packages/core/src/ai/discovery/tool-metadata.ts#L29-L40)
+- [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md:28-367](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L28-L367)
+
+### 技能API文档更新
+
+**更新** 更新了optionalTools数组的描述，反映了Web搜索功能不再作为标准可选工具
+
+技能API文档反映了最新的工具配置要求：
+
+#### 技能定义更新
+
+技能定义中的optionalTools数组现在反映了移除Web搜索功能后的实际配置：
+
+```mermaid
+classDiagram
+class Skill {
++id : string
++name : string
++displayName : string
++description : string
++version : string
++author : string
++homepage : string
++requiredTools : string[]
++optionalTools : string[] // 现在为空数组或仅包含非Web工具
++systemPromptFragment : string
++tags : string[]
++createdAt : string
++updatedAt : string
+}
+```
+
+**图表来源**
+- [docs/api/skills-api.md:17-33](file://docs/api/skills-api.md#L17-L33)
+
+#### 市场技能示例更新
+
+市场技能示例现在展示了更新后的工具配置：
+
+| 字段 | 当前值 | 说明 |
+|------|--------|------|
+| requiredTools | ["getDocumentStructure", "readChunk", "searchInDocument", "replaceContent", "askUserChoice"] | 必需工具列表 |
+| optionalTools | [] | 可选工具列表（已移除Web搜索功能） |
+| systemPromptFragment | "## Translation Assistant Skill Active..." | 专用系统提示片段 |
+
+**章节来源**
+- [docs/api/skills-api.md:381-415](file://docs/api/skills-api.md#L381-L415)
 
 ## 依赖关系分析
 
@@ -573,11 +542,11 @@ Zod --> ProseMirror
 ```
 
 **图表来源**
-- [package.json](file://package.json#L51-L107)
-- [README.md](file://README.md#L43-L65)
+- [package.json:51-107](file://package.json#L51-L107)
+- [README.md:43-65](file://README.md#L43-L65)
 
 **章节来源**
-- [package.json](file://package.json#L1-L120)
+- [package.json:1-120](file://package.json#L1-L120)
 
 ## 性能考虑
 
@@ -630,8 +599,13 @@ Zod --> ProseMirror
 - 检查路径参数匹配
 - 验证权限配置
 
+**技能配置问题**
+- 检查optionalTools数组是否为空
+- 确认requiredTools配置正确
+- 验证技能定义格式
+
 **章节来源**
-- [packages/core/src/App.tsx](file://packages/core/src/App.tsx#L65-L76)
+- [packages/core/src/App.tsx:65-76](file://packages/core/src/App.tsx#L65-L76)
 
 ## 结论
 

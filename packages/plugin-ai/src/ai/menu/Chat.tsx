@@ -30,6 +30,10 @@ import {
     INITIAL_MESSAGE, AI_AVATAR_URL, AVATAR_FALLBACKS,
     classifyError,
 } from "./chat-types"
+import type { AnnotationData } from "./chat-types"
+import { useTeamStatus, createInitialTeamState } from "./useTeamStatus"
+import { useSessionManager } from "./useSessionManager"
+import { TeamStatusPanel } from "./TeamStatusPanel"
 import { loadMessages, saveMessages, clearPersistedMessages, getHistoryForAI } from "./chat-persistence"
 import { useStreamingBuffer } from "./use-streaming-buffer"
 import { MessageBubble } from "./MessageBubble"
@@ -115,6 +119,13 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { usePath } = useUploadFile()
 
+    // Session management
+    const { sessionId, conversationId, parseAnnotations, clearSession } = useSessionManager()
+
+    // Team status tracking
+    const [annotations, setAnnotations] = useState<AnnotationData[]>([])
+    const teamState = useTeamStatus(annotations)
+
     // Persistence: load from localStorage on init
     const [messages, setMessages] = useState<Message[]>(() => loadMessages())
     const [input, setInput] = useState("")
@@ -165,6 +176,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         stepsRef.current = []
         setCurrentSteps([])
         buffer.reset()
+        setAnnotations([]) // Reset team state for new message
 
         try {
             // Build history with token-limited context
@@ -175,7 +187,13 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
 
             const { textStream } = await stream({
                 prompt: messageText,
-                messages: history
+                messages: history,
+                sessionId: sessionId || undefined,
+                conversationId: conversationId || undefined,
+                onAnnotation: (newAnnotations: AnnotationData[]) => {
+                    setAnnotations(prev => [...prev, ...newAnnotations])
+                    parseAnnotations(newAnnotations)
+                },
             })
 
             for await (const part of textStream) {
@@ -273,7 +291,9 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         setCurrentSteps([])
         stepsRef.current = []
         clearPersistedMessages()
-    }, [])
+        setAnnotations([])
+        clearSession()
+    }, [clearSession])
 
     // Message count (excluding initial message)
     const messageCount = messages.length - 1
@@ -370,6 +390,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
             </ExpandableChatHeader>
 
             <ExpandableChatBody className="bg-background overflow-x-hidden">
+                <TeamStatusPanel teamState={teamState} />
                 <ChatMessageList>
                     {messages.map((message) => (
                         <MessageBubble
