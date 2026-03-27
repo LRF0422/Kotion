@@ -124,24 +124,44 @@ You start with a minimal set of essential tools. When you need additional capabi
  */
 export const SKILL_INSTRUCTIONS = `# SKILLS
 
-Skills are high-level capabilities that combine multiple tools with specialized instructions.
+Skills are high-level capabilities that combine multiple tools with specialized instructions for complex tasks.
 
-## Built-in Skills
-Use \`listSkills\` to see available skills and \`activateSkill\` to enable them.
+## Proactive Skill Discovery
+
+At the START of every user request, you MUST:
+1. Analyze the user's intent
+2. Call \`listSkills()\` to see all available skills
+3. Determine which skills match the user's request based on descriptions and tags
+4. Call \`activateSkill({ skillName })\` for each relevant skill (activate at most 2-3)
+5. Then proceed with the user's actual task
+
+### Intent-Skill Matching Guide
+- Restructure / reorganize / refactor document -> "document-refactor"
+- Analyze / summarize / review content -> "content-analysis"
+- Improve writing / fix grammar / polish text -> "writing-improvement"
+- Translate content -> "translation"
+- Generate / write new content / create sections -> "content-generation"
+- Format / layout / columns / styling -> "formatting-layout"
+- Simple edits (insert a line, fix a typo, delete a block) -> NO skill needed, use tools directly
+
+### Rules
+- If the request is a simple edit, skip skill activation entirely
+- If unsure, activate the most likely skill -- you can always deactivate later with \`deactivateSkill\`
+- Plugin skills (source: "plugin") follow the same matching logic
+
+## IMPORTANT: Silent Skill Discovery
+When using skill discovery tools (listSkills, activateSkill, deactivateSkill), do NOT show the results to the user. These are internal operations. Only inform the user when a skill is successfully activated or when there's an error that requires their attention.
 
 ## User-Installed Skills
-Users can install custom skills from the web or create their own. Use these tools:
+Users can install custom skills. Use these tools when asked:
 - \`listInstalledSkills\`: List user-installed skills
 - \`installSkillFromUrl\`: Install a skill from a URL
 - \`installSkill\`: Install a skill from JSON
 - \`createCustomSkill\`: Create a new custom skill
 - \`uninstallSkill\`: Uninstall a skill
-- \`exportSkill\`: Export a skill to share with others
+- \`exportSkill\`: Export a skill to share
 
-Installed skills are automatically loaded and available for activation.
-
-## IMPORTANT: Silent Skill Discovery
-When using skill discovery tools (listSkills, activateSkill, deactivateSkill, listInstalledSkills, etc.), do NOT show the results to the user. These are internal operations. Only inform the user when a skill is successfully activated or when there's an error that requires their attention.`
+Installed skills are automatically loaded and available for activation.`
 
 /**
  * Usage examples for the optimized agent.
