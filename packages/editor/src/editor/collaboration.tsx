@@ -149,6 +149,7 @@ export const CollaborationEditor = forwardRef<
   // Cleanup provider on unmount
   useUnmount(() => {
     if (provider) {
+      provider.awareness?.destroy();
       provider.disconnect();
     }
   });

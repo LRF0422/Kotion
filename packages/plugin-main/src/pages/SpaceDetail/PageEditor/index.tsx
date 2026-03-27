@@ -87,15 +87,40 @@ export const PageEditor: React.FC = () => {
         avatar: userInfo?.avatar ? usePath(userInfo.avatar) : undefined,
     }), [userInfo?.name, userInfo?.name, userInfo?.id, userColor, userInfo?.avatar, usePath]);
 
-    // Create collaboration provider
+    // Track previous pageId and provider for cleanup
+    const prevPageIdRef = useRef<string | undefined>(undefined);
+    const prevProviderRef = useRef<TiptapCollabProvider | undefined>(undefined);
+
+    // Create collaboration provider - deferred to avoid blocking on page switch
+    const [deferredPageId, setDeferredPageId] = useState<string | undefined>(undefined);
+
+    // Delay provider creation to next tick to avoid blocking UI
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            setDeferredPageId(params.pageId);
+        }, 50);
+        return () => clearTimeout(timer);
+    }, [params.pageId]);
+
     const provider = React.useMemo(() => {
-        if (!params.pageId) return undefined;
+        const pageId = deferredPageId;
+        if (!pageId) return undefined;
+
+        // Cleanup previous provider asynchronously
+        const prevProvider = prevProviderRef.current;
+        if (prevProvider) {
+            setTimeout(() => {
+                prevProvider.awareness?.destroy();
+                prevProvider.disconnect();
+                prevProvider.destroy();
+            }, 0);
+        }
 
         const doc = new Y.Doc();
         const collabProvider = new TiptapCollabProvider({
             baseUrl: 'wss://kotion.top:8877/ws',
-            name: `page:${params.pageId}`,
-            token: params.pageId as string,
+            name: `page:${pageId}`,
+            token: pageId as string,
             document: doc,
             onAwarenessUpdate: ({ states }) => {
                 const updatedUsers = states
@@ -125,14 +150,15 @@ export const PageEditor: React.FC = () => {
             }
         });
 
+        prevPageIdRef.current = pageId;
+        prevProviderRef.current = collabProvider;
         return collabProvider;
-    }, [params.pageId]);
+    }, [deferredPageId]);
 
-    // Cleanup provider and awareness on unmount
+    // Cleanup provider on unmount
     React.useEffect(() => {
         return () => {
             if (provider) {
-                // Destroy awareness first
                 provider.awareness?.destroy();
                 provider.disconnect();
                 provider.destroy();

@@ -52,6 +52,7 @@ export const PageViewer: React.FC = () => {
         })
         return () => {
             setPage(null)
+            editor?.destroy?.()
             clearHeaderInfo() // Clear header info when unmounting
         }
     }, [params.pageId])
