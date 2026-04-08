@@ -18,6 +18,7 @@ import { cn, useTheme, Button } from "@kn/ui";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
+import { loadContentInBatches } from "./contentLoader";
 import { TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
 import { useSafeState } from "ahooks";
 import { List, X } from "@kn/icon";
@@ -60,25 +61,26 @@ export const EditorRender = forwardRef<
   const [exts, extensionWrappers] = useEditorExtension(undefined, withTitle)
   const [items, setItems] = useSafeState<any[]>([])
   const [tocVisible, setTocVisible] = useSafeState(false)
+  const [contentReady, setContentReady] = useSafeState(false)
+
+  const allExtensions = React.useMemo(() => [
+    ...(extensions as AnyExtension[] || []),
+    ...(exts as AnyExtension[] || []),
+    TableOfContents.configure({
+      onUpdate(content) {
+        setItems(content)
+      },
+      getIndex: getHierarchicalIndexes,
+    }),
+  ], [extensions, exts]);
 
   const editor = useEditor(
     {
-      content: content ? rewriteUnknownContent(content as JSONContent,
-        getSchema([...(exts as AnyExtension[] || []), ...(extensions as AnyExtension[] || [])]), {
-        fallbackToParagraph: true
-      }).json : { type: 'doc', content: [{ type: 'paragraph' }] },
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
       editable: isEditable,
-      extensions: [
-        ...(extensions as AnyExtension[] || []),
-        ...(exts as AnyExtension[] || []),
-        TableOfContents.configure({
-          onUpdate(content) {
-            setItems(content)
-          },
-          getIndex: getHierarchicalIndexes,
-          // scrollParent: () => window,
-        }),
-      ],
+      immediatelyRender: false,
+      shouldRerenderOnTransaction: false,
+      extensions: allExtensions,
       onBlur: ({ editor }) => { onBlur && onBlur(editor) },
       editorProps: {
         attributes: {
@@ -88,10 +90,40 @@ export const EditorRender = forwardRef<
         }
       }
     },
-    []
+    [allExtensions]
   );
 
   useImperativeHandle(ref, () => editor as Editor, [editor]);
+
+  // Load content in batches to keep UI responsive for large documents
+  React.useEffect(() => {
+    if (!editor || !content) return;
+
+    let cancelled = false;
+
+    // Yield first so the skeleton UI can paint before heavy processing begins
+    const timer = setTimeout(async () => {
+      if (cancelled) return;
+
+      // Process content to remove unknown nodes/marks (lightweight)
+      const processedContent = rewriteUnknownContent(
+        content as JSONContent,
+        getSchema(allExtensions as AnyExtension[]),
+        { fallbackToParagraph: true },
+      ).json;
+
+      if (!processedContent || cancelled) return;
+
+      // Load content in batches — yields to browser between chunks
+      await loadContentInBatches(editor, processedContent);
+
+      if (!cancelled) {
+        setContentReady(true);
+      }
+    }, 0);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [editor, content, allExtensions]);
 
   // Get current theme from context
   const { theme: currentTheme } = useTheme();
@@ -104,6 +136,16 @@ export const EditorRender = forwardRef<
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
             <StyledEditor>
               <EditorContent editor={editor} />
+              {!contentReady && (
+                <div className="space-y-3 p-4 animate-pulse">
+                  <div className="h-8 bg-muted rounded w-3/4" />
+                  <div className="h-4 bg-muted rounded w-full" />
+                  <div className="h-4 bg-muted rounded w-5/6" />
+                  <div className="h-4 bg-muted rounded w-full" />
+                  <div className="h-32 bg-muted rounded w-full" />
+                  <div className="h-4 bg-muted rounded w-4/5" />
+                </div>
+              )}
             </StyledEditor>
           </div>
           {/* Render bubble menus (e.g., comment read-only popup) */}
@@ -115,7 +157,7 @@ export const EditorRender = forwardRef<
             ));
           })}
           {/* ToC - fixed position */}
-          {toc && (
+          {toc && contentReady && (
             <>
               {/* Toggle button */}
               <Button

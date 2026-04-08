@@ -44,7 +44,6 @@ export function useAutoSave({
     const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
     const isSavingRef = useRef(false);
     const pendingSaveRef = useRef(false);
-    const initialContentRef = useRef<string | null>(null);
 
     // Update status and notify via callback
     const updateStatus = useCallback((newStatus: AutoSaveStatus) => {
@@ -68,9 +67,6 @@ export function useAutoSave({
             setIsDirty(false);
             setLastSavedAt(new Date());
             updateStatus('saved');
-
-            // Update baseline to current content after successful save
-            initialContentRef.current = JSON.stringify(content);
 
             // Reset to idle after showing "saved" status briefly
             setTimeout(() => {
@@ -115,15 +111,10 @@ export function useAutoSave({
         updateStatus('saved');
         cancelDebouncedSave();
 
-        // Update baseline to current content after save
-        if (editor) {
-            initialContentRef.current = JSON.stringify(editor.getJSON());
-        }
-
         setTimeout(() => {
             updateStatus('idle');
         }, 2000);
-    }, [editor, updateStatus, cancelDebouncedSave]);
+    }, [updateStatus, cancelDebouncedSave]);
 
     // Manual save function
     const saveNow = useCallback(async () => {
@@ -137,19 +128,12 @@ export function useAutoSave({
     useEffect(() => {
         if (!editor || !enabled) return;
 
-        // Store initial content for comparison
-        if (initialContentRef.current === null) {
-            initialContentRef.current = JSON.stringify(editor.getJSON());
-        }
-
         const handleUpdate = () => {
-            const currentContent = JSON.stringify(editor.getJSON());
-
-            // Only mark as dirty if content actually changed from initial
-            if (currentContent !== initialContentRef.current) {
-                markAsDirty();
-                debouncedSave();
-            }
+            // Simply mark as dirty on any update.
+            // Avoids expensive JSON.stringify(editor.getJSON()) on every keystroke
+            // which would block the main thread for large documents.
+            markAsDirty();
+            debouncedSave();
         };
 
         editor.on('update', handleUpdate);

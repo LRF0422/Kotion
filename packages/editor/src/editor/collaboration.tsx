@@ -15,6 +15,7 @@ import { cn, useIsMobile, useTheme, Button } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
+import { loadContentInBatches } from "./contentLoader";
 import { TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-caret";
@@ -51,7 +52,7 @@ export const CollaborationEditor = forwardRef<
   const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle, externalExtensions)
   const [items, setItems] = useSafeState<any[]>([])
   const [tocVisible, setTocVisible] = useSafeState(false)
-
+  const [contentReady, setContentReady] = useSafeState(false)
 
   // Memoize user ref to avoid extension recreation
   const userRef = React.useRef(user);
@@ -116,6 +117,7 @@ export const CollaborationEditor = forwardRef<
   const editor = useEditor(
     {
       editable: true,
+      immediatelyRender: false,
       shouldRerenderOnTransaction: false,
       onBlur: ({ editor }) => {
         props.onBlur && props.onBlur(editor)
@@ -134,16 +136,35 @@ export const CollaborationEditor = forwardRef<
 
   useImperativeHandle(ref, () => editor as Editor)
 
-  // Handle content updates for non-collaborative mode - wait for editor to be ready
+  // Handle content loading in batches to keep UI responsive for large documents
   React.useEffect(() => {
-    if (editor) {
-      const processedContent = rewriteUnknownContent(content as JSONContent,
-        getSchema(extensions as AnyExtension[]), {
-        fallbackToParagraph: true
-      }).json;
-      editor.commands.setContent(processedContent);
-    }
-  }, [editor]);
+    if (!editor || !content) return;
+
+    let cancelled = false;
+
+    // Yield first so the skeleton UI can paint before heavy processing begins
+    const timer = setTimeout(async () => {
+      if (cancelled) return;
+
+      // Process content to remove unknown nodes/marks (lightweight)
+      const processedContent = rewriteUnknownContent(
+        content as JSONContent,
+        getSchema(extensions as AnyExtension[]),
+        { fallbackToParagraph: true },
+      ).json;
+
+      if (!processedContent || cancelled) return;
+
+      // Load content in batches — yields to browser between chunks
+      await loadContentInBatches(editor, processedContent);
+
+      if (!cancelled) {
+        setContentReady(true);
+      }
+    }, 0);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [editor, content, extensions]);
 
 
   // Cleanup provider on unmount
@@ -167,10 +188,20 @@ export const CollaborationEditor = forwardRef<
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
             <StyledEditor>
               <EditorContent editor={editor} />
+              {!contentReady && (
+                <div className="space-y-3 p-4 animate-pulse">
+                  <div className="h-8 bg-muted rounded w-3/4" />
+                  <div className="h-4 bg-muted rounded w-full" />
+                  <div className="h-4 bg-muted rounded w-5/6" />
+                  <div className="h-4 bg-muted rounded w-full" />
+                  <div className="h-32 bg-muted rounded w-full" />
+                  <div className="h-4 bg-muted rounded w-4/5" />
+                </div>
+              )}
             </StyledEditor>
           </div>
           {/* ToC - fixed position */}
-          {toc && (
+          {toc && contentReady && (
             <>
               {/* Toggle button */}
               <Button

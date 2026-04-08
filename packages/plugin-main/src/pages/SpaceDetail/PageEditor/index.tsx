@@ -342,6 +342,16 @@ export const PageEditor: React.FC = () => {
     const statusDisplay = getStatusDisplay(autoSaveStatus, isManualSaving)
 
 
+    // Pre-process page content: parse JSON and unescape HTML entities off the main render path
+    const parsedContent = React.useMemo(() => {
+        if (!page?.content) return undefined;
+        try {
+            return JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
+        } catch {
+            return undefined;
+        }
+    }, [page?.content]);
+
     return pageLoading ? <div className="w-full h-full" ref={ref}>
         <header className="h-11 w-full flex flex-row justify-between px-1 border-b relative z-50">
             <div className="flex flex-row items-center gap-2 px-1">
@@ -645,7 +655,7 @@ export const PageEditor: React.FC = () => {
                     toc={!isMobile}
                     withTitle={true}
                     width={isMobile ? "w-full" : "w-[calc(100vw-350px)]"}
-                    content={page.content ? JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">")) : undefined}
+                    content={parsedContent}
                 />
             }
         </main>

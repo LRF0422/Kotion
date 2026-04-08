@@ -21,6 +21,23 @@ type RewrittenContent = {
 }[]
 
 /**
+ * Shallow clone a JSONContent node (only copies own enumerable keys at one level).
+ * Much faster than JSON.parse(JSON.stringify()) for large objects since it avoids
+ * serialization/deserialization overhead.
+ */
+function shallowCloneJSON(obj: JSONContent): JSONContent {
+    const clone: Record<string, unknown> = {};
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            // For arrays and objects we keep the reference; rewriteUnknownContentInner
+            // will recursively process nested content/marks arrays in place.
+            clone[key] = (obj as Record<string, unknown>)[key];
+        }
+    }
+    return clone as JSONContent;
+}
+
+/**
  * The actual implementation of the rewriteUnknownContent function
  */
 function rewriteUnknownContentInner({
@@ -54,7 +71,7 @@ function rewriteUnknownContentInner({
             }
 
             rewrittenContent.push({
-                original: JSON.parse(JSON.stringify(mark)),
+                original: shallowCloneJSON(mark as JSONContent),
                 unsupported: name,
             })
             // Just ignore any unknown marks
@@ -79,7 +96,7 @@ function rewriteUnknownContentInner({
 
     if (json && json.type && !validNodes.has(json.type)) {
         rewrittenContent.push({
-            original: JSON.parse(JSON.stringify(json)),
+            original: shallowCloneJSON(json),
             unsupported: json.type,
         })
         // json.content && Array.isArray(json.content) &&
