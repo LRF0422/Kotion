@@ -1,7 +1,6 @@
 import { Button } from "@kn/ui"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@kn/ui"
 import { Input } from "@kn/ui"
-import { Label } from "@kn/ui"
 import { useForm } from "@kn/ui"
 import { Link, useNavigate } from "react-router-dom"
 import { z } from "@kn/ui"
@@ -13,13 +12,14 @@ import { useState } from "react"
 import { Loader2 } from "@kn/icon"
 import { ModeToggle } from "@kn/ui"
 import React from "react"
-import { useUploadFile } from "../../hooks"
 import { LanguageToggle } from "../../locales/LanguageToggle"
+import { SparklesText } from "@kn/ui"
 
 
 export function Login() {
 
     const [loading, setLoading] = useState(false)
+    const [loginSuccess, setLoginSuccess] = useState(false)
     const navigate = useNavigate()
 
     const formSchema = z.object({
@@ -53,17 +53,34 @@ export function Login() {
                 // First time user, redirect to welcome page
                 navigate('/welcome')
             } else {
-                // Returning user, go to main app - force full reload to reinitialize
-                window.location.replace('/')
+                // Returning user — show transition overlay, then navigate without full reload
+                setLoginSuccess(true)
+                // Small delay so the overlay paints before React starts unmounting Login
+                setTimeout(() => navigate('/'), 150)
             }
         }).catch(e => {
-        }).finally(() => setLoading(false))
+            setLoading(false)
+        })
     }
 
 
 
     return (
         <div className="w-full lg:grid h-[100vh] lg:grid-cols-2 bg-background">
+            {/* Login success transition overlay — prevents white flash */}
+            {loginSuccess && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background">
+                    <div className="flex flex-col items-center gap-4">
+                        <SparklesText className="text-[60px]" sparklesCount={8} text="KN" />
+                        <div className="flex items-center gap-2 text-lg text-muted-foreground">
+                            <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Theme Toggle */}
             <div className="absolute top-4 right-4 flex items-center gap-2 z-50">
                 <ModeToggle />

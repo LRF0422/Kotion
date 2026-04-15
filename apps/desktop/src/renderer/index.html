@@ -23,6 +23,38 @@
         html.dark {
             background-color: hsl(240 10% 3.9%);
         }
+
+        /* Static loading indicator — visible before React mounts */
+        #root:empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        #root:empty::after {
+            content: 'KN';
+            font-size: 60px;
+            font-weight: bold;
+            color: hsl(240 5.9% 10%);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        html.dark #root:empty::after {
+            color: hsl(0 0% 98%);
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+        }
     </style>
 </head>
 

@@ -12,7 +12,7 @@ import React from 'react'
 import { LayoutGrid } from '@kn/icon'
 import "@kn/ui/globals.css"
 import { spaceService } from './service/space-service'
-export * from "./service"
+// export * from "./service"
 // @ts-ignore
 import pkg from '../package.json'
 

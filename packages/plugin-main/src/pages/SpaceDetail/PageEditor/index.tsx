@@ -67,6 +67,7 @@ export const PageEditor: React.FC = () => {
     const spaceService = useService("spaceService")
     const [isManualSaving, setIsManualSaving] = useState(false)
     const { usePath } = useUploadFile();
+    const [editorContentReady, setEditorContentReady] = useState(false)
 
     // Generate stable user color based on user ID
     const userColor = useMemo(() => {
@@ -175,6 +176,7 @@ export const PageEditor: React.FC = () => {
 
         return () => {
             setPage(null)
+            setEditorContentReady(false)
         }
     }, [params.pageId])
 
@@ -224,6 +226,7 @@ export const PageEditor: React.FC = () => {
         debounceDelay: 3000, // Auto-save after 3 seconds of inactivity
         onSave: handleAutoSave,
         enabled: !!page && !!params.pageId,
+        contentReady: editorContentReady,
     });
 
     // Manual save handler (for Ctrl+S and save button)
@@ -656,6 +659,7 @@ export const PageEditor: React.FC = () => {
                     withTitle={true}
                     width={isMobile ? "w-full" : "w-[calc(100vw-350px)]"}
                     content={parsedContent}
+                    onContentReady={() => setEditorContentReady(true)}
                 />
             }
         </main>

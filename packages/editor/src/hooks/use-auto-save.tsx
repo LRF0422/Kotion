@@ -15,6 +15,10 @@ export interface UseAutoSaveOptions {
     enabled?: boolean;
     /** Callback when save status changes */
     onStatusChange?: (status: AutoSaveStatus) => void;
+    /** Whether the editor content has finished loading (default: true).
+     *  When false, editor update events are ignored to prevent auto-save
+     *  from firing during initial content load. */
+    contentReady?: boolean;
 }
 
 export interface UseAutoSaveReturn {
@@ -38,12 +42,14 @@ export function useAutoSave({
     onSave,
     enabled = true,
     onStatusChange,
+    contentReady = true,
 }: UseAutoSaveOptions): UseAutoSaveReturn {
     const [status, setStatus] = useState<AutoSaveStatus>('idle');
     const [isDirty, setIsDirty] = useState(false);
     const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
     const isSavingRef = useRef(false);
     const pendingSaveRef = useRef(false);
+    const contentReadyRef = useRef(contentReady);
 
     // Update status and notify via callback
     const updateStatus = useCallback((newStatus: AutoSaveStatus) => {
@@ -124,11 +130,29 @@ export function useAutoSave({
         }
     }, [isDirty, performSave, cancelDebouncedSave]);
 
+    // Keep contentReadyRef in sync so the update handler can read the latest value
+    // without re-subscribing to the editor event.
+    useEffect(() => {
+        const wasReady = contentReadyRef.current;
+        contentReadyRef.current = contentReady;
+
+        // When content transitions from loading to ready,
+        // cancel any pending auto-save and reset dirty state
+        if (contentReady && !wasReady) {
+            cancelDebouncedSave();
+            setIsDirty(false);
+            updateStatus('idle');
+        }
+    }, [contentReady, cancelDebouncedSave, updateStatus]);
+
     // Listen for editor content changes
     useEffect(() => {
         if (!editor || !enabled) return;
 
         const handleUpdate = () => {
+            // Skip auto-save during content loading phase
+            if (!contentReadyRef.current) return;
+
             // Simply mark as dirty on any update.
             // Avoids expensive JSON.stringify(editor.getJSON()) on every keystroke
             // which would block the main thread for large documents.

@@ -39,6 +39,8 @@ export interface CollaborationEditorProps extends EditorRenderProps {
    * Useful for collaboration scenarios where invitee should use inviter's plugins.
    */
   externalExtensions?: ExtensionWrapper[];
+  /** Called when content has finished loading into the editor */
+  onContentReady?: () => void;
 }
 
 // const MemorizedToC = React.memo(ToC)
@@ -47,7 +49,7 @@ export const CollaborationEditor = forwardRef<
   Editor | null,
   React.PropsWithChildren<CollaborationEditorProps>
 >((props, ref) => {
-  const { content, user, provider, pageInfo, toc, withTitle, width = 'w-[calc(100vw-350px)]', externalExtensions } = props
+  const { content, user, provider, pageInfo, toc, withTitle, width = 'w-[calc(100vw-350px)]', externalExtensions, onContentReady } = props
 
   const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle, externalExtensions)
   const [items, setItems] = useSafeState<any[]>([])
@@ -160,6 +162,7 @@ export const CollaborationEditor = forwardRef<
 
       if (!cancelled) {
         setContentReady(true);
+        onContentReady?.();
       }
     }, 0);
 

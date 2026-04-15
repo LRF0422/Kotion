@@ -48,7 +48,7 @@ export interface BlockInfo {
     /** Block type (e.g., 'doc', 'paragraph', 'heading') */
     type: 'doc' | string;
     /** JSON string of block content */
-    content: string;
+    content: any;
     /** ID of the space containing this block */
     spaceId: string;
     /** ID of the page containing this block */

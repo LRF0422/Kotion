@@ -71,13 +71,13 @@ export const BlockReferenceView: React.FC<NodeViewProps> = React.memo((props) =>
 
     // Parse content with memoization to avoid unnecessary re-parsing
     const content = useMemo(() => {
-        if (!blockInfo?.content) return null;
+        if (!blockInfo) return null;
         try {
-            return JSON.parse(blockInfo.content);
+            return blockInfo;
         } catch {
             return null;
         }
-    }, [blockInfo?.content]);
+    }, [blockInfo]);
 
     // Memoize editor extensions
     const [extensions] = useEditorExtension('trailingNode');

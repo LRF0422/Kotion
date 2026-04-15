@@ -41,6 +41,8 @@ export interface EditorRenderProps extends EditorProvider, EditorKit {
   pageInfo?: PageContextProps
   withTitle?: boolean
   onBlur?: (editor: Editor) => void
+  /** Called when content has finished loading into the editor */
+  onContentReady?: () => void;
 }
 
 export const EditorRender = forwardRef<
@@ -55,7 +57,8 @@ export const EditorRender = forwardRef<
     pageInfo,
     withTitle = true,
     onBlur,
-    width = 'w-[calc(100vw-350px)]'
+    width = 'w-[calc(100vw-350px)]',
+    onContentReady,
   } = props;
 
   const [exts, extensionWrappers] = useEditorExtension(undefined, withTitle)
@@ -119,6 +122,7 @@ export const EditorRender = forwardRef<
 
       if (!cancelled) {
         setContentReady(true);
+        onContentReady?.();
       }
     }, 0);
 
