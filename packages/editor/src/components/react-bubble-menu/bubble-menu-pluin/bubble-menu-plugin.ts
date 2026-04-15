@@ -152,6 +152,8 @@ export class BubbleMenuView implements PluginView {
 
   private resizeDebounceTimer: number | undefined
 
+  private hideTimer: number | undefined
+
   private isVisible = false
 
   private floatingUIOptions: NonNullable<BubbleMenuPluginProps['options']> = {
@@ -445,8 +447,8 @@ export class BubbleMenuView implements PluginView {
 
   updateHandler = (view: EditorView, selectionChanged: boolean, docChanged: boolean, oldState?: EditorState) => {
     const { composing } = view
-    
-    const isSame = !selectionChanged && !docChanged    
+
+    const isSame = !selectionChanged && !docChanged
 
     if (composing || isSame) {
       return
@@ -469,10 +471,31 @@ export class BubbleMenuView implements PluginView {
       return
     }
 
+    // Cancel any pending hide removal
+    if (this.hideTimer) {
+      clearTimeout(this.hideTimer)
+      this.hideTimer = undefined
+    }
+
+    const needsAppend = !this.element.parentNode
+
+    if (needsAppend) {
+      // Set initial animation state before appending to DOM
+      this.element.style.opacity = '0'
+      this.element.style.transform = 'scale(0.96)'
+        // attach to appendTo or editor's parent element
+        ; (this.appendTo ?? this.view.dom.parentElement)?.appendChild(this.element)
+    }
+
     this.element.style.visibility = 'visible'
+
+    // Force reflow to ensure initial state is rendered before animating
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    this.element.offsetHeight
+
+    // Trigger entrance animation
     this.element.style.opacity = '1'
-      // attach to appendTo or editor's parent element
-      ; (this.appendTo ?? this.view.dom.parentElement)?.appendChild(this.element)
+    this.element.style.transform = 'scale(1)'
 
     if (this.floatingUIOptions.onShow) {
       this.floatingUIOptions.onShow()
@@ -485,11 +508,17 @@ export class BubbleMenuView implements PluginView {
     if (!this.isVisible) {
       return
     }
-    console.log('hide')
-    this.element.style.visibility = 'hidden'
+
+    // Start exit animation
     this.element.style.opacity = '0'
-    // remove from the parent element
-    this.element.remove()
+    this.element.style.transform = 'scale(0.96)'
+
+    // Remove from DOM after animation completes
+    this.hideTimer = window.setTimeout(() => {
+      this.element.style.visibility = 'hidden'
+      this.element.remove()
+      this.hideTimer = undefined
+    }, 160) // slightly longer than the 150ms transition
 
     if (this.floatingUIOptions.onHide) {
       this.floatingUIOptions.onHide()
@@ -499,7 +528,18 @@ export class BubbleMenuView implements PluginView {
   }
 
   destroy() {
-    this.hide()
+    // Clear any pending hide timer
+    if (this.hideTimer) {
+      clearTimeout(this.hideTimer)
+      this.hideTimer = undefined
+    }
+
+    this.element.style.visibility = 'hidden'
+    this.element.style.opacity = '0'
+    this.element.remove()
+
+    this.isVisible = false
+
     this.element.removeEventListener('mousedown', this.mousedownHandler, { capture: true })
     this.view.dom.removeEventListener('dragstart', this.dragstartHandler)
     window.removeEventListener('resize', this.resizeHandler)

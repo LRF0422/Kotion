@@ -52,6 +52,9 @@ export const BubbleMenu = (props: BubbleMenuProps) => {
       style={{
         visibility: "hidden",
         position: "absolute",
+        opacity: 0,
+        transform: "scale(0.96)",
+        transition: "opacity 150ms cubic-bezier(0.16, 1, 0.3, 1), transform 150ms cubic-bezier(0.16, 1, 0.3, 1)",
       }}
     >
       {props.children}

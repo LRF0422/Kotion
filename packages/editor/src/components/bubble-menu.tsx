@@ -11,14 +11,6 @@ import React, { useMemo } from "react";
 
 
 const defaultTippyOptions: BuiltInTiptapBubbleMenuProps["options"] = {
-  // maxWidth: document.body.clientWidth,
-  // duration: 200,
-  // animation: "shift-toward-subtle",
-  // moveTransition: "transform 0.2s ease-in-out",
-  // zIndex: 10,
-  // arrow: false,
-  // theme: "bubble-menu",
-  // showOnCreate: false,
   placement: "bottom"
 };
 
@@ -60,8 +52,8 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
     return (
       // @ts-ignore
       <NodeBubbleMenu
-        editor={editor}
         className="bg-popover text-popover-foreground px-1 py-1 rounded-sm shadow-md border"
+        editor={editor}
         options={wrapTippyOptions}
         {...rest}>
         {children}
@@ -72,7 +64,7 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
   return (
     <>
       <BuiltInTiptapBubbleMenu
-        className=" bg-popover text-popover-foreground px-1 py-1 rounded-sm shadow-md border"
+        className="bg-popover text-popover-foreground px-1 py-1 rounded-sm shadow-md border"
         editor={editor}
         options={wrapTippyOptions}
         {...rest}>
