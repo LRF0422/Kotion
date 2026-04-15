@@ -105,6 +105,28 @@ export const createSlash = (name: string, options?: SlashOptions) => {
           render: () => {
             let component: ReactRenderer | null = null;
             let isEditable: boolean;
+            let hideTimer: number | undefined;
+
+            const applyShowAnimation = (element: HTMLElement) => {
+              // Set initial animation state
+              element.style.opacity = '0';
+              element.style.transform = 'scale(0.96)';
+              element.style.transition = 'opacity 150ms cubic-bezier(0.16, 1, 0.3, 1), transform 150ms cubic-bezier(0.16, 1, 0.3, 1)';
+
+              // Force reflow to ensure initial state is rendered
+              // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+              element.offsetHeight;
+
+              // Trigger entrance animation
+              element.style.opacity = '1';
+              element.style.transform = 'scale(1)';
+            };
+
+            const applyHideAnimation = (element: HTMLElement, onDone: () => void) => {
+              element.style.opacity = '0';
+              element.style.transform = 'scale(0.96)';
+              hideTimer = window.setTimeout(onDone, 160);
+            };
 
             const updatePosition = (domRect: DOMRect | (() => DOMRect)) => {
               if (!component) return;
@@ -133,6 +155,12 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                 isEditable = props.editor.isEditable;
                 if (!isEditable) return;
 
+                // Cancel any pending hide animation
+                if (hideTimer) {
+                  clearTimeout(hideTimer);
+                  hideTimer = undefined;
+                }
+
                 // Create component if it doesn't exist or has been destroyed
                 if (!component || component.element.children.length === 0) {
                   component = new ReactRenderer(SlashMenuView, {
@@ -141,6 +169,9 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                   });
                   component.render();
                   this.editor.view.dom.parentNode?.appendChild(component.element);
+
+                  // Apply entrance animation
+                  applyShowAnimation(component.element as HTMLElement);
                 }
 
                 const { selection } = this.editor.state;
@@ -178,6 +209,12 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                 if (!isEditable || !component) return false;
 
                 if (props.event.key === "Escape") {
+                  // Clear any pending hide timer
+                  if (hideTimer) {
+                    clearTimeout(hideTimer);
+                    hideTimer = undefined;
+                  }
+
                   const parentNode = props.view.dom.parentNode;
                   if (parentNode?.contains(component.element)) {
                     parentNode.removeChild(component.element);
@@ -192,13 +229,23 @@ export const createSlash = (name: string, options?: SlashOptions) => {
               onExit(props) {
                 if (!isEditable || !component) return;
 
-                const parentNode = props.editor.view.dom.parentNode;
-                if (parentNode?.contains(component.element)) {
-                  parentNode.removeChild(component.element);
+                // Clear any pending hide timer
+                if (hideTimer) {
+                  clearTimeout(hideTimer);
+                  hideTimer = undefined;
                 }
 
-                component.destroy();
-                component = null;
+                const element = component.element as HTMLElement;
+                const parentNode = props.editor.view.dom.parentNode;
+
+                applyHideAnimation(element, () => {
+                  if (parentNode?.contains(element)) {
+                    parentNode.removeChild(element);
+                  }
+                  component?.destroy();
+                  component = null;
+                  hideTimer = undefined;
+                });
               }
             };
           }

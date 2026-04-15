@@ -1,4 +1,3 @@
-import { Button } from "@kn/ui";
 import { NodeViewProps } from "@kn/editor";
 import { NodeViewContent, NodeViewWrapper } from "@kn/editor";
 import React, { useCallback, useMemo } from "react";
@@ -6,8 +5,7 @@ import { aiGeneration } from "./utils";
 import { Textarea } from "@kn/ui";
 import { useToggle } from "ahooks";
 import { Label } from "@kn/ui";
-import { Loader2, Sparkles, Trash2 } from "@kn/icon";
-import { cn } from "@kn/ui";
+import { Loader2, Sparkles, X } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 import { logger } from "@kn/common";
 
@@ -83,52 +81,56 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
         });
     }, [props]);
 
-    return <NodeViewWrapper as="div" className="relative flex flex-col w-full border border-dashed p-2 pt-9 rounded-sm text-popover-foreground">
-        <div className="absolute right-0 top-0 border border-t-0 border-l border-r-0 border-b rounded-sm text-sm text-gray-500 p-1">
-            {t('ai.title')}
+    // Handle keyboard shortcut in textarea: Enter to generate, Shift+Enter for newline
+    const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleGenerate();
+        }
+    }, [handleGenerate]);
+
+    return <NodeViewWrapper as="div" className="relative flex flex-col w-full border border-dashed p-2 pt-9 rounded-sm text-popover-foreground group/ai">
+        <div className="absolute right-0 top-0 border border-t-0 border-l border-r-0 border-b rounded-sm text-sm text-gray-500 p-1 flex items-center gap-2">
+            <span className="flex items-center gap-1">
+                {loading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                )}
+                {t('ai.title')}
+            </span>
             {props.node.attrs.generateDate && (
                 <span>
                     ，{t('ai.generateDate', { defaultValue: '生成日期' })}：
                     {props.node.attrs.generateDate}
                 </span>
             )}
+            {props.editor.isEditable && (
+                <button
+                    className="ml-1 p-0.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover/ai:opacity-100"
+                    onClick={props.deleteNode}
+                    disabled={loading}
+                    title={t('ai.delete', { defaultValue: '删除' })}
+                >
+                    <X className="h-3.5 w-3.5" />
+                </button>
+            )}
         </div>
         <NodeViewContent className="w-full prose-p:mt-0 leading-1 min-h-[40px]" />
         {props.editor.isEditable && (
-            <div className="flex flex-col gap-2 items-start">
-                <Label htmlFor="prompt" className="mb-2 font-bold flex gap-1 items-center">
-                    <Sparkles className="h-4 w-4" /> {t('ai.promptLabel', { defaultValue: '提示语' })}
+            <div className="flex flex-col gap-1 items-start">
+                <Label htmlFor="prompt" className="font-bold flex gap-1 items-center text-xs text-muted-foreground">
+                    <Sparkles className="h-3 w-3" /> {t('ai.promptLabel', { defaultValue: '提示语' })}
+                    <span className="font-normal text-muted-foreground/60 ml-1">⏎</span>
                 </Label>
                 <Textarea
                     id="prompt"
-                    className="h-[100px]"
+                    className="h-[60px] text-sm resize-none"
                     defaultValue={props.node.attrs.prompt}
                     onChange={handlePromptChange}
+                    onKeyDown={handleKeyDown}
                     placeholder={t('ai.promptPlaceholder', { defaultValue: '请输入AI生成的提示语...' })}
                 />
-                <div className="flex flex-row gap-1 items-center">
-                    <Button
-                        size="sm"
-                        onClick={handleGenerate}
-                        disabled={loading || !isPromptValid}
-                    >
-                        {loading ? (
-                            <Loader2 className={cn("h-4 w-4 mr-1 animate-spin")} />
-                        ) : (
-                            <Sparkles className={cn("h-4 w-4 mr-1")} />
-                        )}
-                        {loading ? t('ai.generating', { defaultValue: '生成中...' }) : t('ai.generate', { defaultValue: '生成' })}
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={props.deleteNode}
-                        disabled={loading}
-                    >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        {t('ai.delete', { defaultValue: '删除' })}
-                    </Button>
-                </div>
             </div>
         )}
     </NodeViewWrapper>
