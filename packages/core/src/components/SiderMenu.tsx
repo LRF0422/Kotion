@@ -9,7 +9,6 @@ import { GlobalState } from "../store/GlobalState";
 import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
 import { Badge } from "@kn/ui";
-import { Separator } from "@kn/ui";
 import { SettingDlg } from "./settings/SeetingDlg";
 import { ModeToggle } from "@kn/ui";
 import { AppContext, SiderMenuItemProps } from "@kn/common";
@@ -158,76 +157,9 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                 id: '/setting',
                 isGroup: true,
                 onClick: () => { }
-            },
-            {
-                name: 'UserInfo',
-                icon: <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <button
-                            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            aria-label="User menu"
-                        >
-                            <Avatar className="h-9 w-9 border-2 hover:border-primary transition-colors">
-                                <AvatarImage src={usePath(userInfo?.avatar as string)} />
-                                <AvatarFallback className="text-xs font-medium">{userInfo?.account?.slice(0, 2).toUpperCase()}</AvatarFallback>
-                            </Avatar>
-                        </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent side="right" align="start" className="w-[220px]" sideOffset={8}>
-                        <DropdownMenuLabel className="p-3">
-                            <div className="flex flex-row gap-3 items-start justify-between">
-                                <div className="flex-1 min-w-0">
-                                    <div className="font-bold flex gap-2 items-center text-sm">
-                                        <span className="truncate">{userInfo?.name}</span>
-                                        <Badge variant="secondary" className="h-4 text-xs px-1.5">Free</Badge>
-                                    </div>
-                                    <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                                        {userInfo?.account}
-                                    </div>
-                                </div>
-                                <Avatar className="h-10 w-10 flex-shrink-0">
-                                    <AvatarImage src={usePath(userInfo?.avatar as string)} />
-                                    <AvatarFallback className="text-xs">{userInfo?.account?.slice(0, 2).toUpperCase()}</AvatarFallback>
-                                </Avatar>
-                            </div>
-                            <div className="text-[11px] text-muted-foreground mt-2">
-                                上次登录时间 2024年9月14日
-                            </div>
-                        </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            className="flex flex-row items-center gap-2 cursor-pointer"
-                            onClick={handleGoToPersonalSpace}
-                        >
-                            <LayoutDashboard className="h-4 w-4" />
-                            <span>个人空间</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="flex flex-row items-center gap-2 cursor-pointer">
-                            <UserRoundPlus className="h-4 w-4" />
-                            <span>邀请协作者</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="flex flex-row items-center gap-2 cursor-pointer">
-                            <Settings className="h-4 w-4" />
-                            <span>设置</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            className="flex flex-row items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
-                            onClick={handleLogout}
-                        >
-                            <Power className="h-4 w-4" />
-                            <span>注销账号</span>
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>,
-                key: '/user-info',
-                attachTabs: false,
-                id: '/user-info',
-                isGroup: true,
-                onClick: () => { }
             }
         ]
-    }, [pluginManager?.plugins, flag, userInfo, usePath, handleLogout, handleGoToPersonalSpace])
+    }, [pluginManager?.plugins, flag])
 
     // Memoized click handler
     const handleMenuClick = useCallback((item: SiderMenuItemProps) => {
@@ -240,12 +172,81 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
         onItemClick?.();
     }, [navigator, onItemClick]);
 
+    // User info dropdown - rendered separately at the bottom of sidebar
+    const userInfoMenu = useMemo(() => (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <button
+                    className={cn(
+                        "rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        isMobile ? "" : "hover:ring-2 hover:ring-muted-foreground/30 transition-all"
+                    )}
+                    aria-label="User menu"
+                >
+                    <Avatar className={cn(
+                        "border-2 hover:border-primary transition-colors",
+                        isMobile ? "h-8 w-8" : "h-8 w-8"
+                    )}>
+                        <AvatarImage src={usePath(userInfo?.avatar as string)} />
+                        <AvatarFallback className="text-[10px] font-medium">{userInfo?.account?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="right" align="start" className="w-[220px]" sideOffset={8}>
+                <DropdownMenuLabel className="p-3">
+                    <div className="flex flex-row gap-3 items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                            <div className="font-bold flex gap-2 items-center text-sm">
+                                <span className="truncate">{userInfo?.name}</span>
+                                <Badge variant="secondary" className="h-4 text-xs px-1.5">Free</Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                                {userInfo?.account}
+                            </div>
+                        </div>
+                        <Avatar className="h-10 w-10 flex-shrink-0">
+                            <AvatarImage src={usePath(userInfo?.avatar as string)} />
+                            <AvatarFallback className="text-xs">{userInfo?.account?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-2">
+                        上次登录时间 2024年9月14日
+                    </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                    className="flex flex-row items-center gap-2 cursor-pointer"
+                    onClick={handleGoToPersonalSpace}
+                >
+                    <LayoutDashboard className="h-4 w-4" />
+                    <span>个人空间</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="flex flex-row items-center gap-2 cursor-pointer">
+                    <UserRoundPlus className="h-4 w-4" />
+                    <span>邀请协作者</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="flex flex-row items-center gap-2 cursor-pointer">
+                    <Settings className="h-4 w-4" />
+                    <span>设置</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                    className="flex flex-row items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
+                    onClick={handleLogout}
+                >
+                    <Power className="h-4 w-4" />
+                    <span>注销账号</span>
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    ), [userInfo, usePath, isMobile, handleLogout, handleGoToPersonalSpace]);
+
     return (
         <>
             <TooltipProvider delayDuration={300}>
                 <nav
                     className={cn(
-                        "flex flex-col gap-3 py-2",
+                        "flex flex-col pt-2 pb-5 h-full",
                         isMobile ? "items-stretch px-2" : "items-center"
                     )}
                     aria-label="Main navigation"
@@ -269,16 +270,19 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                         })}
                     </div>
 
-                    {/* Utility controls separator */}
-                    <Separator className={isMobile ? "my-2" : "w-8 my-1"} />
+                    {/* Spacer to push bottom items down */}
+                    <div className="flex-1" />
 
-                    {/* Utility controls */}
-                    <div className={cn(
-                        "flex gap-2",
-                        isMobile ? "flex-row justify-center" : "flex-col items-center"
-                    )}>
-                        <ModeToggle />
-                        <LanguageToggle />
+                    {/* Bottom section: controls + user avatar */}
+                    <div className="flex flex-col items-center gap-3">
+                        <div className={cn(
+                            "flex gap-2",
+                            isMobile ? "flex-row justify-center" : "flex-col items-center"
+                        )}>
+                            <ModeToggle />
+                            <LanguageToggle />
+                        </div>
+                        {userInfoMenu}
                     </div>
                 </nav>
             </TooltipProvider>
