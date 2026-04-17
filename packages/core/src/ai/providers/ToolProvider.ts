@@ -28,6 +28,7 @@ import { createMiscTools } from '../tools/misc-tools'
 import { createColumnsTools } from '../tools/columns-tools'
 import { createStructureTools } from '../tools/structure-tools'
 import { createFormatTools } from '../tools/format-tools'
+import { createCalloutTools } from '../tools/callout-tools'
 
 interface ToolProviderOptions {
     editor: Editor
@@ -87,6 +88,7 @@ export class ToolProvider {
         const columnsTools = createColumnsTools(this.editor)
         const structureTools = createStructureTools(this.editor)
         const formatTools = createFormatTools(this.editor)
+        const calloutTools = createCalloutTools(this.editor)
 
         const allTools = {
             ...readTools,
@@ -95,7 +97,8 @@ export class ToolProvider {
             ...miscTools,
             ...columnsTools,
             ...structureTools,
-            ...formatTools
+            ...formatTools,
+            ...calloutTools
         }
 
         // Register each tool as a factory

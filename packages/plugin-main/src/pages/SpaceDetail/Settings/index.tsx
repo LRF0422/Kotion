@@ -8,10 +8,11 @@ import { useParams } from "@kn/common";
 import { Basic } from "./Basic";
 import { Archive } from "./Archive";
 import { Delete } from "./Delete";
+import { PageManagement } from "./Page";
 import { Settings, Shield, Users, Archive as ArchiveIcon, Trash2, FileText } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 
-export const SettingContext = createContext<{ space?: Space }>({})
+export const SettingContext = createContext<{ space?: Space; spaceId?: string }>({})
 
 
 export const SpaceSettings: React.FC = () => {
@@ -51,7 +52,7 @@ export const SpaceSettings: React.FC = () => {
         </div>
     }
 
-    return space && <SettingContext.Provider value={{ space: space }}>
+    return space && <SettingContext.Provider value={{ space: space, spaceId: params.id }}>
         <div className="h-screen flex flex-col bg-background">
             <header className="px-6 py-3 border-b bg-card shadow-sm">
                 <div className="flex items-center gap-2.5">
@@ -94,11 +95,7 @@ export const SpaceSettings: React.FC = () => {
                                 <Basic />
                             </TabsContent>
                             <TabsContent value="page" className="mt-4">
-                                <div className="flex flex-col items-center justify-center py-10 text-center">
-                                    <Shield className="h-12 w-12 text-muted-foreground/50 mb-3" />
-                                    <h3 className="text-base font-semibold mb-1.5">{t("space-settings.page.title")}</h3>
-                                    <p className="text-xs text-muted-foreground max-w-md">{t("space-settings.page.description")}</p>
-                                </div>
+                                <PageManagement />
                             </TabsContent>
                             <TabsContent value="member" className="mt-4">
                                 <div className="flex flex-col items-center justify-center py-10 text-center">

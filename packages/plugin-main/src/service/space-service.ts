@@ -18,6 +18,7 @@ export interface SpaceService {
     }) => Promise<any>,
     getBlockInfo: (blockId: string) => Promise<any>,
     saveAsTemplate: (spaceId: string) => Promise<any>,
+    movePage: (pageId: string, targetParentId: number | null, targetSpaceId: number) => Promise<any>,
 }
 
 export const spaceService: SpaceService = {
@@ -54,6 +55,10 @@ export const spaceService: SpaceService = {
     },
     saveAsTemplate: async (spaceId: string) => {
         const res = await useApi(APIS.SAVE_SPACE_AS_TEMPLATE, { id: spaceId })
+        return res.data
+    },
+    movePage: async (pageId: string, targetParentId: number | null, targetSpaceId: number) => {
+        const res = await useApi(APIS.MOVE_PAGE, { id: pageId }, { targetParentId, targetSpaceId })
         return res.data
     }
 }

@@ -23,7 +23,9 @@ export const ESSENTIAL_TOOLS = [
     'askUserChoice',
     // Structure tools
     'convertBlock',
-    'formatText'
+    'formatText',
+    // Callout tools (commonly requested)
+    'insertCallout'
 ] as const
 
 // Category descriptions
@@ -364,6 +366,53 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         description: '编辑表格中指定单元格的内容',
         priority: 5,
         tags: ['table', 'cell', 'edit', 'content'],
+        loaded: false,
+        source: 'builtin'
+    },
+
+    // ===== Callout (InfoPanel) Tools =====
+    {
+        name: 'insertCallout',
+        category: 'document-structure',
+        description: '插入高亮提示框（Callout），支持 info/success/warning/error/tip/bookmark/default 类型',
+        priority: 7,
+        tags: ['callout', 'infopanel', 'insert', 'highlight', 'tip', 'warning', 'note'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'getCalloutInfo',
+        category: 'document-structure',
+        description: '获取文档中所有提示框的信息（位置、类型、内容）',
+        priority: 6,
+        tags: ['callout', 'infopanel', 'info', 'read', 'query'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'updateCalloutType',
+        category: 'document-structure',
+        description: '修改提示框的类型（如将 info 改为 warning）',
+        priority: 5,
+        tags: ['callout', 'infopanel', 'update', 'type'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'updateCalloutContent',
+        category: 'document-structure',
+        description: '更新提示框的文本内容',
+        priority: 5,
+        tags: ['callout', 'infopanel', 'update', 'content'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'deleteCallout',
+        category: 'document-structure',
+        description: '删除指定的提示框',
+        priority: 5,
+        tags: ['callout', 'infopanel', 'delete', 'remove'],
         loaded: false,
         source: 'builtin'
     },

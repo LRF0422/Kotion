@@ -58,6 +58,7 @@ export function createToolDiscoveryTools(context: ToolDiscoveryContext): ToolsRe
                     'document-read',
                     'document-write',
                     'document-delete',
+                    'document-structure',
                     'layout',
                     'interaction',
                     'web',

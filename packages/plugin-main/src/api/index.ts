@@ -166,6 +166,11 @@ export const APIS = {
         url: '/knowledge-wiki/collaboration/invitation/:token/page',
         method: 'GET'
     } as API,
+    /** Move page to another parent/space */
+    MOVE_PAGE: {
+        url: '/knowledge-wiki/space/page/:id/move',
+        method: 'PUT'
+    } as API,
     /** Get inviter's installed plugins */
     GET_INVITER_PLUGINS: {
         url: '/knowledge-wiki/collaboration/invitation/:token/plugins',

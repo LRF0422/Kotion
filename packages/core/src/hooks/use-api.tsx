@@ -73,6 +73,7 @@ const getIpcChannel = (url: string, method: string): string | null => {
         { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/template/, channel: 'page:saveAsTemplate' },
         { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/favorite/, channel: 'page:addFavorite' },
         { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/collaborators/, channel: 'page:getCollaborators' },
+        { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/move/, channel: 'page:move' },
         { pattern: /\/knowledge-wiki\/space\/([^/]+)\/favorite/, channel: 'space:addFavorite' },
         { pattern: /\/knowledge-wiki\/space\/([^/]+)\/members/, channel: 'space:getMembers' },
         { pattern: /\/knowledge-wiki\/plugin-config\/([^/]+)/, channel: 'pluginConfig:getOrSave' },
@@ -199,7 +200,7 @@ const handleHttpRequest = (api: API, param?: any, body?: any, header?: Record<st
         case "DELETE":
             return request.delete(fillPathParam(api.url, param), param)
         case "PUT":
-            return request.put(fillPathParam(api.url, param), param)
+            return request.put(fillPathParam(api.url, param), body)
     }
 }
 

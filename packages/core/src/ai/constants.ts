@@ -98,6 +98,11 @@ You start with a minimal set of essential tools. When you need additional capabi
 - convertBlock: 转换块类型（paragraph/heading/blockquote/codeBlock/bulletList/orderedList/taskList）
 - formatText: 为已有文本添加格式（bold/italic/underline/strike/code）
 
+### Callout (提示框)
+- insertCallout: 插入高亮提示框，支持 info/success/warning/error/tip/bookmark/default 类型
+  当用户需要突出显示重要信息、注意事项、提示、警告等内容时使用。
+  使用 loadTool 加载其他 callout 工具: getCalloutInfo, updateCalloutType, updateCalloutContent, deleteCallout
+
 ### Interaction
 - askUserChoice: Confirm with user
 
@@ -109,7 +114,7 @@ You start with a minimal set of essential tools. When you need additional capabi
 - document-read: Reading and analyzing document content
 - document-write: Inserting and updating content
 - document-delete: Deleting content (requires confirmation)
-- document-structure: 块类型转换、移动、格式化、对齐、表格操作
+- document-structure: 块类型转换、移动、格式化、对齐、表格操作、提示框(Callout)操作
 - layout: Multi-column layouts (supports nested columns for complex layouts)
 - interaction: User interaction
 - plugin: Tools from installed plugins

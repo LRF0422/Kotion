@@ -1,0 +1,151 @@
+/* Dark mode text color adaptations */
+/* When text colors are set via the color extension, adapt them for dark mode */
+/* The canonical (stored) value is the light mode color; CSS overrides in dark mode */
+
+/* === Default (saturated) shades === */
+
+/* Gray: #737373 -> #a3a3a3 */
+.dark span[style*="color: rgb(115, 115, 115)"],
+.dark span[style*="color:#737373"] {
+    color: #a3a3a3 !important;
+}
+
+/* Brown: #78350f -> #d97706 */
+.dark span[style*="color: rgb(120, 53, 15)"],
+.dark span[style*="color:#78350f"] {
+    color: #d97706 !important;
+}
+
+/* Red: #dc2626 -> #f87171 */
+.dark span[style*="color: rgb(220, 38, 38)"],
+.dark span[style*="color:#dc2626"] {
+    color: #f87171 !important;
+}
+
+/* Orange: #ea580c -> #fb923c */
+.dark span[style*="color: rgb(234, 88, 12)"],
+.dark span[style*="color:#ea580c"] {
+    color: #fb923c !important;
+}
+
+/* Yellow: #ca8a04 -> #facc15 */
+.dark span[style*="color: rgb(202, 138, 4)"],
+.dark span[style*="color:#ca8a04"] {
+    color: #facc15 !important;
+}
+
+/* Green: #16a34a -> #4ade80 */
+.dark span[style*="color: rgb(22, 163, 74)"],
+.dark span[style*="color:#16a34a"] {
+    color: #4ade80 !important;
+}
+
+/* Blue: #2563eb -> #60a5fa */
+.dark span[style*="color: rgb(37, 99, 235)"],
+.dark span[style*="color:#2563eb"] {
+    color: #60a5fa !important;
+}
+
+/* Purple: #9333ea -> #c084fc */
+.dark span[style*="color: rgb(147, 51, 234)"],
+.dark span[style*="color:#9333ea"] {
+    color: #c084fc !important;
+}
+
+/* Pink: #db2777 -> #f472b6 */
+.dark span[style*="color: rgb(219, 39, 119)"],
+.dark span[style*="color:#db2777"] {
+    color: #f472b6 !important;
+}
+
+/* Cyan: #0891b2 -> #22d3ee */
+.dark span[style*="color: rgb(8, 145, 178)"],
+.dark span[style*="color:#0891b2"] {
+    color: #22d3ee !important;
+}
+
+/* Indigo: #4f46e5 -> #818cf8 */
+.dark span[style*="color: rgb(79, 70, 229)"],
+.dark span[style*="color:#4f46e5"] {
+    color: #818cf8 !important;
+}
+
+/* Teal: #0d9488 -> #2dd4bf */
+.dark span[style*="color: rgb(13, 148, 136)"],
+.dark span[style*="color:#0d9488"] {
+    color: #2dd4bf !important;
+}
+
+/* === Light (pastel) shades === */
+
+/* Gray-light: #a3a3a3 -> #d4d4d4 */
+.dark span[style*="color: rgb(163, 163, 163)"],
+.dark span[style*="color:#a3a3a3"] {
+    color: #d4d4d4 !important;
+}
+
+/* Brown-light: #b45309 -> #fbbf24 */
+.dark span[style*="color: rgb(180, 83, 9)"],
+.dark span[style*="color:#b45309"] {
+    color: #fbbf24 !important;
+}
+
+/* Red-light: #f87171 -> #fca5a5 */
+.dark span[style*="color: rgb(248, 113, 113)"],
+.dark span[style*="color:#f87171"] {
+    color: #fca5a5 !important;
+}
+
+/* Orange-light: #fb923c -> #fdba74 */
+.dark span[style*="color: rgb(251, 146, 60)"],
+.dark span[style*="color:#fb923c"] {
+    color: #fdba74 !important;
+}
+
+/* Yellow-light: #facc15 -> #fde047 */
+.dark span[style*="color: rgb(250, 204, 21)"],
+.dark span[style*="color:#facc15"] {
+    color: #fde047 !important;
+}
+
+/* Green-light: #4ade80 -> #86efac */
+.dark span[style*="color: rgb(74, 222, 128)"],
+.dark span[style*="color:#4ade80"] {
+    color: #86efac !important;
+}
+
+/* Blue-light: #60a5fa -> #93c5fd */
+.dark span[style*="color: rgb(96, 165, 250)"],
+.dark span[style*="color:#60a5fa"] {
+    color: #93c5fd !important;
+}
+
+/* Purple-light: #c084fc -> #d8b4fe */
+.dark span[style*="color: rgb(192, 132, 252)"],
+.dark span[style*="color:#c084fc"] {
+    color: #d8b4fe !important;
+}
+
+/* Pink-light: #f472b6 -> #f9a8d4 */
+.dark span[style*="color: rgb(244, 114, 182)"],
+.dark span[style*="color:#f472b6"] {
+    color: #f9a8d4 !important;
+}
+
+/* Cyan-light: #22d3ee -> #67e8f9 */
+.dark span[style*="color: rgb(34, 211, 238)"],
+.dark span[style*="color:#22d3ee"] {
+    color: #67e8f9 !important;
+}
+
+/* Indigo-light: #818cf8 -> #a5b4fc */
+.dark span[style*="color: rgb(129, 140, 248)"],
+.dark span[style*="color:#818cf8"] {
+    color: #a5b4fc !important;
+}
+
+/* Teal-light: #2dd4bf -> #5eead4 */
+.dark span[style*="color: rgb(45, 212, 191)"],
+.dark span[style*="color:#2dd4bf"] {
+    color: #5eead4 !important;
+}

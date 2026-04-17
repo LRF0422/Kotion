@@ -170,7 +170,22 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "page": {
             "tab": "页面设置",
             "title": "页面设置",
-            "description": "为此空间配置页面级设置和权限。"
+            "description": "为此空间配置页面级设置和权限。",
+            "management_title": "页面管理",
+            "management_description": "管理和组织此空间中的页面。移动页面以调整页面结构。",
+            "search_placeholder": "搜索页面...",
+            "tree_title": "页面结构",
+            "pages_count": "个页面",
+            "empty": "此空间暂无页面",
+            "load_error": "加载页面树失败",
+            "move_title": "移动页面",
+            "move_description": "为 \"{{name}}\" 选择新的父页面",
+            "move_search": "搜索目标页面...",
+            "move_to_root": "空间根目录（顶层）",
+            "move_cancel": "取消",
+            "move_confirm": "移动",
+            "move_success": "页面移动成功",
+            "move_error": "页面移动失败"
           },
           "member": {
             "tab": "成员设置",
@@ -308,7 +323,22 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "page": {
             "tab": "Pages",
             "title": "Page Settings",
-            "description": "Configure page-level settings and permissions for this space."
+            "description": "Configure page-level settings and permissions for this space.",
+            "management_title": "Page Management",
+            "management_description": "Manage and organize pages in this space. Move pages to reorder the structure.",
+            "search_placeholder": "Search pages...",
+            "tree_title": "Page Structure",
+            "pages_count": "pages",
+            "empty": "No pages in this space",
+            "load_error": "Failed to load page tree",
+            "move_title": "Move Page",
+            "move_description": "Select a new parent for \"{{name}}\"",
+            "move_search": "Search target page...",
+            "move_to_root": "Space root (top level)",
+            "move_cancel": "Cancel",
+            "move_confirm": "Move",
+            "move_success": "Page moved successfully",
+            "move_error": "Failed to move page"
           },
           "member": {
             "tab": "Members",

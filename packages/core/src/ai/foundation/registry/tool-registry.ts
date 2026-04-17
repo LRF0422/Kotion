@@ -21,6 +21,7 @@ import { createMiscTools } from '../../tools/misc-tools'
 import { createColumnsTools } from '../../tools/columns-tools'
 import { createStructureTools } from '../../tools/structure-tools'
 import { createFormatTools } from '../../tools/format-tools'
+import { createCalloutTools } from '../../tools/callout-tools'
 
 type ToolFactory = (editor: Editor) => ToolDefinition
 type ReloadCallback = () => void
@@ -118,6 +119,12 @@ class GlobalToolRegistryImpl implements ToolRegistry {
         // Format tools
         const formatTools = createFormatTools(editor)
         for (const [name, tool] of Object.entries(formatTools)) {
+            factoryMap[name] = () => tool as ToolDefinition
+        }
+
+        // Callout tools
+        const calloutTools = createCalloutTools(editor)
+        for (const [name, tool] of Object.entries(calloutTools)) {
             factoryMap[name] = () => tool as ToolDefinition
         }
 

@@ -12,7 +12,7 @@ import {
 } from '../types';
 
 export class SpaceApi {
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) { }
 
   /**
    * Create space
@@ -81,7 +81,7 @@ export class SpaceApi {
 }
 
 export class PageApi {
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) { }
 
   /**
    * Create page
@@ -221,6 +221,19 @@ export class PageApi {
   ): Promise<any> {
     return this.http.post(
       `/knowledge-wiki/space/page/${pageId}/share-link`,
+      dto
+    );
+  }
+
+  /**
+   * Move page to another parent/space
+   */
+  async movePage(
+    pageId: number,
+    dto: { targetParentId: number | null; targetSpaceId: number }
+  ): Promise<void> {
+    return this.http.put(
+      `/knowledge-wiki/space/page/${pageId}/move`,
       dto
     );
   }
