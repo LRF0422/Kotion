@@ -15,12 +15,12 @@ export const Empty: React.FC<EmptyProps> = (props) => {
 
     const { title, desc, button, icon } = props
 
-    return <div className={cn("w-full flex justify-center text-gray-400 border-dashed rounded-sm border p-4", props.className)}>
-        <div className=" flex flex-col items-center gap-2 ">
+    return <div className={cn("w-full flex justify-center text-muted-foreground border-dashed rounded-sm border p-3", props.className)}>
+        <div className=" flex flex-col items-center gap-1.5 ">
             {icon || <Package2 className="h-10 w-10" />}
-            <div className="flex flex-col items-center gap-2">
-                <h4 className=" font-bold">{title || 'Empty'}</h4>
-                <p className=" text-gray-500 text-sm">{desc}</p>
+            <div className="flex flex-col items-center gap-1">
+                <h4 className="font-medium text-xs">{title || 'Empty'}</h4>
+                {desc && <p className=" text-muted-foreground text-[11px] leading-tight">{desc}</p>}
             </div>
             {button}
         </div>

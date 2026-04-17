@@ -540,7 +540,7 @@ const TreeItemGroup: React.FC<any> = memo((props) => {
         : {};
 
     return <div className={props.className || ""}>
-        <div className={`p-1 text-xs text-gray-500 flex justify-between items-center flex-shrink-0`}>
+        <div className={`px-1 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground flex justify-between items-center flex-shrink-0`}>
             <div>
                 {props.name}
             </div>

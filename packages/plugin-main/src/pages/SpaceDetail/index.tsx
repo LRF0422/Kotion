@@ -332,25 +332,25 @@ export const SpaceDetail: React.FC = () => {
             id: '/space/:id/overView',
             className: 'px-0 mb-2',
             customerRender:
-                <div className="flex flex-col gap-2 p-2 sm:p-3 border-b">
+                <div className="flex flex-col gap-1.5 p-2 border-b pb-3">
                     <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => {
                             navigator.go({
                                 to: `/space-detail/${params.id}/page/${space.homePageId}`
                             })
                         }}>
-                            <div className="text-xl sm:text-2xl flex-shrink-0">{space?.icon?.icon}</div>
+                            <div className="text-xl flex-shrink-0">{space?.icon?.icon}</div>
                             <div className="flex flex-col min-w-0 flex-1">
-                                <h2 className="font-semibold text-sm sm:text-base truncate">{space.name}</h2>
-                                <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Personal Space</p>
+                                <h2 className="font-semibold text-sm truncate">{space.name}</h2>
+                                <p className="text-[10px] text-muted-foreground truncate">Personal Space</p>
                             </div>
                         </div>
-                        <IconButton icon={<StarIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} onClick={handleFavorite} className="h-7 w-7 sm:h-8 sm:w-8" />
+                        <IconButton icon={<StarIcon className="h-3.5 w-3.5" />} onClick={handleFavorite} className="h-6 w-6" />
                     </div>
                     <div className="relative">
                         <Input
                             placeholder="Search pages..."
-                            className="h-8 sm:h-9 pl-3 pr-8 text-sm"
+                            className="h-7 pl-2.5 pr-8 text-xs bg-muted/50 border-0 focus:bg-background focus:border focus:border-border"
                             onFocus={toggle}
                         />
                     </div>
@@ -362,10 +362,10 @@ export const SpaceDetail: React.FC = () => {
             id: 'favorite',
             icon: <Star className="h-4 w-4" />,
             isGroup: true,
-            className: 'mt-2',
+            className: 'mt-1',
             emptyProps: {
-                icon: <Star className="h-8 w-8 text-muted-foreground/50" />,
-                title: 'No favorites yet',
+                icon: <Star className="h-5 w-5 text-muted-foreground/40" />,
+                title: 'No favorites',
                 description: 'Star pages to quick access'
             },
             children: favorites.map((it: any, index) => ({
@@ -408,20 +408,20 @@ export const SpaceDetail: React.FC = () => {
             height: 'calc(100vh - 500px)',
             icon: <Package className="h-4 w-4" />,
             actions: [
-                <div key="search-actions" className="flex items-center gap-1">
+                <div key="search-actions" className="flex items-center gap-0.5">
                     <Input
                         onChange={(e) => setSearchValue(e.target.value)}
-                        className="h-6 sm:h-7 text-xs sm:text-sm"
+                        className="h-5 text-[11px] bg-muted/50 border-0 focus:bg-background focus:border focus:border-border"
                         placeholder="Filter..."
                     />
                     <Button
-                        className="h-6 w-6 sm:h-7 sm:w-7"
+                        className="h-5 w-5 p-0"
                         variant="ghost"
                         size="icon"
                         onClick={() => handleCreatePage()}
                         title="New page"
                     >
-                        <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+                        <Plus className="h-3 w-3" />
                     </Button>
                 </div>
             ],
@@ -437,93 +437,78 @@ export const SpaceDetail: React.FC = () => {
             children: pageTree?.length > 0 ? pageTree.map(it => resolve(it)) as SiderMenuItemProps[] : []
         },
         {
-            name: 'Separator',
-            key: 'separator-1',
-            id: 'separator-1',
+            name: 'Bottom Utilities',
+            key: 'bottom-utilities',
+            id: 'bottom-utilities',
             icon: '',
-            customerRender: <div className="border-t my-2"></div>
-        },
-        {
-            name: 'Templates',
-            id: '/space/:id/templates',
-            icon: <LayoutTemplate className="h-3.5 w-3.5 sm:h-4 sm:w-4" />,
-            key: '/space/:id/templates',
-            className: 'hover:bg-muted text-xs sm:text-sm',
-            onClick: () => {
-                setVisible(true)
-            }
-        },
-        {
-            name: 'Settings',
-            id: '/space/:id/settings',
-            icon: <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />,
-            key: '/space/:id/settings',
-            className: 'hover:bg-muted text-xs sm:text-sm',
-            onClick: () => {
-                navigator.go({
-                    to: `/space-detail/${params.id}/settings`
-                })
-            }
-        },
-        {
-            name: 'Trash',
-            customerRender: <DropdownMenu>
-                <DropdownMenuTrigger className="flex flex-row gap-2 items-center w-full py-1 px-1 rounded-sm text-xs sm:text-sm hover:bg-muted transition-colors">
-                    <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                    <span className="flex-1 text-left">Trash</span>
-                    {trash.length > 0 && <Badge variant="secondary" className="h-4 sm:h-5 px-1 sm:px-1.5 text-[10px] sm:text-xs">{trash.length}</Badge>}
-                </DropdownMenuTrigger>
-                <DropdownMenuContent side="right" align="start" className="w-[280px] sm:w-[320px] max-h-[350px] sm:max-h-[400px]">
-                    <DropdownMenuLabel className="pb-2">
-                        <div className="flex items-center justify-between text-xs sm:text-sm">
-                            <span>Trash</span>
-                            <span className="text-[10px] sm:text-xs text-muted-foreground">{trash.length} items</span>
-                        </div>
-                    </DropdownMenuLabel>
-                    <div className="max-h-[300px] sm:max-h-[350px] overflow-auto">
-                        {trash.length > 0 ? trash.map((item: any, index) => (
-                            <DropdownMenuItem key={index} className="flex flex-row justify-between items-center gap-2 py-2">
-                                <div className="flex-1 truncate text-xs sm:text-sm">
-                                    {item.icon?.icon && <span className="mr-1">{item.icon.icon}</span>}
-                                    {item.title}
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 sm:h-7 px-1.5 sm:px-2"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRestorePage(item.id);
-                                        }}
-                                        title="Restore"
-                                    >
-                                        <Undo2 className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                                    </Button>
-                                </div>
-                            </DropdownMenuItem>
-                        )) : (
-                            <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-center">
-                                <Trash2 className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground/50 mb-2" />
-                                <p className="text-xs sm:text-sm text-muted-foreground">Trash is empty</p>
+            customerRender: <div className="border-t pt-1 mt-1 space-y-0.5">
+                <div
+                    className="flex items-center gap-2 py-1 px-1 rounded-md cursor-pointer hover:bg-muted transition-colors text-xs sm:text-sm"
+                    onClick={() => setVisible(true)}
+                >
+                    <LayoutTemplate className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="flex-1">Templates</span>
+                </div>
+                <div
+                    className="flex items-center gap-2 py-1 px-1 rounded-md cursor-pointer hover:bg-muted transition-colors text-xs sm:text-sm"
+                    onClick={() => {
+                        navigator.go({
+                            to: `/space-detail/${params.id}/settings`
+                        })
+                    }}
+                >
+                    <Settings className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="flex-1">Settings</span>
+                </div>
+                <DropdownMenu>
+                    <DropdownMenuTrigger className="flex items-center gap-2 w-full py-1 px-1 rounded-md text-xs sm:text-sm hover:bg-muted transition-colors">
+                        <Trash2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="flex-1 text-left">Trash</span>
+                        {trash.length > 0 && <Badge variant="secondary" className="h-4 sm:h-5 px-1 sm:px-1.5 text-[10px] sm:text-xs">{trash.length}</Badge>}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent side="right" align="start" className="w-[280px] sm:w-[320px] max-h-[350px] sm:max-h-[400px]">
+                        <DropdownMenuLabel className="pb-2">
+                            <div className="flex items-center justify-between text-xs sm:text-sm">
+                                <span>Trash</span>
+                                <span className="text-[10px] sm:text-xs text-muted-foreground">{trash.length} items</span>
                             </div>
-                        )}
-                    </div>
-                </DropdownMenuContent>
-            </DropdownMenu>,
-            id: '/space/:id/trash',
-            icon: <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />,
-            key: '/space/:id/trash',
-            className: 'hover:bg-muted'
-        }, {
-            name: "Save as Template",
-            id: "",
-            key: "",
-            icon: <></>,
-            customerRender: <TemplateCreator mode="space" space={space} className="flex flex-row gap-2 items-center w-full py-1 px-1 rounded-sm text-xs sm:text-sm hover:bg-muted transition-colors">
-                <CircleArrowUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <div>Save as Template</div>
-            </TemplateCreator>
+                        </DropdownMenuLabel>
+                        <div className="max-h-[300px] sm:max-h-[350px] overflow-auto">
+                            {trash.length > 0 ? trash.map((item: any, index) => (
+                                <DropdownMenuItem key={index} className="flex flex-row justify-between items-center gap-2 py-2">
+                                    <div className="flex-1 truncate text-xs sm:text-sm">
+                                        {item.icon?.icon && <span className="mr-1">{item.icon.icon}</span>}
+                                        {item.title}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 sm:h-7 px-1.5 sm:px-2"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRestorePage(item.id);
+                                            }}
+                                            title="Restore"
+                                        >
+                                            <Undo2 className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                                        </Button>
+                                    </div>
+                                </DropdownMenuItem>
+                            )) : (
+                                <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-center">
+                                    <Trash2 className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground/50 mb-2" />
+                                    <p className="text-xs sm:text-sm text-muted-foreground">Trash is empty</p>
+                                </div>
+                            )}
+                        </div>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                <TemplateCreator mode="space" space={space} className="flex items-center gap-2 w-full py-1 px-1 rounded-md text-xs sm:text-sm hover:bg-muted transition-colors">
+                    <CircleArrowUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="flex-1">Save as Template</span>
+                </TemplateCreator>
+            </div>
         }
     ] : [], [space, favorites, pageTree, trash, params.id, navigator, toggle, handleFavorite, handleCreatePage, handleRestorePage, resolve])
 
