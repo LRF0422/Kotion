@@ -468,7 +468,7 @@ export const SpaceDetail: React.FC = () => {
         {
             name: 'Trash',
             customerRender: <DropdownMenu>
-                <DropdownMenuTrigger className="flex flex-row gap-2 items-center w-full px-2 py-2 rounded-sm text-xs sm:text-sm hover:bg-muted transition-colors">
+                <DropdownMenuTrigger className="flex flex-row gap-2 items-center w-full py-1 px-1 rounded-sm text-xs sm:text-sm hover:bg-muted transition-colors">
                     <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     <span className="flex-1 text-left">Trash</span>
                     {trash.length > 0 && <Badge variant="secondary" className="h-4 sm:h-5 px-1 sm:px-1.5 text-[10px] sm:text-xs">{trash.length}</Badge>}
@@ -520,7 +520,7 @@ export const SpaceDetail: React.FC = () => {
             id: "",
             key: "",
             icon: <></>,
-            customerRender: <TemplateCreator mode="space" space={space} className="flex flex-row gap-2 items-center w-full px-2 py-2 rounded-sm text-xs sm:text-sm hover:bg-muted transition-colors">
+            customerRender: <TemplateCreator mode="space" space={space} className="flex flex-row gap-2 items-center w-full py-1 px-1 rounded-sm text-xs sm:text-sm hover:bg-muted transition-colors">
                 <CircleArrowUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 <div>Save as Template</div>
             </TemplateCreator>
