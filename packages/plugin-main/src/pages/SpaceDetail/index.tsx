@@ -342,7 +342,6 @@ export const SpaceDetail: React.FC = () => {
                             <div className="text-xl flex-shrink-0">{space?.icon?.icon}</div>
                             <div className="flex flex-col min-w-0 flex-1">
                                 <h2 className="font-semibold text-sm truncate">{space.name}</h2>
-                                <p className="text-[10px] text-muted-foreground truncate">Personal Space</p>
                             </div>
                         </div>
                         <IconButton icon={<StarIcon className="h-3.5 w-3.5" />} onClick={handleFavorite} className="h-6 w-6" />
