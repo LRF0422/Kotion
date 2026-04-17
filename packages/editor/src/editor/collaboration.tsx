@@ -43,7 +43,6 @@ export interface CollaborationEditorProps extends EditorRenderProps {
   onContentReady?: () => void;
 }
 
-// const MemorizedToC = React.memo(ToC)
 
 export const CollaborationEditor = forwardRef<
   Editor | null,

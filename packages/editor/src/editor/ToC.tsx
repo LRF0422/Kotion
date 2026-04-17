@@ -1,14 +1,21 @@
 import { useTranslation } from '@kn/common'
-import { Empty, ScrollArea, cn, Badge, Separator } from '@kn/ui'
+import { Empty, ScrollArea, cn, Badge } from '@kn/ui'
 import { Editor } from '@tiptap/core'
 import { TextSelection } from '@tiptap/pm/state'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { List } from '@kn/icon'
 import scrollIntoView from 'scroll-into-view-if-needed'
 
+export interface TocItem {
+    id: string
+    level: number
+    itemIndex: string
+    textContent: string
+    isActive?: boolean
+    isScrolledOver?: boolean
+}
 
-export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number, isActive: boolean }> = ({ item, onItemClick, index, isActive }) => {
-    // Light and dark mode color variants for different heading levels
+export const ToCItem: React.FC<{ item: TocItem; onItemClick: (e: React.MouseEvent, item: TocItem) => void; isActive: boolean; focusedIndex: number; index: number; onKeyDown: (e: React.KeyboardEvent, index: number) => void }> = memo(({ item, onItemClick, isActive, focusedIndex, index, onKeyDown }) => {
     const levelColors = [
         'text-slate-900 dark:text-slate-100',
         'text-slate-700 dark:text-slate-300',
@@ -18,6 +25,8 @@ export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number, isA
 
     return (
         <div
+            role="treeitem"
+            aria-selected={isActive}
             className={cn(
                 "group relative rounded-md transition-all duration-200 cursor-pointer",
                 "hover:bg-accent/50 dark:hover:bg-accent/30",
@@ -33,14 +42,17 @@ export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number, isA
         >
             <a
                 className={cn(
-                    "flex items-start gap-2 w-full no-underline",
+                    "flex items-start gap-2 w-full no-underline outline-none",
                     "text-sm leading-relaxed",
                     levelColors[Math.min(item.level - 1, 3)],
                     "hover:text-primary dark:hover:text-primary transition-colors",
+                    "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 rounded",
                     isActive && "text-primary dark:text-primary font-medium"
                 )}
                 href={`#${item.id}`}
                 onClick={e => onItemClick(e, item)}
+                onKeyDown={e => onKeyDown(e, index)}
+                tabIndex={focusedIndex === index ? 0 : -1}
             >
                 <span className="text-xs opacity-60 dark:opacity-50 min-w-[24px] font-mono">
                     {item.itemIndex}.
@@ -54,7 +66,9 @@ export const ToCItem: React.FC<{ item: any, onItemClick: any, index: number, isA
             )}
         </div>
     )
-}
+})
+
+ToCItem.displayName = 'ToCItem'
 
 export const ToCEmptyState = () => {
 
@@ -65,59 +79,60 @@ export const ToCEmptyState = () => {
     )
 }
 
-export const ToC: React.FC<{ editor: Editor, className?: string, items: any[] }> = ({
+export const ToC: React.FC<{ editor: Editor; className?: string; items: TocItem[] }> = ({
     editor,
     className,
     items
 }) => {
     const [activeId, setActiveId] = useState<string | null>(null)
     const { t } = useTranslation()
+    const rafRef = useRef<number>(0)
+    const [focusedIndex, setFocusedIndex] = useState<number>(-1)
 
     useEffect(() => {
         const handleScroll = () => {
-            const headings = items.map(item => {
-                const element = editor.view.dom.querySelector(`[data-toc-id="${item.id}"]`)
-                if (element) {
-                    const rect = element.getBoundingClientRect()
-                    return { id: item.id, top: rect.top }
-                }
-                return null
-            }).filter(Boolean)
+            cancelAnimationFrame(rafRef.current)
+            rafRef.current = requestAnimationFrame(() => {
+                const headings = items.map(item => {
+                    const element = editor.view.dom.querySelector(`[data-toc-id="${item.id}"]`)
+                    if (element) {
+                        const rect = element.getBoundingClientRect()
+                        return { id: item.id, top: rect.top }
+                    }
+                    return null
+                }).filter(Boolean)
 
-            // Find the heading closest to the top of the viewport
-            const current = headings.find(h => h!.top > 0 && h!.top < 200)
-            if (current) {
-                setActiveId(current.id)
-            } else if (headings.length > 0) {
-                // If no heading is in the ideal zone, use the last one above viewport
-                const above = headings.filter(h => h!.top <= 0)
-                if (above.length > 0) {
-                    setActiveId(above[above.length - 1]!.id)
+                // Find the heading closest to the top of the viewport
+                const current = headings.find(h => h!.top > 0 && h!.top < 200)
+                if (current) {
+                    setActiveId(current.id)
+                } else if (headings.length > 0) {
+                    // If no heading is in the ideal zone, use the last one above viewport
+                    const above = headings.filter(h => h!.top <= 0)
+                    if (above.length > 0) {
+                        setActiveId(above[above.length - 1]!.id)
+                    }
                 }
-            }
+            })
         }
 
         const editorElement = editor.view.dom.closest('.overflow-auto')
-        editorElement?.addEventListener('scroll', handleScroll)
+        editorElement?.addEventListener('scroll', handleScroll, { passive: true })
         handleScroll() // Initial check
 
         return () => {
+            cancelAnimationFrame(rafRef.current)
             editorElement?.removeEventListener('scroll', handleScroll)
         }
     }, [editor, items])
 
-    if (items.length === 0) {
-        return <ToCEmptyState />
-    }
-
-    const onItemClick = (e: Event, item: any) => {
+    const onItemClick = useCallback((e: React.MouseEvent, item: TocItem) => {
         e.preventDefault()
 
         if (editor) {
             const element = editor.view.dom.querySelector(`[data-toc-id="${item.id}"]`) as HTMLElement
             if (!element) return
 
-            // Use scroll-into-view-if-needed for smooth scrolling in nested containers
             scrollIntoView(element, {
                 behavior: 'smooth',
                 scrollMode: 'always',
@@ -125,7 +140,6 @@ export const ToC: React.FC<{ editor: Editor, className?: string, items: any[] }>
                 inline: 'nearest'
             })
 
-            // Set selection and add highlight effect after scroll completes
             setTimeout(() => {
                 const pos = editor.view.posAtDOM(element, 0)
                 const tr = editor.view.state.tr
@@ -133,13 +147,10 @@ export const ToC: React.FC<{ editor: Editor, className?: string, items: any[] }>
                 editor.view.dispatch(tr)
                 editor.view.focus()
 
-                // Add flash highlight effect using class
                 element.classList.remove('toc-highlight-flash')
-                // Force reflow to restart animation
                 void element.offsetWidth
                 element.classList.add('toc-highlight-flash')
 
-                // Remove class after animation completes
                 setTimeout(() => {
                     element.classList.remove('toc-highlight-flash')
                 }, 1000)
@@ -147,6 +158,32 @@ export const ToC: React.FC<{ editor: Editor, className?: string, items: any[] }>
 
             setActiveId(item.id)
         }
+    }, [editor])
+
+    const onItemKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault()
+            const next = Math.min(index + 1, items.length - 1)
+            setFocusedIndex(next)
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault()
+            const prev = Math.max(index - 1, 0)
+            setFocusedIndex(prev)
+        } else if (e.key === 'Enter') {
+            e.preventDefault()
+            const item = items[index]
+            if (item) onItemClick(e as unknown as React.MouseEvent, item)
+        } else if (e.key === 'Home') {
+            e.preventDefault()
+            setFocusedIndex(0)
+        } else if (e.key === 'End') {
+            e.preventDefault()
+            setFocusedIndex(items.length - 1)
+        }
+    }, [items, onItemClick])
+
+    if (items.length === 0) {
+        return <ToCEmptyState />
     }
 
     return (
@@ -163,13 +200,15 @@ export const ToC: React.FC<{ editor: Editor, className?: string, items: any[] }>
                 </Badge>
             </div>
             <ScrollArea className="flex-1 px-3 py-2 bg-background dark:bg-background">
-                <div className="space-y-1">
-                    {items.map((item: any, i: number) => (
+                <div role="tree" className="space-y-1">
+                    {items.map((item, index) => (
                         <ToCItem
                             onItemClick={onItemClick}
+                            onKeyDown={onItemKeyDown}
                             key={item.id}
                             item={item}
-                            index={i + 1}
+                            index={index}
+                            focusedIndex={focusedIndex}
                             isActive={activeId === item.id}
                         />
                     ))}
