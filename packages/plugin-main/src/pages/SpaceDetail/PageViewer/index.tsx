@@ -1,9 +1,6 @@
 import { APIS } from "../../../api";
-import { Button, useIsMobile, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
+import { Button, useIsMobile, Sheet, SheetContent, SheetTrigger, SheetTitle, Separator } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@kn/ui";
-import { Input } from "@kn/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
-import { Separator } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
 import { EditorRender, findNodeByBlockId } from "@kn/editor";
 import { event, ON_FAVORITE_CHANGE } from "../../../event";
@@ -11,12 +8,13 @@ import { useLocation } from "@kn/common";
 import { useNavigator, useApi, useMobilePageHeader } from "@kn/core";
 import { Editor } from "@kn/editor";
 import { useToggle } from "@kn/core";
-import { Edit, Loader, MessageCircleCode, MoreHorizontal, Plus, Share, Star, List } from "@kn/icon";
+import { Edit, MessageCircleCode, MoreHorizontal, Share, Star, List } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { useParams } from "@kn/common";
 import { toast } from "@kn/ui";
 import { smoothScrollIntoViewIfNeeded } from '@kn/common';
 import { PageBreadcrumb } from '../../../components/PageBreadcrumb';
+import { CollaborationInvitationDlg } from '../../components/CollaborationInvitationDlg';
 
 export const PageViewer: React.FC = () => {
 
@@ -94,6 +92,8 @@ export const PageViewer: React.FC = () => {
         })
     }
 
+    const [shareDialogOpen, setShareDialogOpen] = useState(false)
+
     // Set mobile header info when page is loaded
     useEffect(() => {
         if (page && isMobile) {
@@ -116,6 +116,13 @@ export const PageViewer: React.FC = () => {
                                 <div id="mobile-toc-container-viewer" className="h-full" />
                             </SheetContent>
                         </Sheet>
+                        <CollaborationInvitationDlg
+                            pageTitle={page?.title}
+                            open={shareDialogOpen}
+                            onOpenChange={setShareDialogOpen}
+                        >
+                            <span /> {/* Placeholder - trigger is the DropdownMenuItem below */}
+                        </CollaborationInvitationDlg>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon">
@@ -123,6 +130,12 @@ export const PageViewer: React.FC = () => {
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent className="w-[200px]">
+                                <DropdownMenuItem onClick={() => setShareDialogOpen(true)}>
+                                    <div className="flex items-center gap-2">
+                                        <Share className="h-4 w-4" />
+                                        <span>Share</span>
+                                    </div>
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => {
                                     page.favorite ? handleRemoveFavorite() : handleAddFavorite()
                                 }}>
@@ -137,7 +150,7 @@ export const PageViewer: React.FC = () => {
         } else if (!isMobile) {
             clearHeaderInfo()
         }
-    }, [page, isMobile, tocOpen])
+    }, [page, isMobile, tocOpen, shareDialogOpen])
 
     return loading ? <div className="w-full h-full">
         {/* Only show skeleton header on desktop */}
@@ -192,23 +205,9 @@ export const PageViewer: React.FC = () => {
                 <div className="flex flex-row items-center gap-1 px-1 flex-shrink-0">
                     <Button variant="ghost" size="icon" onClick={goToEditor}><Edit className="h-5 w-5" /></Button>
                     <Separator orientation="vertical" />
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button variant="ghost" size="icon"><Share className="h-5 w-5" /></Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[500px] flex flex-col gap-2 text-sm" >
-                            <h3>Share this document</h3>
-                            <div className="flex w-full max-w-sm items-center space-x-2">
-                                <Input className="h-7" type="email" placeholder="Email" />
-                                <Button size="sm">Copy Link</Button>
-                            </div>
-                            <Separator />
-                            <div className="flex flex-row items-center justify-between">
-                                <h3>People with access</h3>
-                                <Button variant="ghost" size="sm"><Plus className="h-4 w-4" /></Button>
-                            </div>
-                        </PopoverContent>
-                    </Popover>
+                    <CollaborationInvitationDlg pageTitle={page?.title}>
+                        <Button variant="ghost" size="icon"><Share className="h-5 w-5" /></Button>
+                    </CollaborationInvitationDlg>
                     <Button variant="ghost" size="icon" onClick={() => {
                         page.favorite ? handleRemoveFavorite() : handleAddFavorite()
                     }}>

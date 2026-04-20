@@ -12,8 +12,8 @@ import { useApi } from "@kn/core";
 import { useSafeState } from "@kn/core";
 import { useDebounce } from "@kn/core";
 import { Check, Copy, Globe, Link2, Loader2, Mail, Search, Trash2, User, UserPlus, Users, X } from "@kn/icon";
-import React, { PropsWithChildren, useCallback, useEffect, useState } from "react";
-import { useParams } from "@kn/common";
+import React, { PropsWithChildren, useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useTranslation } from "@kn/common";
 import { toast } from "@kn/ui";
 import { cn } from "@kn/ui";
 
@@ -29,19 +29,27 @@ interface CollaboratorUser {
 interface CollaborationInvitationDlgProps extends PropsWithChildren {
     pageTitle?: string;
     onInviteSuccess?: () => void;
+    /** Controlled open state */
+    open?: boolean;
+    /** Callback when open state changes */
+    onOpenChange?: (open: boolean) => void;
 }
 
-// Permission options
-const PERMISSIONS = [
-    { value: 'READ', label: 'Can view', description: 'Can only view the page' },
-    { value: 'WRITE', label: 'Can edit', description: 'Can view and edit the page' },
-    { value: 'ADMIN', label: 'Full access', description: 'Can manage collaborators' },
-];
 
 export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProps> = (props) => {
-    const { pageTitle, onInviteSuccess } = props;
-    const [open, setOpen] = useState(false);
+    const { pageTitle, onInviteSuccess, open: controlledOpen, onOpenChange } = props;
+    const { t } = useTranslation();
+    const [internalOpen, setInternalOpen] = useState(false);
+    const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+    const setOpen = onOpenChange || setInternalOpen;
     const [activeTab, setActiveTab] = useState('invite');
+
+    // Permission options - derived from i18n
+    const PERMISSIONS = useMemo(() => [
+        { value: 'READ', label: t('collaboration.permission-view'), description: t('collaboration.permission-view-desc') },
+        { value: 'WRITE', label: t('collaboration.permission-edit'), description: t('collaboration.permission-edit-desc') },
+        { value: 'ADMIN', label: t('collaboration.permission-admin'), description: t('collaboration.permission-admin-desc') },
+    ], [t]);
 
     // Search and user selection state
     const [searchQuery, setSearchQuery] = useState('');
@@ -149,7 +157,7 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
     // Handle user invitation
     const handleInviteUsers = async () => {
         if (selectedUsers.length === 0) {
-            toast.error("Please select at least one user to invite");
+            toast.error(t('collaboration.invite-select-user'));
             return;
         }
 
@@ -162,13 +170,13 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
                 permissions: [selectedPermission]
             };
             await useApi(APIS.CREATE_INVITATION, null, param);
-            toast.success(`Successfully invited ${selectedUsers.length} user(s)`);
+            toast.success(t('collaboration.invite-success', { count: selectedUsers.length }));
             setSelectedUsers([]);
             setSearchQuery('');
             onInviteSuccess?.();
         } catch (error) {
             console.error('Failed to invite users:', error);
-            toast.error("Failed to send invitation");
+            toast.error(t('collaboration.invite-error'));
         } finally {
             setIsInviting(false);
         }
@@ -177,7 +185,7 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
     // Handle email invitation
     const handleInviteByEmail = async () => {
         if (emails.length === 0) {
-            toast.error("Please enter at least one email address");
+            toast.error(t('collaboration.email-required'));
             return;
         }
 
@@ -190,12 +198,12 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
                 permissions: [emailPermission]
             };
             await useApi(APIS.CREATE_INVITATION, null, param);
-            toast.success(`Invitation sent to ${emails.length} email(s)`);
+            toast.success(t('collaboration.email-success', { count: emails.length }));
             setEmails([]);
             onInviteSuccess?.();
         } catch (error) {
             console.error('Failed to send email invitation:', error);
-            toast.error("Failed to send email invitation");
+            toast.error(t('collaboration.email-error'));
         } finally {
             setIsInviting(false);
         }
@@ -206,10 +214,10 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
         try {
             await useApi(APIS.REMOVE_PAGE_COLLABORATOR, { pageId: params.pageId, userId });
             setCollaborators(prev => prev.filter(c => c.id !== userId));
-            toast.success("Collaborator removed");
+            toast.success(t('collaboration.collaborator-removed'));
         } catch (error) {
             console.error('Failed to remove collaborator:', error);
-            toast.error("Failed to remove collaborator");
+            toast.error(t('collaboration.collaborator-remove-error'));
         }
     };
 
@@ -218,10 +226,10 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
         try {
             await useApi(APIS.UPDATE_COLLABORATOR_PERMISSION, { pageId: params.pageId, userId }, { permission });
             setCollaborators(prev => prev.map(c => c.id === userId ? { ...c, permission: permission as 'READ' | 'WRITE' | 'ADMIN' } : c));
-            toast.success("Permission updated");
+            toast.success(t('collaboration.permission-updated'));
         } catch (error) {
             console.error('Failed to update permission:', error);
-            toast.error("Failed to update permission");
+            toast.error(t('collaboration.permission-update-error'));
         }
     };
 
@@ -247,10 +255,10 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
         try {
             await navigator.clipboard.writeText(linkToCopy);
             setLinkCopied(true);
-            toast.success("Link copied to clipboard");
+            toast.success(t('collaboration.link-copied'));
             setTimeout(() => setLinkCopied(false), 2000);
         } catch (error) {
-            toast.error("Failed to copy link");
+            toast.error(t('collaboration.link-copy-error'));
         }
     };
 
@@ -271,10 +279,10 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <UserPlus className="h-5 w-5" />
-                        Invite to Edit
+                        {t('collaboration.title')}
                     </DialogTitle>
                     <DialogDescription>
-                        {pageTitle ? `Share "${pageTitle}" with others` : 'Invite people to collaborate on this page'}
+                        {pageTitle ? t('collaboration.description-with-title', { title: pageTitle }) : t('collaboration.description')}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -282,15 +290,15 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
                     <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="invite" className="gap-1">
                             <User className="h-3.5 w-3.5" />
-                            <span className="hidden sm:inline">Invite</span>
+                            <span className="hidden sm:inline">{t('collaboration.tab-invite')}</span>
                         </TabsTrigger>
                         <TabsTrigger value="email" className="gap-1">
                             <Mail className="h-3.5 w-3.5" />
-                            <span className="hidden sm:inline">Email</span>
+                            <span className="hidden sm:inline">{t('collaboration.tab-email')}</span>
                         </TabsTrigger>
                         <TabsTrigger value="manage" className="gap-1">
                             <Users className="h-3.5 w-3.5" />
-                            <span className="hidden sm:inline">Manage</span>
+                            <span className="hidden sm:inline">{t('collaboration.tab-manage')}</span>
                         </TabsTrigger>
                     </TabsList>
 
@@ -321,7 +329,7 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search by name or email..."
+                                placeholder={t('collaboration.search-placeholder')}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="pl-9"
@@ -369,7 +377,7 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
                         {searchQuery.length >= 2 && !isSearching && searchResults.length === 0 && (
                             <div className="text-center py-6 text-muted-foreground">
                                 <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                                <p>No users found</p>
+                                <p>{t('collaboration.no-users-found')}</p>
                             </div>
                         )}
 
@@ -397,12 +405,12 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
                                 {isInviting ? (
                                     <>
                                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                        Sending...
+                                        {t('collaboration.invite-sending')}
                                     </>
                                 ) : (
                                     <>
                                         <UserPlus className="h-4 w-4 mr-2" />
-                                        Invite {selectedUsers.length > 0 ? `(${selectedUsers.length})` : ''}
+                                        {t('collaboration.invite-button')} {selectedUsers.length > 0 ? `(${selectedUsers.length})` : ''}
                                     </>
                                 )}
                             </Button>
@@ -413,19 +421,19 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
                     <TabsContent value="email" className="space-y-4 mt-4">
                         <div className="space-y-3">
                             <div>
-                                <label className="text-sm font-medium mb-2 block">Email Addresses</label>
+                                <label className="text-sm font-medium mb-2 block">{t('collaboration.email-label')}</label>
                                 <TagInput
                                     tags={emails}
                                     setTags={(newValues) => setEmails(newValues)}
                                     activeTagIndex={activeTagIndex}
                                     setActiveTagIndex={setActiveTagIndex}
-                                    placeholder="Enter email addresses..."
+                                    placeholder={t('collaboration.email-placeholder')}
                                     styleClasses={{
                                         input: 'min-h-[80px]',
                                     }}
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    Press Enter or comma to add each email
+                                    {t('collaboration.email-hint')}
                                 </p>
                             </div>
 
@@ -450,12 +458,12 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
                                     {isInviting ? (
                                         <>
                                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                            Sending...
+                                            {t('collaboration.email-sending')}
                                         </>
                                     ) : (
                                         <>
                                             <Mail className="h-4 w-4 mr-2" />
-                                            Send Invitation
+                                            {t('collaboration.email-send')}
                                         </>
                                     )}
                                 </Button>
@@ -515,8 +523,8 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
                         ) : (
                             <div className="text-center py-8 text-muted-foreground">
                                 <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                                <p className="font-medium">No collaborators yet</p>
-                                <p className="text-sm">Invite people to start collaborating</p>
+                                <p className="font-medium">{t('collaboration.manage-no-collaborators')}</p>
+                                <p className="text-sm">{t('collaboration.manage-no-collaborators-hint')}</p>
                             </div>
                         )}
                     </TabsContent>
@@ -528,11 +536,11 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <Link2 className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm font-medium">Share Link</span>
+                            <span className="text-sm font-medium">{t('collaboration.share-link')}</span>
                         </div>
                         <Badge variant="outline" className="text-xs">
                             <Globe className="h-3 w-3 mr-1" />
-                            {isPublic ? 'Public' : 'Private'}
+                            {isPublic ? t('collaboration.public') : t('collaboration.private')}
                         </Badge>
                     </div>
                     <div className="flex gap-2">
