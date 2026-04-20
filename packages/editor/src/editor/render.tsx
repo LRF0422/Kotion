@@ -10,6 +10,7 @@ import { EditorProvider } from "./provider";
 import { AnyExtension, Content, Editor, JSONContent, getSchema } from "@tiptap/core";
 import { ExtensionWrapper } from "@kn/common";
 import { useEditorExtension } from "./use-extension";
+import { resolveBlockMenuItems } from "./kit";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { ThemeProvider } from "styled-components";
 import light, { dark } from "../styles/theme";
@@ -62,6 +63,7 @@ export const EditorRender = forwardRef<
   } = props;
 
   const [exts, extensionWrappers] = useEditorExtension(undefined, withTitle)
+  const blockMenuItems = React.useMemo(() => resolveBlockMenuItems(extensionWrappers as ExtensionWrapper[]), [extensionWrappers])
   const [items, setItems] = useSafeState<any[]>([])
   const [tocVisible, setTocVisible] = useSafeState(false)
   const [contentReady, setContentReady] = useSafeState(false)
@@ -95,6 +97,14 @@ export const EditorRender = forwardRef<
     },
     [allExtensions]
   );
+
+  // Set block menu items into dragable extension storage
+  React.useEffect(() => {
+    if (editor) {
+      // @ts-ignore
+      editor.storage.dragable = { ...editor.storage.dragable, blockMenuItems }
+    }
+  }, [editor, blockMenuItems])
 
   useImperativeHandle(ref, () => editor as Editor, [editor]);
 

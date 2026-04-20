@@ -5,6 +5,7 @@ import { EditorRenderProps } from "./render";
 import { TiptapCollabProvider } from "@hocuspocus/provider";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEditorExtension } from "./use-extension";
+import { resolveBlockMenuItems } from "./kit";
 import { ThemeProvider } from "styled-components";
 import light, { dark } from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
@@ -51,6 +52,7 @@ export const CollaborationEditor = forwardRef<
   const { content, user, provider, pageInfo, toc, withTitle, width = 'w-[calc(100vw-350px)]', externalExtensions, onContentReady } = props
 
   const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle, externalExtensions)
+  const blockMenuItems = React.useMemo(() => resolveBlockMenuItems(extensionWrappers as ExtensionWrapper[]), [extensionWrappers])
   const [items, setItems] = useSafeState<any[]>([])
   const [tocVisible, setTocVisible] = useSafeState(false)
   const [contentReady, setContentReady] = useSafeState(false)
@@ -134,6 +136,14 @@ export const CollaborationEditor = forwardRef<
     },
     [editorExtensions]
   );
+
+  // Set block menu items into dragable extension storage
+  React.useEffect(() => {
+    if (editor) {
+      // @ts-ignore
+      editor.storage.dragable = { ...editor.storage.dragable, blockMenuItems }
+    }
+  }, [editor, blockMenuItems])
 
   useImperativeHandle(ref, () => editor as Editor)
 

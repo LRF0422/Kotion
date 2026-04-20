@@ -1,4 +1,4 @@
-import ReactDOM from 'react-dom';
+import { createRoot, Root } from 'react-dom/client';
 
 import { Extension } from '@tiptap/core';
 import { safePos } from '../../utilities/position';
@@ -15,20 +15,39 @@ import { findParentNodeClosestToPos } from 'prosemirror-utils';
 import { Decoration, DecorationSet, EditorView } from '@tiptap/pm/view';
 import { createColumnsFromNodes } from '../columns/utilities';
 import { Node } from '@tiptap/pm/model';
+import React from 'react';
+import { BlockMenu, BlockMenuItem } from './block-menu';
+import { Editor } from '@tiptap/core';
 
 const DragablePluginKey = new PMPluginKey('dragable');
 
-export const Dragable = Extension.create({
+export interface DragableStorage {
+  blockMenuItems: BlockMenuItem[]
+}
+
+export const Dragable = Extension.create<DragableStorage>({
   name: 'dragable',
+
+  addStorage() {
+    return {
+      blockMenuItems: [] as BlockMenuItem[],
+    }
+  },
 
   // @ts-ignore
   addProseMirrorPlugins() {
+    const editor = this.editor
+    const storage = this.storage as DragableStorage
+
     let editorView: EditorView;
+    let containerDOM: HTMLElement;
     let dragHandleDOM: HTMLElement;
+    let blockMenuMountDOM: HTMLElement;
     let activeNode: ActiveNode | null;
     let activeSelection: Selection | null;
     let dragging = false;
     let mouseleaveTimer: any = null;
+    let blockMenuRoot: Root | null = null;
 
     // Column drop zone state
     let dropZoneIndicator: HTMLElement | null = null;
@@ -36,25 +55,58 @@ export const Dragable = Extension.create({
     let columnDropTimer: any = null;
     const COLUMN_DROP_DELAY = 800; // ms to wait before showing column indicator
 
-    const createDragHandleDOM = () => {
-      const dom = document.createElement('div');
-      dom.className = 'dragable';
-      dom.draggable = true;
-      dom.setAttribute('data-drag-handle', 'true');
+    const createDragHandleContainer = () => {
+      const container = document.createElement('div');
+      container.className = 'drag-handle-container';
 
-      return dom;
+      const menuMount = document.createElement('div');
+      menuMount.className = 'block-menu-mount';
+      container.appendChild(menuMount);
+
+      const handle = document.createElement('div');
+      handle.className = 'dragable';
+      handle.draggable = true;
+      handle.setAttribute('data-drag-handle', 'true');
+      container.appendChild(handle);
+
+      return { container, menuMount, handle };
     };
 
     const showDragHandleDOM = () => {
-      dragHandleDOM?.classList?.add('show');
-      dragHandleDOM?.classList?.remove('hide');
+      containerDOM?.classList?.add('show');
+      containerDOM?.classList?.remove('hide');
     };
 
     const hideDragHandleDOM = () => {
-      dragHandleDOM?.classList?.remove('show');
-      dragHandleDOM?.classList?.remove('active');
-      dragHandleDOM?.classList?.add('hide');
+      // Don't hide if the block menu dropdown is open
+      if (containerDOM?.getAttribute('data-menu-open') === 'true') return;
+      containerDOM?.classList?.remove('show');
+      containerDOM?.classList?.remove('active');
+      containerDOM?.classList?.add('hide');
     };
+
+    const renderBlockMenu = () => {
+      if (!blockMenuMountDOM || !editor) return
+
+      if (!blockMenuRoot) {
+        blockMenuRoot = createRoot(blockMenuMountDOM)
+      }
+
+      blockMenuRoot.render(
+        React.createElement(BlockMenu, {
+          editor: editor as Editor,
+          activeNode,
+          items: storage.blockMenuItems,
+        })
+      )
+    }
+
+    const unmountBlockMenu = () => {
+      if (blockMenuRoot) {
+        blockMenuRoot.unmount()
+        blockMenuRoot = null
+      }
+    }
 
     const renderDragHandleDOM = (view: EditorView, referenceRectDOM: HTMLElement, activeNode: ActiveNode) => {
       const root = view.dom.parentElement;
@@ -63,7 +115,6 @@ export const Dragable = Extension.create({
 
       const targetNodeRect = referenceRectDOM.getBoundingClientRect();
       const rootRect = root.getBoundingClientRect();
-      const handleRect = dragHandleDOM.getBoundingClientRect();
 
       let offsetX = -5;
 
@@ -71,13 +122,12 @@ export const Dragable = Extension.create({
         offsetX = referenceRectDOM.getAttribute('data-checked') ? -3 : -16;
       }
 
-      const left = targetNodeRect.left - rootRect.left - handleRect.width + offsetX;
-      const top = targetNodeRect.top - rootRect.top + handleRect.height / 2 + root.scrollTop;
+      const containerWidth = containerDOM.offsetWidth || 34; // 16px + 2px gap + 16px
+      const left = targetNodeRect.left - rootRect.left - containerWidth + offsetX;
+      const top = targetNodeRect.top - rootRect.top + 8 + root.scrollTop;
 
-      const offsetLeft = 0;
-
-      dragHandleDOM.style.left = `${left + offsetLeft}px`;
-      dragHandleDOM.style.top = `${top - 2}px`;
+      containerDOM.style.left = `${left}px`;
+      containerDOM.style.top = `${top - 2}px`;
 
       showDragHandleDOM();
     };
@@ -91,7 +141,9 @@ export const Dragable = Extension.create({
 
     const handleMouseLeave = () => {
       if (!activeNode) return null;
-      hideDragHandleDOM();
+      mouseleaveTimer = setTimeout(() => {
+        hideDragHandleDOM();
+      }, 300);
     };
 
     const handleMouseDown = () => {
@@ -207,13 +259,21 @@ export const Dragable = Extension.create({
         key: DragablePluginKey,
         view: (view) => {
           if (view.editable) {
-            dragHandleDOM = createDragHandleDOM();
-            dragHandleDOM.addEventListener('mouseenter', handleMouseEnter);
-            dragHandleDOM.addEventListener('mouseleave', handleMouseLeave);
+            const result = createDragHandleContainer();
+            containerDOM = result.container;
+            blockMenuMountDOM = result.menuMount;
+            dragHandleDOM = result.handle;
+
+            // Hover show/hide on container only (not individual children)
+            containerDOM.addEventListener('mouseenter', handleMouseEnter);
+            containerDOM.addEventListener('mouseleave', handleMouseLeave);
+
+            // Drag/click events stay on the drag handle
             dragHandleDOM.addEventListener('mousedown', handleMouseDown);
             dragHandleDOM.addEventListener('mouseup', handleMouseUp);
             dragHandleDOM.addEventListener('dragstart', handleDragStart);
-            view.dom.parentNode?.appendChild(dragHandleDOM);
+
+            view.dom.parentNode?.appendChild(containerDOM);
             view.dom.parentElement?.setAttribute('style', "position: relative;");
           }
 
@@ -222,17 +282,17 @@ export const Dragable = Extension.create({
               editorView = view;
             },
             destroy: () => {
-              if (!dragHandleDOM) return;
+              if (!containerDOM) return;
 
               clearTimeout(mouseleaveTimer);
               clearTimeout(columnDropTimer);
-              ReactDOM.unmountComponentAtNode(dragHandleDOM);
-              dragHandleDOM.removeEventListener('mouseenter', handleMouseEnter);
-              dragHandleDOM.removeEventListener('mouseleave', handleMouseLeave);
+              unmountBlockMenu();
               dragHandleDOM.removeEventListener('mousedown', handleMouseDown);
               dragHandleDOM.removeEventListener('mouseup', handleMouseUp);
               dragHandleDOM.removeEventListener('dragstart', handleDragStart);
-              dragHandleDOM.remove();
+              containerDOM.removeEventListener('mouseenter', handleMouseEnter);
+              containerDOM.removeEventListener('mouseleave', handleMouseLeave);
+              containerDOM.remove();
               dropZoneIndicator?.remove();
               dropZoneIndicator = null;
             },
@@ -374,7 +434,7 @@ export const Dragable = Extension.create({
               return false;
             },
             drop: (view, event: DragEvent) => {
-              if (!view.editable || !dragHandleDOM) return false;
+              if (!view.editable || !containerDOM) return false;
               if (!activeSelection) return false;
 
               // Always clear the column drop timer on any drop
@@ -458,7 +518,7 @@ export const Dragable = Extension.create({
                     view.state.doc.resolve(safePos(view.state, eventPos?.pos ?? 0))
                   );
                   view.dispatch(view.state.tr.setSelection(noneSelection));
-                  this.editor.commands.blur();
+                  editor.commands.blur();
 
                   activeSelection = null;
                   activeNode = null;
@@ -471,7 +531,7 @@ export const Dragable = Extension.create({
               }
 
               const maybeTitle = findParentNodeClosestToPos(
-                view.state.doc.resolve(safePos(this.editor.state, eventPos.pos)),
+                view.state.doc.resolve(safePos(editor.state, eventPos.pos)),
                 (node) => node.type.name === 'title'
               );
 
@@ -498,7 +558,7 @@ export const Dragable = Extension.create({
               return false;
             },
             mousemove: (view, event) => {
-              if (!view.editable || !dragHandleDOM) return false;
+              if (!view.editable || !containerDOM) return false;
 
               const coords = { left: event.clientX, top: event.clientY };
               const pos = view.posAtCoords(coords);
@@ -574,10 +634,11 @@ export const Dragable = Extension.create({
 
               activeNode = result;
               renderDragHandleDOM(view, result.el, activeNode);
+              renderBlockMenu();
               return false;
             },
             keydown: () => {
-              if (!editorView.editable || !dragHandleDOM) return false;
+              if (!editorView.editable || !containerDOM) return false;
               hideDragHandleDOM();
               return false;
             },

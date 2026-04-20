@@ -14,6 +14,7 @@ import { useState } from "react";
 import { isChangeOrigin } from "@tiptap/extension-collaboration";
 import { createSlash } from "../extensions/slash";
 import { UniqueID } from "../extensions/unique-id";
+import { BlockMenuItem } from "../extensions/dragable/block-menu";
 
 export interface EditorKit {
   extensions?: Array<AnyExtension | AnyExtension[]>;
@@ -31,6 +32,16 @@ export const resolveExtesions = (extensions?: ExtensionWrapper[] | any[]) => {
     }
   })
   return editorExtensions;
+}
+
+export const resolveBlockMenuItems = (extensions?: ExtensionWrapper[]): BlockMenuItem[] => {
+  let items: BlockMenuItem[] = []
+  extensions && extensions.forEach(it => {
+    if (it.blockMenuConfig) {
+      items = [...items, ...it.blockMenuConfig]
+    }
+  })
+  return items
 }
 
 export const resloveSlash = (extensions?: ExtensionWrapper[]) => {

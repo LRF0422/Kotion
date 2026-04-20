@@ -37,4 +37,9 @@ export interface ExtensionWrapper {
         systemPromptFragment?: string,
         tags?: string[]
     }[]
+    blockMenuConfig?: {
+        icon?: ReactNode
+        label: string
+        action: (editor: Editor, node: any, pos: number) => void
+    }[]
 }

@@ -632,19 +632,15 @@ export const StyledEditor = styled.div.attrs({
   /* E Resizable */
 
   /* S Dragable */
-  [data-drag-handle] {
+  .drag-handle-container {
     position: absolute;
     z-index: 100;
-    display: inline;
-    width: 16px;
-    height: 16px;
-    cursor: move;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 1px;
     opacity: 0;
     transition: opacity 0.3s ease-out;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='1' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='1' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='3' y='6' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='6' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='3' y='11' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='11' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3C/svg%3E");
-    background-size: contain;
-    background-position: center 0;
-    background-repeat: no-repeat;
 
     &.show {
       opacity: 0.5;
@@ -657,6 +653,33 @@ export const StyledEditor = styled.div.attrs({
     &.hide {
       opacity: 0;
     }
+  }
+
+  .block-menu-trigger {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 4px;
+    color: hsl(var(--muted-foreground));
+
+    &:hover {
+      background: hsl(var(--muted));
+      color: hsl(var(--foreground));
+    }
+  }
+
+  [data-drag-handle] {
+    display: inline;
+    width: 18px;
+    height: 18px;
+    cursor: move;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='1' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='1' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='3' y='6' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='6' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='3' y='11' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='11' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-position: center 0;
+    background-repeat: no-repeat;
   }
   
   /* Dark mode drag handle */

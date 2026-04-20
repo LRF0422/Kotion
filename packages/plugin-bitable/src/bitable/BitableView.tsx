@@ -480,7 +480,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     };
 
     return (
-        <NodeViewWrapper className="node-bitable-wrapper" contentEditable={false}>
+        <NodeViewWrapper className="node-bitable-wrapper">
             <div className="bitable-container min-h-[400px] w-full rounded-lg bg-transparent text-gray-900 dark:text-white">
                 {/* 视图标签页和工具栏 */}
                 <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-border">
