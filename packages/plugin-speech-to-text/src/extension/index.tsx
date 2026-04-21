@@ -3,7 +3,7 @@ import { ExtensionWrapper } from "@kn/common";
 import { Extension } from "@kn/editor";
 import { SpeechToTextPanel } from "./menu/SpeechToTextPanel";
 import { SpeechToTextStaticMenu } from "./menu/static";
-import { MeetingMinutesNode } from "./meeting-minutes/meeting-minutes";
+import { MeetingMinutesNode, MeetingTabSummaryNode, MeetingTabNotesNode, MeetingTabTranscriptNode } from "./meeting-minutes/meeting-minutes";
 import { FileAudio } from "@kn/icon";
 
 const SpeechToTextExt = Extension.create({
@@ -12,7 +12,7 @@ const SpeechToTextExt = Extension.create({
 
 export const SpeechToTextExtension: ExtensionWrapper = {
     name: 'speechToText',
-    extendsion: [SpeechToTextExt, MeetingMinutesNode],
+    extendsion: [SpeechToTextExt, MeetingMinutesNode, MeetingTabSummaryNode, MeetingTabNotesNode, MeetingTabTranscriptNode],
     menuConfig: {
         group: 'block',
         menu: SpeechToTextStaticMenu,
@@ -21,7 +21,7 @@ export const SpeechToTextExtension: ExtensionWrapper = {
     slashConfig: [
         {
             icon: <FileAudio className="h-4 w-4" />,
-            text: '会议纪要',
+            text: 'Meeting Minutes',
             slash: '/meeting',
             action: (editor) => {
                 editor.commands.insertMeetingMinutes();

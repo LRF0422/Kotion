@@ -385,106 +385,107 @@ const BookmarkViewComponent: React.FC<NodeViewProps> = ({
         <NodeViewWrapper>
             <div
                 className={cn(
-                    "group relative my-2 rounded-lg border border-border bg-card transition-all overflow-hidden",
-                    "hover:shadow-md hover:border-primary/30",
+                    "group relative my-2 flex overflow-hidden rounded-md border border-border/60 bg-card transition-colors",
+                    "hover:bg-accent/20 hover:border-border",
                     isEditable && "cursor-pointer"
                 )}
+                onClick={handleOpenLink}
+                title={url}
             >
-                <div className="flex items-start p-4 gap-4">
-                    {/* Left side - Content */}
-                    <div className="flex-1 min-w-0 space-y-2">
-                        {/* URL with favicon */}
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            {faviconUrl && (
-                                <img
-                                    src={faviconUrl}
-                                    alt=""
-                                    className="w-4 h-4 flex-shrink-0 rounded-sm"
-                                    onError={(e) => {
-                                        e.currentTarget.style.display = 'none';
-                                    }}
-                                />
-                            )}
-                            {!faviconUrl && <BookmarkIcon className="w-4 h-4 flex-shrink-0 text-primary" />}
-                            <span className="truncate hover:text-foreground transition-colors">
-                                {domain || url}
-                            </span>
-                        </div>
+                {/* Left side - Content */}
+                <div className="flex min-w-0 flex-1 flex-col justify-center px-4 py-3">
+                    {/* Title */}
+                    {title ? (
+                        <h3 className="mb-1 text-sm font-medium text-foreground line-clamp-1">
+                            {title}
+                        </h3>
+                    ) : url && (
+                        <h3 className="mb-1 text-sm font-medium text-muted-foreground line-clamp-1">
+                            {url}
+                        </h3>
+                    )}
 
-                        {/* Title */}
-                        {title ? (
-                            <h3 className="font-semibold text-base line-clamp-2 text-foreground group-hover:text-primary transition-colors">
-                                {title}
-                            </h3>
-                        ) : url && (
-                            <h3 className="font-medium text-sm line-clamp-1 text-muted-foreground">
-                                {url}
-                            </h3>
-                        )}
+                    {/* Description */}
+                    {description && (
+                        <p className="mb-2 text-xs text-muted-foreground line-clamp-1">
+                            {description}
+                        </p>
+                    )}
 
-                        {/* Description */}
-                        {description && (
-                            <p className="text-sm text-muted-foreground line-clamp-2">
-                                {description}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Right side - Preview image */}
-                    {image && (
-                        <div className="flex-shrink-0 w-32 h-24 rounded-md overflow-hidden bg-muted">
+                    {/* URL with favicon */}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
+                        {faviconUrl ? (
                             <img
-                                src={image}
-                                alt={title || 'Bookmark preview'}
-                                className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                src={faviconUrl}
+                                alt=""
+                                className="h-3.5 w-3.5 flex-shrink-0 rounded-[2px]"
                                 onError={(e) => {
-                                    e.currentTarget.parentElement!.style.display = 'none';
+                                    e.currentTarget.style.display = 'none';
                                 }}
                             />
-                        </div>
-                    )}
+                        ) : (
+                            <BookmarkIcon className="h-3.5 w-3.5 flex-shrink-0 opacity-60" />
+                        )}
+                        <span className="truncate">
+                            {domain || url}
+                        </span>
+                    </div>
                 </div>
+
+                {/* Right side - Preview image */}
+                {image && (
+                    <div className="flex-shrink-0 w-[120px] border-l border-border/40 bg-muted">
+                        <img
+                            src={image}
+                            alt={title || 'Bookmark preview'}
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                                e.currentTarget.parentElement!.style.display = 'none';
+                            }}
+                        />
+                    </div>
+                )}
 
                 {/* Action buttons - shown on hover when editable */}
                 {isEditable && (
-                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-background/80 backdrop-blur-sm rounded-md p-1">
+                    <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 bg-background/90 backdrop-blur-sm rounded-sm shadow-sm p-0.5 border border-border/40">
                         <Button
                             size="sm"
                             variant="ghost"
-                            className="h-7 w-7 p-0"
-                            onClick={handleOpenLink}
+                            className="h-6 w-6 p-0"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenLink();
+                            }}
                             title="Open link"
                         >
-                            <ExternalLink className="h-3.5 w-3.5" />
+                            <ExternalLink className="h-3 w-3" />
                         </Button>
                         <Button
                             size="sm"
                             variant="ghost"
-                            className="h-7 w-7 p-0"
-                            onClick={handleEdit}
+                            className="h-6 w-6 p-0"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleEdit();
+                            }}
                             title="Edit bookmark"
                         >
-                            <Edit className="h-3.5 w-3.5" />
+                            <Edit className="h-3 w-3" />
                         </Button>
                         <Button
                             size="sm"
                             variant="ghost"
-                            className="h-7 w-7 p-0 hover:bg-destructive/10 hover:text-destructive"
-                            onClick={handleDelete}
+                            className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete();
+                            }}
                             title="Delete bookmark"
                         >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="h-3 w-3" />
                         </Button>
                     </div>
-                )}
-
-                {/* Click to open link - only in read mode */}
-                {!isEditable && url && (
-                    <div
-                        className="absolute inset-0 cursor-pointer"
-                        onClick={handleOpenLink}
-                        title="Open link in new tab"
-                    />
                 )}
             </div>
         </NodeViewWrapper>

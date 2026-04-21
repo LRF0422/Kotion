@@ -1,4 +1,4 @@
-import { NodeViewProps, NodeViewWrapper, NodeViewContent, Editor } from "@kn/editor";
+import { NodeViewProps, NodeViewWrapper, NodeViewContent, Editor, Node as PMNode } from "@kn/editor";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useMeetingRecorder } from "../../hooks/useMeetingRecorder";
 import { useFileService, useEditorAgentOptimized } from "@kn/core";
@@ -8,8 +8,38 @@ import { toast } from "@kn/ui";
 import {
     Mic, Pause, Play, Square, Sparkles,
     Loader2, Save, RotateCcw, Calendar, Share2,
-    PenLine, ListTree, ThumbsUp, ThumbsDown, ChevronDown
+    PenLine, ListTree, ThumbsUp, ThumbsDown, ChevronDown,
+    Lightbulb, Settings, Volume2, Copy, Pencil
 } from "@kn/icon";
+
+// ─── Tab Visibility CSS ───────────────────────────────
+// The parent div has data-active-tab="summary|notes|transcript".
+// Each child tab node renders a div with data-tab="summary|notes|transcript".
+// Only the active tab's content is visible and editable.
+
+// ─── Tab Visibility CSS ───────────────────────────────
+// The parent div has data-active-tab="summary|notes|transcript".
+// Each child tab node renders a div with data-tab="summary|notes|transcript".
+// Only the active tab's content is visible and editable.
+
+const TAB_VISIBILITY_STYLE_ID = 'meeting-minutes-tab-styles';
+
+function injectTabStyles() {
+    if (typeof document === 'undefined') return;
+    if (document.getElementById(TAB_VISIBILITY_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = TAB_VISIBILITY_STYLE_ID;
+    style.textContent = `
+.meeting-tabs-container [data-tab] { display: none; }
+.meeting-tabs-container[data-active-tab="summary"] [data-tab="summary"],
+.meeting-tabs-container[data-active-tab="notes"] [data-tab="notes"],
+.meeting-tabs-container[data-active-tab="transcript"] [data-tab="transcript"] { display: block; }
+`;
+    document.head.appendChild(style);
+}
+
+// Inject on module load
+injectTabStyles();
 
 // ─── Helpers ────────────────────────────────────────────
 
@@ -24,11 +54,23 @@ const formatDuration = (seconds: number): string => {
 };
 
 const formatDate = (timestamp: number | null): string => {
-    if (!timestamp) return '今天';
+    if (!timestamp) return 'Today';
     const date = new Date(timestamp);
     const now = new Date();
-    if (date.toDateString() === now.toDateString()) return '今天';
-    return date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' });
+    if (date.toDateString() === now.toDateString()) return 'Today';
+    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+};
+
+// ─── Calendar Day Icon ──────────────────────────────────
+
+const CalendarDayIcon: React.FC = () => {
+    const day = new Date().getDate();
+    return (
+        <div className="w-6 h-6 rounded-md bg-muted flex items-center justify-center shrink-0 relative overflow-hidden">
+            <Calendar className="h-4 w-4 text-muted-foreground absolute" />
+            <span className="text-[8px] font-bold text-foreground relative z-10 mt-1.5">{day}</span>
+        </div>
+    );
 };
 
 // ─── Audio Player ───────────────────────────────────────
@@ -95,6 +137,28 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl }) => {
 type RecordingState = 'idle' | 'recording' | 'paused' | 'processing' | 'completed';
 type MeetingTab = 'summary' | 'notes' | 'transcript';
 
+/**
+ * Find the position + size of a specific child tab node inside the meetingMinutes node.
+ * Returns { pos, node } or null.
+ */
+const findTabChild = (
+    doc: { nodeAt: (pos: number) => PMNode | null },
+    parentPos: number,
+    tabType: string
+): { pos: number; node: PMNode } | null => {
+    const parent = doc.nodeAt(parentPos);
+    if (!parent) return null;
+    let offset = parentPos + 1; // start after the parent's opening tag
+    for (let i = 0; i < parent.childCount; i++) {
+        const child = parent.child(i);
+        if (child.type.name === tabType) {
+            return { pos: offset, node: child };
+        }
+        offset += child.nodeSize;
+    }
+    return null;
+};
+
 // ─── Main View ──────────────────────────────────────────
 
 export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
@@ -114,7 +178,7 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
     const [transcript, setTranscript] = useState(node.attrs.transcript || '');
     const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
     const [localAudioUrl, setLocalAudioUrl] = useState<string | null>(node.attrs.audioUrl || null);
-    const [activeTab, setActiveTab] = useState<MeetingTab>((node.attrs.activeTab as MeetingTab) || 'summary');
+    const [activeTab, setActiveTab] = useState<MeetingTab>((node.attrs.activeTab as MeetingTab) || 'notes');
     const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const titleInputRef = useRef<HTMLInputElement>(null);
@@ -137,6 +201,13 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
         if (activeTab !== node.attrs.activeTab) {
             updateAttributes({ activeTab });
         }
+    }, [activeTab]);
+
+    // ─── Tab switching (CSS-based, no content swapping) ────
+
+    const handleTabSwitch = useCallback((newTab: MeetingTab) => {
+        if (newTab === activeTab) return;
+        setActiveTab(newTab);
     }, [activeTab]);
 
     // ─── Recording Handlers ─────────────────────────────
@@ -167,6 +238,24 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
             const t = result.transcript || '';
             setTranscript(t);
             setLocalAudioUrl(result.audioBlob ? URL.createObjectURL(result.audioBlob) : null);
+
+            // Insert transcript text into the meetingTabTranscript child node
+            const pos = getPos();
+            if (typeof pos === 'number' && t) {
+                const tabInfo = findTabChild(editor.state.doc, pos, 'meetingTabTranscript');
+                if (tabInfo) {
+                    editor.chain()
+                        .deleteRange({ from: tabInfo.pos + 1, to: tabInfo.pos + tabInfo.node.nodeSize - 1 })
+                        .insertContentAt(tabInfo.pos + 1, t, {
+                            applyInputRules: false,
+                            applyPasteRules: false,
+                            parseOptions: { preserveWhitespace: true }
+                        })
+                        .run();
+                }
+            }
+
+            setActiveTab('transcript');
             setState('completed');
         } else {
             setState('idle');
@@ -194,13 +283,16 @@ ${transcript}
 
             const { stream } = useEditorAgentOptimized(editor as Editor);
 
-            // Clear existing content and insert placeholder
+            // Clear existing summary content and insert placeholder
             const pos = getPos();
             if (typeof pos === 'number') {
-                editor.chain().focus()
-                    .deleteRange({ from: pos + 1, to: pos + node.nodeSize - 1 })
-                    .insertContentAt(pos + 1, { type: 'paragraph' })
-                    .run();
+                const tabInfo = findTabChild(editor.state.doc, pos, 'meetingTabSummary');
+                if (tabInfo) {
+                    editor.chain().focus()
+                        .deleteRange({ from: tabInfo.pos + 1, to: tabInfo.pos + tabInfo.node.nodeSize - 1 })
+                        .insertContentAt(tabInfo.pos + 1, { type: 'paragraph' })
+                        .run();
+                }
             }
 
             let summaryText = '';
@@ -214,39 +306,45 @@ ${transcript}
                 summaryText = `**[AI摘要生成失败]**\n\n${transcript.slice(0, 500)}${transcript.length > 500 ? '...' : ''}`;
             }
 
-            // Insert generated summary into the node's content
+            // Insert generated summary into the meetingTabSummary child node
             if (typeof pos === 'number' && summaryText) {
-                editor.chain().focus()
-                    .deleteRange({ from: pos + 1, to: pos + node.nodeSize - 1 })
-                    .insertContentAt(pos + 1, summaryText, {
-                        applyInputRules: false,
-                        applyPasteRules: false,
-                        parseOptions: { preserveWhitespace: false }
-                    })
-                    .run();
+                const tabInfo = findTabChild(editor.state.doc, pos, 'meetingTabSummary');
+                if (tabInfo) {
+                    editor.chain().focus()
+                        .deleteRange({ from: tabInfo.pos + 1, to: tabInfo.pos + tabInfo.node.nodeSize - 1 })
+                        .insertContentAt(tabInfo.pos + 1, summaryText, {
+                            applyInputRules: false,
+                            applyPasteRules: false,
+                            parseOptions: { preserveWhitespace: false }
+                        })
+                        .run();
+                }
             }
         } finally {
             setIsGeneratingSummary(false);
         }
-    }, [transcript, editor, getPos, node]);
+    }, [transcript, editor, getPos]);
 
     // ─── Insert Transcript ──────────────────────────────
 
     const handleInsertTranscript = useCallback(() => {
         if (!transcript) return;
+        // Insert transcript raw text into the transcript tab child node
         const pos = getPos();
         if (typeof pos === 'number') {
-            editor.chain().focus()
-                .deleteRange({ from: pos + 1, to: pos + node.nodeSize - 1 })
-                .insertContentAt(pos + 1, `## 录音转录\n\n${transcript}`, {
-                    applyInputRules: false,
-                    applyPasteRules: false,
-                    parseOptions: { preserveWhitespace: false }
-                })
-                .run();
-            setActiveTab('summary');
+            const tabInfo = findTabChild(editor.state.doc, pos, 'meetingTabTranscript');
+            if (tabInfo) {
+                editor.chain().focus()
+                    .deleteRange({ from: tabInfo.pos + 1, to: tabInfo.pos + tabInfo.node.nodeSize - 1 })
+                    .insertContentAt(tabInfo.pos + 1, transcript, {
+                        applyInputRules: false,
+                        applyPasteRules: false,
+                        parseOptions: { preserveWhitespace: true }
+                    })
+                    .run();
+            }
         }
-    }, [transcript, editor, getPos, node]);
+    }, [transcript, editor, getPos]);
 
     // ─── File & Share ───────────────────────────────────
 
@@ -279,17 +377,25 @@ ${transcript}
         setTranscript('');
         setLocalAudioUrl(null);
         setFeedbackGiven(null);
+        setActiveTab('notes');
         updateAttributes({
             isRecording: false, isPaused: false, duration: 0,
             audioPath: null, audioUrl: null, transcript: ''
         });
-        // Reset node content to empty paragraph
+        // Reset all three child tab nodes to empty paragraphs
         const pos = getPos();
         if (typeof pos === 'number') {
-            editor.chain()
-                .deleteRange({ from: pos + 1, to: pos + node.nodeSize - 1 })
-                .insertContentAt(pos + 1, { type: 'paragraph' })
-                .run();
+            const tabTypes = ['meetingTabSummary', 'meetingTabNotes', 'meetingTabTranscript'];
+            // Process in reverse order so position offsets remain valid
+            for (let i = tabTypes.length - 1; i >= 0; i--) {
+                const tabInfo = findTabChild(editor.state.doc, pos, tabTypes[i]);
+                if (tabInfo) {
+                    editor.chain()
+                        .deleteRange({ from: tabInfo.pos + 1, to: tabInfo.pos + tabInfo.node.nodeSize - 1 })
+                        .insertContentAt(tabInfo.pos + 1, { type: 'paragraph' })
+                        .run();
+                }
+            }
         }
     };
 
@@ -314,43 +420,151 @@ ${transcript}
         }
     }, []);
 
-    const meetingTitle = node.attrs.title || '会议纪要';
+    const meetingTitle = node.attrs.title || 'Meeting';
+
+    // ─── Consent state ──────────────────────────────────────
+    const [consentMode, setConsentMode] = useState<'myself' | 'audio'>('myself');
+    const [showConsentCard, setShowConsentCard] = useState(true);
 
     // ─── Tab definitions ────────────────────────────────
 
     const tabs: { key: MeetingTab; label: string; icon: React.ReactNode }[] = [
-        { key: 'summary', label: '摘要', icon: <Sparkles className="h-3.5 w-3.5" /> },
-        { key: 'notes', label: '笔记', icon: <PenLine className="h-3.5 w-3.5" /> },
-        { key: 'transcript', label: '转录', icon: <ListTree className="h-3.5 w-3.5" /> },
+        { key: 'summary', label: 'Summary', icon: <Sparkles className="h-3.5 w-3.5" /> },
+        { key: 'notes', label: 'Notes', icon: <PenLine className="h-3.5 w-3.5" /> },
+        { key: 'transcript', label: 'Transcript', icon: <ListTree className="h-3.5 w-3.5" /> },
     ];
 
-    // ─── Render: Idle ───────────────────────────────────
+    // ─── Render: Idle (Notion-style) ────────────────────
 
     if (state === 'idle') {
         return (
             <NodeViewWrapper as="div" className="my-4 not-prose">
                 <div className="w-full rounded-lg border border-border bg-card overflow-hidden">
-                    {/* Title bar */}
-                    <div className="px-4 py-3 flex items-center gap-2 border-b border-border/60">
-                        <div className="w-6 h-6 rounded bg-muted flex items-center justify-center shrink-0">
-                            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                        </div>
-                        <span className="text-base font-semibold text-foreground">{meetingTitle}</span>
+                    {/* ── Title Bar ── */}
+                    <div className="px-5 pt-4 pb-2 flex items-center gap-1.5 border-b border-border">
+                        <CalendarDayIcon />
+                        <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                        {isEditingTitle ? (
+                            <input
+                                ref={titleInputRef}
+                                value={node.attrs.title || ''}
+                                onChange={handleTitleChange}
+                                onBlur={handleTitleBlur}
+                                onKeyDown={handleTitleKeyDown}
+                                className="text-base font-semibold text-foreground bg-transparent outline-none border-none flex-1 min-w-0"
+                                placeholder="Meeting title…"
+                            />
+                        ) : (
+                            <h3
+                                className="text-base font-semibold text-foreground truncate cursor-text flex-1 min-w-0"
+                                onClick={handleTitleClick}
+                            >
+                                {meetingTitle}
+                            </h3>
+                        )}
+                        <span className="text-sm text-blue-500 shrink-0 ml-1 select-none">
+                            @{formatDate(node.attrs.createdAt)}
+                        </span>
                     </div>
-                    {/* Empty body */}
-                    <div className="flex flex-col items-center justify-center py-10 gap-3">
-                        <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center">
-                            <Mic className="h-6 w-6 text-muted-foreground/70" />
+
+                    {/* ── Navigation Bar ── */}
+                    <div className="px-5 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            {/* Notes pill button */}
+                            <button
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-sm text-foreground hover:bg-muted/80 transition-colors"
+                            >
+                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                Notes
+                            </button>
                         </div>
-                        <p className="text-sm text-muted-foreground">点击开始录制会议</p>
-                        <Button onClick={handleStart} size="sm" className="gap-1.5">
-                            <Mic className="h-3.5 w-3.5" />
-                            开始录音
-                        </Button>
+                        <div className="flex items-center gap-1.5">
+                            {/* Tip icon */}
+                            <button className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Tips">
+                                <Lightbulb className="h-4 w-4" />
+                            </button>
+                            {/* Settings icon */}
+                            <button className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Settings">
+                                <Settings className="h-4 w-4" />
+                            </button>
+                            {/* Start transcribing button */}
+                            <Button
+                                onClick={handleStart}
+                                size="sm"
+                                className="gap-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-3 h-7 text-xs"
+                            >
+                                Start transcribing
+                                <ChevronDown className="h-3 w-3" />
+                            </Button>
+                        </div>
                     </div>
-                    {/* Hidden NodeViewContent to satisfy ProseMirror content requirement */}
-                    <div className="hidden">
-                        <NodeViewContent />
+
+                    {/* ── Notes Editor (only meetingTabNotes visible) ── */}
+                    <div data-active-tab="notes" className="meeting-tabs-container">
+                        <NodeViewContent className="prose prose-sm dark:prose-invert max-w-none focus:outline-none prose-p:my-1 prose-p:text-sm prose-p:text-muted-foreground prose-headings:mt-3 prose-headings:mb-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5" />
+                    </div>
+
+                    {/* ── How it works ── */}
+                    <div className="px-5 pt-3 pb-3 border-t border-border/50">
+                        <p className="text-sm text-muted-foreground font-medium mb-2">How it works:</p>
+                        <ol className="text-sm text-muted-foreground space-y-1.5 list-decimal list-inside">
+                            <li>Click "Start transcribing" to get started.</li>
+                            <li>Add notes here anytime. AI uses them to make the summary smarter.</li>
+                            <li>When you're done, click "Stop". AI will generate a summary with action items.</li>
+                        </ol>
+                    </div>
+
+                    {/* ── Notification Consent Card ── */}
+                    {showConsentCard && (
+                        <div className="mx-5 mb-3 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-500/20">
+                            <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-1.5">Choose how you notify others</p>
+                            <p className="text-xs text-blue-700/70 dark:text-blue-300/80 mb-3 leading-relaxed">
+                                To let others know you're transcribing, Notion can play an audio message or you can continue to get consent yourself. Set your default for all meetings:
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setConsentMode('myself')}
+                                    className={cn(
+                                        "flex-1 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors",
+                                        consentMode === 'myself'
+                                            ? "border-blue-500 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300"
+                                            : "border-blue-300 dark:border-blue-500/40 text-blue-500 dark:text-blue-300/60 hover:border-blue-500 hover:text-blue-700 dark:hover:border-blue-500/70 dark:hover:text-blue-300"
+                                    )}
+                                >
+                                    Get consent myself
+                                </button>
+                                <button
+                                    onClick={() => setConsentMode('audio')}
+                                    className={cn(
+                                        "flex-1 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors",
+                                        consentMode === 'audio'
+                                            ? "border-blue-500 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300"
+                                            : "border-blue-300 dark:border-blue-500/40 text-blue-500 dark:text-blue-300/60 hover:border-blue-500 hover:text-blue-700 dark:hover:border-blue-500/70 dark:hover:text-blue-300"
+                                    )}
+                                >
+                                    Automatically play audio
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Footer ── */}
+                    <div className="px-5 py-2 border-t border-border flex items-center text-xs text-muted-foreground select-none gap-2">
+                        <span>Instructions:</span>
+                        <button className="inline-flex items-center gap-0.5 font-semibold text-foreground hover:text-foreground/80 transition-colors">
+                            Auto
+                            <ChevronDown className="h-3 w-3" />
+                        </button>
+                        <div className="w-px h-3 bg-border mx-1" />
+                        <span className="flex-1 truncate">By starting, you confirm everyone being transcribed has given consent.</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Volume">
+                                <Volume2 className="h-3 w-3" />
+                            </button>
+                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Copy">
+                                <Copy className="h-3 w-3" />
+                            </button>
+                        </div>
                     </div>
                 </div>
             </NodeViewWrapper>
@@ -363,51 +577,93 @@ ${transcript}
         return (
             <NodeViewWrapper as="div" className="my-4 not-prose">
                 <div className="w-full rounded-lg border border-blue-500/30 bg-card overflow-hidden">
-                    <div className="px-4 py-3 flex items-center gap-2 border-b border-border/60">
-                        <div className="w-6 h-6 rounded bg-muted flex items-center justify-center shrink-0">
-                            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                        </div>
+                    {/* ── Title Bar ── */}
+                    <div className="px-5 pt-4 pb-2 flex items-center gap-1.5">
+                        <CalendarDayIcon />
+                        <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
                         <span className="text-base font-semibold text-foreground">{meetingTitle}</span>
+                        <span className="text-sm text-blue-500 shrink-0 ml-1 select-none">
+                            @{formatDate(node.attrs.createdAt)}
+                        </span>
                     </div>
 
-                    <div className="p-5 flex flex-col items-center gap-4">
+                    {/* ── Recording Nav Bar ── */}
+                    <div className="px-5 py-2 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <div className={cn(
-                                "w-2.5 h-2.5 rounded-full",
+                                "w-2 h-2 rounded-full",
                                 state === 'recording' ? "bg-red-500 animate-pulse" : "bg-yellow-500"
                             )} />
                             <span className="text-sm text-muted-foreground">
-                                {state === 'recording' ? '正在录音' : '已暂停'}
+                                {state === 'recording' ? 'Transcribing' : 'Paused'}
                             </span>
-                            <span className="text-2xl font-mono font-semibold tabular-nums">
+                            <span className="text-xl font-mono font-semibold tabular-nums text-foreground">
                                 {formatDuration(duration)}
                             </span>
                         </div>
-
-                        {transcript && (
-                            <div className="w-full p-3 bg-muted/40 rounded-md max-h-20 overflow-y-auto">
-                                <p className="text-xs text-muted-foreground mb-1">实时转录</p>
-                                <p className="text-sm line-clamp-2">{transcript}</p>
-                            </div>
-                        )}
-
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
                             {state === 'recording' ? (
-                                <button onClick={handlePause} className="w-11 h-11 rounded-full bg-muted hover:bg-muted/80 flex items-center justify-center transition-colors">
-                                    <Pause className="h-5 w-5" />
+                                <button onClick={handlePause} className="h-7 px-3 rounded-md bg-muted hover:bg-muted/80 text-sm text-foreground flex items-center gap-1.5 transition-colors">
+                                    <Pause className="h-3.5 w-3.5" />
+                                    Pause
                                 </button>
                             ) : (
-                                <button onClick={handleResume} className="w-11 h-11 rounded-full bg-muted hover:bg-muted/80 flex items-center justify-center transition-colors">
-                                    <Play className="h-5 w-5 ml-0.5" />
+                                <button onClick={handleResume} className="h-7 px-3 rounded-md bg-muted hover:bg-muted/80 text-sm text-foreground flex items-center gap-1.5 transition-colors">
+                                    <Play className="h-3.5 w-3.5" />
+                                    Resume
                                 </button>
                             )}
-                            <button onClick={handleStop} className="w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white transition-colors shadow-md">
-                                <Square className="h-5 w-5" />
+                            <button onClick={handleStop} className="h-7 px-3 rounded-md bg-red-500 hover:bg-red-600 text-sm text-white flex items-center gap-1.5 transition-colors">
+                                <Square className="h-3.5 w-3.5" />
+                                Stop
                             </button>
                         </div>
                     </div>
 
-                    <div className="hidden"><NodeViewContent /></div>
+                    {/* ── Notes Editor (only meetingTabNotes visible) ── */}
+                    <div data-active-tab="notes" className="meeting-tabs-container px-5 pt-3 pb-2 min-h-[48px]">
+                        <NodeViewContent className="prose prose-sm dark:prose-invert max-w-none focus:outline-none prose-p:my-1 prose-p:text-sm prose-headings:mt-3 prose-headings:mb-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5" />
+                    </div>
+
+                    {/* ── Live Transcript (editable) ── */}
+                    <div className="px-5 pb-5">
+                        <div className="border-t border-border/50 pt-3">
+                            <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-xs text-muted-foreground font-medium">Live transcript</span>
+                                <span className="text-[10px] text-muted-foreground">Editable</span>
+                            </div>
+                            {transcript ? (
+                                <textarea
+                                    value={transcript}
+                                    onChange={(e) => setTranscript(e.target.value)}
+                                    className="w-full text-sm leading-relaxed bg-muted/40 rounded-md p-3 max-h-28 overflow-y-auto resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/40 text-foreground/90 placeholder:text-muted-foreground"
+                                    placeholder="Transcript will appear here…"
+                                    rows={3}
+                                />
+                            ) : (
+                                <p className="text-sm text-muted-foreground text-center py-3">Listening…</p>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ── Footer ── */}
+                    <div className="px-5 py-2 border-t border-border flex items-center text-xs text-muted-foreground select-none gap-2">
+                        <span>Instructions:</span>
+                        <button className="inline-flex items-center gap-0.5 font-semibold text-foreground hover:text-foreground/80 transition-colors">
+                            Auto
+                            <ChevronDown className="h-3 w-3" />
+                        </button>
+                        <div className="w-px h-3 bg-border mx-1" />
+                        <span className="flex-1 truncate">By starting, you confirm everyone being transcribed has given consent.</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Volume">
+                                <Volume2 className="h-3 w-3" />
+                            </button>
+                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Copy">
+                                <Copy className="h-3 w-3" />
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </NodeViewWrapper>
         );
@@ -419,15 +675,18 @@ ${transcript}
         return (
             <NodeViewWrapper as="div" className="my-4 not-prose">
                 <div className="w-full rounded-lg border border-border bg-card overflow-hidden">
-                    <div className="px-4 py-3 flex items-center gap-2 border-b border-border/60">
-                        <div className="w-6 h-6 rounded bg-muted flex items-center justify-center shrink-0">
-                            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                        </div>
+                    {/* ── Title Bar ── */}
+                    <div className="px-5 pt-4 pb-2 flex items-center gap-1.5">
+                        <CalendarDayIcon />
+                        <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
                         <span className="text-base font-semibold text-foreground">{meetingTitle}</span>
+                        <span className="text-sm text-blue-500 shrink-0 ml-1 select-none">
+                            @{formatDate(node.attrs.createdAt)}
+                        </span>
                     </div>
                     <div className="flex flex-col items-center justify-center py-10 gap-3">
                         <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-                        <p className="text-sm text-muted-foreground">处理中…</p>
+                        <p className="text-sm text-muted-foreground">Processing…</p>
                     </div>
                     <div className="hidden"><NodeViewContent /></div>
                 </div>
@@ -442,10 +701,8 @@ ${transcript}
             <div className="w-full rounded-lg border border-border bg-card overflow-hidden shadow-sm">
 
                 {/* ── Title Bar ── */}
-                <div className="px-5 pt-4 pb-3 flex items-center gap-1.5">
-                    <div className="w-7 h-7 rounded-md bg-muted flex items-center justify-center shrink-0">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                    </div>
+                <div className="px-5 pt-4 pb-2 flex items-center gap-1.5">
+                    <CalendarDayIcon />
                     <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
 
                     {isEditingTitle ? (
@@ -455,12 +712,12 @@ ${transcript}
                             onChange={handleTitleChange}
                             onBlur={handleTitleBlur}
                             onKeyDown={handleTitleKeyDown}
-                            className="text-lg font-semibold text-foreground bg-transparent outline-none border-none flex-1 min-w-0"
-                            placeholder="会议标题…"
+                            className="text-base font-semibold text-foreground bg-transparent outline-none border-none flex-1 min-w-0"
+                            placeholder="Meeting title…"
                         />
                     ) : (
                         <h3
-                            className="text-lg font-semibold text-foreground truncate cursor-text flex-1 min-w-0"
+                            className="text-base font-semibold text-foreground truncate cursor-text flex-1 min-w-0"
                             onClick={handleTitleClick}
                         >
                             {meetingTitle}
@@ -473,12 +730,12 @@ ${transcript}
                 </div>
 
                 {/* ── Tab Bar ── */}
-                <div className="px-5 flex items-center justify-between border-b border-border">
+                <div className="px-5 flex items-center justify-between border-b border-border/50">
                     <div className="flex items-center gap-0">
                         {tabs.map((tab) => (
                             <button
                                 key={tab.key}
-                                onClick={() => setActiveTab(tab.key)}
+                                onClick={() => handleTabSwitch(tab.key)}
                                 className={cn(
                                     "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors select-none",
                                     activeTab === tab.key
@@ -492,113 +749,96 @@ ${transcript}
                         ))}
                     </div>
                     <div className="flex items-center gap-0.5">
-                        <button onClick={handleReset} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="重新录制">
+                        <button onClick={handleReset} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="New recording">
                             <RotateCcw className="h-3.5 w-3.5" />
                         </button>
                         {localAudioUrl && (
-                            <button onClick={handleSaveToFile} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="保存录音">
+                            <button onClick={handleSaveToFile} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Save recording">
                                 <Save className="h-3.5 w-3.5" />
                             </button>
                         )}
                         <Button size="sm" onClick={handleShareSummary} className="ml-1.5 h-7 text-xs gap-1 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-3">
                             <Share2 className="h-3 w-3" />
-                            分享摘要
+                            Share
                         </Button>
                     </div>
                 </div>
 
                 {/* ── Tab Content ── */}
                 <div className="min-h-[100px]">
-
-                    {/* Summary / Notes tab → Editor content */}
-                    {(activeTab === 'summary' || activeTab === 'notes') && (
-                        <div>
-                            {/* Audio player */}
-                            {localAudioUrl && (
-                                <div className="mx-5 mt-4 p-2.5 bg-muted/30 rounded-md">
-                                    <AudioPlayer audioUrl={localAudioUrl} />
-                                </div>
-                            )}
-
-                            {/* Generate summary prompt */}
-                            {activeTab === 'summary' && !isGeneratingSummary && transcript && (
-                                <div className="mx-5 mt-3">
-                                    <Button variant="outline" size="sm" onClick={handleGenerateSummary} className="gap-1.5 text-xs h-7">
-                                        <Sparkles className="h-3.5 w-3.5 text-blue-500" />
-                                        生成 AI 摘要
-                                    </Button>
-                                </div>
-                            )}
-
-                            {/* Generating indicator */}
-                            {isGeneratingSummary && (
-                                <div className="mx-5 mt-3 flex items-center gap-2">
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
-                                    <span className="text-xs text-muted-foreground">正在生成摘要…</span>
-                                </div>
-                            )}
-
-                            {/* Editable content via editor */}
-                            <div className="px-5 py-3">
-                                <NodeViewContent className="min-h-[60px] prose prose-sm dark:prose-invert max-w-none focus:outline-none prose-p:my-1.5 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5" />
-                            </div>
+                    {/* Audio player (shown in all tabs) */}
+                    {localAudioUrl && (
+                        <div className="mx-5 mt-4 p-2.5 bg-muted/30 rounded-md">
+                            <AudioPlayer audioUrl={localAudioUrl} />
                         </div>
                     )}
 
-                    {/* Transcript tab → read-only transcript with option to insert */}
+                    {/* Summary tab header: Generate AI summary button */}
+                    {activeTab === 'summary' && !isGeneratingSummary && transcript && (
+                        <div className="mx-5 mt-3">
+                            <Button variant="outline" size="sm" onClick={handleGenerateSummary} className="gap-1.5 text-xs h-7">
+                                <Sparkles className="h-3.5 w-3.5 text-blue-500" />
+                                Generate AI summary
+                            </Button>
+                        </div>
+                    )}
+
+                    {/* Generating indicator */}
+                    {activeTab === 'summary' && isGeneratingSummary && (
+                        <div className="mx-5 mt-3 flex items-center gap-2">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+                            <span className="text-xs text-muted-foreground">Generating summary…</span>
+                        </div>
+                    )}
+
+                    {/* Transcript tab header: char count + insert button */}
                     {activeTab === 'transcript' && (
-                        <div className="p-5">
-                            {localAudioUrl && (
-                                <div className="mb-4 p-2.5 bg-muted/30 rounded-md">
-                                    <AudioPlayer audioUrl={localAudioUrl} />
-                                </div>
-                            )}
-                            <div className="flex items-center justify-between mb-3">
-                                <span className="text-xs font-medium text-muted-foreground">录音转录</span>
-                                <div className="flex items-center gap-2">
-                                    {transcript && (
-                                        <span className="text-xs text-muted-foreground">{transcript.length} 字</span>
-                                    )}
-                                    <Button
-                                        variant="ghost" size="sm"
-                                        onClick={handleInsertTranscript}
-                                        className="h-6 text-xs gap-1 px-2"
-                                    >
-                                        <PenLine className="h-3 w-3" />
-                                        插入到编辑区
-                                    </Button>
-                                </div>
+                        <div className="mx-5 mt-3 flex items-center justify-between">
+                            <span className="text-xs font-medium text-muted-foreground">Transcript</span>
+                            <div className="flex items-center gap-2">
+                                {transcript && (
+                                    <span className="text-xs text-muted-foreground">{transcript.length} chars</span>
+                                )}
+                                <Button
+                                    variant="ghost" size="sm"
+                                    onClick={handleInsertTranscript}
+                                    className="h-6 text-xs gap-1 px-2"
+                                >
+                                    <PenLine className="h-3 w-3" />
+                                    Insert to editor
+                                </Button>
                             </div>
-                            <div className="text-sm leading-relaxed text-foreground/80 whitespace-pre-wrap bg-muted/20 rounded-md p-3 max-h-[300px] overflow-y-auto">
-                                {transcript || '（无语音内容）'}
-                            </div>
-                            {/* NodeViewContent must stay in DOM, keep it hidden */}
-                            <div className="h-0 overflow-hidden"><NodeViewContent /></div>
                         </div>
                     )}
+
+                    {/* Editor: NodeViewContent renders all 3 tab child nodes.
+                        CSS toggles visibility based on data-active-tab. */}
+                    <div data-active-tab={activeTab} className="meeting-tabs-container px-5 py-3">
+                        <NodeViewContent className="min-h-[60px] prose prose-sm dark:prose-invert max-w-none focus:outline-none prose-p:my-1.5 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5" />
+                    </div>
                 </div>
 
                 {/* ── Footer ── */}
-                <div className="px-5 py-2.5 border-t border-border flex items-center text-xs text-muted-foreground select-none">
-                    <span>时长:&nbsp;</span>
+                <div className="px-5 py-2 border-t border-border flex items-center text-xs text-muted-foreground select-none gap-2">
+                    <span>Duration:&nbsp;</span>
                     <span className="font-medium text-foreground tabular-nums">{formatDuration(duration)}</span>
-                    <div className="w-px h-3.5 bg-border mx-3" />
-                    <span>该摘要有帮助吗？</span>
+                    <div className="w-px h-3 bg-border mx-2" />
+                    <span>Was this summary helpful?</span>
                     <button
                         onClick={() => setFeedbackGiven(feedbackGiven === 'up' ? null : 'up')}
-                        className={cn("ml-2 h-6 w-6 rounded flex items-center justify-center transition-colors",
+                        className={cn("ml-1 h-5 w-5 rounded flex items-center justify-center transition-colors",
                             feedbackGiven === 'up' ? "text-blue-500 bg-blue-500/10" : "hover:bg-muted hover:text-foreground"
                         )}
                     >
-                        <ThumbsUp className="h-3.5 w-3.5" />
+                        <ThumbsUp className="h-3 w-3" />
                     </button>
                     <button
                         onClick={() => setFeedbackGiven(feedbackGiven === 'down' ? null : 'down')}
-                        className={cn("h-6 w-6 rounded flex items-center justify-center transition-colors",
+                        className={cn("h-5 w-5 rounded flex items-center justify-center transition-colors",
                             feedbackGiven === 'down' ? "text-orange-500 bg-orange-500/10" : "hover:bg-muted hover:text-foreground"
                         )}
                     >
-                        <ThumbsDown className="h-3.5 w-3.5" />
+                        <ThumbsDown className="h-3 w-3" />
                     </button>
                 </div>
             </div>

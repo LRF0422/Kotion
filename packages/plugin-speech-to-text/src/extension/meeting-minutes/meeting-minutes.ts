@@ -11,10 +11,68 @@ declare module "@kn/editor" {
     }
 }
 
+// ─── Child Tab Nodes ────────────────────────────────────
+// Each tab is an independent ProseMirror node with its own content.
+// The parent meetingMinutes node contains exactly these three children.
+// CSS visibility is controlled by the parent's data-active-tab attribute.
+
+export const MeetingTabSummaryNode = Node.create({
+    name: "meetingTabSummary",
+    group: "block",
+    content: "block+",
+    inline: false,
+    defining: true,
+    isolating: true,
+
+    parseHTML() {
+        return [{ tag: 'div[data-tab="summary"]' }];
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        return ['div', mergeAttributes(HTMLAttributes, { 'data-tab': 'summary', class: 'meeting-tab-content' }), 0];
+    },
+});
+
+export const MeetingTabNotesNode = Node.create({
+    name: "meetingTabNotes",
+    group: "block",
+    content: "block+",
+    inline: false,
+    defining: true,
+    isolating: true,
+
+    parseHTML() {
+        return [{ tag: 'div[data-tab="notes"]' }];
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        return ['div', mergeAttributes(HTMLAttributes, { 'data-tab': 'notes', class: 'meeting-tab-content' }), 0];
+    },
+});
+
+export const MeetingTabTranscriptNode = Node.create({
+    name: "meetingTabTranscript",
+    group: "block",
+    content: "block+",
+    inline: false,
+    defining: true,
+    isolating: true,
+
+    parseHTML() {
+        return [{ tag: 'div[data-tab="transcript"]' }];
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        return ['div', mergeAttributes(HTMLAttributes, { 'data-tab': 'transcript', class: 'meeting-tab-content' }), 0];
+    },
+});
+
+// ─── Parent Node ────────────────────────────────────────
+
 export const MeetingMinutesNode = Node.create({
     name: "meetingMinutes",
     group: "block",
-    content: "block+",
+    content: "meetingTabSummary meetingTabNotes meetingTabTranscript",
     inline: false,
     draggable: true,
     isolating: true,
@@ -50,7 +108,7 @@ export const MeetingMinutesNode = Node.create({
             },
             // Active tab
             activeTab: {
-                default: 'summary'
+                default: 'notes'
             },
             // Metadata
             title: {
@@ -93,7 +151,16 @@ export const MeetingMinutesNode = Node.create({
                     },
                     content: [
                         {
-                            type: 'paragraph'
+                            type: 'meetingTabSummary',
+                            content: [{ type: 'paragraph' }]
+                        },
+                        {
+                            type: 'meetingTabNotes',
+                            content: [{ type: 'paragraph' }]
+                        },
+                        {
+                            type: 'meetingTabTranscript',
+                            content: [{ type: 'paragraph' }]
                         }
                     ]
                 }).run()

@@ -25,7 +25,7 @@ export const MeetingMinutesStaticMenu: React.FC<{ editor: Editor }> = ({ editor 
                     </Toggle>
                 </TooltipTrigger>
                 <TooltipContent>
-                    <p>会议纪要</p>
+                    <p>Meeting Minutes</p>
                 </TooltipContent>
             </Tooltip>
         </TooltipProvider>

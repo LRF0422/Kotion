@@ -33,8 +33,6 @@ import {
     ChevronLeft,
     ChevronRight,
     ChevronDown,
-    ArrowUpDown,
-    Filter,
     Search,
     Zap,
     EyeOff,
