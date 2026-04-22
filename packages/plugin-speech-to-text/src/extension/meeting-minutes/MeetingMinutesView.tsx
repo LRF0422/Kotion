@@ -2,20 +2,17 @@ import { NodeViewProps, NodeViewWrapper, NodeViewContent, Editor, Node as PMNode
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useMeetingRecorder } from "../../hooks/useMeetingRecorder";
 import { useFileService, useEditorAgentOptimized } from "@kn/core";
-import { Button } from "@kn/ui";
+import { useTranslation } from "@kn/common";
+import { Button, Popover, PopoverContent, PopoverTrigger, Calendar } from "@kn/ui";
 import { cn } from "@kn/ui";
 import { toast } from "@kn/ui";
+import { format } from "@kn/ui";
 import {
     Mic, Pause, Play, Square, Sparkles,
-    Loader2, Save, RotateCcw, Calendar, Share2,
+    Loader2, Save, RotateCcw, Share2,
     PenLine, ListTree, ThumbsUp, ThumbsDown, ChevronDown,
     Lightbulb, Settings, Volume2, Copy, Pencil
 } from "@kn/icon";
-
-// ─── Tab Visibility CSS ───────────────────────────────
-// The parent div has data-active-tab="summary|notes|transcript".
-// Each child tab node renders a div with data-tab="summary|notes|transcript".
-// Only the active tab's content is visible and editable.
 
 // ─── Tab Visibility CSS ───────────────────────────────
 // The parent div has data-active-tab="summary|notes|transcript".
@@ -34,6 +31,15 @@ function injectTabStyles() {
 .meeting-tabs-container[data-active-tab="summary"] [data-tab="summary"],
 .meeting-tabs-container[data-active-tab="notes"] [data-tab="notes"],
 .meeting-tabs-container[data-active-tab="transcript"] [data-tab="transcript"] { display: block; }
+.meeting-notes-placeholder p.is-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: hsl(var(--muted-foreground));
+  opacity: 0.6;
+  font-style: italic;
+}
 `;
     document.head.appendChild(style);
 }
@@ -53,23 +59,34 @@ const formatDuration = (seconds: number): string => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-const formatDate = (timestamp: number | null): string => {
-    if (!timestamp) return 'Today';
-    const date = new Date(timestamp);
-    const now = new Date();
-    if (date.toDateString() === now.toDateString()) return 'Today';
-    return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-};
+// ─── Types ──────────────────────────────────────────────
 
-// ─── Calendar Day Icon ──────────────────────────────────
+// ─── Date Picker Button ────────────────────────────────
+// Replaces the static CalendarDayIcon with a clickable date picker.
 
-const CalendarDayIcon: React.FC = () => {
-    const day = new Date().getDate();
+interface DatePickerButtonProps {
+    value: Date;
+    onChange: (date: Date) => void;
+}
+
+const DatePickerButton: React.FC<DatePickerButtonProps> = ({ value, onChange }) => {
+    const dateStr = format(value, 'MMM d');
     return (
-        <div className="w-6 h-6 rounded-md bg-muted flex items-center justify-center shrink-0 relative overflow-hidden">
-            <Calendar className="h-4 w-4 text-muted-foreground absolute" />
-            <span className="text-[8px] font-bold text-foreground relative z-10 mt-1.5">{day}</span>
-        </div>
+        <Popover>
+            <PopoverTrigger asChild>
+                <button className="h-6 px-2 rounded-md bg-muted hover:bg-muted/80 flex items-center justify-center shrink-0 transition-colors cursor-pointer text-xs font-medium text-foreground">
+                    {dateStr}
+                </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                    mode="single"
+                    selected={value}
+                    onSelect={(d) => { if (d) onChange(d); }}
+                    initialFocus
+                />
+            </PopoverContent>
+        </Popover>
     );
 };
 
@@ -163,6 +180,7 @@ const findTabChild = (
 
 export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
     const { node, editor, updateAttributes, getPos } = props;
+    const { t } = useTranslation();
 
     const {
         isRecording, isPaused, duration,
@@ -181,6 +199,11 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
     const [activeTab, setActiveTab] = useState<MeetingTab>((node.attrs.activeTab as MeetingTab) || 'notes');
     const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
     const [isEditingTitle, setIsEditingTitle] = useState(false);
+    const [consentMode, setConsentMode] = useState<'myself' | 'audio'>('myself');
+    const [showConsentCard, setShowConsentCard] = useState(true);
+    const [meetingDate, setMeetingDate] = useState<Date>(() =>
+        node.attrs.createdAt ? new Date(node.attrs.createdAt) : new Date()
+    );
     const titleInputRef = useRef<HTMLInputElement>(null);
 
     // Recording state sync
@@ -270,16 +293,7 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
         setActiveTab('summary');
 
         try {
-            const prompt = `请为以下会议录音转录内容生成会议摘要，包括：
-1. 会议主题/标题
-2. 主要讨论内容（按要点列出）
-3. 会议结论/决议
-4. 待办事项（如有）
-
-转录内容：
-${transcript}
-
-请用 Markdown 格式回复，格式清晰易读。`;
+            const prompt = m('summaryPrompt').replace('{{transcript}}', transcript);
 
             const { stream } = useEditorAgentOptimized(editor as Editor);
 
@@ -303,7 +317,7 @@ ${transcript}
                 }
             } catch (err) {
                 console.error('Error generating summary:', err);
-                summaryText = `**[AI摘要生成失败]**\n\n${transcript.slice(0, 500)}${transcript.length > 500 ? '...' : ''}`;
+                summaryText = `**[${m('summaryGenerationFailed')}]**\n\n${transcript.slice(0, 500)}${transcript.length > 500 ? '...' : ''}`;
             }
 
             // Insert generated summary into the meetingTabSummary child node
@@ -353,23 +367,23 @@ ${transcript}
         try {
             const response = await fetch(localAudioUrl);
             const blob = await response.blob();
-            const fileName = `会议录音_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}_${new Date().toLocaleTimeString('zh-CN', { hour12: false }).replace(/:/g, '-')}.webm`;
+            const fileName = `${m('recordingFilePrefix')}_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}_${new Date().toLocaleTimeString('zh-CN', { hour12: false }).replace(/:/g, '-')}.webm`;
             const file = new File([blob], fileName, { type: 'audio/webm' });
             const result = await fileService.uploadFile(file);
             updateAttributes({ audioPath: result.path });
-            toast.success('录音已保存');
+            toast.success(m('audioSaved'));
         } catch (err) {
             console.error('Error saving file:', err);
-            toast.error('保存失败');
+            toast.error(m('saveFailed'));
         }
     }, [localAudioUrl, fileService, updateAttributes]);
 
     const handleShareSummary = useCallback(() => {
-        const title = node.attrs.title || '会议纪要';
-        const content = `# ${title}\n\n${transcript ? `## 转录\n${transcript}` : ''}`;
+        const title = node.attrs.title || m('title');
+        const content = `# ${title}\n\n${transcript ? `## ${m('transcript')}\n${transcript}` : ''}`;
         navigator.clipboard.writeText(content).then(() => {
-            toast.success('已复制到剪贴板');
-        }).catch(() => toast.error('复制失败'));
+            toast.success(m('copiedToClipboard'));
+        }).catch(() => toast.error(m('copyFailed')));
     }, [transcript, node.attrs.title]);
 
     const handleReset = () => {
@@ -420,18 +434,25 @@ ${transcript}
         }
     }, []);
 
-    const meetingTitle = node.attrs.title || 'Meeting';
+    const handleDateChange = useCallback((date: Date) => {
+        setMeetingDate(date);
+        updateAttributes({ createdAt: date.getTime(), updatedAt: Date.now() });
+    }, [updateAttributes]);
 
-    // ─── Consent state ──────────────────────────────────────
-    const [consentMode, setConsentMode] = useState<'myself' | 'audio'>('myself');
-    const [showConsentCard, setShowConsentCard] = useState(true);
+    const m = useCallback((key: string) => t(`meetingMinutes.${key}`), [t]);
 
-    // ─── Tab definitions ────────────────────────────────
+    const formatDateStr = useCallback((date: Date): string => {
+        const now = new Date();
+        if (date.toDateString() === now.toDateString()) return m('today');
+        return format(date, 'MMM d');
+    }, [m]);
+
+    const meetingTitle = node.attrs.title || m('meetingTitle');
 
     const tabs: { key: MeetingTab; label: string; icon: React.ReactNode }[] = [
-        { key: 'summary', label: 'Summary', icon: <Sparkles className="h-3.5 w-3.5" /> },
-        { key: 'notes', label: 'Notes', icon: <PenLine className="h-3.5 w-3.5" /> },
-        { key: 'transcript', label: 'Transcript', icon: <ListTree className="h-3.5 w-3.5" /> },
+        { key: 'summary', label: m('summary'), icon: <Sparkles className="h-3.5 w-3.5" /> },
+        { key: 'notes', label: m('notes'), icon: <PenLine className="h-3.5 w-3.5" /> },
+        { key: 'transcript', label: m('transcript'), icon: <ListTree className="h-3.5 w-3.5" /> },
     ];
 
     // ─── Render: Idle (Notion-style) ────────────────────
@@ -442,7 +463,7 @@ ${transcript}
                 <div className="w-full rounded-lg border border-border bg-card overflow-hidden">
                     {/* ── Title Bar ── */}
                     <div className="px-5 pt-4 pb-2 flex items-center gap-1.5 border-b border-border">
-                        <CalendarDayIcon />
+                        <DatePickerButton value={meetingDate} onChange={handleDateChange} />
                         <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
                         {isEditingTitle ? (
                             <input
@@ -452,7 +473,7 @@ ${transcript}
                                 onBlur={handleTitleBlur}
                                 onKeyDown={handleTitleKeyDown}
                                 className="text-base font-semibold text-foreground bg-transparent outline-none border-none flex-1 min-w-0"
-                                placeholder="Meeting title…"
+                                placeholder={m('meetingTitlePlaceholder')}
                             />
                         ) : (
                             <h3
@@ -462,9 +483,6 @@ ${transcript}
                                 {meetingTitle}
                             </h3>
                         )}
-                        <span className="text-sm text-blue-500 shrink-0 ml-1 select-none">
-                            @{formatDate(node.attrs.createdAt)}
-                        </span>
                     </div>
 
                     {/* ── Navigation Bar ── */}
@@ -475,16 +493,16 @@ ${transcript}
                                 className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-sm text-foreground hover:bg-muted/80 transition-colors"
                             >
                                 <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                                Notes
+                                {m('notes')}
                             </button>
                         </div>
                         <div className="flex items-center gap-1.5">
                             {/* Tip icon */}
-                            <button className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Tips">
+                            <button className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('tips')}>
                                 <Lightbulb className="h-4 w-4" />
                             </button>
                             {/* Settings icon */}
-                            <button className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Settings">
+                            <button className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('settings')}>
                                 <Settings className="h-4 w-4" />
                             </button>
                             {/* Start transcribing button */}
@@ -493,33 +511,33 @@ ${transcript}
                                 size="sm"
                                 className="gap-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-3 h-7 text-xs"
                             >
-                                Start transcribing
+                                {m('startTranscribing')}
                                 <ChevronDown className="h-3 w-3" />
                             </Button>
                         </div>
                     </div>
 
                     {/* ── Notes Editor (only meetingTabNotes visible) ── */}
-                    <div data-active-tab="notes" className="meeting-tabs-container">
+                    <div data-active-tab="notes" className="meeting-tabs-container px-5 py-2 meeting-notes-placeholder" data-placeholder={m('notesPlaceholder')}>
                         <NodeViewContent className="prose prose-sm dark:prose-invert max-w-none focus:outline-none prose-p:my-1 prose-p:text-sm prose-p:text-muted-foreground prose-headings:mt-3 prose-headings:mb-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5" />
                     </div>
 
                     {/* ── How it works ── */}
                     <div className="px-5 pt-3 pb-3 border-t border-border/50">
-                        <p className="text-sm text-muted-foreground font-medium mb-2">How it works:</p>
+                        <p className="text-sm text-muted-foreground font-medium mb-2">{m('howItWorks')}</p>
                         <ol className="text-sm text-muted-foreground space-y-1.5 list-decimal list-inside">
-                            <li>Click "Start transcribing" to get started.</li>
-                            <li>Add notes here anytime. AI uses them to make the summary smarter.</li>
-                            <li>When you're done, click "Stop". AI will generate a summary with action items.</li>
+                            <li>{m('howItWorks1')}</li>
+                            <li>{m('howItWorks2')}</li>
+                            <li>{m('howItWorks3')}</li>
                         </ol>
                     </div>
 
                     {/* ── Notification Consent Card ── */}
                     {showConsentCard && (
                         <div className="mx-5 mb-3 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-500/20">
-                            <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-1.5">Choose how you notify others</p>
+                            <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-1.5">{m('consentTitle')}</p>
                             <p className="text-xs text-blue-700/70 dark:text-blue-300/80 mb-3 leading-relaxed">
-                                To let others know you're transcribing, Notion can play an audio message or you can continue to get consent yourself. Set your default for all meetings:
+                                {m('consentDesc')}
                             </p>
                             <div className="flex items-center gap-2">
                                 <button
@@ -531,7 +549,7 @@ ${transcript}
                                             : "border-blue-300 dark:border-blue-500/40 text-blue-500 dark:text-blue-300/60 hover:border-blue-500 hover:text-blue-700 dark:hover:border-blue-500/70 dark:hover:text-blue-300"
                                     )}
                                 >
-                                    Get consent myself
+                                    {m('consentMyself')}
                                 </button>
                                 <button
                                     onClick={() => setConsentMode('audio')}
@@ -542,7 +560,7 @@ ${transcript}
                                             : "border-blue-300 dark:border-blue-500/40 text-blue-500 dark:text-blue-300/60 hover:border-blue-500 hover:text-blue-700 dark:hover:border-blue-500/70 dark:hover:text-blue-300"
                                     )}
                                 >
-                                    Automatically play audio
+                                    {m('consentAudio')}
                                 </button>
                             </div>
                         </div>
@@ -550,18 +568,18 @@ ${transcript}
 
                     {/* ── Footer ── */}
                     <div className="px-5 py-2 border-t border-border flex items-center text-xs text-muted-foreground select-none gap-2">
-                        <span>Instructions:</span>
+                        <span>{m('instructions')}</span>
                         <button className="inline-flex items-center gap-0.5 font-semibold text-foreground hover:text-foreground/80 transition-colors">
-                            Auto
+                            {m('auto')}
                             <ChevronDown className="h-3 w-3" />
                         </button>
                         <div className="w-px h-3 bg-border mx-1" />
-                        <span className="flex-1 truncate">By starting, you confirm everyone being transcribed has given consent.</span>
+                        <span className="flex-1 truncate">{m('consentNote')}</span>
                         <div className="flex items-center gap-1 shrink-0">
-                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Volume">
+                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('volume')}>
                                 <Volume2 className="h-3 w-3" />
                             </button>
-                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Copy">
+                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('copy')}>
                                 <Copy className="h-3 w-3" />
                             </button>
                         </div>
@@ -579,12 +597,9 @@ ${transcript}
                 <div className="w-full rounded-lg border border-blue-500/30 bg-card overflow-hidden">
                     {/* ── Title Bar ── */}
                     <div className="px-5 pt-4 pb-2 flex items-center gap-1.5">
-                        <CalendarDayIcon />
+                        <DatePickerButton value={meetingDate} onChange={handleDateChange} />
                         <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
                         <span className="text-base font-semibold text-foreground">{meetingTitle}</span>
-                        <span className="text-sm text-blue-500 shrink-0 ml-1 select-none">
-                            @{formatDate(node.attrs.createdAt)}
-                        </span>
                     </div>
 
                     {/* ── Recording Nav Bar ── */}
@@ -595,7 +610,7 @@ ${transcript}
                                 state === 'recording' ? "bg-red-500 animate-pulse" : "bg-yellow-500"
                             )} />
                             <span className="text-sm text-muted-foreground">
-                                {state === 'recording' ? 'Transcribing' : 'Paused'}
+                                {state === 'recording' ? m('transcribing') : m('paused')}
                             </span>
                             <span className="text-xl font-mono font-semibold tabular-nums text-foreground">
                                 {formatDuration(duration)}
@@ -605,23 +620,23 @@ ${transcript}
                             {state === 'recording' ? (
                                 <button onClick={handlePause} className="h-7 px-3 rounded-md bg-muted hover:bg-muted/80 text-sm text-foreground flex items-center gap-1.5 transition-colors">
                                     <Pause className="h-3.5 w-3.5" />
-                                    Pause
+                                    {m('pause')}
                                 </button>
                             ) : (
                                 <button onClick={handleResume} className="h-7 px-3 rounded-md bg-muted hover:bg-muted/80 text-sm text-foreground flex items-center gap-1.5 transition-colors">
                                     <Play className="h-3.5 w-3.5" />
-                                    Resume
+                                    {m('resume')}
                                 </button>
                             )}
                             <button onClick={handleStop} className="h-7 px-3 rounded-md bg-red-500 hover:bg-red-600 text-sm text-white flex items-center gap-1.5 transition-colors">
                                 <Square className="h-3.5 w-3.5" />
-                                Stop
+                                {m('stop')}
                             </button>
                         </div>
                     </div>
 
                     {/* ── Notes Editor (only meetingTabNotes visible) ── */}
-                    <div data-active-tab="notes" className="meeting-tabs-container px-5 pt-3 pb-2 min-h-[48px]">
+                    <div data-active-tab="notes" className="meeting-tabs-container px-5 pt-3 pb-2 min-h-[48px] meeting-notes-placeholder" data-placeholder={m('notesPlaceholder')}>
                         <NodeViewContent className="prose prose-sm dark:prose-invert max-w-none focus:outline-none prose-p:my-1 prose-p:text-sm prose-headings:mt-3 prose-headings:mb-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5" />
                     </div>
 
@@ -629,37 +644,37 @@ ${transcript}
                     <div className="px-5 pb-5">
                         <div className="border-t border-border/50 pt-3">
                             <div className="flex items-center justify-between mb-1.5">
-                                <span className="text-xs text-muted-foreground font-medium">Live transcript</span>
-                                <span className="text-[10px] text-muted-foreground">Editable</span>
+                                <span className="text-xs text-muted-foreground font-medium">{m('liveTranscript')}</span>
+                                <span className="text-[10px] text-muted-foreground">{m('editable')}</span>
                             </div>
                             {transcript ? (
                                 <textarea
                                     value={transcript}
                                     onChange={(e) => setTranscript(e.target.value)}
                                     className="w-full text-sm leading-relaxed bg-muted/40 rounded-md p-3 max-h-28 overflow-y-auto resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/40 text-foreground/90 placeholder:text-muted-foreground"
-                                    placeholder="Transcript will appear here…"
+                                    placeholder={m('transcriptWillAppear')}
                                     rows={3}
                                 />
                             ) : (
-                                <p className="text-sm text-muted-foreground text-center py-3">Listening…</p>
+                                <p className="text-sm text-muted-foreground text-center py-3">{m('listening')}</p>
                             )}
                         </div>
                     </div>
 
                     {/* ── Footer ── */}
                     <div className="px-5 py-2 border-t border-border flex items-center text-xs text-muted-foreground select-none gap-2">
-                        <span>Instructions:</span>
+                        <span>{m('instructions')}</span>
                         <button className="inline-flex items-center gap-0.5 font-semibold text-foreground hover:text-foreground/80 transition-colors">
-                            Auto
+                            {m('auto')}
                             <ChevronDown className="h-3 w-3" />
                         </button>
                         <div className="w-px h-3 bg-border mx-1" />
-                        <span className="flex-1 truncate">By starting, you confirm everyone being transcribed has given consent.</span>
+                        <span className="flex-1 truncate">{m('consentNote')}</span>
                         <div className="flex items-center gap-1 shrink-0">
-                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Volume">
+                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('volume')}>
                                 <Volume2 className="h-3 w-3" />
                             </button>
-                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Copy">
+                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('copy')}>
                                 <Copy className="h-3 w-3" />
                             </button>
                         </div>
@@ -677,16 +692,13 @@ ${transcript}
                 <div className="w-full rounded-lg border border-border bg-card overflow-hidden">
                     {/* ── Title Bar ── */}
                     <div className="px-5 pt-4 pb-2 flex items-center gap-1.5">
-                        <CalendarDayIcon />
+                        <DatePickerButton value={meetingDate} onChange={handleDateChange} />
                         <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
                         <span className="text-base font-semibold text-foreground">{meetingTitle}</span>
-                        <span className="text-sm text-blue-500 shrink-0 ml-1 select-none">
-                            @{formatDate(node.attrs.createdAt)}
-                        </span>
                     </div>
                     <div className="flex flex-col items-center justify-center py-10 gap-3">
                         <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-                        <p className="text-sm text-muted-foreground">Processing…</p>
+                        <p className="text-sm text-muted-foreground">{m('processing')}</p>
                     </div>
                     <div className="hidden"><NodeViewContent /></div>
                 </div>
@@ -702,7 +714,7 @@ ${transcript}
 
                 {/* ── Title Bar ── */}
                 <div className="px-5 pt-4 pb-2 flex items-center gap-1.5">
-                    <CalendarDayIcon />
+                    <DatePickerButton value={meetingDate} onChange={handleDateChange} />
                     <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
 
                     {isEditingTitle ? (
@@ -713,7 +725,7 @@ ${transcript}
                             onBlur={handleTitleBlur}
                             onKeyDown={handleTitleKeyDown}
                             className="text-base font-semibold text-foreground bg-transparent outline-none border-none flex-1 min-w-0"
-                            placeholder="Meeting title…"
+                            placeholder={m('meetingTitlePlaceholder')}
                         />
                     ) : (
                         <h3
@@ -723,10 +735,6 @@ ${transcript}
                             {meetingTitle}
                         </h3>
                     )}
-
-                    <span className="text-sm text-blue-500 shrink-0 ml-1 select-none">
-                        @{formatDate(node.attrs.createdAt)}
-                    </span>
                 </div>
 
                 {/* ── Tab Bar ── */}
@@ -749,17 +757,17 @@ ${transcript}
                         ))}
                     </div>
                     <div className="flex items-center gap-0.5">
-                        <button onClick={handleReset} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="New recording">
+                        <button onClick={handleReset} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('newRecording')}>
                             <RotateCcw className="h-3.5 w-3.5" />
                         </button>
                         {localAudioUrl && (
-                            <button onClick={handleSaveToFile} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Save recording">
+                            <button onClick={handleSaveToFile} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('saveRecording')}>
                                 <Save className="h-3.5 w-3.5" />
                             </button>
                         )}
                         <Button size="sm" onClick={handleShareSummary} className="ml-1.5 h-7 text-xs gap-1 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-3">
                             <Share2 className="h-3 w-3" />
-                            Share
+                            {m('share')}
                         </Button>
                     </div>
                 </div>
@@ -778,7 +786,7 @@ ${transcript}
                         <div className="mx-5 mt-3">
                             <Button variant="outline" size="sm" onClick={handleGenerateSummary} className="gap-1.5 text-xs h-7">
                                 <Sparkles className="h-3.5 w-3.5 text-blue-500" />
-                                Generate AI summary
+                                {m('generateAISummary')}
                             </Button>
                         </div>
                     )}
@@ -787,17 +795,17 @@ ${transcript}
                     {activeTab === 'summary' && isGeneratingSummary && (
                         <div className="mx-5 mt-3 flex items-center gap-2">
                             <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
-                            <span className="text-xs text-muted-foreground">Generating summary…</span>
+                            <span className="text-xs text-muted-foreground">{m('generatingSummary')}</span>
                         </div>
                     )}
 
                     {/* Transcript tab header: char count + insert button */}
                     {activeTab === 'transcript' && (
                         <div className="mx-5 mt-3 flex items-center justify-between">
-                            <span className="text-xs font-medium text-muted-foreground">Transcript</span>
+                            <span className="text-xs font-medium text-muted-foreground">{m('transcript')}</span>
                             <div className="flex items-center gap-2">
                                 {transcript && (
-                                    <span className="text-xs text-muted-foreground">{transcript.length} chars</span>
+                                    <span className="text-xs text-muted-foreground">{transcript.length} {m('chars')}</span>
                                 )}
                                 <Button
                                     variant="ghost" size="sm"
@@ -805,7 +813,7 @@ ${transcript}
                                     className="h-6 text-xs gap-1 px-2"
                                 >
                                     <PenLine className="h-3 w-3" />
-                                    Insert to editor
+                                    {m('insertToEditor')}
                                 </Button>
                             </div>
                         </div>
@@ -813,17 +821,17 @@ ${transcript}
 
                     {/* Editor: NodeViewContent renders all 3 tab child nodes.
                         CSS toggles visibility based on data-active-tab. */}
-                    <div data-active-tab={activeTab} className="meeting-tabs-container px-5 py-3">
+                    <div data-active-tab={activeTab} className="meeting-tabs-container px-5 py-3 meeting-notes-placeholder" data-placeholder={m('notesPlaceholder')}>
                         <NodeViewContent className="min-h-[60px] prose prose-sm dark:prose-invert max-w-none focus:outline-none prose-p:my-1.5 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5" />
                     </div>
                 </div>
 
                 {/* ── Footer ── */}
                 <div className="px-5 py-2 border-t border-border flex items-center text-xs text-muted-foreground select-none gap-2">
-                    <span>Duration:&nbsp;</span>
+                    <span>{m('duration')}&nbsp;</span>
                     <span className="font-medium text-foreground tabular-nums">{formatDuration(duration)}</span>
                     <div className="w-px h-3 bg-border mx-2" />
-                    <span>Was this summary helpful?</span>
+                    <span>{m('helpfulQuestion')}</span>
                     <button
                         onClick={() => setFeedbackGiven(feedbackGiven === 'up' ? null : 'up')}
                         className={cn("ml-1 h-5 w-5 rounded flex items-center justify-center transition-colors",

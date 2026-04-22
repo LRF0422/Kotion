@@ -8,6 +8,7 @@ import { Editor } from "@kn/editor";
 import { useEditorAgentOptimized } from "@kn/core";
 import { toast } from "@kn/ui";
 import { useFileService } from "@kn/core";
+import { useTranslation } from "@kn/common";
 
 const MEETING_MINUTES_PANEL_EVENT = 'meeting-minutes-panel-open';
 
@@ -177,6 +178,8 @@ type RecordingState = 'idle' | 'recording' | 'paused' | 'processing' | 'complete
 type ConsentMode = 'myself' | 'audio';
 
 export const MeetingMinutesPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
+    const { t } = useTranslation();
+    const m = useCallback((key: string) => t(`meetingMinutes.${key}`), [t]);
     const [isOpen, setIsOpen] = useState(false);
     const [state, setState] = useState<RecordingState>('idle');
     const [transcript, setTranscript] = useState('');
@@ -288,7 +291,7 @@ export const MeetingMinutesPanel: React.FC<{ editor: Editor }> = ({ editor }) =>
         setState('processing');
         const result = await stopRecording();
         if (result) {
-            setTranscript(result.transcript || '（无语音内容）');
+            setTranscript(result.transcript || m('noSpeechContent'));
             setState('completed');
         } else {
             setState('idle');
@@ -312,16 +315,7 @@ export const MeetingMinutesPanel: React.FC<{ editor: Editor }> = ({ editor }) =>
         setSummary(null);
 
         try {
-            const prompt = `请为以下会议录音转录内容生成会议摘要，包括：
-1. 会议主题/标题
-2. 主要讨论内容（按要点列出）
-3. 会议结论/决议
-4. 待办事项（如有）
-
-转录内容：
-${transcript}
-
-请用中文回复，格式清晰易读。`;
+            const prompt = m('summaryPrompt').replace('{{transcript}}', transcript);
 
             // Use the editor's AI agent to generate summary
             const { stream } = useEditorAgentOptimized(editor);
@@ -336,7 +330,9 @@ ${transcript}
             } catch (err) {
                 console.error('Error generating summary:', err);
                 // Fallback to simple summary if AI fails
-                setSummary(`[AI摘要生成失败，以下为转录内容预览]\n\n${transcript.slice(0, 500)}${transcript.length > 500 ? '...' : ''}`);
+                setSummary(`[${m('summaryGenerationFailed')}]
+
+${transcript.slice(0, 500)}${transcript.length > 500 ? '...' : ''}`);
             }
         } finally {
             setIsGeneratingSummary(false);
@@ -350,15 +346,15 @@ ${transcript}
             // Convert audio URL to blob
             const response = await fetch(audioUrl);
             const blob = await response.blob();
-            const fileName = `会议录音_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}_${new Date().toLocaleTimeString('zh-CN', { hour12: false }).replace(/:/g, '-')}.webm`;
+            const fileName = `${m('recordingFilePrefix')}_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}_${new Date().toLocaleTimeString('zh-CN', { hour12: false }).replace(/:/g, '-')}.webm`;
 
             const file = new File([blob], fileName, { type: 'audio/webm' });
             await fileService.uploadFile(file);
 
-            toast.success('录音已保存到文件管理中心');
+            toast.success(m('audioSaved'));
         } catch (err) {
             console.error('Error saving file:', err);
-            toast.error('保存失败，请重试');
+            toast.error(m('saveFailed'));
         }
     }, [audioUrl, fileService]);
 
@@ -367,7 +363,7 @@ ${transcript}
         editor.chain().focus().insertContent({
             type: 'meetingMinutes',
             attrs: {
-                title: '会议纪要',
+                title: m('title'),
                 transcript,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
@@ -392,7 +388,7 @@ ${transcript}
                 }
             ]
         }).run();
-        toast.success('已插入到文档');
+        toast.success(m('insertedToDoc'));
         handleClose();
     }, [summary, transcript, editor, handleClose]);
 
@@ -412,8 +408,8 @@ ${transcript}
                 <div className="relative flex items-center gap-1.5 px-5 pt-4 pb-2 shrink-0 border-b border-border">
                     <CalendarDayIcon />
                     <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
-                    <h2 className="text-base font-semibold text-foreground">Meeting</h2>
-                    <span className="text-sm text-blue-500 shrink-0 select-none">@Today</span>
+                    <h2 className="text-base font-semibold text-foreground">{m('meetingTitle')}</h2>
+                    <span className="text-sm text-blue-500 shrink-0 select-none">@{m('today')}</span>
                     <div className="flex-1" />
                     <button
                         onClick={handleClose}
@@ -430,14 +426,14 @@ ${transcript}
                             className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-sm text-foreground hover:bg-muted/80 transition-colors"
                         >
                             <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                            Notes
+                            {m('notes')}
                         </button>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <button className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Tips">
+                        <button className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('tips')}>
                             <Lightbulb className="h-4 w-4" />
                         </button>
-                        <button className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Settings">
+                        <button className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('settings')}>
                             <Settings className="h-4 w-4" />
                         </button>
                     </div>
@@ -449,26 +445,26 @@ ${transcript}
                     {state === 'idle' && (
                         <div className="flex flex-col py-2">
                             {/* How it works */}
-                            <p className="text-sm text-muted-foreground font-medium mb-2">How it works:</p>
+                            <p className="text-sm text-muted-foreground font-medium mb-2">{m('howItWorks')}</p>
                             <ol className="text-sm text-muted-foreground space-y-1.5 list-decimal list-inside mb-4">
-                                <li>Click "Start transcribing" to get started.</li>
-                                <li>Add notes here anytime. AI uses them to make the summary smarter.</li>
-                                <li>When you're done, click "Stop". AI will generate a summary with action items.</li>
+                                <li>{m('howItWorks1')}</li>
+                                <li>{m('howItWorks2')}</li>
+                                <li>{m('howItWorks3')}</li>
                             </ol>
 
                             {/* Start transcribing button */}
                             <Button onClick={handleStart} className="gap-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md self-start">
                                 <Mic className="h-4 w-4" />
-                                Start transcribing
+                                {m('startTranscribing')}
                                 <ChevronDown className="h-3 w-3" />
                             </Button>
 
                             {/* Notification Consent Card */}
                             {showConsentCard && (
                                 <div className="mt-4 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-500/20">
-                                    <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-1.5">Choose how you notify others</p>
+                                    <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-1.5">{m('consentTitle')}</p>
                                     <p className="text-xs text-blue-700/70 dark:text-blue-300/80 mb-3 leading-relaxed">
-                                        To let others know you're transcribing, Notion can play an audio message or you can continue to get consent yourself. Set your default for all meetings:
+                                        {m('consentDesc')}
                                     </p>
                                     <div className="flex items-center gap-2">
                                         <button
@@ -480,7 +476,7 @@ ${transcript}
                                                     : "border-blue-300 dark:border-blue-500/40 text-blue-500 dark:text-blue-300/60 hover:border-blue-500 hover:text-blue-700 dark:hover:border-blue-500/70 dark:hover:text-blue-300"
                                             )}
                                         >
-                                            Get consent myself
+                                            {m('consentMyself')}
                                         </button>
                                         <button
                                             onClick={() => setConsentMode('audio')}
@@ -491,7 +487,7 @@ ${transcript}
                                                     : "border-blue-300 dark:border-blue-500/40 text-blue-500 dark:text-blue-300/60 hover:border-blue-500 hover:text-blue-700 dark:hover:border-blue-500/70 dark:hover:text-blue-300"
                                             )}
                                         >
-                                            Automatically play audio
+                                            {m('consentAudio')}
                                         </button>
                                     </div>
                                 </div>
@@ -509,7 +505,7 @@ ${transcript}
                                     state === 'recording' ? "bg-red-500 animate-pulse" : "bg-yellow-500"
                                 )} />
                                 <span className="text-sm text-muted-foreground">
-                                    {state === 'recording' ? 'Transcribing' : 'Paused'}
+                                    {state === 'recording' ? m('transcribing') : m('paused')}
                                 </span>
                                 <span className="text-2xl font-mono font-semibold tabular-nums">
                                     {formatDuration(duration)}
@@ -525,14 +521,14 @@ ${transcript}
                             {transcript && (
                                 <div className="w-full mb-4">
                                     <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs text-muted-foreground">Live transcript</span>
-                                        <span className="text-[10px] text-muted-foreground">Editable</span>
+                                        <span className="text-xs text-muted-foreground">{m('liveTranscript')}</span>
+                                        <span className="text-[10px] text-muted-foreground">{m('editable')}</span>
                                     </div>
                                     <textarea
                                         value={transcript}
                                         onChange={(e) => setTranscript(e.target.value)}
                                         className="w-full text-sm bg-muted/50 rounded-lg p-3 max-h-24 overflow-y-auto resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/40 text-foreground/90 placeholder:text-muted-foreground"
-                                        placeholder="Transcript will appear here…"
+                                        placeholder={m('transcriptWillAppear')}
                                         rows={3}
                                     />
                                 </div>
@@ -543,17 +539,17 @@ ${transcript}
                                 {state === 'recording' ? (
                                     <button onClick={handlePause} className="h-8 px-3 rounded-md bg-muted hover:bg-muted/80 text-sm text-foreground flex items-center gap-1.5 transition-colors">
                                         <Pause className="h-4 w-4" />
-                                        Pause
+                                        {m('pause')}
                                     </button>
                                 ) : (
                                     <button onClick={handleResume} className="h-8 px-3 rounded-md bg-muted hover:bg-muted/80 text-sm text-foreground flex items-center gap-1.5 transition-colors">
                                         <Play className="h-4 w-4" />
-                                        Resume
+                                        {m('resume')}
                                     </button>
                                 )}
                                 <button onClick={handleStop} className="h-8 px-3 rounded-md bg-red-500 hover:bg-red-600 text-sm text-white flex items-center gap-1.5 transition-colors">
                                     <Square className="h-4 w-4" />
-                                    Stop
+                                    {m('stop')}
                                 </button>
                             </div>
                         </div>
@@ -563,7 +559,7 @@ ${transcript}
                     {state === 'processing' && (
                         <div className="flex flex-col items-center py-8">
                             <Loader2 className="h-8 w-8 animate-spin text-blue-500 mb-3" />
-                            <p className="text-sm text-muted-foreground">Processing…</p>
+                            <p className="text-sm text-muted-foreground">{m('processing')}</p>
                         </div>
                     )}
 
@@ -573,7 +569,7 @@ ${transcript}
                             {/* Audio Player */}
                             {audioUrl && (
                                 <div className="p-3 bg-muted/50 rounded-lg">
-                                    <p className="text-xs text-muted-foreground mb-2">Recording playback</p>
+                                    <p className="text-xs text-muted-foreground mb-2">{m('recordingPlayback')}</p>
                                     <AudioPlayer audioUrl={audioUrl} />
                                 </div>
                             )}
@@ -581,17 +577,17 @@ ${transcript}
                             {/* Transcript (editable) */}
                             <div className="p-3 bg-muted/50 rounded-lg">
                                 <div className="flex items-center justify-between mb-2">
-                                    <p className="text-xs text-muted-foreground">Transcript</p>
+                                    <p className="text-xs text-muted-foreground">{m('transcript')}</p>
                                     <div className="flex items-center gap-2">
-                                        {transcript && <span className="text-xs text-muted-foreground">{transcript.length} chars</span>}
-                                        <span className="text-[10px] text-muted-foreground">Editable</span>
+                                        {transcript && <span className="text-xs text-muted-foreground">{transcript.length} {m('chars')}</span>}
+                                        <span className="text-[10px] text-muted-foreground">{m('editable')}</span>
                                     </div>
                                 </div>
                                 <textarea
                                     value={transcript}
                                     onChange={(e) => setTranscript(e.target.value)}
                                     className="w-full text-sm bg-transparent whitespace-pre-wrap max-h-32 overflow-y-auto resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/40 rounded p-1 text-foreground/90 placeholder:text-muted-foreground"
-                                    placeholder="(No speech content)"
+                                    placeholder={m('noSpeechContent')}
                                     rows={4}
                                 />
                             </div>
@@ -601,7 +597,7 @@ ${transcript}
                                 <div className="p-3 bg-blue-50 dark:bg-blue-950/50 rounded-lg border border-blue-200 dark:border-blue-500/20">
                                     <div className="flex items-center gap-2 mb-2">
                                         <Sparkles className="h-4 w-4 text-blue-500 dark:text-blue-400" />
-                                        <p className="text-xs text-blue-600 dark:text-blue-300">AI Summary</p>
+                                        <p className="text-xs text-blue-600 dark:text-blue-300">{m('aiSummary')}</p>
                                     </div>
                                     <p className="text-sm whitespace-pre-wrap">{summary}</p>
                                 </div>
@@ -615,7 +611,7 @@ ${transcript}
                                     className="gap-2 border-blue-300 dark:border-blue-500/40 text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-700 dark:hover:text-blue-200"
                                 >
                                     <Sparkles className="h-4 w-4 text-blue-500 dark:text-blue-400" />
-                                    Generate AI summary
+                                    {m('generateAISummary')}
                                 </Button>
                             )}
 
@@ -623,7 +619,7 @@ ${transcript}
                             {isGeneratingSummary && (
                                 <div className="flex items-center gap-2 py-2">
                                     <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                                    <span className="text-sm text-muted-foreground">Generating summary…</span>
+                                    <span className="text-sm text-muted-foreground">{m('generatingSummary')}</span>
                                 </div>
                             )}
 
@@ -636,14 +632,14 @@ ${transcript}
                                     disabled={!audioUrl}
                                 >
                                     <FileAudio className="h-4 w-4" />
-                                    Save recording
+                                    {m('saveRecording')}
                                 </Button>
                                 <Button
                                     onClick={handleInsertToEditor}
                                     className="flex-1 gap-2 bg-blue-500 hover:bg-blue-600 text-white"
                                 >
                                     <CheckCircle2 className="h-4 w-4" />
-                                    Insert to document
+                                    {m('insertToDocument')}
                                 </Button>
                             </div>
 
@@ -657,7 +653,7 @@ ${transcript}
                                 }}
                                 className="w-full"
                             >
-                                New recording
+                                {m('newRecording')}
                             </Button>
                         </div>
                     )}
@@ -672,18 +668,18 @@ ${transcript}
 
                 {/* ── Footer ── */}
                 <div className="px-5 py-2 border-t border-border flex items-center text-xs text-muted-foreground select-none gap-2 shrink-0">
-                    <span>Instructions:</span>
+                    <span>{m('instructions')}</span>
                     <button className="inline-flex items-center gap-0.5 font-semibold text-foreground hover:text-foreground/80 transition-colors">
-                        Auto
+                        {m('auto')}
                         <ChevronDown className="h-3 w-3" />
                     </button>
                     <div className="w-px h-3 bg-border mx-1" />
-                    <span className="flex-1 truncate">By starting, you confirm everyone being transcribed has given consent.</span>
+                    <span className="flex-1 truncate">{m('consentNote')}</span>
                     <div className="flex items-center gap-1 shrink-0">
-                        <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Volume">
+                        <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('volume')}>
                             <Volume2 className="h-3 w-3" />
                         </button>
-                        <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title="Copy">
+                        <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('copy')}>
                             <Copy className="h-3 w-3" />
                         </button>
                     </div>

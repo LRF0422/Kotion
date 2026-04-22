@@ -145,7 +145,7 @@ export const MeetingMinutesNode = Node.create({
                 return chain().insertContent({
                     type: this.name,
                     attrs: {
-                        title: options?.title || '会议纪要',
+                        title: options?.title || 'Meeting Minutes',
                         createdAt: Date.now(),
                         updatedAt: Date.now()
                     },
