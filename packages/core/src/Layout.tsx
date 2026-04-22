@@ -4,22 +4,15 @@ import { SiderMenu } from "./components/SiderMenu"
 import { useContext, useEffect, useState } from "react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Onboarding, OnboardingStep, Rate, SparklesText, cn, useIsMobile, Sheet, SheetContent, SheetTrigger, Button } from "@kn/ui"
 import { Menu, ChevronLeft } from "@kn/icon"
-import { useApi } from "./hooks/use-api"
-import { APIS } from "./api"
-import { useDispatch, AppContext, event } from "@kn/common"
-import { useNavigator } from "./hooks/use-navigator"
-import { GO_TO_MARKETPLACE } from "@kn/common"
+import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, SystemAgentProvider } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
-import { useUploadFile } from "./hooks"
 import { useAsyncEffect } from "ahooks"
 import { MobilePageHeaderProvider, useMobilePageHeader } from "./context/MobilePageHeaderContext"
 import {
-    SystemAgentProvider,
     AIAssistantPanel,
     useAIAssistantShortcut
 } from "./ai/system-agent"
-import { getAccessToken, clearTokens } from "./utils/auth"
 
 interface LayoutProps {
     onPluginsReady: (ready: boolean) => void

@@ -6,7 +6,6 @@ import { PageEditor } from './pages/SpaceDetail/PageEditor'
 import { SpaceSettings } from './pages/SpaceDetail/Settings'
 import { InviteCollaboration } from './pages/InviteCollaboration'
 import { SpaceHub } from './pages/SpaceHub'
-import { AIAssistantPage } from '@kn/core'
 import { KPlugin, PluginConfig } from '@kn/common'
 import React from 'react'
 import { LayoutGrid } from '@kn/icon'
@@ -35,7 +34,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
     { name: '/home', path: '/home', element: <Home /> },
     { name: '/spaces', path: '/spaces', element: <Spaces /> },
     { name: '/all-spaces', path: '/all-spaces', element: <SpaceHub /> },
-    { name: '/ai-assistant', path: '/ai-assistant', element: <AIAssistantPage /> },
+    // { name: '/ai-assistant', path: '/ai-assistant', element: <AIAssistantPage /> },
     { name: '/collaborate/:token', path: '/collaborate/:token', element: <InviteCollaboration /> },
     {
       name: '/space-detail/:id',

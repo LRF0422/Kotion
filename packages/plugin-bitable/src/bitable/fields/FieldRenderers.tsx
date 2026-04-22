@@ -7,7 +7,7 @@ import { DateTimePicker, Rate } from "@kn/ui";
 import { useTranslation } from "@kn/common";
 import { format } from "date-fns";
 import { zhCN, enUS } from "date-fns/locale";
-import { useFileService } from "@kn/core";
+import { useFileService } from "@kn/common";
 import { getTagStyle } from "../../utils/colors";
 
 // 字段渲染器接口

@@ -4,7 +4,7 @@ import {
     Input, Label, Switch, Button, cn,
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@kn/ui'
-import { usePluginConfig } from '@kn/core'
+import { usePluginConfig } from "@kn/common"
 import type { NeteaseMusicPluginConfig } from '../types/config'
 import { DEFAULT_NETEASE_MUSIC_CONFIG } from '../types/config'
 import { NETEASE_MUSIC_PLUGIN_KEY } from '../hooks/use-netease-config'

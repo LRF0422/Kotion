@@ -12,7 +12,7 @@ import {
 } from "@kn/ui";
 import { FolderIcon, ChevronRight, HomeIcon } from "@kn/icon";
 import { FileItem, BreadcrumbItem } from "../FileContext";
-import { useApi } from "@kn/core";
+import { useApi } from "@kn/common";
 import { APIS } from "../../../api";
 
 export interface MoveDialogProps {

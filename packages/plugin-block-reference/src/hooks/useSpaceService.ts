@@ -1,4 +1,4 @@
-import { useService } from "@kn/core";
+import { useService } from "@kn/common";
 import type { SpaceService } from "../types";
 
 /**

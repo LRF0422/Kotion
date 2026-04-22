@@ -1,6 +1,6 @@
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import React, { useMemo } from "react";
-import { useFileService } from "@kn/core";
+import { useFileService } from "@kn/common";
 import { cn, Badge } from "@kn/ui";
 import { FileIcon, DownloadIcon, FileTextIcon } from "@kn/icon";
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useToggle } from "@kn/core";
+import { useToggle } from "@kn/common";
 import type { PageInfo } from "../types";
 import { useSpaceService } from "./useSpaceService";
 import { pageCache } from "../utils/cache";

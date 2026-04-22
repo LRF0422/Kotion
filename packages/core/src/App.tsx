@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 import { Layout } from "./Layout";
 import { ThemeProvider, Toaster } from "@kn/ui";
-import store from './store'
+import { store } from '@kn/common'
 import { Login } from "./components/Login";
 import { SignUpForm } from "./components/SignUp";
 import { Welcome } from "./components/Welcome";
@@ -18,6 +18,8 @@ import { Marketplace } from "./components/Shop/Marketplace";
 
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
+import { setRequestToast } from "@kn/common"
+import { toast } from "@kn/ui"
 import { ErrorPage } from "./components/ErrorPage";
 
 const { createBrowserRouter,
@@ -60,6 +62,9 @@ export const App: React.FC<AppProps> = (props) => {
     const pluginManager = useMemo(() => new common.PluginManager(usePath, plugins), [])
     const [pluginsReady, setPluginsReady] = useState(false)
     const [refreshFlag, setRefreshFlag] = useState(0)
+
+    // Wire up toast for the request module
+    setRequestToast((msg, opts) => toast.error(msg))
 
     // Listen for plugin refresh events to update routes
     useEffect(() => {

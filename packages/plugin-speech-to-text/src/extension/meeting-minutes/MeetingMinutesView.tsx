@@ -1,7 +1,7 @@
 import { NodeViewProps, NodeViewWrapper, NodeViewContent, Editor, Node as PMNode } from "@kn/editor";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useMeetingRecorder } from "../../hooks/useMeetingRecorder";
-import { useFileService, useEditorAgentOptimized } from "@kn/core";
+import { useFileService, useEditorAgentOptimized } from "@kn/common";
 import { useTranslation } from "@kn/common";
 import { Button, Popover, PopoverContent, PopoverTrigger, Calendar } from "@kn/ui";
 import { cn } from "@kn/ui";

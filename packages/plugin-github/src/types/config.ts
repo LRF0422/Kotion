@@ -1,5 +1,5 @@
 import { PluginConfig } from "@kn/common"
-import { PluginConfigData } from "@kn/core"
+import { PluginConfigData } from "@kn/common"
 
 export interface GitHubPluginConfig extends PluginConfigData {
     personalAccessToken: string

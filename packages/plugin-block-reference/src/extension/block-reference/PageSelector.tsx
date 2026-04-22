@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { IconButton, Input, ScrollArea, Skeleton, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
-import { useClickAway, useDebounce } from "@kn/core";
+import { useClickAway, useDebounce } from "@kn/common";
 import { Editor, PageContext } from "@kn/editor";
 import { FileText, Loader2, SearchIcon, X } from "@kn/icon";
 import { useSpaceService, useKeyboardNavigation } from "../../hooks";

@@ -3,8 +3,7 @@ import { Button, EmptyState, Input, ScrollArea, Separator, TreeView, cn, Skeleto
 import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { FileCardList } from "./FileCard";
 import { FileListView } from "./FileList";
-import { useSafeState } from "@kn/core";
-import { useApi } from "@kn/core";
+import { useSafeState, useApi } from "@kn/common";
 import { APIS } from "../../api";
 import { Menu } from "./Menu";
 import { FileItem, FileManageContext, ViewMode } from "./FileContext";

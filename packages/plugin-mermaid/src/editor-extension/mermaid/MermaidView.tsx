@@ -1,6 +1,6 @@
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor"
 import React, { useEffect, useRef, useState } from "react"
-import { useDebounce } from "@kn/core"
+import { useDebounce } from "@kn/common"
 import { EmptyState, Button, useTheme } from "@kn/ui"
 import Editor, { Monaco } from '@monaco-editor/react';
 import { HelpCircle, BoxIcon } from "@kn/icon"

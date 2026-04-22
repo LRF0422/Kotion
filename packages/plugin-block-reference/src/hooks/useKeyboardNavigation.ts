@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect } from "react";
-import { useKeyPress } from "@kn/core";
+import { useKeyPress } from "@kn/common";
 
 interface UseKeyboardNavigationOptions<T> {
     /** Array of items to navigate */

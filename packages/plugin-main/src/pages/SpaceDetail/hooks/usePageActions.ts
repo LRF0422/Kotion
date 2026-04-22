@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
-import { useApi } from '@kn/core';
-import { useNavigator } from '@kn/core';
+import { useApi } from "@kn/common";
+import { useNavigator } from "@kn/common";
 import { APIS } from '../../../api';
 
 interface UsePageActionsProps {

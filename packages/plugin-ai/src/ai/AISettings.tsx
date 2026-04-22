@@ -2,7 +2,7 @@ import React from "react";
 import { Label, Input, Button, Separator, Switch } from "@kn/ui";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@kn/ui";
 import { Save, Key, Globe, Sparkles, Loader2 } from "@kn/icon";
-import { PluginConfigData, usePluginConfig } from "@kn/core";
+import { PluginConfigData, usePluginConfig } from "@kn/common";
 
 interface AISettingsState extends PluginConfigData {
     apiEndpoint: string;

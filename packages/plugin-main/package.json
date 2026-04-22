@@ -16,8 +16,7 @@
     "@kn/common": "workspace:*",
     "@kn/ui": "workspace:*",
     "@kn/icon": "workspace:*",
-    "@kn/editor": "workspace:*",
-    "@kn/core": "workspace:*"
+    "@kn/editor": "workspace:*"
   },
   "keywords": [],
   "author": "",

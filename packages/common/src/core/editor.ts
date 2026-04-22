@@ -1,4 +1,3 @@
-import { z } from "@kn/ui";
 import { AnyExtension, Editor } from "@tiptap/core";
 import { ElementType, ReactNode } from "react";
 

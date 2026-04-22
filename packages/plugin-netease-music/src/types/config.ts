@@ -1,4 +1,4 @@
-import { PluginConfigData } from "@kn/core"
+import { PluginConfigData } from "@kn/common"
 
 export interface NeteaseMusicPluginConfig extends PluginConfigData {
     /** 网易云音乐用户Cookie（用于访问需要登录的API） */

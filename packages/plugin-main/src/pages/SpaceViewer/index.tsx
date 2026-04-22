@@ -1,8 +1,8 @@
 import { APIS } from "../../api";
 import { Sidebar, SidebarProvider, TreeView } from "@kn/ui";
-import { useApi } from "@kn/core";
+import { useApi } from "@kn/common";
 import { Space } from "../../model/Space";
-import { useSafeState } from "@kn/core";
+import { useSafeState } from "@kn/common";
 import React, { useEffect } from "react";
 import { useParams } from "@kn/common";
 

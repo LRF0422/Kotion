@@ -30,7 +30,7 @@ import {
     cn
 } from '@kn/ui'
 import type { Editor } from '@kn/editor'
-import { useSystemAgent, type ExecutionStep } from './context'
+import { useSystemAgent, type ExecutionStep } from '@kn/common'
 
 // ============ Types ============
 

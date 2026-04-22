@@ -6,7 +6,7 @@
  */
 
 import { Editor } from '@kn/editor'
-import { useApi } from '@kn/core'
+import { useApi } from '@kn/common'
 import { z } from '@kn/ui'
 import { APIS } from '../../api'
 

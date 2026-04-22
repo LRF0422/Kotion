@@ -21,9 +21,9 @@ import {
 import { ChatMessageList } from "@kn/ui"
 import React from "react"
 import { Editor } from "@kn/editor"
-import { useEditorAgentOptimized, useUploadFile, ToolExecutionEvent, UserChoiceRequest } from "@kn/core"
+import { useEditorAgentOptimized, useUploadFile, ToolExecutionEvent, UserChoiceRequest } from "@kn/common"
 import { useSelector } from "@kn/common"
-import { GlobalState } from "@kn/core"
+import { GlobalState } from "@kn/common"
 
 import {
     Message, ExecutionStep, PendingUserChoice, ChatError,

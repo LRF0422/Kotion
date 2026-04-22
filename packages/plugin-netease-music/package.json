@@ -25,8 +25,7 @@
         "@kn/common": "workspace:*",
         "@kn/editor": "workspace:*",
         "@kn/ui": "workspace:*",
-        "@kn/icon": "workspace:*",
-        "@kn/core": "workspace:*"
+        "@kn/icon": "workspace:*"
     },
     "devDependencies": {
         "@kn/rollup-config": "workspace:*",

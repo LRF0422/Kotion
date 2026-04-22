@@ -1,18 +1,17 @@
-import { useNavigator, MessageBox } from "@kn/core";
+import { useNavigator, GlobalState, useApi, clearTokens, useSelector } from "@kn/common";
 import { CalendarCheck2, LayoutDashboard, LayoutGrid, PanelBottom, Power, Settings, ShoppingBag, UserRoundPlus } from "@kn/icon";
 import React, { ReactNode } from "react";
 import { EmptyProps } from "@kn/ui";
 import { useLocation } from "react-router-dom";
 import { cn } from "@kn/ui";
-import { useSelector } from "@kn/common";
-import { GlobalState, useApi } from "@kn/core";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
 import { Badge } from "@kn/ui";
 import { APIS } from "../../api";
 import { SettingDlg } from "./settings/SeetingDlg";
 import { ModeToggle } from "@kn/ui";
-import { clearTokens } from "@kn/core";
+
 
 
 export interface SiderMenuItemProps {
@@ -99,13 +98,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
                 })
             }
         },
-        {
-            name: 'Message',
-            icon: <MessageBox />,
-            key: '/message',
-            attachTabs: true,
-            id: '/message',
-        },
+
         {
             name: 'Shop',
             icon: <ShoppingBag className="h-5 w-5" />,

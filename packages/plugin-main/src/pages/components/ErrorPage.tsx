@@ -1,5 +1,5 @@
 import { Button } from "@kn/ui";
-import { useNavigator } from "@kn/core";
+import { useNavigator } from "@kn/common";
 import React from "react";
 
 export const ErrorPage: React.FC = () => {

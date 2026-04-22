@@ -2,11 +2,11 @@ import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
 import { IconButton, TreeView, useIsMobile, Button, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
 import { ArrowLeft, CircleArrowUp, Clock, Copy, LayoutDashboard, LayoutTemplate, Menu, MoreHorizontal, Package, Plus, Settings, Star, StarIcon, Trash2, Undo2, UserCircle, AlertCircle } from "@kn/icon";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { useApi, useService, useUploadFile } from "@kn/core";
+import { useApi, useService, useUploadFile, useNavigator, useToggle } from "@kn/common";
 import { APIS } from "../../api";
 import { Outlet, useParams } from "@kn/common";
 import { Space } from "../../model/Space";
-import { useNavigator } from "@kn/core";
+
 import { Input } from "@kn/ui";
 import { Badge } from "@kn/ui";
 import { Alert, AlertDescription } from "@kn/ui";
@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { event, ON_FAVORITE_CHANGE, ON_PAGE_REFRESH } from "../../event";
 import { Card } from "@kn/ui";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@kn/ui";
-import { useToggle } from "@kn/core";
+
 import { MultiSelect, cn } from "@kn/ui";
 import { TemplateCreator } from "./TemplateCreator";
 import { TemplateSelector } from "../../components/TemplateSelector";
@@ -43,10 +43,10 @@ export const SpaceDetail: React.FC = () => {
     const spaceService = useService("spaceService")
     useEffect(() => {
         if (params.id) {
-            spaceService.getSpaceInfo(params.id).then(res => {
+            spaceService.getSpaceInfo(params.id).then((res: any) => {
                 setSpace(res)
                 setError(null)
-            }).catch(err => {
+            }).catch((err: any) => {
                 setError('Failed to load space information')
                 console.error('Error loading space:', err)
             })
@@ -63,11 +63,11 @@ export const SpaceDetail: React.FC = () => {
         const timeoutId = setTimeout(() => {
             toggleLoading()
             spaceService.getPageTree(params.id!, searchValue)
-                .then(res => {
+                .then((res: any) => {
                     setPageTree(res)
                     setError(null)
                 })
-                .catch(err => {
+                .catch((err: any) => {
                     setError('Failed to load page tree')
                     console.error('Error loading page tree:', err)
                 })

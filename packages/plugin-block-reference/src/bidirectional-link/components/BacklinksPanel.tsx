@@ -8,7 +8,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { cn, ScrollArea, Skeleton } from '@kn/ui';
 import { Link2, FileText, SquareDashedBottom } from '@kn/icon';
-import { useNavigator } from '@kn/core';
+import { useNavigator } from "@kn/common";
 import { getPageBacklinks, BacklinkVO } from '../services/linkService';
 
 interface BacklinksPanelProps {

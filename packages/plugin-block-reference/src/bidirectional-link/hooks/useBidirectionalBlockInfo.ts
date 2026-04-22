@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react";
-import { useApi } from "@kn/core";
+import { useApi } from "@kn/common";
 import { APIS } from "../api";
 import { JSONContent } from "@kn/editor";
 

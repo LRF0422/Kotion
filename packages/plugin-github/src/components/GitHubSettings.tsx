@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, Input, Label, Switch, Button, cn } from '@kn/ui'
-import { usePluginConfig } from '@kn/core'
+import { usePluginConfig } from "@kn/common"
 import type { GitHubPluginConfig } from '../types/config'
 import { DEFAULT_GITHUB_CONFIG } from '../types/config'
 import { testConnection } from '../services/github-client'

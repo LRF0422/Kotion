@@ -29,7 +29,7 @@ import {
     ScrollArea,
     cn
 } from '@kn/ui'
-import { SystemAgentProvider, useSystemAgent, type ExecutionStep } from '../ai/system-agent'
+import { SystemAgentProvider, useSystemAgent, type ExecutionStep } from '@kn/common'
 
 // ============ Types ============
 

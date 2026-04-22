@@ -24,7 +24,6 @@
   "license": "MIT",
   "dependencies": {
     "@kn/common": "workspace:*",
-    "@kn/core": "workspace:*",
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",

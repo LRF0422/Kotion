@@ -1,7 +1,7 @@
 import React, { useCallback } from "react"
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor"
 import { FileManagerView } from "../component/FileManager"
-import { useModal } from "@kn/core"
+import { useModal } from "@kn/common"
 import { EmptyState } from "@kn/ui"
 import { FolderOpenIcon } from "@kn/icon"
 import { ViewMode } from "../component/FileContext"

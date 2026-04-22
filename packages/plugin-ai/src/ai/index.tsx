@@ -8,7 +8,7 @@ import TextLoadingDecorationExtension from "./text-loading";
 import { LoadingMark } from "./marks/loading-mark";
 import { ExpandableChatDemo } from "./menu/Chat";
 import { AiCompletionExtension } from "./completion";
-import { AiInlineTrigger, AiInlinePanel } from "@kn/core";
+// import { AiInlineTrigger, AiInlinePanel } from "@kn/common";
 
 /**
  * AI Extension Configuration
@@ -26,8 +26,8 @@ import { AiInlineTrigger, AiInlinePanel } from "@kn/core";
 export const AIExtension: ExtensionWrapper = {
     name: Ai.name,
     extendsion: [Ai, AiImage, TextLoadingDecorationExtension, LoadingMark, AiCompletionExtension],
-    flotMenuConfig: [AiStaticMenu, AiInlineTrigger],
-    floatingUI: AiInlinePanel,
+    flotMenuConfig: [AiStaticMenu],
+    // floatingUI: AiInlinePanel,
     // Chat component is a floating UI, render it separately via floatingUI
     menuConfig: {
         group: 'block',

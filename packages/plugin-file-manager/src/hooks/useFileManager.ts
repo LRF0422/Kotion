@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { useApi, useFileService, useSafeState } from '@kn/core';
+import { useApi, useFileService, useSafeState } from '@kn/common';
 import { toast } from '@kn/ui';
 import { APIS } from '../api';
 import { FileItem, BreadcrumbItem } from '../editor-extensions/component/FileContext';

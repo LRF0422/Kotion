@@ -20,7 +20,7 @@ import {
     Move,
 } from "@kn/icon";
 import { SettingContext } from "..";
-import { useApi } from "@kn/core";
+import { useApi } from "@kn/common";
 import { APIS } from "../../../../api";
 import { toast } from "@kn/ui";
 import { useTranslation } from "@kn/common";

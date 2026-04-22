@@ -1,6 +1,6 @@
 import { AnyExtension, Content, EditorContent, NodeViewProps, NodeViewWrapper, StyledEditor, useEditor, useEditorExtension } from "@kn/editor";
 import React, { useCallback, useMemo, useRef } from "react";
-import { useHover, useNavigator, useToggle } from "@kn/core";
+import { useHover, useNavigator, useToggle } from "@kn/common";
 import { ArrowUpRight, RefreshCcw, Trash2 } from "@kn/icon";
 import { cn, IconButton, Skeleton, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
 import { useBlockInfo } from "../../hooks";

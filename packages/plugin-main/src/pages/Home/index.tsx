@@ -1,8 +1,7 @@
 import { APIS } from "../../api";
 import { CardList } from "../components/CardList";
 import { Button, Card, CardContent, EmptyState, Skeleton, cn, useIsMobile } from "@kn/ui";
-import { useApi } from "@kn/core";
-import { useNavigator } from "@kn/core";
+import { useApi, useNavigator } from "@kn/common";
 import { Space } from "../../model/Space";
 import { BanIcon, Book, Box, Clock, LayoutTemplate, Moon, Plus, Sun, Sunset, UserCircle } from "@kn/icon";
 import React, { useEffect, useState } from "react";

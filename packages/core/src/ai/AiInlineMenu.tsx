@@ -3,9 +3,7 @@ import { createPortal } from 'react-dom'
 import { Editor, Plugin, PluginKey, Decoration, DecorationSet } from '@kn/editor'
 import { Sparkles, Send, X, Loader2, CheckCircle2, XCircle, MessageSquare } from '@kn/icon'
 import { Button, Badge, Streamdown } from '@kn/ui'
-import { useEditorAgentOptimized } from './use-agent-optimized'
-import { useStreamBuffer } from './utils/use-stream-buffer'
-import type { ToolExecutionEvent, UserChoiceRequest } from './types'
+import { useEditorAgentOptimized, useStreamBuffer, type ToolExecutionEvent, type UserChoiceRequest } from '@kn/common'
 
 // ─── shared ─────────────────────────────────────────────────────
 

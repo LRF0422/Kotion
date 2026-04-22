@@ -1,6 +1,6 @@
 import { NodeViewWrapper, NodeViewProps, PageContext } from "@kn/editor";
 import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { useNavigator, useToggle } from "@kn/core";
+import { useNavigator, useToggle } from "@kn/common";
 import { event, useParams } from "@kn/common";
 import { FileText, Loader2 } from "@kn/icon";
 import { cn, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";

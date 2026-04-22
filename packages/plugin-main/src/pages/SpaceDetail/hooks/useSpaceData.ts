@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useApi, useService } from '@kn/core';
+import { useApi, useService } from "@kn/common";
 import { APIS } from '../../../api';
 import { Space } from '../../../model/Space';
 

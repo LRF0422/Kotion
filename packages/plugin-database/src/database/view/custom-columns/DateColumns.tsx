@@ -12,7 +12,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { cn } from "@kn/ui";
 import { NodeViewContext } from "../../Context";
 import { Editor } from "@kn/editor";
-import { isArray, isObject, useUploadFile } from "@kn/core";
+import { isArray, isObject, useUploadFile } from "@kn/common";
 import { getTitleContent } from "@kn/editor";
 import { EditorRender } from "@kn/editor";
 import { formatDate } from "date-fns";

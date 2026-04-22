@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CardList } from "../components/CardList";
 import { ArrowLeft, EyeIcon, FolderOpen, Grid3X3, LayoutGrid, List, Plus, SearchIcon, Star, StarIcon, TrendingUp } from "@kn/icon";
 import { Space } from "../../model/Space";
-import { useApi, useDebounce, useNavigator } from "@kn/core";
+import { useApi, useDebounce, useNavigator } from "@kn/common";
 import { APIS } from "../../api";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 

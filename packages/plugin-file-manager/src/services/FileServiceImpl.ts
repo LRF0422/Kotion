@@ -1,5 +1,5 @@
 import { FileService, UploadedFile, UploadOptions, FileSelectorOptions, SelectedFile } from "@kn/common";
-import { useApi, APIS as CORE_APIS } from "@kn/core";
+import { useApi, APIS as CORE_APIS } from "@kn/common";
 import { fileOpen } from "browser-fs-access";
 import { APIS } from "../api";
 import { showFileSelector } from "../editor-extensions/utils/showFileSelector";

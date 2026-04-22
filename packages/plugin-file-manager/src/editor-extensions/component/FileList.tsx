@@ -10,7 +10,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@kn/ui"
-import { useSafeState } from "@kn/core"
+import { useSafeState } from "@kn/common"
 import { Download, FcFile, FcOpenedFolder, MoreVertical, Pencil, FolderInput, Copy, Files, Info, Trash2 } from "@kn/icon"
 import { formatFileSize } from "../../utils/fileUtils"
 import { RenameDialog, MoveDialog, FileDetailsDialog } from "./dialogs"

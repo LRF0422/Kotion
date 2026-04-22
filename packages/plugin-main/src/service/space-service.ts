@@ -1,6 +1,6 @@
 import { Page } from "@kn/common"
 import { Space } from "../model/Space"
-import { useApi } from "@kn/core"
+import { useApi } from "@kn/common"
 import { APIS } from "../api"
 
 

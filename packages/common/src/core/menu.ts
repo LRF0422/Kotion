@@ -1,4 +1,3 @@
-import { EmptyProps } from "@kn/ui";
 import { ReactNode } from "react"
 
 export interface SiderMenuProps {
@@ -18,7 +17,7 @@ export interface SiderMenuItemProps {
     isGroup?: boolean,
     className?: string,
     onClick?: (item?: any) => void;
-    emptyProps?: EmptyProps
+    emptyProps?: any
     actions?: ReactNode[]
     customerRender?: ReactNode
     height?: number

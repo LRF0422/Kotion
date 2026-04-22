@@ -15,7 +15,6 @@
   "dependencies": {
     "@drawnix/drawnix": "^0.1.4",
     "@kn/common": "workspace:*",
-    "@kn/core": "workspace:*",
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",

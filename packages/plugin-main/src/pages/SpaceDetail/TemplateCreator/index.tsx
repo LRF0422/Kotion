@@ -1,5 +1,5 @@
 import { useSelector } from "@kn/common";
-import { GlobalState, useApi, useUploadFile } from "@kn/core";
+import { GlobalState, useApi, useUploadFile } from "@kn/common";
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel,
     AlertDialogContent, AlertDialogDescription, AlertDialogFooter,

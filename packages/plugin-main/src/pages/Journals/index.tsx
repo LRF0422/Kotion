@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { moment } from '@kn/core';
+import { moment } from "@kn/common";
 import { cn } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { ChevronLeftIcon, ChevronRightIcon } from "@kn/icon";

@@ -1,5 +1,5 @@
 import { Card, Input, MultiSelect, Sheet, SheetContent, SheetTitle, Button, toast } from "@kn/ui";
-import { useApi, useUploadFile } from "@kn/core"
+import { useApi, useUploadFile } from "@kn/common"
 import { UserCircle, Trash2, FileText } from "@kn/icon";
 import React, { useState, useEffect, useCallback } from "react";
 import { APIS } from "../api";

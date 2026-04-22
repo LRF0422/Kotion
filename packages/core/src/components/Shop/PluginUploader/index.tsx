@@ -14,7 +14,7 @@ import { useTranslation } from "@kn/common";
 import { useApi, useUploadFile } from "../../../hooks";
 import { useSafeState } from "ahooks";
 import { APIS } from "../../../api";
-import { generateText, parseMarkdownToNodes } from "../../../ai";
+import { generateText, parseMarkdownToNodes } from "@kn/common";
 
 interface Description {
     label: string,

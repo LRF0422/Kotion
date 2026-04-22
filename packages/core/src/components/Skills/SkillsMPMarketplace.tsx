@@ -29,10 +29,10 @@ import {
     AlertCircle,
     Github
 } from '@kn/icon'
-import { useSkillsMP } from '../../ai/skills/skillsmp'
-import { convertToSerializableSkill } from '../../ai/skills/skillsmp/client'
-import type { SkillsMPSkill } from '../../ai/skills/skillsmp/types'
-import type { SerializableSkill } from '../../ai/skills/skill-registry'
+import { useSkillsMP } from '@kn/common'
+import { convertToSerializableSkill } from '@kn/common'
+import type { SkillsMPSkill } from '@kn/common'
+import type { SerializableSkill } from '@kn/common'
 
 export interface SkillsMPMarketplaceProps {
     onInstall: (skill: SerializableSkill) => Promise<void>

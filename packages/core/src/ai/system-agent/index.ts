@@ -1,33 +1,11 @@
 /**
- * System AI Agent Module
+ * System AI Agent Module (Core - UI only)
  *
- * Provides a global AI agent that can be used anywhere in the application.
+ * Logic (context, hooks) is in @kn/common.
+ * This module exports only core-specific UI components.
  */
 
-// Context and Provider
-export {
-    SystemAgentProvider,
-    useSystemAgent,
-    useSystemAgentAvailable,
-    type SystemAgentState,
-    type SystemAgentContextValue,
-    type SystemAgentProviderProps,
-    type ExecutionStep,
-    type StreamPromptOptions
-} from './context'
-
-// Hooks
-export {
-    useSystemAgentStream,
-    useSystemAgentEditor,
-    useSystemAgentSkills,
-    useQuickAction,
-    type UseSystemAgentStreamOptions,
-    type UseSystemAgentStreamResult,
-    type QuickActionOptions
-} from './hooks'
-
-// UI Components
+// Core-specific UI Components
 export {
     AIAssistantPanel,
     AIAssistantTrigger,
@@ -36,5 +14,5 @@ export {
     type AIAssistantTriggerProps
 } from './AIAssistantPanel'
 
-// Page Component - exported from pages directory
+// Page Component
 export { AIAssistantPage } from '../../pages/AIAssistantPage'

@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { HoverCard, HoverCardContent, HoverCardTrigger, Label, ScrollArea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, Skeleton, cn } from "@kn/ui";
-import { useDebounce, useToggle } from "@kn/core";
+import { useDebounce, useToggle } from "@kn/common";
 import { AnyExtension, computePosition, Content, createNodeFromContent, Editor, EditorContent, flip, getText, Node, PageContext, posToDOMRect, StyledEditor, useEditor, useEditorExtension } from "@kn/editor";
 import { ArrowRightIcon, Loader2 } from "@kn/icon";
 import { useSpaceService, useKeyboardNavigation } from "../../hooks";

@@ -9,12 +9,12 @@ import { Switch } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
 import { CollaborationEditor, exportToPDF, useAutoSave, AutoSaveStatus, TiptapCollabProvider } from "@kn/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
-import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes } from '@kn/core';
-import { useNavigator } from "@kn/core";
-import { GlobalState } from "@kn/core";
+import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes } from "@kn/common";
+import { useNavigator } from "@kn/common";
+import { GlobalState } from "@kn/common";
 import { Editor } from "@kn/editor";
 import * as Y from "@kn/editor";
-import { useKeyPress, useToggle } from "@kn/core";
+import { useKeyPress, useToggle } from "@kn/common";
 import {
     ALargeSmall, ArrowLeft, BookTemplate, CircleArrowUp,
     Contact2, Download, FileIcon, FileText,

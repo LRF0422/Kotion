@@ -15,7 +15,7 @@ moment.locale('zh-cn');
 import "./calendar.css"
 import { CalendarProvider } from "./calendar/contexts/calendar-context";
 import { ClientContainer } from "./calendar/components/client-container";
-import { GlobalState, useUploadFile } from "@kn/core";
+import { GlobalState, useUploadFile } from "@kn/common";
 import { useSelector } from "@kn/common";
 import { IEvent } from "./calendar/interfaces";
 

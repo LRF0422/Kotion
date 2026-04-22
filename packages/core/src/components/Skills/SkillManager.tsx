@@ -39,9 +39,9 @@ import { SkillCard } from './SkillCard'
 import { SkillDetailDialog } from './SkillDetailDialog'
 import { CreateSkillDialog } from './CreateSkillDialog'
 import { SkillsMPMarketplace } from './SkillsMPMarketplace'
-import { useSkillRegistry } from '../../ai/skills/use-skill-registry'
-import { exampleSkills } from '../../ai/skills/examples'
-import type { InstalledSkill, SerializableSkill } from '../../ai/skills/skill-registry'
+import { useSkillRegistry } from '@kn/common'
+import { exampleSkills } from '@kn/common'
+import type { InstalledSkill, SerializableSkill } from '@kn/common'
 
 export interface SkillManagerProps {
     className?: string

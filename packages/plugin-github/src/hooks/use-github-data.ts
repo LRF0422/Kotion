@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { PluginConfigStore } from '@kn/core'
+import { PluginConfigStore } from "@kn/common"
 import type { GitHubPluginConfig } from '../types/config'
 import { DEFAULT_GITHUB_CONFIG } from '../types/config'
 import { GITHUB_PLUGIN_KEY } from './use-github-config'

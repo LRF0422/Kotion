@@ -9,7 +9,7 @@ import { SettingContext } from "..";
 import { z } from "@kn/ui";
 import { useForm } from "@kn/ui";
 import { zodResolver } from "@kn/ui";
-import { useApi, useUploadFile } from "@kn/core";
+import { useApi, useUploadFile } from "@kn/common";
 import { APIS } from "../../../../api";
 import { toast } from "@kn/ui";
 import { Separator } from "@kn/ui";

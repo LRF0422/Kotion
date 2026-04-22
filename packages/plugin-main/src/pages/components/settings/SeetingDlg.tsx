@@ -4,11 +4,10 @@ import { TreeView } from "@kn/ui";
 import { TreeViewElement } from "@kn/ui";
 import { Badge } from "@kn/ui";
 import { ScrollArea } from "@kn/ui";
-import { GlobalState, useUploadFile } from "@kn/core";
-import { useSafeState } from "@kn/core";
+import { GlobalState, useUploadFile, useSafeState, useSelector } from "@kn/common";
 import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import } from "@kn/icon";
 import React, { PropsWithChildren } from "react";
-import { useSelector } from "@kn/common";
+
 import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { Member } from "./components/Member";

@@ -3,7 +3,7 @@
  * @module @kn/plugin-block-reference/bidirectional-link/services
  */
 
-import { useApi } from "@kn/core";
+import { useApi } from "@kn/common";
 import { APIS } from "../api";
 
 /**

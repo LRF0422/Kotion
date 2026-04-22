@@ -1,4 +1,4 @@
-import { useFileService } from "@kn/core";
+import { useFileService } from "@kn/common";
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import { IconPlus } from "@kn/icon";
 import { Button, CarouselGallery, FileUploader, GalleryImage } from "@kn/ui";

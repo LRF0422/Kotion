@@ -5,9 +5,9 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useMeetingRecorder } from "../../hooks/useMeetingRecorder";
 import { Editor } from "@kn/editor";
-import { useEditorAgentOptimized } from "@kn/core";
+import { useEditorAgentOptimized } from "@kn/common";
 import { toast } from "@kn/ui";
-import { useFileService } from "@kn/core";
+import { useFileService } from "@kn/common";
 import { useTranslation } from "@kn/common";
 
 const MEETING_MINUTES_PANEL_EVENT = 'meeting-minutes-panel-open';

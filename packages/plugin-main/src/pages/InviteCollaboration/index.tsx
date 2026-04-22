@@ -6,10 +6,7 @@ import { Skeleton } from "@kn/ui";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
 import { CollaborationEditor, TiptapCollabProvider } from "@kn/editor";
 import { Editor } from "@kn/editor";
-import { useApi, useUploadFile } from "@kn/core";
-import { useNavigator } from "@kn/core";
-import { GlobalState } from "@kn/core";
-import { deepEqual } from "@kn/core";
+import { useApi, useUploadFile, useNavigator, GlobalState, deepEqual } from "@kn/common";
 import {
     AlertCircle,
     CheckCircle2,

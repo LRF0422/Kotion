@@ -4,7 +4,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
     Button,
 } from "@kn/ui";
-import { useSafeState } from "@kn/core";
+import { useSafeState } from "@kn/common";
 import React, { useEffect, useMemo, useCallback, useState } from "react";
 import { FileItem, FileManagerState, useFileManagerState } from "./FileContext";
 import { RenameDialog, MoveDialog, FileDetailsDialog } from "./dialogs";

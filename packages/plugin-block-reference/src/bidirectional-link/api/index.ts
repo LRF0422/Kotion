@@ -3,7 +3,7 @@
  * @module @kn/plugin-block-reference/bidirectional-link/api
  */
 
-import { API } from "@kn/core";
+import { API } from "@kn/common";
 
 export const APIS = {
     /** Get backlinks for a page */

@@ -17,7 +17,6 @@
     "@kn/editor": "workspace:*",
     "@kn/ui": "workspace:*",
     "@kn/icon": "workspace:*",
-    "@kn/core": "workspace:*",
     "react-data-grid": "^7.0.0-beta.46",
     "react-beautiful-dnd": "^13.1.1",
     "lodash": "^4.17.21",

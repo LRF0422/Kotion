@@ -8,7 +8,7 @@
 
 import React, { useMemo, useCallback, useRef, useContext, useEffect, useState } from "react";
 import { NodeViewWrapper, type NodeViewProps, AnyExtension, EditorContent, StyledEditor, useEditor, useEditorExtension, PageContext, JSONContent } from "@kn/editor";
-import { useHover, useNavigator } from "@kn/core";
+import { useHover, useNavigator } from "@kn/common";
 import { ArrowUpRight, RefreshCcw, Trash2 } from "@kn/icon";
 import { cn, IconButton, Skeleton, Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@kn/ui";
 import { useBidirectionalBlockInfo } from "../hooks/useBidirectionalBlockInfo";

@@ -1,6 +1,6 @@
 import { Mark, mergeAttributes, Plugin, PluginKey, TextSelection } from "@kn/editor";
 import { v4 as uuidv4 } from "uuid";
-import { store } from "@kn/core";
+import { store } from "@kn/common";
 import type { CommentUser, CommentItem, CommentOptions, CommentStorage } from "./types";
 import "./types";
 import "./comment.css";

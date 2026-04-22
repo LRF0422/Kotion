@@ -20,7 +20,7 @@ export interface ExecutionStep {
 
 // Pending user choice state
 export interface PendingUserChoice {
-    request: import("@kn/core").UserChoiceRequest
+    request: import("@kn/common").UserChoiceRequest
     resolve: (value: string) => void
     reject: (reason?: any) => void
 }

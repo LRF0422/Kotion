@@ -1,30 +1,12 @@
 import { XIcon } from "@kn/icon";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, cn } from "@kn/ui";
 import { isNumber } from "lodash";
-import React, { PropsWithChildren, ReactNode, createContext, useCallback, useContext, useRef, useState } from "react";
+import React, { PropsWithChildren, ReactNode, useCallback, useRef, useState } from "react";
+import { ModalContext, ModalState } from "@kn/common";
 
-
-export interface ModalCTX {
-    openModal: (config: Omit<ModalState, 'isOpen'>) => void
-    closeModal: () => void
-}
-
-const ModalContext = createContext<ModalCTX>({} as ModalCTX)
-
-export const useModal = () => useContext(ModalContext)
-
-
-export interface ModalState {
-    isOpen: boolean,
-    title?: ReactNode,
-    desc?: ReactNode,
-    content: ReactNode,
-    footer?: ReactNode,
-    width?: number,
-    height?: number | string,
-    simple?: boolean
-
-}
+// Re-export useModal and types from common for backward compatibility
+export { useModal, ModalContext } from "@kn/common";
+export type { ModalCTX, ModalState } from "@kn/common";
 
 export const ModalProvider: React.FC<PropsWithChildren> = ({ children }) => {
     const [modalState, setModalState] = useState<ModalState>({

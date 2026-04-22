@@ -2,7 +2,7 @@ import React, { ReactNode } from "react";
 import { Empty, EmptyProps } from "@kn/ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@kn/ui";
 import { cn } from "@kn/ui";
-import { useUploadFile } from "@kn/core";
+import { useUploadFile } from "@kn/common";
 
 export interface CardListProps {
     data: any[],

@@ -1,4 +1,4 @@
-import { API } from "@kn/core";
+import { API } from "@kn/common";
 
 
 export const APIS = {

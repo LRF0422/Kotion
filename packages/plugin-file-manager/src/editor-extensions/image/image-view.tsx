@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { NodeViewWrapper, NodeViewProps } from "@kn/editor";
 
 import { Resizable } from "@kn/editor";
-import { useFileService } from "@kn/core";
+import { useFileService } from "@kn/common";
 
 export const ImageView: React.FC<NodeViewProps> = ({
   editor,

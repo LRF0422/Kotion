@@ -1,8 +1,8 @@
 import { APIS } from "../../../api";
 import { Tabs, TabsContent, TabsList, TabsTrigger, Skeleton, Card, CardContent } from "@kn/ui";
-import { useApi } from "@kn/core";
+import { useApi } from "@kn/common";
 import { Space } from "../../../model/Space";
-import { useSafeState } from "@kn/core";
+import { useSafeState } from "@kn/common";
 import React, { createContext, useEffect } from "react";
 import { useParams } from "@kn/common";
 import { Basic } from "./Basic";

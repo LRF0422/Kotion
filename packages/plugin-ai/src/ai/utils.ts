@@ -1,4 +1,4 @@
-import { generateText } from "@kn/core";
+import { generateText } from "@kn/common";
 import { Editor } from "@kn/editor";
 import { TextSelection } from "@kn/editor";
 import { logger } from "@kn/common";

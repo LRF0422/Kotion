@@ -1,4 +1,4 @@
-import { usePluginConfig } from '@kn/core'
+import { usePluginConfig } from "@kn/common"
 import type { GitHubPluginConfig } from '../types/config'
 import { DEFAULT_GITHUB_CONFIG } from '../types/config'
 

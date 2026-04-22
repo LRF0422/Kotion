@@ -1,6 +1,6 @@
 import { Editor } from '@kn/editor'
 import { z } from '@kn/ui'
-import { PluginConfigStore } from '@kn/core'
+import { PluginConfigStore } from "@kn/common"
 import { getOctokit } from '../../services/github-client'
 import type { GitHubPluginConfig } from '../../types/config'
 import { GITHUB_PLUGIN_KEY } from '../../hooks/use-github-config'

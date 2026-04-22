@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useToggle } from "@kn/core";
+import { useToggle } from "@kn/common";
 import type { BlockInfo } from "../types";
 import { useSpaceService } from "./useSpaceService";
 import { blockCache } from "../utils/cache";

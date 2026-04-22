@@ -1,7 +1,7 @@
 import { CollaborationEditor } from "@kn/editor";
-import { GlobalState } from "@kn/core";
+import { GlobalState } from "@kn/common";
 import { TiptapCollabProvider } from "@kn/editor";
-import { deepEqual } from "@kn/core";
+import { deepEqual } from "@kn/common";
 import React, { useMemo, useRef, useState } from "react";
 import { useSelector } from "@kn/common";
 import { useParams } from "@kn/common";

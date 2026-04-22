@@ -8,9 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@kn/ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kn/ui";
 import { Tag, TagInput } from "@kn/ui";
-import { useApi } from "@kn/core";
-import { useSafeState } from "@kn/core";
-import { useDebounce } from "@kn/core";
+import { useApi, useSafeState, useDebounce } from "@kn/common";
 import { Check, Copy, Globe, Link2, Loader2, Mail, Search, Trash2, User, UserPlus, Users, X } from "@kn/icon";
 import React, { PropsWithChildren, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useTranslation } from "@kn/common";
