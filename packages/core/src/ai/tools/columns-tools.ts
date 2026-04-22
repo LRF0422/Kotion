@@ -1,9 +1,9 @@
 import type { Editor } from "@kn/editor"
-import { z } from "zod"
-import type { ToolsRecord } from "../types"
-import { Node as PmNode } from "@kn/editor"
-import { parseMarkdownToNodes } from "../utils/markdown-parser"
-import { scrollToPosition } from "../utils/editor-effects"
+import { z } from "@kn/ui"
+import type { ToolsRecord } from "@kn/common"
+import { Node as PmNode } from "@tiptap/core"
+import { parseMarkdownToNodes } from "@kn/common"
+import { scrollToPosition } from "@kn/common"
 
 /**
  * Columns info with nesting support

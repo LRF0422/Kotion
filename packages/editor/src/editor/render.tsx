@@ -19,7 +19,6 @@ import { cn, useTheme, Button } from "@kn/ui";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
-import { loadContentInBatches } from "./contentLoader";
 import { TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
 import { useSafeState } from "ahooks";
 import { List, X } from "@kn/icon";
@@ -108,14 +107,14 @@ export const EditorRender = forwardRef<
 
   useImperativeHandle(ref, () => editor as Editor, [editor]);
 
-  // Load content in batches to keep UI responsive for large documents
+  // Load content into the editor
   React.useEffect(() => {
     if (!editor || !content) return;
 
     let cancelled = false;
 
     // Yield first so the skeleton UI can paint before heavy processing begins
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       if (cancelled) return;
 
       // Process content to remove unknown nodes/marks (lightweight)
@@ -127,8 +126,8 @@ export const EditorRender = forwardRef<
 
       if (!processedContent || cancelled) return;
 
-      // Load content in batches — yields to browser between chunks
-      await loadContentInBatches(editor, processedContent);
+      // Load content all at once
+      editor.commands.setContent(processedContent, { emitUpdate: false });
 
       if (!cancelled) {
         setContentReady(true);

@@ -5,7 +5,7 @@
  * Manages tools, skills, contexts, and agents in a centralized manner.
  */
 
-import type { Editor } from '@kn/editor'
+import type { Editor } from '@tiptap/core'
 import type {
     AIFoundation,
     AIFoundationConfig,

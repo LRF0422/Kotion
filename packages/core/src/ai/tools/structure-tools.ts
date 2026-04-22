@@ -1,8 +1,8 @@
 import type { Editor } from "@kn/editor"
-import { z } from "zod"
-import type { ToolsRecord } from "../types"
-import { discoverBlocks, findBlockByText } from "../utils/block-utils"
-import { scrollToPosition } from "../utils/editor-effects"
+import { z } from "@kn/ui"
+import type { ToolsRecord } from "@kn/common"
+import { discoverBlocks, findBlockByText } from "@kn/common"
+import { scrollToPosition } from "@kn/common"
 
 /**
  * Create document structure manipulation tools
@@ -61,7 +61,7 @@ export const createStructureTools = (editor: Editor): ToolsRecord => ({
                         success = chain.setParagraph().run()
                         break
                     case 'heading':
-                        success = chain.toggleHeading({ level: headingLevel as 1|2|3|4|5|6 }).run()
+                        success = chain.toggleHeading({ level: headingLevel as 1 | 2 | 3 | 4 | 5 | 6 }).run()
                         break
                     case 'blockquote':
                         success = chain.toggleBlockquote().run()

@@ -1,4 +1,5 @@
-import type { Editor, Node } from "@kn/editor"
+import type { Editor } from "@tiptap/core"
+import type { Node } from "@tiptap/pm/model"
 import type { DocumentStructure, NodeInfo } from "../types"
 import { MAX_CHUNK_SIZE } from "../types"
 

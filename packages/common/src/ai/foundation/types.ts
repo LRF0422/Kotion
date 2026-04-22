@@ -5,7 +5,7 @@
  * This module provides a unified interface for AI capabilities across the application.
  */
 
-import type { Editor } from '@kn/editor'
+import type { Editor } from '@tiptap/core'
 import type { ToolDefinition, ToolsRecord, ToolMetadata, ToolCategory } from '../types'
 import type { Skill, SkillActivationResult } from '../types'
 import type { InstalledSkill } from '../skills/skill-registry'

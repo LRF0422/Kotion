@@ -6,6 +6,9 @@ export { Output } from "ai"
 // Constants
 export * from "./constants"
 
+// Tools (backend-only; editor-specific tools are in @kn/core)
+export * from "./tools"
+
 // Providers
 export * from "./providers"
 

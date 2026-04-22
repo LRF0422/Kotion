@@ -1,15 +1,15 @@
 import type { Editor } from "@kn/editor"
-import { z } from "zod"
-import type { ToolsRecord } from "../types"
+import { z } from "@kn/ui"
+import type { ToolsRecord } from "@kn/common"
 import {
     discoverBlocks,
     findBlockByText,
     findBlockByHeading,
     findTextBlocks
-} from "../utils/block-utils"
-import { contentItemsToNodes, parseMarkdownToNodes } from "../utils/markdown-parser"
-import { validateRange } from "../utils/document-utils"
-import { scrollToPosition } from "../utils/editor-effects"
+} from "@kn/common"
+import { contentItemsToNodes, parseMarkdownToNodes } from "@kn/common"
+import { validateRange } from "@kn/common"
+import { scrollToPosition } from "@kn/common"
 
 /**
  * Create document insertion tools

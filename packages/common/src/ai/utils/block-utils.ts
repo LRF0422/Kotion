@@ -1,5 +1,5 @@
-import type { Editor } from "@kn/editor"
-import { Node as PmNode } from "@kn/editor"
+import type { Editor } from "@tiptap/core"
+import { Node as PmNode } from "@tiptap/pm/model"
 import type { BlockInfo } from "../types"
 
 /**

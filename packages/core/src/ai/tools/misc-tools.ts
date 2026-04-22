@@ -1,7 +1,7 @@
 import type { Editor } from "@kn/editor"
-import { z } from "zod"
-import type { ToolsRecord, UserChoiceOption, OnUserChoiceRequest } from "../types"
-import { validateRange } from "../utils/document-utils"
+import { z } from "@kn/ui"
+import type { ToolsRecord, UserChoiceOption, OnUserChoiceRequest } from "@kn/common"
+import { validateRange } from "@kn/common"
 
 /**
  * Create user interaction tools

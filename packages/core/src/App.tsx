@@ -19,6 +19,7 @@ import { Marketplace } from "./components/Shop/Marketplace";
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
 import { setRequestToast } from "@kn/common"
+import { registerCoreToolFactories } from "./ai/tools/register"
 import { toast } from "@kn/ui"
 import { ErrorPage } from "./components/ErrorPage";
 
@@ -65,6 +66,9 @@ export const App: React.FC<AppProps> = (props) => {
 
     // Wire up toast for the request module
     setRequestToast((msg, opts) => toast.error(msg))
+
+    // Register core AI tool factories so plugins can use them via @kn/common
+    registerCoreToolFactories()
 
     // Listen for plugin refresh events to update routes
     useEffect(() => {

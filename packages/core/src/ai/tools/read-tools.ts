@@ -1,14 +1,15 @@
 import type { Editor } from "@kn/editor"
-import { z } from "zod"
-import type { ToolsRecord } from "../types"
-import { MAX_CHUNK_SIZE, MAX_NODES_PER_READ, CONTEXT_WINDOW } from "../types"
+import { Node } from "@kn/editor"
+import { z } from "@kn/ui"
+import type { ToolsRecord } from "@kn/common"
+import { MAX_CHUNK_SIZE, MAX_NODES_PER_READ, CONTEXT_WINDOW } from "@kn/common"
 import {
     extractDocumentStructure,
     validateRange,
     calculateChunkSize,
     buildNodeInfo,
     getDocumentSizeInfo
-} from "../utils"
+} from "@kn/common"
 
 /**
  * Create document reading tools

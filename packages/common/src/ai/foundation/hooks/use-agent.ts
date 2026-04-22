@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import type { Editor } from '@kn/editor'
+import type { Editor } from '@tiptap/core'
 import type { AgentOptions, StreamOptions, AIAgent } from '../types'
 import type { OnToolExecution, OnUserChoiceRequest } from '../../types'
 import { useAIFoundation } from './use-ai-foundation'

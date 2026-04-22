@@ -1,4 +1,4 @@
-import type { Editor } from "@kn/editor"
+import type { Editor } from "@tiptap/core"
 
 /**
  * Scroll the editor viewport to show the specified position.

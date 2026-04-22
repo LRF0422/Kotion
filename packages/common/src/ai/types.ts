@@ -1,4 +1,4 @@
-import type { Editor, Node } from "@kn/editor"
+import type { Editor, Node } from "@tiptap/core"
 
 // ============ Configuration Constants ============
 export const MAX_CHUNK_SIZE = 2000

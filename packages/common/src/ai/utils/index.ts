@@ -1,5 +1,6 @@
 export * from './block-utils'
 export * from './document-utils'
+export * from './editor-effects'
 export * from './markdown-parser'
 export * from './tool-wrapper'
 export * from './use-stream-buffer'

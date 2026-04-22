@@ -8,10 +8,10 @@
  */
 
 import type { Editor } from "@kn/editor"
-import { z } from "zod"
-import type { ToolsRecord } from "../types"
-import { discoverBlocks } from "../utils/block-utils"
-import { scrollToPosition } from "../utils/editor-effects"
+import { z } from "@kn/ui"
+import type { ToolsRecord } from "@kn/common"
+import { discoverBlocks } from "@kn/common"
+import { scrollToPosition } from "@kn/common"
 
 const CALLOUT_TYPES = ['default', 'info', 'success', 'warning', 'error', 'tip', 'bookmark'] as const
 

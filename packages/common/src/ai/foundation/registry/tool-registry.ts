@@ -5,7 +5,6 @@
  * Supports registration, discovery, and on-demand loading of tools.
  */
 
-import type { Editor } from '@kn/editor'
 import type { ToolDefinition, ToolsRecord, ToolMetadata, ToolCategory } from '../../types'
 import type { ToolRegistry, ToolRegistryOptions } from '../types'
 import {
@@ -14,16 +13,9 @@ import {
     getCategoryInfo,
     isEssentialTool
 } from '../../discovery/tool-metadata'
-import { createReadTools } from '../../tools/read-tools'
-import { createInsertTools } from '../../tools/insert-tools'
-import { createDeleteTools } from '../../tools/delete-tools'
-import { createMiscTools } from '../../tools/misc-tools'
-import { createColumnsTools } from '../../tools/columns-tools'
-import { createStructureTools } from '../../tools/structure-tools'
-import { createFormatTools } from '../../tools/format-tools'
-import { createCalloutTools } from '../../tools/callout-tools'
+import { getToolFactories } from '../../tools/tool-factory-registry'
 
-type ToolFactory = (editor: Editor) => ToolDefinition
+type ToolFactory = (editor: any) => ToolDefinition
 type ReloadCallback = () => void
 
 export interface GlobalToolRegistryOptions extends ToolRegistryOptions {
@@ -36,7 +28,7 @@ class GlobalToolRegistryImpl implements ToolRegistry {
     private toolFactories: Map<string, ToolFactory> = new Map()
     private loadedTools: Map<string, ToolDefinition> = new Map()
     private pluginTools: Map<string, ToolDefinition> = new Map()
-    private editor: Editor | null = null
+    private editor: any | null = null
     private onReload?: ReloadCallback
     private version: number = 0
 
@@ -57,7 +49,7 @@ class GlobalToolRegistryImpl implements ToolRegistry {
     /**
      * Set the editor instance for tool creation
      */
-    setEditor(editor: Editor): void {
+    setEditor(editor: any): void {
         this.editor = editor
         this.registerToolFactories()
     }
@@ -65,7 +57,7 @@ class GlobalToolRegistryImpl implements ToolRegistry {
     /**
      * Get the current editor instance
      */
-    getEditor(): Editor | null {
+    getEditor(): any | null {
         return this.editor
     }
 
@@ -77,60 +69,16 @@ class GlobalToolRegistryImpl implements ToolRegistry {
 
         const editor = this.editor
 
-        // Factory map for creating tools on demand
-        const factoryMap: Record<string, ToolFactory> = {}
-
-        // Read tools
-        const readTools = createReadTools(editor)
-        for (const [name, tool] of Object.entries(readTools)) {
-            factoryMap[name] = () => tool as ToolDefinition
+        // Get all tools from global registry (populated by core)
+        const allTools: ToolsRecord = {}
+        for (const factory of getToolFactories()) {
+            const tools = factory(editor)
+            Object.assign(allTools, tools)
         }
 
-        // Insert tools
-        const insertTools = createInsertTools(editor)
-        for (const [name, tool] of Object.entries(insertTools)) {
-            factoryMap[name] = () => tool as ToolDefinition
-        }
-
-        // Delete tools
-        const deleteTools = createDeleteTools(editor)
-        for (const [name, tool] of Object.entries(deleteTools)) {
-            factoryMap[name] = () => tool as ToolDefinition
-        }
-
-        // Misc tools
-        const miscTools = createMiscTools(editor, undefined)
-        for (const [name, tool] of Object.entries(miscTools)) {
-            factoryMap[name] = () => tool as ToolDefinition
-        }
-
-        // Columns tools
-        const columnsTools = createColumnsTools(editor)
-        for (const [name, tool] of Object.entries(columnsTools)) {
-            factoryMap[name] = () => tool as ToolDefinition
-        }
-
-        // Structure tools
-        const structureTools = createStructureTools(editor)
-        for (const [name, tool] of Object.entries(structureTools)) {
-            factoryMap[name] = () => tool as ToolDefinition
-        }
-
-        // Format tools
-        const formatTools = createFormatTools(editor)
-        for (const [name, tool] of Object.entries(formatTools)) {
-            factoryMap[name] = () => tool as ToolDefinition
-        }
-
-        // Callout tools
-        const calloutTools = createCalloutTools(editor)
-        for (const [name, tool] of Object.entries(calloutTools)) {
-            factoryMap[name] = () => tool as ToolDefinition
-        }
-
-        // Store factories
-        for (const [name, factory] of Object.entries(factoryMap)) {
-            this.toolFactories.set(name, factory)
+        // Store each tool as a factory
+        for (const [name, tool] of Object.entries(allTools)) {
+            this.toolFactories.set(name, () => tool as ToolDefinition)
         }
     }
 

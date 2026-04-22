@@ -1,9 +1,9 @@
 import type { Editor } from "@kn/editor"
-import { z } from "zod"
-import type { ToolsRecord } from "../types"
-import { discoverBlocks } from "../utils/block-utils"
-import { findTextPosition, findTablesInDocument, findTableCellPosition } from "../utils/block-utils"
-import { scrollToPosition } from "../utils/editor-effects"
+import { z } from "@kn/ui"
+import type { ToolsRecord } from "@kn/common"
+import { discoverBlocks } from "@kn/common"
+import { findTextPosition, findTablesInDocument, findTableCellPosition } from "@kn/common"
+import { scrollToPosition } from "@kn/common"
 
 /**
  * Create format and table tools for AI agent

@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { Editor } from '@kn/editor'
+import type { Editor } from '@tiptap/core'
 import { useSystemAgent, type StreamPromptOptions, type ExecutionStep } from './context'
 
 // ============ useSystemAgentStream ============

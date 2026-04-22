@@ -5,7 +5,6 @@
  * Implements a progressive discovery pattern to reduce initial context size.
  */
 
-import type { Editor } from '@kn/editor'
 import type {
     ToolDefinition,
     ToolsRecord,
@@ -21,23 +20,19 @@ import {
     getCategoryInfo,
     isEssentialTool
 } from '../discovery/tool-metadata'
-import { createReadTools } from '../tools/read-tools'
-import { createInsertTools } from '../tools/insert-tools'
-import { createDeleteTools } from '../tools/delete-tools'
-import { createMiscTools } from '../tools/misc-tools'
-import { createColumnsTools } from '../tools/columns-tools'
-import { createStructureTools } from '../tools/structure-tools'
-import { createFormatTools } from '../tools/format-tools'
-import { createCalloutTools } from '../tools/callout-tools'
+import { getToolFactories, type ToolFactory } from '../tools/tool-factory-registry'
+
+// Re-export ToolFactory for consumers
+export type { ToolFactory } from '../tools/tool-factory-registry'
 
 interface ToolProviderOptions {
-    editor: Editor
+    editor: any
     onUserChoiceRequest?: OnUserChoiceRequest
     onReload?: ReloadCallback
 }
 
 export class ToolProvider {
-    private editor: Editor
+    private editor: any
     private onUserChoiceRequest?: OnUserChoiceRequest
     private onReload?: ReloadCallback
 
@@ -80,25 +75,11 @@ export class ToolProvider {
      * Register tool factories for lazy initialization
      */
     private registerToolFactories(): void {
-        // Get all tools from creators
-        const readTools = createReadTools(this.editor)
-        const insertTools = createInsertTools(this.editor)
-        const deleteTools = createDeleteTools(this.editor)
-        const miscTools = createMiscTools(this.editor, this.onUserChoiceRequest)
-        const columnsTools = createColumnsTools(this.editor)
-        const structureTools = createStructureTools(this.editor)
-        const formatTools = createFormatTools(this.editor)
-        const calloutTools = createCalloutTools(this.editor)
-
-        const allTools = {
-            ...readTools,
-            ...insertTools,
-            ...deleteTools,
-            ...miscTools,
-            ...columnsTools,
-            ...structureTools,
-            ...formatTools,
-            ...calloutTools
+        // Get all tools from global registry (populated by core)
+        const allTools: ToolsRecord = {}
+        for (const factory of getToolFactories()) {
+            const tools = factory(this.editor, this.onUserChoiceRequest)
+            Object.assign(allTools, tools)
         }
 
         // Register each tool as a factory
@@ -301,7 +282,7 @@ export class ToolProvider {
     /**
      * Update editor reference (useful for editor recreation)
      */
-    updateEditor(editor: Editor): void {
+    updateEditor(editor: any): void {
         this.editor = editor
         // Re-register factories with new editor
         this.registerToolFactories()
