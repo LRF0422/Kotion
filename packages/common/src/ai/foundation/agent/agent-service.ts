@@ -3,6 +3,11 @@
  *
  * Creates and manages AI Agent instances.
  * Provides a unified interface for AI operations across the application.
+ *
+ * Now uses the backend-driven architecture:
+ * - All chat goes through /api/v1/chat/completions via createKnowledgeModel()
+ * - Backend handles tool calling, sub-agent delegation, and agent loop
+ * - Frontend handles SSE parsing, annotations, and UI rendering
  */
 
 import { stepCountIs, ToolLoopAgent } from 'ai'
@@ -16,8 +21,7 @@ import type {
 } from '../types'
 import type { GlobalToolRegistryImpl } from '../registry/tool-registry'
 import type { SkillActivationResult } from '../../types'
-import { createDeepSeekDirectModel } from '../../model-provider/deepseek-direct-provider'
-import { createBackendTools } from '../../tools/backend-tools'
+import { createKnowledgeModel, type KnowledgeModelOptions } from '../../model-provider/knowledge-provider'
 import { FOUNDATION_AGENT_PROMPT, DEFAULT_MAX_STEPS } from '../../constants'
 
 type AgentDestroyCallback = () => void
@@ -40,6 +44,8 @@ class AIAgentImpl implements AIAgent {
     // Session tracking
     private currentSessionId: string | null = null
     private currentConversationId: string | null = null
+    // Pending annotation callback (set before each stream call)
+    private pendingAnnotationCallback: ((annotations: any[]) => void) | undefined
 
     constructor(
         id: string,
@@ -79,13 +85,25 @@ class AIAgentImpl implements AIAgent {
 
     private getModel(config?: AIModelConfig) {
         const modelName = config?.model || 'deepseek-chat'
-        return createDeepSeekDirectModel(modelName)
+        const apiBase = config?.apiBaseUrl || this.options.apiBaseUrl
+
+        // Build knowledge model options with session/annotation support
+        const modelOptions: KnowledgeModelOptions = {
+            sessionId: this.currentSessionId || undefined,
+            conversationId: this.currentConversationId || undefined,
+            onAnnotation: this.pendingAnnotationCallback,
+            userId: this.options.userId,
+        }
+
+        return createKnowledgeModel(modelName, apiBase, modelOptions)
     }
 
     private getTools(): Record<string, any> {
         const tools: Record<string, any> = {}
 
         // Get specified tools or all loaded tools
+        // These are frontend-only tools that will be sent as tool definitions
+        // for bidirectional tool calling (backend decides which to use)
         if (this.options.tools && this.options.tools.length > 0) {
             for (const name of this.options.tools) {
                 const tool = this.toolRegistry.get(name)
@@ -98,8 +116,7 @@ class AIAgentImpl implements AIAgent {
             Object.assign(tools, this.toolRegistry.getLoaded())
         }
 
-        // Always include backend tools (generateContent)
-        Object.assign(tools, createBackendTools())
+        // No longer include backend tools - backend handles its own tools
 
         return tools
     }
@@ -168,13 +185,40 @@ class AIAgentImpl implements AIAgent {
             this.needsRecreation = true
         }
 
-        // Update session tracking if provided (kept for backward compatibility)
+        // Update session tracking if provided
         if (options.sessionId !== undefined) {
             this.currentSessionId = options.sessionId || null
         }
         if (options.conversationId !== undefined) {
             this.currentConversationId = options.conversationId || null
         }
+
+        // Set the annotation callback for this stream
+        this.pendingAnnotationCallback = options.onAnnotation
+
+        // Collect annotations and session info during stream
+        const collectedAnnotations: any[] = []
+        let extractedSessionId: string | undefined
+        let finishReason: string | undefined
+        let usage: { promptTokens: number; completionTokens: number } | undefined
+
+        const annotationCallback = (annotations: any[]) => {
+            collectedAnnotations.push(...annotations)
+
+            // Extract session ID from annotations
+            for (const ann of annotations) {
+                if (ann && typeof ann === 'object' && 'sessionId' in ann && typeof ann.sessionId === 'string') {
+                    extractedSessionId = ann.sessionId
+                    this.currentSessionId = ann.sessionId
+                }
+            }
+
+            // Forward to the caller's callback
+            options.onAnnotation?.(annotations)
+        }
+
+        // Update the model options with the annotation callback
+        this.pendingAnnotationCallback = annotationCallback
 
         // Ensure agent is up to date before streaming
         this.ensureAgent()
@@ -189,7 +233,10 @@ class AIAgentImpl implements AIAgent {
                 text: '',
                 stream,
                 finished: true,
-                annotations: []
+                annotations: collectedAnnotations,
+                sessionId: extractedSessionId,
+                finishReason,
+                usage
             }
         } catch (error: any) {
             if (error.name === 'AbortError') {
@@ -197,7 +244,9 @@ class AIAgentImpl implements AIAgent {
                     text: '',
                     stream: [][Symbol.iterator]() as any,
                     finished: false,
-                    annotations: []
+                    annotations: collectedAnnotations,
+                    sessionId: extractedSessionId,
+                    finishReason: 'error'
                 }
             }
             throw error

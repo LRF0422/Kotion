@@ -153,3 +153,26 @@ export interface ToolProviderState {
     loadedTools: string[]
     categories: CategoryInfo[]
 }
+
+// ============ Agent Annotation Types ============
+// Annotation types are now defined in @kn/common/ai/chat-client/types.ts
+// and re-exported from this module for backward compatibility.
+// The canonical types live in chat-client/types.ts to avoid circular dependencies.
+
+export type {
+    Annotation,
+    AgentStatusAnnotation,
+    DelegateStartAnnotation,
+    SubagentStatusAnnotation,
+    SubagentOutputAnnotation,
+    SubagentToolCallAnnotation,
+    SubagentToolResultAnnotation,
+    DelegateResultAnnotation,
+    ContextCompressedAnnotation,
+} from './chat-client/types'
+
+/** Session info annotation (first SSE event) */
+export interface SessionInfoAnnotation {
+    sessionId: string
+    conversationId?: string
+}

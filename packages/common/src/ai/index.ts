@@ -12,6 +12,35 @@ export * from "./tools"
 // Providers
 export * from "./providers"
 
+// Chat Client - Backend-driven SSE communication
+// Explicitly export to avoid conflicts with types.ts re-exports
+export {
+    KnowledgeChatClient,
+    createChatRequest,
+    parseSSEStream,
+    collectSSEEvents,
+} from "./chat-client/index"
+export type {
+    ChatStreamEvent,
+    TextDeltaEvent,
+    ToolCallStreamEvent,
+    ToolResultEvent,
+    AnnotationStreamEvent,
+    SessionInfoEvent,
+    FinishEvent,
+    ErrorEvent,
+    ChatRequest,
+    ChatResponse,
+    ChatClientOptions,
+    ChatMessage,
+    ToolCall,
+    ToolCallDelta,
+} from "./chat-client/types"
+
+// Model Providers
+export { createKnowledgeModel, type KnowledgeModelOptions } from "./model-provider/knowledge-provider"
+export { createDeepSeekDirectModel } from "./model-provider/deepseek-direct-provider"
+
 // Discovery
 export * from "./discovery"
 

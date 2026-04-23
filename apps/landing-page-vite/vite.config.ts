@@ -1,30 +1,29 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import tsconfigPaths from 'vite-tsconfig-paths'
 import path from 'path'
 
 // https://vitejs.dev/config/
 const nodeEnv = process.env.NODE_ENV === 'production' ? '"production"' : '"development"';
 
 export default defineConfig({
-  plugins: [react(), tsconfigPaths()],
+  plugins: [react()],
   define: { 'process.env.NODE_ENV': nodeEnv },
   resolve: {
+    tsconfigPaths: true,
     dedupe: ['react', 'react-dom', 'react-router-dom'],
     alias: {
       'react': path.resolve('../../node_modules/react'),
       'react-dom': path.resolve('../../node_modules/react-dom'),
     }
   },
-  optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom'],
-  },
   build: {
     sourcemap: false,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
+        manualChunks(id) {
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) {
+            return 'react-vendor';
+          }
         }
       }
     }

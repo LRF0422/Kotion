@@ -206,9 +206,18 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         const collectedAnnotations: any[] = []
         const handleAnnotation = (annotations: any[]) => {
             collectedAnnotations.push(...annotations)
+
+            // Extract session ID from annotations (first SSE event)
+            for (const ann of annotations) {
+                if (ann && typeof ann === 'object' && 'sessionId' in ann && typeof ann.sessionId === 'string') {
+                    sessionIdRef.current = ann.sessionId
+                }
+            }
+
             setState(prev => ({
                 ...prev,
-                annotations: [...prev.annotations, ...annotations]
+                annotations: [...prev.annotations, ...annotations],
+                sessionId: sessionIdRef.current
             }))
             options?.onAnnotation?.(annotations)
         }

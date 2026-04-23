@@ -12,5 +12,5 @@ import { ai } from "@kn/plugin-ai"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[]} />
+  <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, speechToText, ai]} />
 )

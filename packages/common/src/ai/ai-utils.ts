@@ -1,12 +1,20 @@
+/**
+ * @deprecated Legacy AI utilities. Use KnowledgeChatClient or createKnowledgeModel() instead.
+ * These functions are kept for backward compatibility only.
+ */
+
 import { streamText } from "ai"
 import { createDeepSeek } from "@ai-sdk/deepseek"
-import { getEnvVariable, isEnvVarEnabled } from '../utils/env-utils';
+import { getEnvVariable } from '../utils/env-utils';
 
 export const deepseek = createDeepSeek({
     apiKey: getEnvVariable("DEEPSERACH_API_KEY")
 })
 
 
+/**
+ * @deprecated Use KnowledgeChatClient or createKnowledgeModel() instead.
+ */
 const generateText = (prompt: string, tools?: any): any => {
     console.log("generateText", prompt);
     return streamText({
@@ -19,9 +27,12 @@ const generateText = (prompt: string, tools?: any): any => {
 export { generateText }
 
 
-const API_BASE = '/api/knowledge-agent/api/v1'; // or your gateway URL like http://localhost:7780/api/v1
+const API_BASE = '/api/knowledge-agent/api/v1';
 
-// Custom provider for Knowledge Cloud agent
+/**
+ * @deprecated Use KnowledgeChatClient from chat-client/ instead.
+ * This was a simple provider that didn't support all spec features.
+ */
 export function createKnowledgeProvider(): any {
     return {
         // Chat model factory

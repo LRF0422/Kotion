@@ -87,7 +87,7 @@ export function formatToolName(toolName: string) {
 
 // ============ AgentTeam Status Types ============
 
-export type TeamMemberStatus = 'pending' | 'working' | 'completed' | 'error'
+export type TeamMemberStatus = 'pending' | 'spawned' | 'working' | 'completed' | 'error'
 
 export type TeamPhase = 'planning' | 'assembling' | 'executing' | 'synthesizing' | 'completed'
 
@@ -105,6 +105,81 @@ export interface TeamState {
     phase: TeamPhase | ''
     orchestrationMessage: string
 }
+
+// ============ Spec-aligned Annotation Event Types ============
+// These map directly to the FRONTEND_INTEGRATION.md spec Section 3.6
+
+/** Agent status annotation (thinking/tool_calling) */
+export interface AgentStatusEvent {
+    type: 'agent_status'
+    phase: 'thinking' | 'tool_calling'
+    iteration?: number
+    tool?: string
+}
+
+/** Delegate start annotation (sub-agent delegation begins) */
+export interface DelegateStartEvent {
+    type: 'delegate_start'
+    subTaskCount: number
+    subTasks: Array<{ agentId: string; description: string }>
+}
+
+/** Sub-agent status change */
+export interface SubagentStatusEvent {
+    type: 'subagent_status'
+    agentId: string
+    status: 'spawned' | 'working' | 'completed' | 'error'
+    detail?: string
+}
+
+/** Sub-agent text output */
+export interface SubagentOutputEvent {
+    type: 'subagent_output'
+    agentId: string
+    content: string
+}
+
+/** Sub-agent tool call */
+export interface SubagentToolCallEvent {
+    type: 'subagent_tool_call'
+    agentId: string
+    toolName: string
+    toolCallId: string
+}
+
+/** Sub-agent tool result */
+export interface SubagentToolResultEvent {
+    type: 'subagent_tool_result'
+    agentId: string
+    toolCallId: string
+}
+
+/** Delegate result (all sub-agents completed) */
+export interface DelegateResultEvent {
+    type: 'delegate_result'
+    result: string
+}
+
+/** Context compressed annotation */
+export interface ContextCompressedEvent {
+    type: 'context_compressed'
+    from: number
+    to: number
+}
+
+/** All spec-aligned annotation types */
+export type SpecAnnotationEvent =
+    | AgentStatusEvent
+    | DelegateStartEvent
+    | SubagentStatusEvent
+    | SubagentOutputEvent
+    | SubagentToolCallEvent
+    | SubagentToolResultEvent
+    | DelegateResultEvent
+    | ContextCompressedEvent
+
+// ============ Legacy Compat Event Types ============
+// These are kept for backward compatibility with existing UI
 
 // Team assembled event
 export interface TeamAssembledEvent {

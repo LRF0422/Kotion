@@ -196,6 +196,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                 },
             })
 
+            // textStream is an async iterable of strings from the backend
             for await (const part of textStream) {
                 buffer.append(part)
             }

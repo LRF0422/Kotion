@@ -44,12 +44,11 @@
     "@types/event-source-polyfill": "^1.0.5",
     "@typescript-eslint/eslint-plugin": "^7.10.0",
     "@typescript-eslint/parser": "^7.10.0",
-    "@vitejs/plugin-react": "^5.0.0",
+    "@vitejs/plugin-react": "^6.0.0",
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.7",
     "typescript": "^5.6.2",
-    "vite": "^7.3.1",
-    "vite-tsconfig-paths": "^6.1.0"
+    "vite": "^8.0.0"
   }
 }

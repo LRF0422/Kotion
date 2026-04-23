@@ -1,7 +1,14 @@
+/**
+ * @deprecated This provider calls DeepSeek API directly.
+ * In the new backend-driven architecture, all chat goes through
+ * /api/v1/chat/completions via createKnowledgeModel() instead.
+ * This file is kept as a fallback but should not be used for new code.
+ */
+
 // deepseek-direct-provider.ts
 // Direct DeepSeek API provider using the official @ai-sdk/deepseek package.
 // Calls DeepSeek API directly without going through the backend proxy.
-// The backend is only used for content generation via the generateContent tool.
+// DEPRECATED: Use createKnowledgeModel() from knowledge-provider.ts instead.
 
 import { createDeepSeek } from '@ai-sdk/deepseek'
 
@@ -19,12 +26,15 @@ function getApiKey(): string {
 }
 
 /**
+ * @deprecated Use createKnowledgeModel() from knowledge-provider.ts instead.
+ * This calls DeepSeek API directly; the new architecture routes through the backend.
+ *
  * Create a DeepSeek Direct provider model using @ai-sdk/deepseek.
  * This calls the DeepSeek API directly without going through the backend proxy.
- * 
+ *
  * Tool calling, SSE streaming, and message formatting are handled automatically
  * by the AI SDK's DeepSeek provider.
- * 
+ *
  * @param modelId - The model ID to use (default: 'deepseek-chat')
  */
 export function createDeepSeekDirectModel(modelId: string = 'deepseek-chat') {

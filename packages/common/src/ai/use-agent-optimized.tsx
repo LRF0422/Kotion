@@ -1,10 +1,9 @@
 import { AppContext } from "../core/AppContext"
 import type { Editor } from "@tiptap/core"
-import { stepCountIs, ToolLoopAgent } from "ai"
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 
 // Types
-import type { OnToolExecution, OnUserChoiceRequest, ToolsRecord } from "./types"
+import type { OnToolExecution, OnUserChoiceRequest, ToolsRecord, Annotation } from "./types"
 export type {
     ToolExecutionEvent,
     OnToolExecution,
@@ -12,6 +11,10 @@ export type {
     UserChoiceRequest,
     OnUserChoiceRequest
 } from "./types"
+
+// Chat Client
+import { KnowledgeChatClient, createChatRequest } from "./chat-client"
+import type { ChatStreamEvent, ChatMessage, Annotation as ChatAnnotation } from "./chat-client/types"
 
 // Providers
 import { ToolProvider } from "./providers/ToolProvider"
@@ -30,11 +33,10 @@ import { wrapToolsWithCallback } from "./utils/tool-wrapper"
 
 // Shared constants
 import { EDITOR_AGENT_PROMPT, DEFAULT_MAX_STEPS } from "./constants"
-import { createDeepSeekDirectModel } from "./model-provider/deepseek-direct-provider"
-import { createBackendTools } from "./tools/backend-tools"
 
 /**
- * Optimized editor agent hook with progressive tool discovery and skills
+ * Optimized editor agent hook with backend-driven architecture.
+ * All chat goes through /api/v1/chat/completions via KnowledgeChatClient.
  */
 export const useEditorAgentOptimized = (
     editor: Editor,
@@ -46,14 +48,13 @@ export const useEditorAgentOptimized = (
     // AbortController ref for stopping generation
     const abortControllerRef = useRef<AbortController | null>(null)
 
-    // Ref to hold the current agent
-    const agentRef = useRef<ToolLoopAgent | null>(null)
+    // Chat client instance
+    const chatClientRef = useRef<KnowledgeChatClient>(new KnowledgeChatClient())
 
     // Track whether we're currently streaming
     const isStreamingRef = useRef(false)
 
     // Ref for latest tools and instructions (always up to date)
-    const latestToolsRef = useRef<ToolsRecord>({})
     const latestInstructionsRef = useRef<string>('')
 
     // Version state for reactive updates when tools/skills change
@@ -153,17 +154,20 @@ export const useEditorAgentOptimized = (
         return { ...toolDiscovery, ...skillDiscovery, ...skillManagement }
     }, [toolProvider, skillProvider, skillRegistry, handleReload])
 
-    // Create backend tools (generateContent)
-    const backendTools = useMemo(() => createBackendTools(), [])
+    // Create backend tools (generateContent) - kept for local fallback
+    // Note: In backend-driven mode, the backend handles its own tools.
+    // We only keep discovery tools for frontend-side tool exploration.
 
-    // Combine all tools: loaded tools + discovery tools + backend tools
+    // Combine all tools: loaded tools + discovery tools
+    // These are used for frontend-side tool discovery/management only
+    // The actual tool execution is handled by the backend
     const allTools = useMemo(() => {
         const loadedTools = toolProvider.getLoadedTools()
-        return { ...loadedTools, ...discoveryTools, ...backendTools }
+        return { ...loadedTools, ...discoveryTools }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [toolProvider, discoveryTools, backendTools, version])
+    }, [toolProvider, discoveryTools, version])
 
-    // Wrap tools with callback
+    // Wrap tools with callback (for frontend-side execution tracking)
     const wrappedTools = useMemo(() => {
         return wrapToolsWithCallback(allTools, onToolExecution)
     }, [allTools, onToolExecution])
@@ -175,23 +179,13 @@ export const useEditorAgentOptimized = (
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [skillProvider, version])
 
-    // Keep refs updated with latest values and conditionally recreate agent
+    // Keep instructions ref updated
     useEffect(() => {
-        latestToolsRef.current = wrappedTools
         latestInstructionsRef.current = instructions
-
-        // Only recreate agent if NOT currently streaming
-        if (!isStreamingRef.current) {
-            agentRef.current = new ToolLoopAgent({
-                model: createDeepSeekDirectModel(),
-                stopWhen: stepCountIs(DEFAULT_MAX_STEPS),
-                instructions,
-                tools: wrappedTools,
-            })
-        }
-    }, [wrappedTools, instructions])
+    }, [instructions])
 
     // Stream with abort support and history messages
+    // Uses the backend-driven KnowledgeChatClient
     const stream = useCallback(async (options: {
         prompt: string
         messages?: Array<{ role: 'user' | 'assistant'; content: string }>
@@ -205,33 +199,93 @@ export const useEditorAgentOptimized = (
         }
         abortControllerRef.current = new AbortController()
 
-        // Build prompt with conversation context
-        let fullPrompt = options.prompt
+        // Build messages array for the backend
+        const chatMessages: ChatMessage[] = []
+
+        // Add system message with instructions
+        chatMessages.push({
+            role: 'system',
+            content: latestInstructionsRef.current,
+        })
+
+        // Add history messages
         if (options.messages && options.messages.length > 0) {
-            const contextParts = options.messages.map(m =>
-                `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
-            )
-            fullPrompt = `## Conversation History\n${contextParts.join('\n\n')}\n\n## Current Request\n${options.prompt}`
+            for (const m of options.messages) {
+                chatMessages.push({
+                    role: m.role as 'user' | 'assistant',
+                    content: m.content,
+                })
+            }
         }
 
-        // Create a new ToolLoopAgent for this stream
-        // Note: Direct provider doesn't need session/annotation params since main loop doesn't go through backend
-        const model = createDeepSeekDirectModel()
-
-        const agent = new ToolLoopAgent({
-            model,
-            stopWhen: stepCountIs(DEFAULT_MAX_STEPS),
-            instructions: latestInstructionsRef.current,
-            tools: latestToolsRef.current,
+        // Add current user prompt
+        chatMessages.push({
+            role: 'user',
+            content: options.prompt,
         })
 
         isStreamingRef.current = true
         try {
-            const result = agent.stream({
-                prompt: fullPrompt,
-                abortSignal: abortControllerRef.current.signal,
+            // Use the chat client's raw generator for real-time event handling
+            const request = createChatRequest(options.prompt, {
+                messages: chatMessages.slice(0, -1), // exclude the last user message since it's in the prompt
+                sessionId: options.sessionId,
+                conversationId: options.conversationId,
+                signal: abortControllerRef.current.signal,
             })
-            return result
+
+            const chatGen = chatClientRef.current.chat(request)
+
+            // Create a text stream that forwards annotations in real-time
+            const textStream = (async function* (): AsyncGenerator<string> {
+                for await (const event of chatGen) {
+                    switch (event.type) {
+                        case 'text-delta':
+                            yield event.content
+                            break
+
+                        case 'annotation':
+                            // Forward annotations in real-time
+                            if (options.onAnnotation) {
+                                options.onAnnotation(event.annotations)
+                            }
+                            break
+
+                        case 'session-info':
+                            // Forward session info as an annotation
+                            if (options.onAnnotation) {
+                                options.onAnnotation([{
+                                    type: 'session-info',
+                                    sessionId: event.sessionId,
+                                    conversationId: event.conversationId,
+                                }])
+                            }
+                            break
+
+                        case 'tool-call':
+                            // Tool calls from the backend - informational for UI
+                            break
+
+                        case 'tool-result':
+                            // Tool results from the backend - informational for UI
+                            break
+
+                        case 'finish':
+                            // Stream complete
+                            break
+
+                        case 'error':
+                            throw new Error(event.error)
+                    }
+                }
+            })()
+
+            return { textStream }
+        } catch (error: any) {
+            if (error.name === 'AbortError') {
+                return { textStream: async function* () { /* empty */ }() }
+            }
+            throw error
         } finally {
             isStreamingRef.current = false
         }
@@ -252,11 +306,10 @@ export const useEditorAgentOptimized = (
     }, [])
 
     return {
-        agent: agentRef.current,
         stream,
         stop,
         isGenerating,
-        // New exports for progressive discovery
+        // Exports for progressive discovery
         toolProvider,
         skillProvider,
         skillRegistry,

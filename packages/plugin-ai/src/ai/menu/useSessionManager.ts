@@ -37,11 +37,21 @@ export function useSessionManager() {
     }, [])
 
     /**
-     * Parse session info from annotation data (protocol code `8:` events).
+     * Parse session info from annotation data.
+     * Handles both:
+     * - SSE format: annotations containing sessionId field (from spec Section 3.2)
+     * - Chat client format: SessionInfoEvent with type='session-info'
+     *
      * Call this with each batch of annotation data received from the stream.
      */
     const parseAnnotations = useCallback((annotations: AnnotationData[]) => {
         for (const ann of annotations) {
+            // Handle new chat-client SessionInfoEvent format
+            if ('type' in ann && (ann as any).type === 'session-info' && typeof (ann as any).sessionId === 'string') {
+                saveSession((ann as any).sessionId, (ann as any).conversationId)
+                break
+            }
+            // Handle original SSE annotation format (sessionId in annotations array)
             if ('sessionId' in ann && typeof ann.sessionId === 'string') {
                 saveSession(ann.sessionId, (ann as SessionInfo).conversationId)
                 break

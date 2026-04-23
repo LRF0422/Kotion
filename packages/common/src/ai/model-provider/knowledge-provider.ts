@@ -1,14 +1,14 @@
 /**
  * Knowledge Backend Provider
  * 
- * This provider is used internally for communicating with the backend agent API
- * for content generation tasks. It is NOT the main model provider for the agent loop.
- * The main agent loop uses deepseek-direct-provider.ts which calls DeepSeek API directly.
+ * Primary model provider for the backend-driven agent architecture.
+ * All chat requests go through /api/v1/chat/completions.
  * 
  * This provider handles:
  * - Backend agent API communication (/api/knowledge-agent/api/v1/chat/completions)
  * - Data Stream Protocol v2 parsing (for backend responses)
- * - Session and annotation handling (for backend conversation continuity)
+ * - SSE streaming with session and annotation handling
+ * - Bidirectional tool calling support
  */
 import type {
     LanguageModelV2,
@@ -98,22 +98,37 @@ function convertPromptToMessages(prompt: LanguageModelV2Prompt): any[] {
             }
 
             case 'assistant': {
-                // DeepSeek doesn't support tool_calls in assistant messages
-                // Only keep the text content, strip out tool_calls entirely
+                // Support bidirectional tool mode: include tool_calls if present
                 const textContent = (msg.content as any[])
                     .filter((p: any) => p.type === 'text')
                     .map((p: any) => p.text)
                     .join('');
-                // Only include if there's actual text content
+                const toolCalls = (msg.content as any[])
+                    .filter((p: any) => p.type === 'tool-call');
+
+                const assistantMsg: any = { role: 'assistant' };
                 if (textContent) {
-                    messages.push({ role: 'assistant', content: textContent });
+                    assistantMsg.content = textContent;
+                }
+                if (toolCalls.length > 0) {
+                    assistantMsg.tool_calls = toolCalls.map((tc: any) => ({
+                        id: tc.toolCallId,
+                        type: 'function',
+                        function: {
+                            name: tc.toolName,
+                            arguments: typeof tc.input === 'string' ? tc.input : JSON.stringify(tc.input),
+                        },
+                    }));
+                }
+                if (textContent || toolCalls.length > 0) {
+                    messages.push(assistantMsg);
                 }
                 break;
             }
 
             case 'tool': {
-                // Merge tool results into the preceding assistant message
-                const resultParts: string[] = [];
+                // Support bidirectional tool mode: emit proper tool role messages
+                const toolParts: any[] = [];
                 for (const part of msg.content as any[]) {
                     if (part.type === 'tool-result') {
                         let resultStr: string;
@@ -129,18 +144,24 @@ function convertPromptToMessages(prompt: LanguageModelV2Prompt): any[] {
                         } else {
                             resultStr = JSON.stringify(output, null, 2);
                         }
-                        resultParts.push(`[Tool: ${part.toolName}]\n${resultStr}`);
+                        // Emit as proper tool role message for bidirectional mode
+                        toolParts.push({
+                            toolCallId: part.toolCallId,
+                            toolName: part.toolName,
+                            result: resultStr,
+                        });
                     }
                 }
-                if (resultParts.length > 0) {
-                    const toolResultText = `\n\nTool execution results:\n\n${resultParts.join('\n\n')}`;
-                    // Find the last assistant message and append
-                    const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
-                    if (lastAssistant) {
-                        lastAssistant.content = (lastAssistant.content || '') + toolResultText;
-                    } else {
-                        // Fallback: if no assistant message exists, add as user message
-                        messages.push({ role: 'user', content: toolResultText.trim() });
+
+                if (toolParts.length > 0) {
+                    // Emit as tool role messages (proper OpenAI format for bidirectional mode)
+                    for (const tp of toolParts) {
+                        messages.push({
+                            role: 'tool',
+                            tool_call_id: tp.toolCallId,
+                            name: tp.toolName,
+                            content: tp.result,
+                        });
                     }
                 }
                 break;
@@ -161,6 +182,12 @@ export interface KnowledgeModelOptions {
     conversationId?: string
     /** Callback for annotation events from Data Stream v2 */
     onAnnotation?: (annotations: any[]) => void
+    /** User ID */
+    userId?: number
+    /** Frontend passthrough metadata */
+    data?: Record<string, any>
+    /** Frontend tool definitions for bidirectional tool calling */
+    tools?: any[]
 }
 
 /**
@@ -255,6 +282,9 @@ export function createKnowledgeModel(
                     streamProtocol: 'data',
                     ...(modelOptions?.sessionId ? { sessionId: modelOptions.sessionId } : {}),
                     ...(modelOptions?.conversationId ? { conversationId: modelOptions.conversationId } : {}),
+                    ...(modelOptions?.userId ? { userId: modelOptions.userId } : {}),
+                    ...(modelOptions?.data ? { data: modelOptions.data } : {}),
+                    ...(modelOptions?.tools ? { tools: modelOptions.tools } : {}),
                 }),
                 signal: options.abortSignal,
             });
@@ -342,6 +372,17 @@ export function createKnowledgeModel(
                                         break;
                                     }
 
+                                    case 'c': {
+                                        // Tool call streaming start (tool-call-streaming)
+                                        const tcStream = JSON.parse(payload);
+                                        controller.enqueue({
+                                            type: 'tool-call-streaming',
+                                            toolCallId: tcStream.toolCallId,
+                                            toolName: tcStream.toolName,
+                                        } as any);
+                                        break;
+                                    }
+
                                     case '8': {
                                         // Annotation event (Data Stream v2)
                                         // Note: Don't enqueue as 'annotation' type - AI SDK doesn't recognize it
@@ -376,6 +417,11 @@ export function createKnowledgeModel(
     };
 }
 
-// Usage with streamText:
+// Usage with AI SDK:
 // import { streamText } from 'ai';
 // const result = await streamText({ model: createKnowledgeModel('deepseek-chat'), prompt: 'Hello' });
+//
+// Or use the KnowledgeChatClient directly for more control:
+// import { KnowledgeChatClient } from '../chat-client';
+// const client = new KnowledgeChatClient();
+// const response = await client.chatComplete({ messages: [...] });

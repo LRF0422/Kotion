@@ -14,7 +14,7 @@ import type { InstalledSkill } from '../skills/skill-registry'
 
 export interface AIModelConfig {
     /** Model provider */
-    provider: 'deepseek' | 'anthropic' | 'openai'
+    provider: 'deepseek' | 'anthropic' | 'openai' | 'knowledge'
     /** Model identifier */
     model: string
     /** API key for the provider */
@@ -161,6 +161,10 @@ export interface AgentOptions {
     contextId?: string
     /** Maximum steps for tool loop */
     maxSteps?: number
+    /** User ID */
+    userId?: number
+    /** Custom API base URL for backend */
+    apiBaseUrl?: string
 }
 
 export interface StreamOptions {
@@ -178,6 +182,12 @@ export interface StreamOptions {
     conversationId?: string
     /** Callback for annotation events from Data Stream v2 */
     onAnnotation?: (annotations: any[]) => void
+    /** User ID */
+    userId?: number
+    /** Frontend passthrough metadata */
+    data?: Record<string, any>
+    /** Frontend tool definitions (OpenAI format), for bidirectional tool calling */
+    tools?: any[]
 }
 
 export interface StreamResult {
@@ -191,6 +201,15 @@ export interface StreamResult {
     finished: boolean
     /** Annotations received from Data Stream v2 */
     annotations?: any[]
+    /** Session ID from the first SSE event */
+    sessionId?: string
+    /** Finish reason */
+    finishReason?: string
+    /** Usage statistics */
+    usage?: {
+        promptTokens: number
+        completionTokens: number
+    }
 }
 
 export interface AIAgent {
