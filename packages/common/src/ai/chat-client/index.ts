@@ -95,22 +95,22 @@ export class KnowledgeChatClient {
 
                 case 'tool-call':
                     // Accumulate tool call deltas into complete tool calls
+                    // Use index-based matching per OpenAI streaming spec:
+                    // first delta has id+name, subsequent deltas only have index+arguments
                     for (const tc of event.toolCalls) {
-                        const existing = result.toolCalls.find(t => t.id === tc.id)
+                        const existing = result.toolCalls[tc.index]
                         if (existing) {
-                            // Append delta
                             if (tc.function?.name) existing.function.name = tc.function.name
-                            if (tc.function?.arguments) existing.function.arguments = (existing.function.arguments || '') + tc.function.arguments
-                        } else if (tc.id && tc.function?.name) {
-                            // New complete tool call
-                            result.toolCalls.push({
+                            if (tc.function?.arguments) existing.function.arguments += tc.function.arguments
+                        } else if (tc.id) {
+                            result.toolCalls[tc.index] = {
                                 id: tc.id,
                                 type: 'function',
                                 function: {
-                                    name: tc.function.name,
-                                    arguments: tc.function.arguments || '',
+                                    name: tc.function?.name || '',
+                                    arguments: tc.function?.arguments || '',
                                 },
-                            })
+                            }
                         }
                     }
                     break
@@ -163,22 +163,7 @@ export class KnowledgeChatClient {
             toolCalls: [] as ToolCall[],
         }
 
-        const self = this
-
-        const textStream = {
-            [Symbol.asyncIterator]() {
-                return this
-            },
-
-            async next() {
-                // This approach doesn't work well for a single iterator
-                // We'll use a different approach below
-                return { done: true as const, value: undefined }
-            },
-        }
-
-        // Better approach: use the chat generator and wrap it
-        const chatGen = self.chat(request)
+        const chatGen = this.chat(request)
 
         const textGenerator = async function* (): AsyncGenerator<string> {
             for await (const event of chatGen) {
@@ -188,20 +173,21 @@ export class KnowledgeChatClient {
                         break
 
                     case 'tool-call':
+                        // Use index-based matching for streaming tool call deltas
                         for (const tc of event.toolCalls) {
-                            const existing = metadata.toolCalls.find(t => t.id === tc.id)
+                            const existing = metadata.toolCalls[tc.index]
                             if (existing) {
                                 if (tc.function?.name) existing.function.name = tc.function.name
-                                if (tc.function?.arguments) existing.function.arguments = (existing.function.arguments || '') + tc.function.arguments
-                            } else if (tc.id && tc.function?.name) {
-                                metadata.toolCalls.push({
+                                if (tc.function?.arguments) existing.function.arguments += tc.function.arguments
+                            } else if (tc.id) {
+                                metadata.toolCalls[tc.index] = {
                                     id: tc.id,
                                     type: 'function',
                                     function: {
-                                        name: tc.function.name,
-                                        arguments: tc.function.arguments || '',
+                                        name: tc.function?.name || '',
+                                        arguments: tc.function?.arguments || '',
                                     },
-                                })
+                                }
                             }
                         }
                         break

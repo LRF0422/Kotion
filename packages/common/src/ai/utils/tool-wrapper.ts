@@ -1,4 +1,60 @@
-import type { OnToolExecution, ToolDefinition } from "../types"
+import { z } from "zod"
+import type { OnToolExecution, ToolDefinition, ToolsRecord } from "../types"
+
+/**
+ * Resolve input schema: convert Zod schema to JSON Schema if needed.
+ * Uses Zod v4's built-in z.toJSONSchema() for reliable conversion.
+ */
+function resolveInputSchema(schema: any): any {
+    if (!schema) return { type: 'object', properties: {} }
+
+    // Detect Zod schema: Zod v4 uses _zod, Zod v3 uses _def.typeName
+    const isZodSchema = schema._zod || (schema._def && typeof schema._def === 'object')
+
+    if (isZodSchema && typeof z.toJSONSchema === 'function') {
+        try {
+            const jsonSchema = z.toJSONSchema(schema)
+            // Strip $schema key — not needed for OpenAI function-calling format
+            const { $schema, ...rest } = jsonSchema as Record<string, any>
+            return rest
+        } catch {
+            // If conversion fails, return a safe default
+            return schema
+        }
+    }
+
+    // Already a plain JSON Schema object
+    return schema
+}
+
+/**
+ * Convert a ToolsRecord (internal format) to the OpenAI function-calling tools format.
+ *
+ * Internal: { toolName: { description, inputSchema, execute } }
+ * OpenAI:    [{ type: "function", function: { name, description, parameters } }]
+ *
+ * This is used to send frontend tool definitions to the backend for
+ * bidirectional tool calling (see FRONTEND_INTEGRATION.md §4).
+ */
+export const toolsRecordToOpenAIFormat = (
+    tools: ToolsRecord
+): Array<{
+    type: 'function'
+    function: {
+        name: string
+        description: string
+        parameters: any
+    }
+}> => {
+    return Object.entries(tools).map(([name, tool]) => ({
+        type: 'function' as const,
+        function: {
+            name,
+            description: tool.description || '',
+            parameters: resolveInputSchema(tool.inputSchema),
+        },
+    }))
+}
 
 /**
  * Wrap a tool with execution tracking

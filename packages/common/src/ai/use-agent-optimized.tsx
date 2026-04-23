@@ -14,7 +14,7 @@ export type {
 
 // Chat Client
 import { KnowledgeChatClient, createChatRequest } from "./chat-client"
-import type { ChatStreamEvent, ChatMessage, Annotation as ChatAnnotation } from "./chat-client/types"
+import type { ChatStreamEvent, ChatMessage, ChatRequest, ToolCall, Annotation as ChatAnnotation } from "./chat-client/types"
 
 // Providers
 import { ToolProvider } from "./providers/ToolProvider"
@@ -29,7 +29,7 @@ import { createSkillManagementTools } from "./discovery/skill-management-tools"
 import { builtinSkills, getSkillRegistry } from "./skills"
 
 // Utils
-import { wrapToolsWithCallback } from "./utils/tool-wrapper"
+import { wrapToolsWithCallback, toolsRecordToOpenAIFormat } from "./utils/tool-wrapper"
 
 // Shared constants
 import { EDITOR_AGENT_PROMPT, DEFAULT_MAX_STEPS } from "./constants"
@@ -226,57 +226,142 @@ export const useEditorAgentOptimized = (
 
         isStreamingRef.current = true
         try {
-            // Use the chat client's raw generator for real-time event handling
-            const request = createChatRequest(options.prompt, {
-                messages: chatMessages.slice(0, -1), // exclude the last user message since it's in the prompt
-                sessionId: options.sessionId,
-                conversationId: options.conversationId,
-                signal: abortControllerRef.current.signal,
-            })
+            // Convert frontend tools to OpenAI format for bidirectional tool calling
+            const openAITools = toolsRecordToOpenAIFormat(allTools)
 
-            const chatGen = chatClientRef.current.chat(request)
+            // Build the full messages array (will grow as tool results are added)
+            const messages = [...chatMessages]
 
-            // Create a text stream that forwards annotations in real-time
+            // Track session ID from the first response
+            let currentSessionId = options.sessionId
+
+            // Max iterations to prevent infinite loops in bidirectional tool mode
+            const MAX_TOOL_ITERATIONS = 10
+
+            // Create a text stream that handles bidirectional tool calling
             const textStream = (async function* (): AsyncGenerator<string> {
-                for await (const event of chatGen) {
-                    switch (event.type) {
-                        case 'text-delta':
-                            yield event.content
-                            break
-
-                        case 'annotation':
-                            // Forward annotations in real-time
-                            if (options.onAnnotation) {
-                                options.onAnnotation(event.annotations)
-                            }
-                            break
-
-                        case 'session-info':
-                            // Forward session info as an annotation
-                            if (options.onAnnotation) {
-                                options.onAnnotation([{
-                                    type: 'session-info',
-                                    sessionId: event.sessionId,
-                                    conversationId: event.conversationId,
-                                }])
-                            }
-                            break
-
-                        case 'tool-call':
-                            // Tool calls from the backend - informational for UI
-                            break
-
-                        case 'tool-result':
-                            // Tool results from the backend - informational for UI
-                            break
-
-                        case 'finish':
-                            // Stream complete
-                            break
-
-                        case 'error':
-                            throw new Error(event.error)
+                for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+                    // Build the chat request with current messages and session
+                    const request: ChatRequest = {
+                        messages,
+                        sessionId: currentSessionId,
+                        conversationId: options.conversationId,
+                        signal: abortControllerRef.current!.signal,
+                        stream: true,
+                        tools: openAITools.length > 0 ? openAITools : undefined,
                     }
+
+                    const chatGen = chatClientRef.current.chat(request)
+
+                    // Accumulate tool calls from this round
+                    const roundToolCalls: ToolCall[] = []
+                    let roundFinishReason: string | undefined
+                    let roundAssistantContent = ''
+
+                    for await (const event of chatGen) {
+                        switch (event.type) {
+                            case 'text-delta':
+                                yield event.content
+                                roundAssistantContent += event.content
+                                break
+
+                            case 'annotation':
+                                if (options.onAnnotation) {
+                                    options.onAnnotation(event.annotations)
+                                }
+                                break
+
+                            case 'session-info':
+                                currentSessionId = event.sessionId
+                                if (options.onAnnotation) {
+                                    options.onAnnotation([{
+                                        type: 'session-info',
+                                        sessionId: event.sessionId,
+                                        conversationId: event.conversationId,
+                                    }])
+                                }
+                                break
+
+                            case 'tool-call':
+                                // Accumulate tool call deltas into complete tool calls
+                                // Use index-based matching per OpenAI streaming spec:
+                                // first delta has id+name, subsequent deltas only have index+arguments
+                                for (const tc of event.toolCalls) {
+                                    const existing = roundToolCalls[tc.index]
+                                    if (existing) {
+                                        if (tc.function?.name) existing.function.name = tc.function.name
+                                        if (tc.function?.arguments) existing.function.arguments += tc.function.arguments
+                                    } else if (tc.id) {
+                                        roundToolCalls[tc.index] = {
+                                            id: tc.id,
+                                            type: 'function',
+                                            function: {
+                                                name: tc.function?.name || '',
+                                                arguments: tc.function?.arguments || '',
+                                            },
+                                        }
+                                    }
+                                }
+                                break
+
+                            case 'tool-result':
+                                // Backend tool results - informational for UI
+                                break
+
+                            case 'finish':
+                                roundFinishReason = event.finishReason
+                                break
+
+                            case 'error':
+                                throw new Error(event.error)
+                        }
+                    }
+
+                    // Check if backend requested frontend tool execution
+                    if (roundFinishReason === 'tool-calls' && roundToolCalls.length > 0) {
+                        // Add assistant message with tool_calls to conversation
+                        const assistantMsg: ChatMessage = {
+                            role: 'assistant',
+                            tool_calls: roundToolCalls,
+                        }
+                        if (roundAssistantContent) {
+                            assistantMsg.content = roundAssistantContent
+                        }
+                        messages.push(assistantMsg)
+
+                        // Execute each tool locally and add results as tool messages
+                        // Use wrappedTools for execution tracking, fallback to allTools
+                        for (const tc of roundToolCalls) {
+                            const toolName = tc.function.name
+                            const toolDef = wrappedTools[toolName] || allTools[toolName]
+
+                            let toolResult: string
+                            if (toolDef?.execute) {
+                                try {
+                                    const args = JSON.parse(tc.function.arguments || '{}')
+                                    const result = await toolDef.execute(args)
+                                    toolResult = typeof result === 'string' ? result : JSON.stringify(result)
+                                } catch (err: any) {
+                                    toolResult = `Error executing tool ${toolName}: ${err.message || err}`
+                                }
+                            } else {
+                                toolResult = `Tool ${toolName} not available on frontend`
+                            }
+
+                            messages.push({
+                                role: 'tool',
+                                tool_call_id: tc.id,
+                                name: toolName,
+                                content: toolResult,
+                            })
+                        }
+
+                        // Continue the loop to send tool results back to backend
+                        continue
+                    }
+
+                    // Normal finish (stop, error, max_iterations) - exit the loop
+                    break
                 }
             })()
 
@@ -289,7 +374,7 @@ export const useEditorAgentOptimized = (
         } finally {
             isStreamingRef.current = false
         }
-    }, [])
+    }, [allTools, wrappedTools])
 
     // Stop current generation
     const stop = useCallback(() => {

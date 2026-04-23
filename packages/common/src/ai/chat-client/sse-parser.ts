@@ -50,8 +50,8 @@ export async function* parseSSEStream(body: ReadableStream<Uint8Array>): AsyncGe
                 const trimmed = line.trim()
                 if (!trimmed) continue
 
-                const event = parseSSELine(trimmed)
-                if (event) {
+                const events = parseSSELine(trimmed)
+                for (const event of events) {
                     yield event
                 }
             }
@@ -59,8 +59,8 @@ export async function* parseSSEStream(body: ReadableStream<Uint8Array>): AsyncGe
 
         // Process any remaining buffer
         if (buffer.trim()) {
-            const event = parseSSELine(buffer.trim())
-            if (event) {
+            const events = parseSSELine(buffer.trim())
+            for (const event of events) {
                 yield event
             }
         }
@@ -72,15 +72,15 @@ export async function* parseSSEStream(body: ReadableStream<Uint8Array>): AsyncGe
 /**
  * Parse a single SSE line (`data: {...}` or `data: [DONE]`)
  */
-function parseSSELine(line: string): ChatStreamEvent | null {
+function parseSSELine(line: string): ChatStreamEvent[] {
     // SSE lines start with "data: "
-    if (!line.startsWith('data: ')) return null
+    if (!line.startsWith('data:')) return []
 
-    const data = line.slice(6).trim()
+    const data = line.slice(5).trim()
 
     // Stream termination
     if (data === '[DONE]') {
-        return null // Handled by finish event before [DONE]
+        return [] // Handled by finish event before [DONE]
     }
 
     try {
@@ -89,112 +89,132 @@ function parseSSELine(line: string): ChatStreamEvent | null {
     } catch {
         // Ignore malformed JSON
         console.warn('[SSEParser] Failed to parse SSE data:', data.substring(0, 100))
-        return null
+        return []
     }
 }
 
 /**
- * Parse a parsed JSON object from SSE data into a ChatStreamEvent
+ * Normalize finish_reason from backend (OpenAI format uses underscores)
+ * to our internal format (uses hyphens for some values).
  */
-function parseEventData(json: any): ChatStreamEvent | null {
+function normalizeFinishReason(reason: string): FinishEvent['finishReason'] {
+    // OpenAI sends "tool_calls" but our types use "tool-calls"
+    const mapping: Record<string, FinishEvent['finishReason']> = {
+        'tool_calls': 'tool-calls',
+        'tool-calls': 'tool-calls',
+        'stop': 'stop',
+        'max_iterations': 'max_iterations',
+        'error': 'error',
+        'length': 'length',
+    }
+    return mapping[reason] || (reason as FinishEvent['finishReason'])
+}
+
+/**
+ * Parse a parsed JSON object from SSE data into ChatStreamEvent array.
+ *
+ * Returns an array because a single SSE data object may produce multiple
+ * events (e.g. session-info + annotations in the first message, or
+ * content + finish_reason in the last message).
+ */
+function parseEventData(json: any): ChatStreamEvent[] {
     // 1. Error event (top-level "error" field)
     if (json.error) {
-        return {
+        return [{
             type: 'error',
             error: typeof json.error === 'string' ? json.error : json.error?.message || 'Unknown error',
-        } as ErrorEvent
+        } as ErrorEvent]
     }
 
     // 2. Tool result event (top-level "tool_call_id" field)
     if (json.tool_call_id) {
-        return {
+        return [{
             type: 'tool-result',
             toolCallId: json.tool_call_id,
             result: json.result || { success: true, output: '', error: null },
-        } as ToolResultEvent
+        } as ToolResultEvent]
     }
 
     // 3. Standard OpenAI-format choice events
     const choice = json.choices?.[0]
-    if (!choice) return null
+    if (!choice) return []
 
     const delta = choice.delta
     if (!delta) {
         // Could be a finish event with empty delta
         if (choice.finish_reason) {
-            return {
+            return [{
                 type: 'finish',
-                finishReason: choice.finish_reason,
+                finishReason: normalizeFinishReason(choice.finish_reason),
                 usage: json.usage ? {
                     promptTokens: json.usage.prompt_tokens ?? 0,
                     completionTokens: json.usage.completion_tokens ?? 0,
                 } : undefined,
-            } as FinishEvent
+            } as FinishEvent]
         }
-        return null
+        return []
     }
 
-    // 3a. Session info (sessionId in annotations of first message)
+    // Build events array - a single delta may contain multiple event types
+    const events: ChatStreamEvent[] = []
+
+    // 3a. Annotations (may contain session-info + other annotations)
     if (delta.annotations) {
         const sessionId = extractSessionId(delta.annotations)
         if (sessionId) {
-            // Emit session-info first
-            const sessionEvent: SessionInfoEvent = {
+            // Emit session-info event
+            events.push({
                 type: 'session-info',
                 sessionId,
                 conversationId: delta.annotations.find((a: any) => a.conversationId)?.conversationId,
-            }
+            } as SessionInfoEvent)
 
-            // Also emit annotation event if there are other annotations
+            // Also emit annotation event for non-session annotations
             const otherAnnotations = delta.annotations.filter((a: any) => !('sessionId' in a))
             if (otherAnnotations.length > 0) {
-                // Yield session info and annotations separately
-                // We return the session event; caller should handle annotation separately
-                // For simplicity, we'll emit annotation event too
-                // Since generators can only yield one at a time, we use a different approach
-                // Return session-info here; the annotation will be yielded in the next call
+                events.push({
+                    type: 'annotation',
+                    annotations: otherAnnotations as Annotation[],
+                } as AnnotationStreamEvent)
             }
-
-            return sessionEvent
+        } else {
+            // Regular annotation event
+            events.push({
+                type: 'annotation',
+                annotations: delta.annotations as Annotation[],
+            } as AnnotationStreamEvent)
         }
-
-        // Regular annotation event
-        const annotations = delta.annotations as Annotation[]
-        return {
-            type: 'annotation',
-            annotations,
-        } as AnnotationStreamEvent
     }
 
     // 3b. Text delta
     if (delta.content !== undefined && delta.content !== null) {
-        return {
+        events.push({
             type: 'text-delta',
             content: delta.content,
-        } as TextDeltaEvent
+        } as TextDeltaEvent)
     }
 
     // 3c. Tool call delta
     if (delta.tool_calls) {
-        return {
+        events.push({
             type: 'tool-call',
             toolCalls: delta.tool_calls as ToolCallDelta[],
-        } as ToolCallStreamEvent
+        } as ToolCallStreamEvent)
     }
 
     // 3d. Finish event
     if (choice.finish_reason) {
-        return {
+        events.push({
             type: 'finish',
-            finishReason: choice.finish_reason,
+            finishReason: normalizeFinishReason(choice.finish_reason),
             usage: json.usage ? {
                 promptTokens: json.usage.prompt_tokens ?? 0,
                 completionTokens: json.usage.completion_tokens ?? 0,
             } : undefined,
-        } as FinishEvent
+        } as FinishEvent)
     }
 
-    return null
+    return events
 }
 
 /**

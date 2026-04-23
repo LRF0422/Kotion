@@ -225,6 +225,9 @@ export function createKnowledgeModel(
                     stream: false,
                     ...(modelOptions?.sessionId ? { sessionId: modelOptions.sessionId } : {}),
                     ...(modelOptions?.conversationId ? { conversationId: modelOptions.conversationId } : {}),
+                    ...(modelOptions?.userId ? { userId: modelOptions.userId } : {}),
+                    ...(modelOptions?.data ? { data: modelOptions.data } : {}),
+                    ...(modelOptions?.tools ? { tools: modelOptions.tools } : {}),
                 }),
                 signal: options.abortSignal,
             });
