@@ -4,8 +4,8 @@ import { Avatar, Badge, Button, Rate, Separator, Tabs, TabsContent, TabsList, Ta
 import { useSafeState } from "ahooks";
 import React, { useEffect } from "react";
 import { useParams } from "@kn/common";
-import { useApi, useNavigator, useUploadFile } from "../../../hooks";
-import { APIS } from "../../../api";
+import { useApi, useNavigator, useUploadFile } from "@kn/common";
+import { APIS } from "@kn/common";
 
 
 export const PluginDetail: React.FC = () => {

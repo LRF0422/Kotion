@@ -11,9 +11,9 @@ import { z } from "@kn/ui";
 import { CheckCircle2, PlusIcon, TrashIcon, Loader2Icon, XIcon, UploadIcon, ImageIcon, Sparkles } from "@kn/icon";
 import { CollaborationEditor, JSONContent, Editor } from "@kn/editor";
 import { useTranslation } from "@kn/common";
-import { useApi, useUploadFile } from "../../../hooks";
+import { useApi, useUploadFile } from "@kn/common";
 import { useSafeState } from "ahooks";
-import { APIS } from "../../../api";
+import { APIS } from "@kn/common";
 import { generateText, parseMarkdownToNodes } from "@kn/common";
 
 interface Description {

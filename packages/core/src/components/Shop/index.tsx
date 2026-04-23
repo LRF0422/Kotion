@@ -16,12 +16,12 @@ import {
     TooltipContent, TooltipProvider, TooltipTrigger
 } from "@kn/ui";
 import React, { useContext, useEffect, useState } from "react";
-import { useNavigator } from "../../hooks/use-navigator";
+import { useNavigator } from "@kn/common";
 import { Outlet } from "react-router-dom";
 import { PluginUploader } from "./PluginUploader";
 import { PluginManager } from "./PluginManager";
-import { useApi, useUploadFile } from "../../hooks";
-import { APIS } from "../../api";
+import { useApi, useUploadFile } from "@kn/common";
+import { APIS } from "@kn/common";
 import { useSafeState } from "ahooks";
 import { AppContext, REFRESH_PLUSINS, event } from "@kn/common";
 

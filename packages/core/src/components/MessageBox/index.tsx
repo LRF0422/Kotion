@@ -11,10 +11,10 @@ import {
 } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 import { useNavigate } from "@kn/common";
-import { useInstantMessage, ApiMessage } from "../../hooks/use-instant-message";
+import { useInstantMessage, ApiMessage } from "@kn/common";
 
 // Re-export types for external use
-export type { ApiMessage } from "../../hooks/use-instant-message";
+export type { ApiMessage } from "@kn/common";
 
 // Message type definitions (for UI display)
 export interface Message {

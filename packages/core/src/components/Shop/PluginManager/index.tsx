@@ -1,8 +1,8 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, Badge, ScrollArea, Separator, cn } from "@kn/ui";
 import React, { PropsWithChildren, useCallback, useEffect, useMemo, useState } from "react";
 import { PluginList } from "./PluginList";
-import { useApi } from "../../../hooks";
-import { APIS } from "../../../api";
+import { useApi } from "@kn/common";
+import { APIS } from "@kn/common";
 import { BoxIcon, CheckCircleIcon, XCircleIcon, ClockIcon, LayoutGridIcon, CodeIcon, PaletteIcon, DatabaseIcon, SettingsIcon } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 

@@ -1,7 +1,7 @@
 import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord } from "@kn/common"
-import { Node as PmNode } from "@tiptap/core"
+import { Node as PmNode } from "@kn/editor"
 import { parseMarkdownToNodes } from "@kn/common"
 import { scrollToPosition } from "@kn/common"
 

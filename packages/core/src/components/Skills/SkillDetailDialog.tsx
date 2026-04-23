@@ -34,7 +34,7 @@ import {
     Link,
     FileCode
 } from '@kn/icon'
-import type { InstalledSkill, SerializableSkill } from '../../ai/skills/skill-registry'
+import type { InstalledSkill, SerializableSkill } from '@kn/common'
 
 export interface SkillDetailDialogProps {
     skill: InstalledSkill | SerializableSkill | null

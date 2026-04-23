@@ -5,8 +5,6 @@ export * from "@kn/common"
 // Core-specific exports (UI components that only core uses)
 export * from "./App"
 export * from "./components/Skills"
-export { MobilePageHeaderProvider, useMobilePageHeader, type MobilePageHeaderInfo } from "./context/MobilePageHeaderContext"
-export { ModalProvider } from "./hooks/use-modal"
 export { MessageBox } from "./components/MessageBox"
 export * from "./ai"
 

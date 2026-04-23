@@ -1,5 +1,5 @@
 import { Button, Alert, AlertTitle, AlertDescription } from "@kn/ui";
-import { useNavigator } from "../hooks/use-navigator";
+import { useNavigator } from "@kn/common";
 import React, { useState, useEffect } from "react";
 import { useRouteError } from "react-router-dom";
 import { useTranslation } from "@kn/common";

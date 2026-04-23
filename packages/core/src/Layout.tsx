@@ -8,7 +8,7 @@ import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens,
 import { toast } from "@kn/ui"
 import React from "react"
 import { useAsyncEffect } from "ahooks"
-import { MobilePageHeaderProvider, useMobilePageHeader } from "./context/MobilePageHeaderContext"
+import { MobilePageHeaderProvider, useMobilePageHeader } from "@kn/common"
 import {
     AIAssistantPanel,
     useAIAssistantShortcut

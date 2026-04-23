@@ -6,8 +6,8 @@ import {
 } from "@kn/ui";
 import React, { useContext, useEffect, useState } from "react";
 import { PluginUploader } from "../PluginUploader";
-import { useApi, useNavigator, useUploadFile } from "../../../hooks";
-import { APIS } from "../../../api";
+import { useApi, useNavigator, useUploadFile } from "@kn/common";
+import { APIS } from "@kn/common";
 import { useToggle } from "ahooks";
 import { AppContext, event, useTranslation } from "@kn/common";
 

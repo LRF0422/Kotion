@@ -1,5 +1,5 @@
 import { Separator } from "@kn/ui";
-import { GlobalState } from "../../../store/GlobalState";
+import { GlobalState } from "@kn/common";
 import React from "react";
 import { useSelector } from "@kn/common";
 import { UserAvatar } from "../../UserAvatar";

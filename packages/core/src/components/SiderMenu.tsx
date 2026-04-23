@@ -1,11 +1,11 @@
-import { useNavigator } from "../hooks/use-navigator";
+import { useNavigator } from "@kn/common";
 import { Blocks, LayoutDashboard, Power, Settings, UserRoundPlus } from "@kn/icon";
 import React, { useContext, useEffect, useMemo, useState, useCallback, memo } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile, Button } from "@kn/ui";
 import { useLocation } from "react-router-dom";
 import { cn } from "@kn/ui";
 import { useSelector } from "@kn/common";
-import { GlobalState } from "../store/GlobalState";
+import { GlobalState } from "@kn/common";
 import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@kn/ui";
 import { Badge } from "@kn/ui";
@@ -13,12 +13,12 @@ import { SettingDlg } from "./settings/SeetingDlg";
 import { ModeToggle } from "@kn/ui";
 import { AppContext, SiderMenuItemProps } from "@kn/common";
 import { event } from "@kn/common";
-import { useUploadFile } from "../hooks";
+import { useUploadFile } from "@kn/common";
 import { LanguageToggle } from "../locales/LanguageToggle";
 import { MessageBox } from "./MessageBox";
 import { Sparkles } from "@kn/icon";
 import { useAIAssistantShortcut } from "../ai/system-agent";
-import { clearTokens } from "../utils/auth";
+import { clearTokens } from "@kn/common";
 
 // Memoized menu item component for better performance
 interface MenuItemProps {

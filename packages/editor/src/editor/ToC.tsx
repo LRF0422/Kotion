@@ -9,7 +9,7 @@ import scrollIntoView from 'scroll-into-view-if-needed'
 export interface TocItem {
     id: string
     level: number
-    itemIndex: string
+    itemIndex: number
     textContent: string
     isActive?: boolean
     isScrolledOver?: boolean

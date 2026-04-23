@@ -159,25 +159,23 @@ export const App: React.FC<AppProps> = (props) => {
     return <AppContext.Provider value={{
         pluginManager: pluginManager
     }}>
-        <core.ModalProvider>
-            <ThemeProvider>
-                <Provider store={store}>
-                    {router
-                        ? <RouterProvider router={router} />
-                        : <div className="fixed inset-0 flex items-center justify-center bg-background">
-                            <div className="flex flex-col items-center gap-4">
-                                <div className="text-[60px] font-bold text-primary">KN</div>
-                                <div className="flex items-center gap-2 text-lg text-muted-foreground">
-                                    <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
-                                    <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
-                                    <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
-                                </div>
+        <ThemeProvider>
+            <Provider store={store}>
+                {router
+                    ? <RouterProvider router={router} />
+                    : <div className="fixed inset-0 flex items-center justify-center bg-background">
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="text-[60px] font-bold text-primary">KN</div>
+                            <div className="flex items-center gap-2 text-lg text-muted-foreground">
+                                <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
+                                <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
+                                <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
                             </div>
                         </div>
-                    }
-                    <Toaster />
-                </Provider>
-            </ThemeProvider>
-        </core.ModalProvider>
+                    </div>
+                }
+                <Toaster />
+            </Provider>
+        </ThemeProvider>
     </AppContext.Provider>
 }

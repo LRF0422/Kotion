@@ -24,7 +24,7 @@ import {
     toast
 } from '@kn/ui'
 import { Plus, Upload, Link, X } from '@kn/icon'
-import type { SerializableSkill } from '../../ai/skills/skill-registry'
+import type { SerializableSkill } from '@kn/common'
 
 export interface CreateSkillDialogProps {
     open: boolean

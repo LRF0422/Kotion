@@ -74,6 +74,7 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
         compilerOptions: {
           declaration: true,
           isolatedModules: false,
+          module: "ESNext",
           moduleResolution: "bundler",
           declarationDir: "./dist",
           noImplicitAny: true,

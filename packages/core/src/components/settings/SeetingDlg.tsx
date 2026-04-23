@@ -6,7 +6,7 @@ import { Badge } from "@kn/ui";
 import { ScrollArea } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { cn } from "@kn/ui";
-import { GlobalState } from "../../store/GlobalState";
+import { GlobalState } from "@kn/common";
 import { useSafeState } from "ahooks";
 import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import, Puzzle, ChevronRight, Zap } from "@kn/icon";
 import React, { PropsWithChildren, useContext, useMemo, Suspense } from "react";
@@ -14,7 +14,7 @@ import { useSelector, AppContext, PluginSettingsConfig } from "@kn/common";
 import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { Member } from "./components/Member";
-import { useUploadFile } from "../../hooks";
+import { useUploadFile } from "@kn/common";
 import { SkillManager } from "../Skills";
 
 interface PluginSettingsWithMeta extends PluginSettingsConfig {

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { KnowledgeFile, useApi, useUploadFile } from "../../../hooks";
+import { KnowledgeFile, useApi, useUploadFile } from "@kn/common";
 import {
     Avatar, Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger,
     IconButton, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, AlertDialog, AlertDialogAction,

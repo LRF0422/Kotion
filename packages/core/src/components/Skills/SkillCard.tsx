@@ -30,7 +30,7 @@ import {
     Zap,
     Shield
 } from '@kn/icon'
-import type { InstalledSkill, SerializableSkill } from '../../ai/skills/skill-registry'
+import type { InstalledSkill, SerializableSkill } from '@kn/common'
 
 export interface SkillCardProps {
     skill: InstalledSkill | (SerializableSkill & {
