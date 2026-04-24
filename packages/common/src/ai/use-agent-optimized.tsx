@@ -300,6 +300,20 @@ export const useEditorAgentOptimized = (
                                                 arguments: tc.function?.arguments || '',
                                             },
                                         }
+                                    } else {
+                                        // Delta without id and no existing entry at this index.
+                                        // This can happen if the first delta (with id) was missed
+                                        // due to a network issue or parsing error. Create a
+                                        // placeholder so subsequent argument deltas aren't lost.
+                                        console.warn(`[Agent] Tool call delta at index ${tc.index} has no id and no existing entry. Creating placeholder.`)
+                                        roundToolCalls[tc.index] = {
+                                            id: `placeholder-${tc.index}-${Date.now()}`,
+                                            type: 'function',
+                                            function: {
+                                                name: tc.function?.name || `unknown-tool-${tc.index}`,
+                                                arguments: tc.function?.arguments || '',
+                                            },
+                                        }
                                     }
                                 }
                                 break
@@ -313,16 +327,31 @@ export const useEditorAgentOptimized = (
                                 break
 
                             case 'error':
+                                console.error('[Agent] Stream error event:', event.error)
                                 throw new Error(event.error)
                         }
                     }
 
+                    // Filter out any undefined gaps in the sparse array
+                    const validToolCalls = roundToolCalls.filter(Boolean)
+
                     // Check if backend requested frontend tool execution
-                    if (roundFinishReason === 'tool-calls' && roundToolCalls.length > 0) {
+                    // Fallback: if finish event was missing (undefined) but tool calls
+                    // were accumulated, still attempt execution. This prevents the
+                    // agent from silently stopping when the SSE stream ends
+                    // prematurely.
+                    const shouldExecuteTools = validToolCalls.length > 0 &&
+                        (roundFinishReason === 'tool-calls' || roundFinishReason === undefined)
+
+                    if (shouldExecuteTools) {
+                        if (roundFinishReason === undefined) {
+                            console.warn('[Agent] Stream ended without finish event but tool calls were received. Executing as fallback.')
+                        }
+
                         // Add assistant message with tool_calls to conversation
                         const assistantMsg: ChatMessage = {
                             role: 'assistant',
-                            tool_calls: roundToolCalls,
+                            tool_calls: validToolCalls,
                         }
                         if (roundAssistantContent) {
                             assistantMsg.content = roundAssistantContent
@@ -331,7 +360,7 @@ export const useEditorAgentOptimized = (
 
                         // Execute each tool locally and add results as tool messages
                         // Use wrappedTools for execution tracking, fallback to allTools
-                        for (const tc of roundToolCalls) {
+                        for (const tc of validToolCalls) {
                             const toolName = tc.function.name
                             const toolDef = wrappedTools[toolName] || allTools[toolName]
 
@@ -343,9 +372,11 @@ export const useEditorAgentOptimized = (
                                     toolResult = typeof result === 'string' ? result : JSON.stringify(result)
                                 } catch (err: any) {
                                     toolResult = `Error executing tool ${toolName}: ${err.message || err}`
+                                    console.error(`[Agent] Tool execution failed: ${toolName}`, err)
                                 }
                             } else {
                                 toolResult = `Tool ${toolName} not available on frontend`
+                                console.warn(`[Agent] Tool not available on frontend: ${toolName}`)
                             }
 
                             messages.push({
@@ -358,6 +389,11 @@ export const useEditorAgentOptimized = (
 
                         // Continue the loop to send tool results back to backend
                         continue
+                    }
+
+                    // Warn if tool calls were accumulated but not executed
+                    if (roundToolCalls.length > 0 && !shouldExecuteTools) {
+                        console.warn('[Agent] Tool calls were accumulated but not executed. finishReason:', roundFinishReason)
                     }
 
                     // Normal finish (stop, error, max_iterations) - exit the loop

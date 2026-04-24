@@ -419,12 +419,3 @@ export function createKnowledgeModel(
         },
     };
 }
-
-// Usage with AI SDK:
-// import { streamText } from 'ai';
-// const result = await streamText({ model: createKnowledgeModel('deepseek-chat'), prompt: 'Hello' });
-//
-// Or use the KnowledgeChatClient directly for more control:
-// import { KnowledgeChatClient } from '../chat-client';
-// const client = new KnowledgeChatClient();
-// const response = await client.chatComplete({ messages: [...] });

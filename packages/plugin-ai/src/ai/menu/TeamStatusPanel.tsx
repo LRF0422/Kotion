@@ -65,48 +65,48 @@ export function TeamStatusPanel({ teamState }: TeamStatusPanelProps) {
     }
 
     return (
-        <div className="mx-2 mb-3 rounded-lg border border-gray-200 bg-white/80 p-3 backdrop-blur-sm dark:border-gray-700 dark:bg-gray-900/80">
+        <div className="mx-2 mb-2 rounded-md border border-gray-200 bg-white/80 p-2 backdrop-blur-sm dark:border-gray-700 dark:bg-gray-900/80">
             {/* Phase indicator */}
             {phase && (
-                <div className="mb-2 flex items-center gap-2">
-                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                <div className="mb-1.5 flex items-center gap-1.5">
+                    <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
                         Phase:
                     </span>
-                    <span className={`text-xs font-semibold ${getPhaseColor(phase)}`}>
+                    <span className={`text-[10px] font-semibold ${getPhaseColor(phase)}`}>
                         {getPhaseLabel(phase)}
                     </span>
                     {phase !== 'completed' && (
-                        <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
+                        <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-blue-500" />
                     )}
                 </div>
             )}
 
             {/* Orchestration message */}
             {orchestrationMessage && (
-                <p className="mb-2 text-xs text-gray-600 dark:text-gray-300">
+                <p className="mb-1.5 text-[10px] text-gray-600 dark:text-gray-300">
                     {orchestrationMessage}
                 </p>
             )}
 
             {/* Team members grid */}
             {members.length > 0 && (
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                     {members.map((member) => (
                         <div
                             key={member.id}
-                            className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 transition-colors duration-300 ${getStatusColor(member.status)}`}
+                            className={`flex items-center gap-1.5 rounded border px-2 py-1 transition-colors duration-300 ${getStatusColor(member.status)}`}
                         >
                             <StatusIcon status={member.status} />
                             <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
+                                <div className="flex items-center gap-1">
+                                    <span className="text-[10px] font-medium text-gray-800 dark:text-gray-200">
                                         {member.name}
                                     </span>
-                                    <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                                    <span className="text-[9px] text-gray-500 dark:text-gray-400">
                                         {getStatusLabel(member.status)}
                                     </span>
                                 </div>
-                                <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
+                                <p className="truncate text-[9px] text-gray-500 dark:text-gray-400">
                                     {member.subTask}
                                 </p>
                                 {member.detail && member.status === 'error' && (

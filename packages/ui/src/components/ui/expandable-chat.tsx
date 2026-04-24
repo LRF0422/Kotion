@@ -1,4 +1,4 @@
-import React, { useRef, useState, useImperativeHandle } from "react";
+import React, { useRef, useState, useImperativeHandle, createContext, useContext } from "react";
 import { X, MessageCircle, ArrowDown } from "@kn/icon";
 import { cn } from "@ui/lib/utils";
 import { Button } from "@ui/components/ui/button";
@@ -6,16 +6,29 @@ import { Avatar, AvatarFallback, AvatarImage } from "./avatar";
 import { useAutoScroll } from "@ui/hooks/use-auto-scroll";
 import { Textarea } from "./textarea";
 
+// Context to share chat state with child components
+interface ChatContextValue {
+  isOpen: boolean;
+  toggleChat: () => void;
+}
+
+const ChatContext = createContext<ChatContextValue | null>(null);
+
+function useChatContext() {
+  const context = useContext(ChatContext);
+  return context;
+}
+
 export type ChatPosition = "bottom-right" | "bottom-left";
 export type ChatSize = "sm" | "md" | "lg" | "xl" | "full";
 
 // Configuration constants for the chat component
 const CHAT_DIMENSIONS = {
-  sm: "max-w-xs max-h-[40vh] min-h-[150px] w-[85vw] sm:w-[380px]",
-  md: "max-w-md max-h-[50vh] min-h-[400px] w-[85vw] sm:w-[450px]",
-  lg: "max-w-lg max-h-[60vh] min-h-[250px] w-[85vw] sm:w-[550px]",
-  xl: "max-w-xl max-h-[70vh] min-h-[300px] w-[85vw] sm:w-[650px]",
-  full: "w-full h-[80vh] max-w-full max-h-full sm:w-full sm:h-[80vh] sm:max-w-full sm:max-h-full",
+  sm: "max-w-xs max-h-[50vh] min-h-[200px] w-[85vw] sm:w-[380px]",
+  md: "max-w-md max-h-[65vh] min-h-[500px] w-[85vw] sm:w-[450px]",
+  lg: "max-w-lg max-h-[70vh] min-h-[400px] w-[85vw] sm:w-[550px]",
+  xl: "max-w-xl max-h-[80vh] min-h-[500px] w-[85vw] sm:w-[650px]",
+  full: "w-full h-[90vh] max-w-full max-h-full sm:w-full sm:h-[90vh] sm:max-w-full sm:max-h-full",
 } as const;
 
 const CHAT_POSITIONS = {
@@ -75,40 +88,33 @@ const ExpandableChat: React.FC<ExpandableChatProps> = ({
   }, [isOpen]);
 
   return (
-    <div
-      className={cn(`fixed ${CHAT_POSITIONS[position]} z-50`, className)}
-      {...props}
-    >
-      <div className="relative">
-        <div
-          ref={chatRef}
-          tabIndex={-1}
-          className={cn(
-            "flex flex-col bg-background border rounded-lg shadow-lg overflow-hidden transition-all duration-250 ease-in-out w-full max-h-[70vh] sm:max-h-[60vh]",
-            CHAT_PANEL_POSITIONS[position],
-            CHAT_DIMENSIONS[size],
-            isOpen ? CHAT_VISIBILITY_STATES.open : CHAT_VISIBILITY_STATES.closed,
-            className,
-          )}
-        >
-          {children}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-2 right-2 rounded-full hover:bg-secondary"
-            onClick={toggleChat}
-            aria-label="Close chat"
+    <ChatContext.Provider value={{ isOpen, toggleChat }}>
+      <div
+        className={cn(`fixed ${CHAT_POSITIONS[position]} z-50`, className)}
+        {...props}
+      >
+        <div className="relative">
+          <div
+            ref={chatRef}
+            tabIndex={-1}
+            className={cn(
+              "flex flex-col bg-background border rounded-lg shadow-lg overflow-hidden transition-all duration-250 ease-in-out w-full max-h-[80vh] sm:max-h-[75vh]",
+              CHAT_PANEL_POSITIONS[position],
+              CHAT_DIMENSIONS[size],
+              isOpen ? CHAT_VISIBILITY_STATES.open : CHAT_VISIBILITY_STATES.closed,
+              className,
+            )}
           >
-            <X className="h-4 w-4" />
-          </Button>
+            {children}
+          </div>
         </div>
+        <ExpandableChatToggle
+          icon={icon}
+          isOpen={isOpen}
+          toggleChat={toggleChat}
+        />
       </div>
-      <ExpandableChatToggle
-        icon={icon}
-        isOpen={isOpen}
-        toggleChat={toggleChat}
-      />
-    </div>
+    </ChatContext.Provider>
   );
 };
 
@@ -117,26 +123,29 @@ ExpandableChat.displayName = "ExpandableChat";
 const ExpandableChatHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   className,
   ...props
-}) => (
-  <div
-    className={cn("flex items-center justify-between p-4 border-b", className)}
-    {...props}
-  />
-);
+}) => {
+  const chatContext = useChatContext();
+  return (
+    <div
+      className={cn("flex items-center justify-between p-3 border-b", className)}
+      {...props}
+    />
+  );
+};
 
 ExpandableChatHeader.displayName = "ExpandableChatHeader";
 
 const ExpandableChatBody: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   className,
   ...props
-}) => <div className={cn("flex-grow overflow-y-auto p-4 min-h-0", className)} {...props} />;
+}) => <div className={cn("flex-grow overflow-y-auto p-2 min-h-0", className)} {...props} />;
 
 ExpandableChatBody.displayName = "ExpandableChatBody";
 
 const ExpandableChatFooter: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   className,
   ...props
-}) => <div className={cn("border-t p-4", className)} {...props} />;
+}) => <div className={cn("border-t p-3", className)} {...props} />;
 
 ExpandableChatFooter.displayName = "ExpandableChatFooter";
 
@@ -191,7 +200,7 @@ export function ChatBubble({
   return (
     <div
       className={cn(
-        "flex items-start gap-2 mb-4",
+        "flex items-start gap-1.5 mb-1",
         variant === "sent" && "flex-row-reverse",
         className,
       )}
@@ -357,13 +366,13 @@ const ChatMessageList = React.forwardRef<HTMLDivElement, ChatMessageListProps>(
     return (
       <div className="relative w-full h-full">
         <div
-          className={`flex flex-col w-full h-full p-3 overflow-y-auto ${className}`}
+          className={`flex flex-col w-full h-full p-2 overflow-y-auto ${className}`}
           ref={scrollRef}
           onWheel={disableAutoScroll}
           onTouchMove={disableAutoScroll}
           {...props}
         >
-          <div className="flex flex-col gap-4">{children}</div>
+          <div className="flex flex-col gap-1">{children}</div>
         </div>
 
         {!isAtBottom && (
@@ -412,5 +421,6 @@ export {
   ExpandableChatBody,
   ExpandableChatFooter,
   ChatMessageList,
-  ChatInput
+  ChatInput,
+  useChatContext,
 };

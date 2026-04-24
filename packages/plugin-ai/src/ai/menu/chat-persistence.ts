@@ -1,4 +1,4 @@
-import { Message, INITIAL_MESSAGE } from './chat-types'
+import { Message, INITIAL_MESSAGES } from './chat-types'
 
 const STORAGE_KEY = 'kn-ai-chat-messages'
 const MAX_PERSISTED = 50
@@ -13,12 +13,12 @@ function estimateTokens(text: string): number {
 export function loadMessages(): Message[] {
     try {
         const raw = localStorage.getItem(STORAGE_KEY)
-        if (!raw) return [INITIAL_MESSAGE]
+        if (!raw) return [...INITIAL_MESSAGES]
         const parsed = JSON.parse(raw) as Message[]
-        if (!Array.isArray(parsed) || parsed.length === 0) return [INITIAL_MESSAGE]
+        if (!Array.isArray(parsed) || parsed.length === 0) return [...INITIAL_MESSAGES]
         return parsed
     } catch {
-        return [INITIAL_MESSAGE]
+        return [...INITIAL_MESSAGES]
     }
 }
 
@@ -40,15 +40,13 @@ export function clearPersistedMessages(): void {
 }
 
 /**
- * Build history for AI context: exclude initial message, take recent messages,
+ * Build history for AI context: take recent messages,
  * and trim from the front if total tokens exceed budget.
  */
 export function getHistoryForAI(
     messages: Message[],
-    initialId: string = INITIAL_MESSAGE.id
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
     const relevant = messages
-        .filter(msg => msg.id !== initialId)
         .slice(-MAX_AI_HISTORY)
         .map(msg => ({
             role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,

@@ -39,7 +39,6 @@ export type {
 
 // Model Providers
 export { createKnowledgeModel, type KnowledgeModelOptions } from "./model-provider/knowledge-provider"
-export { createDeepSeekDirectModel } from "./model-provider/deepseek-direct-provider"
 
 // Discovery
 export * from "./discovery"

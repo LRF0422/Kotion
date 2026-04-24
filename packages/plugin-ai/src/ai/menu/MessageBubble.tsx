@@ -1,11 +1,10 @@
 import React, { useState, useCallback } from 'react'
-import { Copy, Check, StopCircle } from '@kn/icon'
+import { StopCircle } from '@kn/icon'
 import { Streamdown, formatDistanceToNow, useCopyToClipboard } from '@kn/ui'
 import {
     ChatBubble,
     ChatBubbleAvatar,
     ChatBubbleMessage,
-    ChatBubbleAction,
 } from '@kn/ui'
 import { Message, AI_AVATAR_URL, AVATAR_FALLBACKS } from './chat-types'
 import { CompletedSteps } from './ExecutionStepsDisplay'
@@ -41,49 +40,46 @@ export const MessageBubble = React.memo(function MessageBubble({
     return (
         <ChatBubble variant={isAI ? 'received' : 'sent'}>
             <ChatBubbleAvatar
-                className={`h-9 w-9 shrink-0 ${isAI
-                    ? 'bg-gradient-to-br from-indigo-500 to-purple-500 text-primary-foreground shadow-lg shadow-indigo-500/20'
-                    : 'bg-gradient-to-br from-blue-500 to-cyan-500 text-primary-foreground shadow-lg shadow-blue-500/20'
-                }`}
+                className={`h-7 w-7 shrink-0 ${isAI
+                    ? 'bg-gradient-to-br from-indigo-500 to-purple-500 text-primary-foreground'
+                    : 'bg-gradient-to-br from-blue-500 to-cyan-500 text-primary-foreground'
+                    }`}
                 src={isAI ? AI_AVATAR_URL : userAvatarUrl}
                 fallback={isAI ? AVATAR_FALLBACKS.ai : userFallback}
             />
-            <div className="flex flex-col gap-2 max-w-[calc(100%-52px)] min-w-0">
+            <div className="flex flex-col gap-1 max-w-[calc(100%-40px)] min-w-0">
                 <div className="group relative">
                     <ChatBubbleMessage
                         variant={isAI ? 'received' : 'sent'}
                         className={isAI
-                            ? 'bg-gradient-to-br from-indigo-50/90 to-purple-50/90 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-200/60 dark:border-indigo-800/60 shadow-lg shadow-indigo-500/5 p-4 rounded-2xl rounded-tl-sm'
-                            : 'bg-gradient-to-br from-slate-100/90 to-gray-100/90 dark:from-slate-800/90 dark:to-gray-800/90 text-foreground border border-slate-200/60 dark:border-slate-700/60 shadow-lg shadow-slate-500/5 p-4 rounded-2xl rounded-tr-sm'
+                            ? 'bg-gradient-to-br from-indigo-50/90 to-purple-50/90 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-200/60 dark:border-indigo-800/60 p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tl-sm'
+                            : 'bg-gradient-to-br from-slate-100/90 to-gray-100/90 dark:from-slate-800/90 dark:to-gray-800/90 text-foreground border border-slate-200/60 dark:border-slate-700/60 p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tr-sm'
                         }
                     >
                         <Streamdown>{message.content}</Streamdown>
                         {message.stopped && (
-                            <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-border/50 text-xs text-muted-foreground">
-                                <StopCircle className="h-3.5 w-3.5" />
-                                <span>已停止生成</span>
+                            <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 text-[10px] text-muted-foreground">
+                                <StopCircle className="h-3 w-3" />
+                                <span>Stopped</span>
                             </div>
                         )}
                     </ChatBubbleMessage>
 
-                    {/* Copy button + timestamp on hover */}
+                    {/* Inline timestamp + copy on hover */}
                     {isAI && (
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 mt-1.5 ml-1">
-                            <ChatBubbleAction
-                                icon={copied
-                                    ? <Check className="h-3.5 w-3.5 text-green-500" />
-                                    : <Copy className="h-3.5 w-3.5" />
-                                }
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 mt-0.5 ml-0.5">
+                            <button
                                 onClick={handleCopy}
-                                className="h-7 w-7 text-muted-foreground/60 hover:text-foreground bg-background/80 rounded-lg shadow-sm"
-                            />
-                            <span className="text-[10px] text-muted-foreground/60">{relativeTime}</span>
+                                className="text-[9px] text-muted-foreground/50 hover:text-foreground transition-colors"
+                            >
+                                {copied ? 'Copied' : relativeTime}
+                            </button>
                         </div>
                     )}
 
                     {!isAI && (
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity mt-1.5 mr-1 text-right">
-                            <span className="text-[10px] text-muted-foreground/60">{relativeTime}</span>
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 mr-0.5 text-right">
+                            <span className="text-[9px] text-muted-foreground/50">{relativeTime}</span>
                         </div>
                     )}
                 </div>

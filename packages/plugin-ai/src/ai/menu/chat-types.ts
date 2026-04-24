@@ -39,12 +39,8 @@ export const AVATAR_FALLBACKS = {
     ai: "AI",
 } as const
 
-export const INITIAL_MESSAGE: Message = {
-    id: "initial-1",
-    content: "Hello! I'm your AI assistant. I can help you edit documents, answer questions, and perform various tasks. How can I assist you today?",
-    sender: "ai",
-    timestamp: Date.now(),
-}
+// Empty state is handled by the greeting UI component instead of a synthetic message
+export const INITIAL_MESSAGES: Message[] = []
 
 export function classifyError(err: any): ChatError {
     const status = err?.status || err?.response?.status

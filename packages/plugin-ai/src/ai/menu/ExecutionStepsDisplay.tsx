@@ -11,13 +11,13 @@ export const CompletedSteps = React.memo(function CompletedSteps({ steps }: Comp
     if (steps.length === 0) return null
 
     return (
-        <Collapsible className="mt-3">
-            <CollapsibleTrigger className="flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-300 hover:text-indigo-700 transition-colors group px-2 py-1.5 -ml-1 rounded-lg hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30">
-                <Terminal className="h-3.5 w-3.5" />
+        <Collapsible className="mt-1">
+            <CollapsibleTrigger className="flex items-center gap-1.5 text-[10px] text-indigo-600 dark:text-indigo-300 hover:text-indigo-700 transition-colors group px-1.5 py-1 -ml-0.5 rounded hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30">
+                <Terminal className="h-3 w-3" />
                 <span className="font-medium">{steps.length} tool {steps.length === 1 ? 'call' : 'calls'}</span>
-                <ChevronDown className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180" />
+                <ChevronDown className="h-3 w-3 transition-transform group-data-[state=open]:rotate-180" />
             </CollapsibleTrigger>
-            <CollapsibleContent className="mt-2 space-y-2 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+            <CollapsibleContent className="mt-1 space-y-1 animate-in fade-in-0 slide-in-from-top-1 duration-200">
                 {steps.map((step) => (
                     <StepItem key={step.id} step={step} />
                 ))}
@@ -34,35 +34,35 @@ export const LiveSteps = React.memo(function LiveSteps({ steps }: LiveStepsProps
     if (steps.length === 0) return null
 
     return (
-        <div className="mx-4 my-4 p-4 rounded-2xl bg-gradient-to-br from-indigo-50/60 to-purple-50/60 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-200/50 dark:border-indigo-800/50 shadow-lg shadow-indigo-500/5 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
-            <div className="flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-300 mb-3">
-                <div className="flex items-center gap-1.5 text-indigo-500">
-                    <Loader2 className="h-4 w-4 animate-spin" />
+        <div className="mx-2 my-2 p-2 rounded-lg bg-gradient-to-br from-indigo-50/60 to-purple-50/60 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-200/50 dark:border-indigo-800/50 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
+            <div className="flex items-center gap-1.5 text-[10px] text-indigo-600 dark:text-indigo-300 mb-1.5">
+                <div className="flex items-center gap-1 text-indigo-500">
+                    <Loader2 className="h-3 w-3 animate-spin" />
                     <span className="font-medium">Running tools...</span>
                 </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
                 {steps.map((step) => (
                     <div
                         key={step.id}
-                        className="flex items-center gap-3 p-3 rounded-xl bg-card/80 backdrop-blur-sm border border-border/50 text-xs shadow-sm"
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-card/80 backdrop-blur-sm border border-border/50 text-[10px]"
                     >
                         {step.status === 'running' ? (
-                            <Loader2 className="h-4 w-4 animate-spin text-indigo-500 shrink-0" />
+                            <Loader2 className="h-3 w-3 animate-spin text-indigo-500 shrink-0" />
                         ) : step.status === 'success' ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                            <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
                         ) : (
-                            <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+                            <XCircle className="h-3 w-3 text-red-500 shrink-0" />
                         )}
-                        <div className="flex-1 flex items-center gap-2 min-w-0">
-                            <Badge variant="outline" className="text-[10px] px-2.5 py-1 font-mono shrink-0 border-indigo-200/60 dark:border-indigo-800/60 bg-indigo-50/50 dark:bg-indigo-950/50">
+                        <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                            <Badge variant="outline" className="text-[9px] px-1.5 py-0.5 font-mono shrink-0 border-indigo-200/60 dark:border-indigo-800/60 bg-indigo-50/50 dark:bg-indigo-950/50">
                                 {formatToolName(step.toolName)}
                             </Badge>
                             {step.status === 'running' && (
-                                <span className="text-[10px] text-muted-foreground animate-pulse">executing...</span>
+                                <span className="text-[9px] text-muted-foreground animate-pulse">executing...</span>
                             )}
                             {step.duration && (
-                                <span className="text-[10px] text-green-600 font-medium">
+                                <span className="text-[9px] text-green-600 font-medium">
                                     {step.duration}ms
                                 </span>
                             )}
@@ -77,29 +77,29 @@ export const LiveSteps = React.memo(function LiveSteps({ steps }: LiveStepsProps
 // Shared step item for completed steps collapsible
 const StepItem = React.memo(function StepItem({ step }: { step: ExecutionStep }) {
     return (
-        <div className="flex items-start gap-3 p-3 rounded-xl bg-card/60 backdrop-blur-sm border border-border/50 text-xs shadow-sm">
-            <div className="mt-0.5 flex-shrink-0">
+        <div className="flex items-start gap-2 px-2 py-1.5 rounded-md bg-card/60 backdrop-blur-sm border border-border/50 text-[10px]">
+            <div className="mt-px flex-shrink-0">
                 {step.status === 'success' ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <CheckCircle2 className="h-3 w-3 text-green-500" />
                 ) : step.status === 'error' ? (
-                    <XCircle className="h-4 w-4 text-red-500" />
+                    <XCircle className="h-3 w-3 text-red-500" />
                 ) : (
-                    <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+                    <Loader2 className="h-3 w-3 animate-spin text-indigo-500" />
                 )}
             </div>
             <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="secondary" className="text-[10px] px-2.5 py-1 font-mono bg-indigo-100/80 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                    <Badge variant="secondary" className="text-[9px] px-1.5 py-0.5 font-mono bg-indigo-100/80 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300">
                         {formatToolName(step.toolName)}
                     </Badge>
                     {step.duration && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-[9px] text-muted-foreground">
                             {step.duration}ms
                         </span>
                     )}
                 </div>
                 {step.args && Object.keys(step.args).length > 0 && (
-                    <div className="mt-2 text-[10px] text-muted-foreground/80 font-mono bg-muted/50 rounded-lg px-2.5 py-2 truncate max-w-full">
+                    <div className="mt-1 text-[9px] text-muted-foreground/80 font-mono bg-muted/50 rounded px-1.5 py-1 truncate max-w-full">
                         {JSON.stringify(step.args).slice(0, 80)}{JSON.stringify(step.args).length > 80 ? '...' : ''}
                     </div>
                 )}
