@@ -32,6 +32,7 @@
     "@kn/plugin-github": "workspace:*",
     "@kn/plugin-office": "workspace:*",
     "@kn/plugin-comment": "workspace:*",
+    "@kn/chart-plugin": "workspace:*",
     "@kn/plugin-speech-to-text": "workspace:*",
     "evaluatex": "^2.2.0",
     "event-source-polyfill": "^1.0.31",

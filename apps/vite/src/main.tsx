@@ -9,8 +9,9 @@ import { blockReference } from "@kn/plugin-block-reference"
 import { bitable } from "@kn/plugin-bitable"
 import { speechToText } from "@kn/plugin-speech-to-text"
 import { ai } from "@kn/plugin-ai"
+import { chart } from "@kn/chart-plugin"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, speechToText, ai]} />
+  <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, speechToText, ai, chart]} />
 )

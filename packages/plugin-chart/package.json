@@ -1,0 +1,30 @@
+{
+  "name": "@kn/chart-plugin",
+  "version": "0.0.1",
+  "description": "Chart plugin for Knowledge Repo - data visualization using shadcn/ui chart components (recharts)",
+  "main": "src/index.tsx",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "registry": "http://localhost:8081/repository/npm-hosted/"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@kn/common": "workspace:*",
+    "@kn/editor": "workspace:*",
+    "@kn/icon": "workspace:*",
+    "@kn/ui": "workspace:*",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "recharts": "^2.15.0"
+  },
+  "keywords": ["chart", "visualization", "data"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@kn/rollup-config": "workspace:*"
+  }
+}
