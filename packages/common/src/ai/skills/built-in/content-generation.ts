@@ -14,14 +14,12 @@ export const contentGenerationSkill: Skill = {
         'getDocumentStructure',
         'readChunk',
         'write',
-        'insertAtEnd',
         'askUserChoice'
     ],
     optionalTools: [
         'insertNear',
         'searchInDocument',
         'replaceContent',
-        'insertAfterBlock',
         'convertBlock',
         'formatText'
     ],
@@ -37,7 +35,7 @@ You are now in content generation mode. Help the user create new content for the
    - Length (brief, moderate, detailed)
    - Target audience
 3. **Generate Content**: Create content that matches the document's existing style
-4. **Insert Appropriately**: Use write/insertAtEnd/insertNear based on where content should go
+4. **Insert Appropriately**: Use write/insertNear based on where content should go
 5. **Review**: Re-read the inserted content in context
 
 ### Content Types

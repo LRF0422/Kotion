@@ -10,22 +10,23 @@ import type { ToolMetadata, ToolCategory, CategoryInfo } from '../types'
 // Essential tools that are always loaded
 export const ESSENTIAL_TOOLS = [
     // Read tools
-    'updateTitle',
     'getDocumentStructure',
     'searchInDocument',
     'readChunk',
-    // Write tools (commonly needed)
+    // Write tools
+    'updateTitle',
     'write',
     'insertNear',
-    'insertAtEnd',
     'replaceContent',
+    // Delete tools
+    'deleteBySearch',
+    'deleteBlock',
+    'clearDocument',
     // Interaction tools
     'askUserChoice',
     // Structure tools
     'convertBlock',
     'formatText',
-    // Callout tools (commonly requested)
-    'insertCallout'
 ] as const
 
 // Category descriptions
@@ -47,7 +48,7 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     {
         name: 'getDocumentStructure',
         category: 'document-read',
-        description: '获取文档整体结构，包括标题、段落和块信息',
+        description: '获取文档整体结构，包括标题、段落、块信息和文档大小',
         priority: 10,
         tags: ['structure', 'overview', 'essential'],
         loaded: false,
@@ -71,24 +72,6 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         loaded: false,
         source: 'builtin'
     },
-    {
-        name: 'getNodeAtPosition',
-        category: 'document-read',
-        description: '获取指定位置的节点详细信息',
-        priority: 5,
-        tags: ['node', 'position', 'detail'],
-        loaded: false,
-        source: 'builtin'
-    },
-    {
-        name: 'getDocumentSize',
-        category: 'document-read',
-        description: '获取文档大小信息',
-        priority: 4,
-        tags: ['size', 'metrics'],
-        loaded: false,
-        source: 'builtin'
-    },
 
     // ===== Document Write Tools =====
     {
@@ -103,101 +86,56 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     {
         name: 'write',
         category: 'document-write',
-        description: '在指定块中插入文本内容',
-        priority: 8,
-        tags: ['write', 'insert', 'text'],
-        loaded: false,
-        source: 'builtin'
-    },
-    {
-        name: 'insertAtPosition',
-        category: 'document-write',
-        description: '在精确位置插入内容',
-        priority: 7,
-        tags: ['insert', 'position', 'precise'],
+        description: '在指定块后插入内容，支持 Markdown，不填 blockIndex 则追加到末尾',
+        priority: 10,
+        tags: ['write', 'insert', 'text', 'essential'],
         loaded: false,
         source: 'builtin'
     },
     {
         name: 'insertNear',
         category: 'document-write',
-        description: '在匹配文本附近插入内容',
-        priority: 8,
-        tags: ['insert', 'near', 'relative'],
+        description: '在匹配文本附近插入内容，支持 before/after/start/end 定位',
+        priority: 10,
+        tags: ['insert', 'near', 'relative', 'essential'],
         loaded: false,
         source: 'builtin'
     },
     {
         name: 'replaceContent',
         category: 'document-write',
-        description: '查找并替换内容',
-        priority: 8,
-        tags: ['replace', 'find', 'update'],
-        loaded: false,
-        source: 'builtin'
-    },
-    {
-        name: 'batchInsert',
-        category: 'document-write',
-        description: '批量插入多个内容项',
-        priority: 6,
-        tags: ['batch', 'insert', 'multiple'],
-        loaded: false,
-        source: 'builtin'
-    },
-    {
-        name: 'insertAfterBlock',
-        category: 'document-write',
-        description: '在指定块后插入内容',
-        priority: 7,
-        tags: ['insert', 'block', 'after'],
-        loaded: false,
-        source: 'builtin'
-    },
-    {
-        name: 'insertAtEnd',
-        category: 'document-write',
-        description: '在文档末尾追加内容',
-        priority: 7,
-        tags: ['insert', 'append', 'end'],
-        loaded: false,
-        source: 'builtin'
-    },
-    {
-        name: 'insertSegmentedMarkdown',
-        category: 'document-write',
-        description: '插入带格式的 Markdown 内容',
-        priority: 6,
-        tags: ['markdown', 'format', 'insert'],
+        description: '查找并替换内容，支持全部替换',
+        priority: 10,
+        tags: ['replace', 'find', 'update', 'essential'],
         loaded: false,
         source: 'builtin'
     },
 
     // ===== Document Delete Tools =====
     {
-        name: 'deleteRange',
-        category: 'document-delete',
-        description: '删除指定位置范围的内容',
-        priority: 6,
-        tags: ['delete', 'range', 'position'],
-        loaded: false,
-        source: 'builtin'
-    },
-    {
         name: 'deleteBySearch',
         category: 'document-delete',
-        description: '搜索并删除匹配的内容',
-        priority: 6,
-        tags: ['delete', 'search', 'match'],
+        description: '搜索并删除匹配的内容，支持文本或整块删除',
+        priority: 8,
+        tags: ['delete', 'search', 'match', 'essential'],
         loaded: false,
         source: 'builtin'
     },
     {
         name: 'deleteBlock',
         category: 'document-delete',
-        description: '删除指定索引的块',
-        priority: 6,
-        tags: ['delete', 'block', 'index'],
+        description: '按块索引删除整个块',
+        priority: 8,
+        tags: ['delete', 'block', 'index', 'essential'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'clearDocument',
+        category: 'document-delete',
+        description: '清空文档内容，默认保留标题',
+        priority: 8,
+        tags: ['clear', 'document', 'reset', 'essential'],
         loaded: false,
         source: 'builtin'
     },

@@ -3,24 +3,19 @@ import { StopCircle } from '@kn/icon'
 import { Streamdown, formatDistanceToNow, useCopyToClipboard } from '@kn/ui'
 import {
     ChatBubble,
-    ChatBubbleAvatar,
     ChatBubbleMessage,
 } from '@kn/ui'
-import { Message, AI_AVATAR_URL, AVATAR_FALLBACKS } from './chat-types'
+import { Message } from './chat-types'
 import { CompletedSteps } from './ExecutionStepsDisplay'
 
 interface MessageBubbleProps {
     message: Message
     showSteps: boolean
-    userAvatarUrl?: string
-    userFallback: string
 }
 
 export const MessageBubble = React.memo(function MessageBubble({
     message,
     showSteps,
-    userAvatarUrl,
-    userFallback,
 }: MessageBubbleProps) {
     const [, copy] = useCopyToClipboard()
     const [copied, setCopied] = useState(false)
@@ -39,21 +34,13 @@ export const MessageBubble = React.memo(function MessageBubble({
 
     return (
         <ChatBubble variant={isAI ? 'received' : 'sent'}>
-            <ChatBubbleAvatar
-                className={`h-7 w-7 shrink-0 ${isAI
-                    ? 'bg-gradient-to-br from-indigo-500 to-purple-500 text-primary-foreground'
-                    : 'bg-gradient-to-br from-blue-500 to-cyan-500 text-primary-foreground'
-                    }`}
-                src={isAI ? AI_AVATAR_URL : userAvatarUrl}
-                fallback={isAI ? AVATAR_FALLBACKS.ai : userFallback}
-            />
-            <div className="flex flex-col gap-1 max-w-[calc(100%-40px)] min-w-0">
+            <div className="flex flex-col gap-1 max-w-[calc(100%-8px)] min-w-0">
                 <div className="group relative">
                     <ChatBubbleMessage
                         variant={isAI ? 'received' : 'sent'}
                         className={isAI
-                            ? 'bg-gradient-to-br from-indigo-50/90 to-purple-50/90 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-200/60 dark:border-indigo-800/60 p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tl-sm'
-                            : 'bg-gradient-to-br from-slate-100/90 to-gray-100/90 dark:from-slate-800/90 dark:to-gray-800/90 text-foreground border border-slate-200/60 dark:border-slate-700/60 p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tr-sm'
+                            ? 'bg-white dark:bg-muted/40 text-foreground p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tl-sm'
+                            : 'bg-[#E6E6E6] dark:bg-muted/80 text-foreground p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tr-sm'
                         }
                     >
                         <Streamdown>{message.content}</Streamdown>

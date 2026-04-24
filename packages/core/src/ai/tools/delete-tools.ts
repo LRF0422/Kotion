@@ -1,60 +1,12 @@
 import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord } from "@kn/common"
-import { discoverBlocks, findTextPosition } from "@kn/common"
-import { validateRange } from "@kn/common"
-import { scrollToPosition } from "@kn/common"
+import { discoverBlocks } from "@kn/common"
 
 /**
  * Create document deletion tools
  */
 export const createDeleteTools = (editor: Editor): ToolsRecord => ({
-    deleteRange: {
-        description: '删除指定范围的内容',
-        inputSchema: z.object({
-            range: z.object({
-                from: z.number().describe("起始位置"),
-                to: z.number().describe("结束位置"),
-            })
-        }),
-        execute: async ({ range }: { range: { from: number; to: number } }) => {
-            const { from, to } = range
-            const docSize = editor.state.doc.nodeSize
-            const validation = validateRange(from, to, docSize)
-
-            if (!validation.valid) {
-                return { error: validation.error }
-            }
-
-            // Scroll to show the target range before deleting
-            editor.chain().focus().setTextSelection({ from, to }).scrollIntoView().run()
-
-            const success = editor.chain()
-                .focus()
-                .deleteRange({ from, to })
-                .scrollIntoView()
-                .run()
-
-            if (!success) {
-                return { error: `Failed to delete range ${from}-${to}` }
-            }
-
-            const newDocSize = editor.state.doc.nodeSize
-            const deletedSize = docSize - newDocSize
-
-            scrollToPosition(editor, from)
-
-            return {
-                success: true,
-                from,
-                to,
-                deletedSize,
-                oldDocSize: docSize,
-                newDocSize
-            }
-        }
-    },
-
     deleteBySearch: {
         description: '通过搜索文本定位并删除内容',
         inputSchema: z.object({
@@ -195,6 +147,65 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
                 }
             } catch (error) {
                 return { error: `删除失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
+    },
+
+    clearDocument: {
+        description: '清空文档内容，保留标题。用于需要重写整个文档的场景',
+        inputSchema: z.object({
+            preserveTitle: z.boolean().optional().describe("是否保留标题，默认 true")
+        }),
+        execute: async ({ preserveTitle = true }: {
+            preserveTitle?: boolean
+        }) => {
+            try {
+                const blocks = discoverBlocks(editor)
+
+                if (blocks.length === 0) {
+                    return { error: '文档中没有内容' }
+                }
+
+                // Find the range to delete
+                const startIndex = preserveTitle ? 1 : 0
+
+                if (startIndex >= blocks.length) {
+                    return {
+                        success: true,
+                        message: '文档已经是空的（仅有标题）',
+                        deletedCount: 0
+                    }
+                }
+
+                const firstBlock = blocks[startIndex]
+                const lastBlock = blocks[blocks.length - 1]
+                const from = firstBlock.pos
+                const to = lastBlock.pos + lastBlock.size
+                const docSize = editor.state.doc.nodeSize
+
+                const success = editor.chain()
+                    .focus()
+                    .deleteRange({ from, to })
+                    .scrollIntoView()
+                    .run()
+
+                if (!success) {
+                    return { error: '清空文档失败' }
+                }
+
+                const newDocSize = editor.state.doc.nodeSize
+
+                return {
+                    success: true,
+                    preserveTitle,
+                    deletedCount: blocks.length - startIndex,
+                    deletedSize: docSize - newDocSize,
+                    message: preserveTitle
+                        ? `已清空文档内容（保留标题），删除了 ${blocks.length - startIndex} 个块`
+                        : `已清空整个文档，删除了 ${blocks.length} 个块`
+                }
+            } catch (error) {
+                return { error: `清空文档失败: ${error instanceof Error ? error.message : '未知错误'}` }
             }
         }
     },

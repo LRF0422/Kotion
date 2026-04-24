@@ -8,7 +8,6 @@ import {
     validateRange,
     calculateChunkSize,
     buildNodeInfo,
-    getDocumentSizeInfo
 } from "@kn/common"
 
 /**
@@ -174,35 +173,5 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
                 tip: 'Use from/to for range selection, or characters[i].pos for specific character position'
             }
         }
-    },
-
-    getNodeAtPosition: {
-        description: '获取指定位置的节点信息',
-        inputSchema: z.object({
-            pos: z.number().describe("位置")
-        }),
-        execute: async ({ pos }: { pos: number }) => {
-            const docSize = editor.state.doc.nodeSize
-            const validation = validateRange(pos, undefined, docSize)
-            if (!validation.valid) {
-                return { error: validation.error }
-            }
-
-            const resolvedPos = editor.state.doc.resolve(pos)
-            const node = resolvedPos.parent
-
-            return {
-                success: true,
-                node: buildNodeInfo(node, resolvedPos.start(), true),
-                depth: resolvedPos.depth,
-                parentType: resolvedPos.parent.type.name
-            }
-        }
-    },
-
-    getDocumentSize: {
-        description: '获取文档大小',
-        inputSchema: z.object({}),
-        execute: async () => getDocumentSizeInfo(editor)
     }
 })

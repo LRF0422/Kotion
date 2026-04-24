@@ -1,6 +1,7 @@
 import { AppContext } from "../core/AppContext"
 import type { Editor } from "@tiptap/core"
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { event, PLUGIN_INIT_SUCCESS, REFRESH_PLUSINS } from "../event"
 
 // Types
 import type { OnToolExecution, OnUserChoiceRequest, ToolsRecord, Annotation } from "./types"
@@ -33,6 +34,47 @@ import { wrapToolsWithCallback, toolsRecordToOpenAIFormat } from "./utils/tool-w
 
 // Shared constants
 import { EDITOR_AGENT_PROMPT, DEFAULT_MAX_STEPS } from "./constants"
+
+/** Timeout in ms – if no SSE event arrives within this window, treat the stream as hung */
+const SSE_INACTIVITY_TIMEOUT_MS = 60_000
+
+/**
+ * Wraps an async generator with a per-yield inactivity timeout.
+ * If no value is yielded within `timeoutMs` the iteration ends gracefully
+ * and the optional `onTimeout` callback is invoked so callers can fall back
+ * to executing any accumulated tool calls.
+ */
+async function* withInactivityTimeout<T>(
+    gen: AsyncGenerator<T>,
+    timeoutMs: number,
+    onTimeout?: () => void
+): AsyncGenerator<T> {
+    while (true) {
+        let timer: ReturnType<typeof setTimeout> | undefined
+        let timedOut = false
+
+        const nextPromise = gen.next()
+        const timeoutPromise = new Promise<IteratorResult<T>>((resolve) => {
+            timer = setTimeout(() => {
+                timedOut = true
+                resolve({ done: true, value: undefined as any })
+            }, timeoutMs)
+        })
+
+        const result = await Promise.race([nextPromise, timeoutPromise])
+        clearTimeout(timer)
+
+        if (timedOut) {
+            // Suppress unhandled rejection from the still-pending gen.next()
+            nextPromise.catch(() => { })
+            onTimeout?.()
+            break
+        }
+
+        if (result.done) break
+        yield result.value
+    }
+}
 
 /**
  * Optimized editor agent hook with backend-driven architecture.
@@ -128,14 +170,34 @@ export const useEditorAgentOptimized = (
         }
     }, [skillRegistry, skillProvider, handleReload])
 
-    // Register plugin skills (tools are loaded on-demand when skill is activated)
-    useMemo(() => {
-        // Register plugin skills if available
-        const pluginSkills = pluginManager?.resolveSkills?.() || []
-        if (pluginSkills.length > 0) {
-            skillProvider.registerSkills(pluginSkills)
+    // Register plugin skills when plugins are loaded/changed
+    // This must be a useEffect (not useMemo) because pluginManager.init() is async
+    // and the pluginManager reference doesn't change after init completes.
+    // We listen for PLUGIN_INIT_SUCCESS and REFRESH_PLUSINS events to know
+    // when plugins are ready or have changed.
+    useEffect(() => {
+        const registerPluginSkills = () => {
+            if (!pluginManager) return
+            const pluginSkills = pluginManager.resolveSkills?.() || []
+            if (pluginSkills.length > 0) {
+                console.log('[Agent] Registering plugin skills:', pluginSkills.map(s => s.name))
+                skillProvider.registerSkills(pluginSkills)
+                handleReload()
+            }
         }
-    }, [pluginManager, skillProvider])
+
+        // Try registering immediately (in case plugins are already loaded)
+        registerPluginSkills()
+
+        // Listen for plugin init success and refresh events
+        event.on(PLUGIN_INIT_SUCCESS, registerPluginSkills)
+        event.on(REFRESH_PLUSINS, registerPluginSkills)
+
+        return () => {
+            event.off(PLUGIN_INIT_SUCCESS, registerPluginSkills)
+            event.off(REFRESH_PLUSINS, registerPluginSkills)
+        }
+    }, [pluginManager, skillProvider, handleReload])
 
     // Create discovery tools
     const discoveryTools = useMemo(() => {
@@ -236,7 +298,7 @@ export const useEditorAgentOptimized = (
             let currentSessionId = options.sessionId
 
             // Max iterations to prevent infinite loops in bidirectional tool mode
-            const MAX_TOOL_ITERATIONS = 10
+            const MAX_TOOL_ITERATIONS = 100
 
             // Create a text stream that handles bidirectional tool calling
             const textStream = (async function* (): AsyncGenerator<string> {
@@ -257,8 +319,16 @@ export const useEditorAgentOptimized = (
                     const roundToolCalls: ToolCall[] = []
                     let roundFinishReason: string | undefined
                     let roundAssistantContent = ''
+                    let streamTimedOut = false
+                    const timedChatGen = withInactivityTimeout(
+                        chatGen, SSE_INACTIVITY_TIMEOUT_MS,
+                        () => {
+                            streamTimedOut = true
+                            console.warn(`[Agent] SSE stream timed out after ${SSE_INACTIVITY_TIMEOUT_MS / 1000}s of inactivity`)
+                        }
+                    )
 
-                    for await (const event of chatGen) {
+                    for await (const event of timedChatGen) {
                         switch (event.type) {
                             case 'text-delta':
                                 yield event.content
@@ -335,17 +405,19 @@ export const useEditorAgentOptimized = (
                     // Filter out any undefined gaps in the sparse array
                     const validToolCalls = roundToolCalls.filter(Boolean)
 
-                    // Check if backend requested frontend tool execution
-                    // Fallback: if finish event was missing (undefined) but tool calls
-                    // were accumulated, still attempt execution. This prevents the
-                    // agent from silently stopping when the SSE stream ends
-                    // prematurely.
+                    // Check if backend requested frontend tool execution.
+                    // Execute tools whenever we have valid tool calls, unless
+                    // finish reason explicitly indicates an error. This handles:
+                    //  - Normal:  finishReason === 'tool-calls'
+                    //  - Missing: finishReason is undefined (SSE ended early / timed out)
+                    //  - Robust:  finishReason is 'stop' or 'length' (some backends
+                    //             incorrectly send these alongside tool calls)
                     const shouldExecuteTools = validToolCalls.length > 0 &&
-                        (roundFinishReason === 'tool-calls' || roundFinishReason === undefined)
+                        roundFinishReason !== 'error'
 
                     if (shouldExecuteTools) {
-                        if (roundFinishReason === undefined) {
-                            console.warn('[Agent] Stream ended without finish event but tool calls were received. Executing as fallback.')
+                        if (roundFinishReason !== 'tool-calls') {
+                            console.warn(`[Agent] Executing tool calls with non-standard finishReason: ${roundFinishReason ?? 'undefined'}${streamTimedOut ? ' (stream timed out)' : ''}`)
                         }
 
                         // Add assistant message with tool_calls to conversation
@@ -391,9 +463,9 @@ export const useEditorAgentOptimized = (
                         continue
                     }
 
-                    // Warn if tool calls were accumulated but not executed
-                    if (roundToolCalls.length > 0 && !shouldExecuteTools) {
-                        console.warn('[Agent] Tool calls were accumulated but not executed. finishReason:', roundFinishReason)
+                    // Warn if tool calls were present but skipped (only when finishReason is 'error')
+                    if (validToolCalls.length > 0 && !shouldExecuteTools) {
+                        console.warn('[Agent] Tool calls skipped due to error finishReason:', roundFinishReason)
                     }
 
                     // Normal finish (stop, error, max_iterations) - exit the loop

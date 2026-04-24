@@ -19,9 +19,7 @@ export const translationSkill: Skill = {
     ],
     optionalTools: [
         'write',
-        'insertNear',
-        'insertAtEnd',
-        'getDocumentSize'
+        'insertNear'
     ],
     systemPromptFragment: `## Translation Skill Active
 

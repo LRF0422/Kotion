@@ -26,7 +26,7 @@ export const exampleTranslationSkill: SerializableSkill = {
     ],
     optionalTools: [
         'insertNear',
-        'batchInsert'
+        'write'
     ],
     systemPromptFragment: `## Translation Assistant Skill Active
 
@@ -80,7 +80,7 @@ export const codeDocumentationSkill: SerializableSkill = {
     ],
     optionalTools: [
         'askUserChoice',
-        'insertSegmentedMarkdown'
+        'write'
     ],
     systemPromptFragment: `## Code Documentation Skill Active
 
@@ -132,12 +132,11 @@ export const meetingNotesSkill: SerializableSkill = {
         'getDocumentStructure',
         'readChunk',
         'searchInDocument',
-        'insertSegmentedMarkdown',
+        'write',
         'replaceContent'
     ],
     optionalTools: [
-        'askUserChoice',
-        'insertAtEnd'
+        'askUserChoice'
     ],
     systemPromptFragment: `## Meeting Notes Skill Active
 

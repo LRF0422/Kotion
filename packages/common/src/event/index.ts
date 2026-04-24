@@ -14,6 +14,8 @@ export const GO_TO_MARKETPLACE = "GO_TO_MARKETPLACE"
 
 export const REFRESH_PLUSINS = "REFRESH_PLUSINS"
 
+export const PLUGIN_INIT_SUCCESS = "PLUGIN_INIT_SUCCESS"
+
 export const BUSINESS_TOPIC = {
     PAGE_COOPERATION_INVITE: "space.page.cooperation.invite"
 }

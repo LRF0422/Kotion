@@ -13,14 +13,12 @@ export const contentAnalysisSkill: Skill = {
     requiredTools: [
         'getDocumentStructure',
         'readChunk',
-        'searchInDocument',
-        'getDocumentSize'
+        'searchInDocument'
     ],
     optionalTools: [
         'highlight',
         'askUserChoice',
-        'write',
-        'insertAtEnd'
+        'write'
     ],
     systemPromptFragment: `## Content Analysis Skill Active
 
@@ -28,7 +26,7 @@ You are now in content analysis mode. Follow these guidelines:
 
 ### Analysis Workflow
 1. **Overview First**: Start with getDocumentStructure to understand the scope and overall layout
-2. **Assess Size**: Use getDocumentSize to plan your reading strategy
+2. **Assess Size**: Use getDocumentStructure to plan your reading strategy
 3. **Read Systematically**: Use readChunk to read content section by section, starting from the beginning
 4. **Search for Patterns**: Use searchInDocument to find specific elements or recurring themes
 5. **Synthesize Findings**: Combine observations into coherent insights

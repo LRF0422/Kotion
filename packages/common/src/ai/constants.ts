@@ -74,55 +74,55 @@ You start with a minimal set of essential tools. When you need additional capabi
 3. **Search tools**: Use \`searchAvailableTools\` to find specific tools
 4. **Load tools**: Use \`loadTool\` to load tools you need
 
-## Pre-loaded Essential Tools
+## Pre-loaded Essential Tools (13 tools)
+
 ### Reading
-- getDocumentStructure: Get document overview
-- searchInDocument: Search for text
-- readChunk: Read document content
+- getDocumentStructure: 获取文档结构概览（包含大小信息）
+- searchInDocument: 搜索文本，返回精确位置
+- readChunk: 分块读取文档内容
 
 ### Writing (支持 Markdown 自动解析)
-- updateTitle: Update document title
-- write: Insert content after a block (recommended, supports markdown)
-- insertNear: Insert content near matching text (supports markdown)
-- insertAtEnd: Append content to document end (supports markdown)
-- replaceContent: Find and replace content
+- updateTitle: 更新文档标题
+- write: 在指定块后插入内容（不填 blockIndex 则追加到末尾）
+- insertNear: 通过搜索文本定位，在匹配块附近插入内容（before/after/start/end）
+- replaceContent: 查找并替换内容
 
-**Markdown Support**: write/insertNear/insertAtEnd/insertAfterBlock 工具默认解析 Markdown 格式：
+**Markdown Support**: write/insertNear 工具默认解析 Markdown 格式：
 - 标题: ## Heading
 - 列表: - item 或 1. item
 - 代码块: \`\`\`language
 - 粗体/斜体: **bold** *italic*
 - 链接: [text](url)
 
+### Deleting
+- deleteBySearch: 通过搜索文本定位并删除（支持 text/block 模式）
+- deleteBlock: 按块索引删除整个块
+- clearDocument: 清空文档内容（默认保留标题），用于重写整个文档
+
 ### Structure & Formatting
 - convertBlock: 转换块类型（paragraph/heading/blockquote/codeBlock/bulletList/orderedList/taskList）
 - formatText: 为已有文本添加格式（bold/italic/underline/strike/code）
 
-### Callout (提示框)
-- insertCallout: 插入高亮提示框，支持 info/success/warning/error/tip/bookmark/default 类型
-  当用户需要突出显示重要信息、注意事项、提示、警告等内容时使用。
-  使用 loadTool 加载其他 callout 工具: getCalloutInfo, updateCalloutType, updateCalloutContent, deleteCallout
-
 ### Interaction
-- askUserChoice: Confirm with user
+- askUserChoice: 向用户确认操作
 
 ### Content Generation
-- generateContent: Generate text content using backend AI (summaries, rewrites, translations, new content)
-  Use this when you need to produce original text. Provide instruction + relevant document context.
+- generateContent: 使用后端 AI 生成内容（摘要、改写、翻译、新内容等）
 
-## Tool Categories
-- document-read: Reading and analyzing document content
-- document-write: Inserting and updating content
-- document-delete: Deleting content (requires confirmation)
+## Tool Categories (按需加载)
+- document-read: 文档读取
+- document-write: 内容插入和更新
+- document-delete: 内容删除
 - document-structure: 块类型转换、移动、格式化、对齐、表格操作、提示框(Callout)操作
-- layout: Multi-column layouts (supports nested columns for complex layouts)
-- interaction: User interaction
-- plugin: Tools from installed plugins
+- layout: 多列布局
+- interaction: 用户交互
+- plugin: 插件工具
 
 ## WORKFLOW FOR CONTENT TASKS
-1. Read relevant document sections using read tools (getDocumentStructure, readChunk, searchInDocument)
-2. Call generateContent with a clear instruction and the gathered context
-3. Use write tools (write, insertNear, insertAtEnd) to insert the generated content into the document`
+1. 先读取文档结构 (getDocumentStructure)
+2. 搜索目标内容 (searchInDocument)
+3. 执行编辑操作 (write/replaceContent/deleteBySearch 等)
+4. 验证结果`
 
 /**
  * Skill instructions for the optimized agent.

@@ -21,14 +21,10 @@ export const documentRefactorSkill: Skill = {
         'askUserChoice'
     ],
     optionalTools: [
-        'batchInsert',
-        'insertAfterBlock',
         'deleteBlock',
-        'insertSegmentedMarkdown',
         'convertBlock',
         'formatText',
-        'write',
-        'insertAtEnd'
+        'write'
     ],
     systemPromptFragment: `## Document Refactor Skill Active
 

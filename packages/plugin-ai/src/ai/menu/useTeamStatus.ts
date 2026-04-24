@@ -37,10 +37,11 @@ export function useTeamStatus(data: AnnotationData[] | undefined): TeamState {
             if (itemType === 'delegate_start') {
                 // Map delegate_start -> team assembly
                 const event = item as DelegateStartEvent
+                const subTasks = Array.isArray(event.subTasks) ? event.subTasks : []
                 setState((prev) => ({
                     ...prev,
                     phase: 'executing',
-                    members: event.subTasks.map((st, i) => ({
+                    members: subTasks.map((st, i) => ({
                         id: st.agentId,
                         name: st.agentId,
                         subTask: st.description,
