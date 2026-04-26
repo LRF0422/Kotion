@@ -181,6 +181,20 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         updateAttributes({ ...attrs, data: newData });
     }, [attrs, updateAttributes]);
 
+    // 批量更新记录 - avoids race condition when multiple records are updated simultaneously
+    const handleBatchUpdateRecords = useCallback((updatesMap: Map<string, Partial<RecordData>>) => {
+        const currentData = attrs.data || [];
+        const now = new Date().toISOString();
+        const newData = currentData.map((record: any) => {
+            const recordUpdates = updatesMap.get(record.id);
+            if (recordUpdates) {
+                return { ...record, ...recordUpdates, updatedTime: now };
+            }
+            return record;
+        });
+        updateAttributes({ ...attrs, data: newData });
+    }, [attrs, updateAttributes]);
+
     // 删除记录
     const handleDeleteRecord = useCallback((recordIds: string[]) => {
         // Use attrs.data directly to avoid stale closure issues
@@ -429,6 +443,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             data: processedData,
             onAddRecord: handleAddRecord,
             onUpdateRecord: handleUpdateRecord,
+            onBatchUpdateRecords: handleBatchUpdateRecords,
             onDeleteRecord: handleDeleteRecord,
             onAddField: handleAddField,
             onUpdateField: handleUpdateField,

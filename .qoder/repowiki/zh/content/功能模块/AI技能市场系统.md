@@ -11,8 +11,10 @@
 - [packages/core/src/ai/skills/types.ts](file://packages/core/src/ai/skills/types.ts)
 - [packages/core/src/ai/tools/structure-tools.ts](file://packages/core/src/ai/tools/structure-tools.ts)
 - [packages/core/src/ai/tools/format-tools.ts](file://packages/core/src/ai/tools/format-tools.ts)
-- [packages/core/src/ai/discovery/tool-metadata.ts](file://packages/core/src/ai/discovery/tool-metadata.ts)
-- [packages/core/src/ai/discovery/tool-discovery-tools.ts](file://packages/core/src/ai/discovery/tool-discovery-tools.ts)
+- [packages/common/src/ai/discovery/tool-metadata.ts](file://packages/common/src/ai/discovery/tool-metadata.ts)
+- [packages/common/src/ai/discovery/tool-discovery-tools.ts](file://packages/common/src/ai/discovery/tool-discovery-tools.ts)
+- [packages/common/src/ai/providers/ToolProvider.ts](file://packages/common/src/ai/providers/ToolProvider.ts)
+- [packages/common/src/ai/tools/backend-tools.ts](file://packages/common/src/ai/tools/backend-tools.ts)
 - [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md)
 - [packages/core/src/ai/README_TOOL_DISCOVERY.md](file://packages/core/src/ai/README_TOOL_DISCOVERY.md)
 - [packages/plugin-main/src/index.tsx](file://packages/plugin-main/src/index.tsx)
@@ -22,15 +24,15 @@
 - [packages/core/src/ai/INTEGRATION_GUIDE.md](file://packages/core/src/ai/INTEGRATION_GUIDE.md)
 - [packages/core/src/ai/skills/skill-registry.ts](file://packages/core/src/ai/skills/skill-registry.ts)
 - [packages/core/src/ai/providers/ToolProvider.ts](file://packages/core/src/ai/providers/ToolProvider.ts)
-- [packages/core/src/ai/tools/backend-tools.ts](file://packages/core/src/ai/tools/backend-tools.ts)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 更新了工具元数据系统，移除了web分类的描述
-- 更新了技能API文档中optionalTools数组的描述，反映了Web搜索功能不再作为标准可选工具
-- 更新了渐进式工具发现系统的架构说明，移除了web搜索相关的工具引用
-- 增强了工具分类体系的准确性
+- 更新了essential tools配置，从20+工具精简至13个核心工具
+- 移除了getNodeAtPosition、getDocumentSize等工具的essential标记
+- 优化了工具分类体系，移除了web分类的描述
+- 更新了技能API文档中optionalTools数组的描述
+- 增强了渐进式工具发现系统的架构说明
 
 ## 目录
 1. [简介](#简介)
@@ -387,46 +389,37 @@ OnDemandLoader --> InteractionTools
 ```
 
 **图表来源**
-- [packages/core/src/ai/discovery/tool-discovery-tools.ts:21-156](file://packages/core/src/ai/discovery/tool-discovery-tools.ts#L21-L156)
-- [packages/core/src/ai/discovery/tool-metadata.ts:42-390](file://packages/core/src/ai/discovery/tool-metadata.ts#L42-L390)
+- [packages/common/src/ai/discovery/tool-discovery-tools.ts:21-156](file://packages/common/src/ai/discovery/tool-discovery-tools.ts#L21-L156)
+- [packages/common/src/ai/discovery/tool-metadata.ts:42-390](file://packages/common/src/ai/discovery/tool-metadata.ts#L42-L390)
 
 ### 工具元数据系统更新
 
-**更新** 移除了web分类的描述，反映了Web搜索功能已被移除
+**更新** essential tools从20+工具精简至13个核心工具，移除了getNodeAtPosition、getDocumentSize等工具
 
 系统实现了完整的工具元数据管理系统，为工具发现和智能推荐提供支持：
 
-#### 元数据结构
+#### essential tools配置更新
+
+**更新** essential tools配置已精简，从原来的20+工具减少至13个核心工具：
 
 ```mermaid
 classDiagram
-class ToolMetadata {
-+name : string
-+category : ToolCategory
-+description : string
-+priority : number
-+tags : string[]
-+loaded : boolean
-+source : ToolSource
-+pluginName : string
-}
-class CategoryInfo {
-+category : ToolCategory
-+description : string
-+toolCount : number
-+loadedCount : number
-}
 class EssentialTools {
 +essentialTools : string[]
 +isEssentialTool(toolName) : boolean
 }
-ToolMetadata --> CategoryInfo
-EssentialTools --> ToolMetadata
+class EssentialToolList {
++document-read : 3个工具
++document-write : 4个工具
++document-delete : 3个工具
++interaction : 1个工具
++document-structure : 2个工具
+}
+EssentialTools --> EssentialToolList
 ```
 
 **图表来源**
-- [packages/core/src/ai/types.ts:120-136](file://packages/core/src/ai/types.ts#L120-L136)
-- [packages/core/src/ai/discovery/tool-metadata.ts:11-419](file://packages/core/src/ai/discovery/tool-metadata.ts#L11-L419)
+- [packages/common/src/ai/discovery/tool-metadata.ts:11-30](file://packages/common/src/ai/discovery/tool-metadata.ts#L11-L30)
 
 #### 分类描述系统更新
 
@@ -436,17 +429,17 @@ EssentialTools --> ToolMetadata
 
 | 分类 | 工具数量 | 描述 |
 |------|----------|------|
-| document-read | 5 | 文档读取工具 - 用于获取文档结构、内容和搜索 |
-| document-write | 8 | 文档写入工具 - 用于插入、更新和替换内容 |
+| document-read | 3 | 文档读取工具 - 用于获取文档结构、内容和搜索 |
+| document-write | 4 | 文档写入工具 - 用于插入、更新和替换内容 |
 | document-delete | 3 | 文档删除工具 - 用于删除内容和块 |
-| document-structure | 9 | 结构工具 - 用于转换块类型、移动块、格式化文本、表格操作 |
+| document-structure | 2 | 结构工具 - 用于转换块类型、移动块、格式化文本、表格操作 |
 | layout | 7 | 布局工具 - 用于管理多列布局 |
-| interaction | 5 | 交互工具 - 用于与用户交互 |
+| interaction | 1 | 交互工具 - 用于与用户交互 |
 | plugin | N | 插件工具 - 来自已安装插件的工具 |
 | discovery | 4 | 发现工具 - 用于发现和加载其他工具 |
 
 **章节来源**
-- [packages/core/src/ai/discovery/tool-metadata.ts:29-40](file://packages/core/src/ai/discovery/tool-metadata.ts#L29-L40)
+- [packages/common/src/ai/discovery/tool-metadata.ts:29-40](file://packages/common/src/ai/discovery/tool-metadata.ts#L29-L40)
 - [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md:28-367](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L28-L367)
 
 ### 技能API文档更新
@@ -493,6 +486,42 @@ class Skill {
 
 **章节来源**
 - [docs/api/skills-api.md:381-415](file://docs/api/skills-api.md#L381-L415)
+
+### 工具提供器架构更新
+
+**更新** 优化了工具加载机制，essential tools现在包含更精确的核心工具集合
+
+工具提供器实现了更高效的工具管理机制：
+
+```mermaid
+classDiagram
+class ToolProvider {
++initializeBuiltinTools()
++registerToolFactories()
++loadToolInternal()
++loadTools()
++getLoadedTools()
++getCategories()
++searchTools()
+}
+class EssentialToolsLoader {
++ESSENTIAL_TOOLS : string[]
++loadEssentialTools()
++isEssentialTool()
+}
+class ToolFactoryRegistry {
++getToolFactories()
++registerToolFactories()
+}
+ToolProvider --> EssentialToolsLoader
+ToolProvider --> ToolFactoryRegistry
+```
+
+**图表来源**
+- [packages/common/src/ai/providers/ToolProvider.ts:34-312](file://packages/common/src/ai/providers/ToolProvider.ts#L34-L312)
+
+**章节来源**
+- [packages/common/src/ai/providers/ToolProvider.ts:69-72](file://packages/common/src/ai/providers/ToolProvider.ts#L69-L72)
 
 ## 依赖关系分析
 

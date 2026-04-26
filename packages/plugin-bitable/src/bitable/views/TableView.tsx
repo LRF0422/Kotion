@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { Editor } from "@kn/editor";
 import { Button, Input, Checkbox } from "@kn/ui";
 import {
@@ -31,6 +31,7 @@ import DataGrid, { SelectColumn } from 'react-data-grid';
 import 'react-data-grid/lib/styles.css';
 import { useTheme, cn } from "@kn/ui";
 import { getFieldRenderer, getFieldEditor } from "../fields/FieldRenderers";
+import { createFillHandler } from "../../utils/autoFill";
 
 // 字段类型图标映射
 const getFieldTypeIcon = (type: FieldType) => {
@@ -77,6 +78,7 @@ interface TableViewProps {
     data: RecordData[];
     onAddRecord: () => void;
     onUpdateRecord: (recordId: string, updates: Partial<RecordData>) => void;
+    onBatchUpdateRecords: (updatesMap: Map<string, Partial<RecordData>>) => void;
     onDeleteRecord: (recordIds: string[]) => void;
     onAddField: (field: FieldConfig) => void;
     onUpdateField: (fieldId: string, updates: Partial<FieldConfig>) => void;
@@ -94,6 +96,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         data,
         onAddRecord,
         onUpdateRecord,
+        onBatchUpdateRecords,
         onDeleteRecord,
         editable,
         editor,
@@ -105,12 +108,6 @@ export const TableView: React.FC<TableViewProps> = (props) => {
     const { t } = useTranslation();
     const [selectedRows, setSelectedRows] = useState<ReadonlySet<string>>(new Set());
     const searchText = searchTextProp || '';
-
-    // Use ref to store latest onUpdateRecord to avoid stale closure without triggering re-renders
-    const onUpdateRecordRef = useRef(onUpdateRecord);
-    useEffect(() => {
-        onUpdateRecordRef.current = onUpdateRecord;
-    }, [onUpdateRecord]);
 
     // 过滤数据
     const filteredData = useMemo(() => {
@@ -200,6 +197,11 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         return editable ? [SelectColumn, ...baseColumns] : baseColumns;
     }, [fields, editable, editor]);
 
+    // Drag-fill handler for react-data-grid
+    const handleFill = useMemo(() => {
+        return createFillHandler(fields, filteredData);
+    }, [fields, filteredData]);
+
     const handleDeleteSelected = () => {
         onDeleteRecord(Array.from(selectedRows));
         setSelectedRows(new Set());
@@ -236,15 +238,20 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                     onRowsChange={(rows, changes) => {
                         // Persist changes when editing is committed (on blur/Enter)
                         if (changes.indexes.length > 0) {
+                            // Batch all row updates into a single updateAttributes call to avoid race condition
+                            const updatesMap = new Map<string, Partial<RecordData>>();
                             changes.indexes.forEach((index) => {
                                 const row = rows[index];
                                 if (row) {
-                                    // Use ref to get the latest onUpdateRecord without causing re-renders
-                                    onUpdateRecordRef.current(row.id, row);
+                                    updatesMap.set(row.id, row);
                                 }
                             });
+                            if (updatesMap.size > 0) {
+                                onBatchUpdateRecords(updatesMap);
+                            }
                         }
                     }}
+                    onFill={handleFill}
                     className={cn(
                         "bitable-data-grid",
                         theme === 'dark' ? "rdg-dark" : "rdg-light"

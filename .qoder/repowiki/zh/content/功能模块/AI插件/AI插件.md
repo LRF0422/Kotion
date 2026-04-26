@@ -13,6 +13,16 @@
 - [packages/plugin-ai/src/ai/marks/loading-mark.tsx](file://packages/plugin-ai/src/ai/marks/loading-mark.tsx)
 - [packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx](file://packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx)
 - [packages/plugin-ai/src/ai/menu/Chat.tsx](file://packages/plugin-ai/src/ai/menu/Chat.tsx)
+- [packages/plugin-ai/src/ai/menu/MessageBubble.tsx](file://packages/plugin-ai/src/ai/menu/MessageBubble.tsx)
+- [packages/plugin-ai/src/ai/menu/chat-types.ts](file://packages/plugin-ai/src/ai/menu/chat-types.ts)
+- [packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts](file://packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts)
+- [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx)
+- [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx)
+- [packages/plugin-ai/src/ai/menu/QuickPrompts.tsx](file://packages/plugin-ai/src/ai/menu/QuickPrompts.tsx)
+- [packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx](file://packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx)
+- [packages/plugin-ai/src/ai/menu/chat-persistence.ts](file://packages/plugin-ai/src/ai/menu/chat-persistence.ts)
+- [packages/plugin-ai/src/ai/menu/useSessionManager.ts](file://packages/plugin-ai/src/ai/menu/useSessionManager.ts)
+- [packages/plugin-ai/src/ai/menu/useTeamStatus.ts](file://packages/plugin-ai/src/ai/menu/useTeamStatus.ts)
 - [packages/plugin-ai/src/ai/AISettings.tsx](file://packages/plugin-ai/src/ai/AISettings.tsx)
 - [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx)
 - [packages/core/src/ai/utils/editor-effects.ts](file://packages/core/src/ai/utils/editor-effects.ts)
@@ -50,6 +60,12 @@
 - 增强列管理工具：支持嵌套列布局、改进编辑器效果工具、增强列管理功能
 - 改进工具系统：新增insertNestedColumns工具、增强工具元数据系统、改进工具执行跟踪
 - 更新插件集成：在AIExtension中集成AiInlineTrigger和AiInlinePanel组件
+- **重大UI组件更新**：Chat.tsx、MessageBubble.tsx等组件增强，改进聊天维度和React context集成
+- **新增流式缓冲机制**：use-streaming-buffer.ts提供requestAnimationFrame优化的流式渲染
+- **增强的执行步骤显示**：ExecutionStepsDisplay.tsx提供完整的工具执行可视化
+- **改进的错误处理**：ErrorDisplay.tsx提供友好的错误提示和重试机制
+- **会话管理增强**：useSessionManager.ts提供持久化的会话和对话ID管理
+- **团队状态面板**：TeamStatusPanel.tsx和useTeamStatus.ts提供AgentTeam状态可视化
 
 ## 目录
 1. [简介](#简介)
@@ -60,11 +76,12 @@
 6. [AI技能生态系统](#ai技能生态系统)
 7. [AI内联助手系统](#ai内联助手系统)
 8. [增强的列管理工具](#增强的列管理工具)
-9. [依赖关系分析](#依赖关系分析)
-10. [性能与可用性建议](#性能与可用性建议)
-11. [故障排查指南](#故障排查指南)
-12. [结论](#结论)
-13. [附录：使用示例与最佳实践](#附录使用示例与最佳实践)
+9. [UI组件系统](#ui组件系统)
+10. [依赖关系分析](#依赖关系分析)
+11. [性能与可用性建议](#性能与可用性建议)
+12. [故障排查指南](#故障排查指南)
+13. [结论](#结论)
+14. [附录：使用示例与最佳实践](#附录使用示例与最佳实践)
 
 ## 简介
 本文件面向希望在编辑器中集成AI能力（文本生成、图像生成与智能编辑）的开发者与产品团队。文档围绕"AI技能生态系统"和"AI内联助手系统"展开，系统阐述以下内容：
@@ -83,6 +100,7 @@
 - **插件集成与参数配置**：通过插件配置注入编辑器扩展、浮动菜单、静态菜单与斜杠命令，统一多语言文案与本地化资源
 - **结果处理与错误处理**：对流式文本与图像生成进行状态切换、结果回填与错误提示
 - **性能优化与最佳实践**：针对长文本流式渲染、并发生成与网络请求进行优化建议
+- **现代化UI组件系统**：Chat.tsx、MessageBubble.tsx等组件提供流畅的用户体验和丰富的交互功能
 
 ## 项目结构
 AI插件位于 packages/plugin-ai，核心由以下模块组成：
@@ -103,6 +121,7 @@ AI插件位于 packages/plugin-ai，核心由以下模块组成：
 - **优化的AI代理系统**：全新的use-agent-optimized.tsx，提供强大的工具调用能力
 - **完整的工具系统**：五大类工具模块，支持复杂的文档操作
 - **增强的工具库**：Markdown解析器、Web搜索、工具包装器等辅助功能
+- **现代化UI组件系统**：Chat.tsx、MessageBubble.tsx等提供丰富的交互体验
 
 ```mermaid
 graph TB
@@ -120,6 +139,17 @@ SM["静态菜单<br/>AiStaticMenu.tsx"]
 CH["聊天视图<br/>Chat.tsx"]
 AS["AI设置面板<br/>AISettings.tsx"]
 IL["AI内联助手<br/>AiInlineMenu.tsx"]
+end
+subgraph "UI组件层"
+CHAT["聊天组件<br/>Chat.tsx"]
+MSG["消息气泡<br/>MessageBubble.tsx"]
+BUF["流式缓冲<br/>use-streaming-buffer.ts"]
+STEP["执行步骤<br/>ExecutionStepsDisplay.tsx"]
+ERR["错误显示<br/>ErrorDisplay.tsx"]
+QUICK["快速提示<br/>QuickPrompts.tsx"]
+TEAM["团队状态<br/>TeamStatusPanel.tsx"]
+SESS["会话管理<br/>useSessionManager.ts"]
+PERSIST["持久化<br/>chat-persistence.ts"]
 end
 subgraph "技能生态系统层"
 SK["SkillsMP集成<br/>use-skillsmp.ts"]
@@ -179,68 +209,77 @@ SK --> SR
 SK --> DT
 SK --> SP
 SK --> TP
+CHAT --> MSG
+CHAT --> BUF
+CHAT --> STEP
+CHAT --> ERR
+CHAT --> QUICK
+CHAT --> TEAM
+CHAT --> SESS
+CHAT --> PERSIST
 ```
 
 **图表来源**
-- [packages/plugin-ai/src/index.tsx](file://packages/plugin-ai/src/index.tsx#L1-L35)
-- [packages/plugin-ai/src/ai/index.tsx](file://packages/plugin-ai/src/ai/index.tsx#L1-L66)
-- [packages/plugin-ai/src/ai/AISettings.tsx](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L1-L435)
-- [packages/core/src/ai/utils/editor-effects.ts](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
-- [packages/core/src/ai/use-agent-optimized.tsx](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
-- [packages/core/src/ai/utils/markdown-parser.ts](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
-- [packages/core/src/ai/utils/web-search.ts](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
-- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
-- [packages/core/src/ai/discovery/tool-metadata.ts](file://packages/core/src/ai/discovery/tool-metadata.ts#L268-L419)
-- [.env.example](file://.env.example#L1-L24)
-- [apps/vite/.env.development](file://apps/vite/.env.development#L1-L23)
-- [apps/vite/.env.production](file://apps/vite/.env.production#L1-L23)
+- [packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35)
+- [packages/plugin-ai/src/ai/index.tsx:1-66](file://packages/plugin-ai/src/ai/index.tsx#L1-L66)
+- [packages/plugin-ai/src/ai/AISettings.tsx:1-182](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
+- [packages/core/src/ai/AiInlineMenu.tsx:1-435](file://packages/core/src/ai/AiInlineMenu.tsx#L1-L435)
+- [packages/core/src/ai/utils/editor-effects.ts:1-12](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
+- [packages/core/src/ai/use-agent-optimized.tsx:1-223](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
+- [packages/core/src/ai/utils/markdown-parser.ts:1-458](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
+- [packages/core/src/ai/utils/web-search.ts:1-172](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
+- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
+- [packages/core/src/ai/discovery/tool-metadata.ts:268-419](file://packages/core/src/ai/discovery/tool-metadata.ts#L268-L419)
+- [.env.example:1-24](file://.env.example#L1-L24)
+- [apps/vite/.env.development:1-23](file://apps/vite/.env.development#L1-L23)
+- [apps/vite/.env.production:1-23](file://apps/vite/.env.production#L1-L23)
 
 ## 核心组件
 - **插件入口与注册**
   - 定义插件实例，声明编辑器扩展数组、浮动菜单、静态菜单与斜杠命令，供插件管理器在运行时合并与注入
   - **新增AI内联助手系统集成**：在AIExtension中集成AiInlineTrigger和AiInlinePanel组件
-  - 关键路径参考：[packages/plugin-ai/src/index.tsx](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/plugin-ai/src/ai/index.tsx](file://packages/plugin-ai/src/ai/index.tsx#L1-L66)
+  - 关键路径参考：[packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/plugin-ai/src/ai/index.tsx:1-66](file://packages/plugin-ai/src/ai/index.tsx#L1-L66)
 
 - **AI文本节点与命令**
   - 定义节点属性（提示语、生成时间）、HTML渲染、节点视图绑定与插入命令
-  - 关键路径参考：[packages/plugin-ai/src/ai/ai.ts](file://packages/plugin-ai/src/ai/ai.ts#L1-L55)
+  - 关键路径参考：[packages/plugin-ai/src/ai/ai.ts:1-55](file://packages/plugin-ai/src/ai/ai.ts#L1-L55)
 
 - **AI图像节点与命令**
   - 定义节点属性（提示语、图片URL）、节点视图绑定与插入命令
-  - 关键路径参考：[packages/plugin-ai/src/ai/ai-image.ts](file://packages/plugin-ai/src/ai/ai-image.ts#L1-L37)
+  - 关键路径参考：[packages/plugin-ai/src/ai/ai-image.ts:1-37](file://packages/plugin-ai/src/ai/ai-image.ts#L1-L37)
 
 - **文本生成视图**
   - 负责渲染节点内容、显示生成信息、接收提示语、触发生成与删除
-  - 关键路径参考：[packages/plugin-ai/src/ai/AiView.tsx](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
+  - 关键路径参考：[packages/plugin-ai/src/ai/AiView.tsx:1-76](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
 
 - **图像生成视图**
   - 负责渲染图片预览、接收提示语、触发生成与删除；对错误进行提示
-  - 关键路径参考：[packages/plugin-ai/src/ai/AiImageView.tsx](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
+  - 关键路径参考：[packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
 
 - **工具函数**
   - 文本生成：基于核心AI工具库发起流式文本生成，支持在指定位置插入与更新
   - 图像生成：调用外部图像生成接口，返回结果后更新节点属性
   - **安全的API密钥管理**：通过环境变量VITE_AI_IMAGE_API_KEY获取图像生成密钥
-  - 关键路径参考：[packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
+  - 关键路径参考：[packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
 
 - **加载装饰器扩展**
   - 在编辑器中注入"生成中"装饰器，支持切换与移除，用于流式渲染占位
-  - 关键路径参考：[packages/plugin-ai/src/ai/text-loading.tsx](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
+  - 关键路径参考：[packages/plugin-ai/src/ai/text-loading.tsx:1-146](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
 
 - **加载标记扩展**
   - 提供"加载中"标记，支持设置与取消标记，便于在特定范围内标注加载状态
-  - 关键路径参考：[packages/plugin-ai/src/ai/marks/loading-mark.tsx](file://packages/plugin-ai/src/ai/marks/loading-mark.tsx#L1-L36)
+  - 关键路径参考：[packages/plugin-ai/src/ai/marks/loading-mark.tsx:1-36](file://packages/plugin-ai/src/ai/marks/loading-mark.tsx#L1-L36)
 
 - **静态菜单与聊天视图**
   - 静态菜单：提供一键改写、简化、插入表情、改变语气、翻译等常用智能编辑操作
   - 聊天视图：提供浮动聊天窗口，支持与Agent对话并流式展示回答
-  - 关键路径参考：[packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx](file://packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx#L1-L48), [packages/plugin-ai/src/ai/menu/Chat.tsx](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L198)
+  - **重大更新**：Chat.tsx组件提供完整的聊天界面，包含流式渲染、执行步骤跟踪、错误处理等功能
+  - 关键路径参考：[packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx:1-48](file://packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx#L1-L48), [packages/plugin-ai/src/ai/menu/Chat.tsx:1-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L636)
 
 - **AI设置面板**
   - 提供API端点和密钥配置界面，支持文本生成和图像生成的API配置
   - 支持密码输入框安全存储API密钥，提供设置保存功能
-  - 关键路径参考：[packages/plugin-ai/src/ai/AISettings.tsx](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
+  - 关键路径参考：[packages/plugin-ai/src/ai/AISettings.tsx:1-182](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
 
 - **AI内联助手系统**
   - **浮动面板界面**：提供Ask AI浮动面板，支持实时流式响应和执行步骤跟踪
@@ -248,98 +287,99 @@ SK --> TP
   - **虚拟选中高亮**：通过装饰插件为选中区域提供视觉高亮
   - **流式缓冲**：使用requestAnimationFrame优化流式文本渲染性能
   - **执行步骤跟踪**：实时显示工具执行状态、结果和耗时
-  - 关键路径参考：[packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L1-L435)
+  - 关键路径参考：[packages/core/src/ai/AiInlineMenu.tsx:1-435](file://packages/core/src/ai/AiInlineMenu.tsx#L1-L435)
 
 - **技能市场集成（SkillsMP）**
   - 基于use-skillsmp.ts的React Hook，提供技能搜索、分类加载和分页功能
   - 支持关键词搜索和AI语义搜索，提供完整的技能市场交互体验
-  - 关键路径参考：[packages/core/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
+  - 关键路径参考：[packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
 
 - **技能注册表系统**
   - 提供技能生命周期管理，包括安装、卸载、启用/禁用和版本控制
   - 支持技能依赖解析和工具注册，实现完整的技能生态系统
-  - 关键路径参考：[docs/api/skills-api.md](file://docs/api/skills-api.md#L1-L777)
+  - 关键路径参考：[docs/api/skills-api.md:1-777](file://docs/api/skills-api.md#L1-L777)
 
 - **渐进式工具发现系统**
   - 基于PROGRESSIVE_TOOL_DISCOVERY.md的智能工具发现机制
   - 支持按需加载、智能搜索和性能优化的工具管理系统
-  - 关键路径参考：[packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L1-L389)
+  - 关键路径参考：[packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md:1-389](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L1-L389)
 
 - **技能提供商**
   - 提供技能商店功能，支持技能分类、评价和推荐系统
   - 支持技能分享、导入和导出，实现技能生态系统的开放性
-  - 关键路径参考：[docs/api/skills-api.md](file://docs/api/skills-api.md#L311-L465)
+  - 关键路径参考：[docs/api/skills-api.md:311-465](file://docs/api/skills-api.md#L311-L465)
 
 - **工具提供商**
   - 支持插件动态注册工具，实现按需加载机制
   - 提供工具元数据管理、优先级设置和标签系统
-  - 关键路径参考：[packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L147-L169)
+  - 关键路径参考：[packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md:147-169](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L147-L169)
 
 - **优化的AI代理系统**
   - 基于use-agent-optimized.tsx的全新代理系统，支持工具循环和智能决策
   - 提供停止生成、状态检查等功能，增强用户体验
-  - 关键路径参考：[packages/core/src/ai/use-agent-optimized.tsx](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
+  - 关键路径参考：[packages/core/src/ai/use-agent-optimized.tsx:1-223](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
 
 - **完整的工具系统**
   - 五大类工具模块：读取工具、插入工具、删除工具、列布局工具、杂项工具
   - 支持复杂的文档操作和智能编辑功能
   - **新增嵌套列布局工具**：insertNestedColumns支持在现有分栏列内插入嵌套分栏布局
-  - 关键路径参考：[packages/core/src/ai/tools/read-tools.ts](file://packages/core/src/ai/tools/read-tools.ts#L1-L208), [packages/core/src/ai/tools/insert-tools.ts](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611), [packages/core/src/ai/tools/delete-tools.ts](file://packages/core/src/ai/tools/delete-tools.ts#L1-L253), [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L1-L616), [packages/core/src/ai/tools/misc-tools.ts](file://packages/core/src/ai/tools/misc-tools.ts#L1-L210)
+  - 关键路径参考：[packages/core/src/ai/tools/read-tools.ts:1-208](file://packages/core/src/ai/tools/read-tools.ts#L1-L208), [packages/core/src/ai/tools/insert-tools.ts:1-611](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611), [packages/core/src/ai/tools/delete-tools.ts:1-253](file://packages/core/src/ai/tools/delete-tools.ts#L1-L253), [packages/core/src/ai/tools/columns-tools.ts:1-616](file://packages/core/src/ai/tools/columns-tools.ts#L1-L616), [packages/core/src/ai/tools/misc-tools.ts:1-210](file://packages/core/src/ai/tools/misc-tools.ts#L1-L210)
 
 - **增强的工具库**
   - Markdown解析器：支持完整的Markdown语法解析和转换
   - Web搜索：集成多种搜索源，提供高质量的外部信息获取
   - 工具包装器：提供统一的工具执行跟踪和回调机制
   - **编辑器效果工具**：提供滚动到指定位置等编辑器操作工具
-  - 关键路径参考：[packages/core/src/ai/utils/markdown-parser.ts](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458), [packages/core/src/ai/utils/web-search.ts](file://packages/core/src/ai/utils/web-search.ts#L1-L172), [packages/core/src/ai/utils/tool-wrapper.ts](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68), [packages/core/src/ai/utils/editor-effects.ts](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
+  - 关键路径参考：[packages/core/src/ai/utils/markdown-parser.ts:1-458](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458), [packages/core/src/ai/utils/web-search.ts:1-172](file://packages/core/src/ai/utils/web-search.ts#L1-L172), [packages/core/src/ai/utils/tool-wrapper.ts:1-68](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68), [packages/core/src/ai/utils/editor-effects.ts:1-12](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
 
 - **核心AI工具库**
   - 提供模型创建与流式文本生成封装，作为工具函数的上游依赖
   - **移除了硬编码的DeepSeek API密钥，通过空字符串初始化**
-  - 关键路径参考：[packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts#L1-L20)
+  - 关键路径参考：[packages/core/src/ai/ai-utils.ts:1-20](file://packages/core/src/ai/ai-utils.ts#L1-L20)
 
 - **插件管理与扩展装配**
   - 插件管理器负责收集各插件的编辑器扩展与本地化资源；编辑器在运行时解析并组装扩展
-  - 关键路径参考：[packages/common/src/core/PluginManager.ts](file://packages/common/src/core/PluginManager.ts#L1-L177), [packages/editor/src/editor/use-extension.ts](file://packages/editor/src/editor/use-extension.ts#L47-L63), [packages/editor/src/editor/build-in-extension.ts](file://packages/editor/src/editor/build-in-extension.ts#L1-L56)
+  - 关键路径参考：[packages/common/src/core/PluginManager.ts:1-177](file://packages/common/src/core/PluginManager.ts#L1-L177), [packages/editor/src/editor/use-extension.ts:47-63](file://packages/editor/src/editor/use-extension.ts#L47-L63), [packages/editor/src/editor/build-in-extension.ts:1-56](file://packages/editor/src/editor/build-in-extension.ts#L1-L56)
 
 **章节来源**
-- [packages/plugin-ai/src/index.tsx](file://packages/plugin-ai/src/index.tsx#L1-L35)
-- [packages/plugin-ai/src/ai/index.tsx](file://packages/plugin-ai/src/ai/index.tsx#L1-L66)
-- [packages/plugin-ai/src/ai/ai.ts](file://packages/plugin-ai/src/ai/ai.ts#L1-L55)
-- [packages/plugin-ai/src/ai/ai-image.ts](file://packages/plugin-ai/src/ai/ai-image.ts#L1-L37)
-- [packages/plugin-ai/src/ai/AiView.tsx](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
-- [packages/plugin-ai/src/ai/AiImageView.tsx](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
-- [packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
-- [packages/plugin-ai/src/ai/text-loading.tsx](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
-- [packages/plugin-ai/src/ai/marks/loading-mark.tsx](file://packages/plugin-ai/src/ai/marks/loading-mark.tsx#L1-L36)
-- [packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx](file://packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx#L1-L48)
-- [packages/plugin-ai/src/ai/menu/Chat.tsx](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L198)
-- [packages/plugin-ai/src/ai/AISettings.tsx](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L1-L435)
-- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
-- [docs/api/skills-api.md](file://docs/api/skills-api.md#L1-L777)
-- [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L1-L389)
-- [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L147-L169)
-- [packages/core/src/ai/use-agent-optimized.tsx](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
-- [packages/core/src/ai/tools/read-tools.ts](file://packages/core/src/ai/tools/read-tools.ts#L1-L208)
-- [packages/core/src/ai/tools/insert-tools.ts](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611)
-- [packages/core/src/ai/tools/delete-tools.ts](file://packages/core/src/ai/tools/delete-tools.ts#L1-L253)
-- [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L1-L616)
-- [packages/core/src/ai/tools/misc-tools.ts](file://packages/core/src/ai/tools/misc-tools.ts#L1-L210)
-- [packages/core/src/ai/utils/markdown-parser.ts](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
-- [packages/core/src/ai/utils/web-search.ts](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
-- [packages/core/src/ai/utils/tool-wrapper.ts](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68)
-- [packages/core/src/ai/utils/editor-effects.ts](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
-- [packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts#L1-L20)
-- [packages/common/src/core/PluginManager.ts](file://packages/common/src/core/PluginManager.ts#L1-L177)
-- [packages/editor/src/editor/use-extension.ts](file://packages/editor/src/editor/use-extension.ts#L47-L63)
-- [packages/editor/src/editor/build-in-extension.ts](file://packages/editor/src/editor/build-in-extension.ts#L1-L56)
+- [packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35)
+- [packages/plugin-ai/src/ai/index.tsx:1-66](file://packages/plugin-ai/src/ai/index.tsx#L1-L66)
+- [packages/plugin-ai/src/ai/ai.ts:1-55](file://packages/plugin-ai/src/ai/ai.ts#L1-L55)
+- [packages/plugin-ai/src/ai/ai-image.ts:1-37](file://packages/plugin-ai/src/ai/ai-image.ts#L1-L37)
+- [packages/plugin-ai/src/ai/AiView.tsx:1-76](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
+- [packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
+- [packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
+- [packages/plugin-ai/src/ai/text-loading.tsx:1-146](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
+- [packages/plugin-ai/src/ai/marks/loading-mark.tsx:1-36](file://packages/plugin-ai/src/ai/marks/loading-mark.tsx#L1-L36)
+- [packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx:1-48](file://packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx#L1-L48)
+- [packages/plugin-ai/src/ai/menu/Chat.tsx:1-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L636)
+- [packages/plugin-ai/src/ai/AISettings.tsx:1-182](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
+- [packages/core/src/ai/AiInlineMenu.tsx:1-435](file://packages/core/src/ai/AiInlineMenu.tsx#L1-L435)
+- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
+- [docs/api/skills-api.md:1-777](file://docs/api/skills-api.md#L1-L777)
+- [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md:1-389](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L1-L389)
+- [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md:147-169](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L147-L169)
+- [packages/core/src/ai/use-agent-optimized.tsx:1-223](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
+- [packages/core/src/ai/tools/read-tools.ts:1-208](file://packages/core/src/ai/tools/read-tools.ts#L1-L208)
+- [packages/core/src/ai/tools/insert-tools.ts:1-611](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611)
+- [packages/core/src/ai/tools/delete-tools.ts:1-253](file://packages/core/src/ai/tools/delete-tools.ts#L1-L253)
+- [packages/core/src/ai/tools/columns-tools.ts:1-616](file://packages/core/src/ai/tools/columns-tools.ts#L1-L616)
+- [packages/core/src/ai/tools/misc-tools.ts:1-210](file://packages/core/src/ai/tools/misc-tools.ts#L1-L210)
+- [packages/core/src/ai/utils/markdown-parser.ts:1-458](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
+- [packages/core/src/ai/utils/web-search.ts:1-172](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
+- [packages/core/src/ai/utils/tool-wrapper.ts:1-68](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68)
+- [packages/core/src/ai/utils/editor-effects.ts:1-12](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
+- [packages/core/src/ai/ai-utils.ts:1-20](file://packages/core/src/ai/ai-utils.ts#L1-L20)
+- [packages/common/src/core/PluginManager.ts:1-177](file://packages/common/src/core/PluginManager.ts#L1-L177)
+- [packages/editor/src/editor/use-extension.ts:47-63](file://packages/editor/src/editor/use-extension.ts#L47-L63)
+- [packages/editor/src/editor/build-in-extension.ts:1-56](file://packages/editor/src/editor/build-in-extension.ts#L1-L56)
 
 ## 架构总览
 AI插件采用"插件-扩展-视图-技能生态系统"的分层架构：
 - **插件层**：通过插件入口注册编辑器扩展、浮动菜单、静态菜单与斜杠命令
 - **扩展层**：节点扩展定义节点行为与视图；加载装饰器扩展提供流式渲染占位；标记扩展提供范围标记能力
 - **视图层**：React节点视图为用户提供交互界面；静态菜单与聊天视图为用户提供快捷操作与对话体验；**AI设置面板为用户提供安全的配置界面**；**AI内联助手系统提供浮动面板界面和实时交互**
+- **UI组件层**：**现代化的聊天组件系统**提供完整的用户交互体验，包括流式渲染、执行步骤跟踪、错误处理等
 - **技能生态系统层**：**SkillsMP集成提供技能市场接入**；**技能注册表管理技能生命周期**；**渐进式工具发现系统提供智能工具管理**；**技能提供商和工具提供商实现生态系统的开放性**
 - **工具层**：全新的工具系统提供完整的文档操作能力，包括读取、插入、删除、列布局和杂项功能，**新增嵌套列布局支持**
 - **代理层**：优化的AI代理系统提供智能决策和工具调用能力
@@ -349,65 +389,62 @@ AI插件采用"插件-扩展-视图-技能生态系统"的分层架构：
 ```mermaid
 sequenceDiagram
 participant User as "用户"
-participant Inline as "AI内联助手<br/>AiInlineMenu.tsx"
-participant Trigger as "触发器<br/>AiInlineTrigger"
-participant Panel as "浮动面板<br/>AiInlinePanel"
-participant Utils as "工具函数<br/>utils.ts"
+participant Chat as "聊天组件<br/>Chat.tsx"
+participant Buffer as "流式缓冲<br/>use-streaming-buffer.ts"
+participant Steps as "执行步骤<br/>ExecutionStepsDisplay.tsx"
+participant Team as "团队状态<br/>TeamStatusPanel.tsx"
 participant Agent as "优化代理系统<br/>use-agent-optimized.tsx"
 participant Skills as "技能生态系统<br/>SkillsMP"
 participant Tools as "工具系统<br/>tools/*"
 participant Parser as "Markdown解析器<br/>markdown-parser.ts"
 participant Search as "Web搜索<br/>web-search.ts"
 participant Core as "AI工具库<br/>ai-utils.ts"
-participant Editor as "编辑器命令链"
-participant Decor as "加载装饰器扩展<br/>text-loading.tsx"
-participant Settings as "AI设置面板<br/>AISettings.tsx"
-User->>Trigger : 点击"Ask AI"按钮
-Trigger->>Panel : 触发AI_INLINE_EVENT事件
-Panel->>User : 显示浮动面板
-User->>Panel : 输入指令并提交
-Panel->>Agent : 调用优化代理系统
+User->>Chat : 发送消息
+Chat->>Buffer : 开始流式渲染
+Chat->>Steps : 更新执行步骤
+Chat->>Team : 显示团队状态
+Chat->>Agent : 调用优化代理系统
 Agent->>Skills : 检查技能可用性
 Skills-->>Agent : 返回技能工具
 Agent->>Tools : 解析指令并调用相应工具
 Tools->>Parser : 处理Markdown内容
 Tools->>Search : 获取外部信息
-Tools->>Editor : 执行文档操作
-Agent-->>Panel : 返回操作结果
-Panel->>User : 实时流式展示响应
+Agent-->>Chat : 返回操作结果
+Chat->>Buffer : 更新流式内容
+Chat->>Steps : 记录执行结果
+Chat->>User : 实时流式展示响应
 ```
 
 **图表来源**
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L77-L115)
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L119-L435)
-- [packages/plugin-ai/src/ai/AiView.tsx](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
-- [packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
-- [packages/plugin-ai/src/ai/AISettings.tsx](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
-- [packages/core/src/ai/use-agent-optimized.tsx](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
-- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
-- [packages/core/src/ai/tools/insert-tools.ts](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611)
-- [packages/core/src/ai/utils/markdown-parser.ts](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
-- [packages/core/src/ai/utils/web-search.ts](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
+- [packages/plugin-ai/src/ai/menu/Chat.tsx:117-246](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L117-L246)
+- [packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts:10-62](file://packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts#L10-L62)
+- [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:10-75](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L10-L75)
+- [packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx:60-122](file://packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx#L60-L122)
+- [packages/core/src/ai/use-agent-optimized.tsx:1-223](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
+- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
+- [packages/core/src/ai/tools/insert-tools.ts:1-611](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611)
+- [packages/core/src/ai/utils/markdown-parser.ts:1-458](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
+- [packages/core/src/ai/utils/web-search.ts:1-172](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
 
 ## 组件详解
 
 ### 文本生成流程（AI文本块）
 - **节点定义与命令**
   - 节点属性包含提示语与生成时间；提供插入AI文本块的命令
-  - 参考路径：[packages/plugin-ai/src/ai/ai.ts](file://packages/plugin-ai/src/ai/ai.ts#L1-L55)
+  - 参考路径：[packages/plugin-ai/src/ai/ai.ts:1-55](file://packages/plugin-ai/src/ai/ai.ts#L1-L55)
 
 - **视图交互**
   - 显示"此文本由AI生成"与生成日期；在可编辑状态下允许修改提示语并触发生成
-  - 参考路径：[packages/plugin-ai/src/ai/AiView.tsx](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
+  - 参考路径：[packages/plugin-ai/src/ai/AiView.tsx:1-76](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
 
 - **流式渲染与装饰器**
   - 使用"生成中"装饰器在指定位置渲染占位；通过命令切换与移除装饰器
-  - 参考路径：[packages/plugin-ai/src/ai/text-loading.tsx](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
+  - 参考路径：[packages/plugin-ai/src/ai/text-loading.tsx:1-146](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
 
 - **工具函数**
   - aiGeneration：发起流式文本生成，回调增量结果；aiText：在当前选区执行AI改写
   - **安全的API密钥管理**：通过环境变量VITE_AI_IMAGE_API_KEY获取图像生成密钥
-  - 参考路径：[packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126), [packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts#L1-L20)
+  - 参考路径：[packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126), [packages/core/src/ai/ai-utils.ts:1-20](file://packages/core/src/ai/ai-utils.ts#L1-L20)
 
 ```mermaid
 flowchart TD
@@ -424,30 +461,30 @@ RemoveDeco --> End(["结束"])
 ```
 
 **图表来源**
-- [packages/plugin-ai/src/ai/AiView.tsx](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
-- [packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
-- [packages/plugin-ai/src/ai/text-loading.tsx](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
+- [packages/plugin-ai/src/ai/AiView.tsx:1-76](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
+- [packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
+- [packages/plugin-ai/src/ai/text-loading.tsx:1-146](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
 
 **章节来源**
-- [packages/plugin-ai/src/ai/ai.ts](file://packages/plugin-ai/src/ai/ai.ts#L1-L55)
-- [packages/plugin-ai/src/ai/AiView.tsx](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
-- [packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
-- [packages/plugin-ai/src/ai/text-loading.tsx](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
-- [packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts#L1-L20)
+- [packages/plugin-ai/src/ai/ai.ts:1-55](file://packages/plugin-ai/src/ai/ai.ts#L1-L55)
+- [packages/plugin-ai/src/ai/AiView.tsx:1-76](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
+- [packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
+- [packages/plugin-ai/src/ai/text-loading.tsx:1-146](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
+- [packages/core/src/ai/ai-utils.ts:1-20](file://packages/core/src/ai/ai-utils.ts#L1-L20)
 
 ### 图像生成流程（AI图像块）
 - **节点定义与命令**
   - 节点属性包含提示语与图片URL；提供插入AI图像块的命令
-  - 参考路径：[packages/plugin-ai/src/ai/ai-image.ts](file://packages/plugin-ai/src/ai/ai-image.ts#L1-L37)
+  - 参考路径：[packages/plugin-ai/src/ai/ai-image.ts:1-37](file://packages/plugin-ai/src/ai/ai-image.ts#L1-L37)
 
 - **视图交互**
   - 预览图片；在可编辑状态下允许修改提示语并触发生成；失败时弹出提示
-  - 参考路径：[packages/plugin-ai/src/ai/AiImageView.tsx](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
+  - 参考路径：[packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
 
 - **工具函数**
   - aiImageWriter：调用外部图像生成接口，返回结果后更新节点URL
   - **安全的API密钥管理**：通过环境变量VITE_AI_IMAGE_API_KEY获取图像生成密钥，支持配置覆盖
-  - 参考路径：[packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
+  - 参考路径：[packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
 
 ```mermaid
 sequenceDiagram
@@ -470,91 +507,97 @@ end
 ```
 
 **图表来源**
-- [packages/plugin-ai/src/ai/AiImageView.tsx](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
-- [packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
+- [packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
+- [packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
 
 **章节来源**
-- [packages/plugin-ai/src/ai/ai-image.ts](file://packages/plugin-ai/src/ai/ai-image.ts#L1-L37)
-- [packages/plugin-ai/src/ai/AiImageView.tsx](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
-- [packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
+- [packages/plugin-ai/src/ai/ai-image.ts:1-37](file://packages/plugin-ai/src/ai/ai-image.ts#L1-L37)
+- [packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
+- [packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
 
 ### 智能编辑工具与聊天视图
 - **静态菜单**
   - 提供一键改写、简化、插入表情、改变语气、翻译等常用智能编辑操作
-  - 参考路径：[packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx](file://packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx#L1-L48)
+  - 参考路径：[packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx:1-48](file://packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx#L1-L48)
 
 - **聊天视图**
-  - 提供浮动聊天窗口，支持与Agent对话并流式展示回答
-  - 参考路径：[packages/plugin-ai/src/ai/menu/Chat.tsx](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L198)
+  - **重大更新**：提供完整的浮动聊天窗口，支持与Agent对话并流式展示回答
+  - **现代化UI设计**：包含ExpandableChat组件、消息列表、工具步骤显示等
+  - **流式渲染优化**：使用requestAnimationFrame优化流式文本渲染性能
+  - **执行步骤跟踪**：实时显示工具执行状态、结果和耗时
+  - **错误处理**：提供友好的错误提示和重试机制
+  - **会话管理**：支持持久化的会话和对话ID管理
+  - **团队状态可视化**：显示AgentTeam的状态和进度
+  - 参考路径：[packages/plugin-ai/src/ai/menu/Chat.tsx:1-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L636)
 
 - **优化的AI代理系统**
   - 基于use-agent-optimized.tsx的全新代理系统，支持工具循环和智能决策
   - 提供停止生成、状态检查等功能，增强用户体验
   - **移除了硬编码的DeepSeek API密钥，通过空字符串初始化**
-  - 参考路径：[packages/core/src/ai/use-agent-optimized.tsx](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
+  - 参考路径：[packages/core/src/ai/use-agent-optimized.tsx:1-223](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
 
 - **Agent能力**
   - 基于插件管理器解析的工具集，提供读取范围、读取全文、写入、替换、删除与高亮等能力
   - 支持列布局操作、Web搜索、用户选择确认等高级功能
   - **集成技能生态系统，支持技能驱动的工具调用**
-  - 参考路径：[packages/core/src/ai/use-agent-optimized.tsx](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
+  - 参考路径：[packages/core/src/ai/use-agent-optimized.tsx:1-223](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
 
 - **模型与工具库**
   - 使用DeepSeek模型与工具库封装流式文本生成
   - **移除了硬编码的DeepSeek API密钥，通过空字符串初始化**
-  - 参考路径：[packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts#L1-L20)
+  - 参考路径：[packages/core/src/ai/ai-utils.ts:1-20](file://packages/core/src/ai/ai-utils.ts#L1-L20)
 
 **章节来源**
-- [packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx](file://packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx#L1-L48)
-- [packages/plugin-ai/src/ai/menu/Chat.tsx](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L198)
-- [packages/core/src/ai/use-agent-optimized.tsx](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
-- [packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts#L1-L20)
+- [packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx:1-48](file://packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx#L1-L48)
+- [packages/plugin-ai/src/ai/menu/Chat.tsx:1-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L636)
+- [packages/core/src/ai/use-agent-optimized.tsx:1-223](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
+- [packages/core/src/ai/ai-utils.ts:1-20](file://packages/core/src/ai/ai-utils.ts#L1-L20)
 
 ### AI设置面板与API配置
 - **安全的API配置界面**
   - 提供文本生成API端点、图像生成API端点和API密钥的配置界面
   - 支持密码输入框安全存储API密钥，提供设置保存功能
-  - 参考路径：[packages/plugin-ai/src/ai/AISettings.tsx](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
+  - 参考路径：[packages/plugin-ai/src/ai/AISettings.tsx:1-182](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
 
 - **环境变量支持**
   - 通过VITE_AI_IMAGE_API_KEY环境变量获取图像生成API密钥
   - 支持开发环境和生产环境的不同配置
-  - 参考路径：[packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L6-L10), [.env.example](file://.env.example#L1-L24), [apps/vite/.env.development](file://apps/vite/.env.development#L1-L23), [apps/vite/.env.production](file://apps/vite/.env.production#L1-L23)
+  - 参考路径：[packages/plugin-ai/src/ai/utils.ts:6-10](file://packages/plugin-ai/src/ai/utils.ts#L6-L10), [.env.example:1-24](file://.env.example#L1-L24), [apps/vite/.env.development:1-23](file://apps/vite/.env.development#L1-L23), [apps/vite/.env.production:1-23](file://apps/vite/.env.production#L1-L23)
 
 - **安全的API密钥管理**
   - 移除了硬编码的DeepSeek API密钥，提升了安全性
   - 通过环境变量和设置面板进行API密钥的配置和管理
-  - 参考路径：[packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts#L5-L7)
+  - 参考路径：[packages/core/src/ai/ai-utils.ts:5-7](file://packages/core/src/ai/ai-utils.ts#L5-L7)
 
 **章节来源**
-- [packages/plugin-ai/src/ai/AISettings.tsx](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
-- [packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L6-L10)
-- [packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts#L5-L7)
-- [.env.example](file://.env.example#L1-L24)
-- [apps/vite/.env.development](file://apps/vite/.env.development#L1-L23)
-- [apps/vite/.env.production](file://apps/vite/.env.production#L1-L23)
+- [packages/plugin-ai/src/ai/AISettings.tsx:1-182](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
+- [packages/plugin-ai/src/ai/utils.ts:6-10](file://packages/plugin-ai/src/ai/utils.ts#L6-L10)
+- [packages/core/src/ai/ai-utils.ts:5-7](file://packages/core/src/ai/ai-utils.ts#L5-L7)
+- [.env.example:1-24](file://.env.example#L1-L24)
+- [apps/vite/.env.development:1-23](file://apps/vite/.env.development#L1-L23)
+- [apps/vite/.env.production:1-23](file://apps/vite/.env.production#L1-L23)
 
 ### 插件集成与参数配置
 - **插件注册**
   - 在插件入口中声明编辑器扩展数组、浮动菜单、静态菜单与斜杠命令，供插件管理器在运行时合并
   - **新增AI内联助手系统集成**：在AIExtension中集成AiInlineTrigger和AiInlinePanel组件
-  - 参考路径：[packages/plugin-ai/src/index.tsx](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/plugin-ai/src/ai/index.tsx](file://packages/plugin-ai/src/ai/index.tsx#L1-L66)
+  - 参考路径：[packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/plugin-ai/src/ai/index.tsx:1-66](file://packages/plugin-ai/src/ai/index.tsx#L1-L66)
 
 - **扩展解析与装配**
   - 编辑器运行时将内置扩展与插件扩展合并，解析并组装扩展列表
-  - 参考路径：[packages/editor/src/editor/use-extension.ts](file://packages/editor/src/editor/use-extension.ts#L47-L63), [packages/editor/src/editor/build-in-extension.ts](file://packages/editor/src/editor/build-in-extension.ts#L1-L56)
+  - 参考路径：[packages/editor/src/editor/use-extension.ts:47-63](file://packages/editor/src/editor/use-extension.ts#L47-L63), [packages/editor/src/editor/build-in-extension.ts:1-56](file://packages/editor/src/editor/build-in-extension.ts#L1-L56)
 
 - **插件管理器**
   - 支持动态安装/卸载插件，聚合各插件的服务与扩展
   - **集成技能生态系统，支持插件驱动的技能管理**
-  - 参考路径：[packages/common/src/core/PluginManager.ts](file://packages/common/src/core/PluginManager.ts#L1-L177)
+  - 参考路径：[packages/common/src/core/PluginManager.ts:1-177](file://packages/common/src/core/PluginManager.ts#L1-L177)
 
 **章节来源**
-- [packages/plugin-ai/src/index.tsx](file://packages/plugin-ai/src/index.tsx#L1-L35)
-- [packages/plugin-ai/src/ai/index.tsx](file://packages/plugin-ai/src/ai/index.tsx#L1-L66)
-- [packages/editor/src/editor/use-extension.ts](file://packages/editor/src/editor/use-extension.ts#L47-L63)
-- [packages/editor/src/editor/build-in-extension.ts](file://packages/editor/src/editor/build-in-extension.ts#L1-L56)
-- [packages/common/src/core/PluginManager.ts](file://packages/common/src/core/PluginManager.ts#L1-L177)
+- [packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35)
+- [packages/plugin-ai/src/ai/index.tsx:1-66](file://packages/plugin-ai/src/ai/index.tsx#L1-L66)
+- [packages/editor/src/editor/use-extension.ts:47-63](file://packages/editor/src/editor/use-extension.ts#L47-L63)
+- [packages/editor/src/editor/build-in-extension.ts:1-56](file://packages/editor/src/editor/build-in-extension.ts#L1-L56)
+- [packages/common/src/core/PluginManager.ts:1-177](file://packages/common/src/core/PluginManager.ts#L1-L177)
 
 ## AI技能生态系统
 
@@ -589,12 +632,12 @@ US --> STAT
 ```
 
 **图表来源**
-- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
-- [docs/api/skills-api.md](file://docs/api/skills-api.md#L311-L465)
+- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
+- [docs/api/skills-api.md:311-465](file://docs/api/skills-api.md#L311-L465)
 
 **章节来源**
-- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
-- [docs/api/skills-api.md](file://docs/api/skills-api.md#L1-L777)
+- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
+- [docs/api/skills-api.md:1-777](file://docs/api/skills-api.md#L1-L777)
 
 ### 技能注册表系统
 **完整的技能生命周期管理**，支持技能的安装、卸载、启用/禁用和版本控制：
@@ -606,7 +649,7 @@ US --> STAT
 - **版本管理**：支持技能版本升级和兼容性检查
 
 **章节来源**
-- [docs/api/skills-api.md](file://docs/api/skills-api.md#L13-L58)
+- [docs/api/skills-api.md:13-58](file://docs/api/skills-api.md#L13-L58)
 
 ### 渐进式工具发现系统
 **智能的工具管理系统**，基于元数据的工具搜索和按需加载：
@@ -628,11 +671,11 @@ Execute --> Result["返回结果"]
 ```
 
 **图表来源**
-- [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L171-L189)
+- [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md:171-189](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L171-L189)
 
 **章节来源**
-- [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L1-L389)
-- [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L1-L367)
+- [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md:1-389](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L1-L389)
+- [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md:1-367](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L1-L367)
 
 ### 技能提供商
 **开放的技能商店系统**，支持技能的发布、评价和推荐：
@@ -644,7 +687,7 @@ Execute --> Result["返回结果"]
 - **预览功能**：提供技能预览图和演示效果
 
 **章节来源**
-- [docs/api/skills-api.md](file://docs/api/skills-api.md#L311-L465)
+- [docs/api/skills-api.md:311-465](file://docs/api/skills-api.md#L311-L465)
 
 ### 工具提供商
 **插件驱动的工具注册系统**，实现动态工具管理和性能优化：
@@ -656,7 +699,7 @@ Execute --> Result["返回结果"]
 - **兼容性保证**：完全向后兼容现有工具
 
 **章节来源**
-- [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L147-L169)
+- [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md:147-169](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L147-L169)
 
 ### 工具系统架构
 AI工具系统采用模块化设计，包含五大类工具模块，每类工具都有明确的职责分工：
@@ -677,7 +720,7 @@ AI工具系统采用模块化设计，包含五大类工具模块，每类工具
 - getDocumentSize：获取文档大小信息
 
 **章节来源**
-- [packages/core/src/ai/tools/read-tools.ts](file://packages/core/src/ai/tools/read-tools.ts#L1-L208)
+- [packages/core/src/ai/tools/read-tools.ts:1-208](file://packages/core/src/ai/tools/read-tools.ts#L1-L208)
 
 ### 插入工具（Insert Tools）
 提供文档内容的插入和修改功能：
@@ -693,7 +736,7 @@ AI工具系统采用模块化设计，包含五大类工具模块，每类工具
 - insertSegmentedMarkdown：分段插入Markdown内容
 
 **章节来源**
-- [packages/core/src/ai/tools/insert-tools.ts](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611)
+- [packages/core/src/ai/tools/insert-tools.ts:1-611](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611)
 
 ### 删除工具（Delete Tools）
 提供文档内容的删除功能：
@@ -703,7 +746,7 @@ AI工具系统采用模块化设计，包含五大类工具模块，每类工具
 - deleteBlock：通过块索引删除整个块
 
 **章节来源**
-- [packages/core/src/ai/tools/delete-tools.ts](file://packages/core/src/ai/tools/delete-tools.ts#L1-L253)
+- [packages/core/src/ai/tools/delete-tools.ts:1-253](file://packages/core/src/ai/tools/delete-tools.ts#L1-L253)
 
 ### 列布局工具（Columns Tools）
 提供分栏布局的创建和管理功能：
@@ -718,7 +761,7 @@ AI工具系统采用模块化设计，包含五大类工具模块，每类工具
 - **insertNestedColumns：在已有分栏的指定列内插入嵌套分栏布局**
 
 **章节来源**
-- [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L1-L616)
+- [packages/core/src/ai/tools/columns-tools.ts:1-616](file://packages/core/src/ai/tools/columns-tools.ts#L1-L616)
 
 ### 杂项工具（Misc Tools）
 提供辅助功能和用户交互：
@@ -729,7 +772,7 @@ AI工具系统采用模块化设计，包含五大类工具模块，每类工具
 - fetchWebPage：获取网页内容
 
 **章节来源**
-- [packages/core/src/ai/tools/misc-tools.ts](file://packages/core/src/ai/tools/misc-tools.ts#L1-L210)
+- [packages/core/src/ai/tools/misc-tools.ts:1-210](file://packages/core/src/ai/tools/misc-tools.ts#L1-L210)
 
 ### 工具包装器与类型系统
 - **工具包装器**：wrapToolsWithCallback提供统一的工具执行跟踪和回调机制
@@ -737,8 +780,8 @@ AI工具系统采用模块化设计，包含五大类工具模块，每类工具
 - **工具上下文**：提供编辑器实例和用户选择回调的上下文环境
 
 **章节来源**
-- [packages/core/src/ai/utils/tool-wrapper.ts](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68)
-- [packages/core/src/ai/types.ts](file://packages/core/src/ai/types.ts#L1-L166)
+- [packages/core/src/ai/utils/tool-wrapper.ts:1-68](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68)
+- [packages/core/src/ai/types.ts:1-166](file://packages/core/src/ai/types.ts#L1-L166)
 
 ### Markdown解析器
 提供完整的Markdown语法解析和转换功能：
@@ -749,7 +792,7 @@ AI工具系统采用模块化设计，包含五大类工具模块，每类工具
 - 表格支持：完整的表格解析和创建功能
 
 **章节来源**
-- [packages/core/src/ai/utils/markdown-parser.ts](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
+- [packages/core/src/ai/utils/markdown-parser.ts:1-458](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
 
 ### Web搜索功能
 集成多种搜索源，提供高质量的外部信息获取：
@@ -759,7 +802,7 @@ AI工具系统采用模块化设计，包含五大类工具模块，每类工具
 - 多级降级：主搜索失败时自动尝试其他搜索源
 
 **章节来源**
-- [packages/core/src/ai/utils/web-search.ts](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
+- [packages/core/src/ai/utils/web-search.ts:1-172](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
 
 ## AI内联助手系统
 
@@ -790,12 +833,12 @@ PL --> CL
 ```
 
 **图表来源**
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L77-L115)
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L119-L435)
+- [packages/core/src/ai/AiInlineMenu.tsx:77-115](file://packages/core/src/ai/AiInlineMenu.tsx#L77-L115)
+- [packages/core/src/ai/AiInlineMenu.tsx:119-435](file://packages/core/src/ai/AiInlineMenu.tsx#L119-L435)
 
 **章节来源**
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L77-L115)
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L119-L435)
+- [packages/core/src/ai/AiInlineMenu.tsx:77-115](file://packages/core/src/ai/AiInlineMenu.tsx#L77-L115)
+- [packages/core/src/ai/AiInlineMenu.tsx:119-435](file://packages/core/src/ai/AiInlineMenu.tsx#L119-L435)
 
 ### 实时流式响应
 **优化的流式文本渲染**确保流畅的用户体验：
@@ -806,8 +849,8 @@ PL --> CL
 - **性能优化**：通过缓冲区和RAF机制避免频繁DOM更新
 
 **章节来源**
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L147-L171)
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L294-L313)
+- [packages/core/src/ai/AiInlineMenu.tsx:147-171](file://packages/core/src/ai/AiInlineMenu.tsx#L147-L171)
+- [packages/core/src/ai/AiInlineMenu.tsx:294-313](file://packages/core/src/ai/AiInlineMenu.tsx#L294-L313)
 
 ### 执行步骤跟踪
 **完整的工具执行可视化**帮助用户理解AI操作过程：
@@ -818,8 +861,8 @@ PL --> CL
 - **历史记录**：维护完整的执行历史，支持查看和调试
 
 **章节来源**
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L11-L19)
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200)
+- [packages/core/src/ai/AiInlineMenu.tsx:11-19](file://packages/core/src/ai/AiInlineMenu.tsx#L11-L19)
+- [packages/core/src/ai/AiInlineMenu.tsx:174-200](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200)
 
 ### 用户选择提示
 **智能的用户交互处理**确保AI操作的准确性和可控性：
@@ -829,7 +872,7 @@ PL --> CL
 - **错误处理**：处理用户选择失败的情况
 
 **章节来源**
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L202-L206)
+- [packages/core/src/ai/AiInlineMenu.tsx:202-206](file://packages/core/src/ai/AiInlineMenu.tsx#L202-L206)
 
 ### 虚拟选中高亮
 **增强的选中文本可视化**提供更好的上下文感知：
@@ -839,7 +882,7 @@ PL --> CL
 - **生命周期管理**：在组件卸载时自动清理装饰
 
 **章节来源**
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L35-L73)
+- [packages/core/src/ai/AiInlineMenu.tsx:35-73](file://packages/core/src/ai/AiInlineMenu.tsx#L35-L73)
 
 ### 事件驱动架构
 **基于事件的触发机制**实现松耦合的组件通信：
@@ -849,8 +892,8 @@ PL --> CL
 - **焦点管理**：保持编辑器焦点，确保选中状态持续有效
 
 **章节来源**
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L28-L28)
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L211-L243)
+- [packages/core/src/ai/AiInlineMenu.tsx:28-28](file://packages/core/src/ai/AiInlineMenu.tsx#L28-L28)
+- [packages/core/src/ai/AiInlineMenu.tsx:211-243](file://packages/core/src/ai/AiInlineMenu.tsx#L211-L243)
 
 ## 增强的列管理工具
 
@@ -882,10 +925,10 @@ SCROLL --> END
 ```
 
 **图表来源**
-- [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L520-L616)
+- [packages/core/src/ai/tools/columns-tools.ts:520-616](file://packages/core/src/ai/tools/columns-tools.ts#L520-L616)
 
 **章节来源**
-- [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L520-L616)
+- [packages/core/src/ai/tools/columns-tools.ts:520-616](file://packages/core/src/ai/tools/columns-tools.ts#L520-L616)
 
 ### 增强的列信息追踪
 **改进的列结构分析**提供更详细的列布局信息：
@@ -896,8 +939,8 @@ SCROLL --> END
 - **实时更新**：插入嵌套列后重新发现文档结构
 
 **章节来源**
-- [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L11-L19)
-- [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L591-L598)
+- [packages/core/src/ai/tools/columns-tools.ts:11-19](file://packages/core/src/ai/tools/columns-tools.ts#L11-L19)
+- [packages/core/src/ai/tools/columns-tools.ts:591-598](file://packages/core/src/ai/tools/columns-tools.ts#L591-L598)
 
 ### 编辑器效果工具
 **新增的编辑器操作工具**提升用户体验：
@@ -907,7 +950,7 @@ SCROLL --> END
 - **平滑滚动**：自动滚动到目标位置
 
 **章节来源**
-- [packages/core/src/ai/utils/editor-effects.ts](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
+- [packages/core/src/ai/utils/editor-effects.ts:1-12](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
 
 ### 工具元数据增强
 **改进的工具元数据系统**支持嵌套列功能：
@@ -918,7 +961,169 @@ SCROLL --> END
 - **来源追踪**：标记为builtin来源，支持内置工具识别
 
 **章节来源**
-- [packages/core/src/ai/discovery/tool-metadata.ts](file://packages/core/src/ai/discovery/tool-metadata.ts#L268-L275)
+- [packages/core/src/ai/discovery/tool-metadata.ts:268-275](file://packages/core/src/ai/discovery/tool-metadata.ts#L268-L275)
+
+## UI组件系统
+
+### Chat.tsx 聊天组件
+**现代化的聊天界面**提供完整的用户交互体验：
+- **ExpandableChat容器**：提供可展开的聊天界面，支持不同尺寸和图标
+- **消息列表**：使用ChatMessageList组件展示消息历史
+- **流式渲染**：通过use-streaming-buffer实现requestAnimationFrame优化的流式文本渲染
+- **执行步骤显示**：实时显示工具执行状态和结果
+- **错误处理**：提供友好的错误提示和重试机制
+- **会话管理**：支持持久化的会话和对话ID管理
+- **团队状态可视化**：显示AgentTeam的状态和进度
+- **快速提示**：提供常用操作的快捷提示
+- **用户选择对话框**：处理用户选择请求，支持自定义输入
+
+```mermaid
+graph TB
+subgraph "Chat.tsx组件树"
+EXP["ExpandableChat容器"]
+HDR["ExpandableChatHeader头部"]
+BODY["ExpandableChatBody主体"]
+FOOT["ExpandableChatFooter底部"]
+MSG["消息列表ChatMessageList"]
+BUF["流式缓冲use-streaming-buffer"]
+STEP["执行步骤ExecutionStepsDisplay"]
+ERR["错误显示ErrorDisplay"]
+TEAM["团队状态TeamStatusPanel"]
+QUICK["快速提示QuickPrompts"]
+SEL["用户选择对话框"]
+end
+EXP --> HDR
+EXP --> BODY
+EXP --> FOOT
+BODY --> TEAM
+BODY --> MSG
+MSG --> BUF
+MSG --> STEP
+MSG --> ERR
+MSG --> QUICK
+MSG --> SEL
+```
+
+**图表来源**
+- [packages/plugin-ai/src/ai/menu/Chat.tsx:307-634](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L307-L634)
+
+**章节来源**
+- [packages/plugin-ai/src/ai/menu/Chat.tsx:1-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L636)
+
+### MessageBubble.tsx 消息气泡组件
+**增强的消息显示组件**提供丰富的交互功能：
+- **流式文本显示**：使用Streamdown组件提供动画效果
+- **复制功能**：支持消息内容复制，提供视觉反馈
+- **时间戳显示**：显示相对时间，支持用户悬停查看更多信息
+- **停止状态指示**：显示生成停止状态
+- **执行步骤显示**：对于AI消息显示工具执行步骤
+- **记忆化优化**：使用React.memo避免不必要的重渲染
+
+**章节来源**
+- [packages/plugin-ai/src/ai/menu/MessageBubble.tsx:1-82](file://packages/plugin-ai/src/ai/menu/MessageBubble.tsx#L1-L82)
+
+### use-streaming-buffer.ts 流式缓冲钩子
+**优化的流式渲染机制**确保流畅的用户体验：
+- **requestAnimationFrame优化**：每帧渲染一次，约16fps刷新率
+- **缓冲区管理**：使用缓冲区累积文本片段，避免频繁DOM更新
+- **强制刷新**：forceFlush确保流式气泡可见
+- **内存管理**：自动清理动画帧请求，避免内存泄漏
+- **内容获取**：提供getContent方法获取当前缓冲内容
+
+**章节来源**
+- [packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts:1-63](file://packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts#L1-L63)
+
+### ExecutionStepsDisplay.tsx 执行步骤显示组件
+**完整的工具执行可视化**提供详细的执行信息：
+- **已完成步骤**：使用Collapsible组件显示可折叠的执行步骤
+- **运行中步骤**：实时显示正在执行的工具和状态
+- **状态图标**：使用不同图标表示执行状态（运行中/成功/失败）
+- **耗时统计**：显示每个工具的执行耗时
+- **参数显示**：显示工具调用参数（截断显示）
+- **格式化工具名**：将驼峰命名转换为可读格式
+
+**章节来源**
+- [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:1-110](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L1-L110)
+
+### ErrorDisplay.tsx 错误显示组件
+**友好的错误处理界面**提供清晰的错误信息：
+- **错误类型图标**：根据不同错误类型显示相应图标
+- **重试功能**：提供可重试的错误类型重试按钮
+- **消失功能**：提供错误消失按钮
+- **错误分类**：支持网络、认证、速率限制、超时、服务器等错误类型
+- **可重试判断**：根据错误类型决定是否显示重试按钮
+
+**章节来源**
+- [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57)
+
+### QuickPrompts.tsx 快速提示组件
+**便捷的操作入口**提供常用功能的快捷访问：
+- **预设提示**：提供创建自定义代理、数据分析、图表创建、数据过滤等预设提示
+- **图标标识**：使用相应图标标识不同类型的提示
+- **徽章标识**：新功能使用"New"徽章标识
+- **一键提交**：点击即可提交对应的提示内容
+- **响应式设计**：适配不同屏幕尺寸
+
+**章节来源**
+- [packages/plugin-ai/src/ai/menu/QuickPrompts.tsx:1-51](file://packages/plugin-ai/src/ai/menu/QuickPrompts.tsx#L1-L51)
+
+### TeamStatusPanel.tsx 团队状态面板
+**AgentTeam状态可视化**提供团队协作的实时状态：
+- **阶段指示器**：显示当前执行阶段（规划、组装团队、执行、合成结果、完成）
+- **编排消息**：显示Agent的思考和工具调用状态
+- **成员网格**：显示团队成员的状态和子任务
+- **状态颜色**：使用不同颜色标识成员状态（等待、运行中、完成、错误）
+- **错误详情**：显示错误状态下的详细信息
+
+**章节来源**
+- [packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx:1-125](file://packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx#L1-L125)
+
+### useTeamStatus.ts 团队状态钩子
+**状态管理钩子**处理AgentTeam注解事件：
+- **注解解析**：解析AgentTeam注解事件，映射到团队状态
+- **兼容性支持**：支持规范对齐的注解事件和传统团队状态事件
+- **状态更新**：实时更新团队成员状态和阶段信息
+- **初始状态**：提供createInitialTeamState函数创建初始状态
+- **事件映射**：将不同事件类型映射到相应的状态更新逻辑
+
+**章节来源**
+- [packages/plugin-ai/src/ai/menu/useTeamStatus.ts:1-138](file://packages/plugin-ai/src/ai/menu/useTeamStatus.ts#L1-L138)
+
+### useSessionManager.ts 会话管理钩子
+**持久化会话管理**提供会话和对话ID的管理：
+- **会话ID存储**：使用localStorage存储会话ID和时间戳
+- **对话ID存储**：存储对话ID以便关联消息
+- **TTL过期处理**：会话30分钟自动过期清理
+- **注解解析**：解析注解数据中的会话信息
+- **会话保存**：保存新的会话和对话ID
+
+**章节来源**
+- [packages/plugin-ai/src/ai/menu/useSessionManager.ts:1-92](file://packages/plugin-ai/src/ai/menu/useSessionManager.ts#L1-L92)
+
+### chat-persistence.ts 聊天持久化
+**消息持久化管理**提供聊天历史的存储和检索：
+- **本地存储**：使用localStorage存储聊天消息
+- **消息限制**：最多存储50条消息，避免存储空间过大
+- **AI历史限制**：最多保留20条AI相关消息
+- **令牌预算**：AI上下文最多8000个令牌
+- **令牌估算**：按字符数估算令牌数量（约4字符/令牌）
+
+**章节来源**
+- [packages/plugin-ai/src/ai/menu/chat-persistence.ts:1-66](file://packages/plugin-ai/src/ai/menu/chat-persistence.ts#L1-L66)
+
+### chat-types.ts 类型定义
+**完整的类型系统**定义聊天相关的所有类型：
+- **消息类型**：Message接口定义消息的基本结构
+- **执行步骤类型**：ExecutionStep接口定义工具执行步骤
+- **用户选择类型**：PendingUserChoice接口定义用户选择状态
+- **错误类型**：ChatError接口定义错误分类和信息
+- **团队状态类型**：TeamState和TeamMember接口定义团队状态
+- **注解事件类型**：定义AgentTeam注解事件的完整类型系统
+- **会话类型**：SessionInfo接口定义会话信息
+- **工具名格式化**：提供工具名格式化函数
+
+**章节来源**
+- [packages/plugin-ai/src/ai/menu/chat-types.ts:1-250](file://packages/plugin-ai/src/ai/menu/chat-types.ts#L1-L250)
 
 ## 依赖关系分析
 - **内部依赖**
@@ -932,6 +1137,7 @@ SCROLL --> END
   - **AI内联助手系统依赖编辑器效果工具和工具元数据**
   - **技能生态系统依赖SkillsMP客户端和API服务**
   - **技能注册表依赖技能API和存储系统**
+  - **UI组件系统依赖现代化的React Hooks和状态管理**
 
 - **外部依赖**
   - 插件包依赖 common、core、editor、ui、icon 等工作区包
@@ -939,6 +1145,7 @@ SCROLL --> END
   - **工具系统依赖zod进行输入验证，ProseMirror进行文档操作**
   - **环境变量依赖VITE_AI_IMAGE_API_KEY进行API密钥配置**
   - **技能生态系统依赖Skills API和SkillsMP平台**
+  - **UI组件系统依赖现代化的React生态系统**
 
 ```mermaid
 graph LR
@@ -967,40 +1174,55 @@ Z["渐进式工具发现<br/>PROGRESSIVE_TOOL_DISCOVERY"] --> N
 AA["AI内联助手<br/>AiInlineMenu.tsx"] --> BB["编辑器效果工具<br/>editor-effects.ts"]
 AA --> CC["工具元数据<br/>tool-metadata.ts"]
 DD["嵌套列工具<br/>insertNestedColumns"] --> AA
+EE["UI组件系统<br/>Chat.tsx / MessageBubble.tsx"] --> FF["React Hooks<br/>useState / useEffect / useCallback"]
+EE --> GG["流式缓冲<br/>use-streaming-buffer.ts"]
+EE --> HH["执行步骤显示<br/>ExecutionStepsDisplay.tsx"]
+EE --> II["错误显示<br/>ErrorDisplay.tsx"]
+EE --> JJ["团队状态<br/>TeamStatusPanel.tsx"]
+EE --> KK["会话管理<br/>useSessionManager.ts"]
+EE --> LL["聊天持久化<br/>chat-persistence.ts"]
+EE --> MM["类型定义<br/>chat-types.ts"]
 ```
 
 **图表来源**
-- [packages/plugin-ai/src/index.tsx](file://packages/plugin-ai/src/index.tsx#L1-L35)
-- [packages/plugin-ai/src/ai/ai.ts](file://packages/plugin-ai/src/ai/ai.ts#L1-L55)
-- [packages/plugin-ai/src/ai/ai-image.ts](file://packages/plugin-ai/src/ai/ai-image.ts#L1-L37)
-- [packages/plugin-ai/src/ai/AiView.tsx](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
-- [packages/plugin-ai/src/ai/AiImageView.tsx](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
-- [packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
-- [packages/plugin-ai/src/ai/text-loading.tsx](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
-- [packages/plugin-ai/src/ai/marks/loading-mark.tsx](file://packages/plugin-ai/src/ai/marks/loading-mark.tsx#L1-L36)
-- [packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx](file://packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx#L1-L48)
-- [packages/plugin-ai/src/ai/menu/Chat.tsx](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L198)
-- [packages/plugin-ai/src/ai/AISettings.tsx](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
-- [packages/common/src/core/PluginManager.ts](file://packages/common/src/core/PluginManager.ts#L1-L177)
-- [packages/editor/src/editor/use-extension.ts](file://packages/editor/src/editor/use-extension.ts#L47-L63)
-- [packages/editor/src/editor/build-in-extension.ts](file://packages/editor/src/editor/build-in-extension.ts#L1-L56)
-- [packages/core/src/ai/use-agent-optimized.tsx](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
-- [packages/core/src/ai/tools/read-tools.ts](file://packages/core/src/ai/tools/read-tools.ts#L1-L208)
-- [packages/core/src/ai/utils/markdown-parser.ts](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
-- [packages/core/src/ai/utils/web-search.ts](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
-- [packages/core/src/ai/utils/tool-wrapper.ts](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68)
-- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
-- [docs/api/skills-api.md](file://docs/api/skills-api.md#L1-L777)
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L1-L435)
-- [packages/core/src/ai/utils/editor-effects.ts](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
-- [packages/core/src/ai/discovery/tool-metadata.ts](file://packages/core/src/ai/discovery/tool-metadata.ts#L268-L275)
+- [packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35)
+- [packages/plugin-ai/src/ai/ai.ts:1-55](file://packages/plugin-ai/src/ai/ai.ts#L1-L55)
+- [packages/plugin-ai/src/ai/ai-image.ts:1-37](file://packages/plugin-ai/src/ai/ai-image.ts#L1-L37)
+- [packages/plugin-ai/src/ai/AiView.tsx:1-76](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
+- [packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
+- [packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
+- [packages/plugin-ai/src/ai/text-loading.tsx:1-146](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
+- [packages/plugin-ai/src/ai/marks/loading-mark.tsx:1-36](file://packages/plugin-ai/src/ai/marks/loading-mark.tsx#L1-L36)
+- [packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx:1-48](file://packages/plugin-ai/src/ai/menu/AiStaticMenu.tsx#L1-L48)
+- [packages/plugin-ai/src/ai/menu/Chat.tsx:1-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L636)
+- [packages/plugin-ai/src/ai/AISettings.tsx:1-182](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
+- [packages/common/src/core/PluginManager.ts:1-177](file://packages/common/src/core/PluginManager.ts#L1-L177)
+- [packages/editor/src/editor/use-extension.ts:47-63](file://packages/editor/src/editor/use-extension.ts#L47-L63)
+- [packages/editor/src/editor/build-in-extension.ts:1-56](file://packages/editor/src/editor/build-in-extension.ts#L1-L56)
+- [packages/core/src/ai/use-agent-optimized.tsx:1-223](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
+- [packages/core/src/ai/tools/read-tools.ts:1-208](file://packages/core/src/ai/tools/read-tools.ts#L1-L208)
+- [packages/core/src/ai/utils/markdown-parser.ts:1-458](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
+- [packages/core/src/ai/utils/web-search.ts:1-172](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
+- [packages/core/src/ai/utils/tool-wrapper.ts:1-68](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68)
+- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
+- [docs/api/skills-api.md:1-777](file://docs/api/skills-api.md#L1-L777)
+- [packages/core/src/ai/AiInlineMenu.tsx:1-435](file://packages/core/src/ai/AiInlineMenu.tsx#L1-L435)
+- [packages/core/src/ai/utils/editor-effects.ts:1-12](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
+- [packages/core/src/ai/discovery/tool-metadata.ts:268-275](file://packages/core/src/ai/discovery/tool-metadata.ts#L268-L275)
+- [packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts:1-63](file://packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts#L1-L63)
+- [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:1-110](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L1-L110)
+- [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57)
+- [packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx:1-125](file://packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx#L1-L125)
+- [packages/plugin-ai/src/ai/menu/useSessionManager.ts:1-92](file://packages/plugin-ai/src/ai/menu/useSessionManager.ts#L1-L92)
+- [packages/plugin-ai/src/ai/menu/chat-persistence.ts:1-66](file://packages/plugin-ai/src/ai/menu/chat-persistence.ts#L1-L66)
+- [packages/plugin-ai/src/ai/menu/chat-types.ts:1-250](file://packages/plugin-ai/src/ai/menu/chat-types.ts#L1-L250)
 
 **章节来源**
-- [packages/plugin-ai/package.json](file://packages/plugin-ai/package.json#L1-L31)
-- [packages/plugin-ai/src/index.tsx](file://packages/plugin-ai/src/index.tsx#L1-L35)
-- [packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
-- [packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts#L1-L20)
-- [packages/core/src/ai/use-agent-optimized.tsx](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
+- [packages/plugin-ai/package.json:1-31](file://packages/plugin-ai/package.json#L1-L31)
+- [packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35)
+- [packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
+- [packages/core/src/ai/ai-utils.ts:1-20](file://packages/core/src/ai/ai-utils.ts#L1-L20)
+- [packages/core/src/ai/use-agent-optimized.tsx:1-223](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
 
 ## 性能与可用性建议
 - **流式渲染优化**
@@ -1008,7 +1230,9 @@ DD["嵌套列工具<br/>insertNestedColumns"] --> AA
   - 合理控制装饰器的DOM数量，避免过多widget节点影响滚动性能
   - **AI内联助手使用requestAnimationFrame优化流式渲染性能**
   - **集成渐进式工具发现，减少工具加载数量**
-  - 参考路径：[packages/plugin-ai/src/ai/text-loading.tsx](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146), [packages/plugin-ai/src/ai/AiView.tsx](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L147-L171)
+  - **UI组件系统使用React.memo优化重渲染性能**
+  - **流式缓冲机制确保16fps的稳定刷新率**
+  - 参考路径：[packages/plugin-ai/src/ai/text-loading.tsx:1-146](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146), [packages/plugin-ai/src/ai/AiView.tsx:1-76](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76), [packages/core/src/ai/AiInlineMenu.tsx:147-171](file://packages/core/src/ai/AiInlineMenu.tsx#L147-L171), [packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts:10-62](file://packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts#L10-L62)
 
 - **并发与节流**
   - 在同一编辑器中限制同时进行的生成任务数量，防止UI卡顿与网络拥塞
@@ -1016,7 +1240,8 @@ DD["嵌套列工具<br/>insertNestedColumns"] --> AA
   - **对工具调用进行并发控制，避免多个工具同时操作文档导致冲突**
   - **使用技能注册表管理技能数量，避免技能过多影响性能**
   - **AI内联助手支持流式响应中断，避免长时间占用资源**
-  - 参考路径：[packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L301-L313)
+  - **UI组件系统使用状态管理避免不必要的重渲染**
+  - 参考路径：[packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126), [packages/core/src/ai/AiInlineMenu.tsx:301-313](file://packages/core/src/ai/AiInlineMenu.tsx#L301-L313), [packages/plugin-ai/src/ai/menu/Chat.tsx:117-246](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L117-L246)
 
 - **工具系统优化**
   - 使用分块读取功能处理大文档，避免一次性读取造成内存压力
@@ -1025,28 +1250,32 @@ DD["嵌套列工具<br/>insertNestedColumns"] --> AA
   - **利用渐进式工具发现的按需加载机制，减少工具初始化开销**
   - **通过技能提供商的分类管理，减少技能搜索时间**
   - **嵌套列布局使用深度追踪和父路径机制，避免索引混乱**
-  - 参考路径：[packages/core/src/ai/tools/read-tools.ts](file://packages/core/src/ai/tools/read-tools.ts#L1-L208), [packages/core/src/ai/tools/insert-tools.ts](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611), [packages/core/src/ai/utils/web-search.ts](file://packages/core/src/ai/utils/web-search.ts#L1-L172), [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L11-L19)
+  - **UI组件系统使用useMemo和React.memo优化性能**
+  - 参考路径：[packages/core/src/ai/tools/read-tools.ts:1-208](file://packages/core/src/ai/tools/read-tools.ts#L1-L208), [packages/core/src/ai/tools/insert-tools.ts:1-611](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611), [packages/core/src/ai/utils/web-search.ts:1-172](file://packages/core/src/ai/utils/web-search.ts#L1-L172), [packages/core/src/ai/tools/columns-tools.ts:11-19](file://packages/core/src/ai/tools/columns-tools.ts#L11-L19)
 
 - **技能生态系统优化**
   - 使用技能注册表的缓存机制，避免重复加载相同技能
   - 通过SkillsMP的分类和标签系统，精准定位所需技能
   - 利用工具提供商的工厂模式，延迟创建工具实例
   - **AI内联助手的工具执行步骤跟踪，便于性能监控和调试**
-  - 参考路径：[docs/api/skills-api.md](file://docs/api/skills-api.md#L653-L731), [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200)
+  - **UI组件系统提供完整的错误处理和用户反馈机制**
+  - 参考路径：[docs/api/skills-api.md:653-731](file://docs/api/skills-api.md#L653-L731), [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190), [packages/core/src/ai/AiInlineMenu.tsx:174-200](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200)
 
 - **错误恢复**
   - 对图像生成失败场景提供明确提示与重试入口；对流式文本生成异常中断时保留已生成片段
   - **AI内联助手支持AbortError处理，优雅中断流式响应**
   - **工具执行失败时提供详细的错误信息和回滚机制**
   - **技能加载失败时提供降级方案和错误提示**
-  - 参考路径：[packages/plugin-ai/src/ai/AiImageView.tsx](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L301-L313)
+  - **UI组件系统提供友好的错误提示和重试机制**
+  - 参考路径：[packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69), [packages/core/src/ai/AiInlineMenu.tsx:301-313](file://packages/core/src/ai/AiInlineMenu.tsx#L301-L313), [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57)
 
 - **本地化与可访问性**
   - 保持多语言文案一致；为生成按钮与装饰器提供可读性标签
   - **工具系统提供完整的错误提示和用户反馈机制**
   - **技能生态系统提供多语言支持和本地化资源**
   - **AI内联助手提供键盘快捷键支持（Esc关闭）**
-  - 参考路径：[packages/plugin-ai/src/index.tsx](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L256-L261)
+  - **UI组件系统提供无障碍访问支持**
+  - 参考路径：[packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/core/src/ai/AiInlineMenu.tsx:256-261](file://packages/core/src/ai/AiInlineMenu.tsx#L256-L261), [packages/plugin-ai/src/ai/menu/Chat.tsx:34-40](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L34-L40)
 
 - **安全配置建议**
   - **移除了硬编码的DeepSeek API密钥，建议通过环境变量进行配置**
@@ -1054,141 +1283,182 @@ DD["嵌套列工具<br/>insertNestedColumns"] --> AA
   - 定期轮换API密钥，避免长期使用同一密钥
   - **通过技能注册表管理技能密钥，避免技能泄露**
   - **AI内联助手支持用户选择处理，避免自动决策风险**
-  - 参考路径：[packages/plugin-ai/src/ai/AISettings.tsx](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182), [packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L6-L10), [packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts#L5-L7), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L202-L206)
+  - **UI组件系统提供安全的用户输入验证和处理**
+  - 参考路径：[packages/plugin-ai/src/ai/AISettings.tsx:1-182](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182), [packages/plugin-ai/src/ai/utils.ts:6-10](file://packages/plugin-ai/src/ai/utils.ts#L6-L10), [packages/core/src/ai/ai-utils.ts:5-7](file://packages/core/src/ai/ai-utils.ts#L5-L7), [packages/core/src/ai/AiInlineMenu.tsx:202-206](file://packages/core/src/ai/AiInlineMenu.tsx#L202-L206)
+
+- **UI组件性能优化**
+  - **使用React.memo优化组件重渲染**
+  - **使用useCallback和useMemo稳定回调和计算结果**
+  - **使用requestAnimationFrame优化动画性能**
+  - **使用Collapsible组件优化折叠内容的渲染**
+  - **使用TooltipProvider优化工具提示的性能**
+  - **使用状态管理避免不必要的重渲染**
+  - 参考路径：[packages/plugin-ai/src/ai/menu/MessageBubble.tsx:16-81](file://packages/plugin-ai/src/ai/menu/MessageBubble.tsx#L16-L81), [packages/plugin-ai/src/ai/menu/Chat.tsx:42-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L42-L636), [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:10-110](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L10-L110)
 
 ## 故障排查指南
 - **文本生成无响应**
   - 检查是否正确切换"生成中"装饰器；确认流式生成回调是否被调用
-  - 参考路径：[packages/plugin-ai/src/ai/text-loading.tsx](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146), [packages/plugin-ai/src/ai/AiView.tsx](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
+  - 参考路径：[packages/plugin-ai/src/ai/text-loading.tsx:1-146](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146), [packages/plugin-ai/src/ai/AiView.tsx:1-76](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
 
 - **图像生成失败**
   - 检查网络请求头与鉴权信息；确认返回体结构与错误字段
   - **检查VITE_AI_IMAGE_API_KEY环境变量配置是否正确**
-  - 参考路径：[packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126), [packages/plugin-ai/src/ai/AiImageView.tsx](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
+  - 参考路径：[packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126), [packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
 
 - **工具执行失败**
   - 检查工具输入参数的有效性；确认工具执行回调是否正常触发
   - 查看工具包装器提供的详细错误信息和执行时间
   - **检查技能依赖是否正确加载，工具是否在技能中定义**
   - **AI内联助手的执行步骤跟踪，查看具体失败的工具和参数**
-  - 参考路径：[packages/core/src/ai/utils/tool-wrapper.ts](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68), [packages/core/src/ai/tools/read-tools.ts](file://packages/core/src/ai/tools/read-tools.ts#L1-L208), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200)
+  - **UI组件系统提供详细的错误分类和处理**
+  - 参考路径：[packages/core/src/ai/utils/tool-wrapper.ts:1-68](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68), [packages/core/src/ai/tools/read-tools.ts:1-208](file://packages/core/src/ai/tools/read-tools.ts#L1-L208), [packages/core/src/ai/AiInlineMenu.tsx:174-200](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200), [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57)
 
 - **Markdown解析问题**
   - 检查Markdown格式的正确性；确认解析器的分段处理逻辑
-  - 参考路径：[packages/core/src/ai/utils/markdown-parser.ts](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
+  - 参考路径：[packages/core/src/ai/utils/markdown-parser.ts:1-458](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
 
 - **Web搜索失败**
   - 检查网络连接和API密钥配置；确认备用搜索源是否正常工作
-  - 参考路径：[packages/core/src/ai/utils/web-search.ts](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
+  - 参考路径：[packages/core/src/ai/utils/web-search.ts:1-172](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
 
 - **API密钥相关问题**
   - **检查VITE_AI_IMAGE_API_KEY环境变量是否正确配置**
   - **确认AI设置面板中的API密钥是否已保存并生效**
   - **验证DeepSeek API密钥的安全配置**
-  - 参考路径：[packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L6-L10), [packages/plugin-ai/src/ai/AISettings.tsx](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182), [packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts#L5-L7)
+  - 参考路径：[packages/plugin-ai/src/ai/utils.ts:6-10](file://packages/plugin-ai/src/ai/utils.ts#L6-L10), [packages/plugin-ai/src/ai/AISettings.tsx:1-182](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182), [packages/core/src/ai/ai-utils.ts:5-7](file://packages/core/src/ai/ai-utils.ts#L5-L7)
 
 - **插件未生效**
   - 确认插件已注册到编辑器扩展列表；检查插件管理器是否正确合并扩展
   - **确认AI内联助手组件是否正确集成到AIExtension中**
-  - 参考路径：[packages/plugin-ai/src/index.tsx](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/common/src/core/PluginManager.ts](file://packages/common/src/core/PluginManager.ts#L1-L177), [packages/editor/src/editor/use-extension.ts](file://packages/editor/src/editor/use-extension.ts#L47-L63), [packages/plugin-ai/src/ai/index.tsx](file://packages/plugin-ai/src/ai/index.tsx#L29-L30)
+  - **确认UI组件系统是否正确加载和渲染**
+  - 参考路径：[packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/common/src/core/PluginManager.ts:1-177](file://packages/common/src/core/PluginManager.ts#L1-L177), [packages/editor/src/editor/use-extension.ts:47-63](file://packages/editor/src/editor/use-extension.ts#L47-L63), [packages/plugin-ai/src/ai/index.tsx:29-30](file://packages/plugin-ai/src/ai/index.tsx#L29-L30)
 
 - **技能市场访问失败**
   - 检查SkillsMP客户端配置；确认API密钥是否正确设置
   - 验证网络连接和Skills API的可用性
-  - 参考路径：[packages/core/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L42-L50), [docs/api/skills-api.md](file://docs/api/skills-api.md#L7-L9)
+  - 参考路径：[packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:42-50](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L42-L50), [docs/api/skills-api.md:7-9](file://docs/api/skills-api.md#L7-L9)
 
 - **技能加载失败**
   - 检查技能定义的完整性；确认必需工具是否正确注册
   - 验证技能版本兼容性和依赖关系
-  - 参考路径：[docs/api/skills-api.md](file://docs/api/skills-api.md#L13-L58)
+  - 参考路径：[docs/api/skills-api.md:13-58](file://docs/api/skills-api.md#L13-L58)
 
 - **AI内联助手问题**
   - **检查Ask AI按钮是否正确触发；确认自定义事件AI_INLINE_EVENT是否正常发送**
   - **验证浮动面板是否正确挂载到document.body；检查CSS样式和z-index**
   - **确认流式缓冲机制是否正常工作；检查requestAnimationFrame调用**
   - **嵌套列布局插入失败时，检查父分栏索引和列索引的有效性**
-  - 参考路径：[packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L77-L115), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L211-L243), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L147-L171), [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L548-L556)
+  - **UI组件系统提供完整的错误处理和用户反馈**
+  - 参考路径：[packages/core/src/ai/AiInlineMenu.tsx:77-115](file://packages/core/src/ai/AiInlineMenu.tsx#L77-L115), [packages/core/src/ai/AiInlineMenu.tsx:211-243](file://packages/core/src/ai/AiInlineMenu.tsx#L211-L243), [packages/core/src/ai/AiInlineMenu.tsx:147-171](file://packages/core/src/ai/AiInlineMenu.tsx#L147-L171), [packages/core/src/ai/tools/columns-tools.ts:548-556](file://packages/core/src/ai/tools/columns-tools.ts#L548-L556), [packages/plugin-ai/src/ai/menu/Chat.tsx:1-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L636)
+
+- **聊天组件问题**
+  - **检查Chat.tsx组件是否正确渲染；确认React Context是否正常提供**
+  - **验证流式缓冲机制是否正常工作；检查requestAnimationFrame调用**
+  - **确认执行步骤显示组件是否正确更新；检查状态管理**
+  - **检查错误显示组件是否正确处理错误类型**
+  - **验证会话管理钩子是否正确保存和加载会话信息**
+  - 参考路径：[packages/plugin-ai/src/ai/menu/Chat.tsx:117-246](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L117-L246), [packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts:10-62](file://packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts#L10-L62), [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:10-75](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L10-L75), [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57), [packages/plugin-ai/src/ai/menu/useSessionManager.ts:1-92](file://packages/plugin-ai/src/ai/menu/useSessionManager.ts#L1-L92)
 
 - **嵌套列布局问题**
   - **检查嵌套深度是否超过支持范围；验证父路径计算的正确性**
   - **确认插入位置计算是否准确；检查scrollToPosition的调用**
   - **验证嵌套列索引更新机制；检查重新发现文档结构的逻辑**
-  - 参考路径：[packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L591-L616), [packages/core/src/ai/utils/editor-effects.ts](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
+  - 参考路径：[packages/core/src/ai/tools/columns-tools.ts:591-616](file://packages/core/src/ai/tools/columns-tools.ts#L591-L616), [packages/core/src/ai/utils/editor-effects.ts:1-12](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
+
+- **UI组件渲染问题**
+  - **检查React.memo是否正确阻止不必要的重渲染**
+  - **验证useCallback和useMemo是否正确稳定回调和计算结果**
+  - **确认requestAnimationFrame是否正确优化动画性能**
+  - **检查Collapsible组件是否正确处理折叠状态**
+  - **验证TooltipProvider是否正确优化工具提示性能**
+  - 参考路径：[packages/plugin-ai/src/ai/menu/MessageBubble.tsx:16-81](file://packages/plugin-ai/src/ai/menu/MessageBubble.tsx#L16-L81), [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:10-110](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L10-L110), [packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx:60-122](file://packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx#L60-L122)
 
 **章节来源**
-- [packages/plugin-ai/src/ai/text-loading.tsx](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
-- [packages/plugin-ai/src/ai/AiView.tsx](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
-- [packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
-- [packages/plugin-ai/src/ai/AiImageView.tsx](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
-- [packages/plugin-ai/src/index.tsx](file://packages/plugin-ai/src/index.tsx#L1-L35)
-- [packages/common/src/core/PluginManager.ts](file://packages/common/src/core/PluginManager.ts#L1-L177)
-- [packages/editor/src/editor/use-extension.ts](file://packages/editor/src/editor/use-extension.ts#L47-L63)
-- [packages/core/src/ai/utils/tool-wrapper.ts](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68)
-- [packages/core/src/ai/utils/markdown-parser.ts](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
-- [packages/core/src/ai/utils/web-search.ts](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
-- [packages/plugin-ai/src/ai/AISettings.tsx](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
-- [packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts#L5-L7)
-- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L42-L50)
-- [docs/api/skills-api.md](file://docs/api/skills-api.md#L1-L777)
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L77-L115)
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L211-L243)
-- [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L147-L171)
-- [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L520-L616)
-- [packages/core/src/ai/utils/editor-effects.ts](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
+- [packages/plugin-ai/src/ai/text-loading.tsx:1-146](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146)
+- [packages/plugin-ai/src/ai/AiView.tsx:1-76](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
+- [packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126)
+- [packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
+- [packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35)
+- [packages/common/src/core/PluginManager.ts:1-177](file://packages/common/src/core/PluginManager.ts#L1-L177)
+- [packages/editor/src/editor/use-extension.ts:47-63](file://packages/editor/src/editor/use-extension.ts#L47-L63)
+- [packages/core/src/ai/utils/tool-wrapper.ts:1-68](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68)
+- [packages/core/src/ai/utils/markdown-parser.ts:1-458](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
+- [packages/core/src/ai/utils/web-search.ts:1-172](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
+- [packages/plugin-ai/src/ai/AISettings.tsx:1-182](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
+- [packages/core/src/ai/ai-utils.ts:5-7](file://packages/core/src/ai/ai-utils.ts#L5-L7)
+- [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:42-50](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L42-L50)
+- [docs/api/skills-api.md:1-777](file://docs/api/skills-api.md#L1-L777)
+- [packages/core/src/ai/AiInlineMenu.tsx:77-115](file://packages/core/src/ai/AiInlineMenu.tsx#L77-L115)
+- [packages/core/src/ai/AiInlineMenu.tsx:211-243](file://packages/core/src/ai/AiInlineMenu.tsx#L211-L243)
+- [packages/core/src/ai/AiInlineMenu.tsx:147-171](file://packages/core/src/ai/AiInlineMenu.tsx#L147-L171)
+- [packages/core/src/ai/tools/columns-tools.ts:520-616](file://packages/core/src/ai/tools/columns-tools.ts#L520-L616)
+- [packages/core/src/ai/utils/editor-effects.ts:1-12](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
+- [packages/plugin-ai/src/ai/menu/Chat.tsx:1-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L636)
+- [packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts:1-63](file://packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts#L1-L63)
+- [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:1-110](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L1-L110)
+- [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57)
+- [packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx:1-125](file://packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx#L1-L125)
+- [packages/plugin-ai/src/ai/menu/useSessionManager.ts:1-92](file://packages/plugin-ai/src/ai/menu/useSessionManager.ts#L1-L92)
 
 ## 结论
-AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现了文本与图像的AI生成能力，并提供了流畅的交互体验。**全新的AI内联助手系统显著增强了AI插件的交互性和可视化程度**。**AI内联助手提供浮动面板界面、实时流式响应、执行步骤跟踪、用户选择提示等功能，为用户提供沉浸式的AI交互体验**。**增强的列管理工具支持嵌套列布局，通过insertNestedColumns工具实现复杂的文档结构**。**全新的技能生态系统显著增强了AI插件的功能性和智能化水平**。**SkillsMP集成提供了完整的技能市场解决方案，技能注册表实现了技能生命周期管理，渐进式工具发现系统提升了工具使用的智能化程度**。**最重要的是，通过移除硬编码的DeepSeek API密钥，采用环境变量和设置面板进行安全配置，大幅提升了系统的安全性**。结合插件管理器与扩展装配机制，可在不侵入主应用的情况下灵活集成与扩展。建议在生产环境中关注流式渲染性能、并发控制、工具执行监控与错误恢复，以及API密钥和技能安全的管理，以获得更稳定的用户体验。
+AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现了文本与图像的AI生成能力，并提供了流畅的交互体验。**全新的AI内联助手系统显著增强了AI插件的交互性和可视化程度**。**AI内联助手提供浮动面板界面、实时流式响应、执行步骤跟踪、用户选择提示等功能，为用户提供沉浸式的AI交互体验**。**增强的列管理工具支持嵌套列布局，通过insertNestedColumns工具实现复杂的文档结构**。**全新的技能生态系统显著增强了AI插件的功能性和智能化水平**。**SkillsMP集成提供了完整的技能市场解决方案，技能注册表实现了技能生命周期管理，渐进式工具发现系统提升了工具使用的智能化程度**。**最重要的是，通过移除硬编码的DeepSeek API密钥，采用环境变量和设置面板进行安全配置，大幅提升了系统的安全性**。**现代化的UI组件系统提供了完整的用户交互体验，包括流式渲染、执行步骤跟踪、错误处理等功能**。结合插件管理器与扩展装配机制，可在不侵入主应用的情况下灵活集成与扩展。建议在生产环境中关注流式渲染性能、并发控制、工具执行监控与错误恢复，以及API密钥和技能安全的管理，以获得更稳定的用户体验。
 
 ## 附录：使用示例与最佳实践
 
 ### 在编辑器中插入AI文本块
 - 使用节点命令插入空的AI文本块，随后在视图中输入提示语并点击生成
-- 参考路径：[packages/plugin-ai/src/ai/ai.ts](file://packages/plugin-ai/src/ai/ai.ts#L1-L55), [packages/plugin-ai/src/ai/AiView.tsx](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
+- 参考路径：[packages/plugin-ai/src/ai/ai.ts:1-55](file://packages/plugin-ai/src/ai/ai.ts#L1-L55), [packages/plugin-ai/src/ai/AiView.tsx:1-76](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76)
 
 ### 在编辑器中插入AI图像块
 - 使用节点命令插入AI图像块，输入提示语后触发生成，预览并更新图片URL
-- 参考路径：[packages/plugin-ai/src/ai/ai-image.ts](file://packages/plugin-ai/src/ai/ai-image.ts#L1-L37), [packages/plugin-ai/src/ai/AiImageView.tsx](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
+- 参考路径：[packages/plugin-ai/src/ai/ai-image.ts:1-37](file://packages/plugin-ai/src/ai/ai-image.ts#L1-L37), [packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69)
 
 ### **使用AI内联助手系统**
 - **在气泡菜单中点击"Ask AI"按钮，触发浮动面板**
 - **在浮动面板中输入指令，支持实时流式响应和步骤跟踪**
 - **使用Esc键快速关闭面板，支持点击空白处关闭**
 - **嵌套列布局：在现有分栏列内插入嵌套分栏布局**
-- 参考路径：[packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L77-L115), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L119-L435), [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L520-L616)
+- **现代化UI组件：享受流畅的聊天体验和丰富的交互功能**
+- 参考路径：[packages/core/src/ai/AiInlineMenu.tsx:77-115](file://packages/core/src/ai/AiInlineMenu.tsx#L77-L115), [packages/core/src/ai/AiInlineMenu.tsx:119-435](file://packages/core/src/ai/AiInlineMenu.tsx#L119-L435), [packages/core/src/ai/tools/columns-tools.ts:520-616](file://packages/core/src/ai/tools/columns-tools.ts#L520-L616), [packages/plugin-ai/src/ai/menu/Chat.tsx:1-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L636)
 
 ### **使用优化的AI代理系统**
 - 通过use-editor-agent-optimized钩子获取代理实例，支持停止生成和状态检查
 - **集成技能生态系统，支持技能驱动的工具调用**
-- 参考路径：[packages/core/src/ai/use-agent-optimized.tsx](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
+- 参考路径：[packages/core/src/ai/use-agent-optimized.tsx:1-223](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
 
 ### **利用渐进式工具发现系统**
 - 使用discoverTools、exploreCategory、searchAvailableTools等API发现和加载工具
 - **通过技能注册表管理技能依赖，实现智能工具选择**
 - **AI内联助手的工具执行步骤跟踪，便于调试和监控**
-- 参考路径：[packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L39-L57), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200)
+- **现代化UI组件系统提供完整的工具执行可视化**
+- 参考路径：[packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md:39-57](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L39-L57), [packages/core/src/ai/AiInlineMenu.tsx:174-200](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200), [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:10-75](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L10-L75)
 
 ### **集成SkillsMP技能市场**
 - 使用use-skillsmp Hook进行技能搜索和管理
 - **通过技能提供商的分类和评价系统，选择合适的技能**
-- 参考路径：[packages/core/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L41-L190)
+- **现代化UI组件系统提供完整的技能市场交互体验**
+- 参考路径：[packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:41-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L41-L190)
 
 ### **利用完整的工具系统**
 - 使用读取工具获取文档结构，插入工具执行内容操作，删除工具清理内容
 - **通过工具提供商的动态注册机制，扩展新的工具能力**
 - **嵌套列布局：使用insertNestedColumns在现有分栏内插入嵌套布局**
-- 参考路径：[packages/core/src/ai/tools/read-tools.ts](file://packages/core/src/ai/tools/read-tools.ts#L1-L208), [packages/core/src/ai/tools/insert-tools.ts](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611), [packages/core/src/ai/tools/delete-tools.ts](file://packages/core/src/ai/tools/delete-tools.ts#L1-L253), [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L520-L616)
+- **现代化UI组件系统提供完整的工具执行可视化**
+- 参考路径：[packages/core/src/ai/tools/read-tools.ts:1-208](file://packages/core/src/ai/tools/read-tools.ts#L1-L208), [packages/core/src/ai/tools/insert-tools.ts:1-611](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611), [packages/core/src/ai/tools/delete-tools.ts:1-253](file://packages/core/src/ai/tools/delete-tools.ts#L1-L253), [packages/core/src/ai/tools/columns-tools.ts:520-616](file://packages/core/src/ai/tools/columns-tools.ts#L520-L616), [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:10-75](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L10-L75)
 
 ### **集成插件至编辑器**
 - 将插件的编辑器扩展注入到插件管理器中，确保扩展在运行时被解析与装配
 - **通过技能注册表管理插件技能，实现插件驱动的扩展**
 - **确认AI内联助手组件正确集成到AIExtension中**
-- 参考路径：[packages/plugin-ai/src/index.tsx](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/common/src/core/PluginManager.ts](file://packages/common/src/core/PluginManager.ts#L1-L177), [packages/editor/src/editor/use-extension.ts](file://packages/editor/src/editor/use-extension.ts#L47-L63), [packages/plugin-ai/src/ai/index.tsx](file://packages/plugin-ai/src/ai/index.tsx#L29-L30)
+- **现代化UI组件系统提供完整的用户交互体验**
+- 参考路径：[packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/common/src/core/PluginManager.ts:1-177](file://packages/common/src/core/PluginManager.ts#L1-L177), [packages/editor/src/editor/use-extension.ts:47-63](file://packages/editor/src/editor/use-extension.ts#L47-L63), [packages/plugin-ai/src/ai/index.tsx:29-30](file://packages/plugin-ai/src/ai/index.tsx#L29-L30)
 
 ### **参数配置与本地化**
 - 在插件配置中提供多语言文案与编辑器扩展数组，确保国际化与功能可用
 - **通过技能生态系统实现插件的本地化和多语言支持**
 - **AI内联助手支持键盘快捷键和无障碍访问**
-- 参考路径：[packages/plugin-ai/src/index.tsx](file://packages/plugin-ai/src/index.tsx#L1-L35)
+- **现代化UI组件系统提供完整的本地化支持**
+- 参考路径：[packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35)
 
 ### **错误处理与性能优化**
 - 对图像生成失败进行提示；对长文本流式渲染采用增量更新与装饰器控制
@@ -1196,17 +1466,21 @@ AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现
 - **通过技能注册表的缓存机制，提升技能加载性能**
 - **AI内联助手的流式缓冲机制，优化渲染性能**
 - **嵌套列布局的深度追踪和父路径机制，避免索引混乱**
-- 参考路径：[packages/plugin-ai/src/ai/AiImageView.tsx](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69), [packages/plugin-ai/src/ai/text-loading.tsx](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146), [packages/core/src/ai/utils/tool-wrapper.ts](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L147-L171), [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts#L11-L19)
+- **现代化UI组件系统提供完整的错误处理和性能优化**
+- **使用React.memo和useCallback优化组件性能**
+- 参考路径：[packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69), [packages/plugin-ai/src/ai/text-loading.tsx:1-146](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146), [packages/core/src/ai/utils/tool-wrapper.ts:1-68](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68), [packages/core/src/ai/AiInlineMenu.tsx:147-171](file://packages/core/src/ai/AiInlineMenu.tsx#L147-L171), [packages/core/src/ai/tools/columns-tools.ts:11-19](file://packages/core/src/ai/tools/columns-tools.ts#L11-L19), [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57), [packages/plugin-ai/src/ai/menu/MessageBubble.tsx:16-81](file://packages/plugin-ai/src/ai/menu/MessageBubble.tsx#L16-L81)
 
 ### **Markdown内容处理最佳实践**
 - 使用insertSegmentedMarkdown进行大文档的分段插入，避免性能问题
 - **通过技能注册表管理Markdown处理技能，提升处理效率**
-- 参考路径：[packages/core/src/ai/tools/insert-tools.ts](file://packages/core/src/ai/tools/insert-tools.ts#L521-L609), [packages/core/src/ai/utils/markdown-parser.ts](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
+- **现代化UI组件系统提供完整的Markdown解析和显示功能**
+- 参考路径：[packages/core/src/ai/tools/insert-tools.ts:521-609](file://packages/core/src/ai/tools/insert-tools.ts#L521-L609), [packages/core/src/ai/utils/markdown-parser.ts:1-458](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
 
 ### **Web搜索集成示例**
 - 使用webSearch工具获取最新信息，结合fetchWebPage获取网页内容
 - **通过技能生态系统集成专业的搜索技能，提升搜索质量**
-- 参考路径：[packages/core/src/ai/tools/misc-tools.ts](file://packages/core/src/ai/tools/misc-tools.ts#L122-L196), [packages/core/src/ai/utils/web-search.ts](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
+- **现代化UI组件系统提供完整的Web搜索集成**
+- 参考路径：[packages/core/src/ai/tools/misc-tools.ts:122-196](file://packages/core/src/ai/tools/misc-tools.ts#L122-L196), [packages/core/src/ai/utils/web-search.ts:1-172](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
 
 ### **API密钥安全配置最佳实践**
 - **移除了硬编码的DeepSeek API密钥，建议通过环境变量进行配置**
@@ -1215,7 +1489,8 @@ AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现
 - 定期轮换API密钥，避免长期使用同一密钥
 - **通过技能注册表管理技能密钥，实现细粒度的权限控制**
 - **AI内联助手支持用户选择处理，避免自动决策风险**
-- 参考路径：[packages/plugin-ai/src/ai/AISettings.tsx](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182), [packages/plugin-ai/src/ai/utils.ts](file://packages/plugin-ai/src/ai/utils.ts#L6-L10), [packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts#L5-L7), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L202-L206)
+- **现代化UI组件系统提供安全的用户输入验证和处理**
+- 参考路径：[packages/plugin-ai/src/ai/AISettings.tsx:1-182](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182), [packages/plugin-ai/src/ai/utils.ts:6-10](file://packages/plugin-ai/src/ai/utils.ts#L6-L10), [packages/core/src/ai/ai-utils.ts:5-7](file://packages/core/src/ai/ai-utils.ts#L5-L7), [packages/core/src/ai/AiInlineMenu.tsx:202-206](file://packages/core/src/ai/AiInlineMenu.tsx#L202-L206)
 
 ### **技能生态系统集成最佳实践**
 - **通过SkillsMP集成技能市场，实现技能的发现和安装**
@@ -1223,4 +1498,18 @@ AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现
 - **利用渐进式工具发现系统，智能选择和加载所需的工具**
 - **通过工具提供商的动态注册机制，扩展编辑器的功能**
 - **AI内联助手的工具执行步骤跟踪，便于性能监控和调试**
-- 参考路径：[docs/api/skills-api.md](file://docs/api/skills-api.md#L1-L777), [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L1-L389), [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190), [packages/core/src/ai/AiInlineMenu.tsx](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200)
+- **现代化UI组件系统提供完整的技能生态系统集成**
+- 参考路径：[docs/api/skills-api.md:1-777](file://docs/api/skills-api.md#L1-L777), [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md:1-389](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L1-L389), [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190), [packages/core/src/ai/AiInlineMenu.tsx:174-200](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200)
+
+### **现代化UI组件系统最佳实践**
+- **使用Chat.tsx组件提供完整的聊天界面**
+- **使用MessageBubble.tsx组件提供丰富的消息显示功能**
+- **使用use-streaming-buffer.ts钩子优化流式渲染性能**
+- **使用ExecutionStepsDisplay.tsx组件提供详细的执行步骤可视化**
+- **使用ErrorDisplay.tsx组件提供友好的错误处理**
+- **使用TeamStatusPanel.tsx组件提供团队状态可视化**
+- **使用useSessionManager.ts钩子管理会话和对话ID**
+- **使用chat-persistence.ts组件提供聊天历史持久化**
+- **使用chat-types.ts类型定义确保类型安全**
+- **现代化UI组件系统提供完整的用户体验和性能优化**
+- 参考路径：[packages/plugin-ai/src/ai/menu/Chat.tsx:1-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L636), [packages/plugin-ai/src/ai/menu/MessageBubble.tsx:1-82](file://packages/plugin-ai/src/ai/menu/MessageBubble.tsx#L1-L82), [packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts:1-63](file://packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts#L1-L63), [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:1-110](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L1-L110), [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57), [packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx:1-125](file://packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx#L1-L125), [packages/plugin-ai/src/ai/menu/useSessionManager.ts:1-92](file://packages/plugin-ai/src/ai/menu/useSessionManager.ts#L1-L92), [packages/plugin-ai/src/ai/menu/chat-persistence.ts:1-66](file://packages/plugin-ai/src/ai/menu/chat-persistence.ts#L1-L66), [packages/plugin-ai/src/ai/menu/chat-types.ts:1-250](file://packages/plugin-ai/src/ai/menu/chat-types.ts#L1-L250)
