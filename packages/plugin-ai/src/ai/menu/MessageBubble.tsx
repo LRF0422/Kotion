@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react'
-import { StopCircle } from '@kn/icon'
+import { StopCircle, AlertCircle } from '@kn/icon'
 import { Streamdown, formatDistanceToNow, useCopyToClipboard } from '@kn/ui'
 import {
     ChatBubble,
@@ -39,10 +39,18 @@ export const MessageBubble = React.memo(function MessageBubble({
                     <ChatBubbleMessage
                         variant={isAI ? 'received' : 'sent'}
                         className={isAI
-                            ? 'bg-white dark:bg-muted/40 text-foreground p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tl-sm'
+                            ? message.error
+                                ? 'bg-red-50 dark:bg-red-950/30 border border-red-200/60 dark:border-red-900/40 text-red-700 dark:text-red-300 p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tl-sm'
+                                : 'bg-white dark:bg-muted/40 text-foreground p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tl-sm'
                             : 'bg-[#E6E6E6] dark:bg-muted/80 text-foreground p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tr-sm'
                         }
                     >
+                        {message.error && (
+                            <div className="flex items-center gap-1 mb-1">
+                                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                <span className="font-medium text-[11px]">Error</span>
+                            </div>
+                        )}
                         <Streamdown>{message.content}</Streamdown>
                         {message.stopped && (
                             <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 text-[10px] text-muted-foreground">

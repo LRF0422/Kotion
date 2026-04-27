@@ -189,6 +189,9 @@ export const Drawnix = Node.create({
         return {
             data: {
                 default: null
+            },
+            mode: {
+                default: 'whiteboard'
             }
         }
     },

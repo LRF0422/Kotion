@@ -10,8 +10,9 @@ import { bitable } from "@kn/plugin-bitable"
 import { speechToText } from "@kn/plugin-speech-to-text"
 import { ai } from "@kn/plugin-ai"
 import { chart } from "@kn/chart-plugin"
+import { drawnix } from "@kn/plugin-drawnix"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, speechToText, ai, chart]} />
+  <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, speechToText, ai, chart, drawnix]} />
 )

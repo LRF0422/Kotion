@@ -468,7 +468,16 @@ export const useEditorAgentOptimized = (
                         console.warn('[Agent] Tool calls skipped due to error finishReason:', roundFinishReason)
                     }
 
-                    // Normal finish (stop, error, max_iterations) - exit the loop
+                    // If the backend reported an error finish, throw so the
+                    // consumer (Chat.tsx) can display it instead of producing a
+                    // blank message.
+                    if (roundFinishReason === 'error') {
+                        const errMsg = roundAssistantContent
+                            || 'Agent processing error'
+                        throw new Error(errMsg)
+                    }
+
+                    // Normal finish (stop, length, max_iterations) - exit the loop
                     break
                 }
             })()

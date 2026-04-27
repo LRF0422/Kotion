@@ -236,7 +236,25 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                 setCurrentSteps([])
             } else {
                 console.error("Error generating AI response:", err)
-                setError(classifyError(err))
+                const classifiedError = classifyError(err)
+                setError(classifiedError)
+
+                // Show the error as an AI message in the dialog so the
+                // user can see what went wrong instead of a blank bubble.
+                const currentContent = buffer.getContent()
+                const errorMessage = currentContent
+                    ? `${currentContent}\n\n⚠️ ${classifiedError.message}`
+                    : `⚠️ ${classifiedError.message}`
+                const aiMessage: Message = {
+                    id: generateMessageId(),
+                    content: errorMessage,
+                    sender: "ai",
+                    timestamp: Date.now(),
+                    steps: [...stepsRef.current],
+                    error: true,
+                }
+                setMessages((prev) => [...prev, aiMessage])
+
                 buffer.reset()
                 setCurrentSteps([])
             }

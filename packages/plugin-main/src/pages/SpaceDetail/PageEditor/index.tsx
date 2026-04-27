@@ -171,6 +171,10 @@ export const PageEditor: React.FC = () => {
         toggleLoading()
         spaceService.getPage(params.pageId!).then((res) => {
             setPage(res)
+        }).catch((err) => {
+            console.error('Failed to load page:', err)
+            toast.error('Failed to load page content')
+        }).finally(() => {
             toggleLoading()
         })
 

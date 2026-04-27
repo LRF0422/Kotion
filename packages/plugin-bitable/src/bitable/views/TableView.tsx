@@ -284,7 +284,9 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                     --rdg-background-color: transparent;
                     --rdg-header-background-color: rgba(249, 250, 251, 0.4);
                     --rdg-row-hover-background-color: rgba(243, 244, 246, 0.5);
-                    --rdg-selection-color: #3b82f6;
+                    --rdg-row-selected-background-color: rgba(59, 130, 246, 0.06);
+                    --rdg-row-selected-hover-background-color: rgba(59, 130, 246, 0.1);
+                    --rdg-selection-color: rgba(59, 130, 246, 0.6);
                     --rdg-border-color: #e5e7eb;
                     --rdg-color: #111827;
                     --rdg-header-color: #6b7280;
@@ -318,11 +320,34 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                     padding: 0 8px;
                 }
 
+                /* Light mode: softer selected cell with inset shadow instead of harsh outline */
+                .bitable-data-grid.rdg-light .rdg-cell[aria-selected="true"] {
+                    outline: none;
+                    box-shadow: inset 0 0 0 1.5px rgba(59, 130, 246, 0.5);
+                    background-color: rgba(59, 130, 246, 0.04);
+                }
+
+                /* Light mode: softer drag handle */
+                .bitable-data-grid.rdg-light .rdg-cell-drag-handle {
+                    --rdg-drag-handle-size: 7px;
+                    background-color: rgba(59, 130, 246, 0.5);
+                    border-radius: 1px;
+                    transition: all 0.15s ease;
+                }
+
+                .bitable-data-grid.rdg-light .rdg-cell-drag-handle:hover {
+                    --rdg-drag-handle-size: 12px;
+                    background-color: #3b82f6;
+                    border-radius: 2px;
+                }
+
                 .bitable-data-grid.rdg-dark {
                     --rdg-background-color: transparent;
                     --rdg-header-background-color: rgba(25, 25, 25, 0.4);
                     --rdg-row-hover-background-color: rgba(37, 37, 37, 0.5);
-                    --rdg-selection-color: #3b82f6;
+                    --rdg-row-selected-background-color: rgba(96, 165, 250, 0.08);
+                    --rdg-row-selected-hover-background-color: rgba(96, 165, 250, 0.13);
+                    --rdg-selection-color: rgba(96, 165, 250, 0.7);
                     --rdg-border-color: #4a4a4a;
                     --rdg-color: #fff;
                     --rdg-header-color: #9ca3af;
@@ -356,9 +381,11 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                     padding: 0 8px;
                 }
 
+                /* Dark mode: softer selected cell with inset shadow instead of harsh outline */
                 .bitable-data-grid.rdg-dark .rdg-cell[aria-selected="true"] {
-                    outline: 2px solid #3b82f6;
-                    outline-offset: -2px;
+                    outline: none;
+                    box-shadow: inset 0 0 0 1.5px rgba(96, 165, 250, 0.6);
+                    background-color: rgba(96, 165, 250, 0.06);
                 }
 
                 .bitable-data-grid.rdg-dark .rdg-checkbox-label {
@@ -368,15 +395,21 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                 }
 
                 .bitable-data-grid.rdg-dark .rdg-checkbox {
-                    accent-color: #3b82f6;
+                    accent-color: #60a5fa;
                 }
 
-                .bitable-data-grid.rdg-dark .rdg-row-selected {
-                    background-color: rgba(59, 130, 246, 0.1);
+                /* Dark mode: softer drag handle */
+                .bitable-data-grid.rdg-dark .rdg-cell-drag-handle {
+                    --rdg-drag-handle-size: 7px;
+                    background-color: rgba(96, 165, 250, 0.5);
+                    border-radius: 1px;
+                    transition: all 0.15s ease;
                 }
 
-                .bitable-data-grid.rdg-dark .rdg-row-selected:hover {
-                    background-color: rgba(59, 130, 246, 0.15);
+                .bitable-data-grid.rdg-dark .rdg-cell-drag-handle:hover {
+                    --rdg-drag-handle-size: 12px;
+                    background-color: #60a5fa;
+                    border-radius: 2px;
                 }
 
                 /* 允许编辑单元格中的下拉菜单溢出 */
@@ -388,6 +421,9 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                 .bitable-data-grid .rdg-cell-editor {
                     overflow: visible;
                 }
+
+                /* Focus sink (row outline): use softer color via variable override */
+                /* The --rdg-selection-color variable already controls focus sink outline color */
             `}</style>
         </div>
     );

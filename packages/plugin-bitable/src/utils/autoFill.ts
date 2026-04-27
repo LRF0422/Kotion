@@ -3,10 +3,13 @@ import { FieldConfig, FieldType, RecordData } from "../types";
 /**
  * Computes the fill value for a target cell based on the source value and field type.
  * Supports:
- * - Number: copies value, or continues arithmetic progression
- * - Date: copies value, or continues date interval progression  
+ * - Number/Rating/Progress: copies the source value
+ * - Date: copies the source value
  * - Text: copies, or increments trailing numbers (e.g., "Item 1" → "Item 2")
  * - Other types: copies the source value
+ *
+ * Note: Progression/interval detection is not applicable because react-data-grid's
+ * onFill only provides a single source row (no multi-cell pattern source like Excel).
  */
 export function computeFillValue(
     field: FieldConfig,
@@ -29,10 +32,10 @@ export function computeFillValue(
         case FieldType.NUMBER:
         case FieldType.RATING:
         case FieldType.PROGRESS:
-            return fillNumeric(sourceValue, sourceIdx, targetIdx, data, field.id, direction);
+            return fillNumeric(sourceValue);
 
         case FieldType.DATE:
-            return fillDate(sourceValue, sourceIdx, targetIdx, data, field.id, direction);
+            return fillDate(sourceValue);
 
         case FieldType.TEXT:
             return fillText(sourceValue, absStep, direction);
@@ -57,72 +60,28 @@ export function computeFillValue(
 }
 
 /**
- * Fill numeric values. Detects arithmetic progression if there's a previous row
- * with a numeric value; otherwise copies the value.
+ * Fill numeric values. Simply copies the source value.
+ * Progression detection is not applicable because react-data-grid's onFill
+ * only provides a single source row (no multi-cell pattern source like Excel).
  */
 function fillNumeric(
-    sourceValue: any,
-    sourceIdx: number,
-    targetIdx: number,
-    data: RecordData[],
-    fieldId: string,
-    direction: number
+    sourceValue: any
 ): number | null {
     const sourceNum = typeof sourceValue === 'number' ? sourceValue : Number(sourceValue);
     if (isNaN(sourceNum)) return sourceValue;
 
-    // Try to detect a step by looking at the row before source
-    const prevIdx = sourceIdx - direction;
-    let step = 0;
-
-    if (prevIdx >= 0 && prevIdx < data.length) {
-        const prevValue = data[prevIdx]?.[fieldId];
-        const prevNum = typeof prevValue === 'number' ? prevValue : Number(prevValue);
-        if (!isNaN(prevNum)) {
-            step = sourceNum - prevNum;
-        }
-    }
-
-    const offset = targetIdx - sourceIdx;
-    const result = sourceNum + (step !== 0 ? step * offset : 0);
-
-    // Round to avoid floating point issues
-    return Number.isInteger(result) ? result : Math.round(result * 100) / 100;
+    return sourceNum;
 }
 
 /**
- * Fill date values. Detects date interval if there's a previous row with a date;
- * otherwise copies the value.
+ * Fill date values. Simply copies the source value.
+ * Interval detection is not applicable because react-data-grid's onFill
+ * only provides a single source row.
  */
 function fillDate(
-    sourceValue: any,
-    sourceIdx: number,
-    targetIdx: number,
-    data: RecordData[],
-    fieldId: string,
-    direction: number
+    sourceValue: any
 ): string | null {
-    const sourceDate = new Date(sourceValue);
-    if (isNaN(sourceDate.getTime())) return sourceValue;
-
-    // Try to detect interval from previous row
-    const prevIdx = sourceIdx - direction;
-    let intervalMs = 0;
-
-    if (prevIdx >= 0 && prevIdx < data.length) {
-        const prevValue = data[prevIdx]?.[fieldId];
-        if (prevValue) {
-            const prevDate = new Date(prevValue);
-            if (!isNaN(prevDate.getTime())) {
-                intervalMs = sourceDate.getTime() - prevDate.getTime();
-            }
-        }
-    }
-
-    const offset = targetIdx - sourceIdx;
-    const resultDate = new Date(sourceDate.getTime() + intervalMs * offset);
-
-    return resultDate.toISOString();
+    return sourceValue;
 }
 
 /**

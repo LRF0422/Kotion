@@ -208,7 +208,25 @@ export const Bitable = Node.create({
 
     addNodeView() {
         return ReactNodeViewRenderer(BitableView, {
-            stopEvent: () => true,
+            stopEvent: (event) => {
+                // Allow undo/redo to reach the ProseMirror editor
+                if (event instanceof KeyboardEvent) {
+                    if (
+                        (event.ctrlKey || event.metaKey) &&
+                        (event.key === 'z' || event.key === 'y' || (event.key === 'Z' && event.shiftKey))
+                    ) {
+                        return false;
+                    }
+                }
+                // Allow beforeinput events for historyUndo/historyRedo
+                if (event instanceof InputEvent) {
+                    const inputType = event.inputType;
+                    if (inputType === 'historyUndo' || inputType === 'historyRedo') {
+                        return false;
+                    }
+                }
+                return true;
+            },
         });
     },
 

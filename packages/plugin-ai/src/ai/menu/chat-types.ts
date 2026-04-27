@@ -6,6 +6,7 @@ export interface Message {
     timestamp: number
     steps?: ExecutionStep[]
     stopped?: boolean
+    error?: boolean
 }
 
 export interface ExecutionStep {
