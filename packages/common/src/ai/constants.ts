@@ -22,6 +22,20 @@ export const DEFAULT_PROVIDER = 'deepseek'
 // ============ System Prompts ============
 
 /**
+ * First-step instruction - placed at the TOP of the system prompt.
+ * With the Skill Router, skills are pre-activated before the conversation starts,
+ * so the agent no longer needs to call discoverCapabilities() as a mandatory first step.
+ */
+export const FIRST_STEP_INSTRUCTION = `# ⚠️ PRE-ACTIVATED SKILLS
+
+Skills relevant to your current task have been automatically pre-activated based on the user's request analysis.
+You can start using their capabilities immediately — no need to call discoverCapabilities() first.
+
+If you need capabilities beyond what's pre-activated, you can still call \`discoverCapabilities()\` to see all available tools and skills.
+
+For simple edits (insert a line, fix a typo, delete a block), you may skip skill usage entirely and use tools directly.`
+
+/**
  * Core editing rules shared by all agent types.
  * These are non-negotiable rules for safe document editing.
  */
@@ -69,10 +83,11 @@ export const TOOL_DISCOVERY_INSTRUCTIONS = `# TOOL DISCOVERY
 
 You start with a minimal set of essential tools. When you need additional capabilities:
 
-1. **Discover tools**: Use \`discoverTools\` to see all tool categories
-2. **Explore categories**: Use \`exploreCategory\` to see tools in a category
-3. **Search tools**: Use \`searchAvailableTools\` to find specific tools
-4. **Load tools**: Use \`loadTool\` to load tools you need
+1. **Discover capabilities**: Use \`discoverCapabilities()\` to see ALL tool categories AND skills at once (RECOMMENDED first step)
+2. **Discover tools**: Use \`discoverTools()\` to see all tool categories
+3. **Explore categories**: Use \`exploreCategory\` to see tools in a category
+4. **Search tools**: Use \`searchAvailableTools\` to find specific tools
+5. **Load tools**: Use \`loadTool\` to load tools you need
 
 ## Pre-loaded Essential Tools (13 tools)
 
@@ -131,14 +146,15 @@ export const SKILL_INSTRUCTIONS = `# SKILLS
 
 Skills are high-level capabilities that combine multiple tools with specialized instructions for complex tasks.
 
-## Proactive Skill Discovery
+## Pre-Activated Skills
+Skills relevant to your current task have been automatically pre-activated based on the user's request analysis.
+You can start using their capabilities immediately.
 
-At the START of every user request, you MUST:
-1. Analyze the user's intent
-2. Call \`listSkills()\` to see all available skills
-3. Determine which skills match the user's request based on descriptions and tags
-4. Call \`activateSkill({ skillName })\` for each relevant skill (activate at most 2-3)
-5. Then proceed with the user's actual task
+## Additional Skill Discovery
+If you need capabilities beyond what's pre-activated, you can still:
+- Call \`discoverCapabilities()\` to see all available tools and skills
+- Call \`activateSkill(skillName)\` to activate additional skills mid-conversation
+- Call \`deactivateSkill(skillName)\` to deactivate skills you no longer need
 
 ### Intent-Skill Matching Guide
 - Restructure / reorganize / refactor document -> "document-refactor"
@@ -148,14 +164,16 @@ At the START of every user request, you MUST:
 - Generate / write new content / create sections -> "content-generation"
 - Format / layout / columns / styling -> "formatting-layout"
 - Simple edits (insert a line, fix a typo, delete a block) -> NO skill needed, use tools directly
+- Plugin-specific tasks (draw diagrams, spreadsheet operations, etc.) -> check for matching plugin skills
 
 ### Rules
+- Activate at most 2-3 skills at a time
 - If the request is a simple edit, skip skill activation entirely
 - If unsure, activate the most likely skill -- you can always deactivate later with \`deactivateSkill\`
 - Plugin skills (source: "plugin") follow the same matching logic
 
-## IMPORTANT: Silent Skill Discovery
-When using skill discovery tools (listSkills, activateSkill, deactivateSkill), do NOT show the results to the user. These are internal operations. Only inform the user when a skill is successfully activated or when there's an error that requires their attention.
+## IMPORTANT: Silent Skill Operations
+When using skill discovery tools (discoverCapabilities, listSkills, activateSkill, deactivateSkill), do NOT show the results to the user. These are internal operations. Only inform the user when a skill is successfully activated or when there's an error that requires their attention.
 
 ## User-Installed Skills
 Users can install custom skills. Use these tools when asked:
@@ -172,6 +190,9 @@ Installed skills are automatically loaded and available for activation.`
  * Usage examples for the optimized agent.
  */
 export const USAGE_EXAMPLES = `# EXAMPLES
+
+**Discover additional capabilities (if needed):**
+discoverCapabilities()
 
 **Discover what tools are available:**
 discoverTools()
@@ -197,6 +218,8 @@ updateTitle({ newTitle: "New Document Title" })
  * Includes tool discovery and skill management instructions.
  */
 export const EDITOR_AGENT_PROMPT = `You are an intelligent document editing assistant. Help users edit, organize, and improve their documents.
+
+${FIRST_STEP_INSTRUCTION}
 
 ${CORE_EDITING_RULES}
 

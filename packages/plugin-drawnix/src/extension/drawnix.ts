@@ -200,9 +200,7 @@ export const Drawnix = Node.create({
         return ["div", mergeAttributes(HTMLAttributes, { class: "node-drawnix" })]
     },
     addNodeView() {
-        return ReactNodeViewRenderer(DrawnixView, {
-            stopEvent: () => true
-        })
+        return ReactNodeViewRenderer(DrawnixView)
     },
     addCommands() {
         return {

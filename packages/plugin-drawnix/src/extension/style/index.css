@@ -1,202 +1,206 @@
-.viewport-container {
-    width: 100% !important;
-    height: 100% !important;
+/* ============================================================
+   Native Drawnix Component Styles
+   ============================================================ */
+
+.drawnix-native {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
 }
 
-/* Whiteboard container styles */
-.node-drawnix {
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    transition: box-shadow 0.2s ease;
-}
-
-.node-drawnix:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-/* Drawnix container - ensure full height and proper layout */
-.drawnix-container {
-    border-radius: 8px;
+/* Board area — full height, no space taken by toolbar (toolbar floats over) */
+.drawnix-board-area {
+    width: 100%;
+    height: 500px;
     position: relative;
 }
 
-.drawnix-container .drawnix {
-    height: 500px;
-}
-
-/* Ensure the drawnix board fills its container and scrolls properly */
-.drawnix-container .plait-board-container {
+/* Ensure viewport fills the board area */
+.drawnix-board-area .plait-board-container {
     width: 100% !important;
     height: 100% !important;
 }
 
-/* The viewport container needs overflow:auto for scrolling/panning */
-.drawnix-container .viewport-container {
+.drawnix-board-area .viewport-container {
+    width: 100% !important;
+    height: 100% !important;
     overflow: auto !important;
 }
 
-/* ========================================
-   Dark Theme - Complete Adaptation
-   ======================================== */
+/* ============================================================
+   Floating Toolbar (centered at top)
+   ============================================================ */
 
-/* When our container has .drawnix-dark, add theme--dark to the .drawnix child
-   This triggers all the built-in dark CSS variables from @drawnix/drawnix */
-.drawnix-dark .drawnix {
-    --island-bg-color: #2c2c2c;
-    --island-border-color: #444;
-    --color-surface-high: hsl(220, 15%, 20%);
-    --color-surface-mid: hsl(220, 15%, 25%);
-    --color-surface-low: hsl(220, 15%, 18%);
-    --color-surface-lowest: #1e1e1e;
-    --color-on-surface: #b0b0b0;
-    --icon-fill-color: #ccc;
-    --color-surface-primary-container: rgba(102, 152, 255, 0.15);
-    --color-on-primary-container: #8ab4ff;
-    --color-primary: #6698ff;
-    --shadow-island: 0 1px 4px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
-    --default-border-color: var(--color-surface-mid);
-    --button-bg: #3a3a3a;
-    --button-hover-bg: #484848;
-    --button-active-bg: #555;
-    --button-active-border: #6698ff;
-    --button-selected-bg: rgba(102, 152, 255, 0.2);
-    --button-selected-border: rgba(102, 152, 255, 0.3);
-    --button-gray-3: #555;
+.drawnix-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 6px;
+    background: var(--drawnix-toolbar-bg, #ffffff);
+    border-radius: 8px;
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
 }
 
-/* Dark theme toolbar backgrounds */
-.drawnix-dark .drawnix .island {
-    background-color: #2c2c2c;
-    border-color: #444;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+.drawnix-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--drawnix-tool-color, #6b7280);
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s ease;
+    padding: 0;
 }
 
-/* Dark theme buttons */
-.drawnix-dark .drawnix .drawnix-button {
-    background-color: #3a3a3a;
-    color: #ccc;
-    border-color: #555;
+.drawnix-tool-btn:hover {
+    background: var(--drawnix-tool-hover-bg, #f3f4f6);
+    color: var(--drawnix-tool-hover-color, #374151);
 }
 
-.drawnix-dark .drawnix .drawnix-button:hover {
-    background-color: #484848;
-    border-color: #666;
+.drawnix-tool-btn.active {
+    background: var(--drawnix-tool-active-bg, #eff6ff);
+    color: var(--drawnix-tool-active-color, #3b82f6);
 }
 
-.drawnix-dark .drawnix .drawnix-button:active {
-    background-color: #555;
+/* Zoom controls pill (top-right) */
+.drawnix-zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 6px;
+    background: var(--drawnix-toolbar-bg, #ffffff);
+    border-radius: 8px;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
 }
 
-.drawnix-dark .drawnix .drawnix-button.active {
-    background-color: rgba(102, 152, 255, 0.2);
-    border-color: rgba(102, 152, 255, 0.3);
-    color: #8ab4ff;
+.drawnix-zoom-display {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    height: 28px;
+    padding: 0 6px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--drawnix-tool-color, #6b7280);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: inherit;
+    transition: all 0.15s ease;
 }
 
-.drawnix-dark .drawnix .drawnix-button.active svg {
-    color: #8ab4ff;
+.drawnix-zoom-display:hover {
+    background: var(--drawnix-tool-hover-bg, #f3f4f6);
 }
 
-/* Dark theme tool icons */
-.drawnix-dark .drawnix .tool-icon__icon {
-    color: #ccc;
+/* ============================================================
+   Board Canvas - Light Theme (default)
+   ============================================================ */
+
+.drawnix-native:not(.drawnix-dark) {
+    background-color: #fafafa;
 }
 
-.drawnix-dark .drawnix .tool-icon__icon:hover {
-    background-color: rgba(102, 152, 255, 0.15);
-    color: #8ab4ff;
+.drawnix-native:not(.drawnix-dark) .drawnix-board-area {
+    background-color: #fafafa;
 }
 
-.drawnix-dark .drawnix .tool-icon__icon:active {
-    background-color: rgba(102, 152, 255, 0.2);
-    border: 1px solid #6698ff;
-}
-
-.drawnix-dark .drawnix .tool-icon__icon:active svg {
-    color: #8ab4ff;
-}
-
-/* Dark theme select dropdown */
-.drawnix-dark .drawnix .theme-toolbar select {
-    background-color: #3a3a3a;
-    color: #ccc;
-    border: 1px solid #555;
-}
-
-.drawnix-dark .drawnix .theme-toolbar select:hover {
-    background-color: #484848;
-}
-
-.drawnix-dark .drawnix .zoom-toolbar .zoom-menu-trigger {
-    color: #b0b0b0;
-}
-
-.drawnix-dark .drawnix .zoom-toolbar .zoom-in-button,
-.drawnix-dark .drawnix .zoom-toolbar .zoom-out-button {
-    color: #ccc;
-}
-
-/* Dark theme - canvas/board background */
-.drawnix-dark .drawnix div[class*="plait-board"],
-.drawnix-dark div[class*="plait-board"] {
-    background-color: #1a1a2e;
-    background-image: radial-gradient(#2a2a3e 1px, transparent 1px);
-    background-size: 20px 20px;
-}
-
-/* Dark theme - mind map nodes need darker fills */
-.drawnix-dark .drawnix svg text {
-    fill: #e0e0e0;
-}
-
-/* Dark theme dialogs */
-.drawnix-dark .drawnix .Dialog {
-    background-color: #2c2c2c;
-    color: #e0e0e0;
-}
-
-.drawnix-dark .drawnix textarea {
-    background-color: #3a3a3a;
-    color: #e0e0e0;
-    border-color: #555;
-}
-
-.drawnix-dark .drawnix textarea:hover,
-.drawnix-dark .drawnix textarea:focus {
-    border-color: #6698ff;
-}
-
-/* Dark theme clean confirm dialog */
-.drawnix-dark .clean-confirm {
-    background-color: #2c2c2c;
-}
-
-.drawnix-dark .clean-confirm__title {
-    color: #e0e0e0;
-}
-
-.drawnix-dark .clean-confirm__description {
-    color: #999;
-}
-
-.drawnix-dark .clean-confirm__button--cancel {
-    background-color: #3a3a3a;
-    color: #e0e0e0;
-}
-
-.drawnix-dark .clean-confirm__button--cancel:hover {
-    background-color: #484848;
-}
-
-/* Dark theme - link popup */
-.drawnix-dark .drawnix .link-popup__input {
-    background-color: #3a3a3a;
-    color: #e0e0e0;
-}
-
-/* Light theme - canvas/board background (default) */
-.drawnix-container:not(.drawnix-dark) div[class*="plait-board"] {
+.drawnix-native:not(.drawnix-dark) .drawnix-board-area .plait-board-container {
     background-color: #fafafa;
     background-image: radial-gradient(#e5e5e5 1px, transparent 1px);
     background-size: 20px 20px;
 }
+
+.drawnix-native:not(.drawnix-dark) .drawnix-board-area .board-host-svg {
+    background-color: #fafafa !important;
+}
+
+.drawnix-native:not(.drawnix-dark) .drawnix-board-area .plait-board {
+    background-color: #fafafa;
+}
+
+/* ============================================================
+   Dark Theme
+   ============================================================ */
+
+.drawnix-dark {
+    --drawnix-toolbar-bg: #1f1f1f;
+    --drawnix-toolbar-border: #333;
+    --drawnix-tool-color: #a1a1aa;
+    --drawnix-tool-hover-bg: #2a2a2a;
+    --drawnix-tool-hover-color: #e4e4e7;
+    --drawnix-tool-active-bg: rgba(59, 130, 246, 0.15);
+    --drawnix-tool-active-color: #60a5fa;
+}
+
+
+.drawnix-dark .drawnix-board-area,
+.drawnix-dark .drawnix-native {
+    background-color: #1e1e1e;
+}
+
+.drawnix-dark .drawnix-board-area .plait-board-container {
+    background-color: #1e1e1e;
+    background-image: radial-gradient(#333 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+
+/* The actual canvas background is on .board-host-svg, override theme colors */
+.drawnix-dark .drawnix-board-area .board-host-svg {
+    background-color: #1e1e1e !important;
+}
+
+.drawnix-dark .drawnix-board-area .plait-board {
+    background-color: #1e1e1e;
+}
+
+/* Dark theme - Plait board internal elements */
+.drawnix-dark .drawnix-board-area .island {
+    background-color: #2c2c2c;
+    border-color: #444;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.drawnix-dark .drawnix-board-area svg text {
+    fill: #e0e0e0;
+}
+
+/* Dark theme - Plait island/button overrides */
+.drawnix-dark .drawnix-board-area .drawnix-button {
+    background-color: #3a3a3a;
+    color: #ccc;
+    border-color: #555;
+}
+
+.drawnix-dark .drawnix-board-area .drawnix-button:hover {
+    background-color: #484848;
+}
+
+.drawnix-dark .drawnix-board-area .tool-icon__icon {
+    color: #ccc;
+}
+
+.drawnix-dark .drawnix-board-area .tool-icon__icon:hover {
+    background-color: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+}
+
+/* ============================================================
+   Legacy compatibility (ProseMirror node rendering)
+   ============================================================ */
+
+.node-drawnix {}

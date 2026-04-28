@@ -210,6 +210,99 @@ export class SkillProvider {
     }
 
     /**
+     * Batch activate multiple skills with a single version increment.
+     *
+     * Unlike calling activateSkill() in a loop, this method:
+     * - Deduplicates tool requirements across all skills
+     * - Loads all tools in one batch via ToolProvider
+     * - Only increments version ONCE at the end to avoid intermediate re-renders
+     */
+    async batchActivate(skillNames: string[]): Promise<{
+        activated: string[]
+        failed: string[]
+        skipped: string[]
+    }> {
+        const activated: string[] = []
+        const failed: string[] = []
+        const skipped: string[] = []
+
+        // Phase 1: Classify skills and collect plugin names that need tool loading
+        const skillsToActivate: Array<{ name: string; definition: SkillDefinition }> = []
+        const pluginNamesToLoad = new Set<string>()
+
+        for (const name of skillNames) {
+            const skill = this.skills.get(name)
+            if (!skill) {
+                console.warn(`[SkillProvider] batchActivate: Skill "${name}" not found`)
+                failed.push(name)
+                continue
+            }
+            if (this.activeSkills.has(name)) {
+                skipped.push(name)
+                continue
+            }
+            skillsToActivate.push({ name, definition: skill })
+
+            // Collect plugin names for plugin-sourced skills
+            if (skill.source === 'plugin' && skill.pluginName && this.pluginManager && this.editor) {
+                pluginNamesToLoad.add(skill.pluginName)
+            }
+        }
+
+        // Phase 2: Load all required plugin tools up front
+        for (const pluginName of pluginNamesToLoad) {
+            try {
+                this.loadPluginTools(pluginName)
+            } catch (err) {
+                console.error(`[SkillProvider] batchActivate: Failed to load plugin tools for "${pluginName}"`, err)
+            }
+        }
+
+        // Phase 3: Collect and deduplicate all required tool names
+        const allToolNames = new Set<string>()
+        for (const { definition } of skillsToActivate) {
+            for (const t of definition.requiredTools) allToolNames.add(t)
+            if (definition.optionalTools) {
+                for (const t of definition.optionalTools) allToolNames.add(t)
+            }
+        }
+
+        // Phase 4: Batch-load all tools at once via ToolProvider
+        const loadResult = this.toolProvider.loadTools(Array.from(allToolNames))
+        const failedToolSet = new Set(loadResult.failed)
+
+        console.log(`[SkillProvider] batchActivate: tool loading result`, loadResult)
+
+        // Phase 5: Validate each skill and mark as active
+        for (const { name, definition } of skillsToActivate) {
+            const failedRequired = definition.requiredTools.filter(t => failedToolSet.has(t))
+
+            if (failedRequired.length > 0) {
+                console.error(
+                    `[SkillProvider] batchActivate: Skill "${name}" failed — missing required tools:`,
+                    failedRequired
+                )
+                failed.push(name)
+                continue
+            }
+
+            // Mark skill as active
+            this.activeSkills.add(name)
+            definition.active = true
+            activated.push(name)
+        }
+
+        // Phase 6: Single version increment
+        if (activated.length > 0) {
+            this.incrementVersion()
+        }
+
+        console.log(`[SkillProvider] batchActivate complete:`, { activated, failed, skipped })
+
+        return { activated, failed, skipped }
+    }
+
+    /**
      * Deactivate a skill
      *
      * Note: Tools are not unloaded, only the skill's prompt fragment is removed.

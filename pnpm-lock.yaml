@@ -1290,9 +1290,6 @@ importers:
 
   packages/plugin-drawnix:
     dependencies:
-      '@drawnix/drawnix':
-        specifier: ^0.1.4
-        version: 0.1.4(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
       '@kn/common':
         specifier: workspace:*
         version: link:../common
@@ -1306,35 +1303,35 @@ importers:
         specifier: workspace:*
         version: link:../ui
       '@plait-board/markdown-to-drawnix':
-        specifier: ^0.0.6
-        version: 0.0.6
+        specifier: ^0.0.8
+        version: 0.0.8
       '@plait-board/mermaid-to-drawnix':
         specifier: ^0.0.7
         version: 0.0.7
       '@plait-board/react-board':
-        specifier: ^0.1.4
-        version: 0.1.4(immer@10.2.0)(is-hotkey@0.2.0)(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
+        specifier: ^0.4.0-2
+        version: 0.4.0-2(immer@10.2.0)(is-hotkey@0.2.0)(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
       '@plait-board/react-text':
-        specifier: ^0.1.4
-        version: 0.1.4(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
+        specifier: ^0.4.0-2
+        version: 0.4.0-2(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
       '@plait/common':
-        specifier: ^0.82.0
-        version: 0.82.0
+        specifier: ^0.92.1
+        version: 0.92.3
       '@plait/core':
-        specifier: ^0.82.0
-        version: 0.82.0(immer@10.2.0)(is-hotkey@0.2.0)(rxjs@7.8.2)
+        specifier: ^0.92.1
+        version: 0.92.3(immer@10.2.0)(is-hotkey@0.2.0)
       '@plait/draw':
-        specifier: ^0.82.0
-        version: 0.82.0
+        specifier: ^0.92.1
+        version: 0.92.3
       '@plait/layouts':
-        specifier: ^0.82.0
-        version: 0.82.0
+        specifier: ^0.92.1
+        version: 0.92.3
       '@plait/mind':
-        specifier: ^0.82.0
-        version: 0.82.0
+        specifier: ^0.92.1
+        version: 0.92.3
       '@plait/text-plugins':
-        specifier: ^0.82.0
-        version: 0.82.0
+        specifier: ^0.92.1
+        version: 0.92.3
       autoprefixer:
         specifier: ^10.4.20
         version: 10.4.27(postcss@8.5.6)
@@ -3354,8 +3351,8 @@ packages:
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
 
-  '@plait-board/markdown-to-drawnix@0.0.6':
-    resolution: {integrity: sha512-X1ddiIza0KDOU8BAwPDCuTucE4UhEiD7ASGtQTq2ZY/H73fkyw5mo5EWr9++PqdYFmBLlio8IoRbZj7jH2BbZg==}
+  '@plait-board/markdown-to-drawnix@0.0.8':
+    resolution: {integrity: sha512-9HXhNryB94JmqHj0+Sx/poECj6cHTdAg2Qtfdxr5xx9A0NH26ObVMkQDWOJT3o3xThE9XkD5zr/6kVR2SvKOyw==}
 
   '@plait-board/mermaid-to-drawnix@0.0.3':
     resolution: {integrity: sha512-xvYBjRta3hJd/oWy4efKMJBcLEm4yHytdejALsJ4QfeIyYuMHIhxwmGIvnDWk3ZqSMCVCjt0yM+CLFlIJMozWQ==}
@@ -3363,33 +3360,32 @@ packages:
   '@plait-board/mermaid-to-drawnix@0.0.7':
     resolution: {integrity: sha512-Z3ETJA34o5G/rjaR2kl9ifirFUp1yDq9shxFcgXNTuI6aOmgLafnNtB4m9IsNQDsfsjlzt44oIXeUQdOCj2Bqw==}
 
-  '@plait-board/react-board@0.1.4':
-    resolution: {integrity: sha512-C+cAeuhL0cy7wJbuaFZTS6K3mcyg11F39EHQhdfTyG98pNvwMgYdDNtpqQKktYS6ERQnMcHKxN6Dfr0oIRw/Mg==}
+  '@plait-board/react-board@0.4.0-2':
+    resolution: {integrity: sha512-yXiMumj6Ie4mUezLwdMjjT5R53xGw6YviP8BOdc1YX9mZzHB4JvcmbvCgpM8mZT5kdaEFppJ8STP26V8jwtI9A==}
 
-  '@plait-board/react-text@0.1.4':
-    resolution: {integrity: sha512-9TDFT0FN1g8o5ySIIBQHydsPveXfzgc2Ndd7/ojcsCagsGsCZ6jn0JPUN6+0XSt2Goba2ZBnX2J0qYUahj/sOA==}
+  '@plait-board/react-text@0.4.0-2':
+    resolution: {integrity: sha512-cPumV6q7Xz4bRjf6EKZ1cYWTbKQKjH0u2vi+8X8PsbTLhLONRQ3iYmVXXBFo7HEPWI2899sP6N0TgKg+iDKJgw==}
 
-  '@plait/common@0.82.0':
-    resolution: {integrity: sha512-338FINjut172UORpjPN0oju2wKHsp3BNvZfeVcFfz4VwKzDLoRs55/aD1Sn3qm7CEgs3QTybfoSpn+0ZH1NkuA==}
+  '@plait/common@0.92.3':
+    resolution: {integrity: sha512-rNQXpjpJNHP9/93+M25Gy2yw8mRNfF7RdOZuSsS0aBrG3rWp0jWFr23M0OhbM8+bFS2pkzkxqNRbDmKkm89zZQ==}
 
-  '@plait/core@0.82.0':
-    resolution: {integrity: sha512-WHSeCZFcJcO4cxtn0n7ploSBBVyfAn93afgCek2Wjlyapuy3RopdPK483EU2iJdjiUkpNnjH2wWI4zhNj0d9nw==}
+  '@plait/core@0.92.3':
+    resolution: {integrity: sha512-TRk1XNkePLGvGTQqe7scDu/C9millFnTFrM+tjZmDWscE9y+4IaMp+RcRZ/e6LGzGyRaTYMPD69twLzRQc8J3g==}
     peerDependencies:
       immer: ^10.0.3
       is-hotkey: ^0.2.0
-      rxjs: ^7.8.0
 
-  '@plait/draw@0.82.0':
-    resolution: {integrity: sha512-jSpajHw1sb2qKgSza6oK4CgYT473ch7EX8Ajrk3+25ZOXnOl2jY8V6ABSXkPhlwGpqsZP6Ct142FVHx68bTx+g==}
+  '@plait/draw@0.92.3':
+    resolution: {integrity: sha512-SlKvJvB3VvusiBV7cVB64Tz8krD8EFYKtlASnva/H21MZciS8dx//4jbGQk5R9O3RGvY79TpZwBlYEzw4ypxDw==}
 
-  '@plait/layouts@0.82.0':
-    resolution: {integrity: sha512-5gjKkOxWoNYy2c6/Z5ZCjsFu11Qc6MGd6A/sOsW61Rd5kRhjGtkpLPhSh+jWVozRS+KlQv5BXTacwYvVIRlbkQ==}
+  '@plait/layouts@0.92.3':
+    resolution: {integrity: sha512-RSTDBoTNuRmQ5t6xdPuH11gkQTo29bO1SRjwfM0PtZfAN6FODUDMtGlt5pXfSaGUjXzjFPNGYs1vnWQMznGoTw==}
 
-  '@plait/mind@0.82.0':
-    resolution: {integrity: sha512-xga6LmS+f2YpxBU71Te+Cl4CpsYkk62eHHi1EJi6N70LycSeEL4k6Yc+N8ML0pirP6XTuTRwTotUsgD0oZkNIA==}
+  '@plait/mind@0.92.3':
+    resolution: {integrity: sha512-0i1ewmz7WZEQyon9YBIJcPVn2vsku0orXxeRIjKNNgET4I4Ee25GJ+yS31WsHC4O+JEt4jGph/OozhFrcl5G6g==}
 
-  '@plait/text-plugins@0.82.0':
-    resolution: {integrity: sha512-XeCfqfhoeNVc6EusLU21m5W3fp7XU2prZ/amC4cpzF6XWtZZApm4pFKUHzNQLoLdIbUzU805s/ZKriU6Z9axvw==}
+  '@plait/text-plugins@0.92.3':
+    resolution: {integrity: sha512-Zci+vj3wA+yjjil+7BnWOPdxEB8gvjy3iyZDXoZDd3tATuRSZgK5dtBSNd4OIl/g7dq2Y8aFhoeCGDSYplzOdQ==}
 
   '@popperjs/core@2.11.8':
     resolution: {integrity: sha512-P1st0aksCrn9sGZhp8GMYwBnQsbvAWsZAX44oXNNvLHGqAOcoVxmjZiohstwQ7SqKnbR47akdNi+uleWD8+g6A==}
@@ -15061,7 +15057,7 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@plait-board/markdown-to-drawnix@0.0.6':
+  '@plait-board/markdown-to-drawnix@0.0.8':
     dependencies:
       remark-parse: 11.0.0
       unified: 11.0.5
@@ -15080,27 +15076,26 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@plait-board/react-board@0.1.4(immer@10.2.0)(is-hotkey@0.2.0)(react-dom@18.3.1(react@19.2.4))(react@19.2.4)':
+  '@plait-board/react-board@0.4.0-2(immer@10.2.0)(is-hotkey@0.2.0)(react-dom@18.3.1(react@19.2.4))(react@19.2.4)':
     dependencies:
-      '@plait/common': 0.82.0
-      '@plait/core': 0.82.0(immer@10.2.0)(is-hotkey@0.2.0)(rxjs@7.8.2)
-      '@plait/draw': 0.82.0
-      '@plait/layouts': 0.82.0
-      '@plait/mind': 0.82.0
-      '@plait/text-plugins': 0.82.0
+      '@plait/common': 0.92.3
+      '@plait/core': 0.92.3(immer@10.2.0)(is-hotkey@0.2.0)
+      '@plait/draw': 0.92.3
+      '@plait/layouts': 0.92.3
+      '@plait/mind': 0.92.3
+      '@plait/text-plugins': 0.92.3
       ahooks: 3.9.6(react-dom@18.3.1(react@19.2.4))(react@19.2.4)
       classnames: 2.5.1
-      rxjs: 7.8.2
     transitivePeerDependencies:
       - immer
       - is-hotkey
       - react
       - react-dom
 
-  '@plait-board/react-text@0.1.4(react-dom@18.3.1(react@19.2.4))(react@19.2.4)':
+  '@plait-board/react-text@0.4.0-2(react-dom@18.3.1(react@19.2.4))(react@19.2.4)':
     dependencies:
-      '@plait/common': 0.82.0
-      '@plait/text-plugins': 0.82.0
+      '@plait/common': 0.92.3
+      '@plait/text-plugins': 0.92.3
       is-hotkey: 0.2.0
       slate: 0.116.0
       slate-dom: 0.116.0(slate@0.116.0)
@@ -15110,32 +15105,31 @@ snapshots:
       - react
       - react-dom
 
-  '@plait/common@0.82.0':
+  '@plait/common@0.92.3':
     dependencies:
       tslib: 2.8.1
 
-  '@plait/core@0.82.0(immer@10.2.0)(is-hotkey@0.2.0)(rxjs@7.8.2)':
+  '@plait/core@0.92.3(immer@10.2.0)(is-hotkey@0.2.0)':
     dependencies:
       immer: 10.2.0
       is-hotkey: 0.2.0
       points-on-curve: 1.0.1
       roughjs: 4.6.6
-      rxjs: 7.8.2
       tslib: 2.8.1
 
-  '@plait/draw@0.82.0':
+  '@plait/draw@0.92.3':
     dependencies:
       tslib: 2.8.1
 
-  '@plait/layouts@0.82.0':
+  '@plait/layouts@0.92.3':
     dependencies:
       tslib: 2.8.1
 
-  '@plait/mind@0.82.0':
+  '@plait/mind@0.92.3':
     dependencies:
       tslib: 2.8.1
 
-  '@plait/text-plugins@0.82.0':
+  '@plait/text-plugins@0.92.3':
     dependencies:
       tslib: 2.8.1
 

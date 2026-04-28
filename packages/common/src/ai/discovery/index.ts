@@ -12,3 +12,20 @@ export {
     getCategoryInfo,
     isEssentialTool
 } from './tool-metadata'
+
+// Skill Router
+export type {
+    SkillRouterInput,
+    SkillDescriptor,
+    SkillRouterResult,
+    SkillRouterConfig,
+} from './skill-router-types'
+export { DEFAULT_SKILL_ROUTER_CONFIG } from './skill-router-types'
+export {
+    buildRouterSystemPrompt,
+    buildRouterMessages,
+    formatSkillCatalog,
+    SKILL_ROUTER_FUNCTION_SCHEMA,
+} from './skill-router-prompt'
+export type { RouterMessage } from './skill-router-prompt'
+export { SkillRouter } from './skill-router'

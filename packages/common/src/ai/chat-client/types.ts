@@ -10,6 +10,10 @@
 export interface ChatMessage {
     role: 'system' | 'user' | 'assistant' | 'tool'
     content?: string
+    /** Reasoning/thinking content from reasoning models (e.g. deepseek-reasoner).
+     *  MUST be included when role='assistant' and tool_calls is present,
+     *  otherwise DeepSeek API returns 400 error. */
+    reasoning_content?: string
     tool_call_id?: string   // role=tool required
     name?: string            // role=tool tool name
     tool_calls?: ToolCall[]  // role=assistant tool calls
@@ -134,6 +138,11 @@ export interface TextDeltaEvent {
     content: string
 }
 
+export interface ReasoningDeltaEvent {
+    type: 'reasoning-delta'
+    content: string
+}
+
 export interface ToolCallStreamEvent {
     type: 'tool-call'
     toolCalls: ToolCallDelta[]
@@ -177,6 +186,7 @@ export interface ErrorEvent {
 /** All stream event types */
 export type ChatStreamEvent =
     | TextDeltaEvent
+    | ReasoningDeltaEvent
     | ToolCallStreamEvent
     | ToolResultEvent
     | AnnotationStreamEvent
@@ -189,6 +199,8 @@ export type ChatStreamEvent =
 export interface ChatResponse {
     /** Full text content accumulated */
     text: string
+    /** Reasoning/thinking content accumulated (from reasoning models) */
+    reasoningContent?: string
     /** Tool calls made during the stream */
     toolCalls: ToolCall[]
     /** All annotations received */
@@ -217,4 +229,26 @@ export interface ChatClientOptions {
     defaultTemperature?: number
     /** Default max tokens */
     defaultMaxTokens?: number
+}
+
+// ============ Model Info Types ============
+
+export interface ModelInfo {
+    /** Model identifier (e.g. 'deepseek-chat', 'gpt-4o') */
+    id: string
+    /** Human-readable model name */
+    name?: string
+    /** Provider name (e.g. 'deepseek', 'openai', 'anthropic') */
+    provider?: string
+    /** Whether this model supports tool calling */
+    supportsToolCalling?: boolean
+    /** Whether this model supports streaming */
+    supportsStreaming?: boolean
+    /** Maximum context length */
+    contextLength?: number
+}
+
+export interface ModelsResponse {
+    /** List of available models */
+    data: ModelInfo[]
 }

@@ -2,6 +2,8 @@
 export interface Message {
     id: string
     content: string
+    /** Reasoning/thinking content from reasoning models (e.g. deepseek-reasoner) */
+    reasoningContent?: string
     sender: "user" | "ai"
     timestamp: number
     steps?: ExecutionStep[]

@@ -281,6 +281,24 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         source: 'builtin'
     },
     {
+        name: 'listTable',
+        category: 'document-structure',
+        description: '列出文档中所有表格的概览信息，包括索引、行列数和表头预览',
+        priority: 6,
+        tags: ['table', 'list', 'read', 'overview'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'deleteTable',
+        category: 'document-delete',
+        description: '删除文档中指定的表格',
+        priority: 6,
+        tags: ['table', 'delete', 'remove'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
         name: 'getTableInfo',
         category: 'document-structure',
         description: '获取文档中表格的结构信息和单元格内容',

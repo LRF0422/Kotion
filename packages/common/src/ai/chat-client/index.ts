@@ -16,6 +16,8 @@ import type {
     ChatMessage,
     Annotation,
     ToolCall,
+    ModelInfo,
+    ModelsResponse,
 } from './types'
 import { getBearerHeader } from '../../utils/auth'
 
@@ -83,6 +85,7 @@ export class KnowledgeChatClient {
     async chatComplete(request: ChatRequest): Promise<ChatResponse> {
         const result: ChatResponse = {
             text: '',
+            reasoningContent: '',
             toolCalls: [],
             annotations: [],
         }
@@ -91,6 +94,10 @@ export class KnowledgeChatClient {
             switch (event.type) {
                 case 'text-delta':
                     result.text += event.content
+                    break
+
+                case 'reasoning-delta':
+                    result.reasoningContent = (result.reasoningContent || '') + event.content
                     break
 
                 case 'tool-call':
@@ -335,5 +342,41 @@ export function createChatRequest(
         tools: options?.tools,
         data: options?.data,
         signal: options?.signal,
+    }
+}
+
+// ============ Model Discovery ============
+
+/**
+ * Fetch available models from the backend /api/v1/models endpoint.
+ *
+ * Follows the OpenAI-compatible models API format.
+ * Falls back to an empty list on failure.
+ *
+ * @param apiBase - Optional API base URL (default: '/api/knowledge-agent/api/v1')
+ */
+export async function fetchModels(apiBase?: string): Promise<ModelInfo[]> {
+    const base = apiBase || DEFAULT_API_BASE
+    try {
+        const response = await fetch(`${base}/models`, {
+            method: 'GET',
+            headers: {
+                ...getBearerHeader(),
+            },
+        })
+
+        if (!response.ok) {
+            console.warn(`[Models] Failed to fetch models (${response.status})`)
+            return []
+        }
+
+        const json: ModelsResponse = await response.json()
+
+        // Support both { data: [...] } and flat array formats
+        const models = Array.isArray(json) ? json : (json.data || [])
+        return models
+    } catch (error) {
+        console.warn('[Models] Failed to fetch models:', error)
+        return []
     }
 }

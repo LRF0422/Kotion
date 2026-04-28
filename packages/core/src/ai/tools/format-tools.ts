@@ -302,6 +302,105 @@ export const createFormatTools = (editor: Editor): ToolsRecord => ({
         }
     },
 
+    deleteTable: {
+        description: '删除文档中指定的表格',
+        inputSchema: z.object({
+            tableIndex: z.number().describe("要删除的表格索引（从0开始）")
+        }),
+        execute: async ({ tableIndex }: { tableIndex: number }) => {
+            try {
+                const tables = findTablesInDocument(editor)
+
+                if (tables.length === 0) {
+                    return { error: '文档中没有表格' }
+                }
+
+                if (tableIndex < 0 || tableIndex >= tables.length) {
+                    return { error: `表格索引 ${tableIndex} 超出范围，共 ${tables.length} 个表格` }
+                }
+
+                const table = tables[tableIndex]
+                const tableInfo = `${table.rows}×${table.cols}`
+
+                // Position cursor inside the table and scroll to it
+                editor.chain().focus().setTextSelection(table.pos + 1).scrollIntoView().run()
+
+                const success = editor.commands.deleteTable()
+
+                if (!success) {
+                    return { error: '删除表格失败' }
+                }
+
+                return {
+                    success: true,
+                    tableIndex,
+                    message: `已删除第 ${tableIndex} 个表格（${tableInfo}）`
+                }
+            } catch (error) {
+                return { error: `删除表格失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
+    },
+
+    listTable: {
+        description: '列出文档中所有表格的概览信息，包括索引、行列数和表头预览内容。用于快速了解文档中有哪些表格。',
+        inputSchema: z.object({
+            previewRows: z.number().min(0).max(5).optional()
+                .describe("预览前N行内容（默认2，设为0则不预览）")
+        }),
+        execute: async ({ previewRows = 2 }: { previewRows?: number }) => {
+            try {
+                const tables = findTablesInDocument(editor)
+
+                if (tables.length === 0) {
+                    return {
+                        success: true,
+                        hasTables: false,
+                        totalTables: 0,
+                        message: '文档中没有表格'
+                    }
+                }
+
+                const tableList = tables.map((table, index) => {
+                    const entry: Record<string, any> = {
+                        index,
+                        rows: table.rows,
+                        cols: table.cols,
+                        hasHeaderRow: table.node.firstChild?.firstChild?.type.name === 'tableHeader'
+                    }
+
+                    if (previewRows > 0) {
+                        const preview: string[][] = []
+                        let rowIdx = 0
+                        table.node.forEach((row) => {
+                            if (rowIdx < previewRows) {
+                                const cells: string[] = []
+                                row.forEach((cell) => {
+                                    cells.push(cell.textContent)
+                                })
+                                preview.push(cells)
+                            }
+                            rowIdx++
+                        })
+                        entry.preview = preview
+                    }
+
+                    return entry
+                })
+
+                return {
+                    success: true,
+                    hasTables: true,
+                    totalTables: tables.length,
+                    tables: tableList,
+                    hint: '使用 getTableInfo({ tableIndex }) 获取指定表格的详细单元格内容，使用 editTable 操作表格结构，使用 editTableCell 编辑单元格内容'
+                }
+            } catch (error) {
+                return { error: `列出表格失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
+    },
+
     editTableCell: {
         description: '编辑表格中指定单元格的内容',
         inputSchema: z.object({

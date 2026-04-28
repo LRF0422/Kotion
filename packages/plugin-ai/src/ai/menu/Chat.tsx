@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, FormEvent, useCallback, useMemo, useRef, useEffect } from "react"
-import { Sparkles, Send, Terminal, Trash2, HelpCircle, Square, XCircle, Settings, Plus, ChevronDown, MessageSquarePlus, Globe, X } from "@kn/icon"
+import { Sparkles, Send, Trash2, HelpCircle, Square, XCircle, Settings, Plus, ChevronDown, MessageSquarePlus, Globe, X, Check } from "@kn/icon"
 import {
     Button, Streamdown,
     Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Input,
@@ -19,9 +19,16 @@ import {
     useChatContext,
 } from "@kn/ui"
 import { ChatMessageList } from "@kn/ui"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@kn/ui"
 import React from "react"
 import { Editor } from "@kn/editor"
-import { useEditorAgentOptimized, ToolExecutionEvent, UserChoiceRequest } from "@kn/common"
+import { useEditorAgentOptimized, ToolExecutionEvent, UserChoiceRequest, fetchModels } from "@kn/common"
+import type { ModelInfo } from "@kn/common"
 
 import {
     Message, ExecutionStep, PendingUserChoice, ChatError,
@@ -39,10 +46,113 @@ import { LiveSteps } from "./ExecutionStepsDisplay"
 import { QuickPrompts } from "./QuickPrompts"
 import { ErrorDisplay } from "./ErrorDisplay"
 
-export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => {
+/** Close button that accesses ChatContext from *inside* ExpandableChat */
+const ChatCloseButton: React.FC = () => {
     const chatContext = useChatContext()
+    return (
+        <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => chatContext?.toggleChat()}
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground transition-colors"
+        >
+            <X className="h-3.5 w-3.5" />
+        </Button>
+    )
+}
+
+// ─── Model Selector ────────────────────────────────────────────────
+
+const MODEL_STORAGE_KEY = 'kn_chat_model'
+
+/** Compact model selector dropdown that fetches available models from the backend API. */
+const ModelSelector: React.FC<{
+    model: string
+    onModelChange: (model: string) => void
+}> = ({ model, onModelChange }) => {
+    const [models, setModels] = useState<ModelInfo[]>([])
+    const [open, setOpen] = useState(false)
+    const loadedRef = useRef(false)
+
+    // Fetch models when dropdown opens for the first time
+    useEffect(() => {
+        if (open && !loadedRef.current) {
+            loadedRef.current = true
+            fetchModels().then(setModels)
+        }
+    }, [open])
+
+    // Group models by provider
+    const grouped = useMemo(() => {
+        const map = new Map<string, ModelInfo[]>()
+        for (const m of models) {
+            const provider = m.provider || 'other'
+            if (!map.has(provider)) map.set(provider, [])
+            map.get(provider)!.push(m)
+        }
+        return map
+    }, [models])
+
+    // Display name for current model
+    const displayLabel = model || 'deepseek-chat'
+
+    return (
+        <DropdownMenu open={open} onOpenChange={setOpen}>
+            <DropdownMenuTrigger asChild>
+                <button
+                    className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                    type="button"
+                >
+                    <Sparkles className="h-3 w-3" />
+                    <span className="max-w-[80px] truncate">{displayLabel}</span>
+                    <ChevronDown className="h-2.5 w-2.5" />
+                </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[200px]">
+                {models.length === 0 && (
+                    <div className="px-2 py-1.5 text-[10px] text-muted-foreground">Loading models...</div>
+                )}
+                {Array.from(grouped.entries()).map(([provider, providerModels]) => (
+                    <React.Fragment key={provider}>
+                        <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                            {provider}
+                        </div>
+                        {providerModels.map((m) => (
+                            <DropdownMenuItem
+                                key={m.id}
+                                onClick={() => onModelChange(m.id)}
+                                className="flex items-center justify-between text-xs"
+                            >
+                                <span>{m.name || m.id}</span>
+                                {model === m.id && (
+                                    <Check className="h-3 w-3 text-primary" />
+                                )}
+                            </DropdownMenuItem>
+                        ))}
+                    </React.Fragment>
+                ))}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    )
+}
+
+// ─── Chat Component ────────────────────────────────────────────────
+
+export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => {
     const [currentSteps, setCurrentSteps] = useState<ExecutionStep[]>([])
     const stepsRef = useRef<ExecutionStep[]>([])
+
+    // Model selection state (persisted in localStorage)
+    const [selectedModel, setSelectedModel] = useState<string>(() => {
+        try {
+            return localStorage.getItem(MODEL_STORAGE_KEY) || ''
+        } catch { return '' }
+    })
+
+    const handleModelChange = useCallback((model: string) => {
+        setSelectedModel(model)
+        try { localStorage.setItem(MODEL_STORAGE_KEY, model) } catch { /* ignore */ }
+    }, [])
 
     // User choice state
     const [pendingChoice, setPendingChoice] = useState<PendingUserChoice | null>(null)
@@ -114,7 +224,9 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         }
     }, [])
 
-    const { stream, stop } = useEditorAgentOptimized(editor, handleToolExecution, handleUserChoiceRequest)
+    const { stream, stop } = useEditorAgentOptimized(editor, handleToolExecution, handleUserChoiceRequest, {
+        model: selectedModel || undefined,
+    })
 
     // Session management
     const { sessionId, conversationId, parseAnnotations, clearSession } = useSessionManager()
@@ -127,12 +239,14 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
     const [messages, setMessages] = useState<Message[]>(() => loadMessages())
     const [input, setInput] = useState("")
     const [isLoading, setIsLoading] = useState(false)
-    const [showSteps, setShowSteps] = useState(true)
     const [error, setError] = useState<ChatError | null>(null)
-    const [autoMode, setAutoMode] = useState(true)
 
     // Streaming buffer (rAF batched)
     const buffer = useStreamingBuffer()
+
+    // Reasoning content buffer (for thinking/reasoner models)
+    const [streamingReasoning, setStreamingReasoning] = useState<string>('')
+    const reasoningRef = useRef<string>('')
 
     // Last user message ref for retry
     const lastUserMessageRef = useRef<string>("")
@@ -168,6 +282,8 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         stepsRef.current = []
         setCurrentSteps([])
         buffer.reset()
+        reasoningRef.current = ''
+        setStreamingReasoning('')
         setAnnotations([]) // Reset team state for new message
 
         try {
@@ -185,6 +301,10 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                 onAnnotation: (newAnnotations: AnnotationData[]) => {
                     setAnnotations(prev => [...prev, ...newAnnotations])
                     parseAnnotations(newAnnotations)
+                },
+                onReasoning: (content: string) => {
+                    reasoningRef.current += content
+                    setStreamingReasoning(reasoningRef.current)
                 },
             })
 
@@ -210,6 +330,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
             const aiMessage: Message = {
                 id: generateMessageId(),
                 content: buffer.getContent(),
+                reasoningContent: reasoningRef.current || undefined,
                 sender: "ai",
                 timestamp: Date.now(),
                 steps: [...stepsRef.current]
@@ -217,6 +338,8 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
 
             setMessages((prev) => [...prev, aiMessage])
             buffer.reset()
+            reasoningRef.current = ''
+            setStreamingReasoning('')
             setCurrentSteps([])
         } catch (err: any) {
             if (err?.name === 'AbortError' || err?.message?.includes('abort')) {
@@ -379,21 +502,6 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => setShowSteps(!showSteps)}
-                                    className={`h-6 w-6 p-0 text-muted-foreground hover:text-foreground transition-colors ${showSteps ? 'text-foreground bg-muted' : ''}`}
-                                >
-                                    <Terminal className="h-3.5 w-3.5" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">
-                                {showSteps ? 'Hide tool details' : 'Show tool details'}
-                            </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
                                     onClick={handleClearChat}
                                     className="h-6 w-6 p-0 text-muted-foreground hover:text-red-500 transition-colors"
                                 >
@@ -404,14 +512,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                         </Tooltip>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => chatContext?.toggleChat()}
-                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground transition-colors"
-                                >
-                                    <X className="h-3.5 w-3.5" />
-                                </Button>
+                                <ChatCloseButton />
                             </TooltipTrigger>
                             <TooltipContent side="bottom" className="text-xs">Close</TooltipContent>
                         </Tooltip>
@@ -441,13 +542,29 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                         <MessageBubble
                             key={message.id}
                             message={message}
-                            showSteps={showSteps}
                         />
                     ))}
 
                     {/* Live execution steps */}
-                    {isLoading && currentSteps.length > 0 && showSteps && (
+                    {isLoading && currentSteps.length > 0 && (
                         <LiveSteps steps={currentSteps} />
+                    )}
+
+                    {/* Streaming reasoning (thinking) content */}
+                    {isLoading && streamingReasoning && (
+                        <ChatBubble variant="received">
+                            <ChatBubbleMessage className="bg-muted/30 dark:bg-muted/20 p-2.5 rounded-xl rounded-tl-sm">
+                                <details open className="group">
+                                    <summary className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground cursor-pointer select-none">
+                                        <Sparkles className="h-3 w-3 animate-pulse" />
+                                        <span>思考过程...</span>
+                                    </summary>
+                                    <div className="mt-1.5 pl-1 border-l-2 border-muted-foreground/20 text-[11px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap break-words">
+                                        {streamingReasoning}
+                                    </div>
+                                </details>
+                            </ChatBubbleMessage>
+                        </ChatBubble>
                     )}
 
                     {/* Streaming message (rAF buffered) */}
@@ -605,16 +722,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="text-xs">Settings</TooltipContent>
                                 </Tooltip>
-                                <button
-                                    type="button"
-                                    onClick={() => setAutoMode(!autoMode)}
-                                    className={`h-7 px-2 rounded text-[10px] font-medium transition-colors ${autoMode
-                                        ? 'bg-foreground/10 text-foreground hover:bg-foreground/15'
-                                        : 'text-muted-foreground/60 hover:text-foreground hover:bg-muted/60'
-                                        }`}
-                                >
-                                    Auto
-                                </button>
+                                <ModelSelector model={selectedModel} onModelChange={handleModelChange} />
                             </TooltipProvider>
                         </div>
                         {isLoading ? (

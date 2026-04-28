@@ -26,6 +26,10 @@ import { createToolDiscoveryTools } from "./discovery/tool-discovery-tools"
 import { createSkillDiscoveryTools } from "./discovery/skill-discovery-tools"
 import { createSkillManagementTools } from "./discovery/skill-management-tools"
 
+// Skill Router
+import { SkillRouter } from "./discovery/skill-router"
+import type { SkillRouterConfig } from "./discovery/skill-router-types"
+
 // Skills
 import { builtinSkills, getSkillRegistry } from "./skills"
 
@@ -83,7 +87,13 @@ async function* withInactivityTimeout<T>(
 export const useEditorAgentOptimized = (
     editor: Editor,
     onToolExecution?: OnToolExecution,
-    onUserChoiceRequest?: OnUserChoiceRequest
+    onUserChoiceRequest?: OnUserChoiceRequest,
+    agentOptions?: {
+        /** Model ID to use for chat requests (e.g. 'deepseek-chat', 'gpt-4o') */
+        model?: string
+        /** Optional config for the pre-conversation skill router */
+        skillRouterConfig?: Partial<SkillRouterConfig>
+    }
 ) => {
     const { pluginManager } = useContext(AppContext)
 
@@ -95,6 +105,30 @@ export const useEditorAgentOptimized = (
 
     // Track whether we're currently streaming
     const isStreamingRef = useRef(false)
+
+    // Ref for latest model (avoids stale closure in stream callback)
+    const modelRef = useRef<string | undefined>(agentOptions?.model)
+
+    // Skill Router instance (reused across messages)
+    const skillRouterRef = useRef<SkillRouter | null>(null)
+    if (!skillRouterRef.current) {
+        skillRouterRef.current = new SkillRouter(
+            chatClientRef.current,
+            agentOptions?.skillRouterConfig
+        )
+    }
+
+    // Keep router config in sync with options
+    useEffect(() => {
+        if (skillRouterRef.current) {
+            skillRouterRef.current.updateConfig(agentOptions?.skillRouterConfig ?? {})
+        }
+    }, [agentOptions?.skillRouterConfig])
+
+    // Keep model ref in sync with agentOptions
+    useEffect(() => {
+        modelRef.current = agentOptions?.model
+    }, [agentOptions?.model])
 
     // Ref for latest tools and instructions (always up to date)
     const latestInstructionsRef = useRef<string>('')
@@ -207,6 +241,7 @@ export const useEditorAgentOptimized = (
         })
         const skillDiscovery = createSkillDiscoveryTools({
             skillProvider,
+            toolProvider,
             onReload: handleReload
         })
         const skillManagement = createSkillManagementTools({
@@ -250,10 +285,12 @@ export const useEditorAgentOptimized = (
     // Uses the backend-driven KnowledgeChatClient
     const stream = useCallback(async (options: {
         prompt: string
-        messages?: Array<{ role: 'user' | 'assistant'; content: string }>
+        messages?: Array<{ role: 'user' | 'assistant'; content: string; reasoning_content?: string }>
         sessionId?: string
         conversationId?: string
         onAnnotation?: (annotations: any[]) => void
+        /** Callback for reasoning/thinking content from reasoning models (e.g. deepseek-reasoner) */
+        onReasoning?: (content: string) => void
     }) => {
         // Abort any previous stream
         if (abortControllerRef.current) {
@@ -264,19 +301,27 @@ export const useEditorAgentOptimized = (
         // Build messages array for the backend
         const chatMessages: ChatMessage[] = []
 
-        // Add system message with instructions
-        chatMessages.push({
+        // System message placeholder — actual content set after skill routing
+        const systemMessage: ChatMessage = {
             role: 'system',
             content: latestInstructionsRef.current,
-        })
+        }
+        chatMessages.push(systemMessage)
 
         // Add history messages
         if (options.messages && options.messages.length > 0) {
             for (const m of options.messages) {
-                chatMessages.push({
+                const historyMsg: ChatMessage = {
                     role: m.role as 'user' | 'assistant',
                     content: m.content,
-                })
+                }
+                // Preserve reasoning_content on prior assistant turns.
+                // DeepSeek thinking mode requires it to be passed back,
+                // otherwise the provider returns 400 invalid_request_error.
+                if (m.role === 'assistant' && m.reasoning_content) {
+                    historyMsg.reasoning_content = m.reasoning_content
+                }
+                chatMessages.push(historyMsg)
             }
         }
 
@@ -288,6 +333,34 @@ export const useEditorAgentOptimized = (
 
         isStreamingRef.current = true
         try {
+            // Pre-conversation skill routing
+            if (skillRouterRef.current) {
+                try {
+                    const catalog = skillRouterRef.current.buildSkillCatalog(skillProvider)
+                    if (catalog.length > 0) {
+                        const routerResult = await skillRouterRef.current.route({
+                            userMessage: options.prompt,
+                            availableSkills: catalog,
+                            conversationContext: options.messages && options.messages.length > 0
+                                ? options.messages.slice(-2).map(m => m.content).join('\n')
+                                : undefined
+                        })
+                        if (routerResult.recommendedSkills.length > 0) {
+                            await skillProvider.batchActivate(routerResult.recommendedSkills)
+                        }
+                    }
+                } catch (err) {
+                    // Router failure is non-fatal — fall back to traditional discovery
+                    console.warn('[SkillRouter] Pre-routing failed, falling back to discovery:', err)
+                }
+            }
+
+            // Rebuild system prompt AFTER routing so pre-activated skill fragments are included
+            const routedInstructions = EDITOR_AGENT_PROMPT + skillProvider.getSystemPromptAddition()
+
+            // Update system message with post-routing instructions
+            systemMessage.content = routedInstructions
+
             // Convert frontend tools to OpenAI format for bidirectional tool calling
             const openAITools = toolsRecordToOpenAIFormat(allTools)
 
@@ -305,6 +378,7 @@ export const useEditorAgentOptimized = (
                 for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
                     // Build the chat request with current messages and session
                     const request: ChatRequest = {
+                        model: modelRef.current || undefined,
                         messages,
                         sessionId: currentSessionId,
                         conversationId: options.conversationId,
@@ -319,6 +393,7 @@ export const useEditorAgentOptimized = (
                     const roundToolCalls: ToolCall[] = []
                     let roundFinishReason: string | undefined
                     let roundAssistantContent = ''
+                    let roundReasoningContent = '' // DeepSeek reasoner: must be echoed back
                     let streamTimedOut = false
                     const timedChatGen = withInactivityTimeout(
                         chatGen, SSE_INACTIVITY_TIMEOUT_MS,
@@ -333,6 +408,13 @@ export const useEditorAgentOptimized = (
                             case 'text-delta':
                                 yield event.content
                                 roundAssistantContent += event.content
+                                break
+
+                            case 'reasoning-delta':
+                                roundReasoningContent += event.content
+                                if (options.onReasoning) {
+                                    options.onReasoning(event.content)
+                                }
                                 break
 
                             case 'annotation':
@@ -421,12 +503,17 @@ export const useEditorAgentOptimized = (
                         }
 
                         // Add assistant message with tool_calls to conversation
+                        // IMPORTANT: DeepSeek API requires reasoning_content to be
+                        // included when tool_calls is present, otherwise returns 400.
                         const assistantMsg: ChatMessage = {
                             role: 'assistant',
                             tool_calls: validToolCalls,
                         }
                         if (roundAssistantContent) {
                             assistantMsg.content = roundAssistantContent
+                        }
+                        if (roundReasoningContent) {
+                            assistantMsg.reasoning_content = roundReasoningContent
                         }
                         messages.push(assistantMsg)
 
@@ -439,7 +526,22 @@ export const useEditorAgentOptimized = (
                             let toolResult: string
                             if (toolDef?.execute) {
                                 try {
-                                    const args = JSON.parse(tc.function.arguments || '{}')
+                                    let argsStr = tc.function.arguments || '{}'
+                                    let args: Record<string, unknown>
+                                    try {
+                                        args = JSON.parse(argsStr)
+                                    } catch {
+                                        // LLM sometimes returns malformed JSON (e.g. trailing
+                                        // characters, unescaped quotes). Try to recover by
+                                        // extracting the first valid JSON object.
+                                        const match = argsStr.match(/\{[\s\S]*\}/)
+                                        if (match) {
+                                            args = JSON.parse(match[0])
+                                        } else {
+                                            args = {}
+                                        }
+                                        console.warn(`[Agent] Recovered malformed tool arguments for ${toolName}`, argsStr)
+                                    }
                                     const result = await toolDef.execute(args)
                                     toolResult = typeof result === 'string' ? result : JSON.stringify(result)
                                 } catch (err: any) {
@@ -491,7 +593,7 @@ export const useEditorAgentOptimized = (
         } finally {
             isStreamingRef.current = false
         }
-    }, [allTools, wrappedTools])
+    }, [allTools, wrappedTools, skillProvider])
 
     // Stop current generation
     const stop = useCallback(() => {

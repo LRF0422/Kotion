@@ -6,6 +6,7 @@
  *
  * Based on the Knowledge Agent Frontend Integration spec:
  * - Text delta: {"choices":[{"delta":{"content":"..."}}]}
+ * - Reasoning delta: {"choices":[{"delta":{"reasoning_content":"..."}}]} (DeepSeek reasoner)
  * - Tool call: {"choices":[{"delta":{"tool_calls":[...]}}]}
  * - Tool result: {"tool_call_id":"...","result":{...}}
  * - Annotations: {"choices":[{"delta":{"annotations":[...]}}]}
@@ -16,6 +17,7 @@
 import type {
     ChatStreamEvent,
     TextDeltaEvent,
+    ReasoningDeltaEvent,
     ToolCallStreamEvent,
     ToolResultEvent,
     AnnotationStreamEvent,
@@ -192,6 +194,14 @@ function parseEventData(json: any): ChatStreamEvent[] {
             type: 'text-delta',
             content: delta.content,
         } as TextDeltaEvent)
+    }
+
+    // 3b-2. Reasoning content delta (DeepSeek reasoner models)
+    if (delta.reasoning_content !== undefined && delta.reasoning_content !== null) {
+        events.push({
+            type: 'reasoning-delta',
+            content: delta.reasoning_content,
+        } as ReasoningDeltaEvent)
     }
 
     // 3c. Tool call delta

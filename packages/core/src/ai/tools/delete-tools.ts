@@ -160,16 +160,29 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
             preserveTitle?: boolean
         }) => {
             try {
-                const blocks = discoverBlocks(editor)
+                const doc = editor.state.doc
 
-                if (blocks.length === 0) {
+                if (doc.childCount === 0) {
                     return { error: '文档中没有内容' }
                 }
 
-                // Find the range to delete
-                const startIndex = preserveTitle ? 1 : 0
+                // Iterate only the top-level children of the doc.
+                // NOTE: do NOT use discoverBlocks() here because it recurses
+                // into descendants and would return the inner `heading` node
+                // of the `title` container as a separate block, causing the
+                // deletion range to start INSIDE the title node when
+                // preserveTitle is true.
+                const topBlocks: Array<{ pos: number; size: number; type: string }> = []
+                let offset = 0
+                doc.forEach(child => {
+                    topBlocks.push({ pos: offset, size: child.nodeSize, type: child.type.name })
+                    offset += child.nodeSize
+                })
 
-                if (startIndex >= blocks.length) {
+                const firstIsTitle = topBlocks.length > 0 && topBlocks[0].type === 'title'
+                const startIndex = preserveTitle && firstIsTitle ? 1 : 0
+
+                if (startIndex >= topBlocks.length) {
                     return {
                         success: true,
                         message: '文档已经是空的（仅有标题）',
@@ -177,11 +190,11 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
                     }
                 }
 
-                const firstBlock = blocks[startIndex]
-                const lastBlock = blocks[blocks.length - 1]
+                const firstBlock = topBlocks[startIndex]
+                const lastBlock = topBlocks[topBlocks.length - 1]
                 const from = firstBlock.pos
                 const to = lastBlock.pos + lastBlock.size
-                const docSize = editor.state.doc.nodeSize
+                const docSize = doc.nodeSize
 
                 const success = editor.chain()
                     .focus()
@@ -194,15 +207,16 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
                 }
 
                 const newDocSize = editor.state.doc.nodeSize
+                const deletedCount = topBlocks.length - startIndex
 
                 return {
                     success: true,
                     preserveTitle,
-                    deletedCount: blocks.length - startIndex,
+                    deletedCount,
                     deletedSize: docSize - newDocSize,
-                    message: preserveTitle
-                        ? `已清空文档内容（保留标题），删除了 ${blocks.length - startIndex} 个块`
-                        : `已清空整个文档，删除了 ${blocks.length} 个块`
+                    message: preserveTitle && firstIsTitle
+                        ? `已清空文档内容（保留标题），删除了 ${deletedCount} 个块`
+                        : `已清空整个文档，删除了 ${deletedCount} 个块`
                 }
             } catch (error) {
                 return { error: `清空文档失败: ${error instanceof Error ? error.message : '未知错误'}` }

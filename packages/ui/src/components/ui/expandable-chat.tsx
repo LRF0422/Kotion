@@ -138,7 +138,18 @@ ExpandableChatHeader.displayName = "ExpandableChatHeader";
 const ExpandableChatBody: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   className,
   ...props
-}) => <div className={cn("flex-grow overflow-y-auto p-2 min-h-0", className)} {...props} />;
+}) => (
+  <div
+    className={cn(
+      // Flex column so children (e.g. TeamStatusPanel + ChatMessageList) can
+      // share the available height. The body itself must NOT scroll: the
+      // inner ChatMessageList owns scrolling so useAutoScroll can track it.
+      "flex flex-col flex-grow min-h-0 overflow-hidden",
+      className,
+    )}
+    {...props}
+  />
+);
 
 ExpandableChatBody.displayName = "ExpandableChatBody";
 
@@ -364,9 +375,9 @@ const ChatMessageList = React.forwardRef<HTMLDivElement, ChatMessageListProps>(
     React.useImperativeHandle(ref, () => scrollRef.current as HTMLDivElement);
 
     return (
-      <div className="relative w-full h-full">
+      <div className="relative flex-1 min-h-0 w-full flex flex-col">
         <div
-          className={`flex flex-col w-full h-full p-2 overflow-y-auto ${className}`}
+          className={`flex-1 min-h-0 flex flex-col w-full p-2 overflow-y-auto ${className ?? ""}`}
           ref={scrollRef}
           onWheel={disableAutoScroll}
           onTouchMove={disableAutoScroll}

@@ -8,9 +8,11 @@
 import { z } from "zod"
 import type { ToolsRecord, ReloadCallback } from '../types'
 import type { SkillProvider } from '../providers/SkillProvider'
+import type { ToolProvider } from '../providers/ToolProvider'
 
 export interface SkillDiscoveryContext {
     skillProvider: SkillProvider
+    toolProvider?: ToolProvider
     onReload?: ReloadCallback
 }
 
@@ -18,9 +20,76 @@ export interface SkillDiscoveryContext {
  * Create skill discovery tools
  */
 export function createSkillDiscoveryTools(context: SkillDiscoveryContext): ToolsRecord {
-    const { skillProvider, onReload } = context
+    const { skillProvider, toolProvider, onReload } = context
 
     return {
+        /**
+         * Discover all available capabilities - tools AND skills in one call.
+         * This is the RECOMMENDED first step before any task.
+         */
+        discoverCapabilities: {
+            description: `一次性发现所有可用能力（工具分类和技能列表）。这是每次任务开始前的推荐第一步，帮助你了解当前可用的完整能力范围。
+返回工具分类概览和所有可用技能。`,
+            inputSchema: z.object({}),
+            execute: async () => {
+                // Gather tool categories
+                const toolCategories = toolProvider
+                    ? (() => {
+                        const categories = toolProvider.getCategories()
+                        const loadedCount = toolProvider.getLoadedToolNames().length
+                        const totalCount = toolProvider.getAllMetadata().length
+                        return {
+                            totalTools: totalCount,
+                            loadedTools: loadedCount,
+                            categories: categories.map(c => ({
+                                category: c.category,
+                                description: c.description,
+                                toolCount: c.toolCount,
+                                loadedCount: c.loadedCount
+                            })),
+                            hint: '使用 exploreCategory 或 searchAvailableTools 查看具体分类下的工具，使用 loadTool 加载需要的工具'
+                        }
+                    })()
+                    : null
+
+                // Gather skills
+                const allSkills = skillProvider.getAllSkills()
+                const activeSkillNames = skillProvider.getActiveSkills()
+
+                const skills = allSkills.map(skill => ({
+                    name: skill.name,
+                    description: skill.description,
+                    active: skill.active,
+                    requiredTools: skill.requiredTools,
+                    source: skill.source,
+                    tags: skill.tags || []
+                }))
+
+                // Separate pre-activated skills from available ones
+                const preActivated = skills.filter(s => s.active)
+                const available = skills.filter(s => !s.active)
+
+                return {
+                    toolCategories,
+                    preActivatedSkills: preActivated.length > 0
+                        ? {
+                            count: preActivated.length,
+                            list: preActivated.map(s => ({ name: s.name, description: s.description, tags: s.tags })),
+                            note: 'These skills are already loaded and ready to use — no activation needed'
+                        }
+                        : null,
+                    availableSkills: {
+                        total: available.length,
+                        list: available
+                    },
+                    summary: `${allSkills.length} skills total, ${preActivated.length} pre-activated, ${available.length} available for activation`,
+                    hint: preActivated.length > 0
+                        ? '已有预激活的技能可直接使用。如需更多能力，使用 activateSkill 激活其他技能'
+                        : '根据用户意图，使用 activateSkill 激活匹配的技能，然后使用 exploreCategory/searchAvailableTools/loadTool 获取所需工具'
+                }
+            }
+        },
+
         /**
          * List all available skills
          */
@@ -136,6 +205,15 @@ export function createSkillDiscoveryTools(context: SkillDiscoveryContext): Tools
  */
 export function getSkillDiscoveryToolsMetadata() {
     return [
+        {
+            name: 'discoverCapabilities',
+            category: 'discovery' as const,
+            description: '一次性发现所有可用能力（工具+技能）',
+            priority: 10,
+            tags: ['discovery', 'capabilities', 'essential', 'first-step'],
+            loaded: true,
+            source: 'builtin' as const
+        },
         {
             name: 'listSkills',
             category: 'discovery' as const,

@@ -17,12 +17,14 @@ export * from "./providers"
 export {
     KnowledgeChatClient,
     createChatRequest,
+    fetchModels,
     parseSSEStream,
     collectSSEEvents,
 } from "./chat-client/index"
 export type {
     ChatStreamEvent,
     TextDeltaEvent,
+    ReasoningDeltaEvent,
     ToolCallStreamEvent,
     ToolResultEvent,
     AnnotationStreamEvent,
@@ -35,6 +37,8 @@ export type {
     ChatMessage,
     ToolCall,
     ToolCallDelta,
+    ModelInfo,
+    ModelsResponse,
 } from "./chat-client/types"
 
 // Model Providers
