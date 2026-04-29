@@ -22,18 +22,16 @@ export const DEFAULT_PROVIDER = 'deepseek'
 // ============ System Prompts ============
 
 /**
- * First-step instruction - placed at the TOP of the system prompt.
- * With the Skill Router, skills are pre-activated before the conversation starts,
- * so the agent no longer needs to call discoverCapabilities() as a mandatory first step.
+ * Capability sourcing note — placed at the top of the editor agent prompt.
+ * The frontend ships the full capability catalog (skills + tools) inline with
+ * every request, and the backend performs progressive discovery/activation
+ * internally. The agent therefore does not need to call any discovery tools.
  */
-export const FIRST_STEP_INSTRUCTION = `# ⚠️ PRE-ACTIVATED SKILLS
+export const CAPABILITIES_NOTE = `# CAPABILITIES
 
-Skills relevant to your current task have been automatically pre-activated based on the user's request analysis.
-You can start using their capabilities immediately — no need to call discoverCapabilities() first.
+The server manages skills and tools for you. You receive only the subset relevant to the current task; use them directly when needed. There are no discovery tools on the frontend — do not call \`discoverCapabilities\`, \`listSkills\`, \`activateSkill\`, or \`loadTool\`.
 
-If you need capabilities beyond what's pre-activated, you can still call \`discoverCapabilities()\` to see all available tools and skills.
-
-For simple edits (insert a line, fix a typo, delete a block), you may skip skill usage entirely and use tools directly.`
+For simple edits (insert a line, fix a typo, delete a block) you can use tools directly without any skill.`
 
 /**
  * Core editing rules shared by all agent types.
@@ -76,162 +74,22 @@ export const STANDARD_WORKFLOW = `# WORKFLOW
 export const LANGUAGE_INSTRUCTION = `# LANGUAGE
 Respond in the same language the user uses.`
 
-/**
- * Tool discovery instructions for the optimized agent.
- */
-export const TOOL_DISCOVERY_INSTRUCTIONS = `# TOOL DISCOVERY
-
-You start with a minimal set of essential tools. When you need additional capabilities:
-
-1. **Discover capabilities**: Use \`discoverCapabilities()\` to see ALL tool categories AND skills at once (RECOMMENDED first step)
-2. **Discover tools**: Use \`discoverTools()\` to see all tool categories
-3. **Explore categories**: Use \`exploreCategory\` to see tools in a category
-4. **Search tools**: Use \`searchAvailableTools\` to find specific tools
-5. **Load tools**: Use \`loadTool\` to load tools you need
-
-## Pre-loaded Essential Tools (13 tools)
-
-### Reading
-- getDocumentStructure: 获取文档结构概览（包含大小信息）
-- searchInDocument: 搜索文本，返回精确位置
-- readChunk: 分块读取文档内容
-
-### Writing (支持 Markdown 自动解析)
-- updateTitle: 更新文档标题
-- write: 在指定块后插入内容（不填 blockIndex 则追加到末尾）
-- insertNear: 通过搜索文本定位，在匹配块附近插入内容（before/after/start/end）
-- replaceContent: 查找并替换内容
-
-**Markdown Support**: write/insertNear 工具默认解析 Markdown 格式：
-- 标题: ## Heading
-- 列表: - item 或 1. item
-- 代码块: \`\`\`language
-- 粗体/斜体: **bold** *italic*
-- 链接: [text](url)
-
-### Deleting
-- deleteBySearch: 通过搜索文本定位并删除（支持 text/block 模式）
-- deleteBlock: 按块索引删除整个块
-- clearDocument: 清空文档内容（默认保留标题），用于重写整个文档
-
-### Structure & Formatting
-- convertBlock: 转换块类型（paragraph/heading/blockquote/codeBlock/bulletList/orderedList/taskList）
-- formatText: 为已有文本添加格式（bold/italic/underline/strike/code）
-
-### Interaction
-- askUserChoice: 向用户确认操作
-
-### Content Generation
-- generateContent: 使用后端 AI 生成内容（摘要、改写、翻译、新内容等）
-
-## Tool Categories (按需加载)
-- document-read: 文档读取
-- document-write: 内容插入和更新
-- document-delete: 内容删除
-- document-structure: 块类型转换、移动、格式化、对齐、表格操作、提示框(Callout)操作
-- layout: 多列布局
-- interaction: 用户交互
-- plugin: 插件工具
-
-## WORKFLOW FOR CONTENT TASKS
-1. 先读取文档结构 (getDocumentStructure)
-2. 搜索目标内容 (searchInDocument)
-3. 执行编辑操作 (write/replaceContent/deleteBySearch 等)
-4. 验证结果`
-
-/**
- * Skill instructions for the optimized agent.
- */
-export const SKILL_INSTRUCTIONS = `# SKILLS
-
-Skills are high-level capabilities that combine multiple tools with specialized instructions for complex tasks.
-
-## Pre-Activated Skills
-Skills relevant to your current task have been automatically pre-activated based on the user's request analysis.
-You can start using their capabilities immediately.
-
-## Additional Skill Discovery
-If you need capabilities beyond what's pre-activated, you can still:
-- Call \`discoverCapabilities()\` to see all available tools and skills
-- Call \`activateSkill(skillName)\` to activate additional skills mid-conversation
-- Call \`deactivateSkill(skillName)\` to deactivate skills you no longer need
-
-### Intent-Skill Matching Guide
-- Restructure / reorganize / refactor document -> "document-refactor"
-- Analyze / summarize / review content -> "content-analysis"
-- Improve writing / fix grammar / polish text -> "writing-improvement"
-- Translate content -> "translation"
-- Generate / write new content / create sections -> "content-generation"
-- Format / layout / columns / styling -> "formatting-layout"
-- Simple edits (insert a line, fix a typo, delete a block) -> NO skill needed, use tools directly
-- Plugin-specific tasks (draw diagrams, spreadsheet operations, etc.) -> check for matching plugin skills
-
-### Rules
-- Activate at most 2-3 skills at a time
-- If the request is a simple edit, skip skill activation entirely
-- If unsure, activate the most likely skill -- you can always deactivate later with \`deactivateSkill\`
-- Plugin skills (source: "plugin") follow the same matching logic
-
-## IMPORTANT: Silent Skill Operations
-When using skill discovery tools (discoverCapabilities, listSkills, activateSkill, deactivateSkill), do NOT show the results to the user. These are internal operations. Only inform the user when a skill is successfully activated or when there's an error that requires their attention.
-
-## User-Installed Skills
-Users can install custom skills. Use these tools when asked:
-- \`listInstalledSkills\`: List user-installed skills
-- \`installSkillFromUrl\`: Install a skill from a URL
-- \`installSkill\`: Install a skill from JSON
-- \`createCustomSkill\`: Create a new custom skill
-- \`uninstallSkill\`: Uninstall a skill
-- \`exportSkill\`: Export a skill to share
-
-Installed skills are automatically loaded and available for activation.`
-
-/**
- * Usage examples for the optimized agent.
- */
-export const USAGE_EXAMPLES = `# EXAMPLES
-
-**Discover additional capabilities (if needed):**
-discoverCapabilities()
-
-**Discover what tools are available:**
-discoverTools()
-
-**Find tools for a specific task:**
-searchAvailableTools({ query: "insert" })
-
-**Load a tool you need:**
-loadTool({ toolName: "insertNear" })
-
-**Update document title:**
-updateTitle({ newTitle: "New Document Title" })
-
-**Search and read content:**
-1. getDocumentStructure() // Get overview
-2. searchInDocument({ query: "target text" })
-3. readChunk({ startPos: 0 })`
-
 // ============ Composed System Prompts ============
 
 /**
- * Base system prompt for the editor agent (used by use-agent-optimized and agent-service).
- * Includes tool discovery and skill management instructions.
+ * Base system prompt for the editor agent (used by use-agent-optimized and
+ * agent-service). Capability discovery is handled by the backend; this prompt
+ * only covers editing rules, document structure, workflow, and language.
  */
 export const EDITOR_AGENT_PROMPT = `You are an intelligent document editing assistant. Help users edit, organize, and improve their documents.
 
-${FIRST_STEP_INSTRUCTION}
+${CAPABILITIES_NOTE}
 
 ${CORE_EDITING_RULES}
 
 ${DOCUMENT_STRUCTURE_INFO}
 
 ${STANDARD_WORKFLOW}
-
-${TOOL_DISCOVERY_INSTRUCTIONS}
-
-${SKILL_INSTRUCTIONS}
-
-${USAGE_EXAMPLES}
 
 ${LANGUAGE_INSTRUCTION}`
 

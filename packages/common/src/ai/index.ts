@@ -12,6 +12,9 @@ export * from "./tools"
 // Providers
 export * from "./providers"
 
+// Capability catalog collector (replaces progressive discovery on the frontend)
+export * from "./capabilities"
+
 // Chat Client - Backend-driven SSE communication
 // Explicitly export to avoid conflicts with types.ts re-exports
 export {

@@ -15,11 +15,12 @@ This document describes the available tools for AI agents to interact with the f
 
 ### 2. insertNetworkImage
 - **Name**: `insertNetworkImage`
-- **Description**: 从网络URL插入图片到文档。需要提供有效的图片URL地址。
+- **Description**: 从网络URL插入图片到文档。需要提供有效的图片URL地址，可指定图片宽度。
 - **Parameters**:
-  - `url` (required): 网络图片的URL地址
+  - `url` (required): 网络图片的URL地址，必须是有效的HTTP/HTTPS URL
   - `alt` (optional): 图片的替代文本（无障碍描述）
   - `title` (optional): 图片标题
+  - `width` (optional): 图片宽度，可以是数字（像素）或百分比字符串如"50%"，默认"100%"
   - `pos` (optional): 插入位置，不填则在当前光标位置插入
 
 ### 3. getFileDownloadUrl
@@ -91,7 +92,20 @@ This document describes the available tools for AI agents to interact with the f
   "arguments": {
     "url": "https://example.com/image.jpg",
     "alt": "Example image",
+    "width": "50%",
     "pos": 50
+  }
+}
+```
+
+### Example 2b: Insert a network image with pixel width
+```json
+{
+  "tool_name": "insertNetworkImage",
+  "arguments": {
+    "url": "https://cdn.example.com/photo.png?w=800",
+    "alt": "Photo",
+    "width": 400
   }
 }
 ```

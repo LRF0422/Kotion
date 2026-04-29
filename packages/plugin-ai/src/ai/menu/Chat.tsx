@@ -177,6 +177,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                     return {
                         ...step,
                         result: event.result,
+                        error: event.error,
                         status: event.status === 'success' ? 'success' as const : 'error' as const,
                         duration: event.duration
                     }

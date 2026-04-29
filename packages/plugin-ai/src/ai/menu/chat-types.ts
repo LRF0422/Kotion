@@ -16,6 +16,7 @@ export interface ExecutionStep {
     toolName: string
     args: any
     result?: any
+    error?: string
     status: 'running' | 'success' | 'error'
     timestamp: number
     duration?: number

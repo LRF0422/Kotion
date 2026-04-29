@@ -17,7 +17,8 @@ import {
     Copy,
     Check,
     Trash2,
-    RotateCcw
+    RotateCcw,
+    AlertTriangle
 } from '@kn/icon'
 import {
     Button,
@@ -340,21 +341,38 @@ const AIChatInterface: React.FC = () => {
                                     <p className="text-xs font-medium text-muted-foreground mb-3">Tool Calls</p>
                                     <div className="space-y-2">
                                         {agent.state.executionSteps.map((step) => (
-                                            <div key={step.id} className="flex items-center gap-3 text-sm">
-                                                {step.status === 'running' ? (
-                                                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                                                ) : step.status === 'success' ? (
-                                                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                                ) : (
-                                                    <XCircle className="h-4 w-4 text-red-500" />
-                                                )}
-                                                <Badge variant="outline" className="text-xs">
-                                                    {step.toolName}
-                                                </Badge>
-                                                {step.duration && (
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {step.duration}ms
-                                                    </span>
+                                            <div key={step.id} className={`rounded-lg p-2 ${step.status === 'error' ? 'bg-red-50/50 dark:bg-red-950/20 border border-red-200/60 dark:border-red-800/40' : ''}`}>
+                                                <div className="flex items-center gap-3 text-sm">
+                                                    {step.status === 'running' ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                                    ) : step.status === 'success' ? (
+                                                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                                    ) : (
+                                                        <XCircle className="h-4 w-4 text-red-500" />
+                                                    )}
+                                                    <Badge variant="outline" className="text-xs">
+                                                        {step.toolName}
+                                                    </Badge>
+                                                    {step.duration && (
+                                                        <span className={`text-xs ${step.status === 'error' ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                                            {step.duration}ms
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {step.status === 'error' && (
+                                                    <div className="ml-7 mt-1.5 space-y-1">
+                                                        {step.args && Object.keys(step.args).length > 0 && (
+                                                            <div className="text-[11px] text-muted-foreground/80 font-mono bg-muted/50 rounded px-2 py-1 truncate max-w-full">
+                                                                {Object.entries(step.args).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(', ').slice(0, 150)}
+                                                            </div>
+                                                        )}
+                                                        {step.error && (
+                                                            <div className="flex items-start gap-1.5 text-[11px] text-red-500 dark:text-red-400">
+                                                                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                                                                <span className="break-words">{step.error}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
                                         ))}

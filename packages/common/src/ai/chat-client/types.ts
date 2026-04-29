@@ -38,6 +38,41 @@ export interface ToolCallDelta {
     }
 }
 
+// ============ Capability Catalog Types ============
+
+/**
+ * Skill payload sent to the backend as part of the capability catalog.
+ * The backend uses this catalog to perform progressive discovery; the frontend
+ * no longer tracks activation state.
+ */
+export interface SkillPayload {
+    name: string
+    description: string
+    requiredTools: string[]
+    optionalTools?: string[]
+    systemPromptFragment?: string
+    tags?: string[]
+    source: 'builtin' | 'plugin' | 'user'
+    pluginName?: string
+}
+
+/**
+ * Tool payload sent to the backend as part of the capability catalog.
+ * Richer than OpenAI's function-call tool shape: it preserves category, priority,
+ * tags and source so the backend can reason about progressive discovery.
+ * `parameters` carries a JSON Schema produced from the tool's Zod input schema.
+ */
+export interface ToolPayload {
+    name: string
+    description: string
+    parameters: any // JSON Schema
+    category: string
+    priority: number
+    tags: string[]
+    source: 'builtin' | 'plugin'
+    pluginName?: string
+}
+
 // ============ Chat Request Types ============
 
 export interface ChatRequest {
@@ -57,8 +92,23 @@ export interface ChatRequest {
     sessionId?: string
     /** User ID */
     userId?: number
-    /** Frontend tool definitions (OpenAI format), for bidirectional tool calling */
-    tools?: any[]
+    /**
+     * Full frontend skill catalog (built-in + plugin + user-installed).
+     * The backend is responsible for progressive activation; the frontend
+     * sends the complete list every turn.
+     */
+    skills?: SkillPayload[]
+    /**
+     * Full frontend tool catalog. Shape is {@link ToolPayload}, not OpenAI's
+     * function-call form; the backend converts subsets to the LLM-facing
+     * shape as it progressively discovers capabilities.
+     */
+    tools?: ToolPayload[]
+    /**
+     * Stable hash of the (skills, tools) catalog. The backend may cache by
+     * this value and skip re-parsing unchanged catalogs across turns.
+     */
+    capabilitiesVersion?: string
     /** Frontend passthrough metadata */
     data?: Record<string, any>
     /** Abort signal for the fetch request (not sent to backend) */

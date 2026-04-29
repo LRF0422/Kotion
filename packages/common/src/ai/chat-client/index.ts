@@ -257,8 +257,16 @@ export class KnowledgeChatClient {
             body.userId = request.userId
         }
 
+        if (request.skills && request.skills.length > 0) {
+            body.skills = request.skills
+        }
+
         if (request.tools && request.tools.length > 0) {
             body.tools = request.tools
+        }
+
+        if (request.capabilitiesVersion) {
+            body.capabilitiesVersion = request.capabilitiesVersion
         }
 
         if (request.data) {
@@ -322,7 +330,9 @@ export function createChatRequest(
         conversationId?: string
         model?: string
         userId?: number
-        tools?: any[]
+        skills?: import('./types').SkillPayload[]
+        tools?: import('./types').ToolPayload[]
+        capabilitiesVersion?: string
         data?: Record<string, any>
         signal?: AbortSignal
     }
@@ -339,7 +349,9 @@ export function createChatRequest(
         sessionId: options?.sessionId,
         conversationId: options?.conversationId,
         userId: options?.userId,
+        skills: options?.skills,
         tools: options?.tools,
+        capabilitiesVersion: options?.capabilitiesVersion,
         data: options?.data,
         signal: options?.signal,
     }

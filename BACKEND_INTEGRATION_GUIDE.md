@@ -814,6 +814,120 @@ ALTER TABLE plugin_version ADD COLUMN is_premium TINYINT DEFAULT 0;  -- 是否�
 3. 冲突解决策略
 4. 增量同步优化
 
+## 八、AI Agent Chat 集成
+
+> Scope: the `knowledge-agent` SSE endpoint that powers the editor's in-document AI assistant. After the frontend skills-architecture refactor, the **frontend no longer performs skill discovery or activation**; it simply ships the full capability catalog on every turn and executes the tool calls the server asks for. The backend owns progressive discovery / skill activation end-to-end.
+
+### 8.1 Endpoint
+
+```
+POST /api/knowledge-agent/api/v1/chat/completions   # SSE streaming
+GET  /api/knowledge-agent/api/v1/models             # available models
+```
+
+Authentication: `Authorization: Bearer <token>` (same scheme as the rest of this guide).
+
+No new endpoint was introduced for capability registration — the catalog travels inline with every chat request.
+
+### 8.2 Extended request body
+
+The request body is an OpenAI-compatible chat payload extended with three fields: `skills`, `tools`, `capabilitiesVersion`.
+
+```jsonc
+{
+    "model": "deepseek-chat",
+    "stream": true,
+    "temperature": 0.7,
+    "maxTokens": 4096,
+    "conversationId": "conv_...",
+    "sessionId": "sess_...",          // optional, for context recovery
+    "userId": 123,
+    "messages": [
+        { "role": "system", "content": "..." },
+        { "role": "user",   "content": "Translate section 2 to English" }
+    ],
+
+    // ---- NEW: full capability catalog ----
+    "capabilitiesVersion": "a1b2c3d4",  // stable FNV-1a 32-bit hex of (skills, tools)
+    "skills": [ /* SkillPayload[] */ ],
+    "tools":  [ /* ToolPayload[]  */ ],
+
+    "data": { /* optional frontend passthrough */ }
+}
+```
+
+Contract guarantees from the frontend:
+
+- `skills` and `tools` contain the **complete** built-in + plugin + user-installed catalog available in the current session. No client-side filtering is performed.
+- `tools[]` uses the `ToolPayload` shape below — **not** OpenAI's `{ type: 'function', function: {...} }` shape. The backend is expected to select a subset and convert to the LLM-facing format as progressive discovery proceeds.
+- `capabilitiesVersion` is a stable hash over the catalog. The backend MAY cache the parsed catalog by this hash and skip re-parsing when it is unchanged across turns within the same session.
+- When `tools` / `skills` are empty or omitted, the backend should treat the session as having no external capabilities (the model may still answer with plain text).
+
+### 8.3 Payload schemas
+
+#### `SkillPayload`
+
+```ts
+interface SkillPayload {
+    name: string                    // unique skill id (e.g. "translation")
+    description: string
+    requiredTools: string[]         // tool names this skill needs to operate
+    optionalTools?: string[]
+    systemPromptFragment?: string   // prompt snippet to splice in when the skill activates
+    tags?: string[]
+    source: 'builtin' | 'plugin' | 'user'
+    pluginName?: string             // set when source is 'plugin' or 'user'
+}
+```
+
+The backend is responsible for:
+
+- Deciding **when** a skill should activate based on the user's message + tool-call history.
+- Splicing `systemPromptFragment` into the system prompt when it activates a skill.
+- Exposing `requiredTools` (and optionally `optionalTools`) from the supplied `tools[]` catalog to the LLM.
+
+#### `ToolPayload`
+
+```ts
+interface ToolPayload {
+    name: string
+    description: string
+    parameters: object              // JSON Schema (produced from the tool's Zod schema)
+    category: string                // e.g. "navigation", "edit", "analysis"
+    priority: number                // higher = more general-purpose
+    tags: string[]
+    source: 'builtin' | 'plugin'
+    pluginName?: string
+}
+```
+
+`parameters` is a plain JSON Schema object — the backend should forward it (possibly after trimming) as the `function.parameters` field when surfacing the tool to the LLM.
+
+### 8.4 Responsibility split
+
+| Concern | Owner |
+|---|---|
+| Collecting built-in / plugin / user skills and tools into one catalog | Frontend (`CapabilityCatalog`) |
+| Computing `capabilitiesVersion` hash | Frontend |
+| Deciding which tools to expose to the LLM in the current turn | **Backend** |
+| Progressive skill activation (`discoverCapabilities`, `activateSkill`, `loadTool`) | **Backend** — implemented as internal server-side tools, never exposed to the frontend |
+| Splicing `systemPromptFragment` into the system prompt | **Backend** |
+| Executing tools named in `tool_calls` and returning `tool_result` | Frontend |
+
+The frontend **never** calls `discoverCapabilities`, `listSkills`, `activateSkill`, or `loadTool`. Those tools, if present, are backend-only and must not appear in any streamed `tool-call` event targeted at the client.
+
+### 8.5 Streaming contract (unchanged)
+
+The SSE event stream is the same as before the refactor. For a complete catalog of `ChatStreamEvent` types (text-delta, reasoning-delta, tool-call, tool-result, annotation, session-info, finish, error), see `packages/common/src/ai/chat-client/types.ts`. The existing tool_call → tool_result round-trip remains the mechanism by which the backend drives frontend-side tool execution.
+
+### 8.6 Reference frontend implementation
+
+For backend developers wiring up this contract, the authoritative client is:
+
+- Request builder: `packages/common/src/ai/chat-client/index.ts` → `KnowledgeChatClient.buildRequestBody`
+- Catalog collector: `packages/common/src/ai/capabilities/CapabilityCatalog.ts` → `collectCapabilityCatalog`
+- Types: `packages/common/src/ai/chat-client/types.ts` (`ChatRequest`, `SkillPayload`, `ToolPayload`)
+
 ---
 
 ## 附录: API 响应格式

@@ -6,5 +6,4 @@ export * from './columns-tools'
 export * from './structure-tools'
 export * from './format-tools'
 export * from './callout-tools'
-// backend-tools is in @kn/common
 export { registerCoreToolFactories } from './register'

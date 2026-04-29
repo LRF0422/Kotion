@@ -1,26 +1,23 @@
 /**
- * ToolProvider - Progressive Tool Discovery and On-Demand Loading
+ * ToolProvider - Eager Tool Catalog
  *
- * Manages tool registration, metadata, and dynamic loading for the AI agent.
- * Implements a progressive discovery pattern to reduce initial context size.
+ * Maintains the full catalog of executable tools (built-in + plugin) so the
+ * frontend can (a) ship the complete catalog to the backend in each chat
+ * request and (b) execute any tool call the backend dispatches.
+ *
+ * Frontend no longer performs progressive discovery — that concern now lives
+ * on the backend, which receives the catalog inline with every chat request.
  */
 
 import type {
     ToolDefinition,
     ToolsRecord,
     ToolMetadata,
-    ToolCategory,
-    CategoryInfo,
+    OnUserChoiceRequest,
     ReloadCallback,
-    OnUserChoiceRequest
 } from '../types'
-import {
-    BUILTIN_TOOL_METADATA,
-    ESSENTIAL_TOOLS,
-    getCategoryInfo,
-    isEssentialTool
-} from '../discovery/tool-metadata'
-import { getToolFactories, type ToolFactory } from '../tools/tool-factory-registry'
+import { BUILTIN_TOOL_METADATA } from '../discovery/tool-metadata'
+import { getToolFactories } from '../tools/tool-factory-registry'
 
 // Re-export ToolFactory for consumers
 export type { ToolFactory } from '../tools/tool-factory-registry'
@@ -36,13 +33,12 @@ export class ToolProvider {
     private onUserChoiceRequest?: OnUserChoiceRequest
     private onReload?: ReloadCallback
 
-    // Tool registries
+    // Metadata for all known tools (built-in + plugin)
     private toolMetadata: Map<string, ToolMetadata> = new Map()
-    private toolFactories: Map<string, () => ToolDefinition> = new Map()
-    private loadedTools: Map<string, ToolDefinition> = new Map()
-    private pluginTools: Map<string, ToolDefinition> = new Map()
+    // Every executable tool is instantiated eagerly and kept here.
+    private tools: Map<string, ToolDefinition> = new Map()
 
-    // Version tracking for reactive updates
+    // Version tracking for reactive UI updates (bumped when the catalog changes)
     private version: number = 0
 
     constructor(options: ToolProviderOptions) {
@@ -54,258 +50,127 @@ export class ToolProvider {
     }
 
     /**
-     * Initialize built-in tool metadata and factories
+     * Load built-in tool metadata and eagerly instantiate every built-in tool.
      */
     private initializeBuiltinTools(): void {
-        // Register metadata
+        // Seed metadata from the canonical registry
         for (const meta of BUILTIN_TOOL_METADATA) {
-            this.toolMetadata.set(meta.name, { ...meta })
+            this.toolMetadata.set(meta.name, { ...meta, loaded: true })
         }
 
-        // Create tool factory map (lazy creation)
-        this.registerToolFactories()
-
-        // Pre-load essential tools
-        for (const toolName of ESSENTIAL_TOOLS) {
-            this.loadToolInternal(toolName, false)
-        }
+        // Instantiate every tool from factories; the backend may request any of them.
+        this.instantiateBuiltinTools()
     }
 
-    /**
-     * Register tool factories for lazy initialization
-     */
-    private registerToolFactories(): void {
-        // Get all tools from global registry (populated by core)
+    private instantiateBuiltinTools(): void {
+        this.tools.clear()
         const allTools: ToolsRecord = {}
         for (const factory of getToolFactories()) {
             const tools = factory(this.editor, this.onUserChoiceRequest)
             Object.assign(allTools, tools)
         }
-
-        // Register each tool as a factory
         for (const [name, tool] of Object.entries(allTools)) {
-            this.toolFactories.set(name, () => tool as ToolDefinition)
+            this.tools.set(name, tool as ToolDefinition)
+            const meta = this.toolMetadata.get(name)
+            if (meta) meta.loaded = true
         }
     }
 
     /**
-     * Register plugin tools with their metadata
+     * Register plugin tools. Tools are instantiated immediately and added to
+     * the catalog with metadata derived from the plugin.
      */
     registerPluginTools(tools: ToolsRecord, pluginName: string): void {
+        let changed = false
         for (const [name, tool] of Object.entries(tools)) {
-            // Create metadata for plugin tool
             const metadata: ToolMetadata = {
                 name,
                 category: 'plugin',
                 description: tool.description || `Plugin tool: ${name}`,
                 priority: 5,
                 tags: ['plugin', pluginName],
-                loaded: true, // Plugin tools are loaded when registered
+                loaded: true,
                 source: 'plugin',
-                pluginName
+                pluginName,
             }
 
+            const existing = this.tools.get(name)
             this.toolMetadata.set(name, metadata)
-            this.pluginTools.set(name, tool)
+            this.tools.set(name, tool as ToolDefinition)
+            if (!existing) changed = true
         }
 
-        this.incrementVersion()
+        if (changed) this.incrementVersion()
     }
 
     /**
-     * Load a specific tool by name
+     * Get the full executable tool catalog (built-in + plugin).
      */
-    loadTool(toolName: string): { success: boolean; message: string } {
-        return this.loadToolInternal(toolName, true)
-    }
-
-    /**
-     * Internal tool loading with optional reload trigger
-     */
-    private loadToolInternal(
-        toolName: string,
-        triggerReload: boolean
-    ): { success: boolean; message: string } {
-        // Check if already loaded
-        if (this.loadedTools.has(toolName) || this.pluginTools.has(toolName)) {
-            return {
-                success: true,
-                message: `Tool "${toolName}" is already loaded`
-            }
-        }
-
-        // Check if factory exists
-        const factory = this.toolFactories.get(toolName)
-        if (!factory) {
-            return {
-                success: false,
-                message: `Tool "${toolName}" not found`
-            }
-        }
-
-        // Create and store tool
-        const tool = factory()
-        this.loadedTools.set(toolName, tool)
-
-        // Update metadata
-        const meta = this.toolMetadata.get(toolName)
-        if (meta) {
-            meta.loaded = true
-        }
-
-        if (triggerReload) {
-            this.incrementVersion()
-        }
-
-        return {
-            success: true,
-            message: `Tool "${toolName}" loaded successfully`
-        }
-    }
-
-    /**
-     * Load multiple tools at once
-     */
-    loadTools(toolNames: string[]): { loaded: string[]; failed: string[] } {
-        const loaded: string[] = []
-        const failed: string[] = []
-
-        for (const name of toolNames) {
-            const result = this.loadToolInternal(name, false)
-            if (result.success) {
-                loaded.push(name)
-            } else {
-                failed.push(name)
-            }
-        }
-
-        if (loaded.length > 0) {
-            this.incrementVersion()
-        }
-
-        return { loaded, failed }
-    }
-
-    /**
-     * Get all currently loaded tools
-     */
-    getLoadedTools(): ToolsRecord {
+    getAllTools(): ToolsRecord {
         const result: ToolsRecord = {}
-
-        this.loadedTools.forEach((tool, name) => {
+        this.tools.forEach((tool, name) => {
             result[name] = tool
         })
-
-        this.pluginTools.forEach((tool, name) => {
-            result[name] = tool
-        })
-
         return result
     }
 
     /**
-     * Get all tool categories with info
+     * Resolve a single tool's executor, used when the backend asks the frontend
+     * to run a specific tool call.
      */
-    getCategories(): CategoryInfo[] {
-        return getCategoryInfo(Array.from(this.toolMetadata.values()))
+    getToolExecutor(name: string): ToolDefinition | undefined {
+        return this.tools.get(name)
     }
 
     /**
-     * Get tools in a specific category
-     */
-    getToolsByCategory(category: ToolCategory): ToolMetadata[] {
-        return Array.from(this.toolMetadata.values())
-            .filter(meta => meta.category === category)
-            .sort((a, b) => b.priority - a.priority)
-    }
-
-    /**
-     * Search tools by query
-     */
-    searchTools(query: string): ToolMetadata[] {
-        const lowerQuery = query.toLowerCase()
-        return Array.from(this.toolMetadata.values())
-            .filter(meta =>
-                meta.name.toLowerCase().includes(lowerQuery) ||
-                meta.description.toLowerCase().includes(lowerQuery) ||
-                meta.tags.some(tag => tag.toLowerCase().includes(lowerQuery))
-            )
-            .sort((a, b) => b.priority - a.priority)
-    }
-
-    /**
-     * Get all tool metadata
+     * All tool metadata entries (used by UI and CapabilityCatalog).
      */
     getAllMetadata(): ToolMetadata[] {
         return Array.from(this.toolMetadata.values())
     }
 
     /**
-     * Get metadata for a specific tool
+     * Metadata lookup for a specific tool.
      */
-    getToolMetadata(toolName: string): ToolMetadata | undefined {
-        return this.toolMetadata.get(toolName)
+    getToolMetadata(name: string): ToolMetadata | undefined {
+        return this.toolMetadata.get(name)
     }
 
     /**
-     * Check if a tool is loaded
+     * Tool names currently in the catalog.
      */
-    isToolLoaded(toolName: string): boolean {
-        return this.loadedTools.has(toolName) || this.pluginTools.has(toolName)
+    getAllToolNames(): string[] {
+        return Array.from(this.tools.keys())
     }
 
     /**
-     * Get the current version number (for reactive updates)
+     * Current catalog version (incremented whenever the catalog mutates).
      */
     getVersion(): number {
         return this.version
     }
 
     /**
-     * Get list of loaded tool names
-     */
-    getLoadedToolNames(): string[] {
-        return [
-            ...Array.from(this.loadedTools.keys()),
-            ...Array.from(this.pluginTools.keys())
-        ]
-    }
-
-    /**
-     * Increment version and trigger reload
-     */
-    private incrementVersion(): void {
-        this.version++
-        this.onReload?.()
-    }
-
-    /**
-     * Update editor reference (useful for editor recreation)
+     * Swap the editor reference (e.g. on editor recreation) and rebuild
+     * built-in tools. Plugin tools are preserved as-is.
      */
     updateEditor(editor: any): void {
         this.editor = editor
-        // Re-register factories with new editor
-        this.registerToolFactories()
-        // Re-load all previously loaded tools
-        const loadedNames = Array.from(this.loadedTools.keys())
-        this.loadedTools.clear()
-        for (const name of loadedNames) {
-            this.loadToolInternal(name, false)
+        // Rebuild built-in tools against the new editor instance.
+        const pluginEntries = Array.from(this.tools.entries()).filter(([name]) => {
+            const meta = this.toolMetadata.get(name)
+            return meta?.source === 'plugin'
+        })
+        this.instantiateBuiltinTools()
+        // Restore plugin tools captured before rebuild.
+        for (const [name, tool] of pluginEntries) {
+            this.tools.set(name, tool)
         }
         this.incrementVersion()
     }
 
-    /**
-     * Get essential tool names
-     */
-    static getEssentialToolNames(): readonly string[] {
-        return ESSENTIAL_TOOLS
-    }
-
-    /**
-     * Check if a tool is essential
-     */
-    static isEssential(toolName: string): boolean {
-        return isEssentialTool(toolName)
+    private incrementVersion(): void {
+        this.version++
+        this.onReload?.()
     }
 }

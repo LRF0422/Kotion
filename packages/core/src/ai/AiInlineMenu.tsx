@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Editor, Plugin, PluginKey, Decoration, DecorationSet } from '@kn/editor'
-import { Sparkles, Send, X, Loader2, CheckCircle2, XCircle, MessageSquare } from '@kn/icon'
+import { Sparkles, Send, X, Loader2, CheckCircle2, XCircle, MessageSquare, AlertTriangle } from '@kn/icon'
 import { Button, Badge, Streamdown } from '@kn/ui'
 import { useEditorAgentOptimized, useStreamBuffer, type ToolExecutionEvent, type UserChoiceRequest } from '@kn/common'
 
@@ -12,6 +12,7 @@ interface ExecutionStep {
     toolName: string
     args: any
     result?: any
+    error?: string
     status: 'running' | 'success' | 'error'
     timestamp: number
     duration?: number
@@ -169,6 +170,7 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
                     return {
                         ...step,
                         result: event.result,
+                        error: event.error,
                         status: (event.status === 'success' ? 'success' : 'error') as 'success' | 'error',
                         duration: event.duration,
                     }
@@ -376,22 +378,39 @@ ${selectedText}
                     <div className="px-3 py-2 border-b border-border/30">
                         <div className="space-y-1">
                             {steps.map((step) => (
-                                <div key={step.id} className="flex items-center gap-2 text-[11px]">
-                                    {step.status === 'running' ? (
-                                        <Loader2 className="h-3 w-3 animate-spin text-indigo-500 shrink-0" />
-                                    ) : step.status === 'success' ? (
-                                        <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
-                                    ) : (
-                                        <XCircle className="h-3 w-3 text-red-500 shrink-0" />
-                                    )}
-                                    <Badge
-                                        variant="outline"
-                                        className="text-[10px] px-1.5 py-0 font-mono border-indigo-200/50 dark:border-indigo-800/50"
-                                    >
-                                        {formatToolName(step.toolName)}
-                                    </Badge>
-                                    {step.duration && (
-                                        <span className="text-[10px] text-muted-foreground">{step.duration}ms</span>
+                                <div key={step.id} className={`rounded ${step.status === 'error' ? 'bg-red-50/50 dark:bg-red-950/20 p-1.5' : ''}`}>
+                                    <div className="flex items-center gap-2 text-[11px]">
+                                        {step.status === 'running' ? (
+                                            <Loader2 className="h-3 w-3 animate-spin text-indigo-500 shrink-0" />
+                                        ) : step.status === 'success' ? (
+                                            <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                                        ) : (
+                                            <XCircle className="h-3 w-3 text-red-500 shrink-0" />
+                                        )}
+                                        <Badge
+                                            variant="outline"
+                                            className="text-[10px] px-1.5 py-0 font-mono border-indigo-200/50 dark:border-indigo-800/50"
+                                        >
+                                            {formatToolName(step.toolName)}
+                                        </Badge>
+                                        {step.duration && (
+                                            <span className={`text-[10px] ${step.status === 'error' ? 'text-red-500' : 'text-muted-foreground'}`}>{step.duration}ms</span>
+                                        )}
+                                    </div>
+                                    {step.status === 'error' && (
+                                        <div className="ml-5 mt-1 space-y-0.5">
+                                            {step.args && Object.keys(step.args).length > 0 && (
+                                                <div className="text-[9px] text-muted-foreground/80 font-mono bg-muted/50 rounded px-1.5 py-0.5 truncate max-w-full">
+                                                    {Object.entries(step.args).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(', ').slice(0, 100)}
+                                                </div>
+                                            )}
+                                            {step.error && (
+                                                <div className="flex items-start gap-1 text-[9px] text-red-500 dark:text-red-400">
+                                                    <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
+                                                    <span className="break-words">{step.error}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             ))}

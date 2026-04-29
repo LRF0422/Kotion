@@ -48,25 +48,30 @@ const resolveFileItem = (file: any): FileItemInfo => ({
  */
 export const insertNetworkImageTool = {
     name: 'insertNetworkImage',
-    description: '从网络URL插入图片到文档。需要提供有效的图片URL地址。',
+    description: '从网络URL插入图片到文档。需要提供有效的图片URL地址，可指定图片宽度。',
     inputSchema: z.object({
-        url: z.string().url().describe('网络图片的URL地址'),
+        url: z.string().url().describe('网络图片的URL地址，必须是有效的HTTP/HTTPS URL'),
         alt: z.string().optional().describe('图片的替代文本（无障碍描述）'),
         title: z.string().optional().describe('图片标题'),
+        width: z.union([z.string(), z.number()]).optional().describe('图片宽度，可以是数字（像素）或百分比字符串如"50%"，默认"100%"'),
         pos: z.number().optional().describe('插入位置，不填则在当前光标位置插入'),
     }),
-    execute: (editor: Editor) => async (params: { url: string; alt?: string; title?: string; pos?: number }) => {
-        const { url, alt = '', title = '', pos } = params
+    execute: (editor: Editor) => async (params: { url: string; alt?: string; title?: string; width?: string | number; pos?: number }) => {
+        const { url, alt = '', title = '', width, pos } = params
 
         try {
-            // Validate URL format
-            const urlPattern = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
-            if (!urlPattern.test(url)) {
+            // Validate URL protocol
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
                 return {
                     success: false,
-                    error: '无效的URL格式'
+                    error: 'URL必须以 http:// 或 https:// 开头'
                 }
             }
+
+            // Resolve width attribute
+            const widthAttr = width !== undefined
+                ? (typeof width === 'number' ? width : width)
+                : '100%'
 
             const imageNode = {
                 type: 'image',
@@ -74,6 +79,7 @@ export const insertNetworkImageTool = {
                     src: url,
                     alt,
                     title,
+                    width: widthAttr,
                 }
             }
 
@@ -93,7 +99,8 @@ export const insertNetworkImageTool = {
             return {
                 success: true,
                 url,
-                message: '已插入网络图片'
+                width: widthAttr,
+                message: `已插入网络图片${width ? `，宽度: ${widthAttr}` : ''}`
             }
         } catch (error) {
             return {
