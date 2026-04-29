@@ -252,5 +252,177 @@ export const createStructureTools = (editor: Editor): ToolsRecord => ({
                 return { error: `设置对齐失败: ${error instanceof Error ? error.message : '未知错误'}` }
             }
         }
+    },
+
+    indentListItem: {
+        description: 'Indent (sink) a list item one nesting level deeper, creating a sub-list.',
+        inputSchema: z.object({
+            blockIndex: z.number().describe("列表块索引（从0开始）"),
+            itemIndex: z.number().optional()
+                .describe("列表项索引（从0开始），不提供则使用当前选中项")
+        }),
+        execute: async ({ blockIndex, itemIndex }: {
+            blockIndex: number
+            itemIndex?: number
+        }) => {
+            try {
+                const blocks = discoverBlocks(editor)
+
+                if (blockIndex < 0 || blockIndex >= blocks.length) {
+                    return { error: `块索引越界。有效范围: 0-${blocks.length - 1}，请求: ${blockIndex}` }
+                }
+
+                const block = blocks[blockIndex]
+                const listTypes = ['bulletList', 'orderedList', 'taskList']
+                if (!listTypes.includes(block.type)) {
+                    return { error: `块类型 "${block.type}" 不是列表类型。支持: ${listTypes.join(', ')}` }
+                }
+
+                // Position cursor inside the list item
+                let selPos = block.contentStart + 1
+                if (itemIndex !== undefined) {
+                    const node = editor.state.doc.nodeAt(block.pos)
+                    if (!node) {
+                        return { error: '无法获取列表块内容' }
+                    }
+                    let currentItem = 0
+                    let itemPos: number | null = null
+                    node.forEach((child, offset) => {
+                        if (currentItem === itemIndex) {
+                            itemPos = block.pos + 1 + offset + 1
+                        }
+                        currentItem++
+                    })
+                    if (itemPos === null) {
+                        return { error: `列表项索引越界。有效范围: 0-${currentItem - 1}，请求: ${itemIndex}` }
+                    }
+                    selPos = itemPos
+                }
+
+                editor.chain().focus().setTextSelection(selPos).scrollIntoView().run()
+                const success = editor.chain().focus().sinkListItem('listItem').run()
+
+                if (!success) {
+                    return { error: '缩进列表项失败（可能已是最深层级或为第一项）' }
+                }
+
+                return {
+                    success: true,
+                    blockIndex,
+                    ...(itemIndex !== undefined ? { itemIndex } : {}),
+                    message: `已缩进列表项`
+                }
+            } catch (error) {
+                return { error: `缩进列表项失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
+    },
+
+    outdentListItem: {
+        description: 'Outdent (lift) a list item one nesting level up.',
+        inputSchema: z.object({
+            blockIndex: z.number().describe("列表块索引（从0开始）"),
+            itemIndex: z.number().optional()
+                .describe("列表项索引（从0开始），不提供则使用当前选中项")
+        }),
+        execute: async ({ blockIndex, itemIndex }: {
+            blockIndex: number
+            itemIndex?: number
+        }) => {
+            try {
+                const blocks = discoverBlocks(editor)
+
+                if (blockIndex < 0 || blockIndex >= blocks.length) {
+                    return { error: `块索引越界。有效范围: 0-${blocks.length - 1}，请求: ${blockIndex}` }
+                }
+
+                const block = blocks[blockIndex]
+                const listTypes = ['bulletList', 'orderedList', 'taskList']
+                if (!listTypes.includes(block.type)) {
+                    return { error: `块类型 "${block.type}" 不是列表类型。支持: ${listTypes.join(', ')}` }
+                }
+
+                // Position cursor inside the list item
+                let selPos = block.contentStart + 1
+                if (itemIndex !== undefined) {
+                    const node = editor.state.doc.nodeAt(block.pos)
+                    if (!node) {
+                        return { error: '无法获取列表块内容' }
+                    }
+                    let currentItem = 0
+                    let itemPos: number | null = null
+                    node.forEach((child, offset) => {
+                        if (currentItem === itemIndex) {
+                            itemPos = block.pos + 1 + offset + 1
+                        }
+                        currentItem++
+                    })
+                    if (itemPos === null) {
+                        return { error: `列表项索引越界。有效范围: 0-${currentItem - 1}，请求: ${itemIndex}` }
+                    }
+                    selPos = itemPos
+                }
+
+                editor.chain().focus().setTextSelection(selPos).scrollIntoView().run()
+                const success = editor.chain().focus().liftListItem('listItem').run()
+
+                if (!success) {
+                    return { error: '提升列表项失败（可能已是最顶层级）' }
+                }
+
+                return {
+                    success: true,
+                    blockIndex,
+                    ...(itemIndex !== undefined ? { itemIndex } : {}),
+                    message: `已提升列表项`
+                }
+            } catch (error) {
+                return { error: `提升列表项失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
+    },
+
+    setCodeBlockLanguage: {
+        description: 'Set the programming language for syntax highlighting on a code block.',
+        inputSchema: z.object({
+            blockIndex: z.number().describe("代码块索引（从0开始）"),
+            language: z.string().describe("编程语言标识符，如 'javascript', 'python', 'typescript' 等")
+        }),
+        execute: async ({ blockIndex, language }: {
+            blockIndex: number
+            language: string
+        }) => {
+            try {
+                const blocks = discoverBlocks(editor)
+
+                if (blockIndex < 0 || blockIndex >= blocks.length) {
+                    return { error: `块索引越界。有效范围: 0-${blocks.length - 1}，请求: ${blockIndex}` }
+                }
+
+                const block = blocks[blockIndex]
+                if (block.type !== 'codeBlock') {
+                    return { error: `块类型 "${block.type}" 不是代码块。只能对 codeBlock 类型设置语言` }
+                }
+
+                // Set selection into the code block and update language attribute
+                const selPos = block.contentStart + 1
+                editor.chain().focus().setTextSelection(selPos).scrollIntoView().run()
+
+                const success = editor.chain().focus().updateAttributes('codeBlock', { language }).run()
+
+                if (!success) {
+                    return { error: '设置代码块语言失败' }
+                }
+
+                return {
+                    success: true,
+                    blockIndex,
+                    language,
+                    message: `已将代码块语言设置为 ${language}`
+                }
+            } catch (error) {
+                return { error: `设置代码块语言失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
     }
 })

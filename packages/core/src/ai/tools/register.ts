@@ -15,6 +15,11 @@ import {
     createStructureTools,
     createFormatTools,
     createCalloutTools,
+    createLinkTools,
+    createRichContentTools,
+    createHistoryTools,
+    createSelectionTools,
+    createRangeTools,
 } from './index'
 
 /**
@@ -31,5 +36,10 @@ export function registerCoreToolFactories(): void {
         createStructureTools,
         createFormatTools,
         createCalloutTools,
+        createLinkTools,
+        createRichContentTools,
+        createHistoryTools,
+        createSelectionTools,
+        createRangeTools,
     ])
 }

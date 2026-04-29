@@ -9,30 +9,24 @@
 - [packages/core/src/App.tsx](file://packages/core/src/App.tsx)
 - [packages/core/src/ai/types.ts](file://packages/core/src/ai/types.ts)
 - [packages/core/src/ai/skills/types.ts](file://packages/core/src/ai/skills/types.ts)
-- [packages/core/src/ai/tools/structure-tools.ts](file://packages/core/src/ai/tools/structure-tools.ts)
-- [packages/core/src/ai/tools/format-tools.ts](file://packages/core/src/ai/tools/format-tools.ts)
-- [packages/common/src/ai/discovery/tool-metadata.ts](file://packages/common/src/ai/discovery/tool-metadata.ts)
-- [packages/common/src/ai/discovery/tool-discovery-tools.ts](file://packages/common/src/ai/discovery/tool-discovery-tools.ts)
-- [packages/common/src/ai/providers/ToolProvider.ts](file://packages/common/src/ai/providers/ToolProvider.ts)
-- [packages/common/src/ai/tools/backend-tools.ts](file://packages/common/src/ai/tools/backend-tools.ts)
-- [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md)
-- [packages/core/src/ai/README_TOOL_DISCOVERY.md](file://packages/core/src/ai/README_TOOL_DISCOVERY.md)
-- [packages/plugin-main/src/index.tsx](file://packages/plugin-main/src/index.tsx)
-- [apps/vite/src/main.tsx](file://apps/vite/src/main.tsx)
-- [docs/api/skills-api.md](file://docs/api/skills-api.md)
+- [packages/common/src/ai/types.ts](file://packages/common/src/ai/types.ts)
+- [packages/common/src/ai/skills/skill-registry.ts](file://packages/common/src/ai/skills/skill-registry.ts)
+- [packages/common/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/common/src/ai/skills/skillsmp/use-skillsmp.ts)
+- [packages/common/src/ai/skills/types.ts](file://packages/common/src/ai/skills/types.ts)
 - [packages/core/src/ai/ARCHITECTURE.md](file://packages/core/src/ai/ARCHITECTURE.md)
 - [packages/core/src/ai/INTEGRATION_GUIDE.md](file://packages/core/src/ai/INTEGRATION_GUIDE.md)
-- [packages/core/src/ai/skills/skill-registry.ts](file://packages/core/src/ai/skills/skill-registry.ts)
-- [packages/core/src/ai/providers/ToolProvider.ts](file://packages/core/src/ai/providers/ToolProvider.ts)
+- [docs/api/skills-api.md](file://docs/api/skills-api.md)
+- [packages/core/src/components/Skills/SkillManager.tsx](file://packages/core/src/components/Skills/SkillManager.tsx)
+- [packages/core/src/components/Skills/SkillsMPMarketplace.tsx](file://packages/core/src/components/Skills/SkillsMPMarketplace.tsx)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 更新了essential tools配置，从20+工具精简至13个核心工具
-- 移除了getNodeAtPosition、getDocumentSize等工具的essential标记
-- 优化了工具分类体系，移除了web分类的描述
-- 更新了技能API文档中optionalTools数组的描述
-- 增强了渐进式工具发现系统的架构说明
+- 移除了渐进式工具发现系统相关文档，包括工具发现API、分类探索器、标签搜索器等组件
+- 移除了技能发现工具、技能管理工具、工具发现工具等核心功能的文档
+- 更新了技能API文档，反映optionalTools数组的简化
+- 移除了工具元数据系统中web分类的描述
+- 更新了技能市场系统的架构说明，反映SkillsMP集成的现状
 
 ## 目录
 1. [简介](#简介)
@@ -40,7 +34,7 @@
 3. [核心组件](#核心组件)
 4. [架构概览](#架构概览)
 5. [详细组件分析](#详细组件分析)
-6. [AI工具系统增强](#ai工具系统增强)
+6. [AI技能系统现状](#ai技能系统现状)
 7. [依赖关系分析](#依赖关系分析)
 8. [性能考虑](#性能考虑)
 9. [故障排除指南](#故障排除指南)
@@ -56,7 +50,7 @@ AI技能市场系统是一个基于现代Web技术构建的协作知识管理平
 - **实时协作**：多用户编辑与Hocuspocus后端集成
 - **插件架构**：可扩展的插件系统支持自定义功能
 - **AI集成**：AI驱动的文本生成、图像创建和内容转换
-- **渐进式工具发现**：智能工具加载和管理机制
+- **技能市场**：集成SkillsMP技能市场，支持技能安装和管理
 - **多维表格**：支持多种视图类型的电子表格
 - **可视化绘图**：支持Excalidraw、DrawIO、Mermaid等绘图工具
 - **文件管理**：内置文档组织系统
@@ -79,11 +73,10 @@ Editor[Editor 编辑器]
 Common[Common 公共模块]
 UI[UI 组件库]
 Icon[Icon 图标库]
-subgraph "AI工具系统"
-ToolDiscovery[工具发现系统]
-StructureTools[结构工具]
-FormatTools[格式化工具]
-ToolMetadata[工具元数据]
+subgraph "AI技能系统"
+SkillRegistry[技能注册表]
+SkillsMP[SkillsMP集成]
+SkillManager[技能管理器]
 end
 subgraph "插件包"
 PluginAI[AI 插件]
@@ -95,6 +88,7 @@ end
 subgraph "基础设施"
 RoomServer[协作服务器]
 APIServer[API服务器]
+SkillsMPAPI[SkillsMP API]
 end
 ViteApp --> Core
 LandingPage --> Core
@@ -103,16 +97,16 @@ Core --> Editor
 Core --> Common
 Core --> UI
 Core --> Icon
-Core --> ToolDiscovery
-Core --> StructureTools
-Core --> FormatTools
-Core --> ToolMetadata
+Core --> SkillRegistry
+Core --> SkillsMP
+Core --> SkillManager
 Core --> PluginAI
 Core --> PluginBitable
 Core --> PluginFileManager
 Core --> PluginMain
 Core --> RoomServer
 Core --> APIServer
+SkillsMP --> SkillsMPAPI
 ```
 
 **图表来源**
@@ -162,7 +156,7 @@ PluginManager --> Routes : 解析路由
 
 ### AI技能系统
 
-AI技能系统是整个平台的核心智能组件，提供了强大的工具执行和技能管理能力：
+AI技能系统是整个平台的核心智能组件，提供了技能注册、管理和SkillsMP集成能力：
 
 ```mermaid
 classDiagram
@@ -176,33 +170,36 @@ class Skill {
 +source : 'builtin' | 'plugin'
 +pluginName : string
 }
-class ToolDefinition {
-+description : string
-+inputSchema : any
-+execute : Function
-+[key : string] : any
+class InstalledSkill {
++installedAt : string
++enabled : boolean
++source : 'marketplace' | 'custom' | 'import'
++sourceUrl : string
 }
-class ToolContext {
-+editor : Editor
-+onUserChoiceRequest : Function
+class SkillRegistry {
++storage : SkillStorageAdapter
++installedSkills : Map~string, InstalledSkill~
++initialize()
++install()
++uninstall()
++setEnabled()
++update()
++getInstalled()
++getEnabled()
++toSkillFormat()
 }
-class SkillRegistryState {
-+skills : Map~string, SkillDefinition~
-+activeSkills : Set~string~
-}
-Skill --> ToolDefinition : 使用
-ToolContext --> Editor : 依赖
-SkillRegistryState --> Skill : 管理
+SkillRegistry --> InstalledSkill : 管理
+Skill --> InstalledSkill : 转换
 ```
 
 **图表来源**
-- [packages/core/src/ai/types.ts:138-165](file://packages/core/src/ai/types.ts#L138-L165)
-- [packages/core/src/ai/skills/types.ts:10-37](file://packages/core/src/ai/skills/types.ts#L10-L37)
+- [packages/common/src/ai/skills/skill-registry.ts:161-420](file://packages/common/src/ai/skills/skill-registry.ts#L161-L420)
+- [packages/common/src/ai/skills/types.ts:11-17](file://packages/common/src/ai/skills/types.ts#L11-L17)
 
 **章节来源**
 - [packages/core/src/App.tsx:1-162](file://packages/core/src/App.tsx#L1-L162)
-- [packages/core/src/ai/types.ts:1-165](file://packages/core/src/ai/types.ts#L1-L165)
-- [packages/core/src/ai/skills/types.ts:1-37](file://packages/core/src/ai/skills/types.ts#L1-L37)
+- [packages/common/src/ai/skills/skill-registry.ts:1-420](file://packages/common/src/ai/skills/skill-registry.ts#L1-420)
+- [packages/common/src/ai/skills/types.ts:1-17](file://packages/common/src/ai/skills/types.ts#L1-L17)
 
 ## 架构概览
 
@@ -214,20 +211,27 @@ subgraph "表现层 (Presentation Layer)"
 UIComponents[UI组件]
 Pages[页面组件]
 Modals[模态框]
+SkillsMPMarketplace[SkillsMP市场]
+SkillManager[技能管理器]
 end
 subgraph "业务逻辑层 (Business Logic Layer)"
 Services[服务层]
 Managers[管理器]
 Validators[验证器]
+SkillRegistry[技能注册表]
+SkillsMPClient[SkillsMP客户端]
 end
 subgraph "数据访问层 (Data Access Layer)"
 Repositories[仓库]
 Storage[存储]
 Cache[缓存]
+LocalStorage[本地存储]
+HybridStorage[混合存储]
 end
 subgraph "外部集成层 (External Integration Layer)"
 APIs[API接口]
-Plugins[插件系统]
+SkillsMPAPI[SkillsMP API]
+PluginSystem[插件系统]
 AIProviders[AI提供者]
 end
 UIComponents --> Services
@@ -235,11 +239,13 @@ Pages --> Services
 Modals --> Services
 Services --> Managers
 Services --> Validators
-Services --> Repositories
-Managers --> Storage
-Validators --> Cache
-Repositories --> APIs
-Services --> Plugins
+Services --> SkillRegistry
+Services --> SkillsMPClient
+SkillRegistry --> Storage
+SkillRegistry --> LocalStorage
+SkillRegistry --> HybridStorage
+SkillsMPClient --> SkillsMPAPI
+Services --> PluginSystem
 Services --> AIProviders
 Plugins --> APIs
 AIProviders --> APIs
@@ -247,7 +253,7 @@ AIProviders --> APIs
 
 **图表来源**
 - [packages/core/src/App.tsx:1-162](file://packages/core/src/App.tsx#L1-L162)
-- [packages/plugin-main/src/index.tsx:1-354](file://packages/plugin-main/src/index.tsx#L1-L354)
+- [packages/core/src/components/Skills/SkillManager.tsx:268-336](file://packages/core/src/components/Skills/SkillManager.tsx#L268-L336)
 
 ## 详细组件分析
 
@@ -277,180 +283,109 @@ App->>Router : 创建路由器
 - [packages/core/src/App.tsx:102-148](file://packages/core/src/App.tsx#L102-L148)
 - [packages/plugin-main/src/index.tsx:29-74](file://packages/plugin-main/src/index.tsx#L29-L74)
 
-### AI技能执行流程
+### SkillsMP技能市场集成
 
-AI技能系统提供了完整的工具发现、加载和执行机制：
+系统集成了SkillsMP技能市场，提供技能搜索、安装和管理功能：
 
 ```mermaid
-flowchart TD
-Start([开始技能执行]) --> LoadSkill["加载技能配置"]
-LoadSkill --> ResolveTools["解析必需工具"]
-ResolveTools --> CheckTools{"工具已加载?"}
-CheckTools --> |否| LoadTools["加载缺失工具"]
-CheckTools --> |是| PrepareContext["准备执行上下文"]
-LoadTools --> VerifyTools["验证工具可用性"]
-VerifyTools --> ToolReady{"工具准备就绪?"}
-ToolReady --> |否| Error["返回错误"]
-ToolReady --> |是| PrepareContext
-PrepareContext --> ExecuteSkill["执行技能"]
-ExecuteSkill --> ToolExecution["工具执行"]
-ToolExecution --> UpdateState["更新状态"]
-UpdateState --> Complete["技能执行完成"]
-Error --> End([结束])
-Complete --> End
+sequenceDiagram
+participant UI as 用户界面
+participant SM as 技能管理器
+participant SMC as SkillsMP客户端
+participant API as SkillsMP API
+participant SR as 技能注册表
+UI->>SM : 搜索技能
+SM->>SMC : 调用搜索API
+SMC->>API : GET /skills/search
+API-->>SMC : 返回技能列表
+SMC-->>SM : 技能数据
+SM->>SM : 显示技能列表
+UI->>SM : 安装技能
+SM->>SR : 安装技能到注册表
+SR-->>SM : 安装成功
+SM-->>UI : 更新界面状态
 ```
 
 **图表来源**
-- [packages/core/src/ai/types.ts:138-165](file://packages/core/src/ai/types.ts#L138-L165)
-- [packages/core/src/ai/skills/types.ts:19-37](file://packages/core/src/ai/skills/types.ts#L19-L37)
+- [packages/common/src/ai/skills/skillsmp/use-skillsmp.ts:68-111](file://packages/common/src/ai/skills/skillsmp/use-skillsmp.ts#L68-L111)
+- [packages/core/src/components/Skills/SkillManager.tsx:282-292](file://packages/core/src/components/Skills/SkillManager.tsx#L282-L292)
 
-### 主插件功能
+### 技能管理器功能
 
-主插件提供了核心的页面管理和空间功能：
+技能管理器提供了完整的技能生命周期管理：
 
 ```mermaid
 classDiagram
-class DefaultPlugin {
-+pluginKey : string
-+name : string
-+status : string
-+routes : RouteConfig[]
-+menus : MenuConfig[]
-+editorExtension : Extension[]
-+services : ServiceMap
-+locales : LocaleResources
+class SkillManager {
++selectedTab : string
++selectedSkill : SkillsMPSkill
++detailOpen : boolean
++actionLoading : boolean
++handleInstall()
++handleToggleEnabled()
++handleUninstall()
++confirmDelete()
++isSkillInstalled()
 }
-class SpaceService {
-+createSpace()
-+getSpaces()
-+updateSpace()
-+deleteSpace()
-+addMember()
-+removeMember()
+class SkillsMPMarketplace {
++apiKey : string
++onInstall : Function
++isInstalled : Function
++viewDetail : Function
 }
-class Home {
-+render()
-}
-class Spaces {
-+render()
-}
-class SpaceDetail {
-+render()
-}
-DefaultPlugin --> SpaceService : 使用
-DefaultPlugin --> Home : 提供页面
-DefaultPlugin --> Spaces : 提供页面
-DefaultPlugin --> SpaceDetail : 提供页面
+SkillManager --> SkillsMPMarketplace : 使用
+SkillsMPMarketplace --> SkillsMPSkill : 显示
 ```
 
 **图表来源**
-- [packages/plugin-main/src/index.tsx:25-74](file://packages/plugin-main/src/index.tsx#L25-L74)
+- [packages/core/src/components/Skills/SkillManager.tsx:268-336](file://packages/core/src/components/Skills/SkillManager.tsx#L268-L336)
 
 **章节来源**
-- [packages/plugin-main/src/index.tsx:1-354](file://packages/plugin-main/src/index.tsx#L1-L354)
+- [packages/core/src/components/Skills/SkillManager.tsx:1-336](file://packages/core/src/components/Skills/SkillManager.tsx#L1-L336)
+- [packages/core/src/components/Skills/SkillsMPMarketplace.tsx:285-314](file://packages/core/src/components/Skills/SkillsMPMarketplace.tsx#L285-L314)
 
-## AI工具系统增强
+## AI技能系统现状
 
-### 渐进式工具发现系统
+### SkillsMP集成架构
 
-系统引入了全新的渐进式工具发现机制，通过智能元数据管理和按需加载策略，显著提升了AI工具的使用效率：
+系统当前采用SkillsMP作为技能市场解决方案，提供技能搜索、安装和管理功能：
 
 ```mermaid
 graph TB
-subgraph "工具发现层"
-ToolDiscovery[工具发现API]
-CategoryExplorer[分类探索器]
-TagSearcher[标签搜索器]
-PrioritySorter[优先级排序器]
+subgraph "SkillsMP集成层"
+SkillsMPClient[SkillsMP客户端]
+SkillsMPAPI[SkillsMP API]
+SkillsMPMarketplace[SkillsMP市场界面]
 end
-subgraph "工具管理层"
-ToolProvider[工具提供器]
-MetadataRegistry[元数据注册表]
-EssentialLoader[基础工具加载器]
-OnDemandLoader[按需加载器]
+subgraph "技能管理层"
+SkillRegistry[技能注册表]
+InstalledSkills[已安装技能]
+SkillStorage[技能存储]
 end
-subgraph "工具执行层"
-StructureTools[结构工具]
-FormatTools[格式化工具]
-NavigationTools[导航工具]
-InteractionTools[交互工具]
+subgraph "用户界面层"
+SkillManager[技能管理器]
+SkillDetail[技能详情]
 end
-ToolDiscovery --> CategoryExplorer
-CategoryExplorer --> TagSearcher
-TagSearcher --> PrioritySorter
-PrioritySorter --> ToolProvider
-ToolProvider --> MetadataRegistry
-ToolProvider --> EssentialLoader
-ToolProvider --> OnDemandLoader
-EssentialLoader --> StructureTools
-EssentialLoader --> FormatTools
-OnDemandLoader --> NavigationTools
-OnDemandLoader --> InteractionTools
+SkillsMPClient --> SkillsMPAPI
+SkillsMPClient --> SkillsMPMarketplace
+SkillsMPMarketplace --> SkillManager
+SkillManager --> SkillRegistry
+SkillRegistry --> InstalledSkills
+SkillRegistry --> SkillStorage
+SkillManager --> SkillDetail
 ```
 
 **图表来源**
-- [packages/common/src/ai/discovery/tool-discovery-tools.ts:21-156](file://packages/common/src/ai/discovery/tool-discovery-tools.ts#L21-L156)
-- [packages/common/src/ai/discovery/tool-metadata.ts:42-390](file://packages/common/src/ai/discovery/tool-metadata.ts#L42-L390)
-
-### 工具元数据系统更新
-
-**更新** essential tools从20+工具精简至13个核心工具，移除了getNodeAtPosition、getDocumentSize等工具
-
-系统实现了完整的工具元数据管理系统，为工具发现和智能推荐提供支持：
-
-#### essential tools配置更新
-
-**更新** essential tools配置已精简，从原来的20+工具减少至13个核心工具：
-
-```mermaid
-classDiagram
-class EssentialTools {
-+essentialTools : string[]
-+isEssentialTool(toolName) : boolean
-}
-class EssentialToolList {
-+document-read : 3个工具
-+document-write : 4个工具
-+document-delete : 3个工具
-+interaction : 1个工具
-+document-structure : 2个工具
-}
-EssentialTools --> EssentialToolList
-```
-
-**图表来源**
-- [packages/common/src/ai/discovery/tool-metadata.ts:11-30](file://packages/common/src/ai/discovery/tool-metadata.ts#L11-L30)
-
-#### 分类描述系统更新
-
-**更新** 移除了web分类的描述，反映了Web搜索功能不再作为标准可选工具
-
-系统为每个工具分类提供了详细的描述信息，帮助AI代理更好地理解工具的功能和用途：
-
-| 分类 | 工具数量 | 描述 |
-|------|----------|------|
-| document-read | 3 | 文档读取工具 - 用于获取文档结构、内容和搜索 |
-| document-write | 4 | 文档写入工具 - 用于插入、更新和替换内容 |
-| document-delete | 3 | 文档删除工具 - 用于删除内容和块 |
-| document-structure | 2 | 结构工具 - 用于转换块类型、移动块、格式化文本、表格操作 |
-| layout | 7 | 布局工具 - 用于管理多列布局 |
-| interaction | 1 | 交互工具 - 用于与用户交互 |
-| plugin | N | 插件工具 - 来自已安装插件的工具 |
-| discovery | 4 | 发现工具 - 用于发现和加载其他工具 |
-
-**章节来源**
-- [packages/common/src/ai/discovery/tool-metadata.ts:29-40](file://packages/common/src/ai/discovery/tool-metadata.ts#L29-L40)
-- [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md:28-367](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L28-L367)
+- [packages/common/src/ai/skills/skillsmp/use-skillsmp.ts:41-190](file://packages/common/src/ai/skills/skillsmp/use-skillsmp.ts#L41-L190)
+- [packages/common/src/ai/skills/skill-registry.ts:161-420](file://packages/common/src/ai/skills/skill-registry.ts#L161-L420)
 
 ### 技能API文档更新
 
-**更新** 更新了optionalTools数组的描述，反映了Web搜索功能不再作为标准可选工具
-
-技能API文档反映了最新的工具配置要求：
+技能API文档反映了当前的SkillsMP集成状态：
 
 #### 技能定义更新
 
-技能定义中的optionalTools数组现在反映了移除Web搜索功能后的实际配置：
+技能定义中的optionalTools数组现在为空，反映了SkillsMP集成的简化配置：
 
 ```mermaid
 classDiagram
@@ -463,7 +398,7 @@ class Skill {
 +author : string
 +homepage : string
 +requiredTools : string[]
-+optionalTools : string[] // 现在为空数组或仅包含非Web工具
++optionalTools : string[] // 现在为空数组
 +systemPromptFragment : string
 +tags : string[]
 +createdAt : string
@@ -474,54 +409,65 @@ class Skill {
 **图表来源**
 - [docs/api/skills-api.md:17-33](file://docs/api/skills-api.md#L17-L33)
 
-#### 市场技能示例更新
+#### SkillsMP市场技能示例
 
-市场技能示例现在展示了更新后的工具配置：
+SkillsMP市场技能示例展示了当前的技能配置：
 
 | 字段 | 当前值 | 说明 |
 |------|--------|------|
-| requiredTools | ["getDocumentStructure", "readChunk", "searchInDocument", "replaceContent", "askUserChoice"] | 必需工具列表 |
-| optionalTools | [] | 可选工具列表（已移除Web搜索功能） |
+| requiredTools | ["getDocumentStructure", "readChunk", "replaceContent"] | 必需工具列表 |
+| optionalTools | [] | 可选工具列表（已简化） |
 | systemPromptFragment | "## Translation Assistant Skill Active..." | 专用系统提示片段 |
+| downloads | 1500 | 下载次数 |
+| rating | 4.8 | 评分 |
+| verified | true | 认证状态 |
+| featured | true | 推荐状态 |
 
 **章节来源**
-- [docs/api/skills-api.md:381-415](file://docs/api/skills-api.md#L381-L415)
+- [docs/api/skills-api.md:340-415](file://docs/api/skills-api.md#L340-L415)
 
-### 工具提供器架构更新
+### 技能存储系统
 
-**更新** 优化了工具加载机制，essential tools现在包含更精确的核心工具集合
-
-工具提供器实现了更高效的工具管理机制：
+技能存储系统提供了灵活的存储适配器：
 
 ```mermaid
 classDiagram
-class ToolProvider {
-+initializeBuiltinTools()
-+registerToolFactories()
-+loadToolInternal()
-+loadTools()
-+getLoadedTools()
-+getCategories()
-+searchTools()
+class SkillStorageAdapter {
+<<interface>>
++load() Promise~InstalledSkill[]~
++save(skills) Promise~void~
++clear() Promise~void~
 }
-class EssentialToolsLoader {
-+ESSENTIAL_TOOLS : string[]
-+loadEssentialTools()
-+isEssentialTool()
+class LocalSkillStorage {
++storageKey : string
++load() Promise~InstalledSkill[]~
++save(skills) Promise~void~
++clear() Promise~void~
 }
-class ToolFactoryRegistry {
-+getToolFactories()
-+registerToolFactories()
+class ApiSkillStorage {
++apiBase : string
++getHeaders() Record~string, string~
++load() Promise~InstalledSkill[]~
++save(skills) Promise~void~
++clear() Promise~void~
 }
-ToolProvider --> EssentialToolsLoader
-ToolProvider --> ToolFactoryRegistry
+class HybridSkillStorage {
++apiStorage : ApiSkillStorage
++localStorage : LocalSkillStorage
++load() Promise~InstalledSkill[]~
++save(skills) Promise~void~
++clear() Promise~void~
+}
+SkillStorageAdapter <|-- LocalSkillStorage
+SkillStorageAdapter <|-- ApiSkillStorage
+SkillStorageAdapter <|-- HybridSkillStorage
 ```
 
 **图表来源**
-- [packages/common/src/ai/providers/ToolProvider.ts:34-312](file://packages/common/src/ai/providers/ToolProvider.ts#L34-L312)
+- [packages/common/src/ai/skills/skill-registry.ts:34-158](file://packages/common/src/ai/skills/skill-registry.ts#L34-L158)
 
 **章节来源**
-- [packages/common/src/ai/providers/ToolProvider.ts:69-72](file://packages/common/src/ai/providers/ToolProvider.ts#L69-L72)
+- [packages/common/src/ai/skills/skill-registry.ts:1-420](file://packages/common/src/ai/skills/skill-registry.ts#L1-L420)
 
 ## 依赖关系分析
 
@@ -551,7 +497,8 @@ Tiptap[Tiptap]
 Hocuspocus[Hocuspocus]
 VercelSDK[Vercel AI SDK]
 end
-subgraph "工具系统"
+subgraph "技能系统"
+SkillsMP[SkillsMP]
 Zod[Zod Schema]
 ProseMirror[ProseMirror]
 end
@@ -567,7 +514,8 @@ shadcn --> Icons
 React --> Tiptap
 Tiptap --> Hocuspocus
 Tiptap --> VercelSDK
-Zod --> ProseMirror
+SkillsMP --> Zod
+SkillsMP --> ProseMirror
 ```
 
 **图表来源**
@@ -588,20 +536,19 @@ Zod --> ProseMirror
 
 ### 运行时性能
 - 插件按需加载机制
-- 工具缓存和复用
+- 技能缓存和复用
 - 内存管理和垃圾回收优化
+
+### SkillsMP集成性能优化
+- 技能搜索结果缓存
+- 分页加载机制
+- 异步安装和更新
+- 技能状态管理优化
 
 ### AI性能优化
 - 工具执行结果缓存
 - 批量处理和队列管理
 - 异步执行和并发控制
-- 渐进式工具发现减少AI上下文大小
-
-### 工具发现性能优化
-- 基础工具预加载策略
-- 智能元数据缓存
-- 按需加载机制
-- 工具分类索引优化
 
 ## 故障排除指南
 
@@ -612,48 +559,50 @@ Zod --> ProseMirror
 - 验证插件配置正确性
 - 查看浏览器控制台错误信息
 
-**AI工具执行异常**
-- 确认AI API密钥配置
+**SkillsMP技能市场问题**
+- 确认SkillsMP API密钥配置
 - 检查网络连接状态
-- 验证工具参数格式
+- 验证技能搜索参数
+- 查看SkillsMP API响应状态
 
-**工具发现系统问题**
-- 确认工具元数据定义完整
-- 检查工具分类注册
-- 验证工具优先级设置
-- 查看工具加载状态
+**技能安装失败**
+- 确认技能兼容性
+- 检查技能依赖工具
+- 验证技能定义格式
+- 查看技能存储状态
+
+**技能管理问题**
+- 确认技能注册表状态
+- 检查技能启用状态
+- 验证技能存储权限
+- 查看技能更新日志
 
 **路由跳转问题**
 - 确认插件路由配置
 - 检查路径参数匹配
 - 验证权限配置
 
-**技能配置问题**
-- 检查optionalTools数组是否为空
-- 确认requiredTools配置正确
-- 验证技能定义格式
-
 **章节来源**
 - [packages/core/src/App.tsx:65-76](file://packages/core/src/App.tsx#L65-L76)
 
 ## 结论
 
-AI技能市场系统是一个功能完整、架构清晰的现代化知识管理平台。通过采用插件化架构、AI集成技术和渐进式工具发现系统，系统为用户提供了强大的协作能力和智能化功能。
+AI技能市场系统经过重构后，采用了SkillsMP作为技能市场解决方案，提供了更加简洁和高效的技能管理能力。系统通过模块化的架构设计，实现了技能市场的无缝集成，同时保持了良好的性能和可维护性。
 
 ### 系统优势
 
-- **智能工具管理**：通过元数据系统和分类机制，实现工具的智能发现和推荐
-- **性能优化**：渐进式工具发现显著减少了AI上下文大小和初始化时间
-- **扩展性强**：模块化的工具系统支持轻松添加新工具和功能
-- **用户体验**：直观的工具分类和搜索功能提升了AI代理的使用效率
+- **SkillsMP集成**：通过SkillsMP提供标准化的技能市场体验
+- **性能优化**：SkillsMP集成减少了AI上下文大小和初始化时间
+- **扩展性强**：模块化的技能系统支持轻松添加新技能
+- **用户体验**：直观的技能市场界面提升了技能管理效率
 
 ### 未来发展方向
 
-- **完善Gantt图表、日历视图等功能**
-- **增强移动端响应式设计**
-- **开发插件市场和模板市场**
-- **实现离线模式支持**
-- **扩展AI工具生态系统的规模**
-- **优化工具发现算法的智能化程度**
+- **SkillsMP功能增强**：进一步优化技能搜索和推荐算法
+- **技能质量评估**：实现技能评分和质量控制系统
+- **技能生态建设**：建立技能开发者社区和审核机制
+- **离线技能支持**：开发离线技能安装和管理功能
+- **技能版本管理**：实现技能版本控制和回滚机制
+- **技能性能监控**：建立技能使用统计和性能分析系统
 
 通过持续的技术创新和功能扩展，AI技能市场系统将继续为用户提供更加智能、高效的知识管理体验。

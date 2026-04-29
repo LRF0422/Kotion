@@ -401,6 +401,147 @@ export const createFormatTools = (editor: Editor): ToolsRecord => ({
         }
     },
 
+    setTextColor: {
+        description: '搜索文档中的文本并设置前景色（文字颜色）。使用 occurrence 指定第几次出现的匹配项。',
+        inputSchema: z.object({
+            searchText: z.string().describe("要设置颜色的文本内容"),
+            color: z.string().describe("颜色值，如 '#ff0000' 或 'red'"),
+            occurrence: z.number().optional()
+                .describe("第几次出现的匹配项（从1开始，默认1）")
+        }),
+        execute: async ({ searchText, color, occurrence = 1 }: {
+            searchText: string
+            color: string
+            occurrence?: number
+        }) => {
+            try {
+                const pos = findTextPosition(editor, searchText, occurrence)
+                if (!pos) {
+                    return { error: `未找到文本: "${searchText}"` }
+                }
+
+                editor.chain().focus().setTextSelection({ from: pos.from, to: pos.to }).scrollIntoView().run()
+
+                const success = editor.chain().focus().setTextSelection({ from: pos.from, to: pos.to }).setColor(color).run()
+
+                if (!success) {
+                    return { error: `设置文字颜色失败` }
+                }
+
+                return {
+                    success: true,
+                    color,
+                    text: pos.text,
+                    from: pos.from,
+                    to: pos.to,
+                    message: `已为文本 "${pos.text}" 设置颜色 ${color}`
+                }
+            } catch (error) {
+                return { error: `设置文字颜色失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
+    },
+
+    setHighlightColor: {
+        description: '搜索文档中的文本并设置背景高亮色。使用 occurrence 指定第几次出现的匹配项。',
+        inputSchema: z.object({
+            searchText: z.string().describe("要设置高亮的文本内容"),
+            color: z.string().describe("高亮颜色值，如 '#ffff00' 或 'yellow'"),
+            occurrence: z.number().optional()
+                .describe("第几次出现的匹配项（从1开始，默认1）")
+        }),
+        execute: async ({ searchText, color, occurrence = 1 }: {
+            searchText: string
+            color: string
+            occurrence?: number
+        }) => {
+            try {
+                const pos = findTextPosition(editor, searchText, occurrence)
+                if (!pos) {
+                    return { error: `未找到文本: "${searchText}"` }
+                }
+
+                editor.chain().focus().setTextSelection({ from: pos.from, to: pos.to }).scrollIntoView().run()
+
+                const success = editor.chain().focus().setTextSelection({ from: pos.from, to: pos.to }).setHighlight({ color }).run()
+
+                if (!success) {
+                    return { error: `设置高亮颜色失败` }
+                }
+
+                return {
+                    success: true,
+                    color,
+                    text: pos.text,
+                    from: pos.from,
+                    to: pos.to,
+                    message: `已为文本 "${pos.text}" 设置高亮颜色 ${color}`
+                }
+            } catch (error) {
+                return { error: `设置高亮颜色失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
+    },
+
+    removeColor: {
+        description: '移除文档中指定文本的颜色格式。可选择移除文字颜色、高亮颜色或两者。',
+        inputSchema: z.object({
+            searchText: z.string().describe("要移除颜色的文本内容"),
+            type: z.enum(['text', 'highlight', 'all'])
+                .describe("移除类型: text 文字颜色, highlight 高亮颜色, all 全部"),
+            occurrence: z.number().optional()
+                .describe("第几次出现的匹配项（从1开始，默认1）")
+        }),
+        execute: async ({ searchText, type, occurrence = 1 }: {
+            searchText: string
+            type: 'text' | 'highlight' | 'all'
+            occurrence?: number
+        }) => {
+            try {
+                const pos = findTextPosition(editor, searchText, occurrence)
+                if (!pos) {
+                    return { error: `未找到文本: "${searchText}"` }
+                }
+
+                editor.chain().focus().setTextSelection({ from: pos.from, to: pos.to }).scrollIntoView().run()
+
+                let success = false
+                switch (type) {
+                    case 'text':
+                        success = editor.chain().focus().setTextSelection({ from: pos.from, to: pos.to }).unsetColor().run()
+                        break
+                    case 'highlight':
+                        success = editor.chain().focus().setTextSelection({ from: pos.from, to: pos.to }).unsetHighlight().run()
+                        break
+                    case 'all':
+                        success = editor.chain().focus().setTextSelection({ from: pos.from, to: pos.to }).unsetColor().unsetHighlight().run()
+                        break
+                }
+
+                if (!success) {
+                    return { error: `移除颜色失败` }
+                }
+
+                const typeNames: Record<string, string> = {
+                    text: '文字颜色',
+                    highlight: '高亮颜色',
+                    all: '所有颜色'
+                }
+
+                return {
+                    success: true,
+                    type,
+                    text: pos.text,
+                    from: pos.from,
+                    to: pos.to,
+                    message: `已移除文本 "${pos.text}" 的${typeNames[type]}`
+                }
+            } catch (error) {
+                return { error: `移除颜色失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
+    },
+
     editTableCell: {
         description: '编辑表格中指定单元格的内容',
         inputSchema: z.object({

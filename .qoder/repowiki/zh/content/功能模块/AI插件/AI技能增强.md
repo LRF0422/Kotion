@@ -7,35 +7,39 @@
 - [pnpm-workspace.yaml](file://pnpm-workspace.yaml)
 - [turbo.json](file://turbo.json)
 - [packages/plugin-ai/package.json](file://packages/plugin-ai/package.json)
-- [packages/core/src/ai/foundation/types.ts](file://packages/core/src/ai/foundation/types.ts)
-- [packages/core/src/ai/skills/types.ts](file://packages/core/src/ai/skills/types.ts)
-- [packages/core/src/ai/skills/skillsmp/types.ts](file://packages/core/src/ai/skills/skillsmp/types.ts)
-- [packages/core/src/ai/providers/SkillProvider.ts](file://packages/core/src/ai/providers/SkillProvider.ts)
-- [packages/core/src/ai/use-agent-optimized.tsx](file://packages/core/src/ai/use-agent-optimized.tsx)
-- [packages/core/src/ai/skills/skill-registry.ts](file://packages/core/src/ai/skills/skill-registry.ts)
-- [packages/core/src/ai/discovery/skill-discovery-tools.ts](file://packages/core/src/ai/discovery/skill-discovery-tools.ts)
+- [packages/common/src/ai/foundation/types.ts](file://packages/common/src/ai/foundation/types.ts)
+- [packages/common/src/ai/skills/types.ts](file://packages/common/src/ai/skills/types.ts)
+- [packages/common/src/ai/skills/skillsmp/types.ts](file://packages/common/src/ai/skills/skillsmp/types.ts)
+- [packages/common/src/ai/providers/SkillProvider.ts](file://packages/common/src/ai/providers/SkillProvider.ts)
+- [packages/common/src/ai/use-agent-optimized.tsx](file://packages/common/src/ai/use-agent-optimized.tsx)
+- [packages/common/src/ai/skill-registry.ts](file://packages/common/src/ai/skill-registry.ts)
+- [packages/common/src/ai/discovery/skill-discovery-tools.ts](file://packages/common/src/ai/discovery/skill-discovery-tools.ts)
+- [packages/common/src/ai/discovery/tool-discovery-tools.ts](file://packages/common/src/ai/discovery/tool-discovery-tools.ts)
+- [packages/common/src/ai/discovery/tool-metadata.ts](file://packages/common/src/ai/discovery/tool-metadata.ts)
+- [packages/common/src/ai/providers/ToolProvider.ts](file://packages/common/src/ai/providers/ToolProvider.ts)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts](file://packages/common/src/ai/model-provider/knowledge-provider.ts)
+- [packages/common/src/ai/chat-client/index.ts](file://packages/common/src/ai/chat-client/index.ts)
 - [packages/common/src/core/PluginManager.ts](file://packages/common/src/core/PluginManager.ts)
 - [packages/common/src/core/editor.ts](file://packages/common/src/core/editor.ts)
 - [packages/plugin-ai/src/ai/menu/Chat.tsx](file://packages/plugin-ai/src/ai/menu/Chat.tsx)
-- [packages/core/src/ai/model-provider/knowledge-provider.ts](file://packages/core/src/ai/model-provider/knowledge-provider.ts)
-- [packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts)
-- [packages/core/src/ai/constants.ts](file://packages/core/src/ai/constants.ts)
-- [packages/core/src/ai/types.ts](file://packages/core/src/ai/types.ts)
-- [packages/core/src/ai/foundation/hooks/use-streaming.ts](file://packages/core/src/ai/foundation/hooks/use-streaming.ts)
-- [packages/core/src/ai/discovery/tool-metadata.ts](file://packages/core/src/ai/discovery/tool-metadata.ts)
-- [packages/core/src/ai/discovery/tool-discovery-tools.ts](file://packages/core/src/ai/discovery/tool-discovery-tools.ts)
-- [packages/core/src/ai/providers/ToolProvider.ts](file://packages/core/src/ai/providers/ToolProvider.ts)
+- [packages/common/src/ai/ai-utils.ts](file://packages/common/src/ai/ai-utils.ts)
+- [packages/common/src/ai/constants.ts](file://packages/common/src/ai/constants.ts)
+- [packages/common/src/ai/types.ts](file://packages/common/src/ai/types.ts)
+- [packages/common/src/ai/foundation/hooks/use-streaming.ts](file://packages/common/src/ai/foundation/hooks/use-streaming.ts)
+- [packages/core/src/ai/README_TOOL_DISCOVERY.md](file://packages/core/src/ai/README_TOOL_DISCOVERY.md)
+- [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md)
+- [packages/core/src/ai/ARCHITECTURE.md](file://packages/core/src/ai/ARCHITECTURE.md)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 移除了webSearch工具，完全移除了web工具类别
-- 更新了工具分类描述，移除了web分类的说明
-- 反映了架构决策将Web搜索功能从核心AI系统中解耦
-- 在use-agent-optimized.tsx中将DeepSeek集成替换为新的Knowledge Provider
-- 新增基于引用的状态跟踪机制，改进流式状态和工具配置管理
-- 保持向后兼容性，继续支持原有的AI提供商
-- 增强资源管理和清理机制，确保适当的内存和连接管理
+- 从渐进式发现系统迁移到集中式目录系统架构
+- 新增Knowledge Provider作为主要AI模型提供者
+- 移除web工具类别和webSearch工具
+- 更新工具分类描述，移除web分类说明
+- 增强插件管理器的工具和技能解析能力
+- 优化流式状态管理和资源清理机制
+- 保持向后兼容性，继续支持原有AI提供商
 
 ## 目录
 1. [简介](#简介)
@@ -56,9 +60,9 @@
 
 知识仓库（Knowledge Repo）是一个强大的协作式知识管理平台，集成了丰富的文本编辑、AI驱动功能和广泛的插件生态系统。该项目采用现代Web技术构建，具备实时协作能力和多维度表格、可视化绘图、文件管理等核心功能。
 
-本项目特别专注于AI技能增强系统，通过模块化的AI基础架构为各种AI能力提供统一的接口和管理机制。该系统支持多种AI模型提供商（包括新的Knowledge Provider），具备工具注册表、技能管理系统、代理模式等功能。
+本项目特别专注于AI技能增强系统，通过模块化的AI基础架构为各种AI能力提供统一的接口和管理机制。该系统支持多种AI模型提供商，具备工具注册表、技能管理系统、代理模式等功能。
 
-**更新** 移除了Web搜索功能，完全移除了webSearch工具和web工具类别，反映了架构决策将Web搜索功能从核心AI系统中解耦。同时，在use-agent-optimized.tsx中替换了DeepSeek集成为新的Knowledge Provider，新增了基于引用的状态跟踪机制，改进了流式状态和工具配置管理，保持向后兼容性。
+**更新** 系统已完成从渐进式发现系统到集中式目录系统的架构迁移，新增了Knowledge Provider作为主要AI模型提供者，完全移除了web工具类别和webSearch工具，反映了架构决策将Web搜索功能从核心AI系统中解耦。同时，增强了插件管理器的工具和技能解析能力，改进了流式状态管理和资源清理机制，保持向后兼容性。
 
 ## 项目结构
 
@@ -170,7 +174,7 @@ AIAgent --> SkillRegistryFoundation : "激活"
 ```
 
 **图表来源**
-- [packages/core/src/ai/foundation/types.ts:239-320](file://packages/core/src/ai/foundation/types.ts#L239-L320)
+- [packages/common/src/ai/foundation/types.ts:239-320](file://packages/common/src/ai/foundation/types.ts#L239-L320)
 
 ### 技能管理系统
 
@@ -216,13 +220,13 @@ SkillsMPSkill --> SkillDefinition : "市场导入"
 ```
 
 **图表来源**
-- [packages/core/src/ai/skills/types.ts:10-37](file://packages/core/src/ai/skills/types.ts#L10-L37)
-- [packages/core/src/ai/skills/skillsmp/types.ts:11-24](file://packages/core/src/ai/skills/skillsmp/types.ts#L11-L24)
+- [packages/common/src/ai/skills/types.ts:10-37](file://packages/common/src/ai/skills/types.ts#L10-L37)
+- [packages/common/src/ai/skills/skillsmp/types.ts:11-24](file://packages/common/src/ai/skills/skillsmp/types.ts#L11-L24)
 
 **章节来源**
-- [packages/core/src/ai/foundation/types.ts:1-320](file://packages/core/src/ai/foundation/types.ts#L1-L320)
-- [packages/core/src/ai/skills/types.ts:1-37](file://packages/core/src/ai/skills/types.ts#L1-L37)
-- [packages/core/src/ai/skills/skillsmp/types.ts:1-78](file://packages/core/src/ai/skills/skillsmp/types.ts#L1-L78)
+- [packages/common/src/ai/foundation/types.ts:1-320](file://packages/common/src/ai/foundation/types.ts#L1-L320)
+- [packages/common/src/ai/skills/types.ts:1-37](file://packages/common/src/ai/skills/types.ts#L1-L37)
+- [packages/common/src/ai/skills/skillsmp/types.ts:1-78](file://packages/common/src/ai/skills/skillsmp/types.ts#L1-L78)
 
 ## 架构概览
 
@@ -279,8 +283,8 @@ AIFoundation --> CacheStore
 ```
 
 **图表来源**
-- [packages/core/src/ai/foundation/types.ts:13-35](file://packages/core/src/ai/foundation/types.ts#L13-L35)
-- [packages/core/src/ai/foundation/types.ts:239-320](file://packages/core/src/ai/foundation/types.ts#L239-L320)
+- [packages/common/src/ai/foundation/types.ts:13-35](file://packages/common/src/ai/foundation/types.ts#L13-L35)
+- [packages/common/src/ai/foundation/types.ts:239-320](file://packages/common/src/ai/foundation/types.ts#L239-L320)
 
 ### 插件集成架构
 
@@ -341,7 +345,7 @@ HandleError --> End
 ```
 
 **图表来源**
-- [packages/core/src/ai/foundation/types.ts:71-119](file://packages/core/src/ai/foundation/types.ts#L71-L119)
+- [packages/common/src/ai/foundation/types.ts:71-119](file://packages/common/src/ai/foundation/types.ts#L71-L119)
 
 #### 技能激活流程
 
@@ -369,11 +373,11 @@ Agent-->>User : 技能激活完成
 ```
 
 **图表来源**
-- [packages/core/src/ai/skills/types.ts:24-36](file://packages/core/src/ai/skills/types.ts#L24-L36)
+- [packages/common/src/ai/skills/types.ts:24-36](file://packages/common/src/ai/skills/types.ts#L24-L36)
 
 **章节来源**
-- [packages/core/src/ai/foundation/types.ts:64-147](file://packages/core/src/ai/foundation/types.ts#L64-L147)
-- [packages/core/src/ai/skills/types.ts:19-36](file://packages/core/src/ai/skills/types.ts#L19-L36)
+- [packages/common/src/ai/foundation/types.ts:64-147](file://packages/common/src/ai/foundation/types.ts#L64-L147)
+- [packages/common/src/ai/skills/types.ts:19-36](file://packages/common/src/ai/skills/types.ts#L19-L36)
 
 ### 插件AI组件
 
@@ -536,19 +540,19 @@ SkillProvider-->>User : 技能激活完成
 ```
 
 **图表来源**
-- [packages/core/src/ai/providers/SkillProvider.ts:58-101](file://packages/core/src/ai/providers/SkillProvider.ts#L58-L101)
-- [packages/core/src/ai/use-agent-optimized.tsx:119-126](file://packages/core/src/ai/use-agent-optimized.tsx#L119-L126)
+- [packages/common/src/ai/providers/SkillProvider.ts:58-101](file://packages/common/src/ai/providers/SkillProvider.ts#L58-L101)
+- [packages/common/src/ai/use-agent-optimized.tsx:119-126](file://packages/common/src/ai/use-agent-optimized.tsx#L119-L126)
 
 **章节来源**
 - [packages/common/src/core/PluginManager.ts:337-483](file://packages/common/src/core/PluginManager.ts#L337-L483)
-- [packages/core/src/ai/providers/SkillProvider.ts:58-101](file://packages/core/src/ai/providers/SkillProvider.ts#L58-L101)
-- [packages/core/src/ai/use-agent-optimized.tsx:119-126](file://packages/core/src/ai/use-agent-optimized.tsx#L119-L126)
+- [packages/common/src/ai/providers/SkillProvider.ts:58-101](file://packages/common/src/ai/providers/SkillProvider.ts#L58-L101)
+- [packages/common/src/ai/use-agent-optimized.tsx:119-126](file://packages/common/src/ai/use-agent-optimized.tsx#L119-L126)
 
 ## AI模型提供者优化
 
 ### Knowledge Provider集成
 
-**更新** 新增了Knowledge Provider作为主要的AI模型提供者，替代了原有的DeepSeek集成：
+**更新** 新增了Knowledge Provider作为主要的AI模型提供者：
 
 ```mermaid
 classDiagram
@@ -581,8 +585,8 @@ useEditorAgentOptimized --> KnowledgeProvider : "创建"
 ```
 
 **图表来源**
-- [packages/core/src/ai/model-provider/knowledge-provider.ts:168-354](file://packages/core/src/ai/model-provider/knowledge-provider.ts#L168-L354)
-- [packages/core/src/ai/use-agent-optimized.tsx:33-33](file://packages/core/src/ai/use-agent-optimized.tsx#L33-L33)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:168-354](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L168-L354)
+- [packages/common/src/ai/use-agent-optimized.tsx:33-33](file://packages/common/src/ai/use-agent-optimized.tsx#L33-L33)
 
 ### DeepSeek兼容性层
 
@@ -599,13 +603,13 @@ API_Compatibility --> DeepSeek
 ```
 
 **图表来源**
-- [packages/core/src/ai/ai-utils.ts:1-63](file://packages/core/src/ai/ai-utils.ts#L1-L63)
-- [packages/core/src/ai/constants.ts:16-20](file://packages/core/src/ai/constants.ts#L16-L20)
+- [packages/common/src/ai/ai-utils.ts:1-63](file://packages/common/src/ai/ai-utils.ts#L1-L63)
+- [packages/common/src/ai/constants.ts:16-20](file://packages/common/src/ai/constants.ts#L16-L20)
 
 **章节来源**
-- [packages/core/src/ai/model-provider/knowledge-provider.ts:1-359](file://packages/core/src/ai/model-provider/knowledge-provider.ts#L1-L359)
-- [packages/core/src/ai/ai-utils.ts:1-63](file://packages/core/src/ai/ai-utils.ts#L1-L63)
-- [packages/core/src/ai/constants.ts:16-20](file://packages/core/src/ai/constants.ts#L16-L20)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:1-359](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L1-L359)
+- [packages/common/src/ai/ai-utils.ts:1-63](file://packages/common/src/ai/ai-utils.ts#L1-L63)
+- [packages/common/src/ai/constants.ts:16-20](file://packages/common/src/ai/constants.ts#L16-L20)
 
 ## 流式状态管理改进
 
@@ -630,7 +634,7 @@ Component->>Component : 清理资源和停止生成
 ```
 
 **图表来源**
-- [packages/core/src/ai/use-agent-optimized.tsx:45-59](file://packages/core/src/ai/use-agent-optimized.tsx#L45-L59)
+- [packages/common/src/ai/use-agent-optimized.tsx:45-59](file://packages/common/src/ai/use-agent-optimized.tsx#L45-L59)
 
 ### 资源管理优化
 
@@ -655,10 +659,10 @@ ResetAgent --> End([结束])
 ```
 
 **图表来源**
-- [packages/core/src/ai/use-agent-optimized.tsx:190-240](file://packages/core/src/ai/use-agent-optimized.tsx#L190-L240)
+- [packages/common/src/ai/use-agent-optimized.tsx:190-240](file://packages/common/src/ai/use-agent-optimized.tsx#L190-L240)
 
 **章节来源**
-- [packages/core/src/ai/use-agent-optimized.tsx:45-240](file://packages/core/src/ai/use-agent-optimized.tsx#L45-L240)
+- [packages/common/src/ai/use-agent-optimized.tsx:45-240](file://packages/common/src/ai/use-agent-optimized.tsx#L45-L240)
 
 ## 工具分类系统更新
 
@@ -693,7 +697,7 @@ ToolCategory --> CategoryDescriptions : "描述"
 ```
 
 **图表来源**
-- [packages/core/src/ai/discovery/tool-metadata.ts:29-40](file://packages/core/src/ai/discovery/tool-metadata.ts#L29-L40)
+- [packages/common/src/ai/discovery/tool-metadata.ts:29-40](file://packages/common/src/ai/discovery/tool-metadata.ts#L29-L40)
 
 ### 工具发现工具更新
 
@@ -714,7 +718,7 @@ DiscoveryTools-->>User : 提示分类不存在
 ```
 
 **图表来源**
-- [packages/core/src/ai/discovery/tool-discovery-tools.ts:53-87](file://packages/core/src/ai/discovery/tool-discovery-tools.ts#L53-L87)
+- [packages/common/src/ai/discovery/tool-discovery-tools.ts:53-87](file://packages/common/src/ai/discovery/tool-discovery-tools.ts#L53-L87)
 
 ### 工具提供者更新
 
@@ -737,12 +741,12 @@ ToolProvider --> CategoryInfo : "返回分类信息"
 ```
 
 **图表来源**
-- [packages/core/src/ai/providers/ToolProvider.ts:225-257](file://packages/core/src/ai/providers/ToolProvider.ts#L225-L257)
+- [packages/common/src/ai/providers/ToolProvider.ts:225-257](file://packages/common/src/ai/providers/ToolProvider.ts#L225-L257)
 
 **章节来源**
-- [packages/core/src/ai/discovery/tool-metadata.ts:29-40](file://packages/core/src/ai/discovery/tool-metadata.ts#L29-L40)
-- [packages/core/src/ai/discovery/tool-discovery-tools.ts:53-87](file://packages/core/src/ai/discovery/tool-discovery-tools.ts#L53-L87)
-- [packages/core/src/ai/providers/ToolProvider.ts:225-257](file://packages/core/src/ai/providers/ToolProvider.ts#L225-L257)
+- [packages/common/src/ai/discovery/tool-metadata.ts:29-40](file://packages/common/src/ai/discovery/tool-metadata.ts#L29-L40)
+- [packages/common/src/ai/discovery/tool-discovery-tools.ts:53-87](file://packages/common/src/ai/discovery/tool-discovery-tools.ts#L53-L87)
+- [packages/common/src/ai/providers/ToolProvider.ts:225-257](file://packages/common/src/ai/providers/ToolProvider.ts#L225-L257)
 
 ## 依赖关系分析
 
@@ -939,11 +943,11 @@ Workspace --> Turbo
    - 验证searchAvailableTools是否包含web工具
 
 **章节来源**
-- [packages/core/src/ai/foundation/types.ts:214-236](file://packages/core/src/ai/foundation/types.ts#L214-L236)
-- [packages/core/src/ai/providers/SkillProvider.ts:58-101](file://packages/core/src/ai/providers/SkillProvider.ts#L58-L101)
-- [packages/core/src/ai/use-agent-optimized.tsx:190-240](file://packages/core/src/ai/use-agent-optimized.tsx#L190-L240)
-- [packages/core/src/ai/discovery/tool-metadata.ts:29-40](file://packages/core/src/ai/discovery/tool-metadata.ts#L29-L40)
-- [packages/core/src/ai/discovery/tool-discovery-tools.ts:53-87](file://packages/core/src/ai/discovery/tool-discovery-tools.ts#L53-L87)
+- [packages/common/src/ai/foundation/types.ts:214-236](file://packages/common/src/ai/foundation/types.ts#L214-L236)
+- [packages/common/src/ai/providers/SkillProvider.ts:58-101](file://packages/common/src/ai/providers/SkillProvider.ts#L58-L101)
+- [packages/common/src/ai/use-agent-optimized.tsx:190-240](file://packages/common/src/ai/use-agent-optimized.tsx#L190-L240)
+- [packages/common/src/ai/discovery/tool-metadata.ts:29-40](file://packages/common/src/ai/discovery/tool-metadata.ts#L29-L40)
+- [packages/common/src/ai/discovery/tool-discovery-tools.ts:53-87](file://packages/common/src/ai/discovery/tool-discovery-tools.ts#L53-L87)
 
 ## 结论
 
@@ -958,7 +962,7 @@ Workspace --> Turbo
 7. **向后兼容性**：保持对原有AI提供商的支持
 8. **易于集成**：标准化的插件接口便于第三方开发者集成
 
-**更新** 移除了Web搜索功能，完全移除了webSearch工具和web工具类别，反映了架构决策将Web搜索功能从核心AI系统中解耦。新增的Knowledge Provider作为主要AI模型提供者，替代了原有的DeepSeek集成，同时保持了向后兼容性。基于引用的状态跟踪机制改进了流式状态和工具配置管理，确保适当的清理和资源管理。这些优化显著提升了系统的稳定性和性能。
+**更新** 系统已完成从渐进式发现系统到集中式目录系统的架构迁移，新增了Knowledge Provider作为主要AI模型提供者，完全移除了web工具类别和webSearch工具，反映了架构决策将Web搜索功能从核心AI系统中解耦。增强的插件管理器提供了更强大的工具和技能解析能力，改进的流式状态管理和资源清理机制确保了更好的性能和稳定性。这些优化显著提升了系统的稳定性和性能。
 
 未来的发展方向包括：
 - 增强离线模式支持

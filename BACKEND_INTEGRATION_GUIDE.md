@@ -858,10 +858,12 @@ The request body is an OpenAI-compatible chat payload extended with three fields
 
 Contract guarantees from the frontend:
 
-- `skills` and `tools` contain the **complete** built-in + plugin + user-installed catalog available in the current session. No client-side filtering is performed.
-- `tools[]` uses the `ToolPayload` shape below — **not** OpenAI's `{ type: 'function', function: {...} }` shape. The backend is expected to select a subset and convert to the LLM-facing format as progressive discovery proceeds.
+- `skills` contains the **complete** built-in + plugin + user-installed skill catalog available in the current session. Each skill also embeds the full OpenAI-shaped definitions of its referenced tools in `skill.tools` — this is the only channel through which plugin tool schemas reach the backend.
+- `tools` contains **only built-in tools** at the top level. Plugin tools are intentionally excluded from this array; the backend must read their definitions from the owning skill's `skill.tools` field when that skill is activated.
+- `tools[]` uses the standard OpenAI function-call shape (`{ type: 'function', function: { name, description, parameters } }`), so the backend can forward the selected subset to the LLM without any shape conversion. `skill.tools[]` uses the exact same shape.
 - `capabilitiesVersion` is a stable hash over the catalog. The backend MAY cache the parsed catalog by this hash and skip re-parsing when it is unchanged across turns within the same session.
 - When `tools` / `skills` are empty or omitted, the backend should treat the session as having no external capabilities (the model may still answer with plain text).
+- When the backend asks the frontend to execute a plugin tool (named in a skill's `requiredTools`), it may emit a `tool-call` SSE event for that tool name; the frontend resolves it from its local plugin tool registry and runs it.
 
 ### 8.3 Payload schemas
 
@@ -873,6 +875,13 @@ interface SkillPayload {
     description: string
     requiredTools: string[]         // tool names this skill needs to operate
     optionalTools?: string[]
+    /**
+     * Full OpenAI function-call definitions for this skill's
+     * `requiredTools` (+ `optionalTools`). Deduped by name. This is the
+     * only place plugin tool schemas are transmitted — they are NOT
+     * present in the top-level `tools[]` array.
+     */
+    tools?: ToolPayload[]
     systemPromptFragment?: string   // prompt snippet to splice in when the skill activates
     tags?: string[]
     source: 'builtin' | 'plugin' | 'user'
@@ -884,24 +893,22 @@ The backend is responsible for:
 
 - Deciding **when** a skill should activate based on the user's message + tool-call history.
 - Splicing `systemPromptFragment` into the system prompt when it activates a skill.
-- Exposing `requiredTools` (and optionally `optionalTools`) from the supplied `tools[]` catalog to the LLM.
+- Exposing the activated skill's `tools[]` to the LLM (in addition to, or instead of, the built-in `tools[]` at the top level) so the model can actually call plugin tools. For built-in skills whose `requiredTools` are already in the top-level `tools[]`, `skill.tools` may simply re-state them (the backend can dedupe by name).
 
 #### `ToolPayload`
 
 ```ts
 interface ToolPayload {
-    name: string
-    description: string
-    parameters: object              // JSON Schema (produced from the tool's Zod schema)
-    category: string                // e.g. "navigation", "edit", "analysis"
-    priority: number                // higher = more general-purpose
-    tags: string[]
-    source: 'builtin' | 'plugin'
-    pluginName?: string
+    type: 'function'
+    function: {
+        name: string
+        description: string
+        parameters: object   // JSON Schema (produced from the tool's Zod schema)
+    }
 }
 ```
 
-`parameters` is a plain JSON Schema object — the backend should forward it (possibly after trimming) as the `function.parameters` field when surfacing the tool to the LLM.
+This is the standard OpenAI function-call shape. The backend can forward it directly as an entry in the LLM request's `tools` array.
 
 ### 8.4 Responsibility split
 

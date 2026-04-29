@@ -83,8 +83,6 @@ Respond in the same language the user uses.`
  */
 export const EDITOR_AGENT_PROMPT = `You are an intelligent document editing assistant. Help users edit, organize, and improve their documents.
 
-${CAPABILITIES_NOTE}
-
 ${CORE_EDITING_RULES}
 
 ${DOCUMENT_STRUCTURE_INFO}

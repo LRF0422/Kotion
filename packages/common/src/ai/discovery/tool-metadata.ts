@@ -372,6 +372,142 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         loaded: false,
         source: 'builtin'
     },
+
+    // ===== Link Tools =====
+    {
+        name: 'insertLink',
+        category: 'document-write',
+        description: '在指定文本上插入超链接',
+        priority: 8,
+        tags: ['link', 'hyperlink', 'url'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'removeLink',
+        category: 'document-write',
+        description: '移除指定文本上的超链接',
+        priority: 8,
+        tags: ['link', 'unlink'],
+        loaded: false,
+        source: 'builtin'
+    },
+
+    // ===== Rich Content Tools =====
+    {
+        name: 'setTextColor',
+        category: 'document-structure',
+        description: '设置文本颜色',
+        priority: 6,
+        tags: ['color', 'text', 'format'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'setHighlightColor',
+        category: 'document-structure',
+        description: '设置文本高亮背景色',
+        priority: 6,
+        tags: ['highlight', 'background', 'color'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'removeColor',
+        category: 'document-structure',
+        description: '移除文本颜色和高亮色',
+        priority: 6,
+        tags: ['color', 'remove', 'format'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'insertHorizontalRule',
+        category: 'document-write',
+        description: '插入水平分割线',
+        priority: 6,
+        tags: ['divider', 'horizontal-rule', 'separator'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'insertDetails',
+        category: 'document-write',
+        description: '插入可折叠/展开的详情块',
+        priority: 6,
+        tags: ['details', 'collapsible', 'toggle'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'indentListItem',
+        category: 'document-structure',
+        description: '增加列表项的缩进层级',
+        priority: 7,
+        tags: ['list', 'indent', 'nesting'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'outdentListItem',
+        category: 'document-structure',
+        description: '减少列表项的缩进层级',
+        priority: 7,
+        tags: ['list', 'outdent', 'nesting'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'setCodeBlockLanguage',
+        category: 'document-structure',
+        description: '设置代码块的编程语言',
+        priority: 7,
+        tags: ['code', 'language', 'syntax'],
+        loaded: false,
+        source: 'builtin'
+    },
+
+    // ===== History Tools =====
+    {
+        name: 'undo',
+        category: 'interaction',
+        description: '撤销上一步操作',
+        priority: 9,
+        tags: ['undo', 'history', 'recovery'],
+        loaded: false,
+        source: 'builtin'
+    },
+
+    // ===== Selection Tools =====
+    {
+        name: 'getSelection',
+        category: 'document-read',
+        description: '获取当前选区位置和选中内容',
+        priority: 8,
+        tags: ['selection', 'cursor', 'position'],
+        loaded: false,
+        source: 'builtin'
+    },
+
+    // ===== Range Tools =====
+    {
+        name: 'replaceRange',
+        category: 'document-write',
+        description: '在精确位置范围内替换文本内容',
+        priority: 9,
+        tags: ['edit', 'replace', 'position', 'precision'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'formatRange',
+        category: 'document-structure',
+        description: '在精确位置范围内应用格式',
+        priority: 9,
+        tags: ['format', 'position', 'precision'],
+        loaded: false,
+        source: 'builtin'
+    },
 ]
 
 /**

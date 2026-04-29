@@ -22,14 +22,22 @@
 - [packages/common/src/ai/use-agent-optimized.tsx](file://packages/common/src/ai/use-agent-optimized.tsx)
 - [packages/common/src/ai/foundation/hooks/use-streaming.ts](file://packages/common/src/ai/foundation/hooks/use-streaming.ts)
 - [packages/common/src/ai/utils/use-stream-buffer.ts](file://packages/common/src/ai/utils/use-stream-buffer.ts)
+- [packages/common/src/ai/capabilities/CapabilityCatalog.ts](file://packages/common/src/ai/capabilities/CapabilityCatalog.ts)
+- [packages/common/src/ai/capabilities/index.ts](file://packages/common/src/ai/capabilities/index.ts)
+- [packages/common/src/ai/providers/SkillProvider.ts](file://packages/common/src/ai/providers/SkillProvider.ts)
+- [packages/common/src/ai/providers/ToolProvider.ts](file://packages/common/src/ai/providers/ToolProvider.ts)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts](file://packages/common/src/ai/model-provider/knowledge-provider.ts)
+- [packages/common/src/ai/ai-utils.ts](file://packages/common/src/ai/ai-utils.ts)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 重构SSE解析器，从单事件处理改为多事件处理机制
-- 工具调用匹配从ID-based改为index-based，符合OpenAI流式规范
-- 更新AI聊天系统架构以支持多事件流式处理
-- 增强工具调用解析的健壮性和兼容性
+- 新增能力目录集成系统，支持技能和工具的完整目录收集
+- 增强推理内容流式传输支持，包含reasoning-delta事件类型
+- 新增模型发现功能，支持动态获取可用模型列表
+- 重构工具调用匹配机制，完全符合OpenAI流式规范
+- 更新SSE解析器以支持多事件流式处理和工具调用索引匹配
+- 增强注解事件处理，支持Data Stream v2协议
 
 ## 目录
 1. [简介](#简介)
@@ -46,6 +54,13 @@
 
 AI聊天客户端系统是一个基于现代Web技术构建的协作知识管理平台，集成了丰富的文本编辑、实时协作、AI智能功能和可扩展的插件生态系统。该系统采用Electron框架开发桌面应用程序，支持多平台部署（Windows、macOS、Linux），为用户提供强大的AI聊天交互体验。
 
+**新增功能**：
+- **能力目录集成**：完整的技能和工具目录收集系统，支持inline发送到后端
+- **推理内容流式传输**：支持reasoning-delta事件，实现思维过程的实时展示
+- **模型发现功能**：动态获取可用模型列表，支持模型切换和配置
+- **增强的SSE流式处理**：支持多事件流式解析和工具调用索引匹配
+- **注解事件处理**：支持Data Stream v2协议的注解事件传输
+
 系统的核心特性包括：
 - **富文本编辑器**：基于Tiptap的协作编辑功能
 - **实时协作**：通过Hocuspocus实现多用户同步编辑
@@ -53,7 +68,6 @@ AI聊天客户端系统是一个基于现代Web技术构建的协作知识管理
 - **插件架构**：可扩展的插件系统支持自定义功能
 - **多维度表格**：支持多种视图模式的数据管理
 - **可视化绘图**：集成多种图表工具如Excalidraw、DrawIO、Mermaid等
-- **增强的SSE流式处理**：支持多事件流式解析和工具调用匹配
 
 ## 项目结构
 
@@ -82,6 +96,12 @@ subgraph "适配层"
 ElectronAdapter[Electron适配<br/>packages/electron-adapter]
 RoomServer[协作服务器<br/>packages/room-server]
 end
+subgraph "AI能力系统"
+CapabilityCatalog[能力目录<br/>packages/common/src/ai/capabilities]
+SkillProvider[技能提供者<br/>packages/common/src/ai/providers]
+ToolProvider[工具提供者<br/>packages/common/src/ai/providers]
+KnowledgeProvider[知识提供者<br/>packages/common/src/ai/model-provider]
+end
 Desktop --> Core
 Desktop --> AIPlugin
 Desktop --> FileManager
@@ -90,6 +110,9 @@ Desktop --> UI
 ViteApp --> Core
 ViteApp --> AIPlugin
 LandingPage --> UI
+CapabilityCatalog --> SkillProvider
+CapabilityCatalog --> ToolProvider
+KnowledgeProvider --> CapabilityCatalog
 ```
 
 **图表来源**
@@ -120,15 +143,28 @@ AI插件是系统的核心功能模块，提供智能聊天和内容生成功能
 - **图像生成**：集成AI图像创建功能
 - **多模态处理**：支持文本、图像等多种内容类型
 - **增强的SSE解析**：支持多事件流式处理和工具调用匹配
+- **能力目录集成**：完整的技能和工具目录收集系统
+- **推理内容传输**：支持思维过程的实时展示
 
-### 电子适配层
+### 能力目录系统
 
-电子适配层为桌面应用提供底层系统服务：
+能力目录系统是AI功能的核心基础设施，提供完整的技能和工具目录管理：
 
-- **认证管理**：处理用户登录、注册和权限验证
-- **存储适配**：统一管理本地和云端数据存储
-- **插件缓存**：管理插件的下载和缓存机制
-- **HTTP客户端**：封装API请求和响应处理
+- **技能目录收集**：收集内置、插件和用户安装的技能
+- **工具目录管理**：管理完整的工具元数据和执行器
+- **目录版本控制**：基于哈希的目录版本管理，支持缓存优化
+- **前端执行支持**：支持工具在前端的即时执行
+- **后端激活机制**：通过技能负载向后端传递工具定义
+
+### 知识提供者
+
+知识提供者是AI模型的核心适配层，实现与后端服务的通信：
+
+- **模型发现**：支持动态获取可用模型列表
+- **流式传输**：支持Data Stream v2协议的流式响应
+- **注解处理**：处理代理状态、委托任务等注解事件
+- **双向工具调用**：支持前后端的工具调用协作
+- **重试机制**：实现指数退避的请求重试逻辑
 
 ### SSE流式处理系统
 
@@ -138,12 +174,15 @@ SSE流式处理系统是AI聊天的核心基础设施，支持高效的实时数
 - **工具调用匹配**：基于索引的工具调用解析机制
 - **流式缓冲**：优化UI更新频率的RAF缓冲机制
 - **错误处理**：完善的流式传输错误恢复机制
+- **推理内容支持**：支持思维过程的增量传输
 
 **章节来源**
 - [apps/desktop/src/main/index.ts:1-115](file://apps/desktop/src/main/index.ts#L1-L115)
 - [apps/desktop/src/main/services.ts:1-197](file://apps/desktop/src/main/services.ts#L1-L197)
 - [packages/plugin-ai/package.json:1-30](file://packages/plugin-ai/package.json#L1-L30)
 - [packages/common/src/ai/chat-client/sse-parser.ts:1-242](file://packages/common/src/ai/chat-client/sse-parser.ts#L1-L242)
+- [packages/common/src/ai/capabilities/CapabilityCatalog.ts:1-127](file://packages/common/src/ai/capabilities/CapabilityCatalog.ts#L1-L127)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:1-422](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L1-L422)
 
 ## 架构概览
 
@@ -155,12 +194,14 @@ subgraph "表现层"
 Renderer[渲染进程<br/>React应用]
 UIComponents[UI组件库]
 StreamingHooks[流式处理钩子]
+ChatMenu[聊天菜单<br/>packages/plugin-ai]
 end
 subgraph "业务逻辑层"
 CoreLogic[核心业务逻辑]
 PluginSystem[插件系统]
 AISystem[AI智能系统]
 AgentOptimized[优化AI代理]
+CapabilitySystem[能力目录系统]
 end
 subgraph "数据访问层"
 StorageAdapter[存储适配器]
@@ -173,6 +214,14 @@ PluginCache[插件缓存服务]
 FileSystem[文件系统]
 SSEParser[SSE解析器]
 ToolMatcher[工具匹配器]
+ModelDiscovery[模型发现]
+CapabilityCollector[能力收集器]
+end
+subgraph "AI能力层"
+SkillProvider[技能提供者]
+ToolProvider[工具提供者]
+KnowledgeProvider[知识提供者]
+CapabilityCatalog[能力目录]
 end
 Renderer --> UIComponents
 Renderer --> StreamingHooks
@@ -182,10 +231,13 @@ ToolMatcher --> AgentOptimized
 AgentOptimized --> CoreLogic
 CoreLogic --> PluginSystem
 CoreLogic --> AISystem
-PluginSystem --> StorageAdapter
-AISystem --> StorageAdapter
-StorageAdapter --> Database
-StorageAdapter --> CloudAPI
+AISystem --> CapabilitySystem
+CapabilitySystem --> SkillProvider
+CapabilitySystem --> ToolProvider
+SkillProvider --> CapabilityCatalog
+ToolProvider --> CapabilityCatalog
+CapabilityCatalog --> KnowledgeProvider
+KnowledgeProvider --> ModelDiscovery
 Renderer --> AuthManager
 PluginSystem --> PluginCache
 FileSystem --> StorageAdapter
@@ -196,6 +248,8 @@ FileSystem --> StorageAdapter
 - [apps/desktop/src/main/ipc.ts:18-829](file://apps/desktop/src/main/ipc.ts#L18-L829)
 - [packages/common/src/ai/chat-client/sse-parser.ts:35-70](file://packages/common/src/ai/chat-client/sse-parser.ts#L35-L70)
 - [packages/common/src/ai/use-agent-optimized.tsx:355-389](file://packages/common/src/ai/use-agent-optimized.tsx#L355-L389)
+- [packages/common/src/ai/capabilities/CapabilityCatalog.ts:22-112](file://packages/common/src/ai/capabilities/CapabilityCatalog.ts#L22-L112)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:360-421](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L360-L421)
 
 ## 详细组件分析
 
@@ -275,8 +329,12 @@ Start([用户输入]) --> ValidateInput["验证输入参数"]
 ValidateInput --> CheckAuth{"用户已认证?"}
 CheckAuth --> |否| RedirectLogin["重定向到登录页面"]
 CheckAuth --> |是| PreparePrompt["准备AI提示词"]
-PreparePrompt --> SelectModel["选择AI模型"]
-SelectModel --> StreamResponse["开始流式响应"]
+PreparePrompt --> CheckReasoning{"推理模式?"}
+CheckReasoning --> |是| LoadReasoningContent["加载推理内容"]
+CheckReasoning --> |否| SelectModel["选择AI模型"]
+LoadReasoningContent --> SelectModel
+SelectModel --> CollectCatalog["收集能力目录"]
+CollectCatalog --> StreamResponse["开始流式响应"]
 StreamResponse --> ParseSSE["解析SSE事件流"]
 ParseSSE --> MultiEvent{"多事件处理?"}
 MultiEvent --> |是| ExtractEvents["提取多个事件类型"]
@@ -300,6 +358,71 @@ RedirectLogin --> End
 **章节来源**
 - [apps/desktop/src/main/ipc.ts:21-69](file://apps/desktop/src/main/ipc.ts#L21-L69)
 - [apps/desktop/src/main/ipc.ts:531-550](file://apps/desktop/src/main/ipc.ts#L531-L550)
+
+### 能力目录系统
+
+能力目录系统是AI功能的核心基础设施，提供完整的技能和工具目录管理：
+
+```mermaid
+flowchart TD
+InitProviders["初始化提供者"] --> CollectSkills["收集技能目录"]
+CollectSkills --> FilterBuiltin["过滤内置工具"]
+FilterBuiltin --> MapTools["映射工具定义"]
+MapTools --> EmbedTools["嵌入工具到技能"]
+EmbedTools --> HashCatalog["计算目录哈希"]
+HashCatalog --> VersionControl["版本控制"]
+VersionControl --> SendToBackend["发送到后端"]
+SendToBackend --> CacheOptimization["缓存优化"]
+CacheOptimization --> Ready([就绪])
+```
+
+**图表来源**
+- [packages/common/src/ai/capabilities/CapabilityCatalog.ts:37-112](file://packages/common/src/ai/capabilities/CapabilityCatalog.ts#L37-L112)
+- [packages/common/src/ai/providers/SkillProvider.ts:16-109](file://packages/common/src/ai/providers/SkillProvider.ts#L16-L109)
+- [packages/common/src/ai/providers/ToolProvider.ts:31-177](file://packages/common/src/ai/providers/ToolProvider.ts#L31-L177)
+
+### 模型发现功能
+
+模型发现功能允许动态获取可用的AI模型列表：
+
+```mermaid
+sequenceDiagram
+participant UI as 用户界面
+participant Agent as AI代理
+participant Provider as 知识提供者
+participant API as 后端API
+UI->>Agent : 请求模型列表
+Agent->>Provider : 调用fetchModels()
+Provider->>API : GET /api/v1/models
+API-->>Provider : 返回模型列表
+Provider-->>Agent : 解析模型信息
+Agent-->>UI : 显示可用模型
+```
+
+**图表来源**
+- [packages/common/src/ai/chat-client/index.ts:370-395](file://packages/common/src/ai/chat-client/index.ts#L370-L395)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:200-210](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L200-L210)
+
+### 推理内容流式传输
+
+推理内容流式传输支持思维过程的实时展示：
+
+```mermaid
+flowchart TD
+Start([开始推理]) --> ReasoningDelta["接收推理增量"]
+ReasoningDelta --> BufferContent["缓冲推理内容"]
+BufferContent --> UpdateUI["更新UI显示"]
+UpdateUI --> CheckFinish{"推理完成?"}
+CheckFinish --> |否| ReasoningDelta
+CheckFinish --> |是| AssistantMessage["发送助手消息"]
+AssistantMessage --> IncludeToolCalls["包含工具调用"]
+IncludeToolCalls --> ContinueConversation["继续对话"]
+ContinueConversation --> End([结束])
+```
+
+**图表来源**
+- [packages/common/src/ai/chat-client/types.ts:196-240](file://packages/common/src/ai/chat-client/types.ts#L196-L240)
+- [packages/common/src/ai/use-agent-optimized.tsx:336-341](file://packages/common/src/ai/use-agent-optimized.tsx#L336-L341)
 
 ### SSE解析器重构
 
@@ -415,6 +538,7 @@ subgraph "AI相关依赖"
 DeepSeek["@ai-sdk/deepseek"]
 VercelSDK["ai"]
 ReactAI["@ai-sdk/react"]
+AI_SDK["@ai-sdk/provider"]
 end
 DesktopApp --> CorePackage
 DesktopApp --> UIPackage
@@ -423,6 +547,7 @@ CorePackage --> React
 CorePackage --> Typescript
 CorePackage --> DeepSeek
 CorePackage --> VercelSDK
+CorePackage --> AI_SDK
 DesktopApp --> Electron
 DesktopApp --> Turborepo
 ```
@@ -449,18 +574,27 @@ DesktopApp --> Turborepo
 - **连接池**：HTTP客户端使用连接池提高请求效率
 - **流式处理**：AI响应采用流式传输减少等待时间
 - **SSE优化**：多事件解析器减少事件处理开销
+- **模型发现缓存**：模型列表的智能缓存机制
 
 ### 前端性能
 - **代码分割**：使用Vite的动态导入实现按需加载
 - **组件优化**：React.memo和useMemo减少不必要的重渲染
 - **懒加载**：插件和大型组件采用懒加载策略
 - **RAF缓冲**：requestAnimationFrame优化UI更新频率
+- **能力目录缓存**：基于版本号的能力目录缓存
 
 ### SSE流式处理优化
 - **多事件处理**：单次解析提取多个事件类型，减少解析次数
 - **索引匹配**：基于索引的工具调用匹配比ID匹配更高效
 - **流式缓冲**：RAF缓冲机制优化UI渲染性能
 - **超时处理**：60秒超时机制防止流式传输挂起
+- **推理内容优化**：推理增量的实时缓冲和展示
+
+### 能力目录优化
+- **哈希缓存**：基于FNV-1a算法的目录哈希，支持后端缓存
+- **增量更新**：仅在目录变化时更新版本号
+- **工具分类**：内置工具和插件工具的分类管理
+- **技能嵌入**：工具定义嵌入到技能负载中，减少往返通信
 
 ## 故障排除指南
 
@@ -476,6 +610,7 @@ DesktopApp --> Turborepo
 2. 验证网络连接和代理设置
 3. 查看AI服务日志获取错误详情
 4. 检查SSE解析器错误日志
+5. 验证能力目录收集是否正常
 
 **插件加载问题**
 1. 检查插件缓存目录权限
@@ -487,6 +622,19 @@ DesktopApp --> Turborepo
 2. 验证SSE事件格式是否符合规范
 3. 查看工具调用匹配日志
 4. 检查RAF缓冲机制是否正常工作
+5. 验证推理内容传输是否正常
+
+**模型发现失败**
+1. 检查后端模型API是否可达
+2. 验证模型列表格式是否正确
+3. 查看模型发现错误日志
+4. 确认网络代理配置
+
+**能力目录问题**
+1. 检查技能提供者是否正确注册
+2. 验证工具提供者的元数据完整性
+3. 查看目录哈希计算是否正常
+4. 确认后端缓存机制是否工作
 
 ### 调试工具
 
@@ -495,6 +643,7 @@ DesktopApp --> Turborepo
 - React Developer Tools检查组件状态
 - 浏览器开发者工具分析网络请求
 - SSE调试工具监控事件流
+- 能力目录调试工具检查目录内容
 
 **日志监控**
 - 应用程序日志记录关键操作和错误
@@ -502,6 +651,8 @@ DesktopApp --> Turborepo
 - 插件系统日志监控插件生命周期
 - SSE解析器日志记录事件处理过程
 - 工具调用匹配日志记录索引解析过程
+- 能力目录日志记录目录收集和版本管理
+- 模型发现日志记录模型列表获取过程
 
 **章节来源**
 - [apps/desktop/src/main/index.ts:42-48](file://apps/desktop/src/main/index.ts#L42-L48)
@@ -520,5 +671,15 @@ AI聊天客户端系统是一个功能完整、架构清晰的现代化桌面应
 5. **开发友好**：完善的开发工具链和文档支持
 6. **SSE优化**：重构的SSE解析器支持多事件处理和索引匹配
 7. **兼容性**：完全符合OpenAI流式规范的工具调用机制
+8. **能力目录**：完整的技能和工具目录管理系统
+9. **推理支持**：支持思维过程的实时展示和传输
+10. **模型发现**：动态获取可用模型列表的功能
 
-该系统为知识管理场景提供了强大的AI辅助工具，通过智能聊天交互提升用户的工作效率和创造力。重构后的SSE解析器和工具调用匹配机制显著提升了系统的稳定性和性能，为未来的功能扩展奠定了坚实的基础。未来的发展方向包括移动端支持、离线模式和更丰富的AI功能集成。
+**新增功能总结**：
+- **能力目录集成**：从渐进式发现转向完整目录发送，提升后端处理效率
+- **推理内容流式传输**：支持reasoning-delta事件，实现思维过程的实时展示
+- **模型发现功能**：动态获取可用模型列表，支持模型切换和配置
+- **增强的SSE处理**：支持多事件流式处理和工具调用索引匹配
+- **注解事件处理**：支持Data Stream v2协议的完整注解事件传输
+
+该系统为知识管理场景提供了强大的AI辅助工具，通过智能聊天交互提升用户的工作效率和创造力。重构后的SSE解析器、工具调用匹配机制和新增的能力目录系统显著提升了系统的稳定性和性能，为未来的功能扩展奠定了坚实的基础。新增的推理内容传输和模型发现功能进一步增强了系统的智能化水平，为用户提供更加丰富和自然的AI交互体验。

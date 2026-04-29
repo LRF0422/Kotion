@@ -43,29 +43,34 @@
 - [packages/common/src/core/PluginManager.ts](file://packages/common/src/core/PluginManager.ts)
 - [packages/editor/src/editor/build-in-extension.ts](file://packages/editor/src/editor/build-in-extension.ts)
 - [packages/editor/src/editor/use-extension.ts](file://packages/editor/src/editor/use-extension.ts)
-- [.env.example](file://.env.example)
-- [apps/vite/.env.development](file://apps/vite/.env.development)
-- [apps/vite/.env.production](file://apps/vite/.env.production)
+- [packages/core/src/ai/tools/format-tools.ts](file://packages/core/src/ai/tools/format-tools.ts)
+- [packages/core/src/ai/system-agent/AIAssistantPanel.tsx](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx)
+- [packages/common/src/ai/constants.ts](file://packages/common/src/ai/constants.ts)
+- [packages/common/src/ai/discovery/tool-metadata.ts](file://packages/common/src/ai/discovery/tool-metadata.ts)
+- [packages/common/src/ai/system-agent/context.tsx](file://packages/common/src/ai/system-agent/context.tsx)
+- [packages/common/src/ai/foundation/agent/agent-service.ts](file://packages/common/src/ai/foundation/agent/agent-service.ts)
+- [packages/common/src/ai/system-agent/hooks.ts](file://packages/common/src/ai/system-agent/hooks.ts)
 - [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md)
 - [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md)
 - [packages/core/src/ai/README_TOOL_DISCOVERY.md](file://packages/core/src/ai/README_TOOL_DISCOVERY.md)
 - [packages/core/src/ai/ARCHITECTURE.md](file://packages/core/src/ai/ARCHITECTURE.md)
 - [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts)
 - [docs/api/skills-api.md](file://docs/api/skills-api.md)
+- [.env.example](file://.env.example)
+- [apps/vite/.env.development](file://apps/vite/.env.development)
+- [apps/vite/.env.production](file://apps/vite/.env.production)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 新增AI内联助手系统（AiInlineMenu.tsx）：提供浮动面板界面、实时流式响应、执行步骤跟踪、用户选择提示等功能
-- 增强列管理工具：支持嵌套列布局、改进编辑器效果工具、增强列管理功能
-- 改进工具系统：新增insertNestedColumns工具、增强工具元数据系统、改进工具执行跟踪
-- 更新插件集成：在AIExtension中集成AiInlineTrigger和AiInlinePanel组件
-- **重大UI组件更新**：Chat.tsx、MessageBubble.tsx等组件增强，改进聊天维度和React context集成
-- **新增流式缓冲机制**：use-streaming-buffer.ts提供requestAnimationFrame优化的流式渲染
-- **增强的执行步骤显示**：ExecutionStepsDisplay.tsx提供完整的工具执行可视化
-- **改进的错误处理**：ErrorDisplay.tsx提供友好的错误提示和重试机制
-- **会话管理增强**：useSessionManager.ts提供持久化的会话和对话ID管理
-- **团队状态面板**：TeamStatusPanel.tsx和useTeamStatus.ts提供AgentTeam状态可视化
+- **架构重大转变**：从渐进式工具发现系统转向集中式目录系统，工具元数据统一管理
+- **新增格式化工具**：完整的文本格式化和表格操作工具集，支持内联格式、表格插入、编辑和删除
+- **AI助手面板增强**：全新的AI Assistant Panel提供全局悬浮面板、工具调用可视化、流式响应等功能
+- **工具元数据系统重构**：统一的工具分类、优先级和标签系统，支持智能搜索和排序
+- **技能生态系统优化**：SkillsMP集成、技能注册表管理、工具提供商系统
+- **AI内联助手系统完善**：浮动面板界面、实时流式响应、执行步骤跟踪、用户选择提示
+- **增强的列管理工具**：支持嵌套列布局、改进编辑器效果工具、增强列管理功能
+- **改进的工具系统**：新增insertNestedColumns工具、增强工具元数据系统、改进工具执行跟踪
 
 ## 目录
 1. [简介](#简介)
@@ -75,31 +80,26 @@
 5. [组件详解](#组件详解)
 6. [AI技能生态系统](#ai技能生态系统)
 7. [AI内联助手系统](#ai内联助手系统)
-8. [增强的列管理工具](#增强的列管理工具)
-9. [UI组件系统](#ui组件系统)
-10. [依赖关系分析](#依赖关系分析)
-11. [性能与可用性建议](#性能与可用性建议)
-12. [故障排查指南](#故障排查指南)
-13. [结论](#结论)
-14. [附录：使用示例与最佳实践](#附录使用示例与最佳实践)
+8. [格式化工具系统](#格式化工具系统)
+9. [AI助手面板](#ai助手面板)
+10. [工具元数据系统](#工具元数据系统)
+11. [技能生态系统](#技能生态系统)
+12. [依赖关系分析](#依赖关系分析)
+13. [性能与可用性建议](#性能与可用性建议)
+14. [故障排查指南](#故障排查指南)
+15. [结论](#结论)
+16. [附录：使用示例与最佳实践](#附录使用示例与最佳实践)
 
 ## 简介
 本文件面向希望在编辑器中集成AI能力（文本生成、图像生成与智能编辑）的开发者与产品团队。文档围绕"AI技能生态系统"和"AI内联助手系统"展开，系统阐述以下内容：
-- **全新的AI内联助手系统**：提供浮动面板界面、实时流式响应、执行步骤跟踪、用户选择提示等功能
+- **全新的集中式目录系统**：统一的工具元数据管理，支持智能分类、优先级排序和标签搜索
+- **增强的格式化工具系统**：完整的文本格式化和表格操作工具集，支持内联格式、表格插入、编辑和删除
+- **AI助手面板**：全新的全局悬浮面板，提供AI助手功能和工具调用可视化
+- **AI内联助手系统**：提供浮动面板界面、实时流式响应、执行步骤跟踪、用户选择提示等功能
+- **技能生态系统**：集成SkillsMP平台，支持技能搜索、安装、管理和评价
+- **工具元数据系统**：统一的工具分类、优先级和标签系统，支持智能搜索和排序
 - **增强的列管理工具**：支持嵌套列布局、改进编辑器效果工具、增强列管理功能
-- **改进的工具系统**：新增insertNestedColumns工具、增强工具元数据系统、改进工具执行跟踪
-- **全新的AI技能市场系统**：集成SkillsMP平台，支持技能搜索、安装、管理和评价
-- **渐进式工具发现系统**：基于智能元数据的工具搜索和按需加载机制
-- **技能注册表管理**：提供技能生命周期管理、版本控制和依赖解析
-- **智能工具提供商**：支持插件动态注册工具，实现按需加载机制
-- **增强的AI代理系统**：基于优化的use-agent-optimized.tsx，提供强大的工具调用能力和智能编辑功能
 - **完整的工具系统**：包含读取、插入、删除、列布局和杂项五大类工具，支持复杂的文档操作
-- **增强的Markdown处理**：提供完整的Markdown解析器，支持表格、列表、代码块等复杂格式
-- **Web搜索集成**：内置Web搜索功能，支持外部信息获取和网页内容提取
-- **安全的API密钥管理**：移除了硬编码的DeepSeek API密钥，通过环境变量和设置面板进行安全配置
-- **插件集成与参数配置**：通过插件配置注入编辑器扩展、浮动菜单、静态菜单与斜杠命令，统一多语言文案与本地化资源
-- **结果处理与错误处理**：对流式文本与图像生成进行状态切换、结果回填与错误提示
-- **性能优化与最佳实践**：针对长文本流式渲染、并发生成与网络请求进行优化建议
 - **现代化UI组件系统**：Chat.tsx、MessageBubble.tsx等组件提供流畅的用户体验和丰富的交互功能
 
 ## 项目结构
@@ -113,10 +113,11 @@ AI插件位于 packages/plugin-ai，核心由以下模块组成：
 - **菜单与聊天**：提供静态菜单（一键改写、语气、翻译等）与浮动聊天视图
 - **AI设置面板**：提供API端点和密钥配置界面，支持安全的密钥管理
 - **AI内联助手系统**：提供浮动面板界面、实时流式响应、执行步骤跟踪、用户选择提示
+- **格式化工具系统**：完整的文本格式化和表格操作工具集
+- **AI助手面板**：全局悬浮面板，提供AI助手功能和工具调用可视化
+- **工具元数据系统**：统一的工具分类、优先级和标签管理
 - **技能市场集成**：集成SkillsMP平台，支持技能搜索、安装和管理
 - **技能注册表**：提供技能生命周期管理、版本控制和依赖解析
-- **发现工具**：基于渐进式工具发现系统，支持智能工具搜索和加载
-- **技能提供商**：提供技能商店、分类管理和评价系统
 - **工具提供商**：支持插件动态注册工具，实现按需加载机制
 - **优化的AI代理系统**：全新的use-agent-optimized.tsx，提供强大的工具调用能力
 - **完整的工具系统**：五大类工具模块，支持复杂的文档操作
@@ -139,6 +140,8 @@ SM["静态菜单<br/>AiStaticMenu.tsx"]
 CH["聊天视图<br/>Chat.tsx"]
 AS["AI设置面板<br/>AISettings.tsx"]
 IL["AI内联助手<br/>AiInlineMenu.tsx"]
+AAP["AI助手面板<br/>AIAssistantPanel.tsx"]
+FT["格式化工具<br/>format-tools.ts"]
 end
 subgraph "UI组件层"
 CHAT["聊天组件<br/>Chat.tsx"]
@@ -154,7 +157,7 @@ end
 subgraph "技能生态系统层"
 SK["SkillsMP集成<br/>use-skillsmp.ts"]
 SR["技能注册表<br/>技能生命周期管理"]
-DT["发现工具<br/>渐进式工具发现"]
+DT["工具元数据<br/>集中式目录系统"]
 SP["技能提供商<br/>技能商店管理"]
 TP["工具提供商<br/>插件工具注册"]
 end
@@ -166,7 +169,7 @@ MD["Markdown解析器<br/>markdown-parser.ts"]
 WS["Web搜索<br/>web-search.ts"]
 TW["工具包装器<br/>tool-wrapper.ts"]
 EE["编辑器效果工具<br/>editor-effects.ts"]
-TM["工具元数据<br/>tool-metadata.ts"]
+CM["工具常量<br/>constants.ts"]
 end
 subgraph "配置层"
 ENV["环境变量配置<br/>.env.example"]
@@ -187,6 +190,8 @@ AIEXT --> SM
 AIEXT --> CH
 AIEXT --> AS
 AIEXT --> IL
+AIEXT --> AAP
+AIEXT --> FT
 E1 --> V1
 E2 --> V2
 V1 --> U
@@ -204,7 +209,9 @@ AS --> ENV
 AS --> DEV
 AS --> PROD
 IL --> EE
-IL --> TM
+IL --> DT
+AAP --> CM
+AAP --> C2
 SK --> SR
 SK --> DT
 SK --> SP
@@ -230,6 +237,10 @@ CHAT --> PERSIST
 - [packages/core/src/ai/utils/web-search.ts:1-172](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
 - [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
 - [packages/core/src/ai/discovery/tool-metadata.ts:268-419](file://packages/core/src/ai/discovery/tool-metadata.ts#L268-L419)
+- [packages/core/src/ai/tools/format-tools.ts:1-505](file://packages/core/src/ai/tools/format-tools.ts#L1-L505)
+- [packages/core/src/ai/system-agent/AIAssistantPanel.tsx:1-538](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx#L1-L538)
+- [packages/common/src/ai/constants.ts:1-143](file://packages/common/src/ai/constants.ts#L1-L143)
+- [packages/common/src/ai/discovery/tool-metadata.ts:1-404](file://packages/common/src/ai/discovery/tool-metadata.ts#L1-L404)
 - [.env.example:1-24](file://.env.example#L1-L24)
 - [apps/vite/.env.development:1-23](file://apps/vite/.env.development#L1-L23)
 - [apps/vite/.env.production:1-23](file://apps/vite/.env.production#L1-L23)
@@ -238,6 +249,8 @@ CHAT --> PERSIST
 - **插件入口与注册**
   - 定义插件实例，声明编辑器扩展数组、浮动菜单、静态菜单与斜杠命令，供插件管理器在运行时合并与注入
   - **新增AI内联助手系统集成**：在AIExtension中集成AiInlineTrigger和AiInlinePanel组件
+  - **新增AI助手面板集成**：集成AIAssistantPanel组件提供全局悬浮面板
+  - **新增格式化工具集成**：集成format-tools工具集
   - 关键路径参考：[packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/plugin-ai/src/ai/index.tsx:1-66](file://packages/plugin-ai/src/ai/index.tsx#L1-L66)
 
 - **AI文本节点与命令**
@@ -289,6 +302,29 @@ CHAT --> PERSIST
   - **执行步骤跟踪**：实时显示工具执行状态、结果和耗时
   - 关键路径参考：[packages/core/src/ai/AiInlineMenu.tsx:1-435](file://packages/core/src/ai/AiInlineMenu.tsx#L1-L435)
 
+- **格式化工具系统**
+  - **文本格式化**：支持内联格式（加粗、斜体、下划线、删除线、代码）
+  - **表格操作**：支持表格插入、结构操作、单元格编辑、删除
+  - **工具定义**：完整的TypeScript类型定义和输入验证
+  - **编辑器集成**：与ProseMirror编辑器无缝集成
+  - 关键路径参考：[packages/core/src/ai/tools/format-tools.ts:1-505](file://packages/core/src/ai/tools/format-tools.ts#L1-L505)
+
+- **AI助手面板**
+  - **全局悬浮面板**：提供AI助手功能，支持全局访问
+  - **流式响应**：实时流式文本生成和工具调用可视化
+  - **工具调用**：显示工具执行步骤、参数和结果
+  - **错误处理**：友好的错误提示和重试机制
+  - **会话管理**：支持持久化的会话和对话ID管理
+  - 关键路径参考：[packages/core/src/ai/system-agent/AIAssistantPanel.tsx:1-538](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx#L1-L538)
+
+- **工具元数据系统**
+  - **集中式目录**：统一的工具分类、优先级和标签管理
+  - **智能搜索**：支持按分类、标签和关键词搜索工具
+  - **优先级排序**：根据重要性和使用频率排序工具
+  - **按需加载**：只在需要时加载工具，提升性能
+  - **分类管理**：按功能分类组织工具，便于管理
+  - 关键路径参考：[packages/common/src/ai/discovery/tool-metadata.ts:1-404](file://packages/common/src/ai/discovery/tool-metadata.ts#L1-L404)
+
 - **技能市场集成（SkillsMP）**
   - 基于use-skillsmp.ts的React Hook，提供技能搜索、分类加载和分页功能
   - 支持关键词搜索和AI语义搜索，提供完整的技能市场交互体验
@@ -298,16 +334,6 @@ CHAT --> PERSIST
   - 提供技能生命周期管理，包括安装、卸载、启用/禁用和版本控制
   - 支持技能依赖解析和工具注册，实现完整的技能生态系统
   - 关键路径参考：[docs/api/skills-api.md:1-777](file://docs/api/skills-api.md#L1-L777)
-
-- **渐进式工具发现系统**
-  - 基于PROGRESSIVE_TOOL_DISCOVERY.md的智能工具发现机制
-  - 支持按需加载、智能搜索和性能优化的工具管理系统
-  - 关键路径参考：[packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md:1-389](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L1-L389)
-
-- **技能提供商**
-  - 提供技能商店功能，支持技能分类、评价和推荐系统
-  - 支持技能分享、导入和导出，实现技能生态系统的开放性
-  - 关键路径参考：[docs/api/skills-api.md:311-465](file://docs/api/skills-api.md#L311-L465)
 
 - **工具提供商**
   - 支持插件动态注册工具，实现按需加载机制
@@ -323,6 +349,7 @@ CHAT --> PERSIST
   - 五大类工具模块：读取工具、插入工具、删除工具、列布局工具、杂项工具
   - 支持复杂的文档操作和智能编辑功能
   - **新增嵌套列布局工具**：insertNestedColumns支持在现有分栏列内插入嵌套分栏布局
+  - **新增格式化工具**：formatText、insertTable、getTableInfo、editTable、deleteTable、listTable、editTableCell
   - 关键路径参考：[packages/core/src/ai/tools/read-tools.ts:1-208](file://packages/core/src/ai/tools/read-tools.ts#L1-L208), [packages/core/src/ai/tools/insert-tools.ts:1-611](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611), [packages/core/src/ai/tools/delete-tools.ts:1-253](file://packages/core/src/ai/tools/delete-tools.ts#L1-L253), [packages/core/src/ai/tools/columns-tools.ts:1-616](file://packages/core/src/ai/tools/columns-tools.ts#L1-L616), [packages/core/src/ai/tools/misc-tools.ts:1-210](file://packages/core/src/ai/tools/misc-tools.ts#L1-L210)
 
 - **增强的工具库**
@@ -355,6 +382,9 @@ CHAT --> PERSIST
 - [packages/plugin-ai/src/ai/menu/Chat.tsx:1-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L636)
 - [packages/plugin-ai/src/ai/AISettings.tsx:1-182](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182)
 - [packages/core/src/ai/AiInlineMenu.tsx:1-435](file://packages/core/src/ai/AiInlineMenu.tsx#L1-L435)
+- [packages/core/src/ai/tools/format-tools.ts:1-505](file://packages/core/src/ai/tools/format-tools.ts#L1-L505)
+- [packages/core/src/ai/system-agent/AIAssistantPanel.tsx:1-538](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx#L1-L538)
+- [packages/common/src/ai/discovery/tool-metadata.ts:1-404](file://packages/common/src/ai/discovery/tool-metadata.ts#L1-L404)
 - [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
 - [docs/api/skills-api.md:1-777](file://docs/api/skills-api.md#L1-L777)
 - [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md:1-389](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L1-L389)
@@ -378,10 +408,10 @@ CHAT --> PERSIST
 AI插件采用"插件-扩展-视图-技能生态系统"的分层架构：
 - **插件层**：通过插件入口注册编辑器扩展、浮动菜单、静态菜单与斜杠命令
 - **扩展层**：节点扩展定义节点行为与视图；加载装饰器扩展提供流式渲染占位；标记扩展提供范围标记能力
-- **视图层**：React节点视图为用户提供交互界面；静态菜单与聊天视图为用户提供快捷操作与对话体验；**AI设置面板为用户提供安全的配置界面**；**AI内联助手系统提供浮动面板界面和实时交互**
+- **视图层**：React节点视图为用户提供交互界面；静态菜单与聊天视图为用户提供快捷操作与对话体验；**AI设置面板为用户提供安全的配置界面**；**AI内联助手系统提供浮动面板界面和实时交互**；**AI助手面板提供全局悬浮面板和工具调用可视化**
 - **UI组件层**：**现代化的聊天组件系统**提供完整的用户交互体验，包括流式渲染、执行步骤跟踪、错误处理等
-- **技能生态系统层**：**SkillsMP集成提供技能市场接入**；**技能注册表管理技能生命周期**；**渐进式工具发现系统提供智能工具管理**；**技能提供商和工具提供商实现生态系统的开放性**
-- **工具层**：全新的工具系统提供完整的文档操作能力，包括读取、插入、删除、列布局和杂项功能，**新增嵌套列布局支持**
+- **技能生态系统层**：**SkillsMP集成提供技能市场接入**；**技能注册表管理技能生命周期**；**集中式工具元数据系统提供智能工具管理**；**技能提供商和工具提供商实现生态系统的开放性**
+- **工具层**：全新的工具系统提供完整的文档操作能力，包括读取、插入、删除、列布局、杂项功能，**新增嵌套列布局支持**，**新增格式化工具系统**
 - **代理层**：优化的AI代理系统提供智能决策和工具调用能力
 - **配置层**：环境变量和设置面板提供安全的API密钥管理
 - **运行时装配**：插件管理器聚合各插件扩展，编辑器解析并组装扩展
@@ -581,6 +611,8 @@ end
 - **插件注册**
   - 在插件入口中声明编辑器扩展数组、浮动菜单、静态菜单与斜杠命令，供插件管理器在运行时合并
   - **新增AI内联助手系统集成**：在AIExtension中集成AiInlineTrigger和AiInlinePanel组件
+  - **新增AI助手面板集成**：集成AIAssistantPanel组件提供全局悬浮面板
+  - **新增格式化工具集成**：集成format-tools工具集
   - 参考路径：[packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/plugin-ai/src/ai/index.tsx:1-66](file://packages/plugin-ai/src/ai/index.tsx#L1-L66)
 
 - **扩展解析与装配**
@@ -599,9 +631,147 @@ end
 - [packages/editor/src/editor/build-in-extension.ts:1-56](file://packages/editor/src/editor/build-in-extension.ts#L1-L56)
 - [packages/common/src/core/PluginManager.ts:1-177](file://packages/common/src/core/PluginManager.ts#L1-L177)
 
-## AI技能生态系统
+### 格式化工具系统
 
-### 技能市场集成（SkillsMP）
+#### 文本格式化工具
+**完整的内联格式化工具集**提供丰富的文本格式化功能：
+- **formatText工具**：为文档中已有的文本应用内联格式（加粗、斜体、下划线、删除线、代码）
+- **输入验证**：使用zod进行严格的输入验证，支持文本搜索、格式类型和出现次数
+- **精确定位**：通过findTextPosition精确定位目标文本，支持多次出现的文本选择
+- **编辑器集成**：与ProseMirror编辑器无缝集成，支持滚动到可视区域
+- **错误处理**：提供详细的错误信息和回退机制
+
+```mermaid
+graph TB
+subgraph "格式化工具流程"
+SEARCH["搜索文本<br/>findTextPosition"]
+SELECT["选择文本范围<br/>setTextSelection"]
+FORMAT["应用格式<br/>toggleBold/ToggleItalic"]
+SUCCESS["格式化成功<br/>返回结果"]
+ERROR["格式化失败<br/>返回错误"]
+end
+SEARCH --> SELECT
+SELECT --> FORMAT
+FORMAT --> SUCCESS
+FORMAT --> ERROR
+```
+
+**图表来源**
+- [packages/core/src/ai/tools/format-tools.ts:21-70](file://packages/core/src/ai/tools/format-tools.ts#L21-L70)
+
+**章节来源**
+- [packages/core/src/ai/tools/format-tools.ts:11-71](file://packages/core/src/ai/tools/format-tools.ts#L11-L71)
+
+#### 表格操作工具
+**完整的表格操作工具集**提供文档表格的全面管理：
+- **insertTable工具**：插入新表格，支持行列数、表头行和块索引定位
+- **getTableInfo工具**：获取表格结构信息和单元格内容，支持概览和详细信息
+- **editTable工具**：表格结构操作（添加/删除行列、合并/拆分单元格）
+- **editTableCell工具**：编辑指定单元格内容，支持替换、追加、前置模式
+- **deleteTable工具**：删除指定表格，提供详细确认信息
+- **listTable工具**：列出所有表格概览，支持预览行数设置
+
+**章节来源**
+- [packages/core/src/ai/tools/format-tools.ts:73-505](file://packages/core/src/ai/tools/format-tools.ts#L73-L505)
+
+### AI助手面板
+
+#### 全局悬浮面板
+**全新的AI助手面板**提供全局悬浮访问和工具调用可视化：
+- **悬浮面板设计**：支持多种位置（右下角、左下角、居中），固定尺寸400x600px
+- **工具调用可视化**：实时显示工具执行步骤、参数和结果
+- **流式响应**：支持实时流式文本生成和工具调用状态
+- **会话管理**：支持持久化的会话和对话ID管理
+- **错误处理**：友好的错误提示和重试机制
+- **键盘快捷键**：支持Ctrl+K快捷键打开面板
+
+```mermaid
+graph TB
+subgraph "AI助手面板架构"
+TRIGGER["触发器<br/>AIAssistantTrigger"]
+PANEL["悬浮面板<br/>AIAssistantPanel"]
+HEADER["头部信息<br/>状态显示"]
+MESSAGES["消息列表<br/>用户/助手消息"]
+STEPS["工具调用<br/>执行步骤可视化"]
+INPUT["输入区域<br/>文本输入 + 发送按钮"]
+ERROR["错误显示<br/>错误信息提示"]
+END
+TRIGGER --> PANEL
+PANEL --> HEADER
+PANEL --> MESSAGES
+PANEL --> STEPS
+PANEL --> INPUT
+PANEL --> ERROR
+```
+
+**图表来源**
+- [packages/core/src/ai/system-agent/AIAssistantPanel.tsx:75-472](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx#L75-L472)
+
+**章节来源**
+- [packages/core/src/ai/system-agent/AIAssistantPanel.tsx:1-538](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx#L1-L538)
+
+#### 工具调用可视化
+**工具执行步骤可视化**帮助用户理解AI操作过程：
+- **步骤记录**：实时记录工具执行状态（运行中/成功/失败）
+- **参数显示**：显示工具名称和执行参数
+- **耗时统计**：记录每个工具的执行耗时
+- **状态指示**：使用不同图标表示执行状态
+- **错误详情**：显示错误状态下的详细信息和参数
+- **历史记录**：维护完整的执行历史，支持查看和调试
+
+**章节来源**
+- [packages/core/src/ai/system-agent/AIAssistantPanel.tsx:357-400](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx#L357-L400)
+
+### 工具元数据系统
+
+#### 集中式目录管理
+**统一的工具元数据系统**实现智能分类和管理：
+- **工具分类**：document-read、document-write、document-delete、document-structure、layout、interaction、web、plugin、discovery
+- **优先级系统**：1-10分制，数值越高越重要
+- **标签系统**：功能标签、特性标签、场景标签、对象标签
+- **智能搜索**：支持按分类、标签和关键词搜索工具
+- **按需加载**：只在需要时加载工具，提升性能
+- **分类管理**：按功能分类组织工具，便于管理
+
+```mermaid
+graph TB
+subgraph "工具元数据系统"
+ESSENTIAL["基础工具<br/>ESSENTIAL_TOOLS"]
+CATEGORY["分类管理<br/>CATEGORY_DESCRIPTIONS"]
+METADATA["工具元数据<br/>BUILTIN_TOOL_METADATA"]
+SEARCH["智能搜索<br/>按分类/标签/关键词"]
+LOAD["按需加载<br/>只加载需要的工具"]
+END
+ESSENTIAL --> CATEGORY
+CATEGORY --> METADATA
+METADATA --> SEARCH
+SEARCH --> LOAD
+```
+
+**图表来源**
+- [packages/common/src/ai/discovery/tool-metadata.ts:10-404](file://packages/common/src/ai/discovery/tool-metadata.ts#L10-L404)
+
+**章节来源**
+- [packages/common/src/ai/discovery/tool-metadata.ts:1-404](file://packages/common/src/ai/discovery/tool-metadata.ts#L1-L404)
+
+#### 工具分类与描述
+**详细的工具分类和描述**提供清晰的工具组织：
+- **document-read分类**：文档读取工具 - 用于获取文档结构、内容和搜索
+- **document-write分类**：文档写入工具 - 用于插入、更新和替换内容
+- **document-delete分类**：文档删除工具 - 用于删除内容和块
+- **document-structure分类**：结构工具 - 用于转换块类型、移动块、格式化文本、表格操作
+- **layout分类**：布局工具 - 用于管理多列布局
+- **interaction分类**：交互工具 - 用于与用户交互
+- **web分类**：网络工具 - 用于网页搜索和获取
+- **plugin分类**：插件工具 - 来自已安装插件的工具
+- **discovery分类**：发现工具 - 用于发现和加载其他工具
+
+**章节来源**
+- [packages/common/src/ai/discovery/tool-metadata.ts:32-43](file://packages/common/src/ai/discovery/tool-metadata.ts#L32-L43)
+
+### 技能生态系统
+
+#### 技能市场集成（SkillsMP）
 **全新的技能市场平台集成**，提供完整的技能生态系统：
 - **SkillsMP客户端**：基于use-skillsmp.ts的React Hook，提供技能搜索、分类加载和分页功能
 - **关键词搜索**：支持传统的关键词匹配搜索
@@ -639,7 +809,7 @@ US --> STAT
 - [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190)
 - [docs/api/skills-api.md:1-777](file://docs/api/skills-api.md#L1-L777)
 
-### 技能注册表系统
+#### 技能注册表系统
 **完整的技能生命周期管理**，支持技能的安装、卸载、启用/禁用和版本控制：
 - **技能定义**：完整的技能元数据，包括名称、描述、版本、作者等
 - **安装管理**：支持从市场安装和自定义技能安装
@@ -651,45 +821,7 @@ US --> STAT
 **章节来源**
 - [docs/api/skills-api.md:13-58](file://docs/api/skills-api.md#L13-L58)
 
-### 渐进式工具发现系统
-**智能的工具管理系统**，基于元数据的工具搜索和按需加载：
-- **工具元数据**：为每个工具定义优先级、标签和描述
-- **智能搜索**：基于标签和描述的语义搜索
-- **优先级排序**：根据重要性和使用频率排序工具
-- **按需加载**：只在需要时加载工具，提升性能
-- **分类管理**：按功能分类组织工具，便于管理
-- **扩展支持**：支持插件动态注册新工具
-
-```mermaid
-flowchart TD
-Start(["Agent需要工具"]) --> Search["搜索可用工具"]
-Search --> Meta["获取工具元数据"]
-Meta --> Priority["按优先级排序"]
-Priority --> Load["按需加载工具"]
-Load --> Execute["执行工具"]
-Execute --> Result["返回结果"]
-```
-
-**图表来源**
-- [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md:171-189](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L171-L189)
-
-**章节来源**
-- [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md:1-389](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L1-L389)
-- [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md:1-367](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L1-L367)
-
-### 技能提供商
-**开放的技能商店系统**，支持技能的发布、评价和推荐：
-- **技能商店**：提供技能浏览、搜索和详情展示
-- **分类管理**：按功能分类组织技能，便于用户查找
-- **评价系统**：支持用户对技能进行评分和评论
-- **推荐机制**：基于下载量和评分的智能推荐
-- **认证系统**：支持官方认证技能的标识
-- **预览功能**：提供技能预览图和演示效果
-
-**章节来源**
-- [docs/api/skills-api.md:311-465](file://docs/api/skills-api.md#L311-L465)
-
-### 工具提供商
+#### 工具提供商
 **插件驱动的工具注册系统**，实现动态工具管理和性能优化：
 - **动态注册**：支持插件在运行时注册新工具
 - **工厂模式**：使用工厂函数创建工具实例
@@ -701,7 +833,7 @@ Execute --> Result["返回结果"]
 **章节来源**
 - [packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md:147-169](file://packages/core/src/ai/TOOL_ADAPTATION_GUIDE.md#L147-L169)
 
-### 工具系统架构
+#### 工具系统架构
 AI工具系统采用模块化设计，包含五大类工具模块，每类工具都有明确的职责分工：
 
 - **读取工具（Read Tools）**：获取文档结构、分块读取内容、搜索文档、获取节点信息等
@@ -709,6 +841,7 @@ AI工具系统采用模块化设计，包含五大类工具模块，每类工具
 - **删除工具（Delete Tools）**：按范围删除、按文本删除、按块删除等
 - **列布局工具（Columns Tools）**：创建分栏、更新列内容、设置布局、添加/删除列、**嵌套列布局**
 - **杂项工具（Misc Tools）**：用户选择确认、高亮标记、Web搜索、网页抓取等
+- **格式化工具（Format Tools）**：文本格式化、表格操作、单元格编辑等
 
 ### 读取工具（Read Tools）
 提供文档内容的读取和查询功能：
@@ -961,7 +1094,7 @@ SCROLL --> END
 - **来源追踪**：标记为builtin来源，支持内置工具识别
 
 **章节来源**
-- [packages/core/src/ai/discovery/tool-metadata.ts:268-275](file://packages/core/src/ai/discovery/tool-metadata.ts#L268-L275)
+- [packages/common/src/ai/discovery/tool-metadata.ts:208-215](file://packages/common/src/ai/discovery/tool-metadata.ts#L208-L215)
 
 ## UI组件系统
 
@@ -1135,6 +1268,8 @@ MSG --> SEL
   - **优化代理系统依赖完整的工具系统和工具包装器**
   - **AI设置面板依赖UI组件库和状态管理**
   - **AI内联助手系统依赖编辑器效果工具和工具元数据**
+  - **AI助手面板依赖系统代理和工具调用可视化**
+  - **格式化工具系统依赖ProseMirror编辑器和工具元数据**
   - **技能生态系统依赖SkillsMP客户端和API服务**
   - **技能注册表依赖技能API和存储系统**
   - **UI组件系统依赖现代化的React Hooks和状态管理**
@@ -1174,14 +1309,21 @@ Z["渐进式工具发现<br/>PROGRESSIVE_TOOL_DISCOVERY"] --> N
 AA["AI内联助手<br/>AiInlineMenu.tsx"] --> BB["编辑器效果工具<br/>editor-effects.ts"]
 AA --> CC["工具元数据<br/>tool-metadata.ts"]
 DD["嵌套列工具<br/>insertNestedColumns"] --> AA
-EE["UI组件系统<br/>Chat.tsx / MessageBubble.tsx"] --> FF["React Hooks<br/>useState / useEffect / useCallback"]
-EE --> GG["流式缓冲<br/>use-streaming-buffer.ts"]
-EE --> HH["执行步骤显示<br/>ExecutionStepsDisplay.tsx"]
-EE --> II["错误显示<br/>ErrorDisplay.tsx"]
-EE --> JJ["团队状态<br/>TeamStatusPanel.tsx"]
-EE --> KK["会话管理<br/>useSessionManager.ts"]
-EE --> LL["聊天持久化<br/>chat-persistence.ts"]
-EE --> MM["类型定义<br/>chat-types.ts"]
+EE["格式化工具<br/>format-tools.ts"] --> FF["ProseMirror编辑器<br/>@kn/editor"]
+EE --> GG["工具元数据<br/>tool-metadata.ts"]
+HH["AI助手面板<br/>AIAssistantPanel.tsx"] --> II["系统代理<br/>use-system-agent"]
+II --> JJ["工具调用可视化<br/>ExecutionStepsDisplay.tsx"]
+KK["UI组件系统<br/>Chat.tsx / MessageBubble.tsx"] --> FF
+KK --> GG
+KK --> HH
+KK --> II
+LL["流式缓冲<br/>use-streaming-buffer.ts"] --> FF
+MM["执行步骤显示<br/>ExecutionStepsDisplay.tsx"] --> FF
+NN["错误显示<br/>ErrorDisplay.tsx"] --> FF
+OO["团队状态<br/>TeamStatusPanel.tsx"] --> FF
+PP["会话管理<br/>useSessionManager.ts"] --> FF
+QQ["聊天持久化<br/>chat-persistence.ts"] --> FF
+RR["类型定义<br/>chat-types.ts"] --> FF
 ```
 
 **图表来源**
@@ -1208,7 +1350,7 @@ EE --> MM["类型定义<br/>chat-types.ts"]
 - [docs/api/skills-api.md:1-777](file://docs/api/skills-api.md#L1-L777)
 - [packages/core/src/ai/AiInlineMenu.tsx:1-435](file://packages/core/src/ai/AiInlineMenu.tsx#L1-L435)
 - [packages/core/src/ai/utils/editor-effects.ts:1-12](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
-- [packages/core/src/ai/discovery/tool-metadata.ts:268-275](file://packages/core/src/ai/discovery/tool-metadata.ts#L268-L275)
+- [packages/common/src/ai/discovery/tool-metadata.ts:268-275](file://packages/common/src/ai/discovery/tool-metadata.ts#L268-L275)
 - [packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts:1-63](file://packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts#L1-L63)
 - [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:1-110](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L1-L110)
 - [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57)
@@ -1216,6 +1358,8 @@ EE --> MM["类型定义<br/>chat-types.ts"]
 - [packages/plugin-ai/src/ai/menu/useSessionManager.ts:1-92](file://packages/plugin-ai/src/ai/menu/useSessionManager.ts#L1-L92)
 - [packages/plugin-ai/src/ai/menu/chat-persistence.ts:1-66](file://packages/plugin-ai/src/ai/menu/chat-persistence.ts#L1-L66)
 - [packages/plugin-ai/src/ai/menu/chat-types.ts:1-250](file://packages/plugin-ai/src/ai/menu/chat-types.ts#L1-L250)
+- [packages/core/src/ai/tools/format-tools.ts:1-505](file://packages/core/src/ai/tools/format-tools.ts#L1-L505)
+- [packages/core/src/ai/system-agent/AIAssistantPanel.tsx:1-538](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx#L1-L538)
 
 **章节来源**
 - [packages/plugin-ai/package.json:1-31](file://packages/plugin-ai/package.json#L1-L31)
@@ -1232,6 +1376,7 @@ EE --> MM["类型定义<br/>chat-types.ts"]
   - **集成渐进式工具发现，减少工具加载数量**
   - **UI组件系统使用React.memo优化重渲染性能**
   - **流式缓冲机制确保16fps的稳定刷新率**
+  - **格式化工具系统使用精确的文本定位和滚动机制**
   - 参考路径：[packages/plugin-ai/src/ai/text-loading.tsx:1-146](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146), [packages/plugin-ai/src/ai/AiView.tsx:1-76](file://packages/plugin-ai/src/ai/AiView.tsx#L1-L76), [packages/core/src/ai/AiInlineMenu.tsx:147-171](file://packages/core/src/ai/AiInlineMenu.tsx#L147-L171), [packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts:10-62](file://packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts#L10-L62)
 
 - **并发与节流**
@@ -1241,6 +1386,7 @@ EE --> MM["类型定义<br/>chat-types.ts"]
   - **使用技能注册表管理技能数量，避免技能过多影响性能**
   - **AI内联助手支持流式响应中断，避免长时间占用资源**
   - **UI组件系统使用状态管理避免不必要的重渲染**
+  - **格式化工具系统使用精确的编辑器操作，避免不必要的重排**
   - 参考路径：[packages/plugin-ai/src/ai/utils.ts:1-126](file://packages/plugin-ai/src/ai/utils.ts#L1-L126), [packages/core/src/ai/AiInlineMenu.tsx:301-313](file://packages/core/src/ai/AiInlineMenu.tsx#L301-L313), [packages/plugin-ai/src/ai/menu/Chat.tsx:117-246](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L117-L246)
 
 - **工具系统优化**
@@ -1251,6 +1397,7 @@ EE --> MM["类型定义<br/>chat-types.ts"]
   - **通过技能提供商的分类管理，减少技能搜索时间**
   - **嵌套列布局使用深度追踪和父路径机制，避免索引混乱**
   - **UI组件系统使用useMemo和React.memo优化性能**
+  - **格式化工具系统使用精确的文本定位和表格操作，提升性能**
   - 参考路径：[packages/core/src/ai/tools/read-tools.ts:1-208](file://packages/core/src/ai/tools/read-tools.ts#L1-L208), [packages/core/src/ai/tools/insert-tools.ts:1-611](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611), [packages/core/src/ai/utils/web-search.ts:1-172](file://packages/core/src/ai/utils/web-search.ts#L1-L172), [packages/core/src/ai/tools/columns-tools.ts:11-19](file://packages/core/src/ai/tools/columns-tools.ts#L11-L19)
 
 - **技能生态系统优化**
@@ -1259,6 +1406,7 @@ EE --> MM["类型定义<br/>chat-types.ts"]
   - 利用工具提供商的工厂模式，延迟创建工具实例
   - **AI内联助手的工具执行步骤跟踪，便于性能监控和调试**
   - **UI组件系统提供完整的错误处理和用户反馈机制**
+  - **格式化工具系统提供精确的表格操作和文本格式化**
   - 参考路径：[docs/api/skills-api.md:653-731](file://docs/api/skills-api.md#L653-L731), [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190), [packages/core/src/ai/AiInlineMenu.tsx:174-200](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200)
 
 - **错误恢复**
@@ -1267,6 +1415,7 @@ EE --> MM["类型定义<br/>chat-types.ts"]
   - **工具执行失败时提供详细的错误信息和回滚机制**
   - **技能加载失败时提供降级方案和错误提示**
   - **UI组件系统提供友好的错误提示和重试机制**
+  - **格式化工具系统提供精确的错误处理和回退机制**
   - 参考路径：[packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69), [packages/core/src/ai/AiInlineMenu.tsx:301-313](file://packages/core/src/ai/AiInlineMenu.tsx#L301-L313), [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57)
 
 - **本地化与可访问性**
@@ -1275,6 +1424,7 @@ EE --> MM["类型定义<br/>chat-types.ts"]
   - **技能生态系统提供多语言支持和本地化资源**
   - **AI内联助手提供键盘快捷键支持（Esc关闭）**
   - **UI组件系统提供无障碍访问支持**
+  - **格式化工具系统提供精确的用户交互和反馈**
   - 参考路径：[packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/core/src/ai/AiInlineMenu.tsx:256-261](file://packages/core/src/ai/AiInlineMenu.tsx#L256-L261), [packages/plugin-ai/src/ai/menu/Chat.tsx:34-40](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L34-L40)
 
 - **安全配置建议**
@@ -1284,6 +1434,7 @@ EE --> MM["类型定义<br/>chat-types.ts"]
   - **通过技能注册表管理技能密钥，避免技能泄露**
   - **AI内联助手支持用户选择处理，避免自动决策风险**
   - **UI组件系统提供安全的用户输入验证和处理**
+  - **格式化工具系统提供精确的编辑器操作和安全验证**
   - 参考路径：[packages/plugin-ai/src/ai/AISettings.tsx:1-182](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182), [packages/plugin-ai/src/ai/utils.ts:6-10](file://packages/plugin-ai/src/ai/utils.ts#L6-L10), [packages/core/src/ai/ai-utils.ts:5-7](file://packages/core/src/ai/ai-utils.ts#L5-L7), [packages/core/src/ai/AiInlineMenu.tsx:202-206](file://packages/core/src/ai/AiInlineMenu.tsx#L202-L206)
 
 - **UI组件性能优化**
@@ -1293,6 +1444,7 @@ EE --> MM["类型定义<br/>chat-types.ts"]
   - **使用Collapsible组件优化折叠内容的渲染**
   - **使用TooltipProvider优化工具提示的性能**
   - **使用状态管理避免不必要的重渲染**
+  - **格式化工具系统使用精确的编辑器操作，避免不必要的重排**
   - 参考路径：[packages/plugin-ai/src/ai/menu/MessageBubble.tsx:16-81](file://packages/plugin-ai/src/ai/menu/MessageBubble.tsx#L16-L81), [packages/plugin-ai/src/ai/menu/Chat.tsx:42-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L42-L636), [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:10-110](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L10-L110)
 
 ## 故障排查指南
@@ -1311,6 +1463,7 @@ EE --> MM["类型定义<br/>chat-types.ts"]
   - **检查技能依赖是否正确加载，工具是否在技能中定义**
   - **AI内联助手的执行步骤跟踪，查看具体失败的工具和参数**
   - **UI组件系统提供详细的错误分类和处理**
+  - **格式化工具系统提供精确的错误信息和回退机制**
   - 参考路径：[packages/core/src/ai/utils/tool-wrapper.ts:1-68](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68), [packages/core/src/ai/tools/read-tools.ts:1-208](file://packages/core/src/ai/tools/read-tools.ts#L1-L208), [packages/core/src/ai/AiInlineMenu.tsx:174-200](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200), [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57)
 
 - **Markdown解析问题**
@@ -1331,6 +1484,7 @@ EE --> MM["类型定义<br/>chat-types.ts"]
   - 确认插件已注册到编辑器扩展列表；检查插件管理器是否正确合并扩展
   - **确认AI内联助手组件是否正确集成到AIExtension中**
   - **确认UI组件系统是否正确加载和渲染**
+  - **确认格式化工具系统是否正确集成**
   - 参考路径：[packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/common/src/core/PluginManager.ts:1-177](file://packages/common/src/core/PluginManager.ts#L1-L177), [packages/editor/src/editor/use-extension.ts:47-63](file://packages/editor/src/editor/use-extension.ts#L47-L63), [packages/plugin-ai/src/ai/index.tsx:29-30](file://packages/plugin-ai/src/ai/index.tsx#L29-L30)
 
 - **技能市场访问失败**
@@ -1364,6 +1518,22 @@ EE --> MM["类型定义<br/>chat-types.ts"]
   - **确认插入位置计算是否准确；检查scrollToPosition的调用**
   - **验证嵌套列索引更新机制；检查重新发现文档结构的逻辑**
   - 参考路径：[packages/core/src/ai/tools/columns-tools.ts:591-616](file://packages/core/src/ai/tools/columns-tools.ts#L591-L616), [packages/core/src/ai/utils/editor-effects.ts:1-12](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
+
+- **格式化工具问题**
+  - **检查格式化工具的输入验证是否正确；确认zod schema定义**
+  - **验证文本定位功能是否正常；检查findTextPosition的调用**
+  - **确认表格操作工具是否正确处理单元格定位**
+  - **检查编辑器命令是否正确执行；验证ProseMirror集成**
+  - **UI组件系统提供完整的错误处理和用户反馈**
+  - 参考路径：[packages/core/src/ai/tools/format-tools.ts:21-70](file://packages/core/src/ai/tools/format-tools.ts#L21-L70), [packages/core/src/ai/tools/format-tools.ts:103-143](file://packages/core/src/ai/tools/format-tools.ts#L103-L143), [packages/core/src/ai/tools/format-tools.ts:404-505](file://packages/core/src/ai/tools/format-tools.ts#L404-L505), [packages/core/src/ai/utils/editor-effects.ts:1-12](file://packages/core/src/ai/utils/editor-effects.ts#L1-L12)
+
+- **AI助手面板问题**
+  - **检查AIAssistantPanel组件是否正确渲染；确认React Context是否正常提供**
+  - **验证工具调用可视化是否正确显示；检查executionSteps状态**
+  - **确认流式响应机制是否正常工作；检查streamingContent状态**
+  - **检查错误处理是否正确；验证error状态管理**
+  - **确认会话管理是否正确；检查sessionId状态**
+  - 参考路径：[packages/core/src/ai/system-agent/AIAssistantPanel.tsx:112-168](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx#L112-L168), [packages/core/src/ai/system-agent/AIAssistantPanel.tsx:357-400](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx#L357-L400), [packages/core/src/ai/system-agent/AIAssistantPanel.tsx:407-414](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx#L407-L414), [packages/common/src/ai/system-agent/context.tsx:336-339](file://packages/common/src/ai/system-agent/context.tsx#L336-L339)
 
 - **UI组件渲染问题**
   - **检查React.memo是否正确阻止不必要的重渲染**
@@ -1399,9 +1569,11 @@ EE --> MM["类型定义<br/>chat-types.ts"]
 - [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57)
 - [packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx:1-125](file://packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx#L1-L125)
 - [packages/plugin-ai/src/ai/menu/useSessionManager.ts:1-92](file://packages/plugin-ai/src/ai/menu/useSessionManager.ts#L1-L92)
+- [packages/core/src/ai/tools/format-tools.ts:1-505](file://packages/core/src/ai/tools/format-tools.ts#L1-L505)
+- [packages/core/src/ai/system-agent/AIAssistantPanel.tsx:1-538](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx#L1-L538)
 
 ## 结论
-AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现了文本与图像的AI生成能力，并提供了流畅的交互体验。**全新的AI内联助手系统显著增强了AI插件的交互性和可视化程度**。**AI内联助手提供浮动面板界面、实时流式响应、执行步骤跟踪、用户选择提示等功能，为用户提供沉浸式的AI交互体验**。**增强的列管理工具支持嵌套列布局，通过insertNestedColumns工具实现复杂的文档结构**。**全新的技能生态系统显著增强了AI插件的功能性和智能化水平**。**SkillsMP集成提供了完整的技能市场解决方案，技能注册表实现了技能生命周期管理，渐进式工具发现系统提升了工具使用的智能化程度**。**最重要的是，通过移除硬编码的DeepSeek API密钥，采用环境变量和设置面板进行安全配置，大幅提升了系统的安全性**。**现代化的UI组件系统提供了完整的用户交互体验，包括流式渲染、执行步骤跟踪、错误处理等功能**。结合插件管理器与扩展装配机制，可在不侵入主应用的情况下灵活集成与扩展。建议在生产环境中关注流式渲染性能、并发控制、工具执行监控与错误恢复，以及API密钥和技能安全的管理，以获得更稳定的用户体验。
+AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现了文本与图像的AI生成能力，并提供了流畅的交互体验。**全新的集中式目录系统显著提升了工具管理的智能化程度**。**AI助手面板提供全局悬浮访问和工具调用可视化，大幅增强了AI插件的交互性和实用性**。**格式化工具系统提供了完整的文本格式化和表格操作能力，满足复杂的文档编辑需求**。**AI内联助手系统显著增强了AI插件的交互性和可视化程度**。**AI内联助手提供浮动面板界面、实时流式响应、执行步骤跟踪、用户选择提示等功能，为用户提供沉浸式的AI交互体验**。**增强的列管理工具支持嵌套列布局，通过insertNestedColumns工具实现复杂的文档结构**。**全新的技能生态系统显著增强了AI插件的功能性和智能化水平**。**SkillsMP集成提供了完整的技能市场解决方案，技能注册表实现了技能生命周期管理，渐进式工具发现系统提升了工具使用的智能化程度**。**最重要的是，通过移除硬编码的DeepSeek API密钥，采用环境变量和设置面板进行安全配置，大幅提升了系统的安全性**。**现代化的UI组件系统提供了完整的用户交互体验，包括流式渲染、执行步骤跟踪、错误处理等功能**。结合插件管理器与扩展装配机制，可在不侵入主应用的情况下灵活集成与扩展。建议在生产环境中关注流式渲染性能、并发控制、工具执行监控与错误恢复，以及API密钥和技能安全的管理，以获得更稳定的用户体验。
 
 ## 附录：使用示例与最佳实践
 
@@ -1421,17 +1593,33 @@ AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现
 - **现代化UI组件：享受流畅的聊天体验和丰富的交互功能**
 - 参考路径：[packages/core/src/ai/AiInlineMenu.tsx:77-115](file://packages/core/src/ai/AiInlineMenu.tsx#L77-L115), [packages/core/src/ai/AiInlineMenu.tsx:119-435](file://packages/core/src/ai/AiInlineMenu.tsx#L119-L435), [packages/core/src/ai/tools/columns-tools.ts:520-616](file://packages/core/src/ai/tools/columns-tools.ts#L520-L616), [packages/plugin-ai/src/ai/menu/Chat.tsx:1-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L636)
 
+### **使用格式化工具系统**
+- **文本格式化：使用formatText工具为文本应用内联格式**
+- **表格操作：使用insertTable、getTableInfo、editTable、editTableCell、deleteTable工具管理表格**
+- **精确定位：使用findTextPosition和findTablesInDocument进行精确操作**
+- **编辑器集成：与ProseMirror编辑器无缝集成，支持滚动到可视区域**
+- **错误处理：提供详细的错误信息和回退机制**
+- 参考路径：[packages/core/src/ai/tools/format-tools.ts:11-71](file://packages/core/src/ai/tools/format-tools.ts#L11-L71), [packages/core/src/ai/tools/format-tools.ts:73-505](file://packages/core/src/ai/tools/format-tools.ts#L73-L505)
+
+### **使用AI助手面板**
+- **全局悬浮访问：使用AIAssistantTrigger组件提供全局悬浮面板**
+- **工具调用可视化：实时显示工具执行步骤、参数和结果**
+- **流式响应：支持实时流式文本生成和工具调用状态**
+- **会话管理：支持持久化的会话和对话ID管理**
+- **键盘快捷键：支持Ctrl+K快捷键打开面板**
+- 参考路径：[packages/core/src/ai/system-agent/AIAssistantPanel.tsx:485-538](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx#L485-L538), [packages/core/src/ai/system-agent/AIAssistantPanel.tsx:357-400](file://packages/core/src/ai/system-agent/AIAssistantPanel.tsx#L357-L400)
+
 ### **使用优化的AI代理系统**
 - 通过use-editor-agent-optimized钩子获取代理实例，支持停止生成和状态检查
 - **集成技能生态系统，支持技能驱动的工具调用**
 - 参考路径：[packages/core/src/ai/use-agent-optimized.tsx:1-223](file://packages/core/src/ai/use-agent-optimized.tsx#L1-L223)
 
-### **利用渐进式工具发现系统**
-- 使用discoverTools、exploreCategory、searchAvailableTools等API发现和加载工具
+### **利用工具元数据系统**
+- 使用ESSENTIAL_TOOLS、CATEGORY_DESCRIPTIONS、BUILTIN_TOOL_METADATA进行工具管理
 - **通过技能注册表管理技能依赖，实现智能工具选择**
 - **AI内联助手的工具执行步骤跟踪，便于调试和监控**
 - **现代化UI组件系统提供完整的工具执行可视化**
-- 参考路径：[packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md:39-57](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L39-L57), [packages/core/src/ai/AiInlineMenu.tsx:174-200](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200), [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:10-75](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L10-L75)
+- 参考路径：[packages/common/src/ai/discovery/tool-metadata.ts:10-43](file://packages/common/src/ai/discovery/tool-metadata.ts#L10-L43), [packages/common/src/ai/discovery/tool-metadata.ts:45-375](file://packages/common/src/ai/discovery/tool-metadata.ts#L45-L375), [packages/core/src/ai/AiInlineMenu.tsx:174-200](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200), [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:10-75](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L10-L75)
 
 ### **集成SkillsMP技能市场**
 - 使用use-skillsmp Hook进行技能搜索和管理
@@ -1443,14 +1631,16 @@ AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现
 - 使用读取工具获取文档结构，插入工具执行内容操作，删除工具清理内容
 - **通过工具提供商的动态注册机制，扩展新的工具能力**
 - **嵌套列布局：使用insertNestedColumns在现有分栏内插入嵌套布局**
+- **格式化工具：使用formatText、insertTable等工具进行文档格式化**
 - **现代化UI组件系统提供完整的工具执行可视化**
-- 参考路径：[packages/core/src/ai/tools/read-tools.ts:1-208](file://packages/core/src/ai/tools/read-tools.ts#L1-L208), [packages/core/src/ai/tools/insert-tools.ts:1-611](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611), [packages/core/src/ai/tools/delete-tools.ts:1-253](file://packages/core/src/ai/tools/delete-tools.ts#L1-L253), [packages/core/src/ai/tools/columns-tools.ts:520-616](file://packages/core/src/ai/tools/columns-tools.ts#L520-L616), [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:10-75](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L10-L75)
+- 参考路径：[packages/core/src/ai/tools/read-tools.ts:1-208](file://packages/core/src/ai/tools/read-tools.ts#L1-L208), [packages/core/src/ai/tools/insert-tools.ts:1-611](file://packages/core/src/ai/tools/insert-tools.ts#L1-L611), [packages/core/src/ai/tools/delete-tools.ts:1-253](file://packages/core/src/ai/tools/delete-tools.ts#L1-L253), [packages/core/src/ai/tools/columns-tools.ts:520-616](file://packages/core/src/ai/tools/columns-tools.ts#L520-L616), [packages/core/src/ai/tools/misc-tools.ts:122-196](file://packages/core/src/ai/tools/misc-tools.ts#L122-L196), [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:10-75](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L10-L75)
 
 ### **集成插件至编辑器**
 - 将插件的编辑器扩展注入到插件管理器中，确保扩展在运行时被解析与装配
 - **通过技能注册表管理插件技能，实现插件驱动的扩展**
 - **确认AI内联助手组件正确集成到AIExtension中**
 - **现代化UI组件系统提供完整的用户交互体验**
+- **确认格式化工具系统正确集成**
 - 参考路径：[packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35), [packages/common/src/core/PluginManager.ts:1-177](file://packages/common/src/core/PluginManager.ts#L1-L177), [packages/editor/src/editor/use-extension.ts:47-63](file://packages/editor/src/editor/use-extension.ts#L47-L63), [packages/plugin-ai/src/ai/index.tsx:29-30](file://packages/plugin-ai/src/ai/index.tsx#L29-L30)
 
 ### **参数配置与本地化**
@@ -1458,6 +1648,7 @@ AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现
 - **通过技能生态系统实现插件的本地化和多语言支持**
 - **AI内联助手支持键盘快捷键和无障碍访问**
 - **现代化UI组件系统提供完整的本地化支持**
+- **格式化工具系统提供精确的用户交互和反馈**
 - 参考路径：[packages/plugin-ai/src/index.tsx:1-35](file://packages/plugin-ai/src/index.tsx#L1-L35)
 
 ### **错误处理与性能优化**
@@ -1466,20 +1657,23 @@ AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现
 - **通过技能注册表的缓存机制，提升技能加载性能**
 - **AI内联助手的流式缓冲机制，优化渲染性能**
 - **嵌套列布局的深度追踪和父路径机制，避免索引混乱**
+- **格式化工具系统的精确操作，提升性能和准确性**
 - **现代化UI组件系统提供完整的错误处理和性能优化**
 - **使用React.memo和useCallback优化组件性能**
-- 参考路径：[packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69), [packages/plugin-ai/src/ai/text-loading.tsx:1-146](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146), [packages/core/src/ai/utils/tool-wrapper.ts:1-68](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68), [packages/core/src/ai/AiInlineMenu.tsx:147-171](file://packages/core/src/ai/AiInlineMenu.tsx#L147-L171), [packages/core/src/ai/tools/columns-tools.ts:11-19](file://packages/core/src/ai/tools/columns-tools.ts#L11-L19), [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57), [packages/plugin-ai/src/ai/menu/MessageBubble.tsx:16-81](file://packages/plugin-ai/src/ai/menu/MessageBubble.tsx#L16-L81)
+- 参考路径：[packages/plugin-ai/src/ai/AiImageView.tsx:1-69](file://packages/plugin-ai/src/ai/AiImageView.tsx#L1-L69), [packages/plugin-ai/src/ai/text-loading.tsx:1-146](file://packages/plugin-ai/src/ai/text-loading.tsx#L1-L146), [packages/core/src/ai/utils/tool-wrapper.ts:1-68](file://packages/core/src/ai/utils/tool-wrapper.ts#L1-L68), [packages/core/src/ai/AiInlineMenu.tsx:147-171](file://packages/core/src/ai/AiInlineMenu.tsx#L147-L171), [packages/core/src/ai/tools/columns-tools.ts:11-19](file://packages/core/src/ai/tools/columns-tools.ts#L11-L19), [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57), [packages/plugin-ai/src/ai/menu/MessageBubble.tsx:16-81](file://packages/plugin-ai/src/ai/menu/MessageBubble.tsx#L16-L81), [packages/core/src/ai/tools/format-tools.ts:21-70](file://packages/core/src/ai/tools/format-tools.ts#L21-L70)
 
 ### **Markdown内容处理最佳实践**
 - 使用insertSegmentedMarkdown进行大文档的分段插入，避免性能问题
 - **通过技能注册表管理Markdown处理技能，提升处理效率**
 - **现代化UI组件系统提供完整的Markdown解析和显示功能**
+- **格式化工具系统提供精确的Markdown表格操作**
 - 参考路径：[packages/core/src/ai/tools/insert-tools.ts:521-609](file://packages/core/src/ai/tools/insert-tools.ts#L521-L609), [packages/core/src/ai/utils/markdown-parser.ts:1-458](file://packages/core/src/ai/utils/markdown-parser.ts#L1-L458)
 
 ### **Web搜索集成示例**
 - 使用webSearch工具获取最新信息，结合fetchWebPage获取网页内容
 - **通过技能生态系统集成专业的搜索技能，提升搜索质量**
 - **现代化UI组件系统提供完整的Web搜索集成**
+- **格式化工具系统提供精确的文本搜索和定位**
 - 参考路径：[packages/core/src/ai/tools/misc-tools.ts:122-196](file://packages/core/src/ai/tools/misc-tools.ts#L122-L196), [packages/core/src/ai/utils/web-search.ts:1-172](file://packages/core/src/ai/utils/web-search.ts#L1-L172)
 
 ### **API密钥安全配置最佳实践**
@@ -1490,6 +1684,7 @@ AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现
 - **通过技能注册表管理技能密钥，实现细粒度的权限控制**
 - **AI内联助手支持用户选择处理，避免自动决策风险**
 - **现代化UI组件系统提供安全的用户输入验证和处理**
+- **格式化工具系统提供精确的编辑器操作和安全验证**
 - 参考路径：[packages/plugin-ai/src/ai/AISettings.tsx:1-182](file://packages/plugin-ai/src/ai/AISettings.tsx#L1-L182), [packages/plugin-ai/src/ai/utils.ts:6-10](file://packages/plugin-ai/src/ai/utils.ts#L6-L10), [packages/core/src/ai/ai-utils.ts:5-7](file://packages/core/src/ai/ai-utils.ts#L5-L7), [packages/core/src/ai/AiInlineMenu.tsx:202-206](file://packages/core/src/ai/AiInlineMenu.tsx#L202-L206)
 
 ### **技能生态系统集成最佳实践**
@@ -1499,7 +1694,8 @@ AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现
 - **通过工具提供商的动态注册机制，扩展编辑器的功能**
 - **AI内联助手的工具执行步骤跟踪，便于性能监控和调试**
 - **现代化UI组件系统提供完整的技能生态系统集成**
-- 参考路径：[docs/api/skills-api.md:1-777](file://docs/api/skills-api.md#L1-L777), [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md:1-389](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L1-L389), [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190), [packages/core/src/ai/AiInlineMenu.tsx:174-200](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200)
+- **格式化工具系统提供精确的工具调用和可视化**
+- 参考路径：[docs/api/skills-api.md:1-777](file://docs/api/skills-api.md#L1-L777), [packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md:1-389](file://packages/core/src/ai/PROGRESSIVE_TOOL_DISCOVERY.md#L1-L389), [packages/core/src/ai/skills/skillsmp/use-skillsmp.ts:1-190](file://packages/core/src/ai/skills/skillsmp/use-skillsmp.ts#L1-L190), [packages/core/src/ai/AiInlineMenu.tsx:174-200](file://packages/core/src/ai/AiInlineMenu.tsx#L174-L200), [packages/common/src/ai/discovery/tool-metadata.ts:1-404](file://packages/common/src/ai/discovery/tool-metadata.ts#L1-L404)
 
 ### **现代化UI组件系统最佳实践**
 - **使用Chat.tsx组件提供完整的聊天界面**
@@ -1512,4 +1708,5 @@ AI插件通过清晰的分层设计与可扩展的编辑器节点体系，实现
 - **使用chat-persistence.ts组件提供聊天历史持久化**
 - **使用chat-types.ts类型定义确保类型安全**
 - **现代化UI组件系统提供完整的用户体验和性能优化**
+- **格式化工具系统提供精确的用户交互和反馈**
 - 参考路径：[packages/plugin-ai/src/ai/menu/Chat.tsx:1-636](file://packages/plugin-ai/src/ai/menu/Chat.tsx#L1-L636), [packages/plugin-ai/src/ai/menu/MessageBubble.tsx:1-82](file://packages/plugin-ai/src/ai/menu/MessageBubble.tsx#L1-L82), [packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts:1-63](file://packages/plugin-ai/src/ai/menu/use-streaming-buffer.ts#L1-L63), [packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx:1-110](file://packages/plugin-ai/src/ai/menu/ExecutionStepsDisplay.tsx#L1-L110), [packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx:1-57](file://packages/plugin-ai/src/ai/menu/ErrorDisplay.tsx#L1-L57), [packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx:1-125](file://packages/plugin-ai/src/ai/menu/TeamStatusPanel.tsx#L1-L125), [packages/plugin-ai/src/ai/menu/useSessionManager.ts:1-92](file://packages/plugin-ai/src/ai/menu/useSessionManager.ts#L1-L92), [packages/plugin-ai/src/ai/menu/chat-persistence.ts:1-66](file://packages/plugin-ai/src/ai/menu/chat-persistence.ts#L1-L66), [packages/plugin-ai/src/ai/menu/chat-types.ts:1-250](file://packages/plugin-ai/src/ai/menu/chat-types.ts#L1-L250)

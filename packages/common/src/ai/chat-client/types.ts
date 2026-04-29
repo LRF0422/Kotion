@@ -44,12 +44,19 @@ export interface ToolCallDelta {
  * Skill payload sent to the backend as part of the capability catalog.
  * The backend uses this catalog to perform progressive discovery; the frontend
  * no longer tracks activation state.
+ *
+ * The `tools` field carries the full OpenAI-shaped definitions of the skill's
+ * `requiredTools` (+ `optionalTools`). This lets the backend learn the schema
+ * of plugin tools through the skill envelope — plugin tools are not shipped
+ * in the top-level `tools[]` array.
  */
 export interface SkillPayload {
     name: string
     description: string
     requiredTools: string[]
     optionalTools?: string[]
+    /** Detailed OpenAI function-call definitions for this skill's required + optional tools. */
+    tools?: ToolPayload[]
     systemPromptFragment?: string
     tags?: string[]
     source: 'builtin' | 'plugin' | 'user'
@@ -58,19 +65,17 @@ export interface SkillPayload {
 
 /**
  * Tool payload sent to the backend as part of the capability catalog.
- * Richer than OpenAI's function-call tool shape: it preserves category, priority,
- * tags and source so the backend can reason about progressive discovery.
+ * Uses the standard OpenAI function-call shape so the backend can forward
+ * it directly to the LLM without conversion.
  * `parameters` carries a JSON Schema produced from the tool's Zod input schema.
  */
 export interface ToolPayload {
-    name: string
-    description: string
-    parameters: any // JSON Schema
-    category: string
-    priority: number
-    tags: string[]
-    source: 'builtin' | 'plugin'
-    pluginName?: string
+    type: 'function'
+    function: {
+        name: string
+        description: string
+        parameters: any // JSON Schema
+    }
 }
 
 // ============ Chat Request Types ============
@@ -99,9 +104,9 @@ export interface ChatRequest {
      */
     skills?: SkillPayload[]
     /**
-     * Full frontend tool catalog. Shape is {@link ToolPayload}, not OpenAI's
-     * function-call form; the backend converts subsets to the LLM-facing
-     * shape as it progressively discovers capabilities.
+     * Full frontend tool catalog in the standard OpenAI function-call shape
+     * ({@link ToolPayload}). The backend forwards the subset it exposes to
+     * the LLM without shape conversion.
      */
     tools?: ToolPayload[]
     /**
