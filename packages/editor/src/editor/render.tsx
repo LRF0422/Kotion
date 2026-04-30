@@ -19,9 +19,10 @@ import { cn, useTheme, Button } from "@kn/ui";
 import { ToC } from "./ToC";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
+import { loadContentProgressive, isLargeDocument } from "./loadContentProgressive";
 import { TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
 import { useSafeState } from "ahooks";
-import { List, X } from "@kn/icon";
+import { List, X, Loader2 } from "@kn/icon";
 
 export interface EditorRenderProps extends EditorProvider, EditorKit {
   content?: Content;
@@ -66,6 +67,8 @@ export const EditorRender = forwardRef<
   const [items, setItems] = useSafeState<any[]>([])
   const [tocVisible, setTocVisible] = useSafeState(false)
   const [contentReady, setContentReady] = useSafeState(false)
+  const [loadProgress, setLoadProgress] = useSafeState(0)
+  const [isLargeDoc, setIsLargeDoc] = useSafeState(false)
 
   const allExtensions = React.useMemo(() => [
     ...(extensions as AnyExtension[] || []),
@@ -112,9 +115,11 @@ export const EditorRender = forwardRef<
     if (!editor || !content) return;
 
     let cancelled = false;
+    setLoadProgress(0);
+    setIsLargeDoc(false);
 
     // Yield first so the skeleton UI can paint before heavy processing begins
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       if (cancelled) return;
 
       // Process content to remove unknown nodes/marks (lightweight)
@@ -126,8 +131,19 @@ export const EditorRender = forwardRef<
 
       if (!processedContent || cancelled) return;
 
-      // Load content all at once
-      editor.commands.setContent(processedContent, { emitUpdate: false });
+      // For very large documents, load in chunks so the browser stays
+      // responsive and we can show progress. Otherwise use the fast path.
+      if (isLargeDocument(processedContent)) {
+        setIsLargeDoc(true);
+        await loadContentProgressive(editor, processedContent, {
+          chunkSize: 40,
+          onProgress: (p) => { if (!cancelled) setLoadProgress(p); },
+          isCancelled: () => cancelled,
+        });
+      } else {
+        editor.commands.setContent(processedContent, { emitUpdate: false });
+        if (!cancelled) setLoadProgress(100);
+      }
 
       if (!cancelled) {
         setContentReady(true);
@@ -150,13 +166,29 @@ export const EditorRender = forwardRef<
             <StyledEditor>
               <EditorContent editor={editor} />
               {!contentReady && (
-                <div className="space-y-3 p-4 animate-pulse">
-                  <div className="h-8 bg-muted rounded w-3/4" />
-                  <div className="h-4 bg-muted rounded w-full" />
-                  <div className="h-4 bg-muted rounded w-5/6" />
-                  <div className="h-4 bg-muted rounded w-full" />
-                  <div className="h-32 bg-muted rounded w-full" />
-                  <div className="h-4 bg-muted rounded w-4/5" />
+                <div className="space-y-3 p-4">
+                  {isLargeDoc && (
+                    <div className="flex flex-col items-center gap-2 py-4">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>正在加载大文档，请稍候... {loadProgress}%</span>
+                      </div>
+                      <div className="w-full max-w-md h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all duration-200"
+                          style={{ width: `${loadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <div className="space-y-3 animate-pulse">
+                    <div className="h-8 bg-muted rounded w-3/4" />
+                    <div className="h-4 bg-muted rounded w-full" />
+                    <div className="h-4 bg-muted rounded w-5/6" />
+                    <div className="h-4 bg-muted rounded w-full" />
+                    <div className="h-32 bg-muted rounded w-full" />
+                    <div className="h-4 bg-muted rounded w-4/5" />
+                  </div>
                 </div>
               )}
             </StyledEditor>
