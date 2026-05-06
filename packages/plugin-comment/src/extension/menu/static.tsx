@@ -1,6 +1,5 @@
-import { useActive } from "@kn/editor";
+import { useActive, Editor } from "@kn/editor";
 import { Toggle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
-import { Editor } from "@tiptap/core";
 import React, { useCallback } from "react";
 import { MessageCircleMore } from "@kn/icon";
 

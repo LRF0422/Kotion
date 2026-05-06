@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { useEditor, EditorContent, useEditorExtension } from '@kn/editor';
-import { BubbleMenu } from '@kn/editor';
+import { BubbleMenu, TextSelection } from '@kn/editor';
 import {
     Bold,
     Italic,
@@ -49,6 +49,12 @@ export const RecordEditor: React.FC<RecordEditorProps> = ({
         }
     }, [editor, editable]);
 
+    const shouldShow = useCallback(() => {
+        return editor.state.selection instanceof TextSelection &&
+            !editor.state.selection.empty &&
+            !editor.isActive('codeBlock');
+    }, [editor]);
+
     if (!editor) {
         return null;
     }
@@ -57,8 +63,8 @@ export const RecordEditor: React.FC<RecordEditorProps> = ({
         <div className={cn('record-editor relative', className)}>
             {editor && editable && (
                 <BubbleMenu
+                    shouldShow={shouldShow}
                     editor={editor}
-                    options={{ duration: 150 }}
                     className="flex items-center gap-0.5 rounded-lg border border-border bg-background p-1 shadow-lg"
                 >
                     <ToolbarButton

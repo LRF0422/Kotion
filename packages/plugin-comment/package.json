@@ -17,7 +17,6 @@
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
     "@kn/ui": "workspace:*",
-    "@tiptap/core": "3.15.3",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
