@@ -292,6 +292,20 @@ export const MeetingMinutesPanel: React.FC<{ editor: Editor }> = ({ editor }) =>
         const result = await stopRecording();
         if (result) {
             setTranscript(result.transcript || m('noSpeechContent'));
+
+            // Auto-upload recording to default folder via fileService
+            if (result.audioBlob) {
+                try {
+                    const fileName = `${m('recordingFilePrefix')}_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}_${new Date().toLocaleTimeString('zh-CN', { hour12: false }).replace(/:/g, '-')}.webm`;
+                    const file = new File([result.audioBlob], fileName, { type: 'audio/webm' });
+                    await fileService.uploadFile(file);
+                    toast.success(m('audioSaved'));
+                } catch (err) {
+                    console.error('Error uploading recording:', err);
+                    toast.error(m('uploadRecordingFailed'));
+                }
+            }
+
             setState('completed');
         } else {
             setState('idle');

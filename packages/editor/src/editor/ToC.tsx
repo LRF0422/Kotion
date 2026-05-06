@@ -1,10 +1,28 @@
 import { useTranslation } from '@kn/common'
-import { Empty, ScrollArea, cn, Badge } from '@kn/ui'
+import { Empty, ScrollArea, cn, Badge, Input } from '@kn/ui'
 import { Editor } from '@tiptap/core'
 import { TextSelection } from '@tiptap/pm/state'
-import React, { useState, useEffect, useCallback, useRef, memo } from 'react'
-import { List } from '@kn/icon'
+import React, { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react'
+import { List, Search, X } from '@kn/icon'
 import scrollIntoView from 'scroll-into-view-if-needed'
+
+// Escape regex special characters for safe use in RegExp construction
+const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+// Highlight the matched substring inside the heading text
+const highlightMatch = (text: string, query: string) => {
+    if (!query) return text
+    const parts = text.split(new RegExp(`(${escapeRegExp(query)})`, 'gi'))
+    return parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase() ? (
+            <mark key={i} className="bg-yellow-200 dark:bg-yellow-500/40 text-inherit rounded-sm px-0.5">
+                {part}
+            </mark>
+        ) : (
+            <React.Fragment key={i}>{part}</React.Fragment>
+        )
+    )
+}
 
 export interface TocItem {
     id: string
@@ -15,7 +33,7 @@ export interface TocItem {
     isScrolledOver?: boolean
 }
 
-export const ToCItem: React.FC<{ item: TocItem; onItemClick: (e: React.MouseEvent, item: TocItem) => void; isActive: boolean; focusedIndex: number; index: number; onKeyDown: (e: React.KeyboardEvent, index: number) => void }> = memo(({ item, onItemClick, isActive, focusedIndex, index, onKeyDown }) => {
+export const ToCItem: React.FC<{ item: TocItem; onItemClick: (e: React.MouseEvent, item: TocItem) => void; isActive: boolean; focusedIndex: number; index: number; onKeyDown: (e: React.KeyboardEvent, index: number) => void; searchQuery?: string }> = memo(({ item, onItemClick, isActive, focusedIndex, index, onKeyDown, searchQuery }) => {
     const levelColors = [
         'text-slate-900 dark:text-slate-100',
         'text-slate-700 dark:text-slate-300',
@@ -58,7 +76,7 @@ export const ToCItem: React.FC<{ item: TocItem; onItemClick: (e: React.MouseEven
                     {item.itemIndex}.
                 </span>
                 <span className="flex-1 overflow-hidden text-ellipsis">
-                    {item.textContent}
+                    {searchQuery ? highlightMatch(item.textContent, searchQuery) : item.textContent}
                 </span>
             </a>
             {isActive && (
@@ -88,6 +106,13 @@ export const ToC: React.FC<{ editor: Editor; className?: string; items: TocItem[
     const { t } = useTranslation()
     const rafRef = useRef<number>(0)
     const [focusedIndex, setFocusedIndex] = useState<number>(-1)
+    const [searchQuery, setSearchQuery] = useState<string>('')
+
+    const filteredItems = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase()
+        if (!q) return items
+        return items.filter(item => item.textContent.toLowerCase().includes(q))
+    }, [items, searchQuery])
 
     useEffect(() => {
         const handleScroll = () => {
@@ -163,7 +188,7 @@ export const ToC: React.FC<{ editor: Editor; className?: string; items: TocItem[
     const onItemKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
         if (e.key === 'ArrowDown') {
             e.preventDefault()
-            const next = Math.min(index + 1, items.length - 1)
+            const next = Math.min(index + 1, filteredItems.length - 1)
             setFocusedIndex(next)
         } else if (e.key === 'ArrowUp') {
             e.preventDefault()
@@ -171,16 +196,16 @@ export const ToC: React.FC<{ editor: Editor; className?: string; items: TocItem[
             setFocusedIndex(prev)
         } else if (e.key === 'Enter') {
             e.preventDefault()
-            const item = items[index]
+            const item = filteredItems[index]
             if (item) onItemClick(e as unknown as React.MouseEvent, item)
         } else if (e.key === 'Home') {
             e.preventDefault()
             setFocusedIndex(0)
         } else if (e.key === 'End') {
             e.preventDefault()
-            setFocusedIndex(items.length - 1)
+            setFocusedIndex(filteredItems.length - 1)
         }
-    }, [items, onItemClick])
+    }, [filteredItems, onItemClick])
 
     if (items.length === 0) {
         return <ToCEmptyState />
@@ -195,24 +220,60 @@ export const ToC: React.FC<{ editor: Editor; className?: string; items: TocItem[
                     </div>
                     <h3 className="font-semibold text-sm text-foreground dark:text-foreground">{t("toc.title", "Table of Contents")}</h3>
                 </div>
+                <div className="relative mt-2">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => {
+                            setSearchQuery(e.target.value)
+                            setFocusedIndex(-1)
+                        }}
+                        placeholder={t('toc.search.placeholder', 'Search headings...')}
+                        aria-label={t('toc.search.placeholder', 'Search headings...')}
+                        className="h-8 pl-7 pr-7 text-xs"
+                    />
+                    {searchQuery && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setSearchQuery('')
+                                setFocusedIndex(-1)
+                            }}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors"
+                            aria-label={t('toc.search.clear', 'Clear search')}
+                        >
+                            <X className="h-3.5 w-3.5" />
+                        </button>
+                    )}
+                </div>
                 <Badge variant="secondary" className="mt-2 text-xs bg-muted dark:bg-muted hover:bg-muted/80 dark:hover:bg-muted/80 text-foreground dark:text-foreground">
-                    {items.length} {items.length === 1 ? 'section' : 'sections'}
+                    {searchQuery
+                        ? `${filteredItems.length} / ${items.length} ${items.length === 1 ? 'section' : 'sections'}`
+                        : `${items.length} ${items.length === 1 ? 'section' : 'sections'}`}
                 </Badge>
             </div>
             <ScrollArea className="flex-1 px-3 py-2 bg-background dark:bg-background">
-                <div role="tree" className="space-y-1">
-                    {items.map((item, index) => (
-                        <ToCItem
-                            onItemClick={onItemClick}
-                            onKeyDown={onItemKeyDown}
-                            key={item.id}
-                            item={item}
-                            index={index}
-                            focusedIndex={focusedIndex}
-                            isActive={activeId === item.id}
-                        />
-                    ))}
-                </div>
+                {filteredItems.length === 0 ? (
+                    <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
+                        {t('toc.search.noResults', 'No matching headings')}
+                    </div>
+                ) : (
+                    <div role="tree" className="space-y-1">
+                        {filteredItems.map((item, index) => (
+                            <ToCItem
+                                onItemClick={onItemClick}
+                                onKeyDown={onItemKeyDown}
+                                key={item.id}
+                                item={item}
+                                index={index}
+                                focusedIndex={focusedIndex}
+                                isActive={activeId === item.id}
+                                searchQuery={searchQuery}
+                            />
+                        ))}
+                    </div>
+                )}
             </ScrollArea>
         </div>
     )

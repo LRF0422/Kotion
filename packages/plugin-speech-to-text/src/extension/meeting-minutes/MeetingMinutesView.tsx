@@ -262,6 +262,24 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
             setTranscript(t);
             setLocalAudioUrl(result.audioBlob ? URL.createObjectURL(result.audioBlob) : null);
 
+            // Auto-upload recording to default folder via fileService
+            if (result.audioBlob) {
+                try {
+                    const fileName = `${m('recordingFilePrefix')}_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}_${new Date().toLocaleTimeString('zh-CN', { hour12: false }).replace(/:/g, '-')}.webm`;
+                    const file = new File([result.audioBlob], fileName, { type: 'audio/webm' });
+                    const uploadResult = await fileService.uploadFile(file);
+                    const remoteAudioUrl = uploadResult.name ? fileService.getDownloadUrl(uploadResult.name) : null;
+                    updateAttributes({
+                        audioPath: uploadResult.path || uploadResult.name,
+                        audioUrl: remoteAudioUrl,
+                    });
+                    toast.success(m('audioSaved'));
+                } catch (err) {
+                    console.error('Error uploading recording:', err);
+                    toast.error(m('uploadRecordingFailed'));
+                }
+            }
+
             // Insert transcript text into the meetingTabTranscript child node
             const pos = getPos();
             if (typeof pos === 'number' && t) {

@@ -1,4 +1,4 @@
-import { FileService, UploadedFile, UploadOptions, FileSelectorOptions, SelectedFile } from "@kn/common";
+import { FileService, UploadedFile, UploadOptions, FileSelectorOptions, SelectedFile, getAccessToken } from "@kn/common";
 import { useApi, APIS as CORE_APIS } from "@kn/common";
 import { fileOpen } from "browser-fs-access";
 import { APIS } from "../api";
@@ -62,7 +62,7 @@ export class FileServiceImpl implements FileService {
         if (fileName.startsWith('http://') || fileName.startsWith('https://')) {
             return fileName;
         }
-        return this.downloadBaseUrl + fileName;
+        return this.downloadBaseUrl + fileName + '&Authorization=' + getAccessToken();
     }
 
     /**
