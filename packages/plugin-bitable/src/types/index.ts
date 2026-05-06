@@ -216,6 +216,7 @@ export interface GroupConfig {
 export interface RecordData {
     id: string;
     [key: string]: any;
+    content?: any; // Tiptap JSON document content for record body/page
     createdTime?: string;
     updatedTime?: string;
     createdBy?: Person;

@@ -54,7 +54,7 @@ import { convertFieldValue, generateSelectOptionsFromData } from "../utils/field
 import { applyFilters, applySorts } from "../utils/dataProcessing";
 import { SortPanel } from "./components/SortPanel";
 import { FilterPanel } from "./components/FilterPanel";
-import { RecordDetailSheet } from "./components/RecordDetailSheet";
+import { RecordDetailModal } from "./components/RecordDetailModal";
 
 export const BitableView: React.FC<NodeViewProps> = (props) => {
     const { node, updateAttributes, deleteNode, editor } = props;
@@ -822,15 +822,14 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* Record detail panel */}
-            <RecordDetailSheet
+            {/* Record detail modal */}
+            <RecordDetailModal
                 open={selectedRecord !== null}
-                onOpenChange={(open) => { if (!open) setSelectedRecord(null); }}
                 record={selectedRecord}
                 fields={attrs.fields}
+                onClose={() => setSelectedRecord(null)}
                 onUpdateRecord={handleUpdateRecord}
                 editable={editor.isEditable}
-                editor={editor}
             />
         </NodeViewWrapper>
     );

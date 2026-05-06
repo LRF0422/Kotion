@@ -17,6 +17,7 @@ export const dispatchMeetingMinutesPanelOpen = () => {
 };
 
 const formatDuration = (seconds: number): string => {
+    if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
@@ -91,7 +92,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, onEnded }) => {
         if (!audio) return;
 
         const handleLoadedMetadata = () => {
-            setDuration(audio.duration);
+            const d = audio.duration;
+            setDuration(Number.isFinite(d) ? d : 0);
         };
 
         const handleTimeUpdate = () => {
@@ -152,7 +154,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, onEnded }) => {
                     <input
                         type="range"
                         min={0}
-                        max={duration || 0}
+                        max={Number.isFinite(duration) ? duration : 0}
                         value={currentTime}
                         onChange={handleSeek}
                         className="flex-1 h-1 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gradient-to-r [&::-webkit-slider-thumb]:from-indigo-500 [&::-webkit-slider-thumb]:to-purple-500"

@@ -50,6 +50,7 @@ injectTabStyles();
 // ─── Helpers ────────────────────────────────────────────
 
 const formatDuration = (seconds: number): string => {
+    if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
@@ -105,7 +106,10 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl }) => {
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
-        const onMeta = () => setDur(audio.duration);
+        const onMeta = () => {
+            const d = audio.duration;
+            setDur(Number.isFinite(d) ? d : 0);
+        };
         const onTime = () => setCurrentTime(audio.currentTime);
         const onEnd = () => { setIsPlaying(false); setCurrentTime(0); };
         audio.addEventListener('loadedmetadata', onMeta);
@@ -141,7 +145,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl }) => {
             </button>
             <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{formatDuration(Math.floor(currentTime))}</span>
             <input
-                type="range" min={0} max={dur || 0} value={currentTime} onChange={handleSeek}
+                type="range" min={0} max={Number.isFinite(dur) ? dur : 0} value={currentTime} onChange={handleSeek}
                 className="flex-1 h-1 bg-muted rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500"
             />
             <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{formatDuration(Math.floor(dur))}</span>
@@ -189,13 +193,20 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
 
     const fileService = useFileService();
 
-    const [state, setState] = useState<RecordingState>(() =>
-        node.attrs.isRecording ? 'recording' :
-            (node.attrs.transcript ? 'completed' : 'idle')
-    );
+    // On reload, if isRecording was left true (browser crash), reset it.
+    // A node is considered "completed" if it has transcript or audio data persisted.
+    const hasCompletedData = !!(node.attrs.transcript || node.attrs.audioPath || node.attrs.audioUrl);
+    const [state, setState] = useState<RecordingState>(() => {
+        if (node.attrs.isRecording && !hasCompletedData) return 'recording'; // edge case: stale
+        if (hasCompletedData) return 'completed';
+        return 'idle';
+    });
     const [transcript, setTranscript] = useState(node.attrs.transcript || '');
     const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
-    const [localAudioUrl, setLocalAudioUrl] = useState<string | null>(node.attrs.audioUrl || null);
+    // Use persisted remote URL if available; otherwise fall back to local blob URL
+    const [localAudioUrl, setLocalAudioUrl] = useState<string | null>(
+        node.attrs.audioUrl || null
+    );
     const [activeTab, setActiveTab] = useState<MeetingTab>((node.attrs.activeTab as MeetingTab) || 'notes');
     const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
     const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -205,6 +216,13 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
         node.attrs.createdAt ? new Date(node.attrs.createdAt) : new Date()
     );
     const titleInputRef = useRef<HTMLInputElement>(null);
+
+    // On mount, reset stale isRecording flag from a previous session
+    useEffect(() => {
+        if (node.attrs.isRecording && state !== 'recording') {
+            updateAttributes({ isRecording: false, isPaused: false });
+        }
+    }, []);
 
     // Recording state sync
     useEffect(() => {
@@ -254,7 +272,7 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
     };
 
     const handleStop = async () => {
-        updateAttributes({ isRecording: false, isPaused: false });
+        updateAttributes({ isRecording: false, isPaused: false, duration });
         setState('processing');
         const result = await stopRecording();
         if (result) {
@@ -412,7 +430,8 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
         setActiveTab('notes');
         updateAttributes({
             isRecording: false, isPaused: false, duration: 0,
-            audioPath: null, audioUrl: null, transcript: ''
+            audioPath: null, audioUrl: null, transcript: '',
+            activeTab: 'notes'
         });
         // Reset all three child tab nodes to empty paragraphs
         const pos = getPos();
@@ -458,6 +477,9 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
     }, [updateAttributes]);
 
     const m = useCallback((key: string) => t(`meetingMinutes.${key}`), [t]);
+
+    // Use persisted duration on reload, live duration during recording
+    const displayDuration = isRecording || isPaused ? duration : (node.attrs.duration || duration);
 
     const formatDateStr = useCallback((date: Date): string => {
         const now = new Date();
@@ -778,7 +800,7 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
                         <button onClick={handleReset} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('newRecording')}>
                             <RotateCcw className="h-3.5 w-3.5" />
                         </button>
-                        {localAudioUrl && (
+                        {localAudioUrl && !node.attrs.audioPath && (
                             <button onClick={handleSaveToFile} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('saveRecording')}>
                                 <Save className="h-3.5 w-3.5" />
                             </button>
@@ -847,7 +869,7 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
                 {/* ── Footer ── */}
                 <div className="px-5 py-2 border-t border-border flex items-center text-xs text-muted-foreground select-none gap-2">
                     <span>{m('duration')}&nbsp;</span>
-                    <span className="font-medium text-foreground tabular-nums">{formatDuration(duration)}</span>
+                    <span className="font-medium text-foreground tabular-nums">{formatDuration(displayDuration)}</span>
                     <div className="w-px h-3 bg-border mx-2" />
                     <span>{m('helpfulQuestion')}</span>
                     <button
