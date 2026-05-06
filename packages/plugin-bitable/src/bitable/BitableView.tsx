@@ -179,7 +179,15 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 : record
         );
         updateAttributes({ ...attrs, data: newData });
-    }, [attrs, updateAttributes]);
+
+        // Keep selectedRecord in sync with updated data
+        if (selectedRecord?.id === recordId) {
+            const updatedRecord = newData.find((r: any) => r.id === recordId);
+            if (updatedRecord) {
+                setSelectedRecord(updatedRecord);
+            }
+        }
+    }, [attrs, updateAttributes, selectedRecord?.id]);
 
     // 批量更新记录 - avoids race condition when multiple records are updated simultaneously
     const handleBatchUpdateRecords = useCallback((updatesMap: Map<string, Partial<RecordData>>) => {
