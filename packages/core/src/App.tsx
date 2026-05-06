@@ -157,7 +157,8 @@ export const App: React.FC<AppProps> = (props) => {
     }, [pluginsReady, pluginManager, refreshFlag])
 
     return <AppContext.Provider value={{
-        pluginManager: pluginManager
+        pluginManager: pluginManager,
+        serviceRegistry: pluginManager?.serviceRegistry
     }}>
         <ThemeProvider>
             <Provider store={store}>

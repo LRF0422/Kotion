@@ -5,7 +5,7 @@ import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
 import { Clock, Plus, X, Image, ImagePlus, Trash2, Move, GripVertical } from "@kn/icon";
 import React, { useContext, useState, useMemo, useCallback, useRef } from "react";
 import { PageContext } from "@editor/editor/context";
-import { AppContext, FileService } from "@kn/common";
+import { AppContext, FileService, useOptionalService } from "@kn/common";
 
 // Cover image configuration interface
 interface CoverConfig {
@@ -26,8 +26,8 @@ export const TitleView: React.FC<NodeViewProps> = (props) => {
 	const dragStartY = useRef<number>(0)
 	const dragStartPosition = useRef<number>(50)
 
-	// Get file service from plugin manager
-	const fileService = pluginManager?.pluginServices?.fileService as FileService | undefined
+	// Get file service from service registry
+	const fileService = useOptionalService("fileService") as FileService | undefined
 
 	// Check if icon is configured
 	const hasIcon = !!props.node.attrs?.icon?.icon

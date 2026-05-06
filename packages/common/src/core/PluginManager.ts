@@ -3,6 +3,7 @@ import { ExtensionWrapper } from "./editor";
 import { SiderMenuItemProps } from "./menu";
 import { RouteConfig } from "./route";
 import { Services } from "./types";
+import { ServiceRegistry } from "./ServiceRegistry";
 import { importScript } from "../utils/import-util";
 import { event } from "../event";
 import { Editor } from "@tiptap/core";
@@ -101,7 +102,7 @@ export class PluginManager {
 
     plugins: KPlugin<any>[] = []
     _initialPlugins: KPlugin<any>[] = []
-    _pluginServices: Services = {} as Services
+    private _serviceRegistry: ServiceRegistry = new ServiceRegistry()
     _pluginStore: (path: string) => string
     _init: boolean = false
 
@@ -171,7 +172,7 @@ export class PluginManager {
                 this._mergeServices()
                 this._init = true
                 logger.info('Plugins loaded:', this.plugins.length);
-                logger.debug('Services loaded:', this._pluginServices);
+                logger.debug('Services loaded:', this._serviceRegistry.getAll());
                 return
             }
 
@@ -205,7 +206,7 @@ export class PluginManager {
             this._init = true
 
             logger.info(`All plugins loaded: ${this.plugins.length} (${successfulPlugins.length} remote)`);
-            logger.debug('Services loaded:', this._pluginServices);
+            logger.debug('Services loaded:', this._serviceRegistry.getAll());
 
             const failedCount = loadResults.filter(r => r.status === 'rejected').length
             if (failedCount > 0) {
@@ -225,7 +226,8 @@ export class PluginManager {
             .filter(service => service !== undefined)
 
         if (servicesArray.length > 0) {
-            this._pluginServices = merge({}, ...servicesArray)
+            const merged = merge({}, ...servicesArray) as Services
+            this._serviceRegistry.registerAll(merged)
         }
     }
 
@@ -276,9 +278,9 @@ export class PluginManager {
             this._pluginMap.set(loadedPlugin.name, loadedPlugin)
             this._clearCache()
 
-            // Merge services if available
+            // Merge services via ServiceRegistry if available
             if (pluginInstance[pluginKey]?.services) {
-                this._pluginServices = merge(this._pluginServices, pluginInstance[pluginKey].services)
+                this._serviceRegistry.registerAll(pluginInstance[pluginKey].services)
             }
 
             logger.info(`Plugin ${loadedPlugin.name} installed successfully`)
@@ -536,8 +538,19 @@ export class PluginManager {
         return extensions;
     }
 
+    /**
+     * Access the ServiceRegistry for runtime service management.
+     * Plugins can use this to register/unregister services dynamically.
+     */
+    get serviceRegistry(): ServiceRegistry {
+        return this._serviceRegistry
+    }
+
+    /**
+     * @deprecated Use serviceRegistry.getAll() instead
+     */
     get pluginServices(): Services {
-        return this._pluginServices
+        return this._serviceRegistry.getAll()
     }
 
     /**
@@ -545,15 +558,15 @@ export class PluginManager {
      * Core services are services provided by the application itself, not plugins
      */
     registerCoreService<K extends keyof Services>(name: K, service: Services[K]): void {
-        this._pluginServices[name] = service
-        logger.debug(`Core service registered: ${name}`)
+        this._serviceRegistry.register(name, service)
+        logger.debug(`Core service registered: ${String(name)}`)
     }
 
     /**
      * Unregister a core service
      */
     unregisterCoreService(name: keyof Services): void {
-        delete this._pluginServices[name]
-        logger.debug(`Core service unregistered: ${name}`)
+        this._serviceRegistry.unregister(name)
+        logger.debug(`Core service unregistered: ${String(name)}`)
     }
 }

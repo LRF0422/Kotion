@@ -2,13 +2,16 @@ export * from "./core/editor"
 export * from "./core/route"
 export * from "./core/PluginManager"
 export * from "./core/AppContext"
+export * from "./core/ServiceRegistry"
 export * from "./core/menu"
 export * from "./event"
 export * from "./locales"
-// Export from core/types, excluding AIFoundation and Services (already exported via ./ai and ./core/AppContext)
+// Export from core/types, excluding AIFoundation (already exported via ./ai)
+// Services type is exported for module augmentation by plugins
 export type {
     KeysWithTypeOf, ValuesOf,
-    UploadedFile, UploadOptions, FileSelectorOptions, SelectedFile, FileService
+    UploadedFile, UploadOptions, FileSelectorOptions, SelectedFile, FileService,
+    Services
 } from "./core/types"
 export * from "./entity"
 export * from "./utils/logger"

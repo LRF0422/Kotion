@@ -132,5 +132,4 @@ export interface AIFoundation {
 export interface Services {
     fileService?: FileService;
     aiFoundation?: AIFoundation;
-    [key: string]: any;
 }

@@ -1,34 +1,24 @@
-import { AppContext } from "../core/AppContext";
 import { FileService } from "../core/types";
-import { useContext } from "react";
+import { useService, useOptionalService } from "../hooks/use-service";
 
 // Re-export types from common for convenience
 export type { FileService, UploadedFile, UploadOptions } from "../core/types";
 
 /**
- * Hook to access FileService from plugin services
+ * Hook to access FileService from plugin services.
+ * Uses the unified useService hook with proper type inference.
  * @throws Error if FileService is not registered
  * @returns FileService instance
  */
 export const useFileService = (): FileService => {
-    const { pluginManager } = useContext(AppContext);
-    const service = pluginManager?.pluginServices?.fileService;
-
-    if (!service) {
-        throw new Error(
-            "useFileService: FileService is not registered. " +
-            "Make sure plugin-file-manager is installed and loaded."
-        );
-    }
-
-    return service;
+    return useService("fileService");
 };
 
 /**
  * Hook to optionally access FileService (returns undefined if not available)
+ * Uses the unified useOptionalService hook with proper type inference.
  * @returns FileService instance or undefined
  */
 export const useOptionalFileService = (): FileService | undefined => {
-    const { pluginManager } = useContext(AppContext);
-    return pluginManager?.pluginServices?.fileService;
+    return useOptionalService("fileService");
 };
