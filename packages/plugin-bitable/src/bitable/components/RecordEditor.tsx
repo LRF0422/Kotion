@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useEditor, EditorContent, useEditorExtension, AnyExtension } from '@kn/editor';
+import { useEditor, EditorContent, useEditorExtension } from '@kn/editor';
 import { BubbleMenu } from '@kn/editor';
 import {
     Bold,
