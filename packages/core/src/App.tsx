@@ -22,6 +22,7 @@ import { setRequestToast } from "@kn/common"
 import { registerCoreToolFactories } from "./ai/tools/register"
 import { toast } from "@kn/ui"
 import { ErrorPage } from "./components/ErrorPage";
+import ReactDOM from "react-dom";
 
 const { createBrowserRouter,
     createRoutesFromElements, Route, RouterProvider, Provider,
@@ -47,6 +48,8 @@ window.core = core
 window.icon = icon
 window.editor = editor
 window.React = React
+window.ReactDOM = ReactDOM
+
 
 
 export type Plugins = common.KPlugin<any>[]

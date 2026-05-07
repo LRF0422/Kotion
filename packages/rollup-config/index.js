@@ -13,14 +13,23 @@ import tailwindcss from "tailwindcss";
 import autoprefixer from "autoprefixer";
 
 export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
-  external: [
-    "react",
-    "@kn/common",
-    "@kn/ui",
-    "@kn/icon",
-    "@kn/editor",
-    "@kn/core",
-  ],
+  // Ensure only one React instance — externalize react/react-dom, bundle sub-paths (jsx-runtime etc.)
+  external: (id) => {
+    // Only externalize exact react and react-dom — subpaths (react/jsx-runtime,
+    // react-dom/client, etc.) are bundled since they internally reference
+    // the external React instance, keeping it a singleton.
+    if (id === "react" || id === "react-dom") {
+      return true;
+    }
+    // Workspace packages must also be external
+    return [
+      "@kn/common",
+      "@kn/ui",
+      "@kn/icon",
+      "@kn/editor",
+      "@kn/core",
+    ].includes(id);
+  },
   input,
   output: [
     {
@@ -36,6 +45,7 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
         "@kn/editor": "editor",
         "@kn/core": "core",
         react: "React",
+        "react-dom": "ReactDOM",
       },
       inlineDynamicImports: true,
     },
@@ -44,6 +54,8 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
     commonjs(),
     resolve({
       browser: true,
+      // Prevent multiple copies of react/react-dom in the bundle
+      dedupe: ["react", "react-dom"],
     }),
     json(),
     nodePolyfills(),
@@ -54,11 +66,13 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
       exclude: "../../node_modules/**",
     }),
     // PostCSS for node_modules CSS (no transformation, just bundle)
+    // NOTE: minimize is OFF because cssnano corrupts @layer-based CSS
+    // (e.g., react-data-grid) by incorrectly merging selectors across layers.
     postcss({
       plugins: [],
       extensions: [".css"],
       extract: false,
-      minimize: true,
+      minimize: false,
       include: /node_modules/,
     }),
     // PostCSS for source files with Tailwind CSS and other transformations

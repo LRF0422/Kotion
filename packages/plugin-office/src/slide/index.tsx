@@ -34,6 +34,6 @@ export const SlideExtension: ExtensionWrapper = {
             },
         },
     ],
-    tools: slideTools,
+    // tools: slideTools,
     skills: [slideExpertSkill],
 }

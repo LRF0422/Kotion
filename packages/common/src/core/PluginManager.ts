@@ -8,6 +8,7 @@ import { importScript } from "../utils/import-util";
 import { event } from "../event";
 import { Editor } from "@tiptap/core";
 import { logger } from "../utils/logger";
+import { getAccessToken } from "../utils/auth";
 
 export interface PluginSettingsConfig {
     /**
@@ -178,7 +179,7 @@ export class PluginManager {
 
             const loadResults = await Promise.allSettled(remotePlugins.map(async (plugin) => {
                 try {
-                    const path = this._pluginStore(plugin.resourcePath) + "&cache=true"
+                    const path = this._pluginStore(plugin.resourcePath) + "&cache=true&Authorization=" + getAccessToken()
                     const result = await importScript(path, plugin.pluginKey, plugin.name)
                     return result
                 } catch (error) {
