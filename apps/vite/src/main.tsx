@@ -14,5 +14,5 @@ import { drawnix } from "@kn/plugin-drawnix"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[]} />
+  <App plugins={[ai, bitable, blockReference, speechToText, chart, drawnix, DefaultPluginInstance, fileManager]} />
 )

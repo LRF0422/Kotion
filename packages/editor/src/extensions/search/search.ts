@@ -1,218 +1,278 @@
-// @ts-nocheck
-import { event } from '@kn/common';
-import { Extension } from '@tiptap/core';
-import { Node as ProsemirrorNode } from '@tiptap/pm/model';
-import { EditorState, Plugin, PluginKey } from '@tiptap/pm/state';
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import scrollIntoView from 'scroll-into-view-if-needed';
+import { event as rawEvent } from "@kn/common";
+import { Extension, Range } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import type { EditorState, Transaction } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import scrollIntoView from "scroll-into-view-if-needed";
 
-declare module '@tiptap/core' {
+import { ON_SEARCH_RESULTS, ON_SEARCH_TOGGLE } from "./events";
+
+// The shared event emitter is strictly typed against a core EventMap.
+// Cast once so we can emit extension-local events without polluting common.
+const event = rawEvent as unknown as {
+    emit: (name: string, ...args: any[]) => unknown;
+    on: (name: string, fn: (...args: any[]) => void) => unknown;
+    off: (name: string, fn?: (...args: any[]) => void) => unknown;
+};
+
+declare module "@tiptap/core" {
+    interface Storage {
+        search: SearchStorage;
+    }
     interface Commands<ReturnType> {
         search: {
+            /** Set the current search term; triggers re-decoration. */
             setSearchTerm: (searchTerm: string) => ReturnType;
+            /** Set the replacement term (does not re-run the search). */
             setReplaceTerm: (replaceTerm: string) => ReturnType;
+            /** Update search-matching options (case-sensitive / regex / whole-word). */
+            setSearchOptions: (opts: {
+                caseSensitive?: boolean;
+                disableRegex?: boolean;
+                wholeWord?: boolean;
+            }) => ReturnType;
+            /** Replace the current match. */
             replace: () => ReturnType;
+            /** Replace all matches. */
             replaceAll: () => ReturnType;
-            goToPrevSearchResult: () => void;
-            goToNextSearchResult: () => void;
+            /** Jump to the previous match. */
+            goToPrevSearchResult: () => ReturnType;
+            /** Jump to the next match. */
+            goToNextSearchResult: () => ReturnType;
+            /** Open the floating search panel. */
+            openSearchPanel: () => ReturnType;
+            /** Close the floating search panel. */
+            closeSearchPanel: () => ReturnType;
+            /** Toggle the floating search panel. */
+            toggleSearchPanel: () => ReturnType;
         };
     }
 }
 
-interface Result {
-    from: number;
-    to: number;
-}
+export interface SearchResult extends Range { }
 
-interface TextNodesWithPosition {
+interface TextNodeWithPosition {
     text: string;
     pos: number;
 }
 
-const updateView = (state: EditorState, dispatch: any) => dispatch(state.tr);
-
-const regex = (s: string, disableRegex: boolean, caseSensitive: boolean): RegExp => {
-    return RegExp(disableRegex ? s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') : s, caseSensitive ? 'gu' : 'gui');
-};
-
-function processSearches(
-    doc: ProsemirrorNode,
-    searchTerm: RegExp,
-    searchResultClass: string
-): { decorationsToReturn: any[]; results: Result[] } {
-    const decorations: Decoration[] = [];
-    let textNodesWithPosition: TextNodesWithPosition[] = [];
-    const results: Result[] = [];
-
-    let index = 0;
-
-    if (!searchTerm) return { decorationsToReturn: [], results: [] };
-
-    doc?.descendants((node, pos) => {
-        if (node.isText) {
-            if (textNodesWithPosition[index]) {
-                textNodesWithPosition[index] = {
-                    text: textNodesWithPosition[index].text + node.text,
-                    pos: textNodesWithPosition[index].pos,
-                };
-            } else {
-                textNodesWithPosition[index] = {
-                    text: `${node.text}`,
-                    pos,
-                };
-            }
-        } else {
-            index += 1;
-        }
-    });
-
-    textNodesWithPosition = textNodesWithPosition.filter(Boolean);
-
-    for (let i = 0; i < textNodesWithPosition.length; i += 1) {
-        const { text, pos } = textNodesWithPosition[i];
-
-        const matches = [...text.matchAll(searchTerm)];
-
-        for (let j = 0; j < matches.length; j += 1) {
-            const m = matches[j];
-
-            if (m[0] === '') break;
-
-            if (m.index !== undefined) {
-                results.push({
-                    from: pos + m.index,
-                    to: pos + m.index + m[0].length,
-                });
-            }
-        }
-    }
-
-    for (let i = 0; i < results.length; i += 1) {
-        const r = results[i];
-        decorations.push(Decoration.inline(r.from, r.to, { class: searchResultClass }));
-    }
-
-    return {
-        decorationsToReturn: decorations,
-        results,
-    };
+export interface SearchOptions {
+    searchTerm: string;
+    replaceTerm: string;
+    caseSensitive: boolean;
+    disableRegex: boolean;
+    wholeWord: boolean;
+    searchResultClass: string;
+    searchResultCurrentClass: string;
 }
 
-const replace = (replaceTerm: string, results: Result[], { state, dispatch }: any) => {
-    const firstResult = results[0];
+export interface SearchStorage {
+    results: SearchResult[];
+    currentIndex: number;
+    panelOpen: boolean;
+}
 
-    if (!firstResult) return;
+interface SearchPluginState {
+    decorations: DecorationSet;
+    results: SearchResult[];
+    currentIndex: number;
+    searchTerm: string;
+    replaceTerm: string;
+    caseSensitive: boolean;
+    disableRegex: boolean;
+    wholeWord: boolean;
+}
 
-    const { from, to } = results[0];
+interface SearchMeta {
+    searchTerm?: string;
+    replaceTerm?: string;
+    caseSensitive?: boolean;
+    disableRegex?: boolean;
+    wholeWord?: boolean;
+    currentIndex?: number;
+    /** Force a rescan even if params haven't changed (after replace). */
+    rescan?: boolean;
+}
 
-    if (dispatch) dispatch(state.tr.insertText(replaceTerm, from, to));
+export const searchPluginKey = new PluginKey<SearchPluginState>("search");
+
+/** Escape all regex metacharacters. */
+const escapeRegex = (value: string): string =>
+    value.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+
+/** Build a RegExp honouring the current search parameters. */
+const buildRegex = (
+    term: string,
+    { disableRegex, caseSensitive, wholeWord }: {
+        disableRegex: boolean;
+        caseSensitive: boolean;
+        wholeWord: boolean;
+    }
+): RegExp | null => {
+    if (!term) return null;
+    let source = disableRegex ? escapeRegex(term) : term;
+    if (wholeWord) {
+        source = `\\b(?:${source})\\b`;
+    }
+    const flags = caseSensitive ? "gu" : "gui";
+    try {
+        return new RegExp(source, flags);
+    } catch {
+        // Invalid user-supplied regex — treat as "no results" rather than crashing.
+        return null;
+    }
 };
 
-const rebaseNextResult = (
-    replaceTerm: string,
-    index: number,
-    lastOffset: number,
-    results: Result[]
-): [number, Result[]] | null => {
-    const nextIndex = index + 1;
+/** Scan the doc and compute result ranges. */
+const processSearches = (
+    doc: ProseMirrorNode,
+    searchTerm: RegExp | null
+): SearchResult[] => {
+    if (!searchTerm) return [];
 
-    if (!results[nextIndex]) return null;
+    const textNodes: TextNodeWithPosition[] = [];
+    const results: SearchResult[] = [];
 
-    const { from: currentFrom, to: currentTo } = results[index];
+    let lastPos = -1;
 
-    const offset = currentTo - currentFrom - replaceTerm.length + lastOffset;
+    doc.descendants((node, pos) => {
+        if (!node.isText || !node.text) return;
+        if (lastPos === -1 || pos !== lastPos) {
+            textNodes.push({ text: node.text, pos });
+        } else {
+            const entry = textNodes[textNodes.length - 1];
+            entry.text += node.text;
+        }
+        lastPos = pos + node.nodeSize;
+    });
 
-    const { from, to } = results[nextIndex];
-
-    results[nextIndex] = {
-        to: to - offset,
-        from: from - offset,
-    };
-
-    return [offset, results];
-};
-
-const replaceAll = (replaceTerm: string, results: Result[], { tr, dispatch }: any) => {
-    let offset = 0;
-
-    let ourResults = results.slice();
-
-    if (!ourResults.length) return false;
-
-    for (let i = 0; i < ourResults.length; i += 1) {
-        const { from, to } = ourResults[i];
-
-        tr.insertText(replaceTerm, from, to);
-
-        const rebaseNextResultResponse = rebaseNextResult(replaceTerm, i, offset, ourResults);
-
-        if (rebaseNextResultResponse) {
-            offset = rebaseNextResultResponse[0];
-            ourResults = rebaseNextResultResponse[1];
+    for (const { text, pos } of textNodes) {
+        searchTerm.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = searchTerm.exec(text)) !== null) {
+            if (match[0].length === 0) {
+                searchTerm.lastIndex += 1;
+                continue;
+            }
+            const from = pos + match.index;
+            const to = from + match[0].length;
+            results.push({ from, to });
         }
     }
 
-    dispatch(tr);
+    return results;
+};
 
+const buildDecorationSet = (
+    doc: ProseMirrorNode,
+    results: SearchResult[],
+    currentIndex: number,
+    searchResultClass: string,
+    searchResultCurrentClass: string
+): DecorationSet => {
+    if (results.length === 0) return DecorationSet.empty;
+    const decorations: Decoration[] = results.map((r, i) =>
+        Decoration.inline(r.from, r.to, {
+            class: i === currentIndex ? searchResultCurrentClass : searchResultClass,
+        })
+    );
+    return DecorationSet.create(doc, decorations);
+};
+
+const replaceAtRange = (
+    replaceTerm: string,
+    range: SearchResult,
+    state: EditorState,
+    dispatch?: (tr: Transaction) => void
+): void => {
+    if (!dispatch) return;
+    const tr = state.tr.insertText(replaceTerm, range.from, range.to);
+    tr.setMeta(searchPluginKey, { rescan: true } as SearchMeta);
+    dispatch(tr);
+};
+
+const replaceAllMatches = (
+    replaceTerm: string,
+    results: SearchResult[],
+    state: EditorState,
+    dispatch?: (tr: Transaction) => void
+): boolean => {
+    if (!dispatch || results.length === 0) return false;
+    const tr = state.tr;
+    // Replace in reverse so earlier positions don't shift.
+    for (let i = results.length - 1; i >= 0; i -= 1) {
+        const { from, to } = results[i];
+        tr.insertText(replaceTerm, from, to);
+    }
+    tr.setMeta(searchPluginKey, { rescan: true, currentIndex: -1 } as SearchMeta);
+    dispatch(tr);
     return true;
 };
 
-const gotoSearchResult = ({ view, tr, searchResults, searchResultCurrentClass, gotoIndex }) => {
-    const result = searchResults[gotoIndex];
-
-    if (result) {
-        const transaction = tr.setMeta('directDecoration', {
-            fromPos: result.from,
-            toPos: result.to,
-            attrs: { class: searchResultCurrentClass },
-        });
-        view?.dispatch(transaction);
-
-        setTimeout(() => {
-            const el = window.document.querySelector(`.${searchResultCurrentClass}`);
-            if (el) {
-                scrollIntoView(el, { behavior: 'smooth', scrollMode: 'if-needed' });
-            }
-        }, 0);
-
-        return true;
+const scrollToResult = (
+    view: EditorView,
+    result: SearchResult | undefined
+): void => {
+    if (!result) return;
+    try {
+        const { node } = view.domAtPos(result.from);
+        const el = node instanceof HTMLElement ? node : (node.parentElement ?? null);
+        if (el) {
+            scrollIntoView(el, {
+                behavior: "smooth",
+                scrollMode: "if-needed",
+                block: "center",
+                inline: "nearest",
+            });
+        }
+    } catch {
+        // domAtPos can throw after a doc change if positions are stale; ignore.
     }
-
-    return false;
 };
 
-export const ON_SEARCH_RESULTS = 'ON_SEARCH_RESULTS';
+/** Build a SearchPluginState that reflects `next` params against `doc`. */
+const rescan = (
+    doc: ProseMirrorNode,
+    next: SearchPluginState,
+    searchResultClass: string,
+    searchResultCurrentClass: string
+): SearchPluginState => {
+    const regex = buildRegex(next.searchTerm, {
+        disableRegex: next.disableRegex,
+        caseSensitive: next.caseSensitive,
+        wholeWord: next.wholeWord,
+    });
+    const results = processSearches(doc, regex);
+    let currentIndex = next.currentIndex;
+    if (results.length === 0) {
+        currentIndex = -1;
+    } else if (currentIndex < 0 || currentIndex >= results.length) {
+        currentIndex = 0;
+    }
+    const decorations = buildDecorationSet(
+        doc,
+        results,
+        currentIndex,
+        searchResultClass,
+        searchResultCurrentClass
+    );
+    return { ...next, results, currentIndex, decorations };
+};
 
-interface SearchOptions {
-    searchTerm: string;
-    replaceTerm: string;
-    searchResultClass: string;
-    searchResultCurrentClass: string;
-    caseSensitive: boolean;
-    disableRegex: boolean;
-    onChange?: () => void;
-}
-
-interface SearchStorage {
-    results: Result[];
-    currentIndex: number;
-}
-
-// eslint-disable-next-line @typescript-eslint/ban-types
 export const SearchNReplace = Extension.create<SearchOptions, SearchStorage>({
-    name: 'search',
+    name: "search",
 
     addOptions() {
         return {
-            searchTerm: '',
-            replaceTerm: '',
-            results: [],
-            currentIndex: 0,
-            searchResultClass: 'search-result',
-            searchResultCurrentClass: 'search-result-current',
+            searchTerm: "",
+            replaceTerm: "",
             caseSensitive: false,
-            disableRegex: false,
-            onChange: () => { },
+            disableRegex: true,
+            wholeWord: false,
+            searchResultClass: "search-result",
+            searchResultCurrentClass: "search-result-current",
         };
     },
 
@@ -220,6 +280,7 @@ export const SearchNReplace = Extension.create<SearchOptions, SearchStorage>({
         return {
             results: [],
             currentIndex: -1,
+            panelOpen: false,
         };
     },
 
@@ -227,143 +288,264 @@ export const SearchNReplace = Extension.create<SearchOptions, SearchStorage>({
         return {
             setSearchTerm:
                 (searchTerm: string) =>
-                    ({ state, dispatch, editor }) => {
-                        this.options.searchTerm = searchTerm;
-                        this.storage.results = [];
-                        this.storage.currentIndex = 0;
-                        event.emit(ON_SEARCH_RESULTS);
-                        updateView(state, dispatch);
-                        return false;
+                    ({ tr, dispatch }) => {
+                        if (dispatch) {
+                            tr.setMeta(searchPluginKey, {
+                                searchTerm,
+                                currentIndex: 0,
+                            } as SearchMeta);
+                        }
+                        return true;
                     },
+
             setReplaceTerm:
                 (replaceTerm: string) =>
-                    ({ state, dispatch }) => {
-                        this.options.replaceTerm = replaceTerm;
-
-                        updateView(state, dispatch);
-
-                        return false;
+                    ({ tr, dispatch }) => {
+                        if (dispatch) {
+                            tr.setMeta(searchPluginKey, { replaceTerm } as SearchMeta);
+                        }
+                        return true;
                     },
+
+            setSearchOptions:
+                (opts) =>
+                    ({ tr, dispatch }) => {
+                        if (dispatch) {
+                            const meta: SearchMeta = {};
+                            if (typeof opts.caseSensitive === "boolean") {
+                                meta.caseSensitive = opts.caseSensitive;
+                            }
+                            if (typeof opts.disableRegex === "boolean") {
+                                meta.disableRegex = opts.disableRegex;
+                            }
+                            if (typeof opts.wholeWord === "boolean") {
+                                meta.wholeWord = opts.wholeWord;
+                            }
+                            tr.setMeta(searchPluginKey, meta);
+                        }
+                        return true;
+                    },
+
             replace:
                 () =>
-                    ({ state, dispatch, editor }) => {
-                        const { replaceTerm } = this.options;
-                        const { currentIndex, results } = this.storage;
-                        const currentResult = results[currentIndex];
-
-                        if (currentResult) {
-                            replace(replaceTerm, [currentResult], { state, dispatch });
-                            this.storage.results.splice(currentIndex, 1);
-                        } else {
-                            replace(replaceTerm, results, { state, dispatch });
-                            this.storage.results.shift();
+                    ({ state, dispatch, view }) => {
+                        const pluginState = searchPluginKey.getState(state);
+                        if (!pluginState) return false;
+                        const { replaceTerm, results, currentIndex } = pluginState;
+                        const current = results[currentIndex];
+                        if (!current) return false;
+                        if (dispatch) {
+                            replaceAtRange(replaceTerm, current, state, dispatch);
+                            // After rescan the same index points to the next occurrence.
+                            requestAnimationFrame(() => {
+                                const ps = searchPluginKey.getState(view.state);
+                                scrollToResult(view, ps?.results[ps.currentIndex]);
+                            });
                         }
-
-                        event.emit(ON_SEARCH_RESULTS);
-
-                        updateView(state, dispatch);
-
-                        return false;
+                        return true;
                     },
+
             replaceAll:
                 () =>
-                    ({ state, tr, dispatch, editor }) => {
-                        const { replaceTerm } = this.options;
-                        const { results } = this.storage;
-
-                        replaceAll(replaceTerm, results, { tr, dispatch });
-
-                        this.storage.currentIndex = -1;
-                        this.storage.results = [];
-                        event.emit(ON_SEARCH_RESULTS);
-
-                        updateView(state, dispatch);
-
-                        return false;
+                    ({ state, dispatch }) => {
+                        const pluginState = searchPluginKey.getState(state);
+                        if (!pluginState) return false;
+                        const { replaceTerm, results } = pluginState;
+                        if (results.length === 0) return false;
+                        return replaceAllMatches(replaceTerm, results, state, dispatch);
                     },
+
             goToPrevSearchResult:
                 () =>
-                    ({ view, tr, editor }) => {
-                        const { searchResultCurrentClass } = this.options;
-                        const { currentIndex, results } = this.storage;
-                        const nextIndex = (currentIndex + results.length - 1) % results.length;
-                        this.storage.currentIndex = nextIndex;
-                        event.emit(ON_SEARCH_RESULTS);
-                        return gotoSearchResult({
-                            view,
-                            tr,
-                            searchResults: results,
-                            searchResultCurrentClass,
-                            gotoIndex: nextIndex,
-                        });
+                    ({ state, tr, dispatch, view }) => {
+                        const pluginState = searchPluginKey.getState(state);
+                        if (!pluginState || !pluginState.results.length) return false;
+                        const len = pluginState.results.length;
+                        const next = (pluginState.currentIndex + len - 1) % len;
+                        if (dispatch) {
+                            tr.setMeta(searchPluginKey, { currentIndex: next } as SearchMeta);
+                            requestAnimationFrame(() => {
+                                scrollToResult(view, pluginState.results[next]);
+                            });
+                        }
+                        return true;
                     },
+
             goToNextSearchResult:
                 () =>
-                    ({ view, tr, editor }) => {
-                        const { searchResultCurrentClass } = this.options;
-                        const { currentIndex, results } = this.storage;
-                        const nextIndex = (currentIndex + 1) % results.length;
-                        this.storage.currentIndex = nextIndex;
-                        this.options.onChange && this.options.onChange();
-                        event.emit(ON_SEARCH_RESULTS);
-                        return gotoSearchResult({
-                            view,
-                            tr,
-                            searchResults: results,
-                            searchResultCurrentClass,
-                            gotoIndex: nextIndex,
-                        });
+                    ({ state, tr, dispatch, view }) => {
+                        const pluginState = searchPluginKey.getState(state);
+                        if (!pluginState || !pluginState.results.length) return false;
+                        const len = pluginState.results.length;
+                        const next = (pluginState.currentIndex + 1) % len;
+                        if (dispatch) {
+                            tr.setMeta(searchPluginKey, { currentIndex: next } as SearchMeta);
+                            requestAnimationFrame(() => {
+                                scrollToResult(view, pluginState.results[next]);
+                            });
+                        }
+                        return true;
+                    },
+
+            openSearchPanel:
+                () =>
+                    () => {
+                        if (this.storage.panelOpen) return false;
+                        this.storage.panelOpen = true;
+                        event.emit(ON_SEARCH_TOGGLE);
+                        return true;
+                    },
+
+            closeSearchPanel:
+                () =>
+                    ({ tr, dispatch }) => {
+                        if (!this.storage.panelOpen) return false;
+                        this.storage.panelOpen = false;
+                        // Clear search so decorations disappear immediately.
+                        if (dispatch) {
+                            tr.setMeta(searchPluginKey, {
+                                searchTerm: "",
+                                currentIndex: -1,
+                            } as SearchMeta);
+                        }
+                        event.emit(ON_SEARCH_TOGGLE);
+                        return true;
+                    },
+
+            toggleSearchPanel:
+                () =>
+                    ({ editor }) => {
+                        if (this.storage.panelOpen) {
+                            return editor.chain().closeSearchPanel().run();
+                        }
+                        return editor.chain().openSearchPanel().run();
                     },
         };
     },
 
+    addKeyboardShortcuts() {
+        return {
+            "Mod-f": () => this.editor.commands.openSearchPanel(),
+            "Escape": () => {
+                if (!this.storage.panelOpen) return false;
+                return this.editor.commands.closeSearchPanel();
+            },
+        };
+    },
+
     addProseMirrorPlugins() {
-        // eslint-disable-next-line @typescript-eslint/no-this-alias
         const extensionThis = this;
-
         return [
-            new Plugin({
-                key: new PluginKey('search'),
+            new Plugin<SearchPluginState>({
+                key: searchPluginKey,
                 state: {
-                    init() {
-                        return DecorationSet.empty;
+                    init(): SearchPluginState {
+                        return {
+                            decorations: DecorationSet.empty,
+                            results: [],
+                            currentIndex: -1,
+                            searchTerm: extensionThis.options.searchTerm || "",
+                            replaceTerm: extensionThis.options.replaceTerm || "",
+                            caseSensitive: !!extensionThis.options.caseSensitive,
+                            disableRegex: extensionThis.options.disableRegex !== false,
+                            wholeWord: !!extensionThis.options.wholeWord,
+                        };
                     },
-                    apply(ctx) {
-                        const { doc, docChanged } = ctx;
+                    apply(tr, old, _oldState, newState): SearchPluginState {
+                        const meta = tr.getMeta(searchPluginKey) as SearchMeta | undefined;
+                        const { searchResultClass, searchResultCurrentClass } = extensionThis.options;
 
-                        const { searchTerm, searchResultClass, searchResultCurrentClass, disableRegex, caseSensitive } =
-                            extensionThis.options;
+                        // Merge new params from meta (if any).
+                        let next: SearchPluginState = { ...old };
+                        let paramsChanged = false;
+                        let onlyIndexChanged = false;
+                        let forceRescan = false;
 
-                        if (docChanged || searchTerm) {
-                            const { decorationsToReturn, results } = processSearches(
-                                doc,
-                                regex(searchTerm, disableRegex, caseSensitive),
-                                searchResultClass
-                            );
-                            extensionThis.storage.results = results;
-                            if (extensionThis.storage.currentIndex > results.length - 1) {
-                                extensionThis.storage.currentIndex = 0;
+                        if (meta) {
+                            if ("searchTerm" in meta && meta.searchTerm !== undefined) {
+                                if (meta.searchTerm !== next.searchTerm) paramsChanged = true;
+                                next.searchTerm = meta.searchTerm;
                             }
-                            event.emit(ON_SEARCH_RESULTS);
-                            if (ctx.getMeta('directDecoration')) {
-                                const { fromPos, toPos, attrs } = ctx.getMeta('directDecoration');
-                                decorationsToReturn.push(Decoration.inline(fromPos, toPos, attrs));
-                            } else {
-                                if (results.length) {
-                                    decorationsToReturn[0] = Decoration.inline(results[0].from, results[0].to, {
-                                        class: searchResultCurrentClass,
-                                    });
-                                }
+                            if ("replaceTerm" in meta && meta.replaceTerm !== undefined) {
+                                next.replaceTerm = meta.replaceTerm;
                             }
-
-                            return DecorationSet.create(doc, decorationsToReturn);
+                            if ("caseSensitive" in meta && typeof meta.caseSensitive === "boolean") {
+                                if (meta.caseSensitive !== next.caseSensitive) paramsChanged = true;
+                                next.caseSensitive = meta.caseSensitive;
+                            }
+                            if ("disableRegex" in meta && typeof meta.disableRegex === "boolean") {
+                                if (meta.disableRegex !== next.disableRegex) paramsChanged = true;
+                                next.disableRegex = meta.disableRegex;
+                            }
+                            if ("wholeWord" in meta && typeof meta.wholeWord === "boolean") {
+                                if (meta.wholeWord !== next.wholeWord) paramsChanged = true;
+                                next.wholeWord = meta.wholeWord;
+                            }
+                            if ("currentIndex" in meta && typeof meta.currentIndex === "number") {
+                                next.currentIndex = meta.currentIndex;
+                                if (!paramsChanged) onlyIndexChanged = true;
+                            }
+                            if (meta.rescan) forceRescan = true;
                         }
-                        return DecorationSet.empty;
+
+                        const docChanged = tr.docChanged;
+
+                        if (paramsChanged || forceRescan || (docChanged && next.searchTerm)) {
+                            next = rescan(
+                                newState.doc,
+                                next,
+                                searchResultClass,
+                                searchResultCurrentClass
+                            );
+                            // Mirror to public storage for UI consumers.
+                            extensionThis.storage.results = next.results;
+                            extensionThis.storage.currentIndex = next.currentIndex;
+                            event.emit(ON_SEARCH_RESULTS);
+                            return next;
+                        }
+
+                        if (onlyIndexChanged && next.results.length) {
+                            next.decorations = buildDecorationSet(
+                                newState.doc,
+                                next.results,
+                                next.currentIndex,
+                                searchResultClass,
+                                searchResultCurrentClass
+                            );
+                            extensionThis.storage.currentIndex = next.currentIndex;
+                            event.emit(ON_SEARCH_RESULTS);
+                            return next;
+                        }
+
+                        if (docChanged) {
+                            // No search term: just clear anything stale.
+                            if (!next.searchTerm) {
+                                if (
+                                    extensionThis.storage.results.length !== 0 ||
+                                    extensionThis.storage.currentIndex !== -1
+                                ) {
+                                    extensionThis.storage.results = [];
+                                    extensionThis.storage.currentIndex = -1;
+                                    event.emit(ON_SEARCH_RESULTS);
+                                }
+                                return {
+                                    ...next,
+                                    decorations: DecorationSet.empty,
+                                    results: [],
+                                    currentIndex: -1,
+                                };
+                            }
+                            // Map existing decorations to the new doc positions.
+                            next.decorations = next.decorations.map(tr.mapping, tr.doc);
+                            return next;
+                        }
+
+                        return next;
                     },
                 },
                 props: {
                     decorations(state) {
-                        return this.getState(state);
+                        return searchPluginKey.getState(state)?.decorations;
                     },
                 },
             }),

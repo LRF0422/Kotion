@@ -26,7 +26,7 @@ import ReactDOM from "react-dom";
 
 const { createBrowserRouter,
     createRoutesFromElements, Route, RouterProvider, Provider,
-    AppContext, i18n, initReactI18next, LanguageDetector, event } = common;
+    AppContext, i18n, initReactI18next, LanguageDetector, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS } = common;
 
 const reslove = (config: common.RouteConfig) => {
     if (config.children) {
@@ -73,17 +73,21 @@ export const App: React.FC<AppProps> = (props) => {
     // Register core AI tool factories so plugins can use them via @kn/common
     registerCoreToolFactories()
 
-    // Listen for plugin refresh events to update routes
+    // Listen for plugin events to update routes
     useEffect(() => {
-        const handleRefresh = () => {
-            console.log('Received REFRESH_PLUSINS event, updating router');
+        const handlePluginChange = () => {
+            console.log('Received plugin change event, updating router');
             setRefreshFlag(prev => prev + 1);
         };
 
-        event.on("REFRESH_PLUSINS", handleRefresh);
+        // PLUGIN_CHANGED: emitted when user installs/uninstalls/updates/refreshes
+        event.on(PLUGIN_CHANGED, handlePluginChange);
+        // PLUGIN_INIT_SUCCESS: emitted after Layout initializes plugins from server
+        event.on(PLUGIN_INIT_SUCCESS, handlePluginChange);
 
         return () => {
-            event.off("REFRESH_PLUSINS", handleRefresh);
+            event.off(PLUGIN_CHANGED, handlePluginChange);
+            event.off(PLUGIN_INIT_SUCCESS, handlePluginChange);
         };
     }, []);
 
@@ -115,7 +119,7 @@ export const App: React.FC<AppProps> = (props) => {
         console.log('Router useEffect triggered. pluginsReady:', pluginsReady, 'refreshFlag:', refreshFlag);
 
         if (pluginsReady && pluginManager) {
-            const pluginLocales = pluginManager.resloveLocales()
+            const pluginLocales = pluginManager.resolveLocales()
             const res = merge(resources, pluginLocales)
             if (i18n.isInitialized) {
                 Object.keys(res).forEach(it => {
@@ -123,7 +127,7 @@ export const App: React.FC<AppProps> = (props) => {
                 })
             }
 
-            const routeConfigs = pluginManager.resloveRoutes()
+            const routeConfigs = pluginManager.resolveRoutes()
             const routes = routeConfigs.map(it => reslove(it))
             console.log('Creating router with', routes.length, 'plugin routes')
             const updatedRouter = createBrowserRouter(createRoutesFromElements(

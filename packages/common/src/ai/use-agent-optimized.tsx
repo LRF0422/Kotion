@@ -1,7 +1,7 @@
 import { AppContext } from "../core/AppContext"
 import type { Editor } from "@tiptap/core"
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
-import { event, PLUGIN_INIT_SUCCESS, REFRESH_PLUSINS } from "../event"
+import { event, PLUGIN_CHANGED } from "../event"
 
 // Types
 import type { OnToolExecution, OnUserChoiceRequest, ToolsRecord } from "./types"
@@ -190,8 +190,8 @@ export const useEditorAgentOptimized = (
             }
 
             // Register plugin tools, grouped by plugin
-            const allPluginTools = pluginManager.resloveTools?.(editor) || {}
-            const extensions = pluginManager.resloveEditorExtension?.() || []
+            const allPluginTools = pluginManager.resolveTools?.(editor) || {}
+            const extensions = pluginManager.resolveEditorExtensions?.() || []
             for (const ext of extensions) {
                 const toolNames = ext.tools
                     ? (Array.isArray(ext.tools) ? ext.tools : [ext.tools]).map((t: any) => t.name)
@@ -212,12 +212,10 @@ export const useEditorAgentOptimized = (
         // Try registering immediately (in case plugins are already loaded)
         registerPluginCapabilities()
 
-        event.on(PLUGIN_INIT_SUCCESS, registerPluginCapabilities)
-        event.on(REFRESH_PLUSINS, registerPluginCapabilities)
+        event.on(PLUGIN_CHANGED, registerPluginCapabilities)
 
         return () => {
-            event.off(PLUGIN_INIT_SUCCESS, registerPluginCapabilities)
-            event.off(REFRESH_PLUSINS, registerPluginCapabilities)
+            event.off(PLUGIN_CHANGED, registerPluginCapabilities)
         }
     }, [pluginManager, skillProvider, toolProvider, editor])
 

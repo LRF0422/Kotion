@@ -4,11 +4,10 @@ import { SiderMenuItemProps } from "./menu";
 import { RouteConfig } from "./route";
 import { Services } from "./types";
 import { ServiceRegistry } from "./ServiceRegistry";
-import { importScript } from "../utils/import-util";
-import { event } from "../event";
-import { Editor } from "@tiptap/core";
+import { pluginScriptLoader } from "../utils/import-util";
 import { logger } from "../utils/logger";
 import { getAccessToken } from "../utils/auth";
+import { Editor } from "@tiptap/core";
 
 export interface PluginSettingsConfig {
     /**
@@ -48,7 +47,6 @@ export interface PluginConfig {
      */
     settings?: PluginSettingsConfig
 }
-
 
 export class KPlugin<T extends PluginConfig> {
 
@@ -107,6 +105,15 @@ export class PluginManager {
     _pluginStore: (path: string) => string
     _init: boolean = false
 
+    // Version counter that increments whenever plugins change.
+    // Used by React hooks (usePluginState, useEditorExtension) to detect changes
+    // and trigger re-renders / editor reconfiguration.
+    private _version: number = 0
+
+    // Observable change listeners – a lightweight alternative to emitting events
+    // from within the PluginManager. UI code subscribes via onChange().
+    private _changeListeners = new Set<() => void>()
+
     // Cache for resolved plugin data to improve performance
     private _cacheRoutes: RouteConfig[] | null = null
     private _cacheMenus: SiderMenuItemProps[] | null = null
@@ -121,17 +128,59 @@ export class PluginManager {
         logger.debug('Initial plugins loaded:', this._initialPlugins);
     }
 
+    /**
+     * Get the current plugin version counter.
+     * This value changes every time plugins are added, removed, or re-initialized.
+     * Use this as a React hook dependency to detect plugin changes.
+     */
+    get version(): number {
+        return this._version
+    }
+
+    /**
+     * Subscribe to plugin state changes.
+     * The listener is called every time the plugin list changes (init, install, uninstall, remove).
+     * @returns An unsubscribe function.
+     */
+    onChange(listener: () => void): () => void {
+        this._changeListeners.add(listener)
+        return () => { this._changeListeners.delete(listener) }
+    }
+
     private _buildPluginMap(plugins: KPlugin<any>[]) {
         plugins.forEach(plugin => {
             this._pluginMap.set(plugin.name, plugin)
         })
     }
 
-    private _clearCache() {
+    /**
+     * Invalidate internal derived-data caches and notify listeners.
+     */
+    private _notifyChange() {
         this._cacheRoutes = null
         this._cacheMenus = null
         this._cacheExtensions = null
         this._cacheLocales = null
+        this._version++
+        this._changeListeners.forEach(fn => fn())
+    }
+
+    /**
+     * Clear the plugin script cache to ensure plugins are freshly loaded.
+     * Call this before re-initializing plugins (after uninstall/update)
+     * to avoid serving stale cached versions.
+     */
+    clearPluginCache() {
+        pluginScriptLoader.invalidateAll()
+        logger.info('Plugin script cache invalidated')
+    }
+
+    /**
+     * Clear a specific plugin URL from the script cache.
+     */
+    clearPluginCacheByUrl(url: string) {
+        pluginScriptLoader.invalidate(url)
+        logger.info(`Plugin script cache invalidated for URL: ${url}`)
     }
 
     private _validatePlugin(plugin: any): boolean {
@@ -154,9 +203,12 @@ export class PluginManager {
         logger.info('Initializing remote plugins:', remotePlugins);
         logger.info('Current init status:', this._init);
 
+        // Determine if we are re-initializing (already initialized before)
+        const isReinit = this._init
+
         try {
             // Reset state if reinitializing to ensure clean state
-            if (this._init) {
+            if (isReinit) {
                 logger.info('PluginManager already initialized, resetting state for reinitialization');
                 this._init = false;
                 // Keep initial plugins but clear remote plugins
@@ -164,12 +216,14 @@ export class PluginManager {
                 // Rebuild plugin map with only initial plugins
                 this._pluginMap.clear();
                 this._buildPluginMap(this._initialPlugins);
-                this._clearCache();
+
+                // Invalidate script cache so remote plugins are freshly loaded
+                this.clearPluginCache()
             }
 
             if (!remotePlugins || remotePlugins.length === 0) {
                 this.plugins = ([...(this._initialPlugins || [])])
-                this._clearCache()
+                this._notifyChange()
                 this._mergeServices()
                 this._init = true
                 logger.info('Plugins loaded:', this.plugins.length);
@@ -180,7 +234,9 @@ export class PluginManager {
             const loadResults = await Promise.allSettled(remotePlugins.map(async (plugin) => {
                 try {
                     const path = this._pluginStore(plugin.resourcePath) + "&cache=true&Authorization=" + getAccessToken()
-                    const result = await importScript(path, plugin.pluginKey, plugin.name)
+                    const result = await pluginScriptLoader.load(path, plugin.pluginKey, plugin.name, {
+                        bustCache: isReinit
+                    })
                     return result
                 } catch (error) {
                     logger.error(`Failed to load plugin ${plugin.name}:`, error)
@@ -202,7 +258,7 @@ export class PluginManager {
 
             this.plugins = [...this._initialPlugins, ...successfulPlugins]
             this._buildPluginMap(successfulPlugins)
-            this._clearCache()
+            this._notifyChange()
             this._mergeServices()
             this._init = true
 
@@ -242,13 +298,17 @@ export class PluginManager {
 
         this.plugins = this.plugins.filter(it => it.name !== key)
         this._pluginMap.delete(key)
-        this._clearCache()
+
+        // Invalidate the script cache so that if the plugin is re-installed,
+        // it will be freshly loaded instead of using the stale cached version
+        this.clearPluginCache()
 
         // Rebuild services without the uninstalled plugin
         this._mergeServices()
 
         logger.info('Plugin uninstalled:', key);
-        event.emit("REFRESH_PLUSINS")
+        // Notify listeners (does NOT emit global events – callers do that)
+        this._notifyChange()
         return true
     }
 
@@ -259,8 +319,11 @@ export class PluginManager {
                 return false
             }
 
+            // Use bustCache to ensure we get the latest version of the plugin script
             const path = this._pluginStore(plugin.resourcePath) + "&cache=true"
-            const pluginInstance = await importScript(path, plugin.pluginKey, plugin.name)
+            const pluginInstance = await pluginScriptLoader.load(path, plugin.pluginKey, plugin.name, {
+                bustCache: true
+            })
 
             if (!pluginInstance) {
                 logger.error(`Failed to load plugin instance for ${plugin.name}`)
@@ -277,7 +340,6 @@ export class PluginManager {
 
             this.plugins = [...this.plugins, loadedPlugin]
             this._pluginMap.set(loadedPlugin.name, loadedPlugin)
-            this._clearCache()
 
             // Merge services via ServiceRegistry if available
             if (pluginInstance[pluginKey]?.services) {
@@ -285,7 +347,8 @@ export class PluginManager {
             }
 
             logger.info(`Plugin ${loadedPlugin.name} installed successfully`)
-            event.emit("REFRESH_PLUSINS")
+            // Notify listeners (does NOT emit global events – callers do that)
+            this._notifyChange()
             callBack && callBack()
             return true
         } catch (error) {
@@ -299,8 +362,8 @@ export class PluginManager {
         if (existed) {
             this.plugins = this.plugins.filter(it => it.name !== name)
             this._pluginMap.delete(name)
-            this._clearCache()
             logger.debug(`Plugin ${name} removed from manager`)
+            this._notifyChange()
         }
         return existed
     }
@@ -321,7 +384,9 @@ export class PluginManager {
         return this._init
     }
 
-    resloveRoutes(): RouteConfig[] {
+    // ---- Resolve methods (correctly spelled) ----
+
+    resolveRoutes(): RouteConfig[] {
         if (this._cacheRoutes) {
             return this._cacheRoutes
         }
@@ -337,9 +402,9 @@ export class PluginManager {
         return routes
     }
 
-    resloveTools(editor: Editor) {
+    resolveTools(editor: Editor) {
         const res: any = {}
-        const extensions = this.resloveEditorExtension()
+        const extensions = this.resolveEditorExtensions()
 
         for (const ext of extensions) {
             if (!ext.tools) continue
@@ -369,7 +434,7 @@ export class PluginManager {
         return res
     }
 
-    resloveLocales(): any {
+    resolveLocales(): any {
         if (this._cacheLocales) {
             return this._cacheLocales
         }
@@ -385,7 +450,7 @@ export class PluginManager {
         return locales
     }
 
-    resloveEditorExtension(): ExtensionWrapper[] {
+    resolveEditorExtensions(): ExtensionWrapper[] {
         if (this._cacheExtensions) {
             return this._cacheExtensions
         }
@@ -401,7 +466,7 @@ export class PluginManager {
         return editorExtensions
     }
 
-    resloveMenus(): SiderMenuItemProps[] {
+    resolveMenus(): SiderMenuItemProps[] {
         if (this._cacheMenus) {
             return this._cacheMenus
         }
@@ -459,7 +524,7 @@ export class PluginManager {
             pluginName: string
         }> = []
 
-        const extensions = this.resloveEditorExtension()
+        const extensions = this.resolveEditorExtensions()
 
         for (const ext of extensions) {
             if (!ext.skills) continue
@@ -489,7 +554,7 @@ export class PluginManager {
      * Load external plugins and extract their editor extensions.
      * This method is used for collaboration scenarios where we need to load
      * another user's plugins without affecting the current user's plugin list.
-     * 
+     *
      * @param plugins Array of plugin metadata with resourcePath and pluginKey
      * @returns Array of ExtensionWrapper from the loaded plugins
      */
@@ -513,7 +578,7 @@ export class PluginManager {
                     : this._pluginStore(plugin.resourcePath) + "&cache=true";
 
                 // Load the plugin script
-                const loadedPlugin = await importScript(pluginUrl, plugin.pluginKey, plugin.name);
+                const loadedPlugin = await pluginScriptLoader.load(pluginUrl, plugin.pluginKey, plugin.name);
 
                 // Extract the KPlugin instance
                 const pluginInstance = Object.values(loadedPlugin)[0] as KPlugin<any>;
@@ -570,4 +635,21 @@ export class PluginManager {
         this._serviceRegistry.unregister(name)
         logger.debug(`Core service unregistered: ${String(name)}`)
     }
+
+    // ---- Deprecated method aliases (old typo names) ----
+
+    /** @deprecated Use resolveRoutes() instead */
+    resloveRoutes(): RouteConfig[] { return this.resolveRoutes() }
+
+    /** @deprecated Use resolveTools() instead */
+    resloveTools(editor: Editor) { return this.resolveTools(editor) }
+
+    /** @deprecated Use resolveLocales() instead */
+    resloveLocales(): any { return this.resolveLocales() }
+
+    /** @deprecated Use resolveEditorExtensions() instead */
+    resloveEditorExtension(): ExtensionWrapper[] { return this.resolveEditorExtensions() }
+
+    /** @deprecated Use resolveMenus() instead */
+    resloveMenus(): SiderMenuItemProps[] { return this.resolveMenus() }
 }

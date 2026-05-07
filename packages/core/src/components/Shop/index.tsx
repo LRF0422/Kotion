@@ -1,4 +1,4 @@
-import { BoxSelect, DownloadCloud, PlusSquare, RefreshCcw, Slack, Star, Trash2, Package } from "@kn/icon";
+import { BoxSelect, CheckCircle2, DownloadCloud, PlusSquare, RefreshCcw, Slack, Star, Trash2, XCircle, Package, AlertCircle } from "@kn/icon";
 import {
     Accordion, AccordionContent,
     AccordionItem, AccordionTrigger,
@@ -13,7 +13,7 @@ import {
     AlertDialogTrigger,
     Avatar,
     Badge, Button, EmptyState, Input, Separator, Tooltip,
-    TooltipContent, TooltipProvider, TooltipTrigger
+    TooltipContent, TooltipProvider, TooltipTrigger, cn
 } from "@kn/ui";
 import React, { useContext, useEffect, useState } from "react";
 import { useNavigator } from "@kn/common";
@@ -23,10 +23,10 @@ import { PluginManager } from "./PluginManager";
 import { useApi, useUploadFile } from "@kn/common";
 import { APIS } from "@kn/common";
 import { useSafeState } from "ahooks";
-import { AppContext, REFRESH_PLUSINS, event } from "@kn/common";
+import { AppContext, PLUGIN_CHANGED, event, usePluginState } from "@kn/common";
 
 
-const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void, handleUpdate: (id: string) => void }> = ({ item, handleUnInstall, handleUpdate }) => {
+const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void, handleUpdate: (id: string) => void, isLoaded?: boolean }> = ({ item, handleUnInstall, handleUpdate, isLoaded }) => {
     const navigator = useNavigator()
     const { usePath } = useUploadFile()
     const [isHovered, setIsHovered] = useState(false)
@@ -49,10 +49,15 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void, handleU
                     }}
                 >
                     {/* Plugin Icon */}
-                    <div className="flex-shrink-0">
+                    <div className="flex-shrink-0 relative">
                         <Avatar className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg border-2 border-border/50 group-hover:border-primary/30 transition-colors">
                             <img src={usePath(item.icon)} alt={item.name} className="object-cover" />
                         </Avatar>
+                        {/* Runtime status indicator */}
+                        <div className={cn(
+                            "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border-2 border-background",
+                            isLoaded ? "bg-green-500" : "bg-yellow-500"
+                        )} title={isLoaded ? "Loaded" : "Not loaded"} />
                     </div>
 
                     {/* Plugin Info */}
@@ -76,6 +81,21 @@ const Item: React.FC<{ item: any, handleUnInstall: (id: string) => void, handleU
                         <p className="text-[10px] sm:text-xs text-muted-foreground line-clamp-1">
                             {item.description}
                         </p>
+
+
+                        <div className="flex items-center gap-1.5 pt-0.5">
+                            {isLoaded ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Active
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-yellow-600 dark:text-yellow-400">
+                                    <AlertCircle className="h-3 w-3" />
+                                    Not loaded
+                                </span>
+                            )}
+                        </div>
 
                         {/* Action Buttons */}
                         <div className="flex gap-1 sm:gap-1.5 pt-0.5">
@@ -142,16 +162,23 @@ export const Shop: React.FC = () => {
     const { pluginManager } = useContext(AppContext)
     const [currentPlugin, setCurrentPlugin] = useState<any | undefined>()
 
+    // Use consolidated hook for plugin runtime state tracking
+    const { loadedPluginNames, pluginVersion } = usePluginState()
+
     useEffect(() => {
         useApi(APIS.GET_INSTALLED_PLUGINS).then(res => {
             setInstalledPlugins(res.data)
         })
-    }, [flag])
+    }, [pluginVersion])
 
     useEffect(() => {
-        event.on("REFRESH_PLUSINS", () => {
+        const handlePluginChange = () => {
             setFlag(f => f + 1)
-        })
+        }
+        event.on(PLUGIN_CHANGED, handlePluginChange)
+        return () => {
+            event.off(PLUGIN_CHANGED, handlePluginChange)
+        }
     }, [])
 
     const goToMarketplace = () => {
@@ -167,8 +194,16 @@ export const Shop: React.FC = () => {
 
     const handleUpdate = (id: string) => {
         useApi(APIS.UPDATE_PLUGIN, { versionId: id }).then(() => {
-            setFlag(f => f + 1)
+            // Clear plugin script cache before refreshing to ensure new version loads
+            pluginManager?.clearPluginCache()
+            event.emit(PLUGIN_CHANGED, { source: 'update' })
         })
+    }
+
+    const handleRefresh = () => {
+        // Clear plugin script cache before refreshing to get latest state
+        pluginManager?.clearPluginCache()
+        event.emit(PLUGIN_CHANGED, { source: 'refresh' })
     }
 
     return <div className="flex flex-col lg:grid lg:grid-cols-[320px_1fr] w-full h-screen bg-background">
@@ -192,7 +227,7 @@ export const Shop: React.FC = () => {
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-muted">
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 hover:bg-muted" onClick={handleRefresh}>
                                         <RefreshCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                     </Button>
                                 </TooltipTrigger>
@@ -255,7 +290,7 @@ export const Shop: React.FC = () => {
                             <div className="space-y-1 sm:space-y-1.5">
                                 {
                                     installedPlugins.length > 0 ? installedPlugins.map((plugin, index) => {
-                                        return <Item key={index} item={plugin} handleUnInstall={uninstall} handleUpdate={handleUpdate} />
+                                        return <Item key={index} item={plugin} handleUnInstall={uninstall} handleUpdate={handleUpdate} isLoaded={loadedPluginNames.has(plugin.name)} />
                                     }) : <div className="py-8 sm:py-12">
                                         <EmptyState
                                             title="No Plugins Installed"
@@ -321,8 +356,9 @@ export const Shop: React.FC = () => {
                         onClick={() => {
                             if (currentPlugin) {
                                 useApi(APIS.UNINSTALL_PLUGIN, { versionId: currentPlugin.id }).then(res => {
-                                    setFlag(f => f + 1)
+                                    // Uninstall from runtime PluginManager (this also invalidates the script cache)
                                     pluginManager?.uninstallPlugin(currentPlugin.name)
+                                    event.emit(PLUGIN_CHANGED, { source: 'uninstall' })
                                     setOpen(false)
                                 })
                             }

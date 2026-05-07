@@ -7,7 +7,7 @@ import {
 	SubscriptExtension, SuperScriptExtension, ColumnsExtension, ColorExtension, HardBreakExtension, TitleExtension, LinkExtension,
 	BulletListExtension, DateExtension, EmojiExtension, KnowledgeMathExtension, BackGroundColorExtension, FigmaExtension, LoadingExtension,
 	TaskListExtension, PageContentExtension, MarkDownExtension, IdentExtension, LineHeightExtension, FormatPainterExtension, TableOfContentExtension, EventExtension, SelectionExtension, UnknownNodeExtension, HighlightExtension, DetailsExtension, BookmarkExtension,
-	SyncBlockExtension
+	SyncBlockExtension, SearchExtension
 } from "../extensions";
 
 export const buildInExtension: ExtensionWrapper[] = [
@@ -54,5 +54,6 @@ export const buildInExtension: ExtensionWrapper[] = [
 	HighlightExtension,
 	DetailsExtension,
 	BookmarkExtension,
+	SearchExtension,
 	// SyncBlockExtension
 ]

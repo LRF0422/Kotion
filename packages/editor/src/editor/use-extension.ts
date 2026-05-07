@@ -7,7 +7,7 @@ import BubbleMenu from "@tiptap/extension-bubble-menu"
 import { isChangeOrigin } from "@tiptap/extension-collaboration"
 import { resloveSlash, resolveExtesions } from "./kit"
 import { buildInExtension } from "./build-in-extension"
-import { AppContext, ExtensionWrapper } from "@kn/common"
+import { AppContext, ExtensionWrapper, usePluginState } from "@kn/common"
 import { Paragraph } from "../extensions/paragraph"
 import { Placeholder } from "../extensions/placeholder"
 import { Perf } from "../extensions/perf"
@@ -19,8 +19,11 @@ import { UndoRedo } from '@tiptap/extensions'
 
 export const useEditorExtension = (ext?: string, withTitle?: boolean, externalExtensions?: ExtensionWrapper[]) => {
 	const { pluginManager } = useContext(AppContext)
+	const { pluginVersion } = usePluginState()
 
-	// Memoize everything to prevent infinite loops
+	// Memoize everything to prevent infinite loops.
+	// pluginVersion changes whenever plugins are installed, uninstalled, or updated,
+	// which causes the editor to be reconfigured with the new extension set.
 	return useMemo(() => {
 		const runtimeExtension: AnyExtension[] = [
 			withTitle ? Doc : Document,
@@ -34,7 +37,7 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean, externalEx
 					if (node.type.name === 'codeBlock') {
 						return ''
 					}
-					return '输入`/`唤出菜单'
+					return '\u8F93\u5165`/`\u5524\u51FA\u83DC\u5355'
 				},
 			}),
 			Text,
@@ -44,7 +47,7 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean, externalEx
 		]
 
 		// Use external extensions if provided, otherwise use pluginManager's extensions
-		const pluginExtensions = externalExtensions || (pluginManager?.resloveEditorExtension() as ExtensionWrapper[]) || []
+		const pluginExtensions = externalExtensions || (pluginManager?.resolveEditorExtensions() as ExtensionWrapper[]) || []
 		const full = [...buildInExtension, ...pluginExtensions]
 		const reoloved = resolveExtesions(full);
 		let editorExtensions = [
@@ -60,5 +63,5 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean, externalEx
 			filterTransaction: t => !isChangeOrigin(t)
 		}))
 		return [editorExtensions, full] as const
-	}, [ext, withTitle, pluginManager, externalExtensions])
+	}, [ext, withTitle, pluginManager, externalExtensions, pluginVersion])
 }

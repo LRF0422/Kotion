@@ -4,7 +4,7 @@ import { SiderMenu } from "./components/SiderMenu"
 import { useContext, useEffect, useState } from "react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Onboarding, OnboardingStep, Rate, SparklesText, cn, useIsMobile, Sheet, SheetContent, SheetTrigger, Button } from "@kn/ui"
 import { Menu, ChevronLeft } from "@kn/icon"
-import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, SystemAgentProvider } from "@kn/common"
+import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, SystemAgentProvider } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { useAsyncEffect } from "ahooks"
@@ -94,13 +94,14 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const [requestPlugin, setRequestPlugin] = useState<any>()
     const { usePath } = useUploadFile()
 
-    // Plugin loading logic moved from App.tsx
+    // Plugin loading logic: listen for PLUGIN_CHANGED to trigger reinit
     useEffect(() => {
-        event.on("REFRESH_PLUSINS", () => {
+        const handlePluginChange = () => {
             setRefreshFlag(f => f + 1)
-        })
+        }
+        event.on(PLUGIN_CHANGED, handlePluginChange)
         return () => {
-            event.off("REFRESH_PLUSINS")
+            event.off(PLUGIN_CHANGED, handlePluginChange)
         }
     }, [])
 
@@ -127,9 +128,10 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
                 setPluginsLoaded(true)
                 onPluginsReady(true)
-                // Emit event to notify other components that plugins are ready
-                event.emit("PLUGIN_INIT_SUCCESS")
-                // Don't emit REFRESH_PLUSINS here to avoid infinite loop
+                // Emit PLUGIN_INIT_SUCCESS to notify other components that plugins are ready.
+                // Do NOT emit PLUGIN_CHANGED here – Layout itself listens to that event
+                // to trigger reinit, so emitting it would cause an infinite refresh loop.
+                event.emit(PLUGIN_INIT_SUCCESS)
             } else {
                 // No auth token, redirect to login
                 console.log('No token found, redirecting to login')
@@ -201,7 +203,9 @@ export function Layout({ onPluginsReady }: LayoutProps) {
             versionId
         }).then(res => {
             toast.success('安装成功')
-            event.emit("REFRESH_PLUSINS")
+            // Invalidate plugin cache and trigger reinit to load the new plugin into runtime
+            pluginManager?.clearPluginCache()
+            event.emit(PLUGIN_CHANGED, { source: 'install' })
             setOpen(false)
         })
     }

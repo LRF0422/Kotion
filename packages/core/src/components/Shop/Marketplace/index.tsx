@@ -1,4 +1,4 @@
-import { ArchiveIcon, ArrowUpRight, BoxIcon, Dot, DownloadIcon, FilePlus2, Loader2, PlusIcon, RiNftFill, SearchIcon } from "@kn/icon";
+import { ArchiveIcon, ArrowUpRight, BoxIcon, CheckCircle2, Dot, DownloadIcon, FilePlus2, Loader2, PlusIcon, RiNftFill, SearchIcon } from "@kn/icon";
 import {
     Avatar, Button, Card, CardDescription, CardFooter, CardHeader, CardTitle, EmptyState, IconButton, Input,
     Rate,
@@ -6,10 +6,10 @@ import {
 } from "@kn/ui";
 import React, { useContext, useEffect, useState } from "react";
 import { PluginUploader } from "../PluginUploader";
-import { useApi, useNavigator, useUploadFile } from "@kn/common";
+import { useApi, useNavigator, useUploadFile, usePluginState, PLUGIN_CHANGED, event } from "@kn/common";
 import { APIS } from "@kn/common";
 import { useToggle } from "ahooks";
-import { AppContext, event, useTranslation } from "@kn/common";
+import { AppContext, useTranslation } from "@kn/common";
 
 export const Marketplace: React.FC = () => {
 
@@ -32,6 +32,9 @@ export const Marketplace: React.FC = () => {
     const [isLoading, setIsLoading] = useState<boolean>(false)
     const [showLoading, setShowLoading] = useState<boolean>(false)
 
+    // Use consolidated hook for plugin runtime state tracking
+    const { loadedPluginNames, pluginVersion } = usePluginState()
+
     useEffect(() => {
         setIsLoading(true)
 
@@ -47,15 +50,16 @@ export const Marketplace: React.FC = () => {
             setShowLoading(false)
             setIsLoading(false)
         })
-    }, [flag, selectCategory])
+    }, [pluginVersion, selectCategory])
 
     useEffect(() => {
-        event.on("REFRESH_PLUSINS", () => {
+        const handlePluginChange = () => {
             setFlag(f => f + 1)
-        })
+        }
+        event.on(PLUGIN_CHANGED, handlePluginChange)
 
         return () => {
-            event.off("REFRESH_PLUSINS")
+            event.off(PLUGIN_CHANGED, handlePluginChange)
         }
     }, [])
 
@@ -68,6 +72,7 @@ export const Marketplace: React.FC = () => {
             pluginManager?.installPlugin(plugin).then(() => {
                 setInstallingPluginId(undefined)
                 toggle()
+                event.emit(PLUGIN_CHANGED, { source: 'install' })
             })
         })
 
@@ -230,16 +235,24 @@ export const Marketplace: React.FC = () => {
                                         <CardFooter className="pb-3 pt-0 gap-1.5 flex-col">
                                             <Button
                                                 disabled={!!(plugin.installeddVersions.length > 0)}
-                                                className="w-full shadow-sm hover:shadow-md transition-all h-8 text-xs"
+                                                className={cn(
+                                                    "w-full shadow-sm hover:shadow-md transition-all h-8 text-xs",
+                                                    plugin.installeddVersions.length > 0 && loadedPluginNames.has(plugin.name) && "bg-green-600 hover:bg-green-700 text-white"
+                                                )}
                                                 size="sm"
                                                 onClick={() => installPlugin(plugin)}
                                             >
                                                 {(installing && installingPluginId === plugin.currentVersionId) ? (
                                                     <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                                                ) : plugin.installeddVersions.length > 0 ? (
+                                                    <>
+                                                        <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                                                        {loadedPluginNames.has(plugin.name) ? "Active" : "Installed"}
+                                                    </>
                                                 ) : (
                                                     <DownloadIcon className="w-3.5 h-3.5 mr-1.5" />
                                                 )}
-                                                {plugin.installeddVersions.length > 0 ? "Installed" : "Install"}
+                                                {plugin.installeddVersions.length === 0 && "Install"}
                                             </Button>
                                             <Button
                                                 variant="outline"

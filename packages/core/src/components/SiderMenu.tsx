@@ -11,7 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Badge } from "@kn/ui";
 import { SettingDlg } from "./settings/SeetingDlg";
 import { ModeToggle } from "@kn/ui";
-import { AppContext, SiderMenuItemProps } from "@kn/common";
+import { AppContext, SiderMenuItemProps, PLUGIN_CHANGED } from "@kn/common";
 import { event } from "@kn/common";
 import { useUploadFile } from "@kn/common";
 import { LanguageToggle } from "../locales/LanguageToggle";
@@ -107,19 +107,19 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
         // })
     }, []);
 
-    // Handle plugin refresh events
+    // Handle plugin change events
     useEffect(() => {
-        const handleRefresh = () => setFlag(f => f + 1);
-        event.on("REFRESH_PLUSINS", handleRefresh);
+        const handlePluginChange = () => setFlag(f => f + 1);
+        event.on(PLUGIN_CHANGED, handlePluginChange);
         return () => {
-            event.off("REFRESH_PLUSINS", handleRefresh);
+            event.off(PLUGIN_CHANGED, handlePluginChange);
         }
     }, [])
 
 
     // Memoized menus construction
     const menus: SiderMenuItemProps[] = useMemo(() => {
-        const pluginMenus = pluginManager?.resloveMenus() || [];
+        const pluginMenus = pluginManager?.resolveMenus() || [];
 
         return [
             ...pluginMenus as SiderMenuItemProps[],
