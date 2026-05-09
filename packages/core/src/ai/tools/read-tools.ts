@@ -78,6 +78,7 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
 
                 return true
             })
+            console.log('nodes', result);
 
             return {
                 success: true,

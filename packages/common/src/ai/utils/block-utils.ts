@@ -9,11 +9,13 @@ export const discoverBlocks = (editor: Editor): BlockInfo[] => {
     const blocks: BlockInfo[] = []
     editor.state.doc.descendants((node, pos) => {
         if (node.isBlock && node.type.name !== 'doc') {
+            const fullText = node.textContent
             const blockInfo: BlockInfo = {
                 pos,
                 size: node.nodeSize,
                 type: node.type.name,
-                text: node.textContent.slice(0, 80) + (node.textContent.length > 80 ? '...' : ''),
+                text: fullText.slice(0, 80) + (fullText.length > 80 ? '...' : ''),
+                fullText,
                 contentStart: pos,
                 contentEnd: pos + node.nodeSize
             }
@@ -36,7 +38,9 @@ export const discoverBlocks = (editor: Editor): BlockInfo[] => {
 }
 
 /**
- * Find a block by text content
+ * Find a block by text content.
+ * Matches against the full block text (not the truncated preview) so long
+ * blocks can still be located by a phrase that appears past the preview limit.
  */
 export const findBlockByText = (
     blocks: BlockInfo[],
@@ -46,7 +50,8 @@ export const findBlockByText = (
     const searchLower = searchText.toLowerCase()
     let count = 0
     for (const block of blocks) {
-        if (block.text.toLowerCase().includes(searchLower)) {
+        const haystack = (block.fullText ?? block.text).toLowerCase()
+        if (haystack.includes(searchLower)) {
             count++
             if (count === occurrence) {
                 return block
@@ -68,7 +73,8 @@ export const findBlockByHeading = (
     for (const block of blocks) {
         if (block.type === 'heading') {
             if (level && block.level !== level) continue
-            if (block.text.toLowerCase().includes(searchLower)) {
+            const haystack = (block.fullText ?? block.text).toLowerCase()
+            if (haystack.includes(searchLower)) {
                 return block
             }
         }

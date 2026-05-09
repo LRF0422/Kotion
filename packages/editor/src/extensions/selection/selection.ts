@@ -49,13 +49,13 @@ export const getTopLevelNodesFromSelection = (selection: Selection, doc: PMNode)
 export const getDecorations = (doc: PMNode, selection: Selection): DecorationSet => {
     try {
         // Handle NodeSelection - single node is selected
-        if (selection instanceof NodeSelection) {
-            return DecorationSet.create(doc, [
-                Decoration.node(selection.from, selection.to, {
-                    class: 'selected-node',
-                }),
-            ]);
-        }
+        // if (selection instanceof NodeSelection) {
+        //     return DecorationSet.create(doc, [
+        //         Decoration.node(selection.from, selection.to, {
+        //             class: 'selected-node',
+        //         }),
+        //     ]);
+        // }
 
         // Handle TextSelection and AllSelection - range or full document
         if (selection instanceof TextSelection || selection instanceof AllSelection) {

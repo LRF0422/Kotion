@@ -200,7 +200,7 @@ export const ChartExtension: ExtensionWrapper = {
                     height: z.number().describe("图表高度（像素）").optional(),
                     innerRadius: z.number().describe("饼图内半径（用于环形图）").optional(),
                 }).describe("图表配置对象，包含类型、数据、样式等"),
-                position: z.number().describe("插入位置。如不指定则插入到当前光标位置或文档末尾").optional()
+                position: z.number().describe("插入位置（ProseMirror 绝对位置）。如不指定则插入到当前光标位置或文档末尾。注意：chart 为块级节点，若传入的是段落内部的字符位置，会自动吸附到所在段落末尾，避免把段落切断。").optional()
             }),
             execute: (editor: Editor) => async (params: {
                 chartConfig: ChartData;
@@ -228,9 +228,33 @@ export const ChartExtension: ExtensionWrapper = {
                                 error: `Invalid position: ${position}. Document size is ${docSize}`
                             };
                         }
+
+                        // Chart is a block-level atom. If the supplied position
+                        // falls inside a textblock (e.g. an agent passed a
+                        // character-level position from searchInDocument),
+                        // inserting there would split the paragraph. Snap the
+                        // position to the nearest block boundary instead.
+                        let insertPos = position;
+                        try {
+                            const $pos = editor.state.doc.resolve(position);
+                            if ($pos.parent.isTextblock && $pos.depth > 0) {
+                                const blockStart = $pos.before($pos.depth);
+                                const blockEnd = $pos.after($pos.depth);
+                                // If already at a boundary, keep as-is;
+                                // otherwise snap to the end of the current block
+                                // (preferring "after" to match agent intent of
+                                // inserting near a located paragraph).
+                                if (position !== blockStart && position !== blockEnd) {
+                                    insertPos = blockEnd;
+                                }
+                            }
+                        } catch {
+                            // Fall back to the raw position if resolve fails.
+                        }
+
                         editor.chain()
                             .focus()
-                            .insertContentAt(position, {
+                            .insertContentAt(insertPos, {
                                 type: 'chart',
                                 attrs: { data: JSON.stringify(chartConfig) }
                             })

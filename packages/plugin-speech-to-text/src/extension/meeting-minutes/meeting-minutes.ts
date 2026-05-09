@@ -136,7 +136,15 @@ export const MeetingMinutesNode = Node.create({
     },
 
     addNodeView() {
-        return ReactNodeViewRenderer(MeetingMinutesView)
+        return ReactNodeViewRenderer(MeetingMinutesView, {
+            stopEvent: (eventWrapper) => {
+                const event = eventWrapper.event;
+                if (event instanceof MouseEvent && event.type === 'mousedown') {
+                    return false;
+                }
+                return true;
+            }
+        })
     },
 
     addCommands() {

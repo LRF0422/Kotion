@@ -12,7 +12,10 @@ export interface BlockInfo {
     contentStart: number
     contentEnd: number
     type: string
+    /** Truncated preview text (<= 80 chars) for display/serialization */
     text: string
+    /** Full text content of the block, used for accurate text-based matching */
+    fullText?: string
     level?: number
 }
 
@@ -28,6 +31,7 @@ export interface NodeInfo {
     nodeSize: number
     textStartPos?: number
     textEndPos?: number
+    blockId?: string
 }
 
 // ============ Document Structure ============

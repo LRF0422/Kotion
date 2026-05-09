@@ -143,6 +143,30 @@ export const findNodeByBlockId = (
   return target ? { node: target, pos } : null;
 };
 
+/**
+ * Find multiple nodes by their blockIds in a single document traversal.
+ * Returns a map of blockId → { node, pos } for all found nodes.
+ */
+export const findNodesByBlockIds = (
+  state: EditorState,
+  blockIds: string[],
+): Map<string, { node: Node; pos: number }> => {
+  const idSet = new Set(blockIds);
+  const results = new Map<string, { node: Node; pos: number }>();
+
+  state.doc.nodesBetween(0, state.doc.content.size, (node, p) => {
+    const id = node.attrs.id as string | undefined;
+    if (id && idSet.has(id)) {
+      results.set(id, { node, pos: p });
+      // Stop early if all found
+      if (results.size === idSet.size) return true;
+    }
+    return false;
+  });
+
+  return results;
+};
+
 export const isListActive = (editor: Editor) => {
   return editor.isActive('bulletList') || editor.isActive('orderedList') || editor.isActive('taskList');
 };

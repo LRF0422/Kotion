@@ -288,5 +288,40 @@ export const createDeleteTools = (editor: Editor): ToolsRecord => ({
                 return { error: `删除块失败: ${error instanceof Error ? error.message : '未知错误'}` }
             }
         }
+    },
+
+    deleteByBlockId: {
+        description: '通过块的 blockId 删除一个或多个块。支持批量删除，批量删除在同一个事务中完成，按位置从后向前删除以保证位置正确性',
+        inputSchema: z.object({
+            blockIds: z.union([
+                z.string().describe('单个 blockId'),
+                z.array(z.string()).describe('多个 blockId，用于批量删除')
+            ]).describe('要删除的块 ID，可以是单个字符串或字符串数组'),
+        }),
+        execute: async ({ blockIds }: {
+            blockIds: string | string[]
+        }) => {
+            const ids = typeof blockIds === 'string' ? [blockIds] : blockIds
+
+            if (ids.length === 0) {
+                return { error: '未提供 blockIds' }
+            }
+
+            try {
+                // Use the editor command which handles batch deletion
+                // with descending position sort in a single transaction
+                const result = editor.commands.deleteByBlockId(ids)
+
+                return {
+                    success: result,
+                    deletedIds: ids,
+                    message: result
+                        ? `已删除 ${ids.length} 个块`
+                        : `未找到 ID 对应的块`
+                }
+            } catch (error) {
+                return { error: `通过 blockId 删除块失败: ${error instanceof Error ? error.message : '未知错误'}` }
+            }
+        }
     }
 })

@@ -123,18 +123,18 @@ export const MermaidExtension: ExtensionWrapper = {
         {
             name: 'insertMermaidDiagram',
             description: `插入 Mermaid 图表。支持多种图表类型：
-- flowchart: 流程图，用于展示流程、决策树
-- sequence: 时序图，用于展示系统交互、API调用流程
-- classDiagram: 类图，用于展示代码结构、类关系
-- stateDiagram: 状态图，用于展示状态转换
-- erDiagram: ER图，用于展示数据库关系
-- gantt: 甘特图，用于项目时间规划
-- pie: 饼图，用于展示数据分布比例
-- mindmap: 思维导图，用于展示层级结构
-- timeline: 时间线，用于展示历史事件
-- gitGraph: Git分支图，用于展示版本控制流程
+                        - flowchart: 流程图，用于展示流程、决策树
+                        - sequence: 时序图，用于展示系统交互、API调用流程
+                        - classDiagram: 类图，用于展示代码结构、类关系
+                        - stateDiagram: 状态图，用于展示状态转换
+                        - erDiagram: ER图，用于展示数据库关系
+                        - gantt: 甘特图，用于项目时间规划
+                        - pie: 饼图，用于展示数据分布比例
+                        - mindmap: 思维导图，用于展示层级结构
+                        - timeline: 时间线，用于展示历史事件
+                        - gitGraph: Git分支图，用于展示版本控制流程
 
-如果用户没有指定具体代码，可以根据chartType生成模板；如果用户提供了具体需求，应根据需求生成对应的Mermaid代码。`,
+                        如果用户没有指定具体代码，可以根据chartType生成模板；如果用户提供了具体需求，应根据需求生成对应的Mermaid代码。`,
             inputSchema: z.object({
                 code: z.string().describe("Mermaid 图表代码。如果不提供，将根据 chartType 使用默认模板").optional(),
                 chartType: z.enum([

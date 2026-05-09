@@ -175,6 +175,8 @@ export const Bitable = Node.create({
     name: "bitable",
     group: "block",
     atom: true,
+    selectable: true,
+    draggable: true,
 
     addAttributes() {
         const defaultViews = getDefaultViews();
@@ -208,7 +210,14 @@ export const Bitable = Node.create({
 
     addNodeView() {
         return ReactNodeViewRenderer(BitableView, {
-            stopEvent: (event) => {
+            stopEvent: (eventWrapper) => {
+                const event = eventWrapper.event;
+                // Allow mousedown to reach ProseMirror so it can create NodeSelection
+                // for selectable nodes and update cursor position
+                if (event instanceof MouseEvent && event.type === 'mousedown') {
+                    console.log('123123123', event);
+                    return false;
+                }
                 // Allow undo/redo to reach the ProseMirror editor
                 if (event instanceof KeyboardEvent) {
                     if (

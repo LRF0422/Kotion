@@ -500,7 +500,7 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
     if (state === 'idle') {
         return (
             <NodeViewWrapper as="div" className="my-4 not-prose">
-                <div className="w-full rounded-lg border border-border bg-card overflow-hidden">
+                <div className="w-full rounded-lg border border-border bg-card overflow-hidden" contentEditable={false}>
                     {/* ── Title Bar ── */}
                     <div className="px-5 pt-4 pb-2 flex items-center gap-1.5 border-b border-border">
                         <DatePickerButton value={meetingDate} onChange={handleDateChange} />

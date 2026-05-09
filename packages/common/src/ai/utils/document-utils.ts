@@ -14,6 +14,7 @@ export const buildNodeInfo = (node: Node, pos: number, includeFullText: boolean 
         type: node.type.name,
         attrs: node.attrs,
         marks: node.marks,
+        blockId: node.attrs.id,
         textContent: includeFullText ? node.textContent : undefined,
         nodeSize: node.nodeSize
     }

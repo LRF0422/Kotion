@@ -11,8 +11,9 @@ import { speechToText } from "@kn/plugin-speech-to-text"
 import { ai } from "@kn/plugin-ai"
 import { chart } from "@kn/chart-plugin"
 import { drawnix } from "@kn/plugin-drawnix"
+import { mermaid } from "@kn/mermaid-plugin"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[ai, bitable, blockReference, speechToText, chart, drawnix, DefaultPluginInstance, fileManager]} />
+  <App plugins={[ai, bitable, blockReference, speechToText, chart, drawnix, DefaultPluginInstance, fileManager, mermaid]} />
 )
