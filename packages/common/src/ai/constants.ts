@@ -53,7 +53,12 @@ export const DOCUMENT_STRUCTURE_INFO = `# DOCUMENT STRUCTURE
 The document has a special structure:
 - The FIRST block (index 0) is always the **document title** (a special "title" node)
 - Regular content blocks start from index 1
-- To modify the title, use \`updateTitle\` tool, NOT insert tools`
+- To modify the title, use \`updateTitle\` tool, NOT insert tools
+- **Column layouts** (分栏) can contain 2-6 parallel columns for side-by-side content
+  - Each column can hold any block content (paragraphs, headings, lists, images, etc.)
+  - Columns support nesting (columns within a column) for complex layouts
+  - Layout types: 'none'(equal width), 'left'(left wider), 'right'(right wider), 'center'(center wider)
+  - Use \`insertColumns\` to create, \`getColumnsInfo\` to read, \`updateColumnContent\` to modify`
 
 /**
  * Standard workflow for document operations.
@@ -63,9 +68,10 @@ export const STANDARD_WORKFLOW = `# WORKFLOW
 1. Understand the user's intent
 2. Read relevant document sections (getDocumentStructure, searchInDocument)
 3. If modifying title → use updateTitle
-4. If destructive action → askUserChoice to confirm
-5. Execute the operation
-6. Verify the result`
+4. If creating/modifying column layouts → use insertColumns, getColumnsInfo, updateColumnContent
+5. If destructive action → askUserChoice to confirm
+6. Execute the operation
+7. Verify the result`
 
 /**
  * Language instruction for all agents.
@@ -115,6 +121,7 @@ You can:
 - Edit and modify content
 - Search and find information
 - Organize and structure content
+- Create and manage multi-column layouts (分栏)
 - Answer questions about the content
 - Help with writing and editing
 
@@ -136,6 +143,7 @@ You have access to various tools for document manipulation. Use them when approp
 - Reading tools to understand the document
 - Writing tools to make changes
 - Structure tools to organize content
+- Layout tools to create and manage multi-column layouts
 - Interaction tools to confirm with users
 
 ${LANGUAGE_INSTRUCTION}`

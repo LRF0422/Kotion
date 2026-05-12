@@ -50,16 +50,23 @@ export const MessageBubble = React.memo(function MessageBubble({
                             </div>
                         )}
                         {/* Reasoning/thinking process (collapsible) */}
-                        {isAI && message.reasoningContent && (
-                            <details className="mb-2 group/reasoning">
+                        {isAI && (message.reasoningContent || (message.steps && message.steps.length > 0)) && (
+                            <details open={!!message.reasoningContent} className="mb-2 group/reasoning">
                                 <summary className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors">
                                     <Sparkles className="h-3 w-3" />
                                     <span>思考过程</span>
                                     <span className="text-[9px] text-muted-foreground/50 group-open/reasoning:hidden">▸</span>
                                 </summary>
-                                <div className="mt-1.5 pl-1 border-l-2 border-muted-foreground/20 text-[11px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap break-words">
-                                    {message.reasoningContent}
-                                </div>
+                                {message.reasoningContent && (
+                                    <div className="mt-1.5 pl-1 border-l-2 border-muted-foreground/20 text-[11px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap break-words">
+                                        {message.reasoningContent}
+                                    </div>
+                                )}
+                                {message.steps && message.steps.length > 0 && (
+                                    <div className={message.reasoningContent ? 'mt-2 pl-1 border-l-2 border-muted-foreground/20' : 'mt-1.5 pl-1 border-l-2 border-muted-foreground/20'}>
+                                        <CompletedSteps steps={message.steps} />
+                                    </div>
+                                )}
                             </details>
                         )}
                         <Streamdown>{message.content}</Streamdown>
@@ -100,10 +107,6 @@ export const MessageBubble = React.memo(function MessageBubble({
                     )}
                 </div>
 
-                {/* Execution steps for completed AI messages */}
-                {isAI && message.steps && message.steps.length > 0 && (
-                    <CompletedSteps steps={message.steps} />
-                )}
             </div>
         </ChatBubble>
     )

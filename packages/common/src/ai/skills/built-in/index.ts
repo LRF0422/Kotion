@@ -8,6 +8,7 @@ export { writingImprovementSkill } from './writing-improvement'
 export { translationSkill } from './translation'
 export { contentGenerationSkill } from './content-generation'
 export { formattingLayoutSkill } from './formatting-layout'
+export { columnsLayoutSkill } from './columns-layout'
 
 import { documentRefactorSkill } from './document-refactor'
 import { contentAnalysisSkill } from './content-analysis'
@@ -15,6 +16,7 @@ import { writingImprovementSkill } from './writing-improvement'
 import { translationSkill } from './translation'
 import { contentGenerationSkill } from './content-generation'
 import { formattingLayoutSkill } from './formatting-layout'
+import { columnsLayoutSkill } from './columns-layout'
 import type { Skill } from '../../types'
 
 /**
@@ -26,5 +28,6 @@ export const builtinSkills: Skill[] = [
     writingImprovementSkill,
     translationSkill,
     contentGenerationSkill,
-    formattingLayoutSkill
+    formattingLayoutSkill,
+    columnsLayoutSkill
 ]

@@ -20,9 +20,10 @@ export const formattingLayoutSkill: Skill = {
     optionalTools: [
         'searchInDocument',
         'replaceContent',
-        'createColumns',
-        'addColumnContent',
-        'removeColumns',
+        'insertColumns',
+        'getColumnsInfo',
+        'updateColumnContent',
+        'setColumnsLayout',
         'insertNear',
         'write'
     ],

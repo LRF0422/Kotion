@@ -27,6 +27,9 @@ export const ESSENTIAL_TOOLS = [
     // Structure tools
     'convertBlock',
     'formatText',
+    // Layout tools
+    'insertColumns',
+    'getColumnsInfo',
 ] as const
 
 // Category descriptions
@@ -144,26 +147,26 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     {
         name: 'insertColumns',
         category: 'layout',
-        description: '创建多列布局（2-6列）',
-        priority: 5,
-        tags: ['columns', 'layout', 'create'],
+        description: '创建多列布局（2-6列），支持不同宽度比例',
+        priority: 8,
+        tags: ['columns', 'layout', 'create', 'essential'],
         loaded: false,
         source: 'builtin'
     },
     {
         name: 'getColumnsInfo',
         category: 'layout',
-        description: '获取列布局信息',
-        priority: 4,
-        tags: ['columns', 'info', 'read'],
+        description: '获取列布局信息，包括位置、列数和各列内容',
+        priority: 8,
+        tags: ['columns', 'info', 'read', 'essential'],
         loaded: false,
         source: 'builtin'
     },
     {
         name: 'updateColumnContent',
         category: 'layout',
-        description: '更新指定列的内容',
-        priority: 5,
+        description: '更新指定列的内容，支持替换、追加和前置插入',
+        priority: 7,
         tags: ['columns', 'update', 'content'],
         loaded: false,
         source: 'builtin'
@@ -171,8 +174,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     {
         name: 'setColumnsLayout',
         category: 'layout',
-        description: '设置列宽度比例',
-        priority: 4,
+        description: '设置列宽度比例（等宽/左宽/右宽/中间宽）',
+        priority: 7,
         tags: ['columns', 'layout', 'width'],
         loaded: false,
         source: 'builtin'
@@ -180,8 +183,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     {
         name: 'addColumnToLayout',
         category: 'layout',
-        description: '向现有布局添加列',
-        priority: 4,
+        description: '向现有布局添加新列',
+        priority: 6,
         tags: ['columns', 'add', 'layout'],
         loaded: false,
         source: 'builtin'
@@ -189,8 +192,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     {
         name: 'deleteColumn',
         category: 'layout',
-        description: '删除布局中的列',
-        priority: 4,
+        description: '删除布局中的指定列',
+        priority: 6,
         tags: ['columns', 'delete', 'remove'],
         loaded: false,
         source: 'builtin'
@@ -199,7 +202,7 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         name: 'deleteColumnsLayout',
         category: 'layout',
         description: '删除整个列布局',
-        priority: 4,
+        priority: 6,
         tags: ['columns', 'delete', 'layout'],
         loaded: false,
         source: 'builtin'
@@ -207,8 +210,8 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     {
         name: 'insertNestedColumns',
         category: 'layout',
-        description: '在已有分栏列内插入嵌套分栏布局',
-        priority: 5,
+        description: '在已有分栏列内插入嵌套分栏布局，实现复杂布局',
+        priority: 7,
         tags: ['columns', 'nested', 'layout', 'insert'],
         loaded: false,
         source: 'builtin'
