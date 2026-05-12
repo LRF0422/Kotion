@@ -667,8 +667,13 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                         />
                     ))}
 
-                    {/* Streaming reasoning + Tool Calls combined in thinking section */}
-                    {isLoading && (streamingReasoning || currentSteps.length > 0) && (
+                    {/* Live execution steps */}
+                    {isLoading && currentSteps.length > 0 && (
+                        <LiveSteps steps={currentSteps} />
+                    )}
+
+                    {/* Streaming reasoning (thinking) content */}
+                    {isLoading && streamingReasoning && (
                         <ChatBubble variant="received">
                             <ChatBubbleMessage className="bg-muted/30 dark:bg-muted/20 p-2.5 rounded-xl rounded-tl-sm">
                                 <details open className="group">
@@ -676,16 +681,9 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                         <Sparkles className="h-3 w-3 animate-pulse" />
                                         <span>思考过程...</span>
                                     </summary>
-                                    {streamingReasoning && (
-                                        <div className="mt-1.5 pl-1 border-l-2 border-muted-foreground/20 text-[11px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap break-words">
-                                            {streamingReasoning}
-                                        </div>
-                                    )}
-                                    {currentSteps.length > 0 && (
-                                        <div className={streamingReasoning ? 'mt-2 pl-1 border-l-2 border-muted-foreground/20' : 'mt-1.5 pl-1 border-l-2 border-muted-foreground/20'}>
-                                            <LiveSteps steps={currentSteps} />
-                                        </div>
-                                    )}
+                                    <div className="mt-1.5 pl-1 border-l-2 border-muted-foreground/20 text-[11px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap break-words">
+                                        {streamingReasoning}
+                                    </div>
                                 </details>
                             </ChatBubbleMessage>
                         </ChatBubble>
@@ -701,7 +699,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                     )}
 
                     {/* Loading indicator */}
-                    {isLoading && !buffer.displayText && currentSteps.length === 0 && !streamingReasoning && (
+                    {isLoading && !buffer.displayText && currentSteps.length === 0 && (
                         <ChatBubble variant="received">
                             <ChatBubbleMessage isLoading className="bg-white dark:bg-muted/40 p-2.5 rounded-xl rounded-tl-sm" />
                         </ChatBubble>
