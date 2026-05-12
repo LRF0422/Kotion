@@ -247,9 +247,9 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     {
         name: 'moveBlock',
         category: 'document-structure',
-        description: '移动块到新位置（上移/下移/指定位置）',
+        description: '通过 blockId 将块移动到目标块的前面/后面（blockId 稳定，不受其他块增删影响）',
         priority: 5,
-        tags: ['move', 'block', 'reorder'],
+        tags: ['move', 'block', 'reorder', 'blockId'],
         loaded: false,
         source: 'builtin'
     },

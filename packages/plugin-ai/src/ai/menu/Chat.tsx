@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, FormEvent, useCallback, useMemo, useRef, useEffect } from "react"
-import { Sparkles, Send, Trash2, HelpCircle, Square, XCircle, Settings, Plus, ChevronDown, MessageSquarePlus, Globe, X, Check } from "@kn/icon"
+import { Sparkles, Send, Trash2, HelpCircle, Square, XCircle, Settings, Plus, ChevronDown, Globe, X, Check } from "@kn/icon"
 import {
     Button, Streamdown,
     Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Input,
@@ -31,15 +31,15 @@ import { useEditorAgentOptimized, ToolExecutionEvent, UserChoiceRequest, fetchMo
 import type { ModelInfo } from "@kn/common"
 
 import {
-    Message, ExecutionStep, PendingUserChoice, ChatError,
-    INITIAL_MESSAGES,
+    ExecutionStep, PendingUserChoice, ChatError,
     classifyError,
 } from "./chat-types"
-import type { AnnotationData } from "./chat-types"
+import type { AnnotationData, Message } from "./chat-types"
 import { useTeamStatus, createInitialTeamState } from "./useTeamStatus"
-import { useSessionManager } from "./useSessionManager"
 import { TeamStatusPanel } from "./TeamStatusPanel"
-import { loadMessages, saveMessages, clearPersistedMessages, getHistoryForAI } from "./chat-persistence"
+import { getHistoryForAI } from "./chat-persistence"
+import { useChatSessions } from "./useChatSessions"
+import type { ChatSessionMeta } from "./chat-sessions"
 import { useStreamingBuffer } from "./use-streaming-buffer"
 import { MessageBubble } from "./MessageBubble"
 import { LiveSteps } from "./ExecutionStepsDisplay"
@@ -136,6 +136,97 @@ const ModelSelector: React.FC<{
     )
 }
 
+// ─── Session Tabs ──────────────────────────────────────────────────
+
+interface SessionTabsProps {
+    sessions: ChatSessionMeta[]
+    activeSessionId: string
+    onSwitch: (id: string) => void
+    onNewSession: () => void
+    onDelete: (id: string) => void
+}
+
+/**
+ * Horizontal, scrollable tab strip for switching between chat sessions.
+ * Each tab exposes an inline × button that deletes that session.
+ * A trailing + button creates a new chat.
+ */
+const SessionTabs: React.FC<SessionTabsProps> = ({
+    sessions, activeSessionId, onSwitch, onNewSession, onDelete,
+}) => {
+    const activeTabRef = useRef<HTMLDivElement | null>(null)
+
+    // Keep the active tab visible when sessions or active id change.
+    useEffect(() => {
+        activeTabRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    }, [activeSessionId])
+
+    const handleDelete = useCallback((e: React.MouseEvent, id: string) => {
+        e.stopPropagation()
+        e.preventDefault()
+        onDelete(id)
+    }, [onDelete])
+
+    return (
+        <div
+            role="tablist"
+            aria-label="Chat sessions"
+            className="flex items-center gap-0.5 min-w-0 flex-1 overflow-x-auto scrollbar-thin"
+            style={{ scrollbarWidth: 'thin' }}
+        >
+            {sessions.map((s) => {
+                const isActive = s.id === activeSessionId
+                const title = s.title || 'New chat'
+                return (
+                    <div
+                        key={s.id}
+                        ref={isActive ? activeTabRef : undefined}
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => !isActive && onSwitch(s.id)}
+                        title={title}
+                        className={
+                            'group relative flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md cursor-pointer select-none shrink-0 max-w-[140px] transition-colors ' +
+                            (isActive
+                                ? 'bg-muted text-foreground'
+                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground')
+                        }
+                    >
+                        <span
+                            className={
+                                'truncate text-[11px] ' +
+                                (isActive ? 'font-semibold' : 'font-medium')
+                            }
+                        >
+                            {title}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={(e) => handleDelete(e, s.id)}
+                            aria-label={`Delete ${title}`}
+                            className={
+                                'flex items-center justify-center h-3.5 w-3.5 rounded-sm text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-colors ' +
+                                (isActive ? 'opacity-70 hover:opacity-100' : 'opacity-0 group-hover:opacity-100')
+                            }
+                        >
+                            <X className="h-2.5 w-2.5" />
+                        </button>
+                    </div>
+                )
+            })}
+            <button
+                type="button"
+                onClick={onNewSession}
+                aria-label="New chat"
+                title="New chat"
+                className="flex items-center justify-center h-5 w-5 shrink-0 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+            >
+                <Plus className="h-3 w-3" />
+            </button>
+        </div>
+    )
+}
+
 // ─── Chat Component ────────────────────────────────────────────────
 
 export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => {
@@ -229,15 +320,25 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         model: selectedModel || undefined,
     })
 
-    // Session management
-    const { sessionId, conversationId, parseAnnotations, clearSession } = useSessionManager()
+    // Multi-session management (messages + backend session ids per chat).
+    const {
+        sessions,
+        activeSessionId,
+        messages,
+        setMessages,
+        backendSessionId,
+        backendConversationId,
+        createSession,
+        switchSession,
+        deleteSession,
+        clearActiveMessages,
+        parseAnnotations,
+    } = useChatSessions()
 
     // Team status tracking
     const [annotations, setAnnotations] = useState<AnnotationData[]>([])
     const teamState = useTeamStatus(annotations)
 
-    // Persistence: load from localStorage on init
-    const [messages, setMessages] = useState<Message[]>(() => loadMessages())
     const [input, setInput] = useState("")
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<ChatError | null>(null)
@@ -251,11 +352,6 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
 
     // Last user message ref for retry
     const lastUserMessageRef = useRef<string>("")
-
-    // Persist messages on change
-    useEffect(() => {
-        saveMessages(messages)
-    }, [messages])
 
     // Generate unique message ID
     const generateMessageId = useCallback(() => {
@@ -297,8 +393,8 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
             const { textStream } = await stream({
                 prompt: messageText,
                 messages: history,
-                sessionId: sessionId || undefined,
-                conversationId: conversationId || undefined,
+                sessionId: backendSessionId,
+                conversationId: backendConversationId,
                 onAnnotation: (newAnnotations: AnnotationData[]) => {
                     setAnnotations(prev => [...prev, ...newAnnotations])
                     parseAnnotations(newAnnotations)
@@ -385,7 +481,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         } finally {
             setIsLoading(false)
         }
-    }, [stream, generateMessageId, messages, buffer])
+    }, [stream, generateMessageId, messages, buffer, backendSessionId, backendConversationId, parseAnnotations, setMessages])
 
     const handleSubmit = useCallback(async (e: FormEvent) => {
         e.preventDefault()
@@ -430,15 +526,57 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         }
     }, [isInputValid, handleSubmit])
 
-    // Clear chat history
+    // Clear the current chat (keeps the session, wipes its messages + backend ids).
     const handleClearChat = useCallback(() => {
-        setMessages([...INITIAL_MESSAGES])
+        if (isLoading) stop()
         setCurrentSteps([])
         stepsRef.current = []
-        clearPersistedMessages()
         setAnnotations([])
-        clearSession()
-    }, [clearSession])
+        setError(null)
+        clearActiveMessages()
+    }, [isLoading, stop, clearActiveMessages])
+
+    // Create a brand-new chat session and switch to it.
+    const handleNewSession = useCallback(() => {
+        if (isLoading) stop()
+        setCurrentSteps([])
+        stepsRef.current = []
+        setAnnotations([])
+        setError(null)
+        buffer.reset()
+        reasoningRef.current = ''
+        setStreamingReasoning('')
+        createSession()
+    }, [isLoading, stop, createSession, buffer])
+
+    // Switch to an existing session.
+    const handleSwitchSession = useCallback((id: string) => {
+        if (id === activeSessionId) return
+        if (isLoading) stop()
+        setCurrentSteps([])
+        stepsRef.current = []
+        setAnnotations([])
+        setError(null)
+        buffer.reset()
+        reasoningRef.current = ''
+        setStreamingReasoning('')
+        switchSession(id)
+    }, [activeSessionId, isLoading, stop, switchSession, buffer])
+
+    // Delete a session.
+    const handleDeleteSession = useCallback((id: string) => {
+        if (id === activeSessionId) {
+            if (isLoading) stop()
+            setCurrentSteps([])
+            stepsRef.current = []
+            setAnnotations([])
+            setError(null)
+            buffer.reset()
+            reasoningRef.current = ''
+            setStreamingReasoning('')
+        }
+        deleteSession(id)
+    }, [activeSessionId, isLoading, stop, deleteSession, buffer])
 
     // Message count
     const messageCount = messages.length
@@ -450,54 +588,39 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         <ExpandableChat
             size="lg"
             icon={
-                <div className="relative">
-                    <Sparkles className={`h-6 w-6 ${isLoading ? 'animate-pulse' : ''}`} />
+                <div className="relative flex items-center justify-center">
                     {isLoading && (
-                        <>
-                            <span className="absolute inset-0 -m-1 rounded-full border-2 border-primary-foreground/30 animate-ping" />
-                            <span className="absolute -inset-1">
-                                <svg className="h-8 w-8 animate-spin" viewBox="0 0 32 32">
-                                    <circle
-                                        cx="16"
-                                        cy="16"
-                                        r="14"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                        strokeDasharray="60 40"
-                                        className="opacity-75"
-                                    />
-                                </svg>
-                            </span>
-                        </>
+                        <span
+                            aria-hidden
+                            className="absolute -inset-1.5 rounded-full animate-spin"
+                            style={{
+                                background:
+                                    'conic-gradient(from 0deg, transparent 0deg, transparent 220deg, currentColor 340deg, transparent 360deg)',
+                                WebkitMask:
+                                    'radial-gradient(circle, transparent 58%, #000 60%)',
+                                mask: 'radial-gradient(circle, transparent 58%, #000 60%)',
+                                animationDuration: '1.1s',
+                            }}
+                        />
                     )}
+                    <Sparkles
+                        className={`h-6 w-6 relative z-10 transition-transform duration-500 ${isLoading ? 'scale-95 drop-shadow-[0_0_6px_currentColor]' : ''
+                            }`}
+                    />
                 </div>
             }
         >
             {/* Header */}
             <ExpandableChatHeader className="flex items-center justify-between px-3 py-1.5 border-b bg-background/95 backdrop-blur-sm">
-                <div className="flex items-center gap-1">
-                    <button className="flex items-center gap-1 text-xs font-semibold text-foreground hover:text-foreground/80 transition-colors">
-                        <span>New AI chat</span>
-                        <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                    </button>
-                </div>
-                <div className="flex items-center gap-px">
+                <SessionTabs
+                    sessions={sessions}
+                    activeSessionId={activeSessionId}
+                    onSwitch={handleSwitchSession}
+                    onNewSession={handleNewSession}
+                    onDelete={handleDeleteSession}
+                />
+                <div className="flex items-center gap-px shrink-0 pl-1">
                     <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleClearChat}
-                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-                                >
-                                    <MessageSquarePlus className="h-3.5 w-3.5" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">New chat</TooltipContent>
-                        </Tooltip>
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Button
@@ -509,7 +632,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                     <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                             </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">Clear chat</TooltipContent>
+                            <TooltipContent side="bottom" className="text-xs">Clear current chat</TooltipContent>
                         </Tooltip>
                         <Tooltip>
                             <TooltipTrigger asChild>

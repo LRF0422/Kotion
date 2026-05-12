@@ -112,7 +112,17 @@ export const EditorRender = forwardRef<
 
   // Load content into the editor
   React.useEffect(() => {
-    if (!editor || !content) return;
+    if (!editor) return;
+
+    // New/empty pages have no content: mark ready immediately so the skeleton
+    // does not remain visible forever.
+    if (!content) {
+      setLoadProgress(100);
+      setIsLargeDoc(false);
+      setContentReady(true);
+      onContentReady?.();
+      return;
+    }
 
     let cancelled = false;
     setLoadProgress(0);

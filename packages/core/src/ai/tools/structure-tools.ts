@@ -1,4 +1,5 @@
 import type { Editor } from "@kn/editor"
+import { findNodeByBlockId } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord } from "@kn/common"
 import { discoverBlocks, findBlockByText } from "@kn/common"
@@ -107,90 +108,54 @@ export const createStructureTools = (editor: Editor): ToolsRecord => ({
     },
 
     moveBlock: {
-        description: '移动块到新位置',
+        description: '通过 blockId 将一个块移动到目标块的前面或后面。相比基于索引的移动，blockId 不会因其他块的插入/删除而失效，更适合多步骤操作。',
         inputSchema: z.object({
-            blockIndex: z.number().describe("要移动的块索引（从0开始）"),
-            direction: z.enum(['up', 'down']).optional()
-                .describe("移动方向: 'up'上移一位, 'down'下移一位"),
-            toIndex: z.number().optional()
-                .describe("目标索引位置（与 direction 二选一）")
+            blockId: z.string().describe("要移动的源块 blockId"),
+            targetBlockId: z.string().describe("目标参考块的 blockId"),
+            position: z.enum(['before', 'after']).optional()
+                .describe("放置位置：'before' 放到目标块之前，'after' 放到目标块之后（默认 after）")
         }),
-        execute: async ({ blockIndex, direction, toIndex }: {
-            blockIndex: number
-            direction?: 'up' | 'down'
-            toIndex?: number
+        execute: async ({ blockId, targetBlockId, position = 'after' }: {
+            blockId: string
+            targetBlockId: string
+            position?: 'before' | 'after'
         }) => {
             try {
-                const blocks = discoverBlocks(editor)
-
-                if (blockIndex < 0 || blockIndex >= blocks.length) {
-                    return { error: `块索引越界。有效范围: 0-${blocks.length - 1}，请求: ${blockIndex}` }
+                if (!blockId || !targetBlockId) {
+                    return { error: '必须同时提供 blockId 和 targetBlockId' }
                 }
 
-                // Calculate target index
-                let targetIndex: number
-                if (toIndex !== undefined) {
-                    targetIndex = toIndex
-                } else if (direction === 'up') {
-                    targetIndex = blockIndex - 1
-                } else if (direction === 'down') {
-                    targetIndex = blockIndex + 1
-                } else {
-                    return { error: '必须提供 direction 或 toIndex' }
+                if (blockId === targetBlockId) {
+                    return { success: true, message: '源块与目标块相同，无需移动' }
                 }
 
-                if (targetIndex < 0 || targetIndex >= blocks.length) {
-                    return { error: `目标索引越界。有效范围: 0-${blocks.length - 1}，请求: ${targetIndex}` }
+                // Capture source block info before the move (for diagnostics).
+                const sourceResult = findNodeByBlockId(editor.state, blockId)
+                const targetResult = findNodeByBlockId(editor.state, targetBlockId)
+
+                if (!sourceResult) {
+                    return { error: `未找到 blockId 为 "${blockId}" 的块` }
+                }
+                if (!targetResult) {
+                    return { error: `未找到 targetBlockId 为 "${targetBlockId}" 的块` }
                 }
 
-                if (targetIndex === blockIndex) {
-                    return { success: true, message: '块已在目标位置' }
-                }
+                const sourceNode = sourceResult.node
 
-                const sourceBlock = blocks[blockIndex]
-                const sourceFrom = sourceBlock.pos
-                const sourceTo = sourceBlock.pos + sourceBlock.size
-
-                // Get the content of the source block as JSON
-                const sourceNode = editor.state.doc.nodeAt(sourceFrom)
-                if (!sourceNode) {
-                    return { error: '无法获取源块内容' }
-                }
-                const sourceJSON = sourceNode.toJSON()
-
-                // Delete source block first
-                editor.chain().focus().deleteRange({ from: sourceFrom, to: sourceTo }).run()
-
-                // After deletion, re-discover blocks to get correct positions
-                const updatedBlocks = discoverBlocks(editor)
-
-                // Adjust target index after deletion
-                let insertPos: number
-                const adjustedTargetIndex = targetIndex > blockIndex ? targetIndex - 1 : targetIndex
-
-                if (adjustedTargetIndex >= updatedBlocks.length) {
-                    // Insert at end
-                    const lastBlock = updatedBlocks[updatedBlocks.length - 1]
-                    insertPos = lastBlock.pos + lastBlock.size
-                } else {
-                    insertPos = updatedBlocks[adjustedTargetIndex].pos
-                }
-
-                const success = editor.commands.insertContentAt(insertPos, sourceJSON)
+                const success = editor.commands.moveBlockById(blockId, targetBlockId, position)
 
                 if (!success) {
-                    return { error: '移动块失败：插入内容失败' }
+                    return { error: '移动块失败：不能将块移动到其自身内部' }
                 }
-
-                scrollToPosition(editor, insertPos)
 
                 return {
                     success: true,
-                    fromIndex: blockIndex,
-                    toIndex: targetIndex,
-                    blockType: sourceBlock.type,
-                    blockPreview: sourceBlock.text,
-                    message: `已将块从位置 ${blockIndex} 移动到位置 ${targetIndex}`
+                    blockId,
+                    targetBlockId,
+                    position,
+                    blockType: sourceNode.type.name,
+                    blockPreview: sourceNode.textContent.slice(0, 80),
+                    message: `已将块 ${blockId} 移动到块 ${targetBlockId} 的${position === 'before' ? '前面' : '后面'}`
                 }
             } catch (error) {
                 return { error: `移动块失败: ${error instanceof Error ? error.message : '未知错误'}` }

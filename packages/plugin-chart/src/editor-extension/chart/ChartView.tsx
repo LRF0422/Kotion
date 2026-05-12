@@ -29,6 +29,7 @@ import {
     Badge,
     ScrollArea,
     Textarea,
+    useTheme,
     // Recharts components
     BarChart,
     Bar,
@@ -61,32 +62,22 @@ import {
     AlertCircle,
 } from "@kn/icon"
 import type { ChartData } from "./chart"
-
-/** Default color palette for chart series */
-const DEFAULT_COLORS = [
-    "hsl(var(--chart-1))",
-    "hsl(var(--chart-2))",
-    "hsl(var(--chart-3))",
-    "hsl(var(--chart-4))",
-    "hsl(var(--chart-5))",
-]
-
-/** Pie chart color palette */
-const PIE_COLORS = [
-    "hsl(var(--chart-1))",
-    "hsl(var(--chart-2))",
-    "hsl(var(--chart-3))",
-    "hsl(var(--chart-4))",
-    "hsl(var(--chart-5))",
-    "hsl(220 70% 50%)",
-    "hsl(160 60% 45%)",
-    "hsl(30 80% 55%)",
-    "hsl(280 65% 60%)",
-    "hsl(340 75% 55%)",
-]
+import { CHART_PALETTE, getThemeColor, getLightColor, getDarkColor } from "./chart-colors"
 
 /**
- * Build a ChartConfig from ChartData for shadcn ChartContainer
+ * Get the fallback color for a given index, accounting for the current theme.
+ * Used in ColorList and Pie/RadialBar direct-fill scenarios.
+ */
+function getFallbackColor(index: number, isDark: boolean): string {
+    const tc = getThemeColor(index)
+    return isDark ? tc.dark : tc.light
+}
+
+/**
+ * Build a ChartConfig from ChartData for shadcn ChartContainer.
+ * Uses the built-in palette with light/dark theme support.
+ * When no custom color is set, each series gets a `theme` entry
+ * so ChartStyle generates CSS for both light and dark modes.
  */
 function buildChartConfig(chartData: ChartData): ChartConfig {
     const config: ChartConfig = {}
@@ -94,9 +85,22 @@ function buildChartConfig(chartData: ChartData): ChartConfig {
 
     dataKeys.forEach((key, index) => {
         const customColor = chartData.colors?.[key]
-        config[key] = {
-            label: key,
-            color: customColor || DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+        if (customColor) {
+            // User-specified color: use as-is for both themes
+            config[key] = {
+                label: key,
+                color: customColor,
+            }
+        } else {
+            // Built-in palette with light/dark variants
+            const tc = getThemeColor(index)
+            config[key] = {
+                label: key,
+                theme: {
+                    light: tc.light,
+                    dark: tc.dark,
+                },
+            }
         }
     })
 
@@ -223,8 +227,8 @@ const AreaChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; hei
 /**
  * Render a Pie Chart
  */
-const PieChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number }> = ({
-    chartData, config, height
+const PieChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number; isDark: boolean }> = ({
+    chartData, config, height, isDark
 }) => {
     const dataKeys = chartData.dataKeys || []
     const dataKey = dataKeys[0] || "value"
@@ -247,7 +251,7 @@ const PieChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; heig
                     {chartData.data.map((row, index) => {
                         const name = String(row?.[categoryKey] ?? "")
                         const customColor = chartData.colors?.[name]
-                        const fill = customColor || PIE_COLORS[index % PIE_COLORS.length]
+                        const fill = customColor || getFallbackColor(index, isDark)
                         return <Cell key={`cell-${index}`} fill={fill} />
                     })}
                     {chartData.showDataLabels && (
@@ -361,7 +365,8 @@ const isHexColor = (v?: string): v is string => !!v && /^#[0-9a-fA-F]{6}$/.test(
 const ColorList: React.FC<{
     chartData: ChartData
     onUpdate: (updates: Partial<ChartData>) => void
-}> = ({ chartData, onUpdate }) => {
+    isDark: boolean
+}> = ({ chartData, onUpdate, isDark }) => {
     const isCategoryColored = chartData.type === "pie" || chartData.type === "radialBar"
     const categoryKey = chartData.categoryKey || "name"
 
@@ -378,14 +383,14 @@ const ColorList: React.FC<{
             }
             return list.map((name, i) => ({
                 key: name,
-                fallback: PIE_COLORS[i % PIE_COLORS.length],
+                fallback: getFallbackColor(i, isDark),
             }))
         }
         return (chartData.dataKeys || []).map((key, i) => ({
             key,
-            fallback: DEFAULT_COLORS[i % DEFAULT_COLORS.length],
+            fallback: getFallbackColor(i, isDark),
         }))
-    }, [chartData.data, chartData.dataKeys, chartData.type, categoryKey, isCategoryColored])
+    }, [chartData.data, chartData.dataKeys, chartData.type, categoryKey, isCategoryColored, isDark])
 
     const setColor = (key: string, value: string | undefined) => {
         const next = { ...(chartData.colors || {}) }
@@ -474,7 +479,8 @@ const ToggleRow: React.FC<{
 const ConfigPanel: React.FC<{
     chartData: ChartData
     onUpdate: (updates: Partial<ChartData>) => void
-}> = ({ chartData, onUpdate }) => {
+    isDark: boolean
+}> = ({ chartData, onUpdate, isDark }) => {
     const showSmoothLine = chartData.type === "line" || chartData.type === "area"
     const showStacked = chartData.type === "bar" || chartData.type === "area"
     const showHorizontal = chartData.type === "bar"
@@ -636,7 +642,7 @@ const ConfigPanel: React.FC<{
             {/* Colors */}
             <div className="space-y-2">
                 <SectionLabel>Colors</SectionLabel>
-                <ColorList chartData={chartData} onUpdate={onUpdate} />
+                <ColorList chartData={chartData} onUpdate={onUpdate} isDark={isDark} />
             </div>
         </div>
     )
@@ -653,6 +659,8 @@ const ConfigPanel: React.FC<{
 export const ChartView: React.FC<NodeViewProps> = (props) => {
     const rawData = props.node.attrs.data
     const isEditable = props.editor.isEditable
+    const { theme } = useTheme()
+    const isDark = theme === 'dark'
 
     // chartData derived from the ProseMirror node attribute
     const chartData: ChartData | null = useMemo(() => {
@@ -785,7 +793,7 @@ export const ChartView: React.FC<NodeViewProps> = (props) => {
             case "area":
                 return <AreaChartRender chartData={activeChartData} config={chartConfig} height={height} />
             case "pie":
-                return <PieChartRender chartData={activeChartData} config={chartConfig} height={height} />
+                return <PieChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
             case "radar":
                 return <RadarChartRender chartData={activeChartData} config={chartConfig} height={height} />
             case "radialBar":
@@ -852,7 +860,7 @@ export const ChartView: React.FC<NodeViewProps> = (props) => {
                                 <TabsContent value="config" className="flex-1 mt-0 p-0 overflow-auto" style={{ maxHeight: Math.max(height, 300) }}>
                                     <ScrollArea className="h-full">
                                         {activeChartData ? (
-                                            <ConfigPanel chartData={activeChartData} onUpdate={handleConfigUpdate} />
+                                            <ConfigPanel chartData={activeChartData} onUpdate={handleConfigUpdate} isDark={isDark} />
                                         ) : (
                                             <div className="p-4 text-xs text-muted-foreground text-center">
                                                 No chart data to configure

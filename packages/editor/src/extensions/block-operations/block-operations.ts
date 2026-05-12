@@ -10,6 +10,9 @@ export interface DeleteByBlockIdResult {
     notFoundIds: string[];
 }
 
+/** Where to place the moved block relative to the target block. */
+export type MoveBlockPosition = "before" | "after";
+
 declare module "@tiptap/core" {
     interface Commands<ReturnType> {
         blockOperations: {
@@ -26,6 +29,25 @@ declare module "@tiptap/core" {
              * were deleted and which were not found.
              */
             deleteByBlockId: (blockId: string | string[]) => ReturnType;
+            /**
+             * Move a block (identified by blockId) to a position relative to
+             * another block (identified by targetBlockId).
+             *
+             * The move is performed inside a single ProseMirror transaction:
+             *   1. Delete the source node at its original position.
+             *   2. Map the raw insert position through the deletion step.
+             *   3. Insert the cloned source node at the mapped position.
+             *
+             * Cloning via nodeFromJSON preserves all attributes (including
+             * blockId). Since the original is removed inside the same
+             * transaction, the UniqueID extension sees no duplicate and
+             * keeps the original blockId on the moved node.
+             */
+            moveBlockById: (
+                blockId: string,
+                targetBlockId: string,
+                position?: MoveBlockPosition,
+            ) => ReturnType;
         };
     }
 }
@@ -88,6 +110,67 @@ export const BlockOperations = Extension.create({
                         }
 
                         return true
+                    },
+
+            moveBlockById:
+                (
+                    blockId: string,
+                    targetBlockId: string,
+                    position: MoveBlockPosition = "after",
+                ) =>
+                    ({ state, dispatch }) => {
+                        if (!blockId || !targetBlockId) {
+                            return false;
+                        }
+
+                        // No-op: moving a block relative to itself.
+                        if (blockId === targetBlockId) {
+                            return true;
+                        }
+
+                        const source = findNodeByBlockId(state, blockId);
+                        const target = findNodeByBlockId(state, targetBlockId);
+
+                        if (!source || !target) {
+                            return false;
+                        }
+
+                        const sourceFrom = source.pos;
+                        const sourceTo = source.pos + source.node.nodeSize;
+
+                        // Reject moves where the target is inside the source
+                        // subtree — that would be an invalid operation.
+                        if (target.pos >= sourceFrom && target.pos < sourceTo) {
+                            return false;
+                        }
+
+                        if (dispatch) {
+                            const tr = state.tr;
+
+                            // Raw insert position before any mutation.
+                            const rawInsertPos =
+                                position === "before"
+                                    ? target.pos
+                                    : target.pos + target.node.nodeSize;
+
+                            // Clone the source node via JSON round-trip to
+                            // detach it from the doc tree while preserving
+                            // all attributes (including blockId).
+                            const sourceClone = state.schema.nodeFromJSON(
+                                source.node.toJSON(),
+                            );
+
+                            // Delete source first; map the raw insert
+                            // position through the deletion step so it stays
+                            // valid after the removal.
+                            tr.delete(sourceFrom, sourceTo);
+                            const mappedInsertPos = tr.mapping.map(rawInsertPos);
+                            tr.insert(mappedInsertPos, sourceClone);
+
+                            dispatch(tr.scrollIntoView());
+                        }
+
+                        return true;
                     },
         };
     },

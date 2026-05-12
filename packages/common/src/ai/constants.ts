@@ -43,8 +43,7 @@ export const CORE_EDITING_RULES = `# CRITICAL RULES
 2. **NEVER delete content** without calling askUserChoice first
 3. **Use search-based tools** (searchText) instead of position-based when possible
 4. **Confirm with user** when the request is ambiguous
-5. **For title changes, ALWAYS use updateTitle** - never insert a new heading for title updates
-6. **markdown数据不能含有换行符,不要一次性插入大量的markdown内容**`
+5. **For title changes, ALWAYS use updateTitle** - never insert a new heading for title updates`
 
 /**
  * Document structure explanation shared by all agent types.
