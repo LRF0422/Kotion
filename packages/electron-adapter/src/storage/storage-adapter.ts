@@ -22,7 +22,7 @@ export interface StorageAdapterEvents {
 
 export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
   private mode: StorageMode = StorageMode.LOCAL;
-  
+
   constructor(
     private spaceRepository: SpaceRepository,
     private pageRepository: PageRepository,
@@ -53,7 +53,7 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
    */
   async createSpace(dto: SpaceDTO): Promise<Space> {
     const userId = this.authManager.getAuthInfo()?.userId || 0;
-    
+
     if (this.mode === StorageMode.LOCAL) {
       // Local only
       const id = this.spaceRepository.create({
@@ -70,11 +70,11 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
 
     // Cloud or Hybrid - create on server first
     await this.spaceApi.createSpace(dto);
-    
+
     // Fetch from server to get full data
     const spaces = await this.spaceApi.getSpaceList({ size: 1 });
     const space = spaces.records[0];
-    
+
     // Save to local if hybrid mode
     if (this.mode === StorageMode.HYBRID) {
       this.spaceRepository.create({
@@ -94,7 +94,7 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
   async getSpace(id: number): Promise<Space | null> {
     // Try local first
     const localSpace = this.spaceRepository.getById(id);
-    
+
     if (localSpace && (this.mode === StorageMode.LOCAL || localSpace.localOnly)) {
       return localSpace;
     }
@@ -103,7 +103,7 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
     if (this.mode !== StorageMode.LOCAL && this.authManager.isLoggedIn()) {
       try {
         const space = await this.spaceApi.getSpaceDetail(id);
-        
+
         // Cache if hybrid mode
         if (this.mode === StorageMode.HYBRID) {
           if (localSpace) {
@@ -119,7 +119,7 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
             });
           }
         }
-        
+
         return space;
       } catch (error) {
         console.error('Failed to fetch space from cloud:', error);
@@ -142,11 +142,11 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
     if (this.authManager.isLoggedIn()) {
       try {
         const result = await this.spaceApi.getSpaceList({ size: 100 });
-        
+
         // Merge with local spaces if hybrid mode
         if (this.mode === StorageMode.HYBRID) {
           const localSpaces = this.spaceRepository.getAll();
-          
+
           // Save cloud spaces to local
           for (const space of result.records) {
             const existing = localSpaces.find((s) => s.id === space.id);
@@ -163,11 +163,11 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
               });
             }
           }
-          
+
           // Return all (local + cloud)
           return this.spaceRepository.getAll();
         }
-        
+
         return result.records;
       } catch (error) {
         console.error('Failed to fetch spaces from cloud:', error);
@@ -199,7 +199,7 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
       try {
         // TODO: Call cloud API to update space
         // await this.spaceApi.updateSpace(id, data);
-        
+
         this.spaceRepository.update(id, { syncStatus: SyncStatus.SYNCED });
       } catch (error) {
         console.error('Failed to update space on cloud:', error);
@@ -240,7 +240,7 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
    */
   async createPage(dto: PageDTO): Promise<Page> {
     const userId = this.authManager.getAuthInfo()?.userId || 0;
-    
+
     if (this.mode === StorageMode.LOCAL) {
       // Local only
       const id = this.pageRepository.create({
@@ -258,7 +258,7 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
 
     // Cloud or Hybrid - create on server first
     const page = await this.pageApi.createPage(dto);
-    
+
     // Save to local if hybrid mode
     if (this.mode === StorageMode.HYBRID) {
       this.pageRepository.create({
@@ -278,10 +278,10 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
   async getPage(id: number): Promise<Page | null> {
     // Try local first
     const localPage = this.pageRepository.getById(id);
-    
+
     if (localPage) {
       this.pageRepository.recordAccess(id);
-      
+
       if (this.mode === StorageMode.LOCAL || localPage.localOnly) {
         return localPage;
       }
@@ -291,7 +291,7 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
     if (this.mode !== StorageMode.LOCAL && this.authManager.isLoggedIn()) {
       try {
         const page = await this.pageApi.getPageContent(id);
-        
+
         // Cache if hybrid mode
         if (this.mode === StorageMode.HYBRID) {
           if (localPage) {
@@ -307,7 +307,7 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
             });
           }
         }
-        
+
         this.pageRepository.recordAccess(id);
         return page;
       } catch (error) {
@@ -331,7 +331,7 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
     if (this.authManager.isLoggedIn()) {
       try {
         const result = await this.pageApi.getPageList({ spaceId, size: 1000 });
-        
+
         // Merge with local pages if hybrid mode
         if (this.mode === StorageMode.HYBRID) {
           for (const page of result.records) {
@@ -350,7 +350,7 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
             }
           }
         }
-        
+
         return this.mode === StorageMode.HYBRID
           ? this.pageRepository.getBySpaceId(spaceId)
           : result.records;
@@ -411,7 +411,7 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
       try {
         // TODO: Call cloud API to update page
         // await this.pageApi.updatePage(id, data);
-        
+
         this.pageRepository.update(id, { syncStatus: SyncStatus.SYNCED });
       } catch (error) {
         console.error('Failed to update page on cloud:', error);
@@ -596,6 +596,13 @@ export class StorageAdapter extends EventEmitter<StorageAdapterEvents> {
    */
   async deleteBlock(blockId: string): Promise<void> {
     this.pageRepository.deleteBlock(blockId);
+  }
+
+  /**
+   * Get block version history
+   */
+  async getBlockVersions(blockId: string): Promise<any[]> {
+    return this.pageRepository.getBlockVersions(blockId);
   }
 
   // ==================== Search Operations ====================

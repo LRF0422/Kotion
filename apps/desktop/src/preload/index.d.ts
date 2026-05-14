@@ -255,6 +255,7 @@ declare global {
       'page:createBlock': (block: { id: string; pageId: number; type: string; content?: any; properties?: Record<string, any>; parentId?: string; order?: number }) => Promise<ApiResult>
       'page:updateBlock': (blockId: string, data: any) => Promise<ApiResult>
       'page:deleteBlock': (blockId: string) => Promise<ApiResult>
+      'page:getBlockVersions': (blockId: string) => Promise<ApiResult<any[]>>
       'page:getCollaborators': (pageId: string) => Promise<ApiResult<any[]>>
       'page:search': (keyword: string, spaceId?: number) => Promise<ApiResult<Page[]>>
       'page:getTrash': (spaceId?: number) => Promise<ApiResult<Page[]>>
@@ -308,4 +309,4 @@ declare global {
   }
 }
 
-export {}
+export { }

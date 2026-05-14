@@ -46,6 +46,7 @@ const urlToIpcChannel: Record<string, string> = {
     '/knowledge-wiki/space/page/templates': 'page:getTemplates',
     '/knowledge-wiki/space/page/blocks': 'page:getBlocks',
     '/knowledge-wiki/space/page/block': 'page:getBlockInfo',
+    '/knowledge-wiki/space/page/block/versions': 'page:getBlockVersions',
     // IM - removed, use HTTP for WebSocket operations
 }
 
@@ -79,6 +80,7 @@ const getIpcChannel = (url: string, method: string): string | null => {
         { pattern: /\/knowledge-wiki\/plugin-config\/([^/]+)/, channel: 'pluginConfig:getOrSave' },
         { pattern: /\/knowledge-wiki\/plugin\/([^/]+)/, channel: 'plugin:get' },
         { pattern: /\/knowledge-wiki\/favorite\/([^/]+)/, channel: 'page:removeFavorite' },
+        { pattern: /\/knowledge-wiki\/space\/page\/block\/([^/]+)\/versions/, channel: 'page:getBlockVersions' },
         // IM patterns removed - use HTTP for WebSocket operations
     ]
 
@@ -113,6 +115,7 @@ const extractIdFromUrl = (url: string): string | null => {
         /\/plugin-config\/([^/]+)$/,
         /\/plugin\/([^/]+)$/,
         /\/favorite\/([^/]+)$/,
+        /\/block\/([^/]+)\/versions$/,
         // IM patterns removed - use HTTP for WebSocket operations
     ]
 

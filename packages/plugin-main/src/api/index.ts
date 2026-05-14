@@ -108,6 +108,10 @@ export const APIS = {
         url: '/knowledge-wiki/space/page/block/detail/:id',
         method: 'GET'
     } as API,
+    GET_BLOCK_VERSIONS: {
+        url: '/knowledge-wiki/space/page/block/:blockId/versions',
+        method: 'GET'
+    } as API,
     DELETE_TEMPLATE: {
         url: '/knowledge-wiki/space/page/template/:id',
         method: 'DELETE'

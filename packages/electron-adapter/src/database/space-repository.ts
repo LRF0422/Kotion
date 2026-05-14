@@ -592,6 +592,36 @@ export class PageRepository {
   }
 
   /**
+   * Get block version history
+   */
+  getBlockVersions(blockId: string): any[] {
+    // Check if block_versions table exists, if not return empty
+    try {
+      const tableExists = this.db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='block_versions'")
+        .get();
+      if (!tableExists) {
+        return [];
+      }
+      const results = this.db
+        .prepare('SELECT * FROM block_versions WHERE block_id = ? ORDER BY created_at DESC')
+        .all(blockId) as any[];
+      return results.map((r) => ({
+        id: r.id,
+        blockId: r.block_id,
+        content: r.content ? JSON.parse(r.content) : null,
+        createdBy: r.created_by,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        version: r.version,
+        description: r.description,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Delete all blocks for a page
    */
   deleteBlocksByPage(pageId: number): void {

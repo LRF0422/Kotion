@@ -34,7 +34,6 @@ export const Dragable = Extension.create<DragableStorage>({
     }
   },
 
-  // @ts-ignore
   addProseMirrorPlugins() {
     const editor = this.editor
     const storage = this.storage as DragableStorage
@@ -92,11 +91,17 @@ export const Dragable = Extension.create<DragableStorage>({
         blockMenuRoot = createRoot(blockMenuMountDOM)
       }
 
+      // Always read from editor.storage to get the latest blockMenuItems
+      // (editor.storage.dragable is replaced by render.tsx/collaboration.tsx
+      // after the extension is created, so the captured `storage` reference
+      // becomes stale)
+      const currentItems = (editor.storage?.dragable as DragableStorage)?.blockMenuItems || []
+
       blockMenuRoot.render(
         React.createElement(BlockMenu, {
           editor: editor as Editor,
           activeNode,
-          items: storage.blockMenuItems,
+          items: currentItems,
         })
       )
     }

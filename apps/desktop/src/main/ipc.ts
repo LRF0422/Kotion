@@ -369,6 +369,17 @@ export function setupIpcHandlers() {
     }
   });
 
+  ipcMain.handle('page:getBlockVersions', async (_event, blockId: string) => {
+    const storage = getStorageAdapter();
+    try {
+      const versions = await storage.getBlockVersions(blockId);
+      return { data: versions };
+    } catch (error) {
+      console.error('Failed to get block versions:', error);
+      return { data: [] };
+    }
+  });
+
   ipcMain.handle('page:getCollaborators', async (_event, _pageId: string) => {
     // Collaborators are stored locally - for now return current user as collaborator
     const authManager = getAuthManager();

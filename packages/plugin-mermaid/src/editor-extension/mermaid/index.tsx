@@ -141,12 +141,12 @@ export const MermaidExtension: ExtensionWrapper = {
                     'flowchart', 'sequence', 'classDiagram', 'stateDiagram',
                     'erDiagram', 'gantt', 'pie', 'mindmap', 'timeline', 'gitGraph'
                 ]).describe("图表类型。用于生成模板或验证代码格式").optional(),
-                position: z.number().describe("插入位置。如不指定则插入到当前光标位置或文档末尾").optional()
+                position: z.number().describe("插入位置")
             }),
             execute: (editor: Editor) => async (params: {
                 code?: string;
                 chartType?: keyof typeof MERMAID_TEMPLATES;
-                position?: number;
+                position: number;
             }) => {
                 try {
                     const { code, chartType, position } = params;
