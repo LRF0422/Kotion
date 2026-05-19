@@ -3,6 +3,7 @@ import { ExtensionWrapper, Group } from "@kn/common";
 import { Editor } from "@tiptap/core";
 import { Toggle } from "@kn/ui";
 import { Separator } from "@kn/ui";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
 import { isArray } from "lodash";
 import { Undo2, Redo2 } from "@kn/icon";
 import { BubbleMenu as ReactBubble } from "../components";
@@ -103,6 +104,10 @@ export const EditorMenu: React.FC<{
             !editor.isActive('codeBlock');
     }, [editor]);
 
+    // Check undo/redo availability
+    const canUndo = editor.can().undo();
+    const canRedo = editor.can().redo();
+
     // Memoized undo/redo handlers
     const handleUndo = useCallback(() => {
         editor.commands.undo();
@@ -115,17 +120,83 @@ export const EditorMenu: React.FC<{
     return (
         <>
             {toolbar && (
-                <div className="flex flex-row gap-0 w-full items-center z-20 shadow-sm border-b flex-wrap">
-                    <Toggle onClick={handleUndo} size="sm">
-                        <Undo2 className="h-4 w-4" />
-                    </Toggle>
-                    <Toggle onClick={handleRedo} size="sm">
-                        <Redo2 className="h-4 w-4" />
-                    </Toggle>
-                    <Separator orientation="vertical" />
-                    {renderItem(record.mark, 1)}
-                    {renderItem(record.inline, 2)}
-                    {renderItem(record.block, 3)}
+                <div className="flex items-center gap-0.5 w-full px-1 py-0.5 z-20 border-b bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80">
+                    {/* Undo / Redo group */}
+                    <div className="flex items-center gap-0.5">
+                        <TooltipProvider delayDuration={400}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Toggle
+                                        onClick={handleUndo}
+                                        size="sm"
+                                        disabled={!canUndo}
+                                        aria-label="Undo"
+                                        className="h-7 w-7 p-0 data-[disabled=true]:opacity-40"
+                                    >
+                                        <Undo2 className="h-3.5 w-3.5" />
+                                    </Toggle>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="text-xs">
+                                    Undo
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+
+                        <TooltipProvider delayDuration={400}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Toggle
+                                        onClick={handleRedo}
+                                        size="sm"
+                                        disabled={!canRedo}
+                                        aria-label="Redo"
+                                        className="h-7 w-7 p-0 data-[disabled=true]:opacity-40"
+                                    >
+                                        <Redo2 className="h-3.5 w-3.5" />
+                                    </Toggle>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="text-xs">
+                                    Redo
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+
+                    {/* Separator between undo/redo and extension menus */}
+                    {(record.mark.length > 0 || record.inline.length > 0 || record.block.length > 0) && (
+                        <Separator orientation="vertical" className="mx-1 h-4" />
+                    )}
+
+                    {/* Mark menus */}
+                    {record.mark.length > 0 && (
+                        <div className="flex items-center gap-0.5">
+                            {renderItem(record.mark, 1)}
+                        </div>
+                    )}
+
+                    {/* Separator between mark and inline */}
+                    {record.mark.length > 0 && record.inline.length > 0 && (
+                        <Separator orientation="vertical" className="mx-1 h-4" />
+                    )}
+
+                    {/* Inline menus */}
+                    {record.inline.length > 0 && (
+                        <div className="flex items-center gap-0.5">
+                            {renderItem(record.inline, 2)}
+                        </div>
+                    )}
+
+                    {/* Separator between inline and block */}
+                    {(record.mark.length > 0 || record.inline.length > 0) && record.block.length > 0 && (
+                        <Separator orientation="vertical" className="mx-1 h-4" />
+                    )}
+
+                    {/* Block menus */}
+                    {record.block.length > 0 && (
+                        <div className="flex items-center gap-0.5">
+                            {renderItem(record.block, 3)}
+                        </div>
+                    )}
                 </div>
             )}
             {renderItem(bubbleMenu, 4)}
@@ -137,7 +208,7 @@ export const EditorMenu: React.FC<{
                     pluginKey="editor-menu"
                     options={{ placement: 'top' }}
                 >
-                    <div className="flex flex-row gap-0 items-center flex-wrap">
+                    <div className="flex items-center gap-0.5 rounded-lg border bg-popover/95 backdrop-blur-sm p-1 shadow-md">
                         {flotMenu.map((Menu, index) => (
                             <Menu key={`float-menu-${index}`} editor={editor} />
                         ))}

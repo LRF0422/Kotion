@@ -8,7 +8,6 @@ import TextLoadingDecorationExtension from "./text-loading";
 import { LoadingMark } from "./marks/loading-mark";
 import { ExpandableChatDemo } from "./menu/Chat";
 import { AiCompletionExtension } from "./completion";
-// import { AiInlineTrigger, AiInlinePanel } from "@kn/common";
 
 /**
  * AI Extension Configuration
@@ -27,12 +26,8 @@ export const AIExtension: ExtensionWrapper = {
     name: Ai.name,
     extendsion: [Ai, AiImage, TextLoadingDecorationExtension, LoadingMark, AiCompletionExtension],
     flotMenuConfig: [AiStaticMenu],
-    // floatingUI: AiInlinePanel,
+    floatingUI: ExpandableChatDemo,
     // Chat component is a floating UI, render it separately via floatingUI
-    menuConfig: {
-        group: 'block',
-        menu: ExpandableChatDemo
-    },
     slashConfig: [
         {
             divider: true,
@@ -44,14 +39,6 @@ export const AIExtension: ExtensionWrapper = {
             slash: '/ai',
             action: (editor) => {
                 editor.commands.insertAIBlock()
-            }
-        },
-        {
-            icon: <Sparkles className="h-4 w-4" />,
-            text: '文生成图',
-            slash: '/aiImage',
-            action: (editor) => {
-                // editor.commands.insertAiImage()
             }
         },
         {
