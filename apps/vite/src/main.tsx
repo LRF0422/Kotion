@@ -12,8 +12,10 @@ import { ai } from "@kn/plugin-ai"
 import { chart } from "@kn/chart-plugin"
 import { drawnix } from "@kn/plugin-drawnix"
 import { mermaid } from "@kn/mermaid-plugin"
+import { excalidraw } from "@kn/plugin-excalidraw"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App plugins={[ai, bitable, blockReference, speechToText, chart, drawnix, DefaultPluginInstance, fileManager, mermaid]} />
+  <App plugins={[ai, bitable, blockReference, speechToText, chart,
+    drawnix, DefaultPluginInstance, fileManager, mermaid, excalidraw]} />
 )

@@ -19,6 +19,13 @@
     position: absolute;
     top: 0.5rem;
     right: 0.5rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+/* Show action buttons on hover */
+.mermaid-renderer:hover .mermaid-actions {
+    opacity: 1;
 }
 
 .mermaid-action-button {
@@ -79,5 +86,94 @@
 
     .mermaid-action-button {
         @apply h-7 w-7;
+    }
+}
+
+/* ============================================================
+   Fullscreen Overlay Modal
+   ============================================================ */
+
+.mermaid-fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background-color: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: mermaid-fade-in 0.2s ease;
+}
+
+.mermaid-fullscreen-content {
+    position: relative;
+    max-width: 95vw;
+    max-height: 95vh;
+    overflow: auto;
+    background-color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    padding: 2rem;
+}
+
+.mermaid-fullscreen-close {
+    position: sticky;
+    top: 0;
+    float: right;
+    z-index: 1;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    background-color: #f3f4f6;
+    color: #374151;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    margin-bottom: 0.5rem;
+}
+
+.mermaid-fullscreen-close:hover {
+    background-color: #e5e7eb;
+    color: #111827;
+}
+
+.mermaid-fullscreen-diagram {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.mermaid-fullscreen-diagram svg {
+    max-width: 90vw;
+    max-height: 85vh;
+    width: auto;
+    height: auto;
+}
+
+/* Dark mode fullscreen */
+.dark .mermaid-fullscreen-content {
+    background-color: #1f2937;
+}
+
+.dark .mermaid-fullscreen-close {
+    background-color: #374151;
+    color: #d1d5db;
+}
+
+.dark .mermaid-fullscreen-close:hover {
+    background-color: #4b5563;
+    color: #f9fafb;
+}
+
+@keyframes mermaid-fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
     }
 }

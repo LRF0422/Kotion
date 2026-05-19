@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect, useId, memo } from "react";
+import React, { useState, useRef, useEffect, useCallback, memo } from "react";
 import mermaid, { type MermaidConfig } from "mermaid";
 import { Button } from "@kn/ui"
-import { CopyIcon, DownloadIcon } from "@kn/icon"
+import { CopyIcon, DownloadIcon, Maximize2 } from "@kn/icon"
 // styles
 // import "./styles.css";
 import { uuidv4 } from "lib0/random";
@@ -58,11 +58,38 @@ function RenderMermaid({
     renderCode: RenderCode,
 }: RenderMermaidProps) {
     const [error, setError] = useState<string | null>(null);
+    const [isFullscreen, setIsFullscreen] = useState(false);
     const id = uuidv4();
     const mermaidRef = useRef<HTMLDivElement | null>(null);
     const handleCopyCode = () => {
         navigator.clipboard.writeText(mermaidCode ?? "");
     };
+
+    const handleOpenFullscreen = useCallback(() => {
+        setIsFullscreen(true);
+    }, []);
+
+    const handleCloseFullscreen = useCallback(() => {
+        setIsFullscreen(false);
+    }, []);
+
+    const handleOverlayClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        if (e.target === e.currentTarget) {
+            setIsFullscreen(false);
+        }
+    }, []);
+
+    // Close fullscreen on Escape key
+    useEffect(() => {
+        if (!isFullscreen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                setIsFullscreen(false);
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [isFullscreen]);
 
     useEffect(() => {
         const currentRef = mermaidRef.current;
@@ -142,9 +169,9 @@ function RenderMermaid({
     }
 
     return (
-        <div className="mermaid-renderer w-full h-full justify-center relative" key={mermaidCode}>
-            {/* copy code and download buttons */}
-            <div className="mermaid-actions absolute top-1 left-1 flex items-center ">
+        <div className="mermaid-renderer w-full h-full justify-center relative group" key={mermaidCode}>
+            {/* copy code, download and fullscreen buttons — shown on hover */}
+            <div className="mermaid-actions absolute top-1 left-1 flex items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 {!disableCopy &&
                     (CopyComponent ? (
                         <CopyComponent onClick={handleCopyCode} />
@@ -171,8 +198,41 @@ function RenderMermaid({
                             <DownloadIcon className="h-4 w-4" />
                         </Button>
                     ))}
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleOpenFullscreen}
+                    className="mermaid-action-button btn-fullscreen h-8 w-8 p-1.5"
+                    title="View enlarged image"
+                >
+                    <Maximize2 className="h-4 w-4" />
+                </Button>
             </div>
             <div ref={mermaidRef} className="mermaid-diagram flex justify-center items-center" />
+
+            {/* Fullscreen overlay modal */}
+            {isFullscreen && (
+                <div
+                    className="fixed inset-0 z-[9999] bg-black/75 flex items-center justify-center animate-[mermaid-fade-in_0.2s_ease]"
+                    onClick={handleOverlayClick}
+                >
+                    <div className="relative max-w-[95vw] max-h-[95vh] overflow-auto bg-white rounded-xl shadow-2xl p-8">
+                        <button
+                            className="sticky top-0 float-right z-[1] w-8 h-8 border-none rounded-lg bg-gray-100 text-gray-700 text-base cursor-pointer flex items-center justify-center transition-colors duration-150 hover:bg-gray-200 hover:text-gray-900 mb-2"
+                            onClick={handleCloseFullscreen}
+                            aria-label="Close"
+                        >
+                            ✕
+                        </button>
+                        <div
+                            className="flex justify-center items-center [&>svg]:w-[90vw] [&>svg]:max-w-none [&>svg]:h-auto"
+                            dangerouslySetInnerHTML={{
+                                __html: mermaidRef.current?.innerHTML || ""
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
