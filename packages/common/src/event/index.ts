@@ -25,10 +25,3 @@ export const TOGGLE_AI_ASSISTANT = "TOGGLE_AI_ASSISTANT"
 export const BUSINESS_TOPIC = {
     PAGE_COOPERATION_INVITE: "space.page.cooperation.invite"
 }
-
-// --- Backward-compatible aliases ---
-// These are kept so existing code that imports REFRESH_PLUSINS still compiles.
-// New code should use PLUGIN_CHANGED instead.
-
-/** @deprecated Use PLUGIN_CHANGED instead */
-export const REFRESH_PLUSINS = PLUGIN_CHANGED

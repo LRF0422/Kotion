@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { KnowledgeFile, useApi, useUploadFile } from "@kn/common";
+import { KnowledgeFile, useApi, useUploadFile, APIS } from "@kn/common";
 import {
     Avatar, Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger,
     IconButton, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, AlertDialog, AlertDialogAction,
@@ -14,7 +14,7 @@ import {
     SettingsIcon, HistoryIcon, InfoIcon, ChevronRightIcon
 } from "@kn/icon";
 import { PluginUploader } from "../PluginUploader";
-import { APIS } from "../../../api";
+
 import { CollaborationEditor } from "@kn/editor";
 import { isObject } from "lodash";
 import { useTranslation } from "@kn/common";
