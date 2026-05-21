@@ -30,6 +30,13 @@ import {
     ScrollArea,
     Textarea,
     useTheme,
+    // Table components
+    Table,
+    TableHeader,
+    TableBody,
+    TableRow,
+    TableHead,
+    TableCell,
     // Recharts components
     BarChart,
     Bar,
@@ -54,6 +61,7 @@ import {
     CartesianGrid,
     LabelList,
     ZAxis,
+    ComposedChart,
 } from "@kn/ui"
 import {
     BarChart3,
@@ -61,27 +69,28 @@ import {
     Settings2,
     AlertCircle,
 } from "@kn/icon"
-import type { ChartData } from "./chart"
-import { CHART_PALETTE, getThemeColor, getLightColor, getDarkColor } from "./chart-colors"
+import type { ChartData, SeriesConfig } from "./chart"
+import { getThemeColorFromPalette, getPalette, COLOR_PALETTES } from "./chart-colors"
 
 /**
  * Get the fallback color for a given index, accounting for the current theme.
- * Used in ColorList and Pie/RadialBar direct-fill scenarios.
+ * Uses the chart's colorScheme if set, otherwise falls back to the default palette.
  */
-function getFallbackColor(index: number, isDark: boolean): string {
-    const tc = getThemeColor(index)
+function getFallbackColor(index: number, isDark: boolean, colorScheme?: string): string {
+    const tc = getThemeColorFromPalette(colorScheme, index)
     return isDark ? tc.dark : tc.light
 }
 
 /**
  * Build a ChartConfig from ChartData for shadcn ChartContainer.
- * Uses the built-in palette with light/dark theme support.
+ * Uses the selected colorScheme palette with light/dark theme support.
  * When no custom color is set, each series gets a `theme` entry
  * so ChartStyle generates CSS for both light and dark modes.
  */
 function buildChartConfig(chartData: ChartData): ChartConfig {
     const config: ChartConfig = {}
     const dataKeys = chartData.dataKeys || []
+    const colorScheme = chartData.colorScheme
 
     dataKeys.forEach((key, index) => {
         const customColor = chartData.colors?.[key]
@@ -92,8 +101,8 @@ function buildChartConfig(chartData: ChartData): ChartConfig {
                 color: customColor,
             }
         } else {
-            // Built-in palette with light/dark variants
-            const tc = getThemeColor(index)
+            // Palette-derived color with light/dark variants
+            const tc = getThemeColorFromPalette(colorScheme, index)
             config[key] = {
                 label: key,
                 theme: {
@@ -251,7 +260,7 @@ const PieChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; heig
                     {chartData.data.map((row, index) => {
                         const name = String(row?.[categoryKey] ?? "")
                         const customColor = chartData.colors?.[name]
-                        const fill = customColor || getFallbackColor(index, isDark)
+                        const fill = customColor || getFallbackColor(index, isDark, chartData.colorScheme)
                         return <Cell key={`cell-${index}`} fill={fill} />
                     })}
                     {chartData.showDataLabels && (
@@ -342,6 +351,88 @@ const ScatterChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; 
 }
 
 /**
+ * Render a Composed (combination) Chart
+ * Mixes bar, line, and area series in a single chart with optional dual Y-axes.
+ */
+const ComposedChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number }> = ({
+    chartData, config, height
+}) => {
+    const dataKeys = chartData.dataKeys || []
+    const categoryKey = chartData.categoryKey || "name"
+    const seriesConfig = chartData.seriesConfig || {}
+    const showRight = chartData.rightYAxis === true
+
+    // Check if any series uses the right Y-axis
+    const hasRightSeries = dataKeys.some(key => seriesConfig[key]?.yAxisId === 'right')
+
+    return (
+        <ChartContainer config={config} className="w-full" style={{ height }}>
+            <ComposedChart data={chartData.data} accessibilityLayer>
+                {chartData.showGrid !== false && <CartesianGrid vertical={false} strokeDasharray="3 3" />}
+                <XAxis dataKey={categoryKey} tickLine={false} tickMargin={10} axisLine={false} />
+                <YAxis yAxisId="left" tickLine={false} axisLine={false} />
+                {(showRight || hasRightSeries) && (
+                    <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} />
+                )}
+                <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+                {dataKeys.map((key, index) => {
+                    const sc: SeriesConfig = seriesConfig[key] || { type: 'bar' }
+                    const yAxisId = sc.yAxisId === 'right' && (showRight || hasRightSeries) ? 'right' : 'left'
+                    const colorVar = `var(--color-${key})`
+
+                    switch (sc.type) {
+                        case 'line':
+                            return (
+                                <Line
+                                    key={key}
+                                    yAxisId={yAxisId}
+                                    type={chartData.smoothLine !== false ? "monotone" : "linear"}
+                                    dataKey={key}
+                                    stroke={colorVar}
+                                    strokeWidth={2}
+                                    dot={{ r: 4 }}
+                                >
+                                    {chartData.showDataLabels && (
+                                        <LabelList dataKey={key} position="top" className="fill-foreground text-xs" />
+                                    )}
+                                </Line>
+                            )
+                        case 'area':
+                            return (
+                                <Area
+                                    key={key}
+                                    yAxisId={yAxisId}
+                                    type={chartData.smoothLine !== false ? "monotone" : "linear"}
+                                    dataKey={key}
+                                    fill={colorVar}
+                                    fillOpacity={0.4}
+                                    stroke={colorVar}
+                                />
+                            )
+                        case 'bar':
+                        default:
+                            return (
+                                <Bar
+                                    key={key}
+                                    yAxisId={yAxisId}
+                                    dataKey={key}
+                                    fill={colorVar}
+                                    radius={[4, 4, 0, 0]}
+                                >
+                                    {chartData.showDataLabels && (
+                                        <LabelList dataKey={key} position="top" className="fill-foreground text-xs" />
+                                    )}
+                                </Bar>
+                            )
+                    }
+                })}
+                {chartData.showLegend !== false && <ChartLegend content={<ChartLegendContent />} />}
+            </ComposedChart>
+        </ChartContainer>
+    )
+}
+
+/**
  * Chart type options for the config selector
  */
 const CHART_TYPE_OPTIONS = [
@@ -352,103 +443,8 @@ const CHART_TYPE_OPTIONS = [
     { value: "radar", label: "Radar Chart" },
     { value: "radialBar", label: "Radial Bar Chart" },
     { value: "scatter", label: "Scatter Chart" },
+    { value: "compose", label: "Composite Chart" },
 ] as const
-
-/** Returns true if the value is a 6-digit hex color string */
-const isHexColor = (v?: string): v is string => !!v && /^#[0-9a-fA-F]{6}$/.test(v)
-
-/**
- * ColorList - Per-series color editor.
- * - For non-pie/radialBar charts: edits colors keyed by dataKey
- * - For pie/radialBar charts: edits colors keyed by category value
- */
-const ColorList: React.FC<{
-    chartData: ChartData
-    onUpdate: (updates: Partial<ChartData>) => void
-    isDark: boolean
-}> = ({ chartData, onUpdate, isDark }) => {
-    const isCategoryColored = chartData.type === "pie" || chartData.type === "radialBar"
-    const categoryKey = chartData.categoryKey || "name"
-
-    const items = useMemo(() => {
-        if (isCategoryColored) {
-            const seen = new Set<string>()
-            const list: string[] = []
-            for (const row of chartData.data || []) {
-                const v = String(row?.[categoryKey] ?? "")
-                if (v && !seen.has(v)) {
-                    seen.add(v)
-                    list.push(v)
-                }
-            }
-            return list.map((name, i) => ({
-                key: name,
-                fallback: getFallbackColor(i, isDark),
-            }))
-        }
-        return (chartData.dataKeys || []).map((key, i) => ({
-            key,
-            fallback: getFallbackColor(i, isDark),
-        }))
-    }, [chartData.data, chartData.dataKeys, chartData.type, categoryKey, isCategoryColored, isDark])
-
-    const setColor = (key: string, value: string | undefined) => {
-        const next = { ...(chartData.colors || {}) }
-        if (value === undefined || value === "") {
-            delete next[key]
-        } else {
-            next[key] = value
-        }
-        onUpdate({ colors: next })
-    }
-
-    if (items.length === 0) {
-        return <div className="text-xs text-muted-foreground">No series defined</div>
-    }
-
-    return (
-        <div className="space-y-1.5">
-            {items.map((item) => {
-                const customColor = chartData.colors?.[item.key]
-                const displayColor = customColor || item.fallback
-                const colorInputValue = isHexColor(customColor) ? customColor : "#888888"
-                return (
-                    <div key={item.key} className="flex items-center gap-2 group">
-                        <label
-                            className="relative h-5 w-5 rounded border border-border/60 shrink-0 cursor-pointer overflow-hidden ring-offset-background hover:ring-2 hover:ring-ring/40 transition-shadow"
-                            style={{ backgroundColor: displayColor }}
-                            title={displayColor}
-                        >
-                            <input
-                                type="color"
-                                value={colorInputValue}
-                                onChange={(e) => setColor(item.key, e.target.value)}
-                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            />
-                        </label>
-                        <span className="text-xs flex-1 min-w-0 truncate text-foreground/90" title={item.key}>{item.key}</span>
-                        {customColor && (
-                            <button
-                                type="button"
-                                onClick={() => setColor(item.key, undefined)}
-                                className="text-[10px] text-muted-foreground/60 hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                                title="Reset to default"
-                            >
-                                Reset
-                            </button>
-                        )}
-                        <Input
-                            value={customColor || ""}
-                            onChange={(e) => setColor(item.key, e.target.value || undefined)}
-                            placeholder="default"
-                            className="h-6 text-[11px] w-20 font-mono shrink-0 px-1.5"
-                        />
-                    </div>
-                )
-            })}
-        </div>
-    )
-}
 
 /** Compact uppercase section header for the config panel */
 const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -474,6 +470,79 @@ const ToggleRow: React.FC<{
 )
 
 /**
+ * DataTableView - Renders chart data as a read-only table
+ */
+const DataTableView: React.FC<{ chartData: ChartData }> = ({ chartData }) => {
+    const categoryKey = chartData.categoryKey || "name"
+    const dataKeys = chartData.dataKeys || []
+    const data = chartData.data || []
+
+    // Collect all unique keys from data rows to display as columns
+    const allKeys = useMemo(() => {
+        if (data.length === 0) return []
+        const keySet = new Set<string>()
+        // Always start with categoryKey, then dataKeys, then any remaining keys
+        if (categoryKey) keySet.add(categoryKey)
+        dataKeys.forEach(k => keySet.add(k))
+        for (const row of data) {
+            for (const k of Object.keys(row)) {
+                keySet.add(k)
+            }
+        }
+        // Return in order: categoryKey first, then dataKeys, then the rest
+        const ordered: string[] = []
+        if (categoryKey && keySet.has(categoryKey)) {
+            ordered.push(categoryKey)
+            keySet.delete(categoryKey)
+        }
+        for (const dk of dataKeys) {
+            if (keySet.has(dk)) {
+                ordered.push(dk)
+                keySet.delete(dk)
+            }
+        }
+        for (const k of keySet) {
+            ordered.push(k)
+        }
+        return ordered
+    }, [data, dataKeys, categoryKey])
+
+    if (data.length === 0) {
+        return (
+            <div className="p-4 text-xs text-muted-foreground text-center">
+                No data to display
+            </div>
+        )
+    }
+
+    return (
+        <div className="overflow-auto not-prose" style={{ maxHeight: Math.max(chartData.height || 300, 300) }}>
+            <Table className="text-xs">
+                <TableHeader>
+                    <TableRow>
+                        {allKeys.map((key) => (
+                            <TableHead key={key} className="h-8 text-xs font-medium">
+                                {key}
+                            </TableHead>
+                        ))}
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {data.map((row, rowIndex) => (
+                        <TableRow key={rowIndex}>
+                            {allKeys.map((key) => (
+                                <TableCell key={key} className="py-1.5 text-xs">
+                                    {row[key] != null ? String(row[key]) : "-"}
+                                </TableCell>
+                            ))}
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </div>
+    )
+}
+/**
  * ConfigPanel - Form controls for editing chart configuration
  */
 const ConfigPanel: React.FC<{
@@ -481,10 +550,23 @@ const ConfigPanel: React.FC<{
     onUpdate: (updates: Partial<ChartData>) => void
     isDark: boolean
 }> = ({ chartData, onUpdate, isDark }) => {
-    const showSmoothLine = chartData.type === "line" || chartData.type === "area"
+    const showSmoothLine = chartData.type === "line" || chartData.type === "area" || chartData.type === "compose"
     const showStacked = chartData.type === "bar" || chartData.type === "area"
     const showHorizontal = chartData.type === "bar"
     const showInnerRadius = chartData.type === "pie"
+    const showComposeConfig = chartData.type === "compose"
+
+    // Helper to update a single series config
+    const updateSeriesConfig = (key: string, updates: Partial<SeriesConfig>) => {
+        const prev = chartData.seriesConfig || {}
+        const existing = prev[key] || { type: 'bar' as const }
+        onUpdate({
+            seriesConfig: {
+                ...prev,
+                [key]: { ...existing, ...updates }
+            }
+        })
+    }
 
     return (
         <div className="p-3 space-y-4">
@@ -597,8 +679,57 @@ const ConfigPanel: React.FC<{
                             onChange={(c) => onUpdate({ horizontal: c })}
                         />
                     )}
+                    {showComposeConfig && (
+                        <ToggleRow
+                            label="Right Y-Axis"
+                            checked={chartData.rightYAxis === true}
+                            onChange={(c) => onUpdate({ rightYAxis: c })}
+                        />
+                    )}
                 </div>
             </div>
+
+            {/* Series Config for Compose Chart */}
+            {showComposeConfig && chartData.dataKeys && chartData.dataKeys.length > 0 && (
+                <div className="space-y-2">
+                    <SectionLabel>Series Config</SectionLabel>
+                    {chartData.dataKeys.map((key) => {
+                        const sc = chartData.seriesConfig?.[key] || { type: 'bar' as const }
+                        return (
+                            <div key={key} className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground w-16 shrink-0 truncate" title={key}>{key}</span>
+                                <Select
+                                    value={sc.type}
+                                    onValueChange={(value) => updateSeriesConfig(key, { type: value as SeriesConfig['type'] })}
+                                >
+                                    <SelectTrigger className="h-6 text-[11px] w-[72px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="bar" className="text-xs">Bar</SelectItem>
+                                        <SelectItem value="line" className="text-xs">Line</SelectItem>
+                                        <SelectItem value="area" className="text-xs">Area</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {(chartData.rightYAxis || sc.yAxisId === 'right') && (
+                                    <Select
+                                        value={sc.yAxisId || 'left'}
+                                        onValueChange={(value) => updateSeriesConfig(key, { yAxisId: value as 'left' | 'right' })}
+                                    >
+                                        <SelectTrigger className="h-6 text-[11px] w-[72px]">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="left" className="text-xs">Left Y</SelectItem>
+                                            <SelectItem value="right" className="text-xs">Right Y</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            </div>
+                        )
+                    })}
+                </div>
+            )}
 
             {/* Layout */}
             <div className="space-y-2">
@@ -639,10 +770,46 @@ const ConfigPanel: React.FC<{
                 )}
             </div>
 
-            {/* Colors */}
+            {/* Color Scheme */}
             <div className="space-y-2">
-                <SectionLabel>Colors</SectionLabel>
-                <ColorList chartData={chartData} onUpdate={onUpdate} isDark={isDark} />
+                <SectionLabel>Color Scheme</SectionLabel>
+                <Select
+                    value={chartData.colorScheme || "default"}
+                    onValueChange={(value) => onUpdate({ colorScheme: value === "default" ? undefined : value })}
+                >
+                    <SelectTrigger className="h-7 text-xs">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {COLOR_PALETTES.map((palette) => (
+                            <SelectItem key={palette.key} value={palette.key} className="text-xs">
+                                <div className="flex items-center gap-2">
+                                    <div className="flex gap-0.5">
+                                        {palette.colors.slice(0, 5).map((c, i) => (
+                                            <span
+                                                key={i}
+                                                className="inline-block h-3 w-3 rounded-full border border-border/40"
+                                                style={{ backgroundColor: isDark ? c.dark : c.light }}
+                                            />
+                                        ))}
+                                    </div>
+                                    <span>{palette.label}</span>
+                                </div>
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                {/* Preview of current scheme colors */}
+                <div className="flex gap-1 flex-wrap">
+                    {getPalette(chartData.colorScheme).colors.map((c, i) => (
+                        <span
+                            key={i}
+                            className="inline-block h-4 w-4 rounded-sm border border-border/40"
+                            style={{ backgroundColor: isDark ? c.dark : c.light }}
+                            title={`${isDark ? c.dark : c.light}`}
+                        />
+                    ))}
+                </div>
             </div>
         </div>
     )
@@ -800,6 +967,8 @@ export const ChartView: React.FC<NodeViewProps> = (props) => {
                 return <RadialBarChartRender chartData={activeChartData} config={chartConfig} height={height} />
             case "scatter":
                 return <ScatterChartRender chartData={activeChartData} config={chartConfig} height={height} />
+            case "compose":
+                return <ComposedChartRender chartData={activeChartData} config={chartConfig} height={height} />
             default:
                 // Default to bar chart for unknown types
                 return <BarChartRender chartData={{ ...activeChartData, type: "bar" }} config={chartConfig} height={height} />
@@ -827,17 +996,31 @@ export const ChartView: React.FC<NodeViewProps> = (props) => {
                     <div className="flex gap-0">
                         {/* Left Panel: Data + Config */}
                         <div className="w-1/2 border-r min-w-0">
-                            <Tabs defaultValue="data" className="h-full flex flex-col">
+                            <Tabs defaultValue="table" className="h-full flex flex-col">
                                 <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-9 px-1">
+                                    <TabsTrigger value="table" className="text-xs gap-1 data-[state=active]:shadow-none">
+                                        <Table2 className="h-3.5 w-3.5" />
+                                        Table
+                                    </TabsTrigger>
                                     <TabsTrigger value="data" className="text-xs gap-1 data-[state=active]:shadow-none">
                                         <Table2 className="h-3.5 w-3.5" />
-                                        Data
+                                        JSON
                                     </TabsTrigger>
                                     <TabsTrigger value="config" className="text-xs gap-1 data-[state=active]:shadow-none">
                                         <Settings2 className="h-3.5 w-3.5" />
                                         Config
                                     </TabsTrigger>
                                 </TabsList>
+
+                                <TabsContent value="table" className="flex-1 mt-0 p-0">
+                                    {activeChartData ? (
+                                        <DataTableView chartData={activeChartData} />
+                                    ) : (
+                                        <div className="p-4 text-xs text-muted-foreground text-center">
+                                            No data to display
+                                        </div>
+                                    )}
+                                </TabsContent>
 
                                 <TabsContent value="data" className="flex-1 mt-0 p-0">
                                     <div className="relative">

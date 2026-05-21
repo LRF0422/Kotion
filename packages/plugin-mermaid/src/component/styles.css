@@ -10,6 +10,35 @@
     @apply rounded-lg border bg-card text-card-foreground shadow-sm;
 }
 
+/* Preview zoomable container */
+.mermaid-preview-zoomable {
+    transform-origin: top center;
+}
+
+.mermaid-preview-zoomable .mermaid-renderer {
+    margin: 0;
+    padding: 0.5rem;
+    border: none;
+    box-shadow: none;
+}
+
+.mermaid-preview-zoomable .mermaid-diagram {
+    padding-top: 0;
+    padding-bottom: 0;
+    min-height: auto;
+}
+
+/* Preview zoom controls */
+.mermaid-preview-zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+    background-color: rgba(243, 244, 246, 0.8);
+    border-radius: 8px;
+    padding: 0.125rem;
+    backdrop-filter: blur(4px);
+}
+
 .mermaid-actions {
     display: flex;
     flex-direction: row;
@@ -104,7 +133,7 @@
     animation: mermaid-fade-in 0.2s ease;
 }
 
-.mermaid-fullscreen-content {
+.mermaid-fullscreen-container {
     position: relative;
     max-width: 95vw;
     max-height: 95vh;
@@ -153,9 +182,69 @@
     height: auto;
 }
 
+/* Zoom Controls */
+.mermaid-zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    background-color: #f3f4f6;
+    border-radius: 8px;
+    padding: 0.25rem;
+}
+
+.mermaid-zoom-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #374151;
+    min-width: 3rem;
+    text-align: center;
+    user-select: none;
+}
+
+.mermaid-zoom-controls button {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #374151;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.mermaid-zoom-controls button:hover:not(:disabled) {
+    background-color: #e5e7eb;
+    color: #111827;
+}
+
+.mermaid-zoom-controls button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 /* Dark mode fullscreen */
-.dark .mermaid-fullscreen-content {
+.dark .mermaid-fullscreen-container {
     background-color: #1f2937;
+}
+
+.dark .mermaid-zoom-controls {
+    background-color: #374151;
+}
+
+.dark .mermaid-zoom-label {
+    color: #d1d5db;
+}
+
+.dark .mermaid-zoom-controls button {
+    color: #d1d5db;
+}
+
+.dark .mermaid-zoom-controls button:hover:not(:disabled) {
+    background-color: #4b5563;
+    color: #f9fafb;
 }
 
 .dark .mermaid-fullscreen-close {

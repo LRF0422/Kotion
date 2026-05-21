@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "@kn/common";
+import { ExtensionWrapper, resolveBlockInsertPosition } from "@kn/common";
 import { Drawnix, DrawnixData, MindmapNodeData, convertToPlaitElement, extractMindmapStructure, addChildToNode, deleteNodeById, updateNodeText } from "./drawnix";
 import { Paintbrush2 } from "@kn/icon";
 import React from "react";
@@ -52,19 +52,41 @@ export const DrawnixExtension: ExtensionWrapper = {
         // Tool 1: Insert empty drawnix mindmap
         {
             name: 'insertDrawnix',
-            description: '插入一个新的思维导图。可以在当前光标位置或指定位置插入空白思维导图',
-            inputSchema: z.object({
-                pos: z.number().optional().describe('插入位置，不填则在当前光标位置插入')
-            }),
-            execute: (editor: Editor) => async (params: { pos?: number }) => {
-                const { pos } = params;
+            description: `插入一个新的思维导图。可以在指定位置插入空白思维导图
 
-                if (pos !== undefined) {
-                    const docSize = editor.state.doc.nodeSize;
-                    if (pos < 0 || pos >= docSize) {
-                        return { error: `位置 ${pos} 超出文档范围 (0-${docSize - 1})` };
+插入位置定位（优先级从高到低）：
+1. nearText + placement：在包含指定文本的块之前/之后插入（推荐，最精确）
+2. blockIndex：在指定块索引之后插入
+3. position：使用 ProseMirror 绝对位置，默认吸附到块边界`,
+            inputSchema: z.object({
+                nearText: z.string().describe("搜索文档中包含此文本的块，在该块附近插入（优先使用此参数定位）").optional(),
+                placement: z.enum(['before', 'after']).describe("插入位置：'before' 在匹配块之前，'after' 在匹配块之后。默认 'after'").optional(),
+                blockIndex: z.number().describe("在该块索引之后插入（从0开始）").optional(),
+                position: z.number().optional().describe('插入位置（ProseMirror 绝对位置），推荐使用 nearText 代替')
+            }),
+            execute: (editor: Editor) => async (params: {
+                nearText?: string;
+                placement?: 'before' | 'after';
+                blockIndex?: number;
+                position?: number;
+            }) => {
+                const { nearText, placement, blockIndex, position } = params;
+
+                const resolved = resolveBlockInsertPosition(editor, 'drawnix', {
+                    nearText, placement, blockIndex, position
+                });
+
+                if (resolved) {
+                    if (resolved.pos === -1) {
+                        if (resolved.strategy === 'nearText-not-found') {
+                            return { error: `未找到包含 "${nearText}" 的块。请使用 getDocumentStructure 查看文档结构` };
+                        }
+                        if (resolved.strategy === 'blockIndex-out-of-range') {
+                            return { error: '块索引越界，请使用 getDocumentStructure 查看文档结构' };
+                        }
+                        return { error: '插入位置超出文档范围' };
                     }
-                    editor.chain().focus().insertContentAt(pos, { type: 'drawnix' }).run();
+                    editor.chain().focus().insertContentAt(resolved.pos, { type: 'drawnix' }).run();
                 } else {
                     editor.chain().focus().insertDrawnix().run();
                 }
@@ -79,7 +101,12 @@ export const DrawnixExtension: ExtensionWrapper = {
         // Tool 2: Insert drawnix with structured data
         {
             name: 'insertDrawnixFromStructure',
-            description: '根据JSON结构创建并插入思维导图。结构包含根节点文本和子节点数组',
+            description: `根据JSON结构创建并插入思维导图。结构包含根节点文本和子节点数组
+
+插入位置定位（优先级从高到低）：
+1. nearText + placement：在包含指定文本的块之前/之后插入（推荐）
+2. blockIndex：在指定块索引之后插入
+3. position：使用 ProseMirror 绝对位置`,
             inputSchema: z.object({
                 rootText: z.string().describe('根节点文本'),
                 children: z.array(
@@ -88,14 +115,20 @@ export const DrawnixExtension: ExtensionWrapper = {
                         children: z.array(z.any()).optional().describe('子节点数组')
                     })
                 ).optional().describe('子节点数组'),
-                pos: z.number().optional().describe('插入位置，不填则在当前光标位置插入')
+                nearText: z.string().describe("搜索文档中包含此文本的块，在该块附近插入").optional(),
+                placement: z.enum(['before', 'after']).describe("插入位置：'before' 或 'after'，默认 'after'").optional(),
+                blockIndex: z.number().describe("在该块索引之后插入").optional(),
+                position: z.number().optional().describe('插入位置（ProseMirror 绝对位置）')
             }),
             execute: (editor: Editor) => async (params: {
                 rootText: string;
                 children?: Array<{ text: string; children?: any[] }>;
-                pos?: number
+                nearText?: string;
+                placement?: 'before' | 'after';
+                blockIndex?: number;
+                position?: number;
             }) => {
-                const { rootText, children = [], pos } = params;
+                const { rootText, children = [], nearText, placement, blockIndex, position } = params;
 
                 // Build mindmap structure
                 const buildNode = (item: { text: string; children?: any[] }): MindmapNodeData => ({
@@ -115,11 +148,23 @@ export const DrawnixExtension: ExtensionWrapper = {
                     children: [plaitElement]
                 };
 
-                if (pos !== undefined) {
-                    editor.chain().focus().insertContentAt(pos, {
-                        type: 'drawnix',
-                        attrs: { data }
-                    }).run();
+                const drawnixNode = {
+                    type: 'drawnix' as const,
+                    attrs: { data }
+                };
+
+                const resolved = resolveBlockInsertPosition(editor, 'drawnix', {
+                    nearText, placement, blockIndex, position
+                });
+
+                if (resolved) {
+                    if (resolved.pos === -1) {
+                        if (resolved.strategy === 'nearText-not-found') {
+                            return { error: `未找到包含 "${nearText}" 的块` };
+                        }
+                        return { error: '插入位置无效' };
+                    }
+                    editor.chain().focus().insertContentAt(resolved.pos, drawnixNode).run();
                 } else {
                     editor.chain().focus().insertDrawnixWithData(data).run();
                 }
@@ -135,13 +180,21 @@ export const DrawnixExtension: ExtensionWrapper = {
         // Tool 3: Insert drawnix from markdown outline
         {
             name: 'insertDrawnixFromMarkdown',
-            description: '将Markdown大纲格式转换为思维导图并插入。支持标准Markdown标题格式（# ## ### 等）和列表格式（- 或 *）',
+            description: `将Markdown大纲格式转换为思维导图并插入。支持标准Markdown标题格式（# ## ### 等）和列表格式（- 或 *）
+
+插入位置定位（优先级从高到低）：
+1. nearText + placement：在包含指定文本的块之前/之后插入（推荐）
+2. blockIndex：在指定块索引之后插入
+3. position：使用 ProseMirror 绝对位置`,
             inputSchema: z.object({
                 markdown: z.string().describe('Markdown格式的大纲文本，支持标题(#)和列表(-)格式'),
-                pos: z.number().optional().describe('插入位置，不填则在当前光标位置插入')
+                nearText: z.string().describe("搜索文档中包含此文本的块，在该块附近插入").optional(),
+                placement: z.enum(['before', 'after']).describe("插入位置：'before' 或 'after'，默认 'after'").optional(),
+                blockIndex: z.number().describe("在该块索引之后插入").optional(),
+                position: z.number().optional().describe('插入位置（ProseMirror 绝对位置）')
             }),
-            execute: (editor: Editor) => async (params: { markdown: string; pos?: number }) => {
-                const { markdown, pos } = params;
+            execute: (editor: Editor) => async (params: { markdown: string; nearText?: string; placement?: 'before' | 'after'; blockIndex?: number; position?: number }) => {
+                const { markdown, nearText, placement, blockIndex, position } = params;
 
                 try {
                     const mindData = parseMarkdownToDrawnix(markdown);
@@ -154,11 +207,23 @@ export const DrawnixExtension: ExtensionWrapper = {
                         children: mindData.children
                     };
 
-                    if (pos !== undefined) {
-                        editor.chain().focus().insertContentAt(pos, {
-                            type: 'drawnix',
-                            attrs: { data }
-                        }).run();
+                    const drawnixNode = {
+                        type: 'drawnix' as const,
+                        attrs: { data }
+                    };
+
+                    const resolved = resolveBlockInsertPosition(editor, 'drawnix', {
+                        nearText, placement, blockIndex, position
+                    });
+
+                    if (resolved) {
+                        if (resolved.pos === -1) {
+                            if (resolved.strategy === 'nearText-not-found') {
+                                return { error: `未找到包含 "${nearText}" 的块` };
+                            }
+                            return { error: '插入位置无效' };
+                        }
+                        editor.chain().focus().insertContentAt(resolved.pos, drawnixNode).run();
                     } else {
                         editor.chain().focus().insertDrawnixWithData(data).run();
                     }
@@ -178,13 +243,21 @@ export const DrawnixExtension: ExtensionWrapper = {
         // Tool 4: Insert drawnix from mermaid
         {
             name: 'insertDrawnixFromMermaid',
-            description: '将Mermaid图表代码转换为思维导图并插入。支持mindmap和flowchart语法',
+            description: `将Mermaid图表代码转换为思维导图并插入。支持mindmap和flowchart语法
+
+插入位置定位（优先级从高到低）：
+1. nearText + placement：在包含指定文本的块之前/之后插入（推荐）
+2. blockIndex：在指定块索引之后插入
+3. position：使用 ProseMirror 绝对位置`,
             inputSchema: z.object({
                 mermaid: z.string().describe('Mermaid格式的图表代码'),
-                pos: z.number().optional().describe('插入位置，不填则在当前光标位置插入')
+                nearText: z.string().describe("搜索文档中包含此文本的块，在该块附近插入").optional(),
+                placement: z.enum(['before', 'after']).describe("插入位置：'before' 或 'after'，默认 'after'").optional(),
+                blockIndex: z.number().describe("在该块索引之后插入").optional(),
+                position: z.number().optional().describe('插入位置（ProseMirror 绝对位置）')
             }),
-            execute: (editor: Editor) => async (params: { mermaid: string; pos?: number }) => {
-                const { mermaid, pos } = params;
+            execute: (editor: Editor) => async (params: { mermaid: string; nearText?: string; placement?: 'before' | 'after'; blockIndex?: number; position?: number }) => {
+                const { mermaid, nearText, placement, blockIndex, position } = params;
 
                 try {
                     const mindData = await parseMermaidToDrawnix(mermaid);
@@ -199,11 +272,23 @@ export const DrawnixExtension: ExtensionWrapper = {
                         children: mindData.children
                     };
 
-                    if (pos !== undefined) {
-                        editor.chain().focus().insertContentAt(pos, {
-                            type: 'drawnix',
-                            attrs: { data }
-                        }).run();
+                    const drawnixNode = {
+                        type: 'drawnix' as const,
+                        attrs: { data }
+                    };
+
+                    const resolved = resolveBlockInsertPosition(editor, 'drawnix', {
+                        nearText, placement, blockIndex, position
+                    });
+
+                    if (resolved) {
+                        if (resolved.pos === -1) {
+                            if (resolved.strategy === 'nearText-not-found') {
+                                return { error: `未找到包含 "${nearText}" 的块` };
+                            }
+                            return { error: '插入位置无效' };
+                        }
+                        editor.chain().focus().insertContentAt(resolved.pos, drawnixNode).run();
                     } else {
                         editor.chain().focus().insertDrawnixWithData(data).run();
                     }

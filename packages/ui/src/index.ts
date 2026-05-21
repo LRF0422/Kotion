@@ -11,6 +11,7 @@ export {
     Label as ChartLabel, Pie, PieChart, Area, AreaChart,
     LineChart, Line, YAxis, Cell, PolarRadiusAxis, ScatterChart, Scatter, ZAxis,
     RadialBarChart, RadialBar,
+    ComposedChart,
     LabelList,
 } from "recharts"
 export { zodResolver } from "@hookform/resolvers/zod"

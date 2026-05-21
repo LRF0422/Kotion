@@ -1,5 +1,5 @@
 import React from "react";
-import { ExtensionWrapper } from "@kn/common";
+import { ExtensionWrapper, resolveBlockInsertPosition } from "@kn/common";
 import { Excalidraw } from "./excalidraw";
 import { PaintBucket } from "@kn/icon";
 import { z } from "@kn/ui";
@@ -635,19 +635,30 @@ export const ExcalidrawExtension: ExtensionWrapper = {
 
 可以直接使用模板，也可以传入自定义 elements 数组来创建自定义图表。
 每个 element 需要包含 type、x、y、width、height 等属性。
-支持的 element 类型：rectangle、ellipse、diamond、text、arrow、line、freedraw。`,
+支持的 element 类型：rectangle、ellipse、diamond、text、arrow、line、freedraw。
+
+插入位置定位（优先级从高到低）：
+1. nearText + placement：在包含指定文本的块之前/之后插入（推荐，最精确）
+2. blockIndex：在指定块索引之后插入
+3. position：使用 ProseMirror 绝对位置，默认吸附到块边界`,
             inputSchema: z.object({
                 elements: z.array(z.any()).describe("Excalidraw 元素数组。每个元素需包含 type, x, y, width, height 等属性。如不提供，将根据 templateType 使用模板").optional(),
                 templateType: z.enum(['flowchart', 'architecture', 'mindmap', 'sequence', 'shapes'] as const).describe("模板类型。用于生成预设图表").optional(),
-                position: z.number().describe("插入位置。如不指定则插入到当前光标位置或文档末尾").optional()
+                nearText: z.string().describe("搜索文档中包含此文本的块，在该块附近插入图表（优先使用此参数定位，比 position 更精确）").optional(),
+                placement: z.enum(['before', 'after']).describe("插入位置：'before' 在匹配块之前，'after' 在匹配块之后。默认 'after'").optional(),
+                blockIndex: z.number().describe("在该块索引之后插入图表（从0开始）").optional(),
+                position: z.number().describe("插入位置（ProseMirror 绝对位置）。推荐使用 nearText 代替此参数").optional()
             }),
             execute: (editor: Editor) => async (params: {
                 elements?: any[];
                 templateType?: string;
+                nearText?: string;
+                placement?: 'before' | 'after';
+                blockIndex?: number;
                 position?: number;
             }) => {
                 try {
-                    const { elements, templateType, position } = params;
+                    const { elements, templateType, nearText, placement, blockIndex, position } = params;
 
                     // Determine elements to use
                     let finalElements: any[] = [];
@@ -665,25 +676,26 @@ export const ExcalidrawExtension: ExtensionWrapper = {
                         usedTemplate = 'flowchart';
                     }
 
-                    // Insert at specified position or use command
-                    if (position !== undefined) {
-                        const docSize = editor.state.doc.nodeSize;
-                        if (position < 0 || position > docSize - 2) {
-                            return {
-                                success: false,
-                                error: `Invalid position: ${position}. Document size is ${docSize}`
-                            };
+                    const excalidrawNode = {
+                        type: 'excalidraw' as const,
+                        attrs: {
+                            elements: finalElements,
+                            appState: { isLoading: false }
                         }
-                        editor.chain()
-                            .focus()
-                            .insertContentAt(position, {
-                                type: 'excalidraw',
-                                attrs: {
-                                    elements: finalElements,
-                                    appState: { isLoading: false }
-                                }
-                            })
-                            .run();
+                    };
+
+                    const resolved = resolveBlockInsertPosition(editor, 'excalidraw', {
+                        nearText, placement, blockIndex, position
+                    });
+
+                    if (resolved) {
+                        if (resolved.pos === -1) {
+                            if (resolved.strategy === 'nearText-not-found') {
+                                return { success: false, error: `未找到包含 "${nearText}" 的块。请使用 getDocumentStructure 查看文档结构` };
+                            }
+                            return { success: false, error: '插入位置无效或超出文档范围' };
+                        }
+                        editor.chain().focus().insertContentAt(resolved.pos, excalidrawNode).run();
                     } else {
                         editor.commands.insertExcalidraw(finalElements);
                     }
@@ -976,17 +988,23 @@ AI 只需描述图的逻辑结构，工具自动计算所有坐标和布局。
                     label: z.string().describe("连线标签").optional()
                 })).describe("节点之间的连线"),
                 layout: z.enum(['vertical', 'horizontal']).describe("布局方向，默认 vertical").optional(),
-                position: z.number().describe("插入位置（可选）").optional()
+                nearText: z.string().describe("搜索文档中包含此文本的块，在该块附近插入图表").optional(),
+                placement: z.enum(['before', 'after']).describe("插入位置：'before' 或 'after'，默认 'after'").optional(),
+                blockIndex: z.number().describe("在该块索引之后插入").optional(),
+                position: z.number().describe("插入位置（ProseMirror 绝对位置）").optional()
             }),
             execute: (editor: Editor) => async (params: {
                 title?: string;
                 nodes: GraphNode[];
                 edges: GraphEdge[];
                 layout?: 'vertical' | 'horizontal';
+                nearText?: string;
+                placement?: 'before' | 'after';
+                blockIndex?: number;
                 position?: number;
             }) => {
                 try {
-                    const { title, nodes, edges, layout = 'vertical', position } = params;
+                    const { title, nodes, edges, layout = 'vertical', nearText, placement, blockIndex, position } = params;
 
                     // Validate
                     if (!nodes || nodes.length === 0) {
@@ -1006,16 +1024,23 @@ AI 只需描述图的逻辑结构，工具自动计算所有坐标和布局。
                     const layoutResult = computeGraphLayout(nodes, edges, layout);
                     const elements = buildExcalidrawElements(layoutResult, title);
 
-                    // Insert into document
-                    if (position !== undefined) {
-                        const docSize = editor.state.doc.nodeSize;
-                        if (position < 0 || position > docSize - 2) {
-                            return { success: false, error: `Invalid position: ${position}. Document size is ${docSize}` };
+                    const excalidrawNode = {
+                        type: 'excalidraw' as const,
+                        attrs: { elements, appState: { isLoading: false } }
+                    };
+
+                    const resolved = resolveBlockInsertPosition(editor, 'excalidraw', {
+                        nearText, placement, blockIndex, position
+                    });
+
+                    if (resolved) {
+                        if (resolved.pos === -1) {
+                            if (resolved.strategy === 'nearText-not-found') {
+                                return { success: false, error: `未找到包含 "${nearText}" 的块` };
+                            }
+                            return { success: false, error: '插入位置无效或超出文档范围' };
                         }
-                        editor.chain().focus().insertContentAt(position, {
-                            type: 'excalidraw',
-                            attrs: { elements, appState: { isLoading: false } }
-                        }).run();
+                        editor.chain().focus().insertContentAt(resolved.pos, excalidrawNode).run();
                     } else {
                         editor.commands.insertExcalidraw(elements);
                     }
@@ -1042,8 +1067,8 @@ AI 只需描述图的逻辑结构，工具自动计算所有坐标和布局。
         name: 'excalidraw-drawing',
         description: 'Excalidraw 绘图技能：将用户需求转化为结构化图表',
         requiredTools: ['createExcalidrawFromGraph', 'insertExcalidrawDiagram',
-                        'listExcalidrawDiagrams', 'updateExcalidrawDiagram',
-                        'deleteExcalidrawDiagram', 'getExcalidrawTemplates'],
+            'listExcalidrawDiagrams', 'updateExcalidrawDiagram',
+            'deleteExcalidrawDiagram', 'getExcalidrawTemplates'],
         tags: ['excalidraw', 'drawing', 'diagram', 'graph', 'flowchart'],
         systemPromptFragment: `# Excalidraw 绘图技能
 

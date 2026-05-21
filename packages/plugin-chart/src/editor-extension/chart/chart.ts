@@ -2,11 +2,22 @@ import { PMNode as Node, ReactNodeViewRenderer } from "@kn/editor";
 import { ChartView } from "./ChartView";
 
 /**
+ * Configuration for a single series within a compose chart.
+ * Determines how each dataKey is rendered (bar/line/area) and which Y-axis it uses.
+ */
+export interface SeriesConfig {
+    /** Chart type for this specific series */
+    type: 'bar' | 'line' | 'area';
+    /** Which Y-axis to use */
+    yAxisId?: 'left' | 'right';
+}
+
+/**
  * Chart data structure stored in the node's `data` attribute.
  * The agent provides this as JSON and the ChartView renders it with recharts.
  */
 export interface ChartData {
-    /** Chart type: bar | line | area | pie | radar | radialBar | scatter */
+    /** Chart type: bar | line | area | pie | radar | radialBar | scatter | compose */
     type: string;
     /** Chart title */
     title?: string;
@@ -18,7 +29,13 @@ export interface ChartData {
     dataKeys: string[];
     /** Key for x-axis / category axis */
     categoryKey?: string;
-    /** Color mapping for each data key */
+    /** Named color scheme for automatic light/dark adaptation.
+     *  Available values: "default" | "ocean" | "warm" | "pastel" | "vivid" | "earth"
+     *  When set, overrides the built-in default palette. Each scheme provides
+     *  curated colors with both light and dark mode variants.
+     */
+    colorScheme?: string;
+    /** @deprecated Use colorScheme instead. Manual color mapping does not adapt to dark/light mode. */
     colors?: Record<string, string>;
     /** Display options */
     showLegend?: boolean;
@@ -31,6 +48,10 @@ export interface ChartData {
     height?: number;
     /** Pie chart specific */
     innerRadius?: number;
+    /** Series config for compose charts - maps dataKey to rendering config */
+    seriesConfig?: Record<string, SeriesConfig>;
+    /** Whether to show a right Y-axis (for compose charts with dual axes) */
+    rightYAxis?: boolean;
 }
 
 declare module '@kn/editor' {

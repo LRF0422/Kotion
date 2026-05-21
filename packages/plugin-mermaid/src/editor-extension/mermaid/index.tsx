@@ -1,4 +1,4 @@
-import { ExtensionWrapper } from "@kn/common";
+import { ExtensionWrapper, resolveBlockInsertPosition } from "@kn/common";
 import { Mermaid } from "./mermaid";
 import { ChartPieIcon } from "@kn/icon";
 import React from "react";
@@ -134,22 +134,33 @@ export const MermaidExtension: ExtensionWrapper = {
                         - timeline: 时间线，用于展示历史事件
                         - gitGraph: Git分支图，用于展示版本控制流程
 
-                        如果用户没有指定具体代码，可以根据chartType生成模板；如果用户提供了具体需求，应根据需求生成对应的Mermaid代码。`,
+                        如果用户没有指定具体代码，可以根据chartType生成模板；如果用户提供了具体需求，应根据需求生成对应的Mermaid代码。
+
+插入位置定位（优先级从高到低）：
+1. nearText + placement：在包含指定文本的块之前/之后插入（推荐，最精确）
+2. blockIndex：在指定块索引之后插入
+3. position：使用 ProseMirror 绝对位置，默认吸附到块边界`,
             inputSchema: z.object({
                 code: z.string().describe("Mermaid 图表代码。如果不提供，将根据 chartType 使用默认模板").optional(),
                 chartType: z.enum([
                     'flowchart', 'sequence', 'classDiagram', 'stateDiagram',
                     'erDiagram', 'gantt', 'pie', 'mindmap', 'timeline', 'gitGraph'
                 ]).describe("图表类型。用于生成模板或验证代码格式").optional(),
-                position: z.number().describe("插入位置")
+                nearText: z.string().describe("搜索文档中包含此文本的块，在该块附近插入图表（优先使用此参数定位，比 position 更精确）").optional(),
+                placement: z.enum(['before', 'after']).describe("插入位置：'before' 在匹配块之前，'after' 在匹配块之后。默认 'after'").optional(),
+                blockIndex: z.number().describe("在该块索引之后插入图表（从0开始）。可通过 getDocumentStructure 获取块索引").optional(),
+                position: z.number().describe("插入位置（ProseMirror 绝对位置）。推荐使用 nearText 代替此参数").optional()
             }),
             execute: (editor: Editor) => async (params: {
                 code?: string;
                 chartType?: keyof typeof MERMAID_TEMPLATES;
-                position: number;
+                nearText?: string;
+                placement?: 'before' | 'after';
+                blockIndex?: number;
+                position?: number;
             }) => {
                 try {
-                    const { code, chartType, position } = params;
+                    const { code, chartType, nearText, placement = 'after', blockIndex, position } = params;
 
                     // Determine the mermaid code to use
                     let mermaidCode = code;
@@ -160,29 +171,49 @@ export const MermaidExtension: ExtensionWrapper = {
                         mermaidCode = MERMAID_TEMPLATES.flowchart; // Default to flowchart
                     }
 
-                    // Insert at specified position or use command
-                    if (position !== undefined) {
-                        const docSize = editor.state.doc.nodeSize;
-                        if (position < 0 || position > docSize - 2) {
+                    const mermaidNode = {
+                        type: 'mermaid' as const,
+                        attrs: { data: mermaidCode }
+                    };
+
+                    const resolved = resolveBlockInsertPosition(editor, 'mermaid', {
+                        nearText, placement, blockIndex, position
+                    });
+
+                    if (resolved) {
+                        if (resolved.pos === -1) {
+                            if (resolved.strategy === 'nearText-not-found') {
+                                return {
+                                    success: false,
+                                    error: `未找到包含 "${nearText}" 的块。请使用 getDocumentStructure 查看文档结构，或使用 blockIndex 定位。`
+                                };
+                            }
                             return {
                                 success: false,
-                                error: `Invalid position: ${position}. Document size is ${docSize}`
+                                error: '插入位置无效或超出文档范围'
                             };
                         }
-                        editor.chain()
+                        const success = editor.chain()
                             .focus()
-                            .insertContentAt(position, {
-                                type: 'mermaid',
-                                attrs: { data: mermaidCode }
-                            })
+                            .insertContentAt(resolved.pos, mermaidNode)
                             .run();
-                    } else {
-                        editor.commands.insertMermaid(mermaidCode);
+
+                        return success
+                            ? {
+                                success: true,
+                                message: `Mermaid diagram inserted via ${resolved.strategy}`,
+                                chartType: chartType || 'custom',
+                                codePreview: mermaidCode.substring(0, 100) + (mermaidCode.length > 100 ? '...' : '')
+                            }
+                            : { success: false, error: 'Failed to insert mermaid diagram at the specified position' };
                     }
+
+                    // Default — insert at cursor or document end
+                    editor.commands.insertMermaid(mermaidCode);
 
                     return {
                         success: true,
-                        message: `Mermaid diagram inserted successfully`,
+                        message: `Mermaid diagram inserted at cursor position`,
                         chartType: chartType || 'custom',
                         codePreview: mermaidCode.substring(0, 100) + (mermaidCode.length > 100 ? '...' : '')
                     };

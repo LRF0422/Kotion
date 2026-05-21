@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from "react";
 import mermaid, { type MermaidConfig } from "mermaid";
 import { Button } from "@kn/ui"
-import { CopyIcon, DownloadIcon, Maximize2 } from "@kn/icon"
+import { CopyIcon, DownloadIcon, Maximize2, ZoomIn, ZoomOut, RotateCcw } from "@kn/icon"
 // styles
 // import "./styles.css";
 import { uuidv4 } from "lib0/random";
@@ -35,6 +35,7 @@ export interface RenderMermaidProps {
     errorComponent?: React.ComponentType<{ error: string; mermaidCode: string }>;
     disableDownload?: boolean;
     disableCopy?: boolean;
+    disableFullscreen?: boolean;
     downloadComponent?: React.ComponentType<{ onClick: () => void }>;
     copyComponent?: React.ComponentType<{ onClick: () => void }>;
     mermaidConfig?: MermaidConfig;
@@ -52,6 +53,7 @@ function RenderMermaid({
     errorComponent: ErrorComponent,
     disableDownload = false,
     disableCopy = false,
+    disableFullscreen = false,
     downloadComponent: DownloadComponent,
     copyComponent: CopyComponent,
     mermaidConfig,
@@ -59,6 +61,11 @@ function RenderMermaid({
 }: RenderMermaidProps) {
     const [error, setError] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [zoom, setZoom] = useState(1);
+    const MIN_ZOOM = 0.25;
+    const MAX_ZOOM = 5;
+    const ZOOM_STEP = 0.25;
+    const fullscreenRef = useRef<HTMLDivElement | null>(null);
     const id = uuidv4();
     const mermaidRef = useRef<HTMLDivElement | null>(null);
     const handleCopyCode = () => {
@@ -71,6 +78,19 @@ function RenderMermaid({
 
     const handleCloseFullscreen = useCallback(() => {
         setIsFullscreen(false);
+        setZoom(1);
+    }, []);
+
+    const handleZoomIn = useCallback(() => {
+        setZoom(prev => Math.min(prev + ZOOM_STEP, MAX_ZOOM));
+    }, []);
+
+    const handleZoomOut = useCallback(() => {
+        setZoom(prev => Math.max(prev - ZOOM_STEP, MIN_ZOOM));
+    }, []);
+
+    const handleZoomReset = useCallback(() => {
+        setZoom(1);
     }, []);
 
     const handleOverlayClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -85,10 +105,28 @@ function RenderMermaid({
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Escape") {
                 setIsFullscreen(false);
+                setZoom(1);
             }
         };
         document.addEventListener("keydown", handleKeyDown);
         return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [isFullscreen]);
+
+    // Ctrl+wheel zoom in fullscreen
+    useEffect(() => {
+        if (!isFullscreen) return;
+        const handleWheel = (e: WheelEvent) => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                setZoom(prev => {
+                    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+                    const next = prev + delta;
+                    return Math.min(Math.max(next, MIN_ZOOM), MAX_ZOOM);
+                });
+            }
+        };
+        document.addEventListener("wheel", handleWheel, { passive: false });
+        return () => document.removeEventListener("wheel", handleWheel);
     }, [isFullscreen]);
 
     useEffect(() => {
@@ -171,43 +209,47 @@ function RenderMermaid({
     return (
         <div className="mermaid-renderer w-full h-full justify-center relative group" key={mermaidCode}>
             {/* copy code, download and fullscreen buttons — shown on hover */}
-            <div className="mermaid-actions absolute top-1 left-1 flex items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                {!disableCopy &&
-                    (CopyComponent ? (
-                        <CopyComponent onClick={handleCopyCode} />
-                    ) : (
+            {(!disableCopy || !disableDownload || !disableFullscreen) && (
+                <div className="mermaid-actions absolute top-1 left-1 flex items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    {!disableCopy &&
+                        (CopyComponent ? (
+                            <CopyComponent onClick={handleCopyCode} />
+                        ) : (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={handleCopyCode}
+                                className="mermaid-action-button btn-copy h-8 w-8 p-1.5"
+                            >
+                                <CopyIcon className="h-4 w-4" />
+                            </Button>
+                        ))}
+                    {!disableDownload &&
+                        (DownloadComponent ? (
+                            <DownloadComponent onClick={() => handleDownloadSvg(mermaidRef)} />
+                        ) : (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDownloadSvg(mermaidRef)}
+                                className="mermaid-action-button btn-download h-8 w-8 p-1.5"
+                            >
+                                <DownloadIcon className="h-4 w-4" />
+                            </Button>
+                        ))}
+                    {!disableFullscreen && (
                         <Button
                             variant="ghost"
                             size="icon"
-                            onClick={handleCopyCode}
-                            className="mermaid-action-button btn-copy h-8 w-8 p-1.5"
+                            onClick={handleOpenFullscreen}
+                            className="mermaid-action-button btn-fullscreen h-8 w-8 p-1.5"
+                            title="View enlarged image"
                         >
-                            <CopyIcon className="h-4 w-4" />
+                            <Maximize2 className="h-4 w-4" />
                         </Button>
-                    ))}
-                {!disableDownload &&
-                    (DownloadComponent ? (
-                        <DownloadComponent onClick={() => handleDownloadSvg(mermaidRef)} />
-                    ) : (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDownloadSvg(mermaidRef)}
-                            className="mermaid-action-button btn-download h-8 w-8 p-1.5"
-                        >
-                            <DownloadIcon className="h-4 w-4" />
-                        </Button>
-                    ))}
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleOpenFullscreen}
-                    className="mermaid-action-button btn-fullscreen h-8 w-8 p-1.5"
-                    title="View enlarged image"
-                >
-                    <Maximize2 className="h-4 w-4" />
-                </Button>
-            </div>
+                    )}
+                </div>
+            )}
             <div ref={mermaidRef} className="mermaid-diagram flex justify-center items-center" />
 
             {/* Fullscreen overlay modal */}
@@ -216,16 +258,56 @@ function RenderMermaid({
                     className="fixed inset-0 z-[9999] bg-black/75 flex items-center justify-center animate-[mermaid-fade-in_0.2s_ease]"
                     onClick={handleOverlayClick}
                 >
-                    <div className="relative max-w-[95vw] max-h-[95vh] overflow-auto bg-white rounded-xl shadow-2xl p-8">
-                        <button
-                            className="sticky top-0 float-right z-[1] w-8 h-8 border-none rounded-lg bg-gray-100 text-gray-700 text-base cursor-pointer flex items-center justify-center transition-colors duration-150 hover:bg-gray-200 hover:text-gray-900 mb-2"
-                            onClick={handleCloseFullscreen}
-                            aria-label="Close"
-                        >
-                            ✕
-                        </button>
+                    <div className="mermaid-fullscreen-container relative max-w-[95vw] max-h-[95vh] overflow-auto bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-8">
+                        {/* Top bar: close + zoom controls */}
+                        <div className="sticky top-0 z-[2] flex items-center justify-between mb-2">
+                            <div className="mermaid-zoom-controls flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={handleZoomOut}
+                                    disabled={zoom <= MIN_ZOOM}
+                                    className="h-7 w-7 p-1 hover:bg-gray-200 dark:hover:bg-gray-600"
+                                    title="Zoom out"
+                                >
+                                    <ZoomOut className="h-4 w-4" />
+                                </Button>
+                                <span className="mermaid-zoom-label text-xs font-medium text-gray-700 dark:text-gray-300 min-w-[3rem] text-center select-none">
+                                    {Math.round(zoom * 100)}%
+                                </span>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={handleZoomIn}
+                                    disabled={zoom >= MAX_ZOOM}
+                                    className="h-7 w-7 p-1 hover:bg-gray-200 dark:hover:bg-gray-600"
+                                    title="Zoom in"
+                                >
+                                    <ZoomIn className="h-4 w-4" />
+                                </Button>
+                                <div className="w-px h-4 bg-gray-300 dark:bg-gray-500 mx-0.5" />
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={handleZoomReset}
+                                    className="h-7 w-7 p-1 hover:bg-gray-200 dark:hover:bg-gray-600"
+                                    title="Reset zoom"
+                                >
+                                    <RotateCcw className="h-3.5 w-3.5" />
+                                </Button>
+                            </div>
+                            <button
+                                className="w-8 h-8 border-none rounded-lg bg-gray-100 text-gray-700 text-base cursor-pointer flex items-center justify-center transition-colors duration-150 hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 dark:hover:text-gray-100"
+                                onClick={handleCloseFullscreen}
+                                aria-label="Close"
+                            >
+                                ✕
+                            </button>
+                        </div>
                         <div
-                            className="flex justify-center items-center [&>svg]:w-[90vw] [&>svg]:max-w-none [&>svg]:h-auto"
+                            ref={fullscreenRef}
+                            className="mermaid-fullscreen-diagram flex justify-center items-center origin-center transition-transform duration-150"
+                            style={{ transform: `scale(${zoom})` }}
                             dangerouslySetInnerHTML={{
                                 __html: mermaidRef.current?.innerHTML || ""
                             }}
