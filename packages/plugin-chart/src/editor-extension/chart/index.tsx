@@ -25,6 +25,7 @@ const CHART_TEMPLATES: Record<string, ChartData> = {
         ],
         dataKeys: ["revenue", "cost"],
         categoryKey: "month",
+        colorScheme: "default",
         showLegend: true,
         showGrid: true,
         height: 300,
@@ -42,6 +43,7 @@ const CHART_TEMPLATES: Record<string, ChartData> = {
         ],
         dataKeys: ["users", "activeUsers"],
         categoryKey: "month",
+        colorScheme: "default",
         showLegend: true,
         showGrid: true,
         smoothLine: true,
@@ -60,6 +62,7 @@ const CHART_TEMPLATES: Record<string, ChartData> = {
         ],
         dataKeys: ["desktop", "mobile"],
         categoryKey: "month",
+        colorScheme: "ocean",
         showLegend: true,
         showGrid: true,
         smoothLine: true,
@@ -77,6 +80,7 @@ const CHART_TEMPLATES: Record<string, ChartData> = {
         ],
         dataKeys: ["value"],
         categoryKey: "name",
+        colorScheme: "default",
         showLegend: true,
         height: 300,
     },
@@ -93,6 +97,7 @@ const CHART_TEMPLATES: Record<string, ChartData> = {
         ],
         dataKeys: ["developer", "team"],
         categoryKey: "skill",
+        colorScheme: "default",
         showLegend: true,
         showGrid: true,
         height: 350,
@@ -108,6 +113,7 @@ const CHART_TEMPLATES: Record<string, ChartData> = {
         ],
         dataKeys: ["progress"],
         categoryKey: "name",
+        colorScheme: "default",
         showLegend: true,
         height: 300,
     },
@@ -125,6 +131,7 @@ const CHART_TEMPLATES: Record<string, ChartData> = {
             { height: 178, weight: 75 },
         ],
         dataKeys: ["height", "weight"],
+        colorScheme: "default",
         showLegend: true,
         showGrid: true,
         height: 300,
@@ -142,6 +149,7 @@ const CHART_TEMPLATES: Record<string, ChartData> = {
         ],
         dataKeys: ["revenue", "growthRate"],
         categoryKey: "month",
+        colorScheme: "default",
         seriesConfig: {
             revenue: { type: "bar", yAxisId: "left" },
             growthRate: { type: "line", yAxisId: "right" },
@@ -269,9 +277,15 @@ export const ChartExtension: ExtensionWrapper = {
                         return { success: false, error: 'chartConfig.dataKeys must be a non-empty array of series key names' };
                     }
 
+                    // Strip deprecated `colors` field — it breaks light/dark mode adaptation
+                    // and can cause CSS variable resolution failures (resulting in black bars).
+                    // The `colorScheme` field should be used instead.
+                    const cleanConfig = { ...chartConfig };
+                    delete (cleanConfig as any).colors;
+
                     const chartNode = {
                         type: 'chart' as const,
-                        attrs: { data: JSON.stringify(chartConfig) }
+                        attrs: { data: JSON.stringify(cleanConfig) }
                     };
 
                     const resolved = resolveBlockInsertPosition(editor, 'chart', {
@@ -443,6 +457,9 @@ export const ChartExtension: ExtensionWrapper = {
                     // Merge existing data with updates
                     const existingData = targetNode.data || {};
                     const mergedData = { ...existingData, ...chartConfig };
+                    // Strip deprecated `colors` field — it breaks light/dark mode adaptation
+                    // and can cause CSS variable resolution failures (resulting in black bars).
+                    delete (mergedData as any).colors;
 
                     const newNode = node.type.create({ ...node.attrs, data: JSON.stringify(mergedData) });
                     const tr = editor.state.tr;

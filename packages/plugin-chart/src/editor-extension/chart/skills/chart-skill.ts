@@ -28,7 +28,7 @@ Chart data structure:
   "data": [{ "name": "A", "value1": 100, "value2": 200 }],
   "dataKeys": ["value1", "value2"],  // Series keys (y-axis values)
   "categoryKey": "name",              // Category key (x-axis)
-  "colors": { "value1": "hsl(var(--chart-1))", "value2": "hsl(var(--chart-2))" },
+  "colorScheme": "default",           // Color palette — MUST use this, NOT raw colors
   "showLegend": true,
   "showGrid": true,
   "showDataLabels": false,
@@ -43,6 +43,15 @@ Chart data structure:
   },
   "rightYAxis": true  // Set true to enable right Y-axis
 }
+
+IMPORTANT - Color Scheme Rules:
+- ALWAYS set "colorScheme" to one of the predefined palettes for proper light/dark mode adaptation
+- Available colorScheme values: "default" | "ocean" | "warm" | "pastel" | "vivid" | "earth"
+- "default" (蓝、绿、琥珀、玫瑰、紫) is recommended for most charts
+- "ocean" (蓝、青、靛等冷色调) for data related to water, technology, or analytics
+- "warm" (橙、琥珀、玫瑰、粉等暖色调) for data with positive/emotional context
+- NEVER use the deprecated "colors" field — it does not adapt to dark/light mode
+- NEVER use raw hex/hsl color values directly in the chart config
 
 Guidelines:
 - For pie charts, use a single dataKey and the categoryKey for labels
