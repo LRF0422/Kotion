@@ -614,7 +614,7 @@ export const StyledEditor = styled.div.attrs({
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 1px;
+    gap: 2px;
     opacity: 0;
     transition: opacity 0.3s ease-out;
 
@@ -638,8 +638,14 @@ export const StyledEditor = styled.div.attrs({
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 3px;
     color: hsl(var(--muted-foreground));
+
+    .block-menu-plus-icon {
+      width: 14px;
+      height: 14px;
+      stroke-width: 1.5;
+    }
 
     &:hover {
       background: hsl(var(--muted));
@@ -652,15 +658,16 @@ export const StyledEditor = styled.div.attrs({
     width: 18px;
     height: 18px;
     cursor: move;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='1' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='1' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='3' y='6' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='6' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='3' y='11' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3Crect x='10' y='11' width='3' height='3' rx='1.5' fill='%236b7280'/%3E%3C/svg%3E");
-    background-size: contain;
-    background-position: center 0;
-    background-repeat: no-repeat;
-  }
-  
-  /* Dark mode drag handle */
-  &.dark [data-drag-handle] {
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='1' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='10' y='1' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='3' y='6' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='10' y='6' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='3' y='11' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3Crect x='10' y='11' width='3' height='3' rx='1.5' fill='%239ca3af'/%3E%3C/svg%3E");
+    background-color: hsl(var(--muted-foreground));
+    mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='2' width='3' height='3' rx='1.5' fill='%23000'/%3E%3Crect x='10' y='2' width='3' height='3' rx='1.5' fill='%23000'/%3E%3Crect x='3' y='7' width='3' height='3' rx='1.5' fill='%23000'/%3E%3Crect x='10' y='7' width='3' height='3' rx='1.5' fill='%23000'/%3E%3Crect x='3' y='12' width='3' height='3' rx='1.5' fill='%23000'/%3E%3Crect x='10' y='12' width='3' height='3' rx='1.5' fill='%23000'/%3E%3C/svg%3E");
+    -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='16' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='2' width='3' height='3' rx='1.5' fill='%23000'/%3E%3Crect x='10' y='2' width='3' height='3' rx='1.5' fill='%23000'/%3E%3Crect x='3' y='7' width='3' height='3' rx='1.5' fill='%23000'/%3E%3Crect x='10' y='7' width='3' height='3' rx='1.5' fill='%23000'/%3E%3Crect x='3' y='12' width='3' height='3' rx='1.5' fill='%23000'/%3E%3Crect x='10' y='12' width='3' height='3' rx='1.5' fill='%23000'/%3E%3C/svg%3E");
+    mask-size: contain;
+    -webkit-mask-size: contain;
+    mask-position: center;
+    -webkit-mask-position: center;
+    mask-repeat: no-repeat;
+    -webkit-mask-repeat: no-repeat;
+    border-radius: 3px;
   }
   /* E Dragable */
 

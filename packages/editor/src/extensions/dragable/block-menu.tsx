@@ -44,7 +44,7 @@ export const BlockMenu: React.FC<{
         <DropdownMenu onOpenChange={handleOpenChange}>
             <DropdownMenuTrigger asChild>
                 <div className="block-menu-trigger" title="More actions">
-                    <Plus className="h-4 w-4" />
+                    <Plus className="block-menu-plus-icon" />
                 </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="bottom" className="min-w-[160px]">

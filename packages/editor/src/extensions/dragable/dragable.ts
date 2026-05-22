@@ -25,6 +25,12 @@ export interface DragableStorage {
   blockMenuItems: BlockMenuItem[]
 }
 
+declare module '@tiptap/core' {
+  interface Storage {
+    dragable: DragableStorage;
+  }
+}
+
 export const Dragable = Extension.create<DragableStorage>({
   name: 'dragable',
 
@@ -127,7 +133,7 @@ export const Dragable = Extension.create<DragableStorage>({
         offsetX = referenceRectDOM.getAttribute('data-checked') ? -3 : -16;
       }
 
-      const containerWidth = containerDOM.offsetWidth || 34; // 16px + 2px gap + 16px
+      const containerWidth = containerDOM.offsetWidth || 38; // 18px + 2px gap + 18px
       const left = targetNodeRect.left - rootRect.left - containerWidth + offsetX;
       const top = targetNodeRect.top - rootRect.top + 8 + root.scrollTop;
 
