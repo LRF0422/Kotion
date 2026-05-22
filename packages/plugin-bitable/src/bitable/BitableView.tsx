@@ -51,9 +51,10 @@ import { FieldConfigPanel } from "./components/FieldConfigPanel";
 import { ExcelImportDialog } from "./components/ExcelImportDialog";
 import { generateRecordId, generateViewId } from "../utils/id";
 import { convertFieldValue, generateSelectOptionsFromData } from "../utils/fieldConversion";
-import { applyFilters, applySorts } from "../utils/dataProcessing";
+import { applyFilters, applySorts, applyGroups } from "../utils/dataProcessing";
 import { SortPanel } from "./components/SortPanel";
 import { FilterPanel } from "./components/FilterPanel";
+import { GroupPanel } from "./components/GroupPanel";
 import { RecordDetailModal } from "./components/RecordDetailModal";
 
 export const BitableView: React.FC<NodeViewProps> = (props) => {
@@ -443,6 +444,12 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         return result;
     }, [data, currentView?.filters, currentView?.sorts, attrs.fields]);
 
+    // Apply groups to processed data
+    const groupedData = useMemo(() => {
+        if (!currentView?.groups?.length) return undefined;
+        return applyGroups(processedData, currentView.groups, attrs.fields);
+    }, [processedData, currentView?.groups, attrs.fields]);
+
     // 渲染视图内容
     const renderViewContent = () => {
         const viewProps = {
@@ -464,7 +471,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
         switch (currentView?.type) {
             case ViewType.TABLE:
-                return <TableView {...viewProps} searchText={searchText} />;
+                return <TableView {...viewProps} searchText={searchText} groups={groupedData} />;
             case ViewType.KANBAN:
                 return <KanbanView {...viewProps} />;
             case ViewType.GALLERY:
@@ -670,6 +677,13 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                         >
                             <EyeOff className="h-4 w-4" />
                         </Button>
+
+                        {/* 分组 */}
+                        <GroupPanel
+                            view={currentView}
+                            fields={attrs.fields}
+                            onUpdateView={handleUpdateView}
+                        />
 
                         {/* 排序 */}
                         <SortPanel

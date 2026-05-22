@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { Editor } from "@kn/editor";
 import { Button, Input, Checkbox } from "@kn/ui";
 import {
@@ -24,14 +24,17 @@ import {
     MessageSquare,
     ImageIcon,
     Maximize2,
+    ChevronRight,
+    ChevronDown,
 } from "@kn/icon";
 import { useTranslation } from "@kn/common";
-import { FieldConfig, RecordData, ViewConfig, FieldType } from "../../types";
-import DataGrid, { SelectColumn } from 'react-data-grid';
+import { FieldConfig, RecordData, ViewConfig, FieldType, GroupConfig } from "../../types";
+import DataGrid, { SelectColumn, Row as DataGridRow, RenderRowProps } from 'react-data-grid';
 import 'react-data-grid/lib/styles.css';
 import { useTheme, cn } from "@kn/ui";
 import { getFieldRenderer, getFieldEditor } from "../fields/FieldRenderers";
 import { createFillHandler } from "../../utils/autoFill";
+import { applyGroups, getGroupLabel } from "../../utils/dataProcessing";
 
 // 字段类型图标映射
 const getFieldTypeIcon = (type: FieldType) => {
@@ -88,10 +91,19 @@ interface TableViewProps {
     editor?: Editor;
     searchText?: string;
     onRecordClick?: (record: RecordData) => void;
+    groups?: Map<string, RecordData[]>;
 }
+
+// Extended row type that supports group headers within DataGrid
+type GroupedRow = RecordData & {
+    _isGroupHeader?: boolean;
+    _groupKey?: string;
+    _groupCount?: number;
+};
 
 export const TableView: React.FC<TableViewProps> = (props) => {
     const {
+        view,
         fields,
         data,
         onAddRecord,
@@ -101,12 +113,14 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         editable,
         editor,
         searchText: searchTextProp,
-        onRecordClick
+        onRecordClick,
+        groups: groupedData,
     } = props;
 
     const { theme } = useTheme();
     const { t } = useTranslation();
     const [selectedRows, setSelectedRows] = useState<ReadonlySet<string>>(new Set());
+    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
     const searchText = searchTextProp || '';
 
     // 过滤数据
@@ -121,6 +135,32 @@ export const TableView: React.FC<TableViewProps> = (props) => {
             });
         });
     }, [data, searchText, fields]);
+
+    const isGrouped = groupedData && groupedData.size > 0;
+
+    // Get the group field for labels
+    const groupField = useMemo(() => {
+        if (!view.groups?.length) return undefined;
+        return fields.find(f => f.id === view.groups![0]!.fieldId);
+    }, [view.groups, fields]);
+
+    // Build flat rows with group headers interspersed
+    const flatRows: GroupedRow[] = useMemo(() => {
+        if (!isGrouped || !groupedData) return filteredData;
+        const rows: GroupedRow[] = [];
+        groupedData.forEach((records, key) => {
+            rows.push({
+                id: `__group__${key}`,
+                _isGroupHeader: true,
+                _groupKey: key,
+                _groupCount: records.length,
+            });
+            if (!collapsedGroups.has(key)) {
+                rows.push(...records);
+            }
+        });
+        return rows;
+    }, [isGrouped, filteredData, groupedData, collapsedGroups]);
 
     // 虚拟滚动阈值
     const VIRTUALIZED_THRESHOLD = 500;
@@ -197,15 +237,91 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         return editable ? [SelectColumn, ...baseColumns] : baseColumns;
     }, [fields, editable, editor]);
 
-    // Drag-fill handler for react-data-grid
+    // Drag-fill handler for react-data-grid (non-grouped)
     const handleFill = useMemo(() => {
         return createFillHandler(fields, filteredData);
     }, [fields, filteredData]);
+
+    // Drag-fill handler for grouped mode
+    const groupedFill = useMemo(() => {
+        if (!isGrouped) return undefined;
+        const dataRows = flatRows.filter(r => !r._isGroupHeader);
+        return createFillHandler(fields, dataRows);
+    }, [isGrouped, flatRows, fields]);
 
     const handleDeleteSelected = () => {
         onDeleteRecord(Array.from(selectedRows));
         setSelectedRows(new Set());
     };
+
+    // Toggle group collapse
+    const toggleGroup = useCallback((groupKey: string) => {
+        setCollapsedGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(groupKey)) {
+                next.delete(groupKey);
+            } else {
+                next.add(groupKey);
+            }
+            return next;
+        });
+    }, []);
+
+    // Custom row renderer for group headers
+    const renderGroupRow = useCallback((key: React.Key, props: RenderRowProps<GroupedRow>) => {
+        const row = props.row;
+        if (row._isGroupHeader) {
+            const groupKey = row._groupKey || '';
+            const isCollapsed = collapsedGroups.has(groupKey);
+            const label = getGroupLabel(groupKey, groupField);
+            const isSelectField = groupField?.type === FieldType.SELECT || groupField?.type === FieldType.MULTI_SELECT;
+            const selectOption = isSelectField
+                ? groupField?.options?.find(o => o.label === groupKey)
+                : undefined;
+
+            return (
+                <div
+                    key={key}
+                    className="rdg-row bitable-group-header-row"
+                    style={{ height: 36, lineHeight: '36px', position: 'relative' }}
+                    onClick={() => toggleGroup(groupKey)}
+                >
+                    <div
+                        className="flex items-center gap-2 px-3 w-full h-full cursor-pointer select-none bg-muted/60 dark:bg-muted/30 hover:bg-muted/80 dark:hover:bg-muted/40 transition-colors"
+                        style={{ position: 'absolute', inset: 0 }}
+                    >
+                        {isCollapsed ? (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        ) : (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        )}
+                        {selectOption ? (
+                            <span
+                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                                style={{
+                                    backgroundColor: selectOption.color + '20',
+                                    color: selectOption.color,
+                                }}
+                            >
+                                {label}
+                            </span>
+                        ) : (
+                            <span className="text-sm font-medium text-foreground">{label}</span>
+                        )}
+                        <span className="text-xs text-muted-foreground">({row._groupCount})</span>
+                    </div>
+                </div>
+            );
+        }
+        // Normal row: delegate to default DataGrid Row component
+        return <DataGridRow key={key} {...props} />;
+    }, [collapsedGroups, groupField, toggleGroup]);
+
+    // Row class callback for group separators
+    const getRowClass = useCallback((row: GroupedRow) => {
+        if (row._isGroupHeader) return 'bitable-group-header-row-container';
+        return undefined;
+    }, []);
 
     return (
         <div className="bitable-table-view">
@@ -227,22 +343,20 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                 </div>
             )}
 
-            {/* 数据表格 */}
+            {/* Data grid - single grid for both grouped and non-grouped */}
             <div className="bitable-grid-container" style={{ height: enableVirtualization ? 'calc(100vh - 300px)' : 'auto', minHeight: enableVirtualization ? 400 : 'auto' }}>
                 <DataGrid
                     columns={columns}
-                    rows={filteredData}
-                    rowKeyGetter={(row) => row.id}
+                    rows={isGrouped ? flatRows : filteredData}
+                    rowKeyGetter={(row: any) => row.id}
                     selectedRows={selectedRows}
-                    onSelectedRowsChange={setSelectedRows}
-                    onRowsChange={(rows, changes) => {
-                        // Persist changes when editing is committed (on blur/Enter)
+                    onSelectedRowsChange={setSelectedRows as any}
+                    onRowsChange={(rows: any, changes: any) => {
                         if (changes.indexes.length > 0) {
-                            // Batch all row updates into a single updateAttributes call to avoid race condition
                             const updatesMap = new Map<string, Partial<RecordData>>();
-                            changes.indexes.forEach((index) => {
+                            changes.indexes.forEach((index: number) => {
                                 const row = rows[index];
-                                if (row) {
+                                if (row && !row._isGroupHeader) {
                                     updatesMap.set(row.id, row);
                                 }
                             });
@@ -251,7 +365,9 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                             }
                         }
                     }}
-                    onFill={handleFill}
+                    onFill={isGrouped ? groupedFill : handleFill}
+                    renderers={isGrouped ? { renderRow: renderGroupRow as any } : undefined}
+                    rowClass={isGrouped ? getRowClass as any : undefined}
                     className={cn(
                         "bitable-data-grid",
                         theme === 'dark' ? "rdg-dark" : "rdg-light"
@@ -263,20 +379,8 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                     }}
                     rowHeight={40}
                     headerRowHeight={36}
-                // virtualized={enableVirtualization}
                 />
             </div>
-
-            {/* 添加新行按钮 */}
-            {editable && (
-                <div
-                    className="flex items-center gap-2 px-4 py-2 text-gray-500 hover:bg-gray-50 dark:hover:bg-card cursor-pointer transition-colors border-b border-gray-200 dark:border-border"
-                    onClick={onAddRecord}
-                >
-                    <Plus className="h-4 w-4" />
-                    <span className="text-sm">{t('bitable.actions.newPage')}</span>
-                </div>
-            )}
 
             {/* 自定义样式 */}
             <style>{`
@@ -424,6 +528,21 @@ export const TableView: React.FC<TableViewProps> = (props) => {
 
                 /* Focus sink (row outline): use softer color via variable override */
                 /* The --rdg-selection-color variable already controls focus sink outline color */
+
+                /* Group header row in single DataGrid */
+                .bitable-data-grid .bitable-group-header-row {
+                    position: relative;
+                }
+
+                .bitable-data-grid .bitable-group-header-row-container {
+                    background: transparent;
+                }
+
+                .bitable-data-grid .bitable-group-header-row .rdg-cell {
+                    padding: 0 !important;
+                    border: none !important;
+                    overflow: visible !important;
+                }
             `}</style>
         </div>
     );

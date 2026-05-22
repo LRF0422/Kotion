@@ -226,6 +226,14 @@ export const bitable = new BitablePlugin({
                         "criticalPath": "Critical Path",
                         "customColors": "Custom Colors"
                     },
+                    // Group panel
+                    "groupPanel": {
+                        "title": "Group By",
+                        "emptyHint": "Add a field to group records",
+                        "empty": "(empty)",
+                        "yes": "Yes",
+                        "no": "No"
+                    },
                     // Calendar view
                     "calendarView": {
                         "today": "Today",
@@ -566,6 +574,14 @@ export const bitable = new BitablePlugin({
                         "dependencyField": "依赖字段",
                         "criticalPath": "关键路径",
                         "customColors": "自定义颜色"
+                    },
+                    // Group panel
+                    "groupPanel": {
+                        "title": "分组",
+                        "emptyHint": "添加字段对记录进行分组",
+                        "empty": "(空)",
+                        "yes": "是",
+                        "no": "否"
                     },
                     // Calendar view
                     "calendarView": {

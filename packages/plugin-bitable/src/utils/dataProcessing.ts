@@ -1,4 +1,4 @@
-import { RecordData, FieldConfig, FilterConfig, SortConfig, FilterOperator } from '../types';
+import { RecordData, FieldConfig, FilterConfig, SortConfig, GroupConfig, FilterOperator } from '../types';
 
 /**
  * Apply filters to data
@@ -59,6 +59,115 @@ function evaluateFilter(value: any, operator: FilterOperator, filterValue: any):
         default:
             return true;
     }
+}
+
+/**
+ * Apply groups to data, returning grouped data as a Map
+ * Key is the group label, value is the array of records in that group
+ */
+export function applyGroups(
+    data: RecordData[],
+    groups: GroupConfig[],
+    fields: FieldConfig[]
+): Map<string, RecordData[]> {
+    if (!groups || groups.length === 0) return new Map();
+
+    const result = new Map<string, RecordData[]>();
+
+    // Only support single-level grouping for now
+    const group = groups[0];
+    if (!group) return result;
+
+    const field = fields.find(f => f.id === group.fieldId);
+    if (!field) return result;
+
+    // Group records by field value
+    const groupMap = new Map<string, RecordData[]>();
+    const groupOrder: string[] = [];
+
+    // For select/multi_select fields, pre-populate groups from options
+    if (field.type === 'select' && field.options) {
+        field.options.forEach(option => {
+            const key = option.label;
+            groupMap.set(key, []);
+            groupOrder.push(key);
+        });
+    }
+
+    // Distribute records into groups
+    data.forEach(record => {
+        let value = record[group.fieldId];
+
+        // Determine group key
+        let key: string;
+        if (value == null || value === '' || (Array.isArray(value) && value.length === 0)) {
+            key = '';
+        } else if (field.type === 'select' && field.options) {
+            // Match select value to option label
+            const option = field.options.find(o => o.id === value || o.label === value);
+            key = option ? option.label : String(value);
+        } else if (field.type === 'multi_select' && Array.isArray(value)) {
+            // Multi-select: use first value as group key
+            if (value.length > 0) {
+                const firstVal = value[0];
+                const option = field.options?.find(o => o.id === firstVal || o.label === firstVal);
+                key = option ? option.label : String(firstVal);
+            } else {
+                key = '';
+            }
+        } else if (field.type === 'checkbox') {
+            key = value ? 'true' : 'false';
+        } else {
+            key = String(value);
+        }
+
+        if (!groupMap.has(key)) {
+            groupMap.set(key, []);
+            groupOrder.push(key);
+        }
+        groupMap.get(key)!.push(record);
+    });
+
+    // Sort groups if order is specified
+    if (group.order === 'desc') {
+        groupOrder.reverse();
+    }
+
+    // Build result map in order
+    groupOrder.forEach(key => {
+        const records = groupMap.get(key);
+        if (records && records.length > 0) {
+            result.set(key, records);
+        }
+    });
+
+    // Handle empty group (empty key goes last)
+    const emptyRecords = groupMap.get('');
+    if (emptyRecords && emptyRecords.length > 0 && !result.has('')) {
+        result.set('', emptyRecords);
+    }
+
+    return result;
+}
+
+/**
+ * Get a human-readable label for a group key
+ */
+export function getGroupLabel(
+    key: string,
+    field: FieldConfig | undefined
+): string {
+    if (!field) return key || '(empty)';
+
+    if (key === '') {
+        return '(empty)';
+    }
+
+    if (field.type === 'checkbox') {
+        return key === 'true' ? 'Yes' : 'No';
+    }
+
+    return key;
 }
 
 /**
