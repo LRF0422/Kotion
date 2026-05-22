@@ -281,6 +281,8 @@ export class BubbleMenuView implements PluginView {
     this.update(view, view.state)
 
     if (this.getShouldShow()) {
+      this.updatePositionSync()
+      this.updatePosition()
       this.show()
     }
   }
@@ -336,39 +338,73 @@ export class BubbleMenuView implements PluginView {
     this.hide()
   }
 
-  updatePosition() {
+  /**
+   * Resolves the reference DOM rect for the current selection,
+   * accounting for custom getReferenceClientRect and CellSelection.
+   */
+  private getReferenceRect(): DOMRect {
     const { selection } = this.editor.state
     let domRect = posToDOMRect(this.view, selection.from, selection.to)
     if (this.floatingUIOptions.getReferenceClientRect) {
       domRect = this.floatingUIOptions.getReferenceClientRect()
     }
+
+    if (selection instanceof CellSelection) {
+      const { $anchorCell, $headCell } = selection
+      const from = $anchorCell ? $anchorCell.pos : $headCell!.pos
+      const to = $headCell ? $headCell.pos : $anchorCell!.pos
+      const fromDOM = this.view.nodeDOM(from)
+      const toDOM = this.view.nodeDOM(to)
+
+      if (fromDOM && toDOM) {
+        domRect =
+          fromDOM === toDOM
+            ? (fromDOM as HTMLElement).getBoundingClientRect()
+            : combineDOMRects(
+                (fromDOM as HTMLElement).getBoundingClientRect(),
+                (toDOM as HTMLElement).getBoundingClientRect(),
+              )
+      }
+    }
+
+    return domRect
+  }
+
+  /**
+   * Synchronously sets an approximate position based on the selection rect.
+   * This ensures the element is at a reasonable location before becoming visible,
+   * preventing the first-render flash at (0, 0).
+   */
+  private updatePositionSync() {
+    const domRect = this.getReferenceRect()
+    const offsetValue = typeof this.floatingUIOptions.offset === 'number'
+      ? this.floatingUIOptions.offset
+      : 8
+    const strategy = this.floatingUIOptions.strategy || 'absolute'
+
+    this.element.style.width = 'max-content'
+    this.element.style.position = strategy
+
+    if (strategy === 'fixed') {
+      this.element.style.left = `${domRect.left}px`
+      this.element.style.top = `${domRect.top - offsetValue}px`
+    } else {
+      this.element.style.left = `${domRect.left + window.scrollX}px`
+      this.element.style.top = `${domRect.top + window.scrollY - offsetValue}px`
+    }
+  }
+
+  updatePosition() {
+    const domRect = this.getReferenceRect()
     let virtualElement = {
       getBoundingClientRect: () => domRect,
       getClientRects: () => [domRect],
     }
 
     // this is a special case for cell selections
+    const { selection } = this.editor.state
     if (selection instanceof CellSelection) {
-      const { $anchorCell, $headCell } = selection
-
-      const from = $anchorCell ? $anchorCell.pos : $headCell!.pos
-      const to = $headCell ? $headCell.pos : $anchorCell!.pos
-
-      const fromDOM = this.view.nodeDOM(from)
-      const toDOM = this.view.nodeDOM(to)
-
-      if (!fromDOM || !toDOM) {
-        return
-      }
-
-      const clientRect =
-        fromDOM === toDOM
-          ? (fromDOM as HTMLElement).getBoundingClientRect()
-          : combineDOMRects(
-            (fromDOM as HTMLElement).getBoundingClientRect(),
-            (toDOM as HTMLElement).getBoundingClientRect(),
-          )
-
+      const clientRect = domRect
       virtualElement = {
         getBoundingClientRect: () => clientRect,
         getClientRects: () => [clientRect],
@@ -462,6 +498,10 @@ export class BubbleMenuView implements PluginView {
       return
     }
 
+    // Set synchronous position before showing to prevent first-render flash
+    if (!this.isVisible) {
+      this.updatePositionSync()
+    }
     this.updatePosition()
     this.show()
   }
@@ -483,6 +523,8 @@ export class BubbleMenuView implements PluginView {
       // Set initial animation state before appending to DOM
       this.element.style.opacity = '0'
       this.element.style.transform = 'scale(0.96)'
+      // Ensure bubble menu renders above editor content
+      this.element.style.zIndex = '1000'
         // attach to appendTo or editor's parent element
         ; (this.appendTo ?? this.view.dom.parentElement)?.appendChild(this.element)
     }

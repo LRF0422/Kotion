@@ -5,6 +5,9 @@ export const StyledEditor = styled.div.attrs({
 })`
   box-sizing: border-box;
   width: 100%;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
   padding-left: 40px;
   padding-right: 40px;
   
@@ -177,7 +180,6 @@ export const StyledEditor = styled.div.attrs({
     width: 100%;
     border-collapse: separate !important;
     border-spacing: 0 !important;
-    border-radius: 8px;
     overflow: hidden;
     margin: 1em 0;
     background-color: ${props => (props.theme as any).tableCellBgColor || 'transparent'};
@@ -185,7 +187,7 @@ export const StyledEditor = styled.div.attrs({
     box-sizing: border-box;
 
     * { box-sizing: border-box; }
-    p { margin: 0; }
+    p { margin: 0; line-height: 1.6; }
 
     tr {
       transition: background-color 0.15s ease;
@@ -196,10 +198,9 @@ export const StyledEditor = styled.div.attrs({
     th {
       background-color: ${props => (props.theme as any).tableHeaderBgColor || '#f8fafc'};
       font-weight: 600;
-      font-size: 0.875em;
+      font-size: 0.85em;
       color: ${props => (props.theme as any).tableHeaderTextColor || (props.theme as any).text};
-      &:first-child { border-top-left-radius: 7px; }
-      &:last-child { border-top-right-radius: 7px; }
+      letter-spacing: 0.02em;
     }
 
     td, th {
@@ -207,9 +208,10 @@ export const StyledEditor = styled.div.attrs({
       vertical-align: top;
       border-bottom: 1px solid ${props => (props.theme as any).tableBorderColor || '#e2e8f0'} !important;
       border-right: 1px solid ${props => (props.theme as any).tableBorderColor || '#e2e8f0'} !important;
-      padding: 4px 8px !important;
+      padding: 8px 12px !important;
       text-align: left;
-      min-width: 100px;
+      min-width: 80px;
+      line-height: 1.6;
       transition: background-color 0.15s ease;
       &:last-child { border-right: none !important; }
     }
@@ -219,7 +221,6 @@ export const StyledEditor = styled.div.attrs({
   .tableWrapper {
     position: relative;
     margin: 1em 0;
-    border-radius: 8px;
     overflow: hidden;
 
     &.has-focus {
@@ -232,7 +233,6 @@ export const StyledEditor = styled.div.attrs({
     width: 100%;
     border-collapse: separate !important;
     border-spacing: 0 !important;
-    border-radius: 8px;
     overflow: hidden;
     margin-top: 0;
     background-color: ${props => (props.theme as any).tableCellBgColor};
@@ -247,6 +247,7 @@ export const StyledEditor = styled.div.attrs({
 
     p {
       margin: 0;
+      line-height: 1.6;
     }
 
     tr {
@@ -266,18 +267,11 @@ export const StyledEditor = styled.div.attrs({
     th {
       background-color: ${props => (props.theme as any).tableHeaderBgColor};
       font-weight: 600;
-      font-size: 0.875em;
+      font-size: 0.85em;
       color: ${props => (props.theme as any).tableHeaderTextColor || (props.theme as any).text};
       text-transform: none;
-      letter-spacing: 0;
+      letter-spacing: 0.02em;
       transition: background-color 0.2s ease;
-
-      &:first-child {
-        border-top-left-radius: 7px;
-      }
-      &:last-child {
-        border-top-right-radius: 7px;
-      }
     }
 
     td,
@@ -286,9 +280,10 @@ export const StyledEditor = styled.div.attrs({
       vertical-align: top;
       border-bottom: 1px solid ${props => (props.theme as any).tableBorderColor} !important;
       border-right: 1px solid ${props => (props.theme as any).tableBorderColor} !important;
-      padding: 4px 8px !important;
+      padding: 8px 12px !important;
       text-align: left;
-      min-width: 100px;
+      min-width: 80px;
+      line-height: 1.6;
       transition: background-color 0.15s ease;
 
       &:last-child {
@@ -305,7 +300,6 @@ export const StyledEditor = styled.div.attrs({
         position: absolute;
         inset: 0;
         border: 2px solid ${props => (props.theme as any).tableSelectedBorderColor};
-        border-radius: 2px;
         pointer-events: none;
         z-index: 12;
       }
@@ -360,7 +354,7 @@ export const StyledEditor = styled.div.attrs({
         background: ${props => (props.theme as any).tableGripBgColor || (props.theme as any).tableHeaderBgColor};
         border: 1px solid ${props => (props.theme as any).tableBorderColor};
         border-bottom: none;
-        border-radius: 6px 6px 0 0;
+        border-radius: 0;
         transition: all 0.2s ease;
       }
 
@@ -377,14 +371,6 @@ export const StyledEditor = styled.div.attrs({
           background: ${props => (props.theme as any).tableGripHoverBgColor || (props.theme as any).tableSelectedControlBgColor};
           box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
         }
-      }
-
-      &.first::after {
-        border-top-left-radius: 6px;
-      }
-
-      &.last::after {
-        border-top-right-radius: 6px;
       }
 
       &.selected {
@@ -454,7 +440,7 @@ export const StyledEditor = styled.div.attrs({
         background: ${props => (props.theme as any).tableGripBgColor || (props.theme as any).tableHeaderBgColor};
         border: 1px solid ${props => (props.theme as any).tableBorderColor};
         border-right: none;
-        border-radius: 6px 0 0 6px;
+        border-radius: 0;
         transition: all 0.2s ease;
       }
 
@@ -471,14 +457,6 @@ export const StyledEditor = styled.div.attrs({
           background: ${props => (props.theme as any).tableGripHoverBgColor || (props.theme as any).tableSelectedControlBgColor};
           box-shadow: -2px 0 8px rgba(0, 0, 0, 0.06);
         }
-      }
-
-      &.first::after {
-        border-top-left-radius: 6px;
-      }
-
-      &.last::after {
-        border-bottom-left-radius: 6px;
       }
 
       &.selected {
@@ -511,7 +489,7 @@ export const StyledEditor = styled.div.attrs({
         height: 12px;
         background: ${props => (props.theme as any).tableGripBgColor || (props.theme as any).tableHeaderBgColor};
         border: 1px solid ${props => (props.theme as any).tableBorderColor};
-        border-radius: 6px 0 0 0;
+        border-radius: 0;
         transition: all 0.2s ease;
       }
       
@@ -552,7 +530,6 @@ export const StyledEditor = styled.div.attrs({
 
     &::-webkit-scrollbar-thumb {
       background: ${props => (props.theme as any).tableBorderColor};
-      border-radius: 3px;
     }
 
     &::-webkit-scrollbar-thumb:hover {
@@ -569,7 +546,6 @@ export const StyledEditor = styled.div.attrs({
     width: 4px;
     pointer-events: none;
     background-color: ${props => (props.theme as any).tableResizeHandleBgColor};
-    border-radius: 2px;
     opacity: 0.8;
   }
 

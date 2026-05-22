@@ -34,7 +34,7 @@ import { wrapToolsWithCallback } from "./utils/tool-wrapper"
 import { EDITOR_AGENT_PROMPT, DEFAULT_MAX_STEPS } from "./constants"
 
 /** Timeout in ms – if no SSE event arrives within this window, treat the stream as hung */
-const SSE_INACTIVITY_TIMEOUT_MS = 60_000
+const SSE_INACTIVITY_TIMEOUT_MS = 60_000 * 10
 
 /**
  * Wraps an async generator with a per-yield inactivity timeout.
