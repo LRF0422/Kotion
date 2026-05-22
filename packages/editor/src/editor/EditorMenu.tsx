@@ -208,7 +208,7 @@ export const EditorMenu: React.FC<{
                     pluginKey="editor-menu"
                     options={{ placement: 'top' }}
                 >
-                    <div className="flex items-center gap-0.5 rounded-lg border bg-popover/95 backdrop-blur-sm p-1 shadow-md">
+                    <div className="flex items-center gap-0.5 bg-popover/95 backdrop-blur-sm">
                         {flotMenu.map((Menu, index) => (
                             <Menu key={`float-menu-${index}`} editor={editor} />
                         ))}

@@ -9,7 +9,7 @@ import { useApi } from "@kn/common"
 import { APIS } from "@kn/common"
 import { saveTokens } from "@kn/common"
 import { useState } from "react"
-import { Loader2 } from "@kn/icon"
+import { Loader2, Eye, EyeOff, Check, ArrowRight } from "@kn/icon"
 import { ModeToggle } from "@kn/ui"
 import React from "react"
 import { LanguageToggle } from "../../locales/LanguageToggle"
@@ -20,6 +20,7 @@ export function Login() {
 
     const [loading, setLoading] = useState(false)
     const [loginSuccess, setLoginSuccess] = useState(false)
+    const [showPassword, setShowPassword] = useState(false)
     const navigate = useNavigate()
 
     const formSchema = z.object({
@@ -66,8 +67,8 @@ export function Login() {
 
 
     return (
-        <div className="w-full lg:grid h-[100vh] lg:grid-cols-2 bg-background">
-            {/* Login success transition overlay — prevents white flash */}
+        <div className="w-full lg:grid h-[100vh] lg:grid-cols-[1fr_460px] bg-background">
+            {/* Login success transition overlay */}
             {loginSuccess && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background">
                     <div className="flex flex-col items-center gap-4">
@@ -81,96 +82,112 @@ export function Login() {
                 </div>
             )}
 
-            {/* Theme Toggle */}
+            {/* Theme & Language Toggle */}
             <div className="absolute top-4 right-4 flex items-center gap-2 z-50">
                 <ModeToggle />
                 <LanguageToggle />
             </div>
 
-            {/* Left Side - Animated Background */}
-            <div className="hidden lg:flex relative bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 dark:from-indigo-900 dark:via-purple-900 dark:to-pink-900 overflow-hidden">
-                {/* Animated gradient orbs */}
-                <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-300 dark:bg-purple-700 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-70 animate-blob"></div>
-                <div className="absolute top-0 -right-4 w-72 h-72 bg-pink-300 dark:bg-pink-700 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
-                <div className="absolute -bottom-8 left-20 w-72 h-72 bg-indigo-300 dark:bg-indigo-700 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
+            {/* Left Side - Brand Panel (Notion-style) */}
+            <div className="hidden lg:flex relative overflow-hidden bg-gradient-to-b from-slate-50 to-slate-100/80 dark:from-slate-950 dark:to-slate-900/80">
+                <div className="relative z-10 flex flex-col justify-between w-full h-full p-12 xl:p-16 animate-fade-in-up">
+                    {/* Center — Hero (no logo per request) */}
+                    <div className="flex-1 flex flex-col justify-center max-w-lg">
+                        <h2 className="text-4xl xl:text-[44px] font-bold leading-[1.2] tracking-tight text-foreground">
+                            你的想法，
+                            <br />
+                            值得被好好组织。
+                        </h2>
+                        <p className="mt-5 text-base text-muted-foreground leading-relaxed max-w-sm">
+                            一款为个人创作者和团队打造的笔记与协作工具。写作、计划、协作，全部在一个地方完成。
+                        </p>
 
-                {/* Grid pattern overlay */}
-                <div className="absolute inset-0 bg-grid-pattern"></div>
-
-                {/* Content with animation */}
-                <div className="relative z-10 flex flex-col items-center justify-center w-full h-full p-12 text-white">
-                    <div className="max-w-md space-y-8 animate-fade-in-up">
-                        {/* Logo/Brand */}
-                        <div className="space-y-4">
-                            <div className="w-20 h-20 rounded-2xl bg-white/20 dark:bg-white/10 backdrop-blur-xl flex items-center justify-center text-4xl font-bold shadow-2xl animate-scale-in">
-                                K
-                            </div>
-                            <h2 className="text-5xl font-bold leading-tight">
-                                Welcome to
-                                <br />
-                                <span className="text-white drop-shadow-lg">
-                                    Knowledge
-                                </span>
-                            </h2>
-                            <p className="text-lg text-white/90 dark:text-white/80 leading-relaxed drop-shadow-md">
-                                Your intelligent workspace for capturing, organizing, and sharing knowledge seamlessly.
-                            </p>
-                        </div>
-
-                        {/* Feature highlights with stagger animation */}
-                        <div className="space-y-4 pt-8">
+                        {/* Feature list with checkmarks */}
+                        <div className="mt-8 space-y-4">
                             {[
-                                { icon: '📝', title: '智能编辑器', desc: 'Powerful rich-text editor' },
-                                { icon: '🔗', title: '团队协作', desc: 'Real-time collaboration' },
-                                { icon: '🎨', title: '自定义主题', desc: 'Beautiful themes & plugins' },
-                            ].map((feature, index) => (
+                                '无限层级页面，灵活组织知识结构',
+                                '实时多人协作，团队高效同步',
+                                'Markdown 支持，专注写作体验',
+                            ].map((text, index) => (
                                 <div
                                     key={index}
-                                    className="flex items-center gap-4 p-4 rounded-xl bg-white/15 dark:bg-white/10 backdrop-blur-sm hover:bg-white/25 dark:hover:bg-white/15 transition-all duration-300 animate-slide-in-left shadow-lg"
-                                    style={{ animationDelay: `${index * 150}ms` }}
+                                    className="flex items-center gap-3 animate-slide-in-left"
+                                    style={{ animationDelay: `${index * 100}ms` }}
                                 >
-                                    <div className="text-3xl">{feature.icon}</div>
-                                    <div>
-                                        <div className="font-semibold text-white drop-shadow">{feature.title}</div>
-                                        <div className="text-sm text-white/85 dark:text-white/75">{feature.desc}</div>
+                                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
+                                        <Check className="h-3 w-3" strokeWidth={3} />
                                     </div>
+                                    <span className="text-sm text-foreground/80">{text}</span>
                                 </div>
                             ))}
                         </div>
+
+                        {/* Mock UI illustration */}
+                        <div className="mt-10 rounded-lg border border-border/60 bg-background/50 p-4 animate-fade-in">
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="h-3 w-3 rounded-full bg-red-400/60" />
+                                <div className="h-3 w-3 rounded-full bg-yellow-400/60" />
+                                <div className="h-3 w-3 rounded-full bg-green-400/60" />
+                                <span className="ml-2 text-[11px] text-muted-foreground/50 font-mono">Knowledge</span>
+                            </div>
+                            <div className="space-y-2.5">
+                                <div className="h-2.5 w-3/4 rounded bg-foreground/8" />
+                                <div className="h-2 w-full rounded bg-foreground/5" />
+                                <div className="h-2 w-full rounded bg-foreground/5" />
+                                <div className="h-2 w-2/3 rounded bg-foreground/5" />
+                                <div className="mt-4 h-2.5 w-1/2 rounded bg-foreground/8" />
+                                <div className="h-2 w-full rounded bg-foreground/5" />
+                                <div className="h-2 w-5/6 rounded bg-foreground/5" />
+                            </div>
+                            <div className="mt-4 flex gap-2">
+                                <div className="h-7 w-16 rounded-md bg-foreground/6" />
+                                <div className="h-7 w-16 rounded-md bg-foreground/6" />
+                            </div>
+                        </div>
                     </div>
+
+                    {/* Bottom — Footer */}
+                    <p className="text-xs text-muted-foreground/50">
+                        © {new Date().getFullYear()} Knowledge Repo
+                    </p>
                 </div>
             </div>
 
             {/* Right Side - Login Form */}
-            <div className="flex items-center justify-center py-12 px-4 bg-white dark:bg-slate-950">
-                <div className="mx-auto w-full max-w-[400px] space-y-6 animate-fade-in">
+            <div className="flex items-center justify-center py-12 px-6 sm:px-8 bg-background border-l border-border">
+                <div className="mx-auto w-full max-w-[340px] space-y-7 animate-fade-in">
+                    {/* Mobile Logo (shown on small screens only) */}
+                    <div className="lg:hidden text-center mb-6">
+                        <h2 className="text-xl font-bold tracking-tight">Knowledge</h2>
+                    </div>
+
                     {/* Header */}
-                    <div className="space-y-2 text-center lg:text-left">
-                        <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-400 bg-clip-text text-transparent">
-                            嗨，近来可好？
+                    <div className="space-y-1.5">
+                        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                            登录
                         </h1>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">
-                            👋 欢迎来到 Knowledge, 登录以继续
+                        <p className="text-sm text-muted-foreground">
+                            欢迎回来，请输入你的账号信息
                         </p>
                     </div>
 
                     {/* Form */}
                     <Form {...form}>
-                        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+                        <form className="space-y-5" onSubmit={form.handleSubmit(onSubmit)}>
                             <FormField
                                 control={form.control}
                                 name="account"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel className="text-slate-700 dark:text-slate-200">账号</FormLabel>
+                                        <FormLabel className="text-sm font-medium text-foreground">邮箱地址</FormLabel>
                                         <FormControl>
                                             <Input
-                                                placeholder="输入您的邮箱"
-                                                className="h-11 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 transition-all"
+                                                placeholder="name@example.com"
+                                                className="h-10 bg-background border-border focus-visible:ring-1 focus-visible:ring-primary/30 transition-all"
                                                 {...field}
                                             />
                                         </FormControl>
-                                        <FormMessage className="text-red-600 dark:text-red-400" />
+                                        <FormMessage />
                                     </FormItem>
                                 )}
                             />
@@ -180,23 +197,33 @@ export function Login() {
                                 render={({ field }) => (
                                     <FormItem>
                                         <div className="flex items-center justify-between">
-                                            <FormLabel className="text-slate-700 dark:text-slate-200">密码</FormLabel>
+                                            <FormLabel className="text-sm font-medium text-foreground">密码</FormLabel>
                                             <Link
                                                 to="/forgot-password"
-                                                className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                                                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                                             >
-                                                忘记密码?
+                                                忘记密码？
                                             </Link>
                                         </div>
                                         <FormControl>
-                                            <Input
-                                                type="password"
-                                                placeholder="输入您的密码"
-                                                className="h-11 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 transition-all"
-                                                {...field}
-                                            />
+                                            <div className="relative">
+                                                <Input
+                                                    type={showPassword ? 'text' : 'password'}
+                                                    placeholder="请输入密码"
+                                                    className="h-10 bg-background border-border pr-10 focus-visible:ring-1 focus-visible:ring-primary/30 transition-all"
+                                                    {...field}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    tabIndex={-1}
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                                                    onClick={() => setShowPassword(!showPassword)}
+                                                >
+                                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                </button>
+                                            </div>
                                         </FormControl>
-                                        <FormMessage className="text-red-600 dark:text-red-400" />
+                                        <FormMessage />
                                     </FormItem>
                                 )}
                             />
@@ -204,20 +231,24 @@ export function Login() {
                             <Button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full h-11 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 dark:from-indigo-500 dark:to-purple-500 dark:hover:from-indigo-600 dark:hover:to-purple-600 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200"
+                                className="w-full h-10 font-medium shadow-sm hover:shadow-md transition-all"
                             >
-                                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                登录
+                                {loading ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <span>继续</span>
+                                )}
+                                {!loading && <ArrowRight className="ml-1.5 h-4 w-4" />}
                             </Button>
 
                             {/* Divider */}
-                            <div className="relative my-6">
+                            <div className="relative my-3">
                                 <div className="absolute inset-0 flex items-center">
-                                    <div className="w-full border-t border-slate-200 dark:border-slate-800"></div>
+                                    <div className="w-full border-t border-border"></div>
                                 </div>
-                                <div className="relative flex justify-center text-xs uppercase">
-                                    <span className="bg-white dark:bg-slate-950 px-2 text-slate-500 dark:text-slate-400">
-                                        或
+                                <div className="relative flex justify-center text-xs">
+                                    <span className="bg-background px-3 text-muted-foreground">
+                                        或使用以下方式继续
                                     </span>
                                 </div>
                             </div>
@@ -225,15 +256,18 @@ export function Login() {
                             <Button
                                 variant="outline"
                                 type="button"
-                                className="w-full h-11 border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-200 transition-all"
+                                className="w-full h-10 border-border hover:bg-muted transition-colors"
                             >
+                                <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178A1.17 1.17 0 0 1 4.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178 1.17 1.17 0 0 1-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.653 3.75 4.84 7.093 5.088a9.536 9.536 0 0 0 2.354-.164l1.578.924a.271.271 0 0 0 .14.047c.133 0 .241-.112.241-.248 0-.06-.023-.12-.038-.178l-.326-1.233a.492.492 0 0 1 .177-.553C23.022 18.342 24 16.65 24 14.771c0-3.328-3.238-6.057-7.062-5.913zm-2.8 2.987c.534 0 .966.44.966.982a.974.974 0 0 1-.966.983.974.974 0 0 1-.966-.983c0-.542.433-.982.966-.982zm4.843 0c.534 0 .966.44.966.982a.974.974 0 0 1-.966.983.974.974 0 0 1-.966-.983c0-.542.433-.982.966-.982z"/>
+                                </svg>
                                 使用微信登录
                             </Button>
 
-                            <div className="text-center text-sm text-slate-600 dark:text-slate-400">
-                                还没有账号?{" "}
-                                <Link to="/sign-up" className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium transition-colors">
-                                    注册
+                            <div className="text-center text-sm text-muted-foreground pt-1">
+                                还没有账号？{' '}
+                                <Link to="/sign-up" className="text-primary font-medium hover:text-primary/80 transition-colors">
+                                    免费注册
                                 </Link>
                             </div>
                         </form>
@@ -243,30 +277,10 @@ export function Login() {
 
             {/* Animation Styles */}
             <style>{`
-                @keyframes blob {
-                    0%, 100% {
-                        transform: translate(0px, 0px) scale(1);
-                    }
-                    33% {
-                        transform: translate(30px, -50px) scale(1.1);
-                    }
-                    66% {
-                        transform: translate(-20px, 20px) scale(0.9);
-                    }
-                }
-                .animate-blob {
-                    animation: blob 7s infinite;
-                }
-                .animation-delay-2000 {
-                    animation-delay: 2s;
-                }
-                .animation-delay-4000 {
-                    animation-delay: 4s;
-                }
                 @keyframes fade-in-up {
                     from {
                         opacity: 0;
-                        transform: translateY(30px);
+                        transform: translateY(20px);
                     }
                     to {
                         opacity: 1;
@@ -274,7 +288,7 @@ export function Login() {
                     }
                 }
                 .animate-fade-in-up {
-                    animation: fade-in-up 0.8s ease-out;
+                    animation: fade-in-up 0.6s ease-out;
                 }
                 @keyframes fade-in {
                     from {
@@ -285,25 +299,12 @@ export function Login() {
                     }
                 }
                 .animate-fade-in {
-                    animation: fade-in 0.6s ease-out;
-                }
-                @keyframes scale-in {
-                    from {
-                        opacity: 0;
-                        transform: scale(0.8);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: scale(1);
-                    }
-                }
-                .animate-scale-in {
-                    animation: scale-in 0.5s ease-out;
+                    animation: fade-in 0.5s ease-out;
                 }
                 @keyframes slide-in-left {
                     from {
                         opacity: 0;
-                        transform: translateX(-30px);
+                        transform: translateX(-16px);
                     }
                     to {
                         opacity: 1;
@@ -311,12 +312,7 @@ export function Login() {
                     }
                 }
                 .animate-slide-in-left {
-                    animation: slide-in-left 0.6s ease-out backwards;
-                }
-                .bg-grid-pattern {
-                    background-image: linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
-                                      linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
-                    background-size: 50px 50px;
+                    animation: slide-in-left 0.5s ease-out backwards;
                 }
             `}</style>
         </div>
