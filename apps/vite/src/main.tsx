@@ -13,9 +13,11 @@ import { chart } from "@kn/chart-plugin"
 import { drawnix } from "@kn/plugin-drawnix"
 import { mermaid } from "@kn/mermaid-plugin"
 import { excalidraw } from "@kn/plugin-excalidraw"
+import { comment } from "@kn/plugin-comment"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <App plugins={[ai, bitable, blockReference, speechToText, chart,
+    comment,
     drawnix, DefaultPluginInstance, fileManager, mermaid, excalidraw]} />
 )

@@ -3,7 +3,7 @@ import { CardList } from "../components/CardList";
 import { Button, Card, CardContent, EmptyState, Skeleton, cn, useIsMobile } from "@kn/ui";
 import { useApi, useNavigator } from "@kn/common";
 import { Space } from "../../model/Space";
-import { BanIcon, Book, Box, Clock, LayoutTemplate, Moon, Plus, Sun, Sunset, UserCircle } from "@kn/icon";
+import { BanIcon, Book, Box, Clock, LayoutTemplate, Moon, Plus, Star, Sun, Sunset, UserCircle } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { useTranslation } from "@kn/common";
@@ -15,6 +15,7 @@ export const Home: React.FC = () => {
     const isMobile = useIsMobile()
     const [recentSpaces, setRecentSpaces] = useState<Space[]>([])
     const [recentPages, setRecentPages] = useState<any[]>([])
+    const [favoritePages, setFavoritePages] = useState<any[]>([])
     const [flag, setFlag] = useState(0)
     const [loading, setLoading] = useState(true)
     const [currentHour, setCurrentHour] = useState(new Date().getHours())
@@ -53,10 +54,13 @@ export const Home: React.FC = () => {
         setLoading(true)
         Promise.all([
             useApi(APIS.QUERY_SPACE, { template: false, pageSize: 4 }),
-            useApi(APIS.QUERY_RECENT_PAGE, { pageSize: 8 })
-        ]).then(([spacesRes, pagesRes]) => {
+            useApi(APIS.QUERY_RECENT_PAGE, { pageSize: 8 }),
+            useApi(APIS.QUERY_FAVORITE, { pageSize: 8 })
+        ]).then(([spacesRes, pagesRes, favoritesRes]) => {
             setRecentSpaces(spacesRes.data.records || [])
             setRecentPages(pagesRes.data.records || [])
+            const favData = favoritesRes?.data
+            setFavoritePages(Array.isArray(favData) ? favData : (favData?.records || []))
         }).finally(() => {
             setLoading(false)
         })
@@ -239,22 +243,64 @@ export const Home: React.FC = () => {
                     )}
                 </div>
 
-                {/* Collaboration Spaces Section */}
+                {/* Favorite Pages Section */}
                 <div className="flex flex-col gap-3">
                     <div className="flex items-center gap-2">
-                        <LayoutTemplate size={14} className="text-muted-foreground" />
-                        <span className="font-medium text-sm">{t("home.collaboration") || "Collaboration Spaces"}</span>
+                        <Star size={14} className="text-muted-foreground" />
+                        <span className="font-medium text-sm">{t("home.favorites") || "Favorite Pages"}</span>
                     </div>
-                    <Card className="border-dashed bg-muted/30">
-                        <CardContent className="flex flex-col items-center justify-center py-8 text-center">
-                            <div className="p-3 rounded-full bg-muted mb-3">
-                                <BanIcon className="h-5 w-5 text-muted-foreground" />
-                            </div>
+                    {loading ? (
+                        <div className="flex flex-col">
+                            {[...Array(5)].map((_, index) => (
+                                <div key={index} className="flex items-center gap-3 py-2">
+                                    <Skeleton className="h-4 w-4 rounded" />
+                                    <Skeleton className="h-4 flex-1 max-w-[40%]" />
+                                    <Skeleton className="h-3 w-20" />
+                                </div>
+                            ))}
+                        </div>
+                    ) : favoritePages.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <Star className="h-5 w-5 text-muted-foreground/40 mb-2" />
                             <p className="text-sm text-muted-foreground">
-                                {t("home.coming-soon-desc") || "This feature is coming soon, stay tuned!"}
+                                {t("home.no-favorites") || "No favorite pages yet"}
                             </p>
-                        </CardContent>
-                    </Card>
+                            <p className="text-xs text-muted-foreground/70 mt-1">
+                                {t("home.no-favorites-hint") || "Star pages to add them here"}
+                            </p>
+                        </div>
+                    ) : (
+                        <ul className="flex flex-col divide-y divide-border/60">
+                            {favoritePages.map((data: any) => (
+                                <li
+                                    key={data.id}
+                                    className="flex items-center gap-3 py-2 px-2 -mx-2 rounded-md cursor-pointer hover:bg-muted/60 transition-colors"
+                                    onClick={() => {
+                                        navigator.go({
+                                            to: `/space-detail/${data.spaceId}/page/${data.id}`
+                                        })
+                                    }}
+                                >
+                                    <span className="flex h-5 w-5 items-center justify-center text-base shrink-0">
+                                        {data.icon?.icon || <Box className="h-4 w-4 text-muted-foreground" />}
+                                    </span>
+                                    <span className="flex-1 truncate text-sm">{data.title}</span>
+                                    {data.updateTime && (
+                                        <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                                            <Clock className="h-3 w-3" />
+                                            {(() => {
+                                                try {
+                                                    return formatDistanceToNow(parseISO(data.updateTime), { addSuffix: true });
+                                                } catch {
+                                                    return format(parseISO(data.updateTime), 'MM/dd/yyyy');
+                                                }
+                                            })()}
+                                        </span>
+                                    )}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                 </div>
 
                 {/* Learning Section */}

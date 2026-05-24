@@ -211,6 +211,12 @@ export const EditorRender = forwardRef<
               <Menu key={`render-bubble-${idx}-${j}`} editor={editor} />
             ));
           })}
+          {/* Floating UI components (always mounted, independent of bubble menu) */}
+          {editor && extensionWrappers?.map((wrapper, idx) => {
+            if (!wrapper.floatingUI) return null;
+            const FloatingComp = wrapper.floatingUI;
+            return <FloatingComp key={`render-floating-${idx}`} editor={editor} />;
+          })}
           {/* ToC - fixed position */}
           {toc && contentReady && (
             <>

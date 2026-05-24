@@ -25,11 +25,10 @@
 
 ## 更新摘要
 **变更内容**
-- 引入中央化令牌管理实用程序，提供OAuth2访问令牌和刷新令牌的安全存储与检索功能
-- 新增令牌获取、保存、清除和Bearer授权头生成等核心功能
-- 集成令牌刷新拦截器，实现自动令牌刷新机制
-- 扩展AuthManager事件驱动架构，支持令牌刷新和过期处理
-- 增强桌面应用与Web应用的令牌管理一致性
+- Login和SignUp组件进行了重大视觉重设计，采用Notion风格美学设计
+- 新增SVG装饰背景系统，包含点阵网格、径向渐变、装饰圆形元素、同心圆环等视觉元素
+- 组件包含复杂的视觉层次和动画效果，提升用户体验
+- Welcome组件也采用了类似的视觉设计模式
 
 ## 目录
 1. [简介](#简介)
@@ -44,13 +43,16 @@
 10. [设备绑定功能](#设备绑定功能)
 11. [事件驱动架构](#事件驱动架构)
 12. [本地存储机制](#本地存储机制)
-13. [依赖关系分析](#依赖关系分析)
-14. [性能考量](#性能考量)
-15. [故障排除指南](#故障排除指南)
-16. [结论](#结论)
+13. [视觉设计增强](#视觉设计增强)
+14. [依赖关系分析](#依赖关系分析)
+15. [性能考量](#性能考量)
+16. [故障排除指南](#故障排除指南)
+17. [结论](#结论)
 
 ## 简介
 本文档面向知识库管理系统的认证API，重点介绍基于electron-adapter的AuthManager认证系统以及新增的中央化令牌管理实用程序。该系统支持匿名用户登录、设备绑定、事件驱动架构、本地存储以及OAuth2令牌管理等特性，为桌面应用和Web应用提供完整的认证解决方案。
+
+**更新** Login和SignUp组件经过重大视觉重设计，采用Notion风格的美学设计，包含复杂的SVG装饰背景系统和动画效果。
 
 内容涵盖HTTP方法、URL路径、请求参数、响应格式、权限要求、参数校验与错误处理机制、调用示例、安全考虑与最佳实践、错误码说明与故障排除。
 
@@ -64,6 +66,7 @@
 - **令牌管理实用程序**：中央化令牌存储与检索功能
 - **事件系统**：基于EventEmitter3的事件驱动架构
 - **类型定义**：完整的TypeScript类型系统支持
+- **视觉设计组件**：Login、SignUp、Welcome组件的Notion风格设计
 
 ```mermaid
 graph TB
@@ -80,10 +83,15 @@ G["令牌管理实用程序<br/>localStorage封装"]
 H["Bearer授权头生成<br/>Authorization头构建"]
 I["令牌刷新拦截器<br/>自动刷新机制"]
 end
+subgraph "视觉设计增强"
+J["Login组件<br/>Notion风格设计"]
+K["SignUp组件<br/>装饰背景系统"]
+L["Welcome组件<br/>渐变动画效果"]
+end
 subgraph "桌面应用集成"
-J["services.ts<br/>服务初始化"]
-K["ipc.ts<br/>IPC通信"]
-L["主进程<br/>Electron Main"]
+M["services.ts<br/>服务初始化"]
+N["ipc.ts<br/>IPC通信"]
+O["主进程<br/>Electron Main"]
 end
 A --> B
 A --> C
@@ -94,10 +102,12 @@ C --> F
 D --> G
 D --> H
 D --> I
-J --> A
-J --> D
-K --> A
-L --> J
+J --> K
+K --> L
+M --> A
+M --> D
+N --> A
+O --> M
 ```
 
 **图表来源**
@@ -106,6 +116,9 @@ L --> J
 - [packages/electron-adapter/src/http/client.ts:11-13](file://packages/electron-adapter/src/http/client.ts#L11-L13)
 - [packages/electron-adapter/src/database/auth-repository.ts:4-5](file://packages/electron-adapter/src/database/auth-repository.ts#L4-L5)
 - [packages/core/src/utils/auth.ts:1-49](file://packages/core/src/utils/auth.ts#L1-L49)
+- [packages/core/src/components/Login/index.tsx:92-187](file://packages/core/src/components/Login/index.tsx#L92-L187)
+- [packages/core/src/components/SignUp/index.tsx:63-159](file://packages/core/src/components/SignUp/index.tsx#L63-L159)
+- [packages/core/src/components/Welcome/index.tsx:123-242](file://packages/core/src/components/Welcome/index.tsx#L123-L242)
 - [apps/desktop/src/main/services.ts:71-72](file://apps/desktop/src/main/services.ts#L71-L72)
 - [apps/desktop/src/main/ipc.ts:2-2](file://apps/desktop/src/main/ipc.ts#L2-L2)
 
@@ -475,6 +488,58 @@ AuthRepository使用SQLite数据库存储三类核心信息：
 **章节来源**
 - [packages/electron-adapter/src/database/auth-repository.ts:10-187](file://packages/electron-adapter/src/database/auth-repository.ts#L10-L187)
 
+## 视觉设计增强
+
+### Notion风格美学设计
+Login和SignUp组件经过重大视觉重设计，采用Notion风格的美学设计：
+
+#### Login组件视觉增强
+- **左侧品牌面板**：隐藏显示，采用渐变背景（从浅色到深色）
+- **SVG装饰背景**：包含点阵网格、径向渐变、装饰圆形元素、同心圆环
+- **动画效果**：淡入、滑入等CSS动画
+- **响应式设计**：支持不同屏幕尺寸的适配
+
+#### SignUp组件视觉增强
+- **装饰背景系统**：与Login组件相同的SVG装饰元素
+- **渐变动画**：使用SparklesText组件的闪烁效果
+- **特征展示**：功能列表的勾选标记和延迟动画
+- **模拟UI展示**：Mock UI illustration展示应用界面
+
+#### Welcome组件视觉增强
+- **渐变标题**：使用渐变色的标题文本
+- **进度指示器**：动态进度条显示引导步骤
+- **卡片布局**：功能特性的网格布局
+- **完成状态**：绿色渐变的完成图标
+
+### SVG装饰元素详解
+两个组件都包含相似的SVG装饰元素：
+
+#### 点阵网格系统
+- **模式定义**：使用pattern元素创建32x32像素的点阵网格
+- **透明度控制**：使用fill-foreground/20控制点的透明度
+- **遮罩效果**：使用mask元素淡化中心内容区域
+
+#### 径向渐变装饰
+- **中心淡化**：使用radialGradient实现从中心向外的淡化效果
+- **大圆球装饰**：使用模糊圆形元素增加视觉层次
+- **暗色版本**：在深色主题下使用不同的透明度
+
+#### 同心圆环系统
+- **多层圆环**：使用多个SVG圆创建同心圆效果
+- **细线描边**：使用stroke-foreground和细线宽创建微妙效果
+- **位置分布**：分布在页面的不同角落
+
+#### 动画效果系统
+- **淡入动画**：animate-fade-in-up和animate-fade-in
+- **滑入动画**：animate-slide-in-left
+- **延迟执行**：使用animation-delay实现序列动画
+- **闪烁效果**：SparklesText组件的动态闪烁
+
+**章节来源**
+- [packages/core/src/components/Login/index.tsx:92-187](file://packages/core/src/components/Login/index.tsx#L92-L187)
+- [packages/core/src/components/SignUp/index.tsx:63-159](file://packages/core/src/components/SignUp/index.tsx#L63-L159)
+- [packages/core/src/components/Welcome/index.tsx:123-242](file://packages/core/src/components/Welcome/index.tsx#L123-L242)
+
 ## 依赖关系分析
 
 ### 桌面应用集成
@@ -529,6 +594,12 @@ electron-adapter提供完整的TypeScript类型定义：
 - **资源释放**：数据库连接和文件句柄的正确释放
 - **内存监控**：定期检查内存使用情况
 
+### 视觉性能优化
+- **SVG渲染**：使用硬件加速的SVG元素
+- **动画优化**：使用transform和opacity属性优化动画性能
+- **懒加载**：渐进式加载装饰元素
+- **响应式设计**：针对不同设备优化渲染性能
+
 ## 故障排除指南
 
 ### 常见问题诊断
@@ -558,6 +629,12 @@ electron-adapter提供完整的TypeScript类型定义：
 - **令牌格式**：检查令牌格式是否正确
 - **存储键名**：确认使用正确的存储键名
 
+#### 视觉设计问题
+- **SVG渲染**：检查SVG元素的兼容性和渲染性能
+- **动画效果**：确认CSS动画在目标浏览器中的支持
+- **响应式布局**：验证不同屏幕尺寸下的显示效果
+- **主题切换**：测试明暗主题切换时的视觉效果
+
 **章节来源**
 - [packages/electron-adapter/src/auth/auth-manager.ts:61-64](file://packages/electron-adapter/src/auth/auth-manager.ts#L61-L64)
 - [packages/electron-adapter/src/auth/auth-manager.ts:84-87](file://packages/electron-adapter/src/auth/auth-manager.ts#L84-L87)
@@ -567,6 +644,8 @@ electron-adapter提供完整的TypeScript类型定义：
 ## 结论
 electron-adapter的AuthManager为知识库管理系统提供了现代化的认证解决方案，新增的中央化令牌管理实用程序进一步增强了系统的安全性和易用性。该系统通过事件驱动架构、本地存储机制、设备绑定功能以及智能令牌管理，为桌面应用和Web应用提供了完整的认证能力。
 
+**更新** Login和SignUp组件的重大视觉重设计引入了Notion风格的美学设计，包含复杂的SVG装饰背景系统、渐变效果、动画元素和响应式布局，显著提升了用户体验和界面美观度。
+
 主要优势包括：
 - **事件驱动**：灵活的组件间通信机制
 - **本地存储**：高性能的SQLite数据库支持
@@ -575,6 +654,9 @@ electron-adapter的AuthManager为知识库管理系统提供了现代化的认�
 - **令牌管理**：中央化的OAuth2令牌存储与检索
 - **自动刷新**：智能的令牌刷新机制
 - **类型安全**：完整的TypeScript类型定义
+- **视觉设计**：Notion风格的美学设计和动画效果
+- **响应式布局**：适配不同屏幕尺寸的界面设计
+- **性能优化**：SVG渲染和动画性能优化
 
 建议在生产环境中：
 - 严格遵循令牌生命周期管理
@@ -585,3 +667,6 @@ electron-adapter的AuthManager为知识库管理系统提供了现代化的认�
 - 提供完善的用户反馈和错误提示
 - 使用localStorage的安全存储策略
 - 实现令牌过期的优雅降级处理
+- 优化SVG和动画的渲染性能
+- 测试不同浏览器和设备的兼容性
+- 监控视觉设计的加载时间和渲染性能

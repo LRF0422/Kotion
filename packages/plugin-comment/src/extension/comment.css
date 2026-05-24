@@ -2,3 +2,38 @@
     background-color: rgb(255 212 0 / 0.28) !important;
     border-bottom-color: rgb(255 212 0 / 0.6) !important;
 }
+
+.comment-highlight-pulse {
+    animation: comment-pulse 1.2s ease-out;
+}
+
+@keyframes comment-pulse {
+    0% {
+        background-color: rgb(255 212 0 / 0.5);
+    }
+
+    50% {
+        background-color: rgb(255 212 0 / 0.35);
+    }
+
+    100% {
+        background-color: rgb(255 212 0 / 0.14);
+    }
+}
+
+/* Margin comment card enter animation */
+.comment-card-enter {
+    animation: comment-card-slide-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes comment-card-slide-in {
+    from {
+        opacity: 0;
+        transform: translateX(8px) scale(0.96);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}

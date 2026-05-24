@@ -36,23 +36,23 @@ export const CommentInput: React.FC<CommentInputProps> = ({
     };
 
     return (
-        <div className="p-3 border-t border-border/50 bg-muted/20">
+        <div className="p-2.5 border-t border-border/50 bg-muted/20">
             <div className="relative">
                 <Textarea
                     placeholder={placeholder}
                     value={value}
                     onChange={(e) => setValue(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    className="min-h-[60px] resize-none text-[13px] border-border/60 bg-background/80 backdrop-blur-sm focus:bg-background transition-colors placeholder:text-muted-foreground/50"
+                    className="min-h-[48px] resize-none text-[12px] border-border/60 bg-background/80 backdrop-blur-sm focus:bg-background transition-colors placeholder:text-muted-foreground/50"
                     spellCheck={false}
                     autoFocus={autoFocus}
                 />
             </div>
-            <div className="flex items-center justify-between mt-2.5">
+            <div className="flex items-center justify-between mt-2">
                 <span className="text-[11px] text-muted-foreground/50 font-medium">
                     Enter to send, Esc to cancel
                 </span>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5">
                     {onCancel && (
                         <Button
                             variant="ghost"

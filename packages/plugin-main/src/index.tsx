@@ -84,6 +84,9 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "all": "查看全部",
           "recent-pages": "最近的页面",
           "collaboration": "协作空间",
+          "favorites": "收藏页面",
+          "no-favorites": "暂无收藏页面",
+          "no-favorites-hint": "给页面加星标即可在此快速访问",
           "learning": "学习使用 Knowledge",
           "coming-soon-desc": "功能即将上线，敬请期待！",
           "greeting": {
@@ -277,6 +280,9 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "all": "View All",
           "recent-pages": "Recent Pages",
           "collaboration": "Collaboration Spaces",
+          "favorites": "Favorite Pages",
+          "no-favorites": "No favorite pages yet",
+          "no-favorites-hint": "Star pages to add them here",
           "learning": "Learn Knowledge",
           "coming-soon-desc": "This feature is coming soon, stay tuned!",
           "greeting": {

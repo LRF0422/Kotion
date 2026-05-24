@@ -75,11 +75,11 @@ export const CommentItem: React.FC<CommentItemProps> = ({
 
     return (
         <div className={`group ${isReply ? 'ml-6 relative before:absolute before:left-[-14px] before:top-0 before:bottom-0 before:w-px before:bg-border/50' : ''}`}>
-            <div className={`flex gap-2.5 py-2 ${isReply ? 'relative' : ''}`}>
+            <div className={`flex gap-2 py-1.5 ${isReply ? 'relative' : ''}`}>
                 {/* Avatar with consistent user color */}
-                <Avatar className={`h-7 w-7 flex-shrink-0 ring-2 ring-background shadow-sm`}>
+                <Avatar className={`h-6 w-6 flex-shrink-0 ring-1 ring-background shadow-sm`}>
                     <AvatarImage src={comment.user.avatar} alt={comment.user.name} />
-                    <AvatarFallback className={`text-[10px] font-semibold ${avatarColorClass}`}>
+                    <AvatarFallback className={`text-[9px] font-semibold ${avatarColorClass}`}>
                         {comment.user.name.charAt(0).toUpperCase()}
                     </AvatarFallback>
                 </Avatar>
@@ -97,13 +97,13 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                     </div>
 
                     {/* Comment content */}
-                    <p className="text-[13px] leading-[1.5] text-foreground/85 whitespace-pre-wrap break-words mt-0.5">
+                    <p className="text-[12px] leading-[1.4] text-foreground/85 whitespace-pre-wrap break-words">
                         {comment.content}
                     </p>
 
                     {/* Action buttons - show on hover */}
                     {!isReplying && !readOnly && (
-                        <div className="flex items-center gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                        <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                             <Button
                                 variant="ghost"
                                 size="sm"
@@ -128,7 +128,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
 
             {/* Inline reply input */}
             {isReplying && !readOnly && (
-                <div className="ml-9 mb-2 animate-in slide-in-from-top-1 duration-200">
+                <div className="ml-8 mb-1.5 animate-in slide-in-from-top-1 duration-200">
                     <div className="relative">
                         <Textarea
                             spellCheck={false}
@@ -136,11 +136,11 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                             value={replyText}
                             onChange={(e) => setReplyText(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            className="min-h-[60px] resize-none text-[13px] border-border/60 bg-muted/30 focus:bg-background focus:border-border transition-colors"
+                            className="min-h-[48px] resize-none text-[12px] border-border/60 bg-muted/30 focus:bg-background focus:border-border transition-colors"
                             autoFocus
                         />
                     </div>
-                    <div className="flex items-center justify-end gap-2 mt-2">
+                    <div className="flex items-center justify-end gap-1.5 mt-1.5">
                         <Button
                             variant="ghost"
                             size="sm"
@@ -163,7 +163,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
 
             {/* Divider for non-last items */}
             {!isLast && !isReplying && (
-                <div className="border-b border-border/40 ml-9" />
+                <div className="border-b border-border/40 ml-8" />
             )}
         </div>
     );
