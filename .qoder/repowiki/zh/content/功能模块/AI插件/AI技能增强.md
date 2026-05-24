@@ -10,6 +10,9 @@
 - [packages/common/src/ai/foundation/types.ts](file://packages/common/src/ai/foundation/types.ts)
 - [packages/common/src/ai/skills/types.ts](file://packages/common/src/ai/skills/types.ts)
 - [packages/common/src/ai/skills/skillsmp/types.ts](file://packages/common/src/ai/skills/skillsmp/types.ts)
+- [packages/common/src/ai/skills/built-in/columns-layout.ts](file://packages/common/src/ai/skills/built-in/columns-layout.ts)
+- [packages/common/src/ai/skills/built-in/index.ts](file://packages/common/src/ai/skills/built-in/index.ts)
+- [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts)
 - [packages/common/src/ai/providers/SkillProvider.ts](file://packages/common/src/ai/providers/SkillProvider.ts)
 - [packages/common/src/ai/use-agent-optimized.tsx](file://packages/common/src/ai/use-agent-optimized.tsx)
 - [packages/common/src/ai/skill-registry.ts](file://packages/common/src/ai/skill-registry.ts)
@@ -33,10 +36,9 @@
 
 ## 更新摘要
 **变更内容**
-- 从渐进式发现系统迁移到集中式目录系统架构
-- 新增Knowledge Provider作为主要AI模型提供者
-- 移除web工具类别和webSearch工具
-- 更新工具分类描述，移除web分类说明
+- 新增columns-layout技能，专门用于多列布局创建和管理
+- 新增多列布局工具集，包括嵌套分栏支持
+- 更新工具分类系统，移除web分类
 - 增强插件管理器的工具和技能解析能力
 - 优化流式状态管理和资源清理机制
 - 保持向后兼容性，继续支持原有AI提供商
@@ -51,10 +53,11 @@
 7. [AI模型提供者优化](#ai模型提供者优化)
 8. [流式状态管理改进](#流式状态管理改进)
 9. [工具分类系统更新](#工具分类系统更新)
-10. [依赖关系分析](#依赖关系分析)
-11. [性能考虑](#性能考虑)
-12. [故障排除指南](#故障排除指南)
-13. [结论](#结论)
+10. [多列布局技能详解](#多列布局技能详解)
+11. [依赖关系分析](#依赖关系分析)
+12. [性能考虑](#性能考虑)
+13. [故障排除指南](#故障排除指南)
+14. [结论](#结论)
 
 ## 简介
 
@@ -423,7 +426,7 @@ Message --> ExecutionStepsDisplay : "状态反馈"
 
 #### AI图像生成
 
-AI图像生成功能提供了基于文本描述生成图像的能力：
+AI图像生动生成了基于文本描述生成图像的能力：
 
 ```mermaid
 flowchart LR
@@ -697,7 +700,7 @@ ToolCategory --> CategoryDescriptions : "描述"
 ```
 
 **图表来源**
-- [packages/common/src/ai/discovery/tool-metadata.ts:29-40](file://packages/common/src/ai/discovery/tool-metadata.ts#L29-L40)
+- [packages/common/src/ai/discovery/tool-metadata.ts:36-46](file://packages/common/src/ai/discovery/tool-metadata.ts#L36-L46)
 
 ### 工具发现工具更新
 
@@ -744,9 +747,108 @@ ToolProvider --> CategoryInfo : "返回分类信息"
 - [packages/common/src/ai/providers/ToolProvider.ts:225-257](file://packages/common/src/ai/providers/ToolProvider.ts#L225-L257)
 
 **章节来源**
-- [packages/common/src/ai/discovery/tool-metadata.ts:29-40](file://packages/common/src/ai/discovery/tool-metadata.ts#L29-L40)
+- [packages/common/src/ai/discovery/tool-metadata.ts:36-46](file://packages/common/src/ai/discovery/tool-metadata.ts#L36-L46)
 - [packages/common/src/ai/discovery/tool-discovery-tools.ts:53-87](file://packages/common/src/ai/discovery/tool-discovery-tools.ts#L53-L87)
 - [packages/common/src/ai/providers/ToolProvider.ts:225-257](file://packages/common/src/ai/providers/ToolProvider.ts#L225-L257)
+
+## 多列布局技能详解
+
+### 新增columns-layout技能
+
+**更新** 系统新增了专门的多列布局技能，用于创建和管理复杂的多列布局：
+
+```mermaid
+classDiagram
+class ColumnsLayoutSkill {
++name "columns-layout"
++description "分栏布局技能 - 用于创建、管理和操作多列布局，包括嵌套分栏、布局切换和列内容编辑"
++requiredTools [
+"insertColumns",
+"getColumnsInfo",
+"updateColumnContent",
+"askUserChoice"
+]
++optionalTools [
+"setColumnsLayout",
+"addColumnToLayout",
+"deleteColumn",
+"deleteColumnsLayout",
+"insertNestedColumns",
+"getDocumentStructure",
+"readChunk",
+"searchInDocument"
+]
++systemPromptFragment "## Columns Layout Skill Active\\n\\nYou are now in columns layout mode. Help the user create, modify, and manage multi-column layouts in the document."
++tags ["columns", "layout", "multi-column", "分栏", "排版", "structure"]
++source "builtin"
+}
+class ColumnsOperations {
++insertColumns : "创建2-6列布局，支持布局类型"
++getColumnsInfo : "获取所有分栏布局信息"
++updateColumnContent : "更新指定列内容"
++setColumnsLayout : "切换布局类型等宽/左宽/右宽/中间宽"
++addColumnToLayout : "添加新列"
++deleteColumn : "删除指定列"
++deleteColumnsLayout : "删除整个布局"
++insertNestedColumns : "创建嵌套分栏"
+}
+ColumnsLayoutSkill --> ColumnsOperations : "包含操作"
+```
+
+**图表来源**
+- [packages/common/src/ai/skills/built-in/columns-layout.ts:11-77](file://packages/common/src/ai/skills/built-in/columns-layout.ts#L11-L77)
+
+### 多列布局工具集
+
+**更新** 新增了完整的多列布局工具集，支持嵌套分栏和复杂布局操作：
+
+```mermaid
+flowchart TD
+ColumnsTools[多列布局工具集] --> InsertColumns[insertColumns<br/>创建分栏布局]
+ColumnsTools --> GetColumnsInfo[getColumnsInfo<br/>获取分栏信息]
+ColumnsTools --> UpdateColumnContent[updateColumnContent<br/>更新列内容]
+ColumnsTools --> SetColumnsLayout[setColumnsLayout<br/>设置布局类型]
+ColumnsTools --> AddColumnToLayout[addColumnToLayout<br/>添加列]
+ColumnsTools --> DeleteColumn[deleteColumn<br/>删除列]
+ColumnsTools --> DeleteColumnsLayout[deleteColumnsLayout<br/>删除布局]
+ColumnsTools --> InsertNestedColumns[insertNestedColumns<br/>嵌套分栏]
+InsertColumns --> LayoutTypes[布局类型:<br/>none(等宽)<br/>left(左宽)<br/>right(右宽)<br/>center(中间宽)]
+GetColumnsInfo --> NestedSupport[嵌套支持:<br/>支持多层嵌套<br/>深度追踪<br/>路径记录]
+UpdateColumnContent --> ContentModes[内容模式:<br/>replace(替换)<br/>append(追加)<br/>prepend(前置)]
+InsertNestedColumns --> NestedDepth[嵌套深度:<br/>最多1级嵌套<br/>复杂布局支持]
+```
+
+**图表来源**
+- [packages/core/src/ai/tools/columns-tools.ts:91-615](file://packages/core/src/ai/tools/columns-tools.ts#L91-L615)
+
+### 嵌套分栏支持
+
+**更新** 新增多列布局的嵌套支持，允许在列内创建更复杂的布局结构：
+
+```mermaid
+sequenceDiagram
+participant User as 用户
+participant Agent as AI代理
+participant ColumnsTools as 多列工具
+participant Editor as 编辑器
+User->>Agent : 请求嵌套分栏
+Agent->>ColumnsTools : insertNestedColumns
+ColumnsTools->>Editor : 计算目标列位置
+Editor->>Editor : 创建嵌套columns节点
+Editor->>Editor : 插入嵌套布局
+Editor->>Editor : 更新索引和路径
+Editor-->>ColumnsTools : 返回嵌套信息
+ColumnsTools-->>Agent : 返回操作结果
+Agent-->>User : 嵌套分栏创建完成
+```
+
+**图表来源**
+- [packages/core/src/ai/tools/columns-tools.ts:520-614](file://packages/core/src/ai/tools/columns-tools.ts#L520-L614)
+
+**章节来源**
+- [packages/common/src/ai/skills/built-in/columns-layout.ts:11-77](file://packages/common/src/ai/skills/built-in/columns-layout.ts#L11-L77)
+- [packages/common/src/ai/skills/built-in/index.ts:10-33](file://packages/common/src/ai/skills/built-in/index.ts#L10-L33)
+- [packages/core/src/ai/tools/columns-tools.ts:91-615](file://packages/core/src/ai/tools/columns-tools.ts#L91-L615)
 
 ## 依赖关系分析
 
@@ -852,6 +954,15 @@ Workspace --> Turbo
 3. **增量更新**：插件变更时仅重新解析受影响的部分
 4. **异步加载**：外部插件通过异步方式加载，不影响主应用性能
 
+### 多列布局性能优化
+
+**更新** 新增多列布局的性能优化策略：
+
+1. **嵌套深度限制**：限制嵌套层级为1级，避免深度嵌套影响性能
+2. **索引缓存**：缓存分栏索引和路径信息，减少重复计算
+3. **批量操作**：支持批量更新列内容，减少编辑器重绘次数
+4. **虚拟滚动**：对于大量内容的列，使用虚拟滚动优化渲染性能
+
 ### 性能监控指标
 
 系统监控以下关键性能指标：
@@ -862,6 +973,7 @@ Workspace --> Turbo
 - 并发请求数量
 - 错误率统计
 - 流式操作的资源使用情况
+- 多列布局渲染性能
 
 ## 故障排除指南
 
@@ -942,12 +1054,33 @@ Workspace --> Turbo
    - 检查exploreCategory是否返回web分类
    - 验证searchAvailableTools是否包含web工具
 
+#### 多列布局问题
+
+**更新** 当遇到多列布局问题时：
+
+1. **检查布局工具**
+   - 验证columns-layout技能是否正确激活
+   - 确认相关工具是否已加载
+   - 检查工具执行权限
+
+2. **查看嵌套支持**
+   - 分析嵌套分栏创建过程
+   - 检查嵌套深度限制
+   - 验证索引和路径信息
+
+3. **性能问题排查**
+   - 监控多列布局渲染性能
+   - 检查内存使用情况
+   - 分析大量内容的处理效率
+
 **章节来源**
 - [packages/common/src/ai/foundation/types.ts:214-236](file://packages/common/src/ai/foundation/types.ts#L214-L236)
 - [packages/common/src/ai/providers/SkillProvider.ts:58-101](file://packages/common/src/ai/providers/SkillProvider.ts#L58-L101)
 - [packages/common/src/ai/use-agent-optimized.tsx:190-240](file://packages/common/src/ai/use-agent-optimized.tsx#L190-L240)
-- [packages/common/src/ai/discovery/tool-metadata.ts:29-40](file://packages/common/src/ai/discovery/tool-metadata.ts#L29-L40)
+- [packages/common/src/ai/discovery/tool-metadata.ts:36-46](file://packages/common/src/ai/discovery/tool-metadata.ts#L36-L46)
 - [packages/common/src/ai/discovery/tool-discovery-tools.ts:53-87](file://packages/common/src/ai/discovery/tool-discovery-tools.ts#L53-L87)
+- [packages/common/src/ai/skills/built-in/columns-layout.ts:11-77](file://packages/common/src/ai/skills/built-in/columns-layout.ts#L11-L77)
+- [packages/core/src/ai/tools/columns-tools.ts:91-615](file://packages/core/src/ai/tools/columns-tools.ts#L91-L615)
 
 ## 结论
 
@@ -962,7 +1095,7 @@ Workspace --> Turbo
 7. **向后兼容性**：保持对原有AI提供商的支持
 8. **易于集成**：标准化的插件接口便于第三方开发者集成
 
-**更新** 系统已完成从渐进式发现系统到集中式目录系统的架构迁移，新增了Knowledge Provider作为主要AI模型提供者，完全移除了web工具类别和webSearch工具，反映了架构决策将Web搜索功能从核心AI系统中解耦。增强的插件管理器提供了更强大的工具和技能解析能力，改进的流式状态管理和资源清理机制确保了更好的性能和稳定性。这些优化显著提升了系统的稳定性和性能。
+**更新** 系统已完成从渐进式发现系统到集中式目录系统的架构迁移，新增了Knowledge Provider作为主要AI模型提供者，完全移除了web工具类别和webSearch工具，反映了架构决策将Web搜索功能从核心AI系统中解耦。增强的插件管理器提供了更强大的工具和技能解析能力，改进的流式状态管理和资源清理机制确保了更好的性能和稳定性。新增的columns-layout技能为多列布局创建和管理提供了专业化的AI支持，包括嵌套分栏、布局切换和内容管理等高级功能。
 
 未来的发展方向包括：
 - 增强离线模式支持
@@ -973,5 +1106,7 @@ Workspace --> Turbo
 - 优化插件加载性能
 - 进一步改进流式状态管理
 - 重新评估Web搜索功能的替代方案
+- 扩展多列布局的高级功能
+- 优化嵌套分栏的性能表现
 
 该系统为知识管理平台提供了强大的AI能力，能够显著提升用户的知识创作和协作效率。

@@ -62,6 +62,39 @@ export function SignUpForm() {
 
             {/* Left Side - Brand Panel (Notion-style) */}
             <div className="hidden lg:flex relative overflow-hidden bg-gradient-to-b from-slate-50 to-slate-100/80 dark:from-slate-950 dark:to-slate-900/80">
+                {/* Decorative background — dot grid + soft radial accents */}
+                <svg className="absolute inset-0 w-full h-full opacity-[0.4] dark:opacity-[0.2]" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <defs>
+                        <pattern id="signup-dot-grid" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
+                            <circle cx="1" cy="1" r="1" className="fill-foreground/20" />
+                        </pattern>
+                        <radialGradient id="signup-fade-center" cx="50%" cy="50%" r="50%">
+                            <stop offset="0%" stopColor="white" stopOpacity="0" />
+                            <stop offset="70%" stopColor="white" stopOpacity="1" />
+                        </radialGradient>
+                    </defs>
+                    {/* Dot grid */}
+                    <rect width="100%" height="100%" fill="url(#signup-dot-grid)" mask="url(#signup-grid-mask)" />
+                    {/* Mask to fade grid towards center content area */}
+                    <mask id="signup-grid-mask">
+                        <rect width="100%" height="100%" fill="white" />
+                        <rect width="100%" height="100%" fill="url(#signup-fade-center)" />
+                    </mask>
+                </svg>
+                {/* Soft gradient orbs */}
+                <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full bg-primary/[0.03] dark:bg-primary/[0.02] blur-3xl" />
+                <div className="absolute bottom-[-15%] left-[-5%] w-[400px] h-[400px] rounded-full bg-primary/[0.04] dark:bg-primary/[0.02] blur-3xl" />
+                {/* Subtle concentric rings */}
+                <svg className="absolute top-[5%] right-[5%] w-[280px] h-[280px] opacity-[0.06] dark:opacity-[0.04]" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <circle cx="100" cy="100" r="40" className="stroke-foreground" strokeWidth="0.5" fill="none" />
+                    <circle cx="100" cy="100" r="65" className="stroke-foreground" strokeWidth="0.5" fill="none" />
+                    <circle cx="100" cy="100" r="90" className="stroke-foreground" strokeWidth="0.5" fill="none" />
+                </svg>
+                <svg className="absolute bottom-[10%] right-[15%] w-[200px] h-[200px] opacity-[0.05] dark:opacity-[0.03]" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <circle cx="100" cy="100" r="50" className="stroke-foreground" strokeWidth="0.5" fill="none" />
+                    <circle cx="100" cy="100" r="80" className="stroke-foreground" strokeWidth="0.5" fill="none" />
+                </svg>
+
                 <div className="relative z-10 flex flex-col justify-between w-full h-full p-12 xl:p-16 animate-fade-in-up">
                     {/* Center — Hero */}
                     <div className="flex-1 flex flex-col justify-center max-w-lg">
@@ -241,7 +274,7 @@ export function SignUpForm() {
                                 className="w-full h-10 border-border hover:bg-muted transition-colors"
                             >
                                 <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178A1.17 1.17 0 0 1 4.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178 1.17 1.17 0 0 1-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.653 3.75 4.84 7.093 5.088a9.536 9.536 0 0 0 2.354-.164l1.578.924a.271.271 0 0 0 .14.047c.133 0 .241-.112.241-.248 0-.06-.023-.12-.038-.178l-.326-1.233a.492.492 0 0 1 .177-.553C23.022 18.342 24 16.65 24 14.771c0-3.328-3.238-6.057-7.062-5.913zm-2.8 2.987c.534 0 .966.44.966.982a.974.974 0 0 1-.966.983.974.974 0 0 1-.966-.983c0-.542.433-.982.966-.982zm4.843 0c.534 0 .966.44.966.982a.974.974 0 0 1-.966.983.974.974 0 0 1-.966-.983c0-.542.433-.982.966-.982z"/>
+                                    <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178A1.17 1.17 0 0 1 4.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178 1.17 1.17 0 0 1-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.653 3.75 4.84 7.093 5.088a9.536 9.536 0 0 0 2.354-.164l1.578.924a.271.271 0 0 0 .14.047c.133 0 .241-.112.241-.248 0-.06-.023-.12-.038-.178l-.326-1.233a.492.492 0 0 1 .177-.553C23.022 18.342 24 16.65 24 14.771c0-3.328-3.238-6.057-7.062-5.913zm-2.8 2.987c.534 0 .966.44.966.982a.974.974 0 0 1-.966.983.974.974 0 0 1-.966-.983c0-.542.433-.982.966-.982zm4.843 0c.534 0 .966.44.966.982a.974.974 0 0 1-.966.983.974.974 0 0 1-.966-.983c0-.542.433-.982.966-.982z" />
                                 </svg>
                                 使用微信注册
                             </Button>

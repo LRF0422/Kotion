@@ -13,15 +13,17 @@
 - [packages/plugin-ai/package.json](file://packages/plugin-ai/package.json)
 - [packages/plugin-ai/src/index.tsx](file://packages/plugin-ai/src/index.tsx)
 - [packages/plugin-ai/src/ai/ai.ts](file://packages/plugin-ai/src/ai/ai.ts)
+- [packages/plugin-ai/src/ai/AISettings.tsx](file://packages/plugin-ai/src/ai/AISettings.tsx)
 - [packages/ui/src/index.ts](file://packages/ui/src/index.ts)
 - [packages/common/src/index.ts](file://packages/common/src/index.ts)
 - [packages/room-server/package.json](file://packages/room-server/package.json)
 - [packages/electron-adapter/package.json](file://packages/electron-adapter/package.json)
-- [packages/core/src/ai/model-provider/knowledge-provider.ts](file://packages/core/src/ai/model-provider/knowledge-provider.ts)
-- [packages/core/src/ai/ai-utils.ts](file://packages/core/src/ai/ai-utils.ts)
-- [packages/core/src/ai/foundation/ai-foundation.ts](file://packages/core/src/ai/foundation/ai-foundation.ts)
-- [packages/core/src/ai/foundation/types.ts](file://packages/core/src/ai/foundation/types.ts)
-- [packages/core/src/ai/types.ts](file://packages/core/src/ai/types.ts)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts](file://packages/common/src/ai/model-provider/knowledge-provider.ts)
+- [packages/common/src/ai/ai-utils.ts](file://packages/common/src/ai/ai-utils.ts)
+- [packages/common/src/ai/foundation/ai-foundation.ts](file://packages/common/src/ai/foundation/ai-foundation.ts)
+- [packages/common/src/ai/foundation/types.ts](file://packages/common/src/ai/foundation/types.ts)
+- [packages/common/src/ai/types.ts](file://packages/common/src/ai/types.ts)
+- [packages/common/src/ai/skills/skill-registry.ts](file://packages/common/src/ai/skills/skill-registry.ts)
 </cite>
 
 ## 更新摘要
@@ -31,6 +33,8 @@
 - 新增指数退避重试逻辑和流式协议支持的技术细节
 - 更新AI基础架构的组件关系图，体现新的知识提供者架构
 - 新增AI工具转换和OpenAI兼容性的技术说明
+- 新增技能注册表系统，支持技能的持久化管理
+- 新增AI聊天客户端和SSE解析器的架构说明
 
 ## 目录
 1. [项目简介](#项目简介)
@@ -39,10 +43,12 @@
 4. [架构概览](#架构概览)
 5. [详细组件分析](#详细组件分析)
 6. [AI知识提供者系统](#ai知识提供者系统)
-7. [依赖关系分析](#依赖关系分析)
-8. [性能考虑](#性能考虑)
-9. [故障排除指南](#故障排除指南)
-10. [结论](#结论)
+7. [技能注册表系统](#技能注册表系统)
+8. [AI聊天客户端架构](#ai聊天客户端架构)
+9. [依赖关系分析](#依赖关系分析)
+10. [性能考虑](#性能考虑)
+11. [故障排除指南](#故障排除指南)
+12. [结论](#结论)
 
 ## 项目简介
 
@@ -59,6 +65,8 @@ AI基础架构系统是一个强大的协作知识管理平台，集成了丰富
 - **文件管理**：内置文档组织系统
 - **块引用**：跨文档块链接和嵌入
 - **国际化**：完整的多语言支持
+- **技能系统**：可持久化的AI技能管理
+- **聊天客户端**：支持SSE流式传输的AI通信
 
 ### 技术栈
 
@@ -88,6 +96,8 @@ subgraph "AI知识提供者层"
 KnowledgeProvider[AI知识提供者]
 AIUtils[AI工具函数]
 AIFoundation[AI基础架构]
+SkillRegistry[技能注册表]
+ChatClient[聊天客户端]
 end
 subgraph "插件包层"
 PluginAI[plugin-ai AI能力]
@@ -237,7 +247,8 @@ subgraph "AI集成层 (AI Integration Layer)"
 AIKnowledgeProvider[AI知识提供者]
 AIUtils[AI工具函数]
 AIFoundation[AI基础架构]
-AIIntegration[AI集成服务]
+SkillRegistry[技能注册表]
+ChatClient[聊天客户端]
 FileManagement[文件管理系统]
 DatabaseIntegration[数据库集成]
 Collaboration[协作服务]
@@ -257,10 +268,11 @@ CoreLogic --> MenuManager
 PluginManager --> AIKnowledgeProvider
 PluginManager --> AIUtils
 PluginManager --> AIFoundation
-AIKnowledgeProvider --> AIIntegration
-AIUtils --> AIIntegration
-AIFoundation --> AIIntegration
-AIIntegration --> ExternalAPIs
+AIKnowledgeProvider --> ChatClient
+AIUtils --> ChatClient
+AIFoundation --> SkillRegistry
+SkillRegistry --> ChatClient
+ChatClient --> ExternalAPIs
 FileManagement --> Storage
 DatabaseIntegration --> Database
 Collaboration --> RoomServer
@@ -293,7 +305,8 @@ class AISettings {
 +imageApiEndpoint : string
 +defaultModel : string
 +maxTokens : number
-+temperature : number
++enableAutoComplete : boolean
++enableSuggestions : boolean
 }
 class AIExtension {
 +name : string
@@ -356,7 +369,7 @@ ApplyTransformation --> End
 
 **章节来源**
 - [packages/plugin-ai/src/index.tsx:1-81](file://packages/plugin-ai/src/index.tsx#L1-L81)
-- [packages/plugin-ai/package.json:1-31](file://packages/plugin-ai/package.json#L1-L31)
+- [packages/plugin-ai/package.json:1-30](file://packages/plugin-ai/package.json#L1-L30)
 
 ### 插件管理系统
 
@@ -452,7 +465,6 @@ class KnowledgeProvider {
 <<interface>>
 +createKnowledgeModel() LanguageModelV2
 +fetchWithRetry() Promise~Response~
-+convertToolsToOpenAI() any[]
 +convertPromptToMessages() any[]
 }
 class LanguageModelV2 {
@@ -477,7 +489,7 @@ AIProviderSystem --> DataStreamV2
 ```
 
 **图表来源**
-- [packages/core/src/ai/model-provider/knowledge-provider.ts:168-354](file://packages/core/src/ai/model-provider/knowledge-provider.ts#L168-L354)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:168-354](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L168-L354)
 
 ### 指数退避重试逻辑
 
@@ -499,7 +511,7 @@ Fail --> End
 ```
 
 **图表来源**
-- [packages/core/src/ai/model-provider/knowledge-provider.ts:17-53](file://packages/core/src/ai/model-provider/knowledge-provider.ts#L17-L53)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:17-53](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L17-L53)
 
 ### OpenAI兼容工具转换
 
@@ -518,7 +530,7 @@ OpenAICompat-->>V2Tools : 返回转换后的工具
 ```
 
 **图表来源**
-- [packages/core/src/ai/model-provider/knowledge-provider.ts:58-70](file://packages/core/src/ai/model-provider/knowledge-provider.ts#L58-L70)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:58-70](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L58-L70)
 
 ### 流式协议支持
 
@@ -539,7 +551,7 @@ ErrorEvent --> StreamEnd : 错误
 ```
 
 **图表来源**
-- [packages/core/src/ai/model-provider/knowledge-provider.ts:283-338](file://packages/core/src/ai/model-provider/knowledge-provider.ts#L283-L338)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:283-338](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L283-L338)
 
 ### AI基础架构集成
 
@@ -574,15 +586,229 @@ KnowledgeProvider --> ToolRegistry
 ```
 
 **图表来源**
-- [packages/core/src/ai/foundation/ai-foundation.ts:29-48](file://packages/core/src/ai/foundation/ai-foundation.ts#L29-L48)
-- [packages/core/src/ai/foundation/types.ts:239-309](file://packages/core/src/ai/foundation/types.ts#L239-L309)
+- [packages/common/src/ai/foundation/ai-foundation.ts:29-48](file://packages/common/src/ai/foundation/ai-foundation.ts#L29-L48)
+- [packages/common/src/ai/foundation/types.ts:239-309](file://packages/common/src/ai/foundation/types.ts#L239-L309)
 
 **章节来源**
-- [packages/core/src/ai/model-provider/knowledge-provider.ts:1-359](file://packages/core/src/ai/model-provider/knowledge-provider.ts#L1-L359)
-- [packages/core/src/ai/ai-utils.ts:1-63](file://packages/core/src/ai/ai-utils.ts#L1-L63)
-- [packages/core/src/ai/foundation/ai-foundation.ts:1-281](file://packages/core/src/ai/foundation/ai-foundation.ts#L1-L281)
-- [packages/core/src/ai/foundation/types.ts:1-320](file://packages/core/src/ai/foundation/types.ts#L1-L320)
-- [packages/core/src/ai/types.ts:1-156](file://packages/core/src/ai/types.ts#L1-L156)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:1-422](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L1-L422)
+- [packages/common/src/ai/ai-utils.ts:1-73](file://packages/common/src/ai/ai-utils.ts#L1-L73)
+- [packages/common/src/ai/foundation/ai-foundation.ts:1-281](file://packages/common/src/ai/foundation/ai-foundation.ts#L1-L281)
+- [packages/common/src/ai/foundation/types.ts:1-347](file://packages/common/src/ai/foundation/types.ts#L1-L347)
+- [packages/common/src/ai/types.ts:1-183](file://packages/common/src/ai/types.ts#L1-L183)
+
+## 技能注册表系统
+
+### 系统概述
+
+技能注册表系统是AI基础架构的重要组成部分，负责管理可持久化的AI技能。该系统支持多种存储方式，包括本地存储、API存储和混合存储模式。
+
+### 核心架构设计
+
+```mermaid
+classDiagram
+class SkillRegistry {
+<<class>>
++storage : SkillStorageAdapter
++installedSkills : Map
++listeners : Set
++initialized : boolean
++initialize() Promise
++subscribe() () => void
++persist() Promise
++install() Promise
++uninstall() Promise
++setEnabled() Promise
++getInstalled() InstalledSkill[]
+}
+class SkillStorageAdapter {
+<<interface>>
++load() Promise~InstalledSkill[]~
++save(skills) Promise
++clear() Promise
+}
+class LocalSkillStorage {
++storageKey : string
++load() Promise
++save(skills) Promise
++clear() Promise
+}
+class ApiSkillStorage {
++apiBase : string
++getHeaders : () => Record
++load() Promise
++save(skills) Promise
++clear() Promise
+}
+class HybridSkillStorage {
++apiStorage : ApiSkillStorage
++localStorage : LocalSkillStorage
++load() Promise
++save(skills) Promise
++clear() Promise
+}
+SkillRegistry --> SkillStorageAdapter
+LocalSkillStorage ..|> SkillStorageAdapter
+ApiSkillStorage ..|> SkillStorageAdapter
+HybridSkillStorage ..|> SkillStorageAdapter
+```
+
+**图表来源**
+- [packages/common/src/ai/skills/skill-registry.ts:160-200](file://packages/common/src/ai/skills/skill-registry.ts#L160-L200)
+
+### 存储适配器模式
+
+系统采用存储适配器模式，支持多种存储后端：
+
+```mermaid
+sequenceDiagram
+participant Client as 客户端
+participant Registry as 技能注册表
+participant Storage as 存储适配器
+Client->>Registry : 请求技能列表
+Registry->>Storage : load()
+alt API存储可用
+Storage->>Storage : 从API加载
+Storage-->>Registry : 返回技能列表
+else API存储不可用
+Storage->>Storage : 从本地存储加载
+Storage-->>Registry : 返回技能列表
+end
+Registry-->>Client : 显示技能列表
+```
+
+**图表来源**
+- [packages/common/src/ai/skills/skill-registry.ts:131-138](file://packages/common/src/ai/skills/skill-registry.ts#L131-L138)
+
+### 技能生命周期管理
+
+```mermaid
+stateDiagram-v2
+[*] --> 初始化
+初始化 --> 加载技能
+加载技能 --> 就绪
+就绪 --> 安装技能
+安装技能 --> 启用技能
+启用技能 --> 使用技能
+使用技能 --> 禁用技能
+禁用技能 --> 卸载技能
+卸载技能 --> [*]
+```
+
+**图表来源**
+- [packages/common/src/ai/skills/skill-registry.ts:174-183](file://packages/common/src/ai/skills/skill-registry.ts#L174-L183)
+
+**章节来源**
+- [packages/common/src/ai/skills/skill-registry.ts:1-420](file://packages/common/src/ai/skills/skill-registry.ts#L1-L420)
+
+## AI聊天客户端架构
+
+### 系统概述
+
+AI聊天客户端是系统与AI服务通信的核心组件，支持SSE（Server-Sent Events）流式传输协议，提供实时的AI响应处理能力。
+
+### 核心架构设计
+
+```mermaid
+classDiagram
+class ChatClient {
+<<interface>>
++streamText() Promise
++sendMessage() Promise
++stopGeneration() void
++onAnnotation() void
+}
+class KnowledgeChatClient {
++sessionId : string
++conversationId : string
++userId : number
++streamProtocol : string
++stream(options) ReadableStream
++stop() void
+}
+class SSEParser {
++parse() Iterator
++processChunk() any
++extractAnnotations() any[]
+}
+class StreamHandler {
++controller : ReadableStreamDefaultController
++buffer : string
++annotations : any[]
++handleTextDelta() void
++handleToolCall() void
++handleFinish() void
+}
+ChatClient <|-- KnowledgeChatClient
+KnowledgeChatClient --> SSEParser
+KnowledgeChatClient --> StreamHandler
+```
+
+**图表来源**
+- [packages/common/src/ai/chat-client/types.ts](file://packages/common/src/ai/chat-client/types.ts)
+
+### SSE流式传输协议
+
+系统实现了完整的SSE流式传输协议，支持多种事件类型的处理：
+
+```mermaid
+sequenceDiagram
+participant Client as 客户端
+participant Server as AI服务器
+participant Parser as SSE解析器
+participant Handler as 流处理器
+Client->>Server : 发送聊天请求
+Server->>Client : 建立SSE连接
+loop 流式响应
+Server->>Client : 文本增量
+Client->>Parser : 解析文本增量
+Parser->>Handler : 处理文本增量
+Handler->>Client : 更新UI
+Server->>Client : 工具调用
+Client->>Parser : 解析工具调用
+Parser->>Handler : 处理工具调用
+Handler->>Client : 执行工具
+Server->>Client : 完成事件
+Client->>Parser : 解析完成事件
+Parser->>Handler : 处理完成事件
+Handler->>Client : 结束流
+end
+```
+
+**图表来源**
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:304-419](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L304-L419)
+
+### 事件处理机制
+
+```mermaid
+flowchart TD
+Start([接收SSE事件]) --> Parse{解析事件类型}
+Parse --> |0x30| TextDelta[文本增量]
+Parse --> |0x62| ToolInputDelta[工具输入增量]
+Parse --> |0x39| ToolCallComplete[工具调用完成]
+Parse --> |0x65| FinishEvent[完成事件]
+Parse --> |0x64| ErrorEvent[错误事件]
+Parse --> |0x63| ToolCallStreaming[工具调用流开始]
+Parse --> |0x68| AnnotationEvent[注解事件]
+TextDelta --> EnqueueText[加入文本队列]
+ToolInputDelta --> EnqueueToolInput[加入工具输入]
+ToolCallComplete --> ExecuteTool[执行工具]
+FinishEvent --> CloseStream[关闭流]
+ErrorEvent --> HandleError[处理错误]
+ToolCallStreaming --> StartToolStream[开始工具流]
+AnnotationEvent --> ProcessAnnotation[处理注解]
+EnqueueText --> Continue[继续处理]
+EnqueueToolInput --> Continue
+ExecuteTool --> Continue
+StartToolStream --> Continue
+ProcessAnnotation --> Continue
+Continue --> Parse
+```
+
+**图表来源**
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:322-404](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L322-L404)
+
+**章节来源**
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:1-422](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L1-L422)
 
 ## 依赖关系分析
 
@@ -658,6 +884,8 @@ subgraph "AI相关包"
 KnowledgeProvider[AI知识提供者]
 AIUtils[AI工具函数]
 AIFoundation[AI基础架构]
+SkillRegistry[技能注册表]
+ChatClient[聊天客户端]
 PluginAI[plugin-ai]
 end
 subgraph "插件包"
@@ -692,6 +920,8 @@ PluginAI --> Icon
 PluginAI --> KnowledgeProvider
 PluginAI --> AIUtils
 PluginAI --> AIFoundation
+PluginAI --> SkillRegistry
+PluginAI --> ChatClient
 PluginMain --> Core
 PluginMain --> UI
 PluginMain --> Common
@@ -744,6 +974,7 @@ ElectronAdapter --> Core
 - **流式协议**：支持实时响应流，减少等待时间
 - **工具调用优化**：高效的工具执行和结果处理
 - **上下文管理**：智能的文档上下文提取和管理
+- **技能持久化**：技能状态的本地缓存和同步
 
 ## 故障排除指南
 
@@ -791,10 +1022,33 @@ ElectronAdapter --> Core
 4. 查看工具转换日志
 5. 检查指数退避重试机制
 
+#### 技能注册表问题
+
+**症状**：AI技能无法正确加载或保存
+
+**排查步骤**：
+1. 验证存储适配器配置
+2. 检查本地存储权限
+3. 确认API存储连接
+4. 查看技能序列化格式
+5. 检查技能依赖关系
+
+#### 聊天客户端问题
+
+**症状**：SSE流式传输中断或响应异常
+
+**排查步骤**：
+1. 验证SSE连接状态
+2. 检查服务器端流式协议
+3. 确认事件解析器正常工作
+4. 查看流处理器错误日志
+5. 检查注解事件处理
+
 **章节来源**
 - [packages/plugin-ai/src/index.tsx:26-81](file://packages/plugin-ai/src/index.tsx#L26-L81)
 - [packages/room-server/package.json:10-15](file://packages/room-server/package.json#L10-L15)
-- [packages/core/src/ai/model-provider/knowledge-provider.ts:17-53](file://packages/core/src/ai/model-provider/knowledge-provider.ts#L17-L53)
+- [packages/common/src/ai/model-provider/knowledge-provider.ts:17-53](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L17-L53)
+- [packages/common/src/ai/skills/skill-registry.ts:131-138](file://packages/common/src/ai/skills/skill-registry.ts#L131-L138)
 
 ## 结论
 
@@ -807,6 +1061,8 @@ AI基础架构系统是一个设计精良的现代化知识管理平台，具有
 - **实时协作**：基于Hocuspocus的专业协作解决方案
 - **AI集成**：深度集成的AI功能和扩展接口
 - **AI知识提供者系统**：全新的AI模型集成架构，支持AI SDK V2接口、指数退避重试逻辑、OpenAI兼容工具转换和流式协议支持
+- **技能管理系统**：可持久化的AI技能管理，支持多种存储后端
+- **聊天客户端架构**：完整的SSE流式传输协议，提供实时AI响应处理
 
 ### 架构特色
 
@@ -815,6 +1071,8 @@ AI基础架构系统是一个设计精良的现代化知识管理平台，具有
 - **可移植性**：支持Web和桌面应用部署
 - **可国际化**：完整的多语言支持
 - **AI架构现代化**：采用最新的AI SDK V2标准
+- **存储多样化**：支持本地、API和混合存储模式
+- **事件驱动**：基于SSE的实时事件处理机制
 
 ### 发展方向
 
@@ -825,5 +1083,7 @@ AI基础架构系统是一个设计精良的现代化知识管理平台，具有
 - 改进离线支持
 - 加强安全性和权限管理
 - 深化AI知识提供者系统的功能
+- 增强技能系统的智能化程度
+- 优化聊天客户端的性能和稳定性
 
 该系统为知识管理和协作提供了一个强大而灵活的基础平台，适合各种规模的团队和应用场景使用。

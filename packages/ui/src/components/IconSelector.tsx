@@ -6,7 +6,7 @@ import { useSafeState } from "ahooks";
 import { CompactEmoji, fetchEmojis } from "emojibase";
 import { ScrollArea } from "./ui/scroll-area";
 import { Input } from "./ui/input";
-import { EmojiPicker, EmojiPickerContent, EmojiPickerFooter, EmojiPickerSearch } from "./ui/emoji-picker";
+import { EmojiPicker, EmojiPickerContent, EmojiPickerSearch } from "./ui/emoji-picker";
 
 export type IconType = 'IMAGE' | 'EMOJI'
 
@@ -17,6 +17,7 @@ export interface IconPropsProps {
 
 export interface IconSelectorProps {
     onChange: (icon: IconPropsProps) => void
+    onRemove?: () => void
     value?: IconPropsProps
 }
 
@@ -54,21 +55,16 @@ export const EmojiSelector: React.FC<{ onChange: (value: IconPropsProps) => void
 export const IconSelector = forwardRef<HTMLDivElement, IconSelectorProps>((props, ref) => {
 
     const [icon, setIcon] = useSafeState<IconPropsProps | undefined>(props.value)
-    const [searchValue, setSearchValue] = useSafeState()
 
-    const handleEmojiSelect = (emoji: string) => {
-        const selectedIcon: IconPropsProps = {
-            type: 'EMOJI',
-            icon: emoji
-        }
-        setIcon(selectedIcon)
-        props.onChange && props.onChange(selectedIcon)
+    const handleRemove = () => {
+        setIcon(undefined)
+        props.onRemove && props.onRemove()
     }
 
     const praseIcon = () => {
         if (icon) {
             if (icon.type === 'EMOJI') {
-                return <div className=" text-[80px]">
+                return <div className="text-[80px]">
                     {icon.icon}
                 </div>
             } else {
@@ -87,14 +83,32 @@ export const IconSelector = forwardRef<HTMLDivElement, IconSelectorProps>((props
                 }
             </div>
         </PopoverTrigger>
-        <PopoverContent side="right" align="start" className="p-1" asChild>
+        <PopoverContent side="right" align="start" className="w-[352px] p-0" asChild>
             <Tabs defaultValue="emoji">
-                <TabsList>
-                    <TabsTrigger value="emoji">Emoji</TabsTrigger>
-                    <TabsTrigger value="image">Image</TabsTrigger>
-                </TabsList>
-                <TabsContent value="emoji" className="w-full flex flex-col gap-1">
-                    <EmojiPicker className="w-full h-[300px]" onEmojiSelect={(value) => {
+                <div className="flex items-center border-b">
+                    <TabsList className="bg-transparent border-none h-10 p-0 px-2 gap-0">
+                        <TabsTrigger
+                            value="emoji"
+                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-3 h-10 font-medium"
+                        >
+                            Emoji
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="icons"
+                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-3 h-10 font-medium"
+                        >
+                            Icons
+                        </TabsTrigger>
+                    </TabsList>
+                    <button
+                        onClick={handleRemove}
+                        className="ml-auto mr-3 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                        Remove
+                    </button>
+                </div>
+                <TabsContent value="emoji" className="mt-0">
+                    <EmojiPicker className="w-full h-[380px]" onEmojiSelect={(value) => {
                         setIcon({
                             type: 'EMOJI',
                             icon: value.emoji
@@ -106,11 +120,10 @@ export const IconSelector = forwardRef<HTMLDivElement, IconSelectorProps>((props
                     }} >
                         <EmojiPickerSearch />
                         <EmojiPickerContent />
-                        <EmojiPickerFooter />
                     </EmojiPicker>
                 </TabsContent>
-                <TabsContent value="image">
-                    FileUpload
+                <TabsContent value="icons" className="mt-0 p-3">
+                    <p className="text-sm text-muted-foreground">Icons coming soon...</p>
                 </TabsContent>
             </Tabs>
         </PopoverContent>

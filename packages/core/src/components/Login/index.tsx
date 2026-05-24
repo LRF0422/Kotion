@@ -90,6 +90,39 @@ export function Login() {
 
             {/* Left Side - Brand Panel (Notion-style) */}
             <div className="hidden lg:flex relative overflow-hidden bg-gradient-to-b from-slate-50 to-slate-100/80 dark:from-slate-950 dark:to-slate-900/80">
+                {/* Decorative background — dot grid + soft radial accents */}
+                <svg className="absolute inset-0 w-full h-full opacity-[0.4] dark:opacity-[0.2]" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <defs>
+                        <pattern id="login-dot-grid" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
+                            <circle cx="1" cy="1" r="1" className="fill-foreground/20" />
+                        </pattern>
+                        <radialGradient id="login-fade-center" cx="50%" cy="50%" r="50%">
+                            <stop offset="0%" stopColor="white" stopOpacity="0" />
+                            <stop offset="70%" stopColor="white" stopOpacity="1" />
+                        </radialGradient>
+                    </defs>
+                    {/* Dot grid */}
+                    <rect width="100%" height="100%" fill="url(#login-dot-grid)" mask="url(#login-grid-mask)" />
+                    {/* Mask to fade grid towards center content area */}
+                    <mask id="login-grid-mask">
+                        <rect width="100%" height="100%" fill="white" />
+                        <rect width="100%" height="100%" fill="url(#login-fade-center)" />
+                    </mask>
+                </svg>
+                {/* Soft gradient orbs */}
+                <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full bg-primary/[0.03] dark:bg-primary/[0.02] blur-3xl" />
+                <div className="absolute bottom-[-15%] left-[-5%] w-[400px] h-[400px] rounded-full bg-primary/[0.04] dark:bg-primary/[0.02] blur-3xl" />
+                {/* Subtle concentric rings */}
+                <svg className="absolute top-[5%] right-[5%] w-[280px] h-[280px] opacity-[0.06] dark:opacity-[0.04]" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <circle cx="100" cy="100" r="40" className="stroke-foreground" strokeWidth="0.5" fill="none" />
+                    <circle cx="100" cy="100" r="65" className="stroke-foreground" strokeWidth="0.5" fill="none" />
+                    <circle cx="100" cy="100" r="90" className="stroke-foreground" strokeWidth="0.5" fill="none" />
+                </svg>
+                <svg className="absolute bottom-[10%] right-[15%] w-[200px] h-[200px] opacity-[0.05] dark:opacity-[0.03]" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <circle cx="100" cy="100" r="50" className="stroke-foreground" strokeWidth="0.5" fill="none" />
+                    <circle cx="100" cy="100" r="80" className="stroke-foreground" strokeWidth="0.5" fill="none" />
+                </svg>
+
                 <div className="relative z-10 flex flex-col justify-between w-full h-full p-12 xl:p-16 animate-fade-in-up">
                     {/* Center — Hero (no logo per request) */}
                     <div className="flex-1 flex flex-col justify-center max-w-lg">

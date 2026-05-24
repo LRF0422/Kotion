@@ -12,6 +12,13 @@
 - [index.ts](file://packages/common/src/ai/chat-client/index.ts)
 </cite>
 
+## 更新摘要
+**所做更改**
+- 更新了AI聊天客户端的API基础URL和端点路径
+- 修正了插件配置API的端点路径和请求方法
+- 更新了核心包的重新导出机制说明
+- 修正了项目结构图以反映实际的包组织方式
+
 ## 目录
 1. [简介](#简介)
 2. [项目结构](#项目结构)
@@ -73,11 +80,11 @@ Apps --> DesktopApp
 
 **图表来源**
 - [README.md:66-97](file://README.md#L66-L97)
-- [package.json:1-124](file://package.json#L1-L124)
+- [package.json:1-125](file://package.json#L1-L125)
 
 **章节来源**
 - [README.md:66-97](file://README.md#L66-L97)
-- [package.json:1-124](file://package.json#L1-L124)
+- [package.json:1-125](file://package.json#L1-L125)
 
 ## 核心组件
 
@@ -154,6 +161,8 @@ Skill <|-- MarketplaceSkill
 
 #### 端点设计
 
+**更新** 插件配置API的端点路径已从`/api/plugin-config`更新为`/knowledge-wiki/plugin-config`
+
 | HTTP方法 | 端点路径 | 描述 |
 |---------|---------|------|
 | GET | `/knowledge-wiki/plugin-config/:pluginKey` | 获取单个插件配置 |
@@ -194,8 +203,10 @@ AI聊天客户端实现了与知识库Agent的SSE流式通信，支持异步消�
 - **事件解析**：支持text-delta、tool-call、annotation等多种事件类型
 - **会话管理**：自动处理sessionId和conversationId
 
+**更新** AI聊天客户端的API基础URL已从`/api/v1`更新为`/api/knowledge-agent/api/v1`
+
 **章节来源**
-- [index.ts:1-354](file://packages/common/src/ai/chat-client/index.ts#L1-L354)
+- [index.ts:1-395](file://packages/common/src/ai/chat-client/index.ts#L1-L395)
 
 ## 架构概览
 
@@ -428,6 +439,8 @@ Common --> Lodash
 
 ### 包导出结构
 
+**更新** 核心包现在重新导出common包的内容，实现更清晰的模块化架构
+
 核心包通过重新导出机制提供统一的API入口：
 
 ```mermaid
@@ -449,11 +462,11 @@ CommonIndex --> AIExport[AI功能导出]
 
 **图表来源**
 - [index.ts:1-11](file://packages/core/src/index.ts#L1-L11)
-- [index.ts:1-36](file://packages/common/src/index.ts#L1-L36)
+- [index.ts:1-39](file://packages/common/src/index.ts#L1-L39)
 
 **章节来源**
 - [index.ts:1-11](file://packages/core/src/index.ts#L1-L11)
-- [index.ts:1-36](file://packages/common/src/index.ts#L1-L36)
+- [index.ts:1-39](file://packages/common/src/index.ts#L1-L39)
 
 ## 性能考虑
 
