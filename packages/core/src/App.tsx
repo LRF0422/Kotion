@@ -22,6 +22,7 @@ import { setRequestToast } from "@kn/common"
 import { registerCoreToolFactories } from "./ai/tools/register"
 import { toast } from "@kn/ui"
 import { ErrorPage } from "./components/ErrorPage";
+import { PluginErrorBoundary } from "./components/PluginErrorBoundary";
 import ReactDOM from "react-dom";
 
 const { createBrowserRouter,
@@ -29,14 +30,20 @@ const { createBrowserRouter,
     AppContext, i18n, initReactI18next, LanguageDetector, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS } = common;
 
 const reslove = (config: common.RouteConfig) => {
+    // Wrap each plugin route element with PluginErrorBoundary to isolate plugin errors
+    // so a single plugin crash doesn't take down the entire application.
+    const wrappedElement = config.element
+        ? <PluginErrorBoundary pluginName={config.name} variant="page">{config.element}</PluginErrorBoundary>
+        : undefined
+
     if (config.children) {
-        return <Route path={config.path} element={config.element} key={config.path} >
+        return <Route path={config.path} element={wrappedElement} key={config.path} >
             {
                 config.children.map(it => reslove(it))
             }
         </Route>
     } else {
-        return <Route path={config.path} element={config.element} key={config.path} />
+        return <Route path={config.path} element={wrappedElement} key={config.path} />
     }
 }
 

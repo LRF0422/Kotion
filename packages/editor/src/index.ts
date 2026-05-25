@@ -21,5 +21,5 @@ export { EditorState, TextSelection, NodeSelection, Plugin, PluginKey } from "@t
 export { EditorView, Decoration, DecorationSet, type DecorationSource } from "@tiptap/pm/view"
 export { findParentNode } from "prosemirror-utils"
 
-export { BubbleMenu, type BubbleMenuProps, Divider, Resizable } from "./components"
+export { BubbleMenu, type BubbleMenuProps, Divider, Resizable, NodeViewErrorBoundary, withNodeViewErrorBoundary } from "./components"
 

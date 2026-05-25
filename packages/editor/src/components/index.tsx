@@ -9,4 +9,5 @@ export * from "./select";
 export * from "./resizable";
 export * from "./upload";
 export * from "./loading";
+export { NodeViewErrorBoundary, withNodeViewErrorBoundary } from "./NodeViewErrorBoundary";
 

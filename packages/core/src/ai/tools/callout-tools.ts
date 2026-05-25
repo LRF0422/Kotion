@@ -12,6 +12,7 @@ import { z } from "@kn/ui"
 import type { ToolsRecord } from "@kn/common"
 import { discoverBlocks } from "@kn/common"
 import { scrollToPosition } from "@kn/common"
+import { parseMarkdownToNodes } from "@kn/common"
 
 const CALLOUT_TYPES = ['default', 'info', 'success', 'warning', 'error', 'tip', 'bookmark'] as const
 
@@ -89,14 +90,12 @@ export const createCalloutTools = (editor: Editor): ToolsRecord => ({
             nearText?: string
         }) => {
             try {
-                // Build the callout node
+                // Build the callout node - parse markdown in content
+                const parsedContent = content ? parseMarkdownToNodes(content) : [{ type: 'paragraph' }]
                 const calloutNode: any = {
                     type: 'infoPanel',
                     attrs: { type },
-                    content: [{
-                        type: 'paragraph',
-                        content: content ? [{ type: 'text', text: content }] : []
-                    }]
+                    content: parsedContent
                 }
 
                 let insertPos: number | null = null
@@ -276,12 +275,13 @@ export const createCalloutTools = (editor: Editor): ToolsRecord => ({
                 const contentStart = target.pos + 1 // After the infoPanel opening
                 const contentEnd = target.pos + node.nodeSize - 1 // Before the infoPanel closing
 
+                // Parse markdown content into proper ProseMirror nodes
+                const parsedNodes = parseMarkdownToNodes(content)
+                const schema = editor.state.schema
+                const fragment = parsedNodes.map(n => schema.nodeFromJSON(n))
+
                 const tr = editor.state.tr
-                const newParagraph = editor.state.schema.nodes.paragraph.create(
-                    null,
-                    content ? editor.state.schema.text(content) : null
-                )
-                tr.replaceWith(contentStart, contentEnd, newParagraph)
+                tr.replaceWith(contentStart, contentEnd, fragment)
                 editor.view.dispatch(tr)
 
                 return {

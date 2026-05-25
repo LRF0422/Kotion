@@ -1,4 +1,4 @@
-import { PMNode as Node, ReactNodeViewRenderer } from "@kn/editor";
+import { PMNode as Node, ReactNodeViewRenderer, withNodeViewErrorBoundary } from "@kn/editor";
 import { MermaidView } from "./MermaidView";
 
 
@@ -18,9 +18,10 @@ export const Mermaid = Node.create({
     },
 
     addNodeView() {
-        return ReactNodeViewRenderer(MermaidView, {
-            stopEvent: () => true
-        })
+        return ReactNodeViewRenderer(
+            withNodeViewErrorBoundary(MermaidView),
+            { stopEvent: (eventWrapper) => true }
+        )
     },
 
     addAttributes() {
