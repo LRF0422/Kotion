@@ -92,7 +92,7 @@ export const MarginCommentCard: React.FC<MarginCommentCardProps> = ({
     if (isNew) {
         return (
             <div
-                className="fixed w-[260px] z-50 comment-card-enter"
+                className="fixed w-[260px] max-w-[calc(100vw-24px)] z-50 comment-card-enter"
                 style={{ top: `${top}px`, left: `${left}px` }}
             >
                 <div className="bg-background border border-border/60 rounded-md shadow-md overflow-hidden">
@@ -142,7 +142,7 @@ export const MarginCommentCard: React.FC<MarginCommentCardProps> = ({
     if (!isActive) {
         return (
             <div
-                className="fixed w-[240px] z-40 cursor-pointer group"
+                className="fixed w-[240px] max-w-[calc(100vw-24px)] z-40 cursor-pointer group"
                 style={{ top: `${top}px`, left: `${left}px` }}
                 onClick={onClick}
             >
@@ -184,7 +184,7 @@ export const MarginCommentCard: React.FC<MarginCommentCardProps> = ({
     // Expanded card - full thread
     return (
         <div
-            className="fixed w-[260px] z-50 comment-card-enter"
+            className="fixed w-[260px] max-w-[calc(100vw-24px)] z-50 comment-card-enter"
             style={{ top: `${top}px`, left: `${left}px` }}
         >
             <div className="bg-background border border-border/60 rounded-md shadow-md overflow-hidden">

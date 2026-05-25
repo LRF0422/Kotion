@@ -97,11 +97,15 @@ export const CommentMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) => 
     const updatePositions = useCallback(() => {
         if (!editor || editor.isDestroyed) return;
 
-        // Calculate the left edge of the margin panel
+        // Calculate the left edge of the margin panel, clamped to viewport
         const proseMirrorEl = editor.view.dom;
         if (proseMirrorEl) {
             const rect = proseMirrorEl.getBoundingClientRect();
-            setPanelLeft(rect.right + 16);
+            const CARD_WIDTH = 260;
+            const VIEWPORT_PADDING = 12;
+            const idealLeft = rect.right + 16;
+            const maxLeft = window.innerWidth - CARD_WIDTH - VIEWPORT_PADDING;
+            setPanelLeft(Math.min(idealLeft, maxLeft));
         }
 
         const positioned = calcPositions(editor, rawThreadsRef.current);
