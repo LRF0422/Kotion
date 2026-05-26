@@ -1,0 +1,62 @@
+server:
+  port: 7780
+
+agent:
+  providers:
+    deepseek:
+      base-url: https://api.deepseek.com
+      api-key: ${DEEPSEEK_API_KEY:}
+      models:
+        - name: deepseek-chat
+          max-tokens: 32768
+          temperature: 0.7
+    openai:
+      base-url: https://api.openai.com
+      api-key: ${OPENAI_API_KEY:}
+      models:
+        - name: gpt-4o
+          max-tokens: 128000
+          temperature: 0.7
+    ollama:
+      base-url: http://localhost:11434
+      api-key: ""
+      models:
+        - name: qwen2.5:32b
+          max-tokens: 32768
+          temperature: 0.7
+  default-provider: deepseek
+  default-model: deepseek-chat
+  context:
+    max-tokens: 32768
+    compression-threshold: 0.75
+    strategy: truncate
+  delegate:
+    max-depth: 2
+    max-sub-agents: 5
+    max-parallel: 3
+  skill:
+    web-search:
+      enabled: true
+      provider: tavily
+      api-url: https://api.tavily.com/search
+      api-key: ${TAVILY_API_KEY:}
+      timeout-seconds: 10
+      default-max-results: 5
+      max-results-limit: 20
+    web-fetch:
+      timeout-seconds: 15
+      max-content-length: 50000
+    dataset-search:
+      enabled: true
+      provider: huggingface
+      timeout-seconds: 15
+      default-max-results: 5
+      max-results-limit: 20
+      huggingface:
+        api-url: https://huggingface.co/api/datasets
+      kaggle:
+        api-url: https://www.kaggle.com/api/v1/datasets/list
+        username: ${KAGGLE_USERNAME:}
+        api-key: ${KAGGLE_KEY:}
+      datagov:
+        api-url: https://catalog.data.gov/api/3/action/package_search

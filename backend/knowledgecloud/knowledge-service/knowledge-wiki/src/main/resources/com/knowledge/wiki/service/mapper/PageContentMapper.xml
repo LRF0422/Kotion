@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.knowledge.wiki.service.mapper.PageContentMapper">
+
+    <!--
+        Bulk INSERT ... ON DUPLICATE KEY UPDATE.
+        Handles both new and content-changed blocks in a single multi-value statement.
+        With rewriteBatchedStatements=true, this is extremely efficient.
+    -->
+    <insert id="batchInsertOnDuplicate" parameterType="java.util.List">
+        INSERT INTO wiki_page_block (
+            id, type, attrs, content, marks, text,
+            parent_id, page_id, path, sort_order,
+            version, content_hash,
+            tenant_id, create_user, create_time, update_user, update_time, is_deleted
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.id},
+                #{item.type},
+                #{item.attrs, typeHandler=com.baomidou.mybatisplus.extension.handlers.FastjsonTypeHandler},
+                #{item.content, typeHandler=com.knowledge.wiki.service.typeHandler.PageContgentListTypehandler},
+                #{item.marks, typeHandler=com.knowledge.wiki.service.typeHandler.MarkListTypeHandler},
+                #{item.text},
+                #{item.parentId},
+                #{item.pageId},
+                #{item.path},
+                #{item.sortOrder},
+                #{item.version},
+                #{item.contentHash},
+                #{item.tenantId},
+                #{item.createUser},
+                NOW(),
+                #{item.updateUser},
+                NOW(),
+                0
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            type = VALUES(type),
+            attrs = VALUES(attrs),
+            content = VALUES(content),
+            marks = VALUES(marks),
+            text = VALUES(text),
+            parent_id = VALUES(parent_id),
+            path = VALUES(path),
+            sort_order = VALUES(sort_order),
+            version = VALUES(version),
+            content_hash = VALUES(content_hash),
+            update_user = VALUES(update_user),
+            update_time = NOW()
+    </insert>
+
+    <!--
+        Lightweight batch UPDATE for blocks where only structural metadata changed
+        (parent_id, path, sort_order) but content is identical.
+        Avoids writing large JSON columns (attrs, content, marks, text).
+    -->
+    <update id="batchUpdateStructure" parameterType="java.util.List">
+        <foreach collection="list" item="item" separator=";">
+            UPDATE wiki_page_block
+            SET parent_id = #{item.parentId},
+                path = #{item.path},
+                sort_order = #{item.sortOrder},
+                update_time = NOW()
+            WHERE id = #{item.id}
+        </foreach>
+    </update>
+
+</mapper>

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>knowledge-ops</artifactId>
+        <groupId>com.knowledge</groupId>
+        <version>3.4.1</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>knowledge-resource</artifactId>
+    <name>${project.artifactId}</name>
+    <version>${knowledge.project.version}</version>
+    <packaging>jar</packaging>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-common</artifactId>
+            <version>${knowledge.project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-core-tool</artifactId>
+            <version>${knowledge.tool.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-core-boot</artifactId>
+            <version>${knowledge.tool.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-core-oss</artifactId>
+            <version>${knowledge.tool.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>com.spotify</groupId>
+                <artifactId>docker-maven-plugin</artifactId>
+                <version>${docker.plugin.version}</version>
+                <configuration>
+                    <imageName>${docker.registry.host}/knowledge/${project.artifactId}:${project.version}</imageName>
+                    <dockerDirectory>${project.basedir}</dockerDirectory>
+                    <dockerHost>${docker.host}</dockerHost>
+                    <resources>
+                        <resource>
+                            <targetPath>/</targetPath>
+                            <directory>${project.build.directory}</directory>
+                            <include>${project.build.finalName}.jar</include>
+                        </resource>
+                    </resources>
+                    <registryUrl>${docker.registry.url}</registryUrl>
+                    <serverId>${docker.registry.url}</serverId>
+                    <pushImage>false</pushImage>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

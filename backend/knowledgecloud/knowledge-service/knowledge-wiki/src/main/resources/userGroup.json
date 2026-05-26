@@ -1,0 +1,14 @@
+[
+  {
+    "name": "knowledge_wiki_user",
+    "tenantId": "000000",
+    "isDefault": true,
+    "id": 1111111111
+  },
+  {
+    "name": "knowledge_wiki_admin",
+    "tenantId": "000000",
+    "isDefault": true,
+    "id": 2222222
+  }
+]

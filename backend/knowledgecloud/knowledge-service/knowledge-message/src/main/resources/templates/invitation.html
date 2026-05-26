@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"   xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <link rel="icon" href="https://static.nowcoder.com/images/logo_87_87.png"/>
+    <title>Knowledge Wiki 账号激活</title>
+    <style>
+        .container {
+            height: 100vh;
+            width: 100%;
+            text-align: center;
+        }
+        .logo {
+            font-size: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        hr {
+            margin-top: 24px;
+            margin-bottom: 24px;
+            border: 0;
+            border-bottom: 1px solid #C1C7D0;
+            width: 50%;
+        }
+
+        .btn {
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+            align-items: baseline;
+            box-sizing: border-box;
+            border-radius: 3px;
+            border-width: 0;
+            border: none;
+            display: inline-flex;
+            font-style: normal;
+            font-size: inherit;
+            line-height: 24px;
+            margin: 0;
+            outline: none;
+            padding: 4px 12px;
+            text-align: center;
+            user-select: none;
+            vertical-align: middle;
+            white-space: nowrap;
+            text-decoration: none;
+            background: #0052CC;
+            color: #FFFFFF;
+        }
+
+        .appContainer {
+            display: flex;
+        }
+
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="logo">
+        <img src="https://gw.alipayobjects.com/zos/antfincdn/XAosXuNZyF/BiazfanxmamNRoxxVxka.png" width="50px">
+        <span>21334</span>
+    </div>
+    <hr>
+    <h2>Your team is waiting for you to join them</h2>
+    <div>
+        <b th:text="${targetUserEmail}"></b>, 您好!
+        albus leong has invited you to collaborate on leong-full
+    </div>
+    <div >
+        邀请您加入Knowledge Wiki, 点击以下链接进行注册
+        <br/>
+        <a th:href="${'http://14.29.235.4:888/user/register?token' + token }" class="btn">Join The Team</a>
+    </div>
+    <hr>
+    <div>
+        Here's what albus leong and your team are using to work seamlessly and accomplish more, together:
+        <div class="appContainer">
+            <div></div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

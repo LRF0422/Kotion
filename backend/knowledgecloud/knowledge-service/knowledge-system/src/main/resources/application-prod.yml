@@ -1,0 +1,17 @@
+#服务器端口
+server:
+  port: 8106
+
+#数据源配置
+spring:
+  datasource:
+    url: ${blade.datasource.prod.url}
+    username: ${blade.datasource.prod.username}
+    password: ${blade.datasource.prod.password}
+
+mybatis-plus:
+  global-config:
+    db-config:
+      logic-delete-field: isDeleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0

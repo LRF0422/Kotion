@@ -1,0 +1,49 @@
+#服务器端口
+server:
+  port: 8106
+
+#数据源配置
+spring:
+  datasource:
+    url: ${blade.datasource.dev.url}
+    username: ${blade.datasource.dev.username}
+    password: ${blade.datasource.dev.password}
+mybatis-plus:
+  global-config:
+    db-config:
+      logic-delete-field: isDeleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+casbin:
+  auto-save: true
+  enable-casbin: true
+  enable-watcher: true
+  store-type: jdbc
+  watcher-type: redis
+
+knowledge:
+  rocketmq:
+    enable: true
+    producer:
+      namesrvAddr: 192.168.3.43:9876
+      groupName: knowledge
+    consumer:
+      namesrvAddr: 192.168.3.43:9876
+      groupName: knowledge
+
+# Ping++ 支付配置
+pingxx:
+  # 测试环境API Key
+  api-key: sk_test_YOUR_PINGXX_API_KEY_HERE
+  # App ID
+  app-id: app_1Gqj58ynP0mHeX1s
+  # 私钥路径（可选）
+  private-key-path: classpath:certs/pingpp_rsa_private_key.pem
+  # 公钥路径（可选）
+  public-key-path: classpath:certs/pingpp_rsa_public_key.pem
+  # 回调通知地址
+  notify-url: http://localhost:8106/payment/pingxx/callback
+  # 是否为测试环境
+  test-mode: true
+

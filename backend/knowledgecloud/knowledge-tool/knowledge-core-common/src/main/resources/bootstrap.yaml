@@ -1,0 +1,14 @@
+# spring:
+#     cloud:
+#         stream:
+#             rocketmq:
+#                 binder:
+#                     name-server: 192.168.3.52:9876
+#                     group: action
+#             bindings:
+#                 action-in-0:
+#                     group: action
+#                     destination: system-action
+#                     content-type: application/json
+#             function:
+#                 definition: action

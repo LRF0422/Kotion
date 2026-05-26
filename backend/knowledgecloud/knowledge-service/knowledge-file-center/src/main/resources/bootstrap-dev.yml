@@ -1,0 +1,8 @@
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 192.168.3.43:8848
+      config:
+        server-addr: 192.168.3.43:8848
+        prefix: ${spring.application.name}

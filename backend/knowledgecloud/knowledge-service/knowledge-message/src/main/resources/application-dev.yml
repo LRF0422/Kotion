@@ -1,0 +1,14 @@
+server:
+  port: 7770
+
+spring:
+  datasource:
+    url: ${blade.datasource.dev.url}
+    username: ${blade.datasource.dev.username}
+    password: ${blade.datasource.dev.password}
+  mail:
+    host: smtp.163.com
+    port: 465
+    username: leong_knowledge@163.com
+    password: SBEWNGQQUDIZVCXV
+    protocol: smtps

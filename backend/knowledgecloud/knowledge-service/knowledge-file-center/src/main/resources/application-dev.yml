@@ -1,0 +1,41 @@
+spring:
+  datasource:
+    url: ${blade.datasource.dev.url}
+    username: ${blade.datasource.dev.username}
+    password: ${blade.datasource.dev.password}
+
+# Agent SDK Configuration
+agent:
+  sdk:
+    enabled: true
+  skill:
+    web-resource:
+      enabled: true
+      # Search provider: tavily, duckduckgo, searxng, or custom
+      provider: tavily
+      # API URL (default: Tavily Search API)
+      api-url: https://api.tavily.com/search
+      # API key (required for some providers)
+      api-key: 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
+      # HTTP request timeout in seconds
+      timeout-seconds: 15
+      # Default max search results
+      default-max-results: 5
+      # Maximum allowed search results (cap)
+      max-results-limit: 20
+      # Maximum file size to download (50MB)
+      max-download-size: 52428800
+      # User-Agent for HTTP requests (realistic browser UA to avoid bot detection)
+      user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    web-download:
+      enabled: true
+      # HTTP request timeout in seconds
+      timeout-seconds: 30
+      # Maximum file size to download (100MB)
+      max-download-size: 104857600
+      # Whether to HEAD-check URL before downloading
+      head-check-enabled: true
+      # Maximum retries for transient HTTP errors (429, 5xx)
+      retry-count: 3
+      # Default User-Agent (rotation pool is built-in)
+      user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

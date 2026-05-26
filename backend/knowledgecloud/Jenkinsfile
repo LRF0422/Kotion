@@ -1,0 +1,370 @@
+pipeline {
+    agent any
+
+    tools {
+        git 'Default'
+        maven 'maven'
+    }
+
+    environment {
+        // Docker Registry
+        DOCKER_REGISTRY = '192.168.3.43:5000'
+        IMAGE_PREFIX = 'knowledge'
+        
+        // Version from pom.xml
+        VERSION = '3.4.1'
+        BUILD_TAG = "${VERSION}-${BUILD_NUMBER}"
+        
+        // Notification
+        DINGTALK_TOKEN = credentials('dingtalk-token')
+        
+        // SonarQube
+        SONAR_HOST = 'http://14.29.235.4:9000'
+    }
+
+    parameters {
+        choice(
+            name: 'DEPLOY_ENV',
+            choices: ['none', 'dev', 'test', 'prod'],
+            description: 'Select deployment environment'
+        )
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: 'Skip unit tests'
+        )
+        booleanParam(
+            name: 'SKIP_SONAR',
+            defaultValue: false,
+            description: 'Skip SonarQube analysis'
+        )
+        string(
+            name: 'MODULES',
+            defaultValue: 'all',
+            description: 'Modules to build (comma-separated) or "all"'
+        )
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 60, unit: 'MINUTES')
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    stages {
+        stage('Preparation') {
+            steps {
+                script {
+                    // Clean local knowledge artifacts
+                    sh 'rm -rf ~/.m2/repository/com/knowledge || true'
+                    
+                    // Display build info
+                    echo "Building version: ${BUILD_TAG}"
+                    echo "Deploy environment: ${params.DEPLOY_ENV}"
+                }
+            }
+        }
+
+        stage('Compile') {
+            steps {
+                sh 'mvn clean compile -T 4C -q'
+            }
+        }
+
+        stage('Unit Tests') {
+            when {
+                expression { return !params.SKIP_TESTS }
+            }
+            steps {
+                sh 'mvn test -T 4C'
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
+                }
+            }
+        }
+
+        stage('Code Quality') {
+            when {
+                expression { return !params.SKIP_SONAR }
+            }
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                        mvn sonar:sonar \
+                            -Dsonar.host.url=${SONAR_HOST} \
+                            -Dsonar.projectKey=knowledge-cloud \
+                            -Dsonar.projectName=KnowledgeCloud \
+                            -Dsonar.java.coveragePlugin=jacoco
+                    '''
+                }
+            }
+        }
+
+        stage('Build Modules') {
+            parallel {
+                stage('Build Core Tools') {
+                    steps {
+                        sh 'mvn package -pl knowledge-tool -am -DskipTests -T 4C -q'
+                    }
+                }
+                stage('Build Common') {
+                    steps {
+                        sh 'mvn package -pl knowledge-common -am -DskipTests -T 4C -q'
+                    }
+                }
+                stage('Build API') {
+                    steps {
+                        sh 'mvn package -pl knowledge-service-api -am -DskipTests -T 4C -q'
+                    }
+                }
+            }
+        }
+
+        stage('Build Services') {
+            parallel {
+                stage('Gateway') {
+                    steps {
+                        sh 'mvn package -pl knowledge-gateway -am -DskipTests -q'
+                    }
+                }
+                stage('Auth') {
+                    steps {
+                        sh 'mvn package -pl knowledge-auth -am -DskipTests -q'
+                    }
+                }
+                stage('System') {
+                    steps {
+                        sh 'mvn package -pl knowledge-service/knowledge-system -am -DskipTests -q'
+                    }
+                }
+                stage('Wiki') {
+                    steps {
+                        sh 'mvn package -pl knowledge-service/knowledge-wiki -am -DskipTests -q'
+                    }
+                }
+                stage('File Center') {
+                    steps {
+                        sh 'mvn package -pl knowledge-service/knowledge-file-center -am -DskipTests -q'
+                    }
+                }
+                stage('Message') {
+                    steps {
+                        sh 'mvn package -pl knowledge-service/knowledge-message -am -DskipTests -q'
+                    }
+                }
+                stage('Log') {
+                    steps {
+                        sh 'mvn package -pl knowledge-service/knowledge-log -am -DskipTests -q'
+                    }
+                }
+            }
+        }
+
+        stage('Build Ops') {
+            parallel {
+                stage('Admin') {
+                    steps {
+                        sh 'mvn package -pl knowledge-ops/knowledge-admin -am -DskipTests -q'
+                    }
+                }
+                stage('Swagger') {
+                    steps {
+                        sh 'mvn package -pl knowledge-ops/knowledge-swagger -am -DskipTests -q'
+                    }
+                }
+                stage('Resource') {
+                    steps {
+                        sh 'mvn package -pl knowledge-ops/knowledge-resource -am -DskipTests -q'
+                    }
+                }
+                stage('Develop') {
+                    steps {
+                        sh 'mvn package -pl knowledge-ops/knowledge-develop -am -DskipTests -q'
+                    }
+                }
+                stage('Report') {
+                    steps {
+                        sh 'mvn package -pl knowledge-ops/knowledge-report -am -DskipTests -q'
+                    }
+                }
+            }
+        }
+
+        stage('Docker Build & Push') {
+            steps {
+                script {
+                    def services = [
+                        'knowledge-gateway',
+                        'knowledge-auth',
+                        'knowledge-service/knowledge-system',
+                        'knowledge-service/knowledge-wiki',
+                        'knowledge-service/knowledge-file-center',
+                        'knowledge-service/knowledge-message',
+                        'knowledge-service/knowledge-log',
+                        'knowledge-ops/knowledge-admin',
+                        'knowledge-ops/knowledge-swagger',
+                        'knowledge-ops/knowledge-resource',
+                        'knowledge-ops/knowledge-develop',
+                        'knowledge-ops/knowledge-report'
+                    ]
+                    
+                    services.each { svc ->
+                        def svcName = svc.split('/').last()
+                        sh """
+                            cd ${svc}
+                            docker build -t ${DOCKER_REGISTRY}/${IMAGE_PREFIX}/${svcName}:${BUILD_TAG} .
+                            docker tag ${DOCKER_REGISTRY}/${IMAGE_PREFIX}/${svcName}:${BUILD_TAG} ${DOCKER_REGISTRY}/${IMAGE_PREFIX}/${svcName}:latest
+                            docker push ${DOCKER_REGISTRY}/${IMAGE_PREFIX}/${svcName}:${BUILD_TAG}
+                            docker push ${DOCKER_REGISTRY}/${IMAGE_PREFIX}/${svcName}:latest
+                            cd -
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Dev') {
+            when {
+                expression { return params.DEPLOY_ENV == 'dev' }
+            }
+            steps {
+                script {
+                    deployToEnv('dev')
+                }
+            }
+        }
+
+        stage('Deploy to Test') {
+            when {
+                expression { return params.DEPLOY_ENV == 'test' }
+            }
+            steps {
+                script {
+                    deployToEnv('test')
+                }
+            }
+        }
+
+        stage('Deploy to Prod') {
+            when {
+                expression { return params.DEPLOY_ENV == 'prod' }
+            }
+            steps {
+                input message: 'Deploy to Production?', ok: 'Deploy'
+                script {
+                    deployToEnv('prod')
+                }
+            }
+        }
+
+        stage('Health Check') {
+            when {
+                expression { return params.DEPLOY_ENV != 'none' }
+            }
+            steps {
+                script {
+                    healthCheck(params.DEPLOY_ENV)
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            script {
+                sendNotification('SUCCESS')
+            }
+        }
+        failure {
+            script {
+                sendNotification('FAILURE')
+            }
+        }
+        always {
+            cleanWs()
+            sh 'docker system prune -f || true'
+        }
+    }
+}
+
+// Deploy function
+def deployToEnv(String env) {
+    def serverMap = [
+        'dev': '192.168.3.100',
+        'test': '192.168.3.101',
+        'prod': '192.168.3.102'
+    ]
+    
+    def server = serverMap[env]
+    
+    sshagent(['deploy-ssh-key']) {
+        sh """
+            ssh -o StrictHostKeyChecking=no root@${server} << 'EOF'
+                cd /opt/knowledge
+                export TAG=${BUILD_TAG}
+                export REGISTER=${DOCKER_REGISTRY}/${IMAGE_PREFIX}
+                docker-compose pull
+                docker-compose up -d
+EOF
+        """
+    }
+}
+
+// Health check function
+def healthCheck(String env) {
+    def gatewayMap = [
+        'dev': 'http://192.168.3.100:1889',
+        'test': 'http://192.168.3.101:1889',
+        'prod': 'http://192.168.3.102:1889'
+    ]
+    
+    def gateway = gatewayMap[env]
+    def maxRetries = 10
+    def retryInterval = 15
+    
+    for (int i = 0; i < maxRetries; i++) {
+        try {
+            def response = sh(
+                script: "curl -s -o /dev/null -w '%{http_code}' ${gateway}/actuator/health",
+                returnStdout: true
+            ).trim()
+            
+            if (response == '200') {
+                echo "Health check passed!"
+                return
+            }
+        } catch (Exception e) {
+            echo "Health check attempt ${i + 1}/${maxRetries} failed"
+        }
+        sleep(retryInterval)
+    }
+    
+    error("Health check failed after ${maxRetries} attempts")
+}
+
+// Notification function
+def sendNotification(String status) {
+    def color = status == 'SUCCESS' ? 'good' : 'danger'
+    def emoji = status == 'SUCCESS' ? '✅' : '❌'
+    
+    // DingTalk notification
+    def message = """
+    {
+        "msgtype": "markdown",
+        "markdown": {
+            "title": "Jenkins Build ${status}",
+            "text": "${emoji} **Knowledge Cloud Build**\n\n- Job: ${env.JOB_NAME}\n- Build: #${env.BUILD_NUMBER}\n- Status: ${status}\n- Version: ${BUILD_TAG}\n- Environment: ${params.DEPLOY_ENV}\n- [View Build](${env.BUILD_URL})"
+        }
+    }
+    """
+    
+    sh """
+        curl -s -X POST \
+            -H 'Content-Type: application/json' \
+            -d '${message}' \
+            'https://oapi.dingtalk.com/robot/send?access_token=${DINGTALK_TOKEN}' || true
+    """
+}

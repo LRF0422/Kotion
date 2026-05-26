@@ -1,0 +1,20 @@
+server:
+  port: 88
+
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      httpclient:
+        # Large-document save needs a long response window; fail fast on connect
+        connect-timeout: 5000
+        response-timeout: 300s
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+    loadbalancer:
+      retry:
+        enabled: true
+

@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <artifactId>Knowledge</artifactId>
+        <groupId>com.knowledge</groupId>
+        <version>3.4.1</version>
+    </parent>
+
+    <artifactId>knowledge-auth</artifactId>
+    <name>${project.artifactId}</name>
+    <version>${knowledge.project.version}</version>
+    <packaging>jar</packaging>
+
+    <dependencies>
+        <!--knowledge-->
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-common</artifactId>
+            <version>${knowledge.project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-core-cloud</artifactId>
+            <version>${knowledge.tool.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-core-secure</artifactId>
+            <version>${knowledge.tool.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-core-log</artifactId>
+            <version>${knowledge.tool.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-core-social</artifactId>
+            <version>${knowledge.tool.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-system-api</artifactId>
+            <version>${knowledge.project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-core-swagger</artifactId>
+            <version>${knowledge.tool.version}</version>
+        </dependency>
+        <!-- Captcha -->
+        <dependency>
+            <groupId>com.github.whvcse</groupId>
+            <artifactId>easy-captcha</artifactId>
+            <version>${captcha.version}</version>
+        </dependency>
+        <!-- Spring Security -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+        </dependency>
+        <!-- MySQL -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+            <version>8.3.0</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>com.spotify</groupId>
+                <artifactId>docker-maven-plugin</artifactId>
+                <version>${docker.plugin.version}</version>
+                <configuration>
+                    <imageName>${docker.registry.host}/knowledge/${project.artifactId}:${project.version}</imageName>
+                    <dockerDirectory>${project.basedir}</dockerDirectory>
+                    <dockerHost>${docker.host}</dockerHost>
+                    <resources>
+                        <resource>
+                            <targetPath>/</targetPath>
+                            <directory>${project.build.directory}</directory>
+                            <include>${project.build.finalName}.jar</include>
+                        </resource>
+                    </resources>
+                    <registryUrl>${docker.registry.host}</registryUrl>
+                    <serverId>${docker.registry.host}</serverId>
+                    <pushImage>false</pushImage>
+                    <noCache>true</noCache>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

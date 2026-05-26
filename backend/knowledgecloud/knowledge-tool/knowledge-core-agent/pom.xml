@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <groupId>com.knowledge</groupId>
+        <artifactId>knowledge-tool</artifactId>
+        <version>3.4.1</version>
+    </parent>
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>knowledge-core-agent</artifactId>
+    <name>${project.artifactId}</name>
+    <version>${knowledge.tool.version}</version>
+    <packaging>jar</packaging>
+    <description>Agent SDK — annotation-driven skill/tool registration for any microservice</description>
+
+    <dependencies>
+        <!-- Knowledge core-tool for R response wrapper and constants -->
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-core-tool</artifactId>
+            <version>${knowledge.tool.version}</version>
+        </dependency>
+        <!-- Knowledge core-launch for AppConstant -->
+        <dependency>
+            <groupId>com.knowledge</groupId>
+            <artifactId>knowledge-core-launch</artifactId>
+            <version>${knowledge.tool.version}</version>
+        </dependency>
+        <!-- Spring context for BeanPostProcessor, ApplicationContext -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <!-- Spring Boot autoconfigure support -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <!-- Feign client to call knowledge-agent-skills SkillRegistry via REST -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <!-- Jackson for JSON schema generation -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>

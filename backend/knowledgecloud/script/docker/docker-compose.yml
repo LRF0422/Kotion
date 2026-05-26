@@ -1,0 +1,172 @@
+version: '3'
+services:
+  nacos:
+    image: nacos/nacos-server:2.0.2
+    hostname: "nacos-standalone"
+    environment:
+      - MODE=standalone
+    volumes:
+      - /docker/nacos/standalone-logs/:/home/nacos/logs
+      - /docker/nacos/init.d/custom.properties:/home/nacos/init.d/custom.properties
+    ports:
+      - 8848:8848
+      - 9848:9848
+      - 9849:9849
+    networks:
+      knowledge_net:
+        ipv4_address: 172.30.0.48
+
+  sentinel:
+    image: knowledge/sentinel-dashboard:1.8.0
+    hostname: "sentinel"
+    ports:
+      - 8858:8858
+    restart: on-failure
+    networks:
+      knowledge_net:
+        ipv4_address: 172.30.0.58
+
+  knowledge-nginx:
+    image: nginx:stable-alpine-perl
+    hostname: "knowledge-nginx"
+    ports:
+    - 88:88
+    volumes:
+    - /docker/nginx/api/nginx.conf:/etc/nginx/nginx.conf
+    privileged: true
+    restart: always
+    networks:
+    - knowledge_net
+
+  web-nginx:
+    image: nginx:stable-alpine-perl
+    hostname: "web-nginx"
+    ports:
+      - 8000:8000
+    volumes:
+      - /docker/nginx/web/html:/usr/share/nginx/html
+      - /docker/nginx/web/nginx.conf:/etc/nginx/nginx.conf
+    privileged: true
+    restart: always
+    networks:
+      - knowledge_net
+
+  knowledge-redis:
+    image: redis:5.0.2-alpine
+    hostname: "knowledge-redis"
+    ports:
+    - 3379:6379
+    volumes:
+    - /docker/redis/data:/data
+    command: "redis-server --appendonly yes"
+    privileged: true
+    restart: always
+    networks:
+    - knowledge_net
+
+  knowledge-admin:
+    image: "${REGISTER}/knowledge-admin:${TAG}"
+    ports:
+    - 7002:7002
+    privileged: true
+    restart: always
+    networks:
+    - knowledge_net
+
+  knowledge-swagger:
+    image: "${REGISTER}/knowledge-swagger:${TAG}"
+    ports:
+      - 18000:18000
+    privileged: true
+    restart: always
+    networks:
+      - knowledge_net
+
+  knowledge-gateway1:
+    image: "${REGISTER}/knowledge-gateway:${TAG}"
+    privileged: true
+    restart: always
+    networks:
+      knowledge_net:
+        ipv4_address: 172.30.0.81
+
+  knowledge-gateway2:
+    image: "${REGISTER}/knowledge-gateway:${TAG}"
+    privileged: true
+    restart: always
+    networks:
+      knowledge_net:
+        ipv4_address: 172.30.0.82
+
+  knowledge-auth1:
+    image: "${REGISTER}/knowledge-auth:${TAG}"
+    privileged: true
+    restart: always
+    networks:
+      knowledge_net:
+        ipv4_address: 172.30.0.91
+
+  knowledge-auth2:
+    image: "${REGISTER}/knowledge-auth:${TAG}"
+    privileged: true
+    restart: always
+    networks:
+      knowledge_net:
+        ipv4_address: 172.30.0.92
+
+  knowledge-report:
+    image: "${REGISTER}/knowledge-report:${TAG}"
+    privileged: true
+    restart: always
+    networks:
+      knowledge_net:
+        ipv4_address: 172.30.0.98
+
+  knowledge-log:
+    image: "${REGISTER}/knowledge-log:${TAG}"
+    privileged: true
+    restart: always
+    networks:
+    - knowledge_net
+
+  knowledge-desk:
+    image: "${REGISTER}/knowledge-desk:${TAG}"
+    privileged: true
+    restart: always
+    networks:
+    - knowledge_net
+
+  knowledge-user:
+    image: "${REGISTER}/knowledge-user:${TAG}"
+    privileged: true
+    restart: always
+    networks:
+    - knowledge_net
+
+  knowledge-system:
+    image: "${REGISTER}/knowledge-system:${TAG}"
+    privileged: true
+    restart: always
+    networks:
+    - knowledge_net
+
+  knowledge-resource:
+    image: "${REGISTER}/knowledge-resource:${TAG}"
+    privileged: true
+    restart: always
+    networks:
+      - knowledge_net
+
+  knowledge-develop:
+    image: "${REGISTER}/knowledge-develop:${TAG}"
+    privileged: true
+    restart: always
+    networks:
+      - knowledge_net
+
+networks:
+  knowledge_net:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.30.0.0/16

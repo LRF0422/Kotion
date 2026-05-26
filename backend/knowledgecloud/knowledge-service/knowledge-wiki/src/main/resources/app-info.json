@@ -1,0 +1,21 @@
+{
+  "applicationName": "knowledge-wiki",
+  "clientId": "wiki",
+  "defaultUserGroups": [
+    {
+      "name": "wiki-admin",
+      "alias": "Wiki管理员",
+      "admin": true
+    },
+    {
+      "name": "wiki-user",
+      "alias": "Wiki用户",
+      "admin": false
+    },
+    {
+      "name": "wiki-guest",
+      "alias": "Wiki访客",
+      "admin": false
+    }
+  ]
+}

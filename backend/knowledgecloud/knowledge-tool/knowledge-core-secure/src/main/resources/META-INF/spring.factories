@@ -1,0 +1,4 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+  com.knowledge.core.secure.config.RegistryConfiguration,\
+  com.knowledge.core.secure.config.SecureConfiguration,\
+  com.knowledge.core.secure.config.KnowledgeSecurityConfiguration

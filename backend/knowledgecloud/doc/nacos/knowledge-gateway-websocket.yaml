@@ -1,0 +1,59 @@
+# ===============================
+# Gateway WebSocket Configuration
+# Add this to Nacos: knowledge-gateway-dev.yaml
+# ===============================
+
+spring:
+  cloud:
+    gateway:
+      # 服务发现路由 (已启用)
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      
+      # 手动定义路由 (WebSocket 需要显式配置)
+      routes:
+        # ========== WebSocket 即时消息路由 ==========
+        - id: knowledge-message-websocket
+          uri: lb:ws://knowledge-message
+          predicates:
+            - Path=/ws/message/**
+          filters:
+            - StripPrefix=0
+        
+        # ========== Message 服务 HTTP 路由 ==========
+        - id: knowledge-message
+          uri: lb://knowledge-message
+          predicates:
+            - Path=/knowledge-message/**
+          filters:
+            - StripPrefix=1
+        
+        # ========== 其他服务路由示例 ==========
+        - id: knowledge-auth
+          uri: lb://knowledge-auth
+          predicates:
+            - Path=/knowledge-auth/**
+          filters:
+            - StripPrefix=1
+            
+        - id: knowledge-system
+          uri: lb://knowledge-system
+          predicates:
+            - Path=/knowledge-system/**
+          filters:
+            - StripPrefix=1
+
+# ========== 认证跳过配置 ==========
+# WebSocket 握手时带 token 参数
+# 如果需要跳过网关认证（让 WebSocket 服务自己验证），取消下面注释
+knowledge:
+  secure:
+    skip-url:
+      # WebSocket 连接路径 (可选，WebSocket 服务已有自己的认证)
+      # - /ws/**
+      # 公开接口
+      - /knowledge-auth/oauth/**
+      - /knowledge-auth/oauth2/**
+      - /knowledge-auth/token/**

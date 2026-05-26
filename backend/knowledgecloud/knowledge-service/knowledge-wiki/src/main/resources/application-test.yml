@@ -1,0 +1,23 @@
+server:
+  port: 7778
+
+spring:
+  datasource:
+    url: ${blade.datasource.test.url}
+    username: ${blade.datasource.test.username}
+    password: ${blade.datasource.test.password}
+
+knowledge:
+  rocketmq:
+    enable: true
+    producer:
+      namesrvAddr: 192.168.3.43:9876
+      groupName: ${spring.application.name}
+    consumer:
+      namesrvAddr: 192.168.3.43:9876
+      groupName: ${spring.application.name}
+
+# Agent SDK Configuration
+agent:
+  sdk:
+    enabled: true

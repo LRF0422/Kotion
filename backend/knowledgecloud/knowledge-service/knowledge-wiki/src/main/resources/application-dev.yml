@@ -1,0 +1,39 @@
+server:
+  port: 7778
+  # Tomcat tuning for large-document save (~1M characters)
+  tomcat:
+    connection-timeout: 120000      # 120s: allow long saves before idle-close
+    keep-alive-timeout: 120000
+    max-http-form-post-size: 50MB   # raise body size cap
+    threads:
+      max: 400
+      min-spare: 20
+
+spring:
+  datasource:
+    url: ${blade.datasource.dev.url}
+    username: ${blade.datasource.dev.username}
+    password: ${blade.datasource.dev.password}
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+  mvc:
+    async:
+      # Allow up to 120s for async request processing
+      request-timeout: 120000
+
+knowledge:
+  rocketmq:
+    enable: true
+    producer:
+      namesrvAddr: 14.29.235.4:9876
+      groupName: ${spring.application.name}
+    consumer:
+      namesrvAddr: 14.29.235.4:9876
+      groupName: ${spring.application.name}
+
+# Agent SDK Configuration
+agent:
+  sdk:
+    enabled: true

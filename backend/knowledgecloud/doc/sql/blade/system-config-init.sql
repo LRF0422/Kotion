@@ -1,0 +1,1 @@
+INSERT INTO `knowledge`.`knowledge_dict` (`id`, `parent_id`, `code`, `dict_key`, `dict_value`, `sort`, `remark`, `is_deleted`) VALUES (1123598814738777237, 0, 'system_config', 1, '系统资源初始化', 1, NULL, 0);

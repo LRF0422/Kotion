@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: ${blade.datasource.test.url}
+    username: ${blade.datasource.test.username}
+    password: ${blade.datasource.test.password}
+
+# Agent SDK Configuration
+agent:
+  sdk:
+    enabled: true

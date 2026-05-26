@@ -1,0 +1,166 @@
+version: '3.8'
+
+x-common-config: &common-config
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "3"
+  deploy:
+    resources:
+      limits:
+        memory: 1G
+      reservations:
+        memory: 512M
+
+services:
+  knowledge-gateway:
+    <<: *common-config
+    image: "${REGISTER}/knowledge-gateway:${TAG}"
+    container_name: knowledge-gateway
+    ports:
+      - "1889:80"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      knowledge_net:
+        ipv4_address: 172.30.0.81
+    depends_on:
+      - knowledge-redis
+
+  knowledge-auth:
+    <<: *common-config
+    image: "${REGISTER}/knowledge-auth:${TAG}"
+    container_name: knowledge-auth
+    ports:
+      - "8100:8100"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8100/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      knowledge_net:
+        ipv4_address: 172.30.0.91
+    depends_on:
+      - knowledge-redis
+
+  knowledge-system:
+    <<: *common-config
+    image: "${REGISTER}/knowledge-system:${TAG}"
+    container_name: knowledge-system
+    ports:
+      - "8106:8106"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8106/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - knowledge_net
+    depends_on:
+      - knowledge-auth
+
+  knowledge-wiki:
+    <<: *common-config
+    image: "${REGISTER}/knowledge-wiki:${TAG}"
+    container_name: knowledge-wiki
+    ports:
+      - "7778:7778"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7778/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - knowledge_net
+    depends_on:
+      - knowledge-auth
+
+  knowledge-file-center:
+    <<: *common-config
+    image: "${REGISTER}/knowledge-file-center:${TAG}"
+    container_name: knowledge-file-center
+    ports:
+      - "7004:7004"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+    volumes:
+      - file_data:/knowledge/files
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7004/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - knowledge_net
+
+  knowledge-log:
+    <<: *common-config
+    image: "${REGISTER}/knowledge-log:${TAG}"
+    container_name: knowledge-log
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+    networks:
+      - knowledge_net
+
+  knowledge-message:
+    <<: *common-config
+    image: "${REGISTER}/knowledge-message:${TAG}"
+    container_name: knowledge-message
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC
+    networks:
+      - knowledge_net
+
+  knowledge-redis:
+    image: redis:7-alpine
+    container_name: knowledge-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - knowledge_net
+
+networks:
+  knowledge_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+
+volumes:
+  redis_data:
+  file_data:
