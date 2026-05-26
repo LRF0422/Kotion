@@ -89,7 +89,6 @@ public class AuthController {
 		String verCode = specCaptcha.text().toLowerCase();
 		String key = UUID.randomUUID().toString();
 
-
 		// 存入redis并设置过期时间为30分钟
 		redisUtil.set(CacheNames.CAPTCHA_KEY + key, verCode, 30L, TimeUnit.MINUTES);
 		// 将key和base64返回给前端
