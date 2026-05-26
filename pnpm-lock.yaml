@@ -858,6 +858,9 @@ importers:
       mysql:
         specifier: ^2.18.1
         version: 2.18.1
+      prosemirror-changeset:
+        specifier: ^2.2.1
+        version: 2.4.0
       prosemirror-codemark:
         specifier: ^0.4.2
         version: 0.4.2(prosemirror-inputrules@1.5.1)(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.6)
@@ -6977,6 +6980,7 @@ packages:
   '@xmldom/xmldom@0.8.11':
     resolution: {integrity: sha512-cQzWCtO6C8TQiYl1ruKNn2U6Ao4o4WBBcbL61yJl84x+j5sOWWFU9X7DpND8XZG3daDppSsigMdfAIl2upQBRw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   abbrev@1.1.1:
     resolution: {integrity: sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==}
@@ -25693,9 +25697,9 @@ snapshots:
 
   prosemirror-commands@1.1.12:
     dependencies:
-      prosemirror-model: 1.14.3
+      prosemirror-model: 1.25.4
       prosemirror-state: 1.3.4
-      prosemirror-transform: 1.3.4
+      prosemirror-transform: 1.11.0
 
   prosemirror-commands@1.7.1:
     dependencies:
@@ -25719,7 +25723,7 @@ snapshots:
   prosemirror-history@1.1.3:
     dependencies:
       prosemirror-state: 1.3.4
-      prosemirror-transform: 1.3.4
+      prosemirror-transform: 1.11.0
       rope-sequence: 1.3.4
 
   prosemirror-history@1.5.0:
@@ -25732,7 +25736,7 @@ snapshots:
   prosemirror-inputrules@1.1.3:
     dependencies:
       prosemirror-state: 1.3.4
-      prosemirror-transform: 1.3.4
+      prosemirror-transform: 1.11.0
 
   prosemirror-inputrules@1.5.1:
     dependencies:
@@ -25782,8 +25786,8 @@ snapshots:
 
   prosemirror-state@1.3.4:
     dependencies:
-      prosemirror-model: 1.14.3
-      prosemirror-transform: 1.3.4
+      prosemirror-model: 1.25.4
+      prosemirror-transform: 1.11.0
 
   prosemirror-state@1.4.4:
     dependencies:
@@ -25813,7 +25817,7 @@ snapshots:
 
   prosemirror-transform@1.3.4:
     dependencies:
-      prosemirror-model: 1.14.3
+      prosemirror-model: 1.25.4
 
   prosemirror-utils@1.2.2(prosemirror-model@1.25.4)(prosemirror-state@1.4.4):
     dependencies:
@@ -25822,9 +25826,9 @@ snapshots:
 
   prosemirror-view@1.18.11:
     dependencies:
-      prosemirror-model: 1.14.3
+      prosemirror-model: 1.25.4
       prosemirror-state: 1.3.4
-      prosemirror-transform: 1.3.4
+      prosemirror-transform: 1.11.0
 
   prosemirror-view@1.41.6:
     dependencies:

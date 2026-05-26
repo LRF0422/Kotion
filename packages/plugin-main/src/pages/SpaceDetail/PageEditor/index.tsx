@@ -205,27 +205,7 @@ export const PageEditor: React.FC = () => {
         return null
     }, [])
 
-    // Auto-save callback - performs the actual FULL save operation
-    const handleFullSave = useCallback(async (content: any) => {
-        if (!page || !params.pageId) return;
-
-        const title = getTitleContent(content);
-        const icon = getIcon(content);
-
-        const pageData = {
-            ...page,
-            title,
-            icon,
-            id: params.pageId,
-            content: JSON.stringify(content),
-            publish: false
-        };
-
-        await useApi(APIS.CREATE_OR_SAVE_PAGE, undefined, pageData);
-        event.emit(ON_PAGE_REFRESH);
-    }, [page, params.pageId, getTitleContent, getIcon])
-
-    // Incremental save callback - sends only changed blocks
+    // Auto-save callback - performs incremental save (only changed blocks)
     const handleIncrementalSave = useCallback(async (payload: IncrementalSavePayload) => {
         if (!page || !params.pageId) return;
 
@@ -247,15 +227,27 @@ export const PageEditor: React.FC = () => {
         editor: editor.current,
         debounceDelay: 3000, // Auto-save after 3 seconds of inactivity
         onIncrementalSave: handleIncrementalSave,
-        onFullSave: handleFullSave,
         enabled: !!page && !!params.pageId,
         contentReady: editorContentReady,
     });
 
-    // Manual save handler (for Ctrl+S and save button)
+    // Manual save handler (for Ctrl+S — triggers immediate incremental save)
+    // Publish handler (needs full content for publishing)
     const handleSave = useCallback(async (publish: boolean = false) => {
         if (!editor.current || !page) return;
 
+        if (!publish) {
+            // Regular save — just flush the incremental save immediately
+            setIsManualSaving(true);
+            try {
+                await saveNow();
+            } finally {
+                setIsManualSaving(false);
+            }
+            return;
+        }
+
+        // Publish requires full content
         setIsManualSaving(true);
         toggle();
 
@@ -270,28 +262,26 @@ export const PageEditor: React.FC = () => {
                 icon,
                 id: params.pageId,
                 content: JSON.stringify(pageContent),
-                publish
+                publish: true
             };
 
             await useApi(APIS.CREATE_OR_SAVE_PAGE, undefined, pageData);
 
-            if (publish) {
-                navigator.go({
-                    to: `/space-detail/${params.id}/page/${params.pageId}`
-                });
-                toast.success("发布成功");
-            }
+            navigator.go({
+                to: `/space-detail/${params.id}/page/${params.pageId}`
+            });
+            toast.success("发布成功");
 
             event.emit(ON_PAGE_REFRESH);
-            markAsSaved(); // Mark as saved to reset auto-save state
+            markAsSaved();
         } catch (error) {
-            console.error('Save failed:', error);
-            toast.error('保存失败');
+            console.error('Publish failed:', error);
+            toast.error('发布失败');
         } finally {
             toggle();
             setIsManualSaving(false);
         }
-    }, [editor, page, params.pageId, params.id, getTitleContent, getIcon, toggle, navigator, markAsSaved])
+    }, [editor, page, params.pageId, params.id, getTitleContent, getIcon, toggle, navigator, markAsSaved, saveNow])
 
     // Markdown import handler
     const handleImportMarkdown = useCallback(() => {

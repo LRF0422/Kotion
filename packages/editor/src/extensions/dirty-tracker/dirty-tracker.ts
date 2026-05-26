@@ -1,8 +1,7 @@
-import { Extension, findChildrenInRange } from "@tiptap/core";
+import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey, Transaction } from "@tiptap/pm/state";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import combineTransactionSteps from "../unique-id/utilities/combine-transaction-steps";
-import getChangedRanges from "../unique-id/utilities/get-changed-ranges";
+import { ChangeSet, simplifyChanges } from "prosemirror-changeset";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -19,6 +18,12 @@ export interface BlockChange {
     type?: string;
     /** The serialized JSON of the block node — undefined for deletions */
     content?: any;
+    /**
+     * The block-level version number that the client believes was the most
+     * recent state when these changes started accumulating. Used by the
+     * backend for optimistic concurrency control.
+     */
+    prevVersion?: number;
 }
 
 /** Payload sent to the backend for an incremental save. */
@@ -35,6 +40,8 @@ export interface DirtyTrackerStorage {
     touchedBlockIds: Set<string>;
     /** Snapshot of all top-level blockIds at the last save checkpoint */
     lastSavedBlockIds: Set<string>;
+    /** Per-block version numbers known to the client (set by callers after load) */
+    blockVersions: Map<string, number>;
     /** Whether the tracker has been initialized with a baseline */
     initialized: boolean;
     /** Get all dirty changes since the last save */
@@ -47,11 +54,13 @@ export interface DirtyTrackerStorage {
     hasDirtyChanges: () => boolean;
     /** Re-initialize the baseline (e.g., after content finishes loading) */
     reinitialize: () => void;
+    /** Replace the per-block version map (e.g., from a freshly-loaded page). */
+    setBlockVersions: (versions: Map<string, number> | Record<string, number>) => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-const DIRTY_TRACKER_KEY = new PluginKey('dirtyTracker');
+const DIRTY_TRACKER_KEY = new PluginKey<{ changeSet: ChangeSet }>('dirtyTracker');
 
 export interface DirtyTrackerOptions {
     /** The attribute name used for block identification (default: 'blockId') */
@@ -88,21 +97,55 @@ function getTopLevelBlockOrder(doc: ProseMirrorNode, attr: string): string[] {
     return order;
 }
 
+/**
+ * Find every top-level blockId whose range overlaps any of the provided
+ * change ranges in the *current* document.
+ */
+function blockIdsTouchedByChanges(
+    doc: ProseMirrorNode,
+    changes: ReadonlyArray<{ fromB: number; toB: number }>,
+    attr: string,
+): Set<string> {
+    const result = new Set<string>();
+    if (changes.length === 0) return result;
+
+    // Walk the top-level children once and test overlap.
+    let pos = 0;
+    doc.forEach((node) => {
+        const start = pos;
+        const end = pos + node.nodeSize;
+        const id = node.attrs[attr];
+        if (id) {
+            for (const c of changes) {
+                if (c.toB > start && c.fromB < end) {
+                    result.add(id);
+                    break;
+                }
+            }
+        }
+        pos = end;
+    });
+    return result;
+}
+
 // ─── Extension ───────────────────────────────────────────────────────
 
 /**
- * DirtyTracker — a Tiptap extension that tracks which blocks have been
- * modified since the last save, enabling efficient incremental saves.
+ * DirtyTracker — Tiptap extension that tracks which top-level blocks have
+ * been modified since the last save, enabling incremental saves.
  *
- * How it works:
- *  1. A ProseMirror plugin intercepts every document-changing transaction.
- *  2. It uses `getChangedRanges()` to find the affected positions.
- *  3. For each changed range it looks up the top-level block (direct child
- *     of the doc node) and adds its `blockId` to the `touchedBlockIds` set.
- *  4. At save time, `getDirtyChanges()` compares the touched set and the
- *     last-saved snapshot to produce a minimal list of updates and deletions.
- *  5. After a successful save, `commitSave()` clears the dirty state and
- *     takes a new snapshot.
+ * The change-detection core is delegated to {@code prosemirror-changeset}:
+ *  1. A ProseMirror plugin maintains a {@code ChangeSet} starting from the
+ *     last-saved doc snapshot.
+ *  2. On every doc-changing transaction the steps are folded into the
+ *     {@code ChangeSet} via {@code addSteps()}.
+ *  3. {@code getDirtyChanges()} reads {@code changeSet.changes} (after
+ *     {@code simplifyChanges()}) and maps each affected range back to the
+ *     enclosing top-level block by id.
+ *  4. Deletions are detected by diffing the snapshot of top-level blockIds
+ *     captured at the last save against the current set.
+ *  5. After a successful save, {@code commitSave()} resets the ChangeSet to
+ *     start from the new "last-saved" doc.
  */
 export const DirtyTracker = Extension.create<DirtyTrackerOptions>({
     name: 'dirtyTracker',
@@ -112,7 +155,7 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions>({
 
     addOptions() {
         return {
-            attributeName: 'blockId',
+            attributeName: 'id',
             types: [],
             filterTransaction: null,
         };
@@ -122,12 +165,14 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions>({
         return {
             touchedBlockIds: new Set<string>(),
             lastSavedBlockIds: new Set<string>(),
+            blockVersions: new Map<string, number>(),
             initialized: false,
             getDirtyChanges: () => [],
             getIncrementalPayload: () => ({ blockOrder: [], changes: [] }),
-            commitSave: () => {},
+            commitSave: () => { },
             hasDirtyChanges: () => false,
-            reinitialize: () => {},
+            reinitialize: () => { },
+            setBlockVersions: () => { },
         };
     },
 
@@ -145,42 +190,61 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions>({
 
         // ── Bind public methods (they close over editor & storage) ──
 
+        const readChangeSet = (): ChangeSet | null => {
+            const pluginState = DIRTY_TRACKER_KEY.getState(editor.state);
+            return pluginState ? pluginState.changeSet : null;
+        };
+
         storage.getDirtyChanges = (): BlockChange[] => {
             if (!storage.initialized) return [];
 
             const doc = editor.state.doc;
             const currentBlockIds = collectTopLevelBlockIds(doc, attributeName);
-            const changes: BlockChange[] = [];
+            const out: BlockChange[] = [];
 
-            // 1. Deletions — blockIds that were in the last snapshot but are gone now
+            // 1. Deletions — blockIds present at last save but missing now.
             for (const blockId of storage.lastSavedBlockIds) {
                 if (!currentBlockIds.has(blockId)) {
-                    changes.push({ blockId, action: 'delete' });
-                }
-            }
-
-            // 2. Updates / inserts — touched blockIds that are still present
-            const seen = new Set<string>();
-            for (const blockId of storage.touchedBlockIds) {
-                if (seen.has(blockId)) continue;
-                seen.add(blockId);
-
-                if (currentBlockIds.has(blockId)) {
-                    // Walk top-level children to find the node
-                    doc.forEach((node) => {
-                        if (node.attrs[attributeName] === blockId) {
-                            changes.push({
-                                blockId,
-                                action: 'update',
-                                type: node.type.name,
-                                content: node.toJSON(),
-                            });
-                        }
+                    out.push({
+                        blockId,
+                        action: 'delete',
+                        prevVersion: storage.blockVersions.get(blockId),
                     });
                 }
             }
 
-            return changes;
+            // 2. Updates / inserts — derived from ChangeSet ranges plus the
+            //    legacy touchedBlockIds fallback (covers the rare case where
+            //    the ChangeSet has been reset but transactions haven't been
+            //    flushed yet).
+            const cs = readChangeSet();
+            const dirtyIds = new Set<string>(storage.touchedBlockIds);
+            if (cs) {
+                const simplified = simplifyChanges(cs.changes, doc);
+                blockIdsTouchedByChanges(doc, simplified, attributeName)
+                    .forEach((id) => dirtyIds.add(id));
+            }
+
+            const seen = new Set<string>();
+            for (const blockId of dirtyIds) {
+                if (seen.has(blockId)) continue;
+                seen.add(blockId);
+                if (!currentBlockIds.has(blockId)) continue;
+
+                doc.forEach((node) => {
+                    if (node.attrs[attributeName] === blockId) {
+                        out.push({
+                            blockId,
+                            action: 'update',
+                            type: node.type.name,
+                            content: node.toJSON(),
+                            prevVersion: storage.blockVersions.get(blockId),
+                        });
+                    }
+                });
+            }
+
+            return out;
         };
 
         storage.getIncrementalPayload = (): IncrementalSavePayload => ({
@@ -194,13 +258,18 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions>({
                 editor.state.doc,
                 attributeName,
             );
+            // Reset the ChangeSet baseline to the just-saved doc.
+            const view = editor.view;
+            view.dispatch(view.state.tr.setMeta(DIRTY_TRACKER_KEY, { reset: true }));
         };
 
         storage.hasDirtyChanges = (): boolean => {
             if (!storage.initialized) return false;
             if (storage.touchedBlockIds.size > 0) return true;
 
-            // Check for deletions (blocks that disappeared)
+            const cs = readChangeSet();
+            if (cs && cs.changes.length > 0) return true;
+
             const currentBlockIds = collectTopLevelBlockIds(
                 editor.state.doc,
                 attributeName,
@@ -218,6 +287,14 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions>({
                 attributeName,
             );
             storage.initialized = true;
+            const view = editor.view;
+            view.dispatch(view.state.tr.setMeta(DIRTY_TRACKER_KEY, { reset: true }));
+        };
+
+        storage.setBlockVersions = (versions) => {
+            storage.blockVersions = versions instanceof Map
+                ? new Map(versions)
+                : new Map(Object.entries(versions));
         };
     },
 
@@ -226,52 +303,66 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions>({
         const storage = this.storage as DirtyTrackerStorage;
 
         return [
-            new Plugin({
+            new Plugin<{ changeSet: ChangeSet }>({
                 key: DIRTY_TRACKER_KEY,
 
-                appendTransaction: (transactions, oldState, newState) => {
-                    // Only care about transactions that actually changed the document
-                    const docChanged =
-                        transactions.some(t => t.docChanged) &&
-                        !oldState.doc.eq(newState.doc);
+                state: {
+                    init(_, state) {
+                        return { changeSet: ChangeSet.create(state.doc) };
+                    },
+                    apply(tr, value, oldState, newState) {
+                        // Manual reset (commitSave / reinitialize)
+                        const meta = tr.getMeta(DIRTY_TRACKER_KEY) as { reset?: boolean } | undefined;
+                        if (meta?.reset) {
+                            return { changeSet: ChangeSet.create(newState.doc) };
+                        }
 
+                        // Skip transactions that didn't change the doc.
+                        if (!tr.docChanged) return value;
+
+                        // Apply user-provided filter.
+                        if (filterTransaction && !filterTransaction(tr)) {
+                            return value;
+                        }
+
+                        const updated = value.changeSet.addSteps(
+                            newState.doc,
+                            tr.mapping.maps,
+                            null,
+                        );
+                        return { changeSet: updated };
+                    },
+                },
+
+                appendTransaction: (transactions, oldState, newState) => {
+                    // Maintain `touchedBlockIds` as a fast-path index for
+                    // hasDirtyChanges() and as a fallback for getDirtyChanges().
+                    const docChanged = transactions.some((t) => t.docChanged)
+                        && !oldState.doc.eq(newState.doc);
                     if (!docChanged) return null;
 
-                    // Apply the user-provided filter (e.g., ignore collab-origin changes)
-                    if (
-                        filterTransaction &&
-                        transactions.some(t => !filterTransaction(t))
-                    ) {
+                    if (filterTransaction && transactions.some((t) => !filterTransaction(t))) {
                         return null;
                     }
 
-                    // Combine all steps and compute the changed ranges
-                    // @ts-ignore — transactions type is compatible
-                    const transform = combineTransactionSteps(
-                        oldState.doc,
-                        [...transactions],
-                    );
-                    const changes = getChangedRanges(transform);
-
-                    // For each changed range, find the top-level block that overlaps
-                    changes.forEach(change => {
-                        const from = Math.max(0, change.newStart);
-                        const to = Math.min(change.newEnd, newState.doc.content.size);
-                        if (from >= to) return;
-
-                        newState.doc.nodesBetween(from, to, (node, _pos, parent) => {
-                            // Only track direct children of the document node
-                            if (parent === newState.doc) {
-                                const blockId = node.attrs[attributeName];
-                                if (blockId) {
-                                    storage.touchedBlockIds.add(blockId);
-                                }
-                                return false; // no need to descend into children
-                            }
+                    // Aggregate all step maps and walk back to find the affected
+                    // ranges in the new doc.
+                    transactions.forEach((tr) => {
+                        tr.mapping.maps.forEach((stepMap) => {
+                            stepMap.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
+                                const from = Math.max(0, newStart);
+                                const to = Math.min(newEnd, newState.doc.content.size);
+                                if (from >= to) return;
+                                newState.doc.nodesBetween(from, to, (node, _pos, parent) => {
+                                    if (parent === newState.doc) {
+                                        const blockId = node.attrs[attributeName];
+                                        if (blockId) storage.touchedBlockIds.add(blockId);
+                                        return false;
+                                    }
+                                });
+                            });
                         });
                     });
-
-                    // Read-only — never return a new transaction
                     return null;
                 },
             }),

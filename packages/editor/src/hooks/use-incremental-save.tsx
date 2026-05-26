@@ -14,16 +14,8 @@ export interface UseIncrementalSaveOptions {
     editor: Editor | null;
     /** Debounce delay in milliseconds (default: 2000) */
     debounceDelay?: number;
-    /**
-     * Called for incremental saves with only the changed blocks.
-     * If not provided, every save falls back to `onFullSave`.
-     */
-    onIncrementalSave?: (payload: IncrementalSavePayload) => Promise<void>;
-    /**
-     * Called for full-document saves (fallback, manual save, periodic checkpoint).
-     * Always required as a safety net.
-     */
-    onFullSave: (content: any) => Promise<void>;
+    /** Called for incremental saves with only the changed blocks. */
+    onIncrementalSave: (payload: IncrementalSavePayload) => Promise<void>;
     /** Whether auto-save is enabled (default: true) */
     enabled?: boolean;
     /** Callback when save status changes */
@@ -33,16 +25,6 @@ export interface UseIncrementalSaveOptions {
      * While false, editor update events are ignored.
      */
     contentReady?: boolean;
-    /**
-     * If the ratio of changed blocks to total blocks exceeds this threshold,
-     * fall back to a full save instead of incremental (default: 0.5).
-     */
-    incrementalThreshold?: number;
-    /**
-     * Number of consecutive incremental saves before forcing a full checkpoint
-     * save for data integrity (default: 20, set 0 to disable).
-     */
-    fullSaveInterval?: number;
 }
 
 // ─── Return type ─────────────────────────────────────────────────────
@@ -72,27 +54,17 @@ function getDirtyTrackerStorage(editor: Editor | null): DirtyTrackerStorage | nu
 // ─── Hook ────────────────────────────────────────────────────────────
 
 /**
- * useIncrementalSave — a drop-in replacement for useAutoSave that leverages
- * the DirtyTracker extension to send only changed blocks to the backend.
- *
- * When `onIncrementalSave` is provided:
- *   - Small changes → incremental payload (only dirty blocks + block order)
- *   - Large changes (> threshold) → falls back to full save
- *   - Every N incremental saves → full checkpoint save for safety
- *
- * When `onIncrementalSave` is NOT provided:
- *   - Behaves exactly like the old useAutoSave (always full save)
+ * useIncrementalSave — leverages the DirtyTracker extension to send only
+ * changed blocks to the backend. No full-document save is performed;
+ * if nothing changed or the tracker isn't ready, the save is simply skipped.
  */
 export function useIncrementalSave({
     editor,
     debounceDelay = 2000,
     onIncrementalSave,
-    onFullSave,
     enabled = true,
     onStatusChange,
     contentReady = true,
-    incrementalThreshold = 0.5,
-    fullSaveInterval = 20,
 }: UseIncrementalSaveOptions): UseIncrementalSaveReturn {
     const [status, setStatus] = useState<AutoSaveStatus>('idle');
     const [isDirty, setIsDirty] = useState(false);
@@ -100,7 +72,6 @@ export function useIncrementalSave({
     const isSavingRef = useRef(false);
     const pendingSaveRef = useRef(false);
     const contentReadyRef = useRef(contentReady);
-    const incrementalCountRef = useRef(0);
 
     // Update status and notify
     const updateStatus = useCallback((newStatus: AutoSaveStatus) => {
@@ -120,35 +91,23 @@ export function useIncrementalSave({
 
         try {
             const tracker = getDirtyTrackerStorage(editor);
-            let didIncremental = false;
 
-            // Attempt incremental save if available
-            if (tracker && tracker.initialized && onIncrementalSave) {
+            if (tracker && tracker.initialized) {
                 const payload = tracker.getIncrementalPayload();
-                const totalBlocks = payload.blockOrder.length;
-                const changedBlocks = payload.changes.length;
 
-                const shouldDoFull =
-                    changedBlocks === 0 ||
-                    totalBlocks === 0 ||
-                    (changedBlocks / Math.max(totalBlocks, 1)) > incrementalThreshold ||
-                    (fullSaveInterval > 0 && incrementalCountRef.current >= fullSaveInterval);
-
-                if (!shouldDoFull && changedBlocks > 0) {
-                    await onIncrementalSave(payload);
-                    tracker.commitSave();
-                    incrementalCountRef.current++;
-                    didIncremental = true;
+                // Nothing changed — skip save
+                if (payload.changes.length === 0) {
+                    setIsDirty(false);
+                    updateStatus('idle');
+                    return;
                 }
-            }
 
-            // Full save fallback
-            if (!didIncremental) {
-                const content = editor.getJSON();
-                await onFullSave(content);
-                const t = getDirtyTrackerStorage(editor);
-                if (t) t.commitSave();
-                incrementalCountRef.current = 0;
+                await onIncrementalSave(payload);
+                tracker.commitSave();
+            } else {
+                // DirtyTracker not ready — skip
+                updateStatus('idle');
+                return;
             }
 
             setIsDirty(false);
@@ -171,7 +130,7 @@ export function useIncrementalSave({
                 performSave();
             }
         }
-    }, [editor, onIncrementalSave, onFullSave, updateStatus, incrementalThreshold, fullSaveInterval]);
+    }, [editor, onIncrementalSave, updateStatus]);
 
     // Debounced save
     const { run: debouncedSave, cancel: cancelDebouncedSave } = useDebounceFn(

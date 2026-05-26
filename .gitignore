@@ -23,10 +23,11 @@ coverage
 
 # Vercel
 .vercel
+.backend/
 
 # Build Outputs
 .next/
-out/
+out/·
 build
 dist
 

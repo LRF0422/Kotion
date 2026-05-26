@@ -4,7 +4,7 @@ import request from "../utils/request"
 export interface API {
     name: string,
     url: string,
-    method: 'POST' | 'GET' | 'DELETE' | 'PUT',
+    method: 'POST' | 'GET' | 'DELETE' | 'PUT' | 'PATCH',
     ipcChannel?: string, // Optional IPC channel for Electron
 }
 
@@ -204,6 +204,15 @@ const handleHttpRequest = (api: API, param?: any, body?: any, header?: Record<st
             return request.delete(fillPathParam(api.url, param), param)
         case "PUT":
             return request.put(fillPathParam(api.url, param), body)
+        case "PATCH":
+            return request({
+                url: fillPathParam(api.url, param),
+                method: 'PATCH',
+                data: body,
+                headers: {
+                    ...(header || {})
+                }
+            })
     }
 }
 
