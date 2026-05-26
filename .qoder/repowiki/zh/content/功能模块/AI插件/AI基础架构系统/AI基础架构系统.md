@@ -24,16 +24,21 @@
 - [packages/common/src/ai/foundation/types.ts](file://packages/common/src/ai/foundation/types.ts)
 - [packages/common/src/ai/types.ts](file://packages/common/src/ai/types.ts)
 - [packages/common/src/ai/skills/skill-registry.ts](file://packages/common/src/ai/skills/skill-registry.ts)
+- [packages/common/src/ai/utils/markdown-parser.ts](file://packages/common/src/ai/utils/markdown-parser.ts)
+- [packages/core/src/ai/tools/callout-tools.ts](file://packages/core/src/ai/tools/callout-tools.ts)
+- [packages/core/src/ai/tools/columns-tools.ts](file://packages/core/src/ai/tools/columns-tools.ts)
+- [packages/core/src/ai/tools/insert-tools.ts](file://packages/core/src/ai/tools/insert-tools.ts)
+- [packages/core/src/ai/tools/index.ts](file://packages/core/src/ai/tools/index.ts)
+- [packages/core/src/ai/tools/register.ts](file://packages/core/src/ai/tools/register.ts)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 新增AI知识提供者系统章节，详细介绍全新的Knowledge Provider实现
-- 更新AI插件系统架构，反映从DeepSeek集成到AI SDK V2接口的迁移
-- 新增指数退避重试逻辑和流式协议支持的技术细节
-- 更新AI基础架构的组件关系图，体现新的知识提供者架构
 - 新增AI工具转换和OpenAI兼容性的技术说明
-- 新增技能注册表系统，支持技能的持久化管理
+- 新增parseMarkdownToNodes工具函数的详细分析，支持更复杂的markdown语法和嵌套格式
+- 更新AI工具功能章节，反映callout-tools的markdown处理能力改进
+- 新增AI工具注册系统和工具工厂模式的架构说明
+- 更新技能注册表系统，增加对AI工具的支持
 - 新增AI聊天客户端和SSE解析器的架构说明
 
 ## 目录
@@ -43,12 +48,13 @@
 4. [架构概览](#架构概览)
 5. [详细组件分析](#详细组件分析)
 6. [AI知识提供者系统](#ai知识提供者系统)
-7. [技能注册表系统](#技能注册表系统)
-8. [AI聊天客户端架构](#ai聊天客户端架构)
-9. [依赖关系分析](#依赖关系分析)
-10. [性能考虑](#性能考虑)
-11. [故障排除指南](#故障排除指南)
-12. [结论](#结论)
+7. [AI工具系统](#ai工具系统)
+8. [技能注册表系统](#技能注册表系统)
+9. [AI聊天客户端架构](#ai聊天客户端架构)
+10. [依赖关系分析](#依赖关系分析)
+11. [性能考虑](#性能考虑)
+12. [故障排除指南](#故障排除指南)
+13. [结论](#结论)
 
 ## 项目简介
 
@@ -67,6 +73,7 @@ AI基础架构系统是一个强大的协作知识管理平台，集成了丰富
 - **国际化**：完整的多语言支持
 - **技能系统**：可持久化的AI技能管理
 - **聊天客户端**：支持SSE流式传输的AI通信
+- **AI工具系统**：基于parseMarkdownToNodes的智能markdown处理
 
 ### 技术栈
 
@@ -98,6 +105,13 @@ AIUtils[AI工具函数]
 AIFoundation[AI基础架构]
 SkillRegistry[技能注册表]
 ChatClient[聊天客户端]
+end
+subgraph "AI工具系统层"
+MarkdownParser[Markdown解析器]
+CalloutTools[提示框工具]
+ColumnsTools[分栏工具]
+InsertTools[插入工具]
+ToolRegistry[工具注册表]
 end
 subgraph "插件包层"
 PluginAI[plugin-ai AI能力]
@@ -253,6 +267,13 @@ FileManagement[文件管理系统]
 DatabaseIntegration[数据库集成]
 Collaboration[协作服务]
 end
+subgraph "AI工具系统层"
+MarkdownParser[Markdown解析器]
+CalloutTools[提示框工具]
+ColumnsTools[分栏工具]
+InsertTools[插入工具]
+ToolRegistry[工具注册表]
+end
 subgraph "基础设施层 (Infrastructure Layer)"
 RoomServer[协作服务器]
 Database[(数据库)]
@@ -276,6 +297,12 @@ ChatClient --> ExternalAPIs
 FileManagement --> Storage
 DatabaseIntegration --> Database
 Collaboration --> RoomServer
+MarkdownParser --> CalloutTools
+MarkdownParser --> ColumnsTools
+MarkdownParser --> InsertTools
+ToolRegistry --> CalloutTools
+ToolRegistry --> ColumnsTools
+ToolRegistry --> InsertTools
 ```
 
 **图表来源**
@@ -596,6 +623,177 @@ KnowledgeProvider --> ToolRegistry
 - [packages/common/src/ai/foundation/types.ts:1-347](file://packages/common/src/ai/foundation/types.ts#L1-L347)
 - [packages/common/src/ai/types.ts:1-183](file://packages/common/src/ai/types.ts#L1-L183)
 
+## AI工具系统
+
+### 系统概述
+
+AI工具系统是AI基础架构的核心组件，提供了丰富的文档操作工具，支持智能的markdown到ProseMirror节点转换。该系统基于parseMarkdownToNodes工具函数，能够处理复杂的markdown语法和嵌套格式。
+
+### 核心架构设计
+
+```mermaid
+classDiagram
+class MarkdownParser {
+<<interface>>
++parseMarkdownToNodes() any[]
++parseInlineMarkdown() any[]
++contentItemsToNodes() any[]
+}
+class CalloutTools {
++insertCallout() any
++getCalloutInfo() any
++updateCalloutType() any
++updateCalloutContent() any
++deleteCallout() any
+}
+class ColumnsTools {
++insertColumns() any
++getColumnsInfo() any
++updateColumnContent() any
++setColumnsLayout() any
++addColumnToLayout() any
++deleteColumn() any
++deleteColumnsLayout() any
++insertNestedColumns() any
+}
+class InsertTools {
++write() any
++insertNear() any
++replaceContent() any
+}
+class ToolRegistry {
++register() void
++load() Promise
++get() ToolDefinition
+}
+MarkdownParser --> CalloutTools
+MarkdownParser --> ColumnsTools
+MarkdownParser --> InsertTools
+ToolRegistry --> CalloutTools
+ToolRegistry --> ColumnsTools
+ToolRegistry --> InsertTools
+```
+
+**图表来源**
+- [packages/common/src/ai/utils/markdown-parser.ts:4-292](file://packages/common/src/ai/utils/markdown-parser.ts#L4-L292)
+- [packages/core/src/ai/tools/callout-tools.ts:71-345](file://packages/core/src/ai/tools/callout-tools.ts#L71-L345)
+- [packages/core/src/ai/tools/columns-tools.ts:91-615](file://packages/core/src/ai/tools/columns-tools.ts#L91-L615)
+- [packages/core/src/ai/tools/insert-tools.ts:14-317](file://packages/core/src/ai/tools/insert-tools.ts#L14-L317)
+
+### parseMarkdownToNodes工具函数
+
+parseMarkdownToNodes是AI工具系统的核心组件，提供了智能的markdown到ProseMirror节点转换功能：
+
+```mermaid
+flowchart TD
+Start([输入markdown文本]) --> Normalize[规范化换行符]
+Normalize --> InitVars[初始化解析变量]
+InitVars --> LoopLines[逐行解析]
+LoopLines --> CheckCodeBlock{检查代码块}
+CheckCodeBlock --> |开始代码块| HandleCodeBlock[处理代码块]
+CheckCodeBlock --> |结束代码块| HandleCodeBlock
+CheckCodeBlock --> |普通行| CheckEmpty{检查空行}
+HandleCodeBlock --> LoopLines
+CheckEmpty --> |空行| CloseListsTables[关闭列表和表格]
+CheckEmpty --> |非空行| CheckTable{检查表格}
+CloseListsTables --> LoopLines
+CheckTable --> |表格分隔线| HandleTable[处理表格]
+CheckTable --> |表格行| HandleTable
+CheckTable --> |标题| HandleHeading[处理标题]
+CheckTable --> |列表| HandleList[处理列表]
+CheckTable --> |引用| HandleQuote[处理引用]
+CheckTable --> |水平线| HandleHR[处理水平线]
+CheckTable --> |段落| HandleParagraph[处理段落]
+HandleHeading --> LoopLines
+HandleList --> LoopLines
+HandleQuote --> LoopLines
+HandleHR --> LoopLines
+HandleParagraph --> LoopLines
+LoopLines --> End([输出ProseMirror节点数组])
+```
+
+**图表来源**
+- [packages/common/src/ai/utils/markdown-parser.ts:4-292](file://packages/common/src/ai/utils/markdown-parser.ts#L4-L292)
+
+### callout-tools的markdown处理能力
+
+callout-tools是AI工具系统的重要组成部分，专门处理提示框（InfoPanel）的markdown内容：
+
+```mermaid
+sequenceDiagram
+participant User as 用户
+participant CalloutTools as 提示框工具
+participant MarkdownParser as Markdown解析器
+participant Editor as 编辑器
+User->>CalloutTools : 调用insertCallout
+CalloutTools->>MarkdownParser : parseMarkdownToNodes(content)
+MarkdownParser->>MarkdownParser : 解析markdown语法
+MarkdownParser-->>CalloutTools : 返回ProseMirror节点
+CalloutTools->>Editor : 插入提示框节点
+Editor-->>User : 显示提示框
+```
+
+**图表来源**
+- [packages/core/src/ai/tools/callout-tools.ts:93-94](file://packages/core/src/ai/tools/callout-tools.ts#L93-L94)
+- [packages/core/src/ai/tools/callout-tools.ts:278-281](file://packages/core/src/ai/tools/callout-tools.ts#L278-L281)
+
+### 工具注册系统
+
+AI工具系统采用工厂模式和注册表机制，支持动态加载和管理各种工具：
+
+```mermaid
+sequenceDiagram
+participant App as 应用程序
+participant ToolRegistry as 工具注册表
+participant CalloutTools as 提示框工具工厂
+participant ColumnsTools as 分栏工具工厂
+participant InsertTools as 插入工具工厂
+App->>ToolRegistry : registerCoreToolFactories()
+ToolRegistry->>CalloutTools : createCalloutTools()
+ToolRegistry->>ColumnsTools : createColumnsTools()
+ToolRegistry->>InsertTools : createInsertTools()
+ToolRegistry->>ToolRegistry : 注册工具工厂
+ToolRegistry-->>App : 工具注册完成
+```
+
+**图表来源**
+- [packages/core/src/ai/tools/register.ts:29-45](file://packages/core/src/ai/tools/register.ts#L29-L45)
+
+### AI工具功能流程
+
+```mermaid
+flowchart TD
+Start([用户触发AI工具操作]) --> CheckTool{检查工具类型}
+CheckTool --> |提示框工具| CalloutFlow[提示框工具流程]
+CheckTool --> |分栏工具| ColumnsFlow[分栏工具流程]
+CheckTool --> |插入工具| InsertFlow[插入工具流程]
+CalloutFlow --> ParseMarkdown[解析markdown内容]
+ParseMarkdown --> CreateNodes[创建ProseMirror节点]
+CreateNodes --> InsertNode[插入到编辑器]
+InsertNode --> End([完成])
+ColumnsFlow --> ParseMarkdown2[解析markdown内容]
+ParseMarkdown2 --> CreateColumns[创建分栏节点]
+CreateColumns --> InsertColumns[插入到编辑器]
+InsertColumns --> End
+InsertFlow --> ParseMarkdown3[解析markdown内容]
+ParseMarkdown3 --> CreateInsertNodes[创建插入节点]
+CreateInsertNodes --> InsertContent[插入内容]
+InsertContent --> End
+```
+
+**图表来源**
+- [packages/core/src/ai/tools/callout-tools.ts:76-167](file://packages/core/src/ai/tools/callout-tools.ts#L76-L167)
+- [packages/core/src/ai/tools/columns-tools.ts:92-151](file://packages/core/src/ai/tools/columns-tools.ts#L92-L151)
+- [packages/core/src/ai/tools/insert-tools.ts:68-123](file://packages/core/src/ai/tools/insert-tools.ts#L68-L123)
+
+**章节来源**
+- [packages/common/src/ai/utils/markdown-parser.ts:1-458](file://packages/common/src/ai/utils/markdown-parser.ts#L1-L458)
+- [packages/core/src/ai/tools/callout-tools.ts:1-346](file://packages/core/src/ai/tools/callout-tools.ts#L1-L346)
+- [packages/core/src/ai/tools/columns-tools.ts:1-616](file://packages/core/src/ai/tools/columns-tools.ts#L1-L616)
+- [packages/core/src/ai/tools/insert-tools.ts:1-318](file://packages/core/src/ai/tools/insert-tools.ts#L1-L318)
+- [packages/core/src/ai/tools/index.ts:1-15](file://packages/core/src/ai/tools/index.ts#L1-L15)
+- [packages/core/src/ai/tools/register.ts:1-46](file://packages/core/src/ai/tools/register.ts#L1-L46)
+
 ## 技能注册表系统
 
 ### 系统概述
@@ -886,6 +1084,11 @@ AIUtils[AI工具函数]
 AIFoundation[AI基础架构]
 SkillRegistry[技能注册表]
 ChatClient[聊天客户端]
+MarkdownParser[Markdown解析器]
+CalloutTools[提示框工具]
+ColumnsTools[分栏工具]
+InsertTools[插入工具]
+ToolRegistry[工具注册表]
 PluginAI[plugin-ai]
 end
 subgraph "插件包"
@@ -922,6 +1125,11 @@ PluginAI --> AIUtils
 PluginAI --> AIFoundation
 PluginAI --> SkillRegistry
 PluginAI --> ChatClient
+PluginAI --> MarkdownParser
+PluginAI --> CalloutTools
+PluginAI --> ColumnsTools
+PluginAI --> InsertTools
+PluginAI --> ToolRegistry
 PluginMain --> Core
 PluginMain --> UI
 PluginMain --> Common
@@ -959,6 +1167,7 @@ ElectronAdapter --> Core
 - **防抖节流**：高频事件使用防抖节流优化
 - **内存管理**：及时清理事件监听器和定时器
 - **流式处理**：AI响应采用流式处理，提升用户体验
+- **智能markdown解析**：parseMarkdownToNodes优化了复杂markdown的处理性能
 
 ### 缓存策略
 
@@ -967,6 +1176,7 @@ ElectronAdapter --> Core
 - **协作状态缓存**：Yjs协作状态本地缓存
 - **图像缓存**：生成的图像缓存到本地存储
 - **模型响应缓存**：AI模型输出结果缓存
+- **工具解析缓存**：AI工具的解析结果缓存
 
 ### AI性能优化
 
@@ -975,6 +1185,7 @@ ElectronAdapter --> Core
 - **工具调用优化**：高效的工具执行和结果处理
 - **上下文管理**：智能的文档上下文提取和管理
 - **技能持久化**：技能状态的本地缓存和同步
+- **markdown解析优化**：parseMarkdownToNodes支持复杂语法和嵌套格式
 
 ## 故障排除指南
 
@@ -1022,6 +1233,17 @@ ElectronAdapter --> Core
 4. 查看工具转换日志
 5. 检查指数退避重试机制
 
+#### AI工具系统问题
+
+**症状**：AI工具无法正确处理markdown内容
+
+**排查步骤**：
+1. 验证parseMarkdownToNodes函数调用
+2. 检查markdown语法格式
+3. 确认ProseMirror节点转换
+4. 查看工具注册表状态
+5. 检查编辑器集成
+
 #### 技能注册表问题
 
 **症状**：AI技能无法正确加载或保存
@@ -1049,6 +1271,7 @@ ElectronAdapter --> Core
 - [packages/room-server/package.json:10-15](file://packages/room-server/package.json#L10-L15)
 - [packages/common/src/ai/model-provider/knowledge-provider.ts:17-53](file://packages/common/src/ai/model-provider/knowledge-provider.ts#L17-L53)
 - [packages/common/src/ai/skills/skill-registry.ts:131-138](file://packages/common/src/ai/skills/skill-registry.ts#L131-L138)
+- [packages/common/src/ai/utils/markdown-parser.ts:4-292](file://packages/common/src/ai/utils/markdown-parser.ts#L4-L292)
 
 ## 结论
 
@@ -1061,6 +1284,7 @@ AI基础架构系统是一个设计精良的现代化知识管理平台，具有
 - **实时协作**：基于Hocuspocus的专业协作解决方案
 - **AI集成**：深度集成的AI功能和扩展接口
 - **AI知识提供者系统**：全新的AI模型集成架构，支持AI SDK V2接口、指数退避重试逻辑、OpenAI兼容工具转换和流式协议支持
+- **AI工具系统**：基于parseMarkdownToNodes的智能markdown处理能力，支持复杂的语法和嵌套格式
 - **技能管理系统**：可持久化的AI技能管理，支持多种存储后端
 - **聊天客户端架构**：完整的SSE流式传输协议，提供实时AI响应处理
 
@@ -1073,6 +1297,7 @@ AI基础架构系统是一个设计精良的现代化知识管理平台，具有
 - **AI架构现代化**：采用最新的AI SDK V2标准
 - **存储多样化**：支持本地、API和混合存储模式
 - **事件驱动**：基于SSE的实时事件处理机制
+- **工具系统完善**：基于工厂模式的工具注册和管理
 
 ### 发展方向
 
@@ -1085,5 +1310,7 @@ AI基础架构系统是一个设计精良的现代化知识管理平台，具有
 - 深化AI知识提供者系统的功能
 - 增强技能系统的智能化程度
 - 优化聊天客户端的性能和稳定性
+- 扩展AI工具系统的功能范围
+- 改进markdown解析器的处理能力
 
 该系统为知识管理和协作提供了一个强大而灵活的基础平台，适合各种规模的团队和应用场景使用。

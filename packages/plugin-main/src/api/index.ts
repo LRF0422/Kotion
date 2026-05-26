@@ -44,6 +44,11 @@ export const APIS = {
         url: '/knowledge-wiki/space/page',
         method: 'POST'
     } as API,
+    /** Incremental save — send only changed blocks instead of the full page */
+    PATCH_PAGE_BLOCKS: {
+        url: '/knowledge-wiki/space/page/:id/blocks',
+        method: 'PATCH'
+    } as API,
     CREATE_SPACE: {
         url: '/knowledge-wiki/space',
         method: 'POST'

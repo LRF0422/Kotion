@@ -7,7 +7,8 @@ import { RadioGroup, RadioGroupItem } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { Switch } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
-import { CollaborationEditor, exportToPDF, useAutoSave, AutoSaveStatus, TiptapCollabProvider } from "@kn/editor";
+import { CollaborationEditor, exportToPDF, useIncrementalSave, AutoSaveStatus, TiptapCollabProvider } from "@kn/editor";
+import type { IncrementalSavePayload } from "@kn/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
 import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes } from "@kn/common";
 import { useNavigator } from "@kn/common";
@@ -204,8 +205,8 @@ export const PageEditor: React.FC = () => {
         return null
     }, [])
 
-    // Auto-save callback - performs the actual save operation
-    const handleAutoSave = useCallback(async (content: any) => {
+    // Auto-save callback - performs the actual FULL save operation
+    const handleFullSave = useCallback(async (content: any) => {
         if (!page || !params.pageId) return;
 
         const title = getTitleContent(content);
@@ -224,11 +225,29 @@ export const PageEditor: React.FC = () => {
         event.emit(ON_PAGE_REFRESH);
     }, [page, params.pageId, getTitleContent, getIcon])
 
-    // Use auto-save hook
-    const { status: autoSaveStatus, isDirty, saveNow, markAsSaved } = useAutoSave({
+    // Incremental save callback - sends only changed blocks
+    const handleIncrementalSave = useCallback(async (payload: IncrementalSavePayload) => {
+        if (!page || !params.pageId) return;
+
+        await useApi(APIS.PATCH_PAGE_BLOCKS, { id: params.pageId }, {
+            pageId: params.pageId,
+            blockOrder: payload.blockOrder,
+            changes: payload.changes.map(c => ({
+                blockId: c.blockId,
+                action: c.action,
+                type: c.type,
+                content: c.content ? JSON.stringify(c.content) : undefined,
+            })),
+        });
+        event.emit(ON_PAGE_REFRESH);
+    }, [page, params.pageId])
+
+    // Use incremental auto-save hook
+    const { status: autoSaveStatus, isDirty, saveNow, markAsSaved } = useIncrementalSave({
         editor: editor.current,
         debounceDelay: 3000, // Auto-save after 3 seconds of inactivity
-        onSave: handleAutoSave,
+        onIncrementalSave: handleIncrementalSave,
+        onFullSave: handleFullSave,
         enabled: !!page && !!params.pageId,
         contentReady: editorContentReady,
     });

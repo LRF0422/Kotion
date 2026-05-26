@@ -12,6 +12,7 @@
 - [packages/plugin-mermaid/package.json](file://packages/plugin-mermaid/package.json)
 - [apps/vite/src/main.tsx](file://apps/vite/src/main.tsx)
 - [packages/common/src/core/PluginManager.ts](file://packages/common/src/core/PluginManager.ts)
+- [packages/editor/src/components/NodeViewErrorBoundary.tsx](file://packages/editor/src/components/NodeViewErrorBoundary.tsx)
 </cite>
 
 ## 更新摘要
@@ -20,6 +21,7 @@
 - 扩展工具集，包含图表插入、列表、更新、删除和模板获取功能
 - 新增10种图表类型的完整模板支持
 - 增强编辑器扩展，提供智能图表类型检测和管理能力
+- **集成NodeViewErrorBoundary高阶组件，提升插件生态系统稳定性**
 
 ## 目录
 1. [简介](#简介)
@@ -30,14 +32,17 @@
 6. [Mermaid图表技能系统](#mermaid图表技能系统)
 7. [图表类型与模板](#图表类型与模板)
 8. [工具集详解](#工具集详解)
-9. [依赖分析](#依赖分析)
-10. [性能考虑](#性能考虑)
-11. [故障排查指南](#故障排查指南)
-12. [结论](#结论)
-13. [附录](#附录)
+9. [错误边界与稳定性保障](#错误边界与稳定性保障)
+10. [依赖分析](#依赖分析)
+11. [性能考虑](#性能考虑)
+12. [故障排查指南](#故障排查指南)
+13. [结论](#结论)
+14. [附录](#附录)
 
 ## 简介
 本插件为知识库编辑器提供全面的Mermaid图表解决方案，不仅支持在编辑器中通过"/mermaid"快捷指令或工具面板插入Mermaid节点，还新增了强大的技能系统，支持AI代理自动创建和管理各种类型的图表。插件支持10种图表类型（流程图、时序图、类图、状态图、ER图、甘特图、饼图、思维导图、时间线、Git分支图），提供完整的图表生命周期管理能力，包括创建、编辑、更新、删除和模板获取等功能。
+
+**更新** 新增NodeViewErrorBoundary高阶组件集成，确保Mermaid图表渲染错误不会导致整个编辑器崩溃，显著提升插件生态系统的稳定性。
 
 ## 项目结构
 该插件位于packages/plugin-mermaid，主要由以下部分组成：
@@ -45,6 +50,7 @@
 - 编辑器扩展：定义Mermaid节点、节点视图以及丰富的工具集和技能系统。
 - 技能系统：提供AI代理专用的Mermaid图表技能，支持多种图表类型的自动创建和管理。
 - 渲染组件：提供独立的React组件用于在任意页面渲染Mermaid源码为SVG，并支持错误处理、复制与下载等交互。
+- 错误边界：集成NodeViewErrorBoundary高阶组件，提供节点视图级别的错误处理和恢复能力。
 - 样式：Tailwind CSS与基础样式，确保渲染容器、动作按钮与响应式布局一致。
 
 ```mermaid
@@ -53,33 +59,39 @@ A["插件入口<br/>packages/plugin-mermaid/src/index.tsx"] --> B["编辑器扩�
 B --> C["Mermaid节点定义<br/>packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts"]
 B --> D["Mermaid节点视图<br/>packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx"]
 B --> E["技能系统<br/>packages/plugin-mermaid/src/editor-extension/mermaid/skills/mermaid-skill.ts"]
-D --> F["Mermaid渲染组件<br/>packages/plugin-mermaid/src/component/index.tsx"]
-F --> G["Mermaid样式<br/>packages/plugin-mermaid/src/component/styles.css"]
-A --> H["应用集成示例<br/>apps/vite/src/main.tsx"]
-A --> I["插件管理器通用<br/>packages/common/src/core/PluginManager.ts"]
+D --> F["错误边界集成<br/>NodeViewErrorBoundary"]
+F --> G["Mermaid渲染组件<br/>packages/plugin-mermaid/src/component/index.tsx"]
+G --> H["Mermaid样式<br/>packages/plugin-mermaid/src/component/styles.css"]
+A --> I["应用集成示例<br/>apps/vite/src/main.tsx"]
+A --> J["插件管理器通用<br/>packages/common/src/core/PluginManager.ts"]
 ```
 
 **图示来源**
 - [packages/plugin-mermaid/src/index.tsx:1-17](file://packages/plugin-mermaid/src/index.tsx#L1-L17)
 - [packages/plugin-mermaid/src/editor-extension/mermaid/index.tsx:1-408](file://packages/plugin-mermaid/src/editor-extension/mermaid/index.tsx#L1-L408)
-- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:1-46](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L1-L46)
-- [packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx:1-99](file://packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx#L1-L99)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:1-47](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L1-L47)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx:1-362](file://packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx#L1-L362)
 - [packages/plugin-mermaid/src/editor-extension/mermaid/skills/mermaid-skill.ts:1-40](file://packages/plugin-mermaid/src/editor-extension/mermaid/skills/mermaid-skill.ts#L1-L40)
 - [packages/plugin-mermaid/src/component/index.tsx:1-197](file://packages/plugin-mermaid/src/component/index.tsx#L1-L197)
 - [packages/plugin-mermaid/src/component/styles.css:1-83](file://packages/plugin-mermaid/src/component/styles.css#L1-L83)
 - [apps/vite/src/main.tsx:1-23](file://apps/vite/src/main.tsx#L1-L23)
 - [packages/common/src/core/PluginManager.ts:1-177](file://packages/common/src/core/PluginManager.ts#L1-L177)
+- [packages/editor/src/components/NodeViewErrorBoundary.tsx:1-95](file://packages/editor/src/components/NodeViewErrorBoundary.tsx#L1-L95)
 
 ## 核心组件
 - 插件实例与注册
   - 通过继承通用插件基类创建实例，声明编辑器扩展数组包含Mermaid扩展，供应用在启动时统一加载。
 - Mermaid节点与命令
   - 定义名为mermaid的块级节点，提供插入命令，支持传入初始代码片段。
-  - 节点视图使用React渲染器挂载MermaidView。
+  - 节点视图使用React渲染器挂载MermaidView，并通过withNodeViewErrorBoundary高阶组件包装。
 - Mermaid节点视图
   - 使用Monaco编辑器作为源码编辑器，支持主题联动（深色/浅色）。
   - 实时防抖更新节点属性中的数据字段，避免频繁重渲染。
   - 将源码交给渲染组件进行Mermaid渲染，空代码时显示占位提示。
+- 错误边界集成
+  - 通过NodeViewErrorBoundary高阶组件提供节点视图级别的错误处理。
+  - 当Mermaid图表渲染出现错误时，显示友好的错误界面而非完全崩溃。
+  - 支持错误重试机制，用户可手动重试渲染。
 - 渲染组件
   - 对外暴露RenderMermaid组件，负责mermaid.initialize与mermaid.render的调用。
   - 支持自定义错误组件、复制与下载按钮、Mermaid配置覆盖、原始代码展示组件等。
@@ -89,13 +101,14 @@ A --> I["插件管理器通用<br/>packages/common/src/core/PluginManager.ts"]
 
 **章节来源**
 - [packages/plugin-mermaid/src/index.tsx:1-17](file://packages/plugin-mermaid/src/index.tsx#L1-L17)
-- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:1-46](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L1-L46)
-- [packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx:1-99](file://packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx#L1-L99)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:1-47](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L1-L47)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx:1-362](file://packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx#L1-L362)
 - [packages/plugin-mermaid/src/component/index.tsx:1-197](file://packages/plugin-mermaid/src/component/index.tsx#L1-L197)
 - [packages/plugin-mermaid/src/component/styles.css:1-83](file://packages/plugin-mermaid/src/component/styles.css#L1-L83)
+- [packages/editor/src/components/NodeViewErrorBoundary.tsx:1-95](file://packages/editor/src/components/NodeViewErrorBoundary.tsx#L1-L95)
 
 ## 架构总览
-下图展示了从应用启动到编辑器中插入与渲染Mermaid图表的整体流程，包括插件注册、编辑器扩展解析、节点视图渲染与实时编辑，以及新增的技能系统集成。
+下图展示了从应用启动到编辑器中插入与渲染Mermaid图表的整体流程，包括插件注册、编辑器扩展解析、节点视图渲染与实时编辑，以及新增的技能系统集成和错误边界保护。
 
 ```mermaid
 sequenceDiagram
@@ -105,6 +118,7 @@ participant Plugin as "Mermaid插件实例<br/>index.tsx"
 participant Ext as "编辑器扩展包装器<br/>mermaid/index.tsx"
 participant Skill as "技能系统<br/>mermaid-skill.ts"
 participant Node as "Mermaid节点<br/>mermaid.ts"
+participant ErrorBoundary as "错误边界<br/>NodeViewErrorBoundary"
 participant View as "Mermaid节点视图<br/>MermaidView.tsx"
 participant Render as "渲染组件<br/>component/index.tsx"
 App->>PM : 传入插件数组含mermaid
@@ -112,10 +126,12 @@ PM->>Plugin : 解析editorExtensions
 Plugin-->>Ext : 返回扩展集合
 Ext->>Skill : 注册Mermaid技能
 Ext->>Node : 注册mermaid节点与命令
+Node->>ErrorBoundary : 包装MermaidView
 App->>View : 在编辑器中插入mermaid节点
 View->>Render : 传入源码与主题配置
 Render->>Render : mermaid.initialize / mermaid.render
 Render-->>View : 返回SVG或错误信息
+ErrorBoundary-->>View : 捕获错误并显示友好界面
 View-->>App : 展示渲染结果与编辑器
 ```
 
@@ -125,8 +141,9 @@ View-->>App : 展示渲染结果与编辑器
 - [packages/plugin-mermaid/src/index.tsx:1-17](file://packages/plugin-mermaid/src/index.tsx#L1-L17)
 - [packages/plugin-mermaid/src/editor-extension/mermaid/index.tsx:1-408](file://packages/plugin-mermaid/src/editor-extension/mermaid/index.tsx#L1-L408)
 - [packages/plugin-mermaid/src/editor-extension/mermaid/skills/mermaid-skill.ts:1-40](file://packages/plugin-mermaid/src/editor-extension/mermaid/skills/mermaid-skill.ts#L1-L40)
-- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:1-46](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L1-L46)
-- [packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx:1-99](file://packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx#L1-L99)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:1-47](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L1-L47)
+- [packages/editor/src/components/NodeViewErrorBoundary.tsx:1-95](file://packages/editor/src/components/NodeViewErrorBoundary.tsx#L1-L95)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx:1-362](file://packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx#L1-L362)
 - [packages/plugin-mermaid/src/component/index.tsx:1-197](file://packages/plugin-mermaid/src/component/index.tsx#L1-L197)
 
 ## 详细组件分析
@@ -137,7 +154,8 @@ View-->>App : 展示渲染结果与编辑器
   - 提供attributes：data字段存储源码字符串。
   - 提供insertMermaid命令，向编辑器插入该节点并设置初始数据。
 - 视图渲染
-  - 使用ReactNodeViewRenderer渲染MermaidView，阻止事件冒泡以避免冲突。
+  - 使用ReactNodeViewRenderer渲染MermaidView，通过withNodeViewErrorBoundary高阶组件包装。
+  - 阻止事件冒泡以避免冲突，确保错误边界正常工作。
 
 ```mermaid
 classDiagram
@@ -146,7 +164,11 @@ class MermaidNode {
 +分组 : "block"
 +属性 : data(字符串)
 +命令 : insertMermaid(code)
-+视图 : ReactNodeViewRenderer(MermaidView)
++视图 : ReactNodeViewRenderer(WithNodeViewErrorBoundary(MermaidView))
+}
+class NodeViewErrorBoundary {
++状态 : hasError, error
++行为 : 捕获子组件错误, 显示友好界面, 支持重试
 }
 class MermaidView {
 +状态 : code(源码)
@@ -159,18 +181,20 @@ class RenderMermaid {
 +属性 : mermaidCode, mermaidConfig, errorComponent, renderCode
 +行为 : 初始化mermaid, 渲染SVG, 错误处理, 复制/下载
 }
-MermaidNode --> MermaidView : "注册节点视图"
+MermaidNode --> NodeViewErrorBoundary : "包装节点视图"
+NodeViewErrorBoundary --> MermaidView : "提供错误边界"
 MermaidView --> RenderMermaid : "传递源码与配置"
 ```
 
 **图示来源**
-- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:1-46](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L1-L46)
-- [packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx:1-99](file://packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx#L1-L99)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:1-47](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L1-L47)
+- [packages/editor/src/components/NodeViewErrorBoundary.tsx:1-95](file://packages/editor/src/components/NodeViewErrorBoundary.tsx#L1-L95)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx:1-362](file://packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx#L1-L362)
 - [packages/plugin-mermaid/src/component/index.tsx:1-197](file://packages/plugin-mermaid/src/component/index.tsx#L1-L197)
 
 **章节来源**
-- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:1-46](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L1-L46)
-- [packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx:1-99](file://packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx#L1-L99)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:1-47](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L1-L47)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx:1-362](file://packages/plugin-mermaid/src/editor-extension/mermaid/MermaidView.tsx#L1-L362)
 
 ### 组件B：编辑器扩展包装器与工具
 - 扩展包装器
@@ -187,12 +211,13 @@ flowchart TD
 Start(["用户触发工具/斜杠"]) --> Validate["校验输入参数<br/>z.object({ code: string })"]
 Validate --> Insert["调用编辑器命令 insertMermaid(code)"]
 Insert --> NodeInsert["插入 mermaid 节点<br/>设置 attrs.data"]
-NodeInsert --> End(["完成"])
+NodeInsert --> WrapErrorBoundary["withNodeViewErrorBoundary 包装"]
+WrapErrorBoundary --> End(["完成"])
 ```
 
 **图示来源**
 - [packages/plugin-mermaid/src/editor-extension/mermaid/index.tsx:1-408](file://packages/plugin-mermaid/src/editor-extension/mermaid/index.tsx#L1-L408)
-- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:33-46](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L33-L46)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:35-47](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L35-L47)
 
 **章节来源**
 - [packages/plugin-mermaid/src/editor-extension/mermaid/index.tsx:1-408](file://packages/plugin-mermaid/src/editor-extension/mermaid/index.tsx#L1-L408)
@@ -355,11 +380,54 @@ Error --> End
 **章节来源**
 - [packages/plugin-mermaid/src/editor-extension/mermaid/index.tsx:121-405](file://packages/plugin-mermaid/src/editor-extension/mermaid/index.tsx#L121-L405)
 
+## 错误边界与稳定性保障
+
+### NodeViewErrorBoundary概述
+NodeViewErrorBoundary是一个专门为ProseMirror节点视图设计的错误边界组件，当插件的节点视图组件抛出错误时，它会捕获错误并在文档流中渲染一个优雅的回退界面，防止整个编辑器崩溃。
+
+### 错误边界特性
+- **节点级别保护**：仅影响特定的节点视图，不影响其他插件或编辑器功能
+- **友好错误界面**：显示红色警告框，包含错误信息和重试按钮
+- **自动日志记录**：在控制台中记录详细的错误信息和组件信息
+- **重试机制**：用户可点击重试按钮重新渲染节点视图
+- **插件标识**：显示插件名称，便于问题诊断
+
+### 集成方式
+在Mermaid插件中，NodeViewErrorBoundary通过withNodeViewErrorBoundary高阶组件集成：
+- 导入withNodeViewErrorBoundary函数
+- 在addNodeView中使用withNodeViewErrorBoundary包装MermaidView
+- 为错误边界提供插件名称标识
+
+### 错误处理流程
+```mermaid
+flowchart TD
+Start(["节点视图渲染开始"]) --> Render["渲染MermaidView组件"]
+Render --> Success{"渲染成功？"}
+Success --> |是| Normal["正常显示图表"]
+Success --> |否| Catch["NodeViewErrorBoundary捕获错误"]
+Catch --> ShowError["显示友好错误界面"]
+ShowError --> Log["记录错误日志"]
+Log --> Retry{"用户点击重试？"}
+Retry --> |是| Reset["重置错误状态"]
+Reset --> Render
+Retry --> |否| Wait["等待用户操作"]
+Wait --> End(["保持错误状态"])
+Normal --> End
+```
+
+**图示来源**
+- [packages/editor/src/components/NodeViewErrorBoundary.tsx:14-68](file://packages/editor/src/components/NodeViewErrorBoundary.tsx#L14-L68)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:20-25](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L20-L25)
+
+**章节来源**
+- [packages/editor/src/components/NodeViewErrorBoundary.tsx:1-95](file://packages/editor/src/components/NodeViewErrorBoundary.tsx#L1-L95)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:1-47](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L1-L47)
+
 ## 依赖分析
 - 内部依赖
   - @kn/common：通用插件基类与类型定义。
   - @kn/core：核心工具与异步效果钩子（如useAsyncEffect、useDebounce）。
-  - @kn/editor：编辑器节点与命令扩展、NodeView包装器。
+  - @kn/editor：编辑器节点与命令扩展、NodeView包装器、NodeViewErrorBoundary。
   - @kn/icon：图标资源。
   - @kn/ui：UI组件（如按钮、主题、空状态）。
 - 外部依赖
@@ -376,6 +444,7 @@ Core["@kn/core"]
 Editor["@kn/editor"]
 Icon["@kn/icon"]
 UI["@kn/ui"]
+ErrorBoundary["@kn/editor/NodeViewErrorBoundary"]
 end
 subgraph "外部库"
 MermaidLib["mermaid"]
@@ -392,13 +461,14 @@ Plugin --> MermaidLib
 Plugin --> Monaco
 Plugin --> PostCSS
 Plugin --> ReactXM
+Plugin --> ErrorBoundary
 ```
 
 **图示来源**
-- [packages/plugin-mermaid/package.json:15-26](file://packages/plugin-mermaid/package.json#L15-L26)
+- [packages/plugin-mermaid/package.json:15-25](file://packages/plugin-mermaid/package.json#L15-L25)
 
 **章节来源**
-- [packages/plugin-mermaid/package.json:1-34](file://packages/plugin-mermaid/package.json#L1-L34)
+- [packages/plugin-mermaid/package.json:1-33](file://packages/plugin-mermaid/package.json#L1-L33)
 
 ## 性能考虑
 - 渲染去抖
@@ -412,6 +482,9 @@ Plugin --> ReactXM
 - 工具执行优化
   - 图表查找和更新操作使用高效的文档遍历算法。
   - 支持指定位置插入，避免全文档扫描。
+- 错误边界性能
+  - 错误边界仅在渲染错误时激活，正常情况下无额外开销。
+  - 重试机制避免了完全重建节点视图的成本。
 
 ## 故障排查指南
 - 插件未生效
@@ -424,6 +497,7 @@ Plugin --> ReactXM
   - 检查源码是否为空或仅包含空白字符；空源码会被清空容器。
   - 查看错误组件是否正常渲染；必要时提供自定义错误组件。
   - 确认mermaid.initialize的配置未被意外覆盖。
+  - **检查NodeViewErrorBoundary是否正常工作**：查看是否有红色错误框显示。
 - 下载/复制无效
   - 确认SVG容器存在且非空；下载前先渲染成功。
   - 复制按钮需在浏览器允许剪贴板权限的情况下使用。
@@ -435,16 +509,24 @@ Plugin --> ReactXM
   - 确认AI代理已正确加载Mermaid技能。
   - 检查技能所需的工具是否已注册。
   - 验证系统提示是否正确传递给AI代理。
+- **错误边界问题**
+  - **确认withNodeViewErrorBoundary已正确集成**：检查Mermaid节点定义。
+  - **检查错误日志**：查看控制台中的错误信息。
+  - **测试重试功能**：确认错误界面中的重试按钮可用。
+  - **验证插件名称显示**：确认错误界面显示正确的插件名称。
 
 **章节来源**
 - [apps/vite/src/main.tsx:1-23](file://apps/vite/src/main.tsx#L1-L23)
 - [packages/common/src/core/PluginManager.ts:120-162](file://packages/common/src/core/PluginManager.ts#L120-L162)
 - [packages/plugin-mermaid/src/editor-extension/mermaid/index.tsx:1-408](file://packages/plugin-mermaid/src/editor-extension/mermaid/index.tsx#L1-L408)
-- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:33-46](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L33-L46)
+- [packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts:20-25](file://packages/plugin-mermaid/src/editor-extension/mermaid/mermaid.ts#L20-L25)
 - [packages/plugin-mermaid/src/component/index.tsx:111-177](file://packages/plugin-mermaid/src/component/index.tsx#L111-L177)
+- [packages/editor/src/components/NodeViewErrorBoundary.tsx:30-36](file://packages/editor/src/components/NodeViewErrorBoundary.tsx#L30-L36)
 
 ## 结论
-该Mermaid图表插件通过清晰的模块划分与标准的编辑器扩展机制，实现了从"插入节点—实时编辑—渲染展示—交互操作"的完整闭环。新增的技能系统进一步增强了插件的能力，为AI代理提供了完整的图表创建和管理能力。插件支持10种图表类型，提供完整的工具集，既可在编辑器中直接使用，也可作为独立组件在其他场景渲染Mermaid图表。配合插件管理器的统一解析与注入，以及AI技能系统的集成，能够平滑地集成到现有系统中，为用户提供智能化的图表创建体验。
+该Mermaid图表插件通过清晰的模块划分与标准的编辑器扩展机制，实现了从"插入节点—实时编辑—渲染展示—交互操作"的完整闭环。新增的技能系统进一步增强了插件的能力，为AI代理提供了完整的图表创建和管理能力。**最重要的更新是集成了NodeViewErrorBoundary高阶组件，显著提升了插件生态系统的稳定性**。即使某个Mermaid图表渲染出现错误，也不会导致整个编辑器崩溃，用户可以通过友好的错误界面进行重试或继续使用编辑器的其他功能。
+
+插件支持10种图表类型，提供完整的工具集，既可在编辑器中直接使用，也可作为独立组件在其他场景渲染Mermaid图表。配合插件管理器的统一解析与注入，以及AI技能系统的集成，能够平滑地集成到现有系统中，为用户提供智能化的图表创建体验。**错误边界的集成确保了插件在生产环境中的可靠性和用户体验的连续性**。
 
 ## 附录
 - 使用建议
@@ -452,8 +534,10 @@ Plugin --> ReactXM
   - 对于长图表，建议开启滚动容器与响应式样式，保证在小屏设备上的可读性。
   - 利用技能系统，让AI代理自动识别用户需求并创建合适的图表。
   - 使用工具集进行图表的批量管理和维护。
+  - **充分利用NodeViewErrorBoundary的错误处理能力，确保编辑器的稳定性**。
 - 可能的优化方向
   - 对mermaid.render增加缓存策略，避免相同源码重复渲染。
   - 对编辑器宽度与高度进行更灵活的自适应控制。
   - 增加图表类型检测的准确性，支持更多图表变体。
   - 优化工具执行性能，支持大规模文档的图表管理。
+  - **扩展错误边界功能，支持更细粒度的错误分类和处理策略**。

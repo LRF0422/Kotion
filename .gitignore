@@ -53,3 +53,37 @@ nginx/*.crt
 
 .history
 .VSCodeCounter.worktrees/
+
+
+# maven #
+target
+
+logs
+
+# windows #
+Thumbs.db
+
+# Mac #
+.DS_Store
+
+# eclipse #
+.settings
+.project
+.classpath
+.log
+*.class
+
+# idea #
+.idea
+*.iml
+
+# Package Files #
+*.jar
+*.war
+*.ear
+/target
+
+.vscode
+.history
+.fastRequest
+.VSCodeCounter

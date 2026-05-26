@@ -12,6 +12,7 @@ import { Paragraph } from "../extensions/paragraph"
 import { Placeholder } from "../extensions/placeholder"
 import { Perf } from "../extensions/perf"
 import { UniqueID } from "../extensions/unique-id"
+import { DirtyTracker } from "../extensions/dirty-tracker"
 import { Doc } from "../extensions"
 import Document from "@tiptap/extension-document";
 import { UndoRedo } from '@tiptap/extensions'
@@ -59,6 +60,10 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean, externalEx
 			editorExtensions = editorExtensions.filter(it => it.name !== ext);
 		}
 		editorExtensions.push(UniqueID.configure({
+			types: editorExtensions.filter(it => it.name !== 'text').map(it => it.name),
+			filterTransaction: t => !isChangeOrigin(t)
+		}))
+		editorExtensions.push(DirtyTracker.configure({
 			types: editorExtensions.filter(it => it.name !== 'text').map(it => it.name),
 			filterTransaction: t => !isChangeOrigin(t)
 		}))
