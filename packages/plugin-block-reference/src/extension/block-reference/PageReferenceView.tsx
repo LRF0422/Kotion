@@ -76,7 +76,7 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
         e.stopPropagation();
         if (pageId) {
             navigator.go({
-                to: `/space-detail/${pageInfo.spaceId}/page/${pageId}`
+                to: `/space-detail/${pageInfo.spaceId}/page/edit/${pageId}`
             });
         }
     }, [pageId, pageInfo.spaceId, navigator]);

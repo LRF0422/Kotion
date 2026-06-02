@@ -64,7 +64,6 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean, externalEx
 			filterTransaction: t => !isChangeOrigin(t)
 		}))
 		editorExtensions.push(DirtyTracker.configure({
-			types: editorExtensions.filter(it => it.name !== 'text').map(it => it.name),
 			filterTransaction: t => !isChangeOrigin(t)
 		}))
 		return [editorExtensions, full] as const

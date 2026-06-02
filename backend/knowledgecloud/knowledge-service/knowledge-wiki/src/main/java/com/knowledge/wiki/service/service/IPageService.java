@@ -10,6 +10,7 @@ import com.knowledge.wiki.service.entity.PageVersion;
 import com.knowledge.wiki.service.entity.dto.UpdateBlockDTO;
 import com.knowledge.wiki.service.entity.dto.BlockPatchItemDTO;
 import com.knowledge.wiki.service.entity.PageContent;
+import com.knowledge.wiki.service.service.impl.BlockStorageService;
 import com.knowledge.wiki.service.entity.vo.PageBlockVO;
 import com.knowledge.wiki.service.entity.enums.PagePermissionEnum;
 
@@ -74,23 +75,16 @@ public interface IPageService extends ISubjectService<Page> {
     void refreshBlock(List<Long> versionIds);
 
     /**
-     * Save page content as individual blocks (block-first storage).
-     *
-     * @param pageId      the page ID
-     * @param contentJson full page content JSON to flatten into blocks
-     */
-    void saveBlocks(Long pageId, String contentJson);
-
-    /**
      * Apply an incremental block-level patch produced by the frontend
      * DirtyTracker. Only updates the blocks listed in {@code changes} and
      * propagates the top-level ordering from {@code blockOrder}.
      *
      * @param pageId     the page ID
-     * @param changes    list of block-level changes (update / delete)
+     * @param changes    list of block-level changes (upsert / delete)
      * @param blockOrder ordered list of all current top-level block ids
+     * @return PatchResult with statistics and any detected conflicts
      */
-    void patchBlocks(Long pageId, List<BlockPatchItemDTO> changes, List<String> blockOrder);
+    BlockStorageService.PatchResult patchBlocks(Long pageId, List<BlockPatchItemDTO> changes, List<String> blockOrder);
 
     /**
      * Assemble and return page content JSON from block rows.
@@ -99,22 +93,6 @@ public interface IPageService extends ISubjectService<Page> {
      * @return assembled JSON string, or null if no block storage exists
      */
     String getPageContentFromBlocks(Long pageId);
-
-    /**
-     * Publish the current block state of a page as a new {@link PageVersion}.
-     * <p>
-     * No content payload is required: the version metadata (md5, title) is
-     * derived from the rows in {@code wiki_page_block}, and pending
-     * {@code wiki_block_version} change rows are sealed against the new
-     * version.
-     * </p>
-     *
-     * @param pageId        the page ID
-     * @param changeSummary optional change summary, may be {@code null}
-     * @return the published {@link PageVersion}, or {@code null} if no draft
-     *         could be created (e.g., empty page)
-     */
-    PageVersion publishCurrentBlocks(Long pageId, String changeSummary);
 
     /**
      * Move a page to a different parent and/or space.

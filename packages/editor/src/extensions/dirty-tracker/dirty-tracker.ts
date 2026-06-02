@@ -1,371 +1,283 @@
-import { Extension } from "@tiptap/core";
-import { Plugin, PluginKey, Transaction } from "@tiptap/pm/state";
-import { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { ChangeSet, simplifyChanges } from "prosemirror-changeset";
+import { Extension, JSONContent } from '@tiptap/core'
+import { Plugin, PluginKey, Transaction } from '@tiptap/pm/state'
+import { Node as ProseMirrorNode } from '@tiptap/pm/model'
 
-// ─── Types ───────────────────────────────────────────────────────────
+// ─── Public Types ────────────────────────────────────────────────────
 
-/** The type of change for a single block. */
-export type BlockChangeAction = 'update' | 'delete';
+export interface IncrementalPayload {
+  blockOrder: string[]
+  changes: BlockChange[]
+}
 
-/** Represents a single block-level change. */
 export interface BlockChange {
-    /** The blockId of the changed block */
-    blockId: string;
-    /** Whether this block was updated/inserted or deleted */
-    action: BlockChangeAction;
-    /** The node type (e.g., 'paragraph', 'heading') — undefined for deletions */
-    type?: string;
-    /** The serialized JSON of the block node — undefined for deletions */
-    content?: any;
-    /**
-     * The block-level version number that the client believes was the most
-     * recent state when these changes started accumulating. Used by the
-     * backend for optimistic concurrency control.
-     */
-    prevVersion?: number;
+  action: 'upsert' | 'delete'
+  blockId: string
+  type?: string
+  content?: JSONContent
+  attrs?: Record<string, unknown>
+  prevVersion?: number
 }
 
-/** Payload sent to the backend for an incremental save. */
-export interface IncrementalSavePayload {
-    /** Ordered list of all current top-level blockIds (defines document structure) */
-    blockOrder: string[];
-    /** Only the blocks that actually changed since the last save */
-    changes: BlockChange[];
+export interface DirtyTrackerOptions {
+  blockIdAttribute: string
+  filterTransaction: (tr: Transaction) => boolean
 }
 
-/** Storage interface exposed by the DirtyTracker extension. */
+/**
+ * Frozen description of one top-level block at a known-clean state.
+ * `signature` is a deterministic JSON fingerprint used for O(1) equality
+ * checks during the on-idle diff.
+ */
+interface BlockSnapshot {
+  type: string
+  attrs: Record<string, unknown> | undefined
+  content: JSONContent | undefined
+  signature: string
+}
+
 export interface DirtyTrackerStorage {
-    /** BlockIds that have been touched by transactions since the last save */
-    touchedBlockIds: Set<string>;
-    /** Snapshot of all top-level blockIds at the last save checkpoint */
-    lastSavedBlockIds: Set<string>;
-    /** Per-block version numbers known to the client (set by callers after load) */
-    blockVersions: Map<string, number>;
-    /** Whether the tracker has been initialized with a baseline */
-    initialized: boolean;
-    /** Get all dirty changes since the last save */
-    getDirtyChanges: () => BlockChange[];
-    /** Get the full incremental save payload (block order + changes) */
-    getIncrementalPayload: () => IncrementalSavePayload;
-    /** Mark the current state as "saved" — clears dirty tracking and snapshots blockIds */
-    commitSave: () => void;
-    /** Check if there are any unsaved changes (touched blocks or deletions) */
-    hasDirtyChanges: () => boolean;
-    /** Re-initialize the baseline (e.g., after content finishes loading) */
-    reinitialize: () => void;
-    /** Replace the per-block version map (e.g., from a freshly-loaded page). */
-    setBlockVersions: (versions: Map<string, number> | Record<string, number>) => void;
+  initialized: boolean
+  /**
+   * Last-committed top-level blocks, keyed by blockId. Updated by
+   * `commit()` after a successful save.
+   */
+  committedSnapshot: Map<string, BlockSnapshot>
+  /** Optimization hint — flipped true on any user-origin doc-changing tx. */
+  dirty: boolean
+  /** Latest backend version per block (blockId -> version). */
+  blockVersions: Map<string, number>
+  /** Currently-registered idle callback (set by `subscribeIdle`). */
+  idleCallback: (() => void) | null
+  idleDebounceMs: number
+  idleTimer: ReturnType<typeof setTimeout> | null
+
+  hasDirty(): boolean
+  getPayload(): IncrementalPayload
+  commit(): void
+  applyServerVersions(versions: Record<string, number>): void
+  /**
+   * Register a callback invoked `debounceMs` after the last doc-changing
+   * ProseMirror transaction. Returns an unsubscribe function. Replaces any
+   * previous registration.
+   */
+  subscribeIdle(callback: () => void, debounceMs: number): () => void
+  /** Cancel any pending idle timer (used before manual `saveNow`). */
+  cancelIdle(): void
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-const DIRTY_TRACKER_KEY = new PluginKey<{ changeSet: ChangeSet }>('dirtyTracker');
-
-export interface DirtyTrackerOptions {
-    /** The attribute name used for block identification (default: 'blockId') */
-    attributeName: string;
-    /** Node types to track. If empty, tracks all nodes that carry the attribute. */
-    types: string[];
-    /** Optional transaction filter — return false to ignore a transaction. */
-    filterTransaction: ((transaction: Transaction) => boolean) | null;
+/**
+ * Deterministic content fingerprint. ProseMirror's `node.toJSON()` always
+ * emits keys in a stable order (type, attrs, content, marks, text), so its
+ * stringification can be used directly as a signature without extra
+ * canonicalisation.
+ */
+function signatureOf(node: ProseMirrorNode): string {
+  return JSON.stringify(node.toJSON())
 }
 
-/**
- * Collect all blockIds from direct children of the document node.
- * These are the "top-level blocks" that we track for incremental saves.
- */
-function collectTopLevelBlockIds(doc: ProseMirrorNode, attr: string): Set<string> {
-    const ids = new Set<string>();
-    doc.forEach((node) => {
-        const id = node.attrs[attr];
-        if (id) ids.add(id);
-    });
-    return ids;
+function buildSnapshot(doc: ProseMirrorNode, attr: string): Map<string, BlockSnapshot> {
+  const snapshot = new Map<string, BlockSnapshot>()
+  doc.forEach(node => {
+    const id = node.attrs[attr]
+    if (!id) return
+    const json = node.toJSON() as JSONContent
+    snapshot.set(id, {
+      type: json.type ?? node.type.name,
+      attrs: json.attrs,
+      content: json.content as unknown as JSONContent | undefined,
+      signature: signatureOf(node),
+    })
+  })
+  return snapshot
 }
 
-/**
- * Get the ordered list of top-level blockIds.
- * Used to communicate document structure to the backend.
- */
-function getTopLevelBlockOrder(doc: ProseMirrorNode, attr: string): string[] {
-    const order: string[] = [];
-    doc.forEach((node) => {
-        const id = node.attrs[attr];
-        if (id) order.push(id);
-    });
-    return order;
-}
-
-/**
- * Find every top-level blockId whose range overlaps any of the provided
- * change ranges in the *current* document.
- */
-function blockIdsTouchedByChanges(
-    doc: ProseMirrorNode,
-    changes: ReadonlyArray<{ fromB: number; toB: number }>,
-    attr: string,
-): Set<string> {
-    const result = new Set<string>();
-    if (changes.length === 0) return result;
-
-    // Walk the top-level children once and test overlap.
-    let pos = 0;
-    doc.forEach((node) => {
-        const start = pos;
-        const end = pos + node.nodeSize;
-        const id = node.attrs[attr];
-        if (id) {
-            for (const c of changes) {
-                if (c.toB > start && c.fromB < end) {
-                    result.add(id);
-                    break;
-                }
-            }
-        }
-        pos = end;
-    });
-    return result;
+function blockOrderOf(doc: ProseMirrorNode, attr: string): string[] {
+  const ids: string[] = []
+  doc.forEach(node => {
+    const id = node.attrs[attr]
+    if (id) ids.push(id)
+  })
+  return ids
 }
 
 // ─── Extension ───────────────────────────────────────────────────────
 
+const dirtyTrackerViewPluginKey = new PluginKey('dirtyTrackerView')
+
 /**
- * DirtyTracker — Tiptap extension that tracks which top-level blocks have
- * been modified since the last save, enabling incremental saves.
+ * Block-level dirty tracker — snapshot-diff strategy with a ProseMirror
+ * view-plugin trigger.
  *
- * The change-detection core is delegated to {@code prosemirror-changeset}:
- *  1. A ProseMirror plugin maintains a {@code ChangeSet} starting from the
- *     last-saved doc snapshot.
- *  2. On every doc-changing transaction the steps are folded into the
- *     {@code ChangeSet} via {@code addSteps()}.
- *  3. {@code getDirtyChanges()} reads {@code changeSet.changes} (after
- *     {@code simplifyChanges()}) and maps each affected range back to the
- *     enclosing top-level block by id.
- *  4. Deletions are detected by diffing the snapshot of top-level blockIds
- *     captured at the last save against the current set.
- *  5. After a successful save, {@code commitSave()} resets the ChangeSet to
- *     start from the new "last-saved" doc.
+ * Save scheduling does NOT rely on Tiptap's `update` event (which can be
+ * suppressed by `setContent({emitUpdate: false})` and has been observed to
+ * occasionally not fire in this codebase's collaborative setup). Instead a
+ * ProseMirror plugin's `view.update` is used — that is fundamental PM core
+ * and fires on every state update with no Tiptap-level filtering.
+ *
+ * Pipeline:
+ *   1. `onCreate` captures the initial `blockId -> JSON signature` snapshot.
+ *   2. `onTransaction` flips a cheap `dirty` hint for user-origin
+ *      transactions. The save flow does not gate on this flag — it exists
+ *      for diagnostic / external consumers.
+ *   3. The PM view plugin re-arms a debounce on every doc-changing state
+ *      update; on idle it invokes the registered idle callback.
+ *   4. `getPayload()` rebuilds a fresh snapshot and diffs it against the
+ *      committed snapshot, emitting `upsert` / `delete` per blockId.
+ *   5. `commit()` advances the baseline after a successful save.
  */
-export const DirtyTracker = Extension.create<DirtyTrackerOptions>({
-    name: 'dirtyTracker',
-    // Lower priority → runs AFTER UniqueID (priority 1000) so that all
-    // blockIds have been assigned before we track changes.
-    priority: 50,
+export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerStorage>({
+  name: 'dirtyTracker',
+  priority: 50,
 
-    addOptions() {
-        return {
-            attributeName: 'id',
-            types: [],
-            filterTransaction: null,
-        };
-    },
+  addOptions() {
+    return {
+      blockIdAttribute: 'id',
+      filterTransaction: () => true,
+    }
+  },
 
-    addStorage(): DirtyTrackerStorage {
-        return {
-            touchedBlockIds: new Set<string>(),
-            lastSavedBlockIds: new Set<string>(),
-            blockVersions: new Map<string, number>(),
-            initialized: false,
-            getDirtyChanges: () => [],
-            getIncrementalPayload: () => ({ blockOrder: [], changes: [] }),
-            commitSave: () => { },
-            hasDirtyChanges: () => false,
-            reinitialize: () => { },
-            setBlockVersions: () => { },
-        };
-    },
+  addStorage() {
+    return {
+      initialized: false,
+      committedSnapshot: new Map<string, BlockSnapshot>(),
+      dirty: false,
+      blockVersions: new Map<string, number>(),
+      idleCallback: null,
+      idleDebounceMs: 3000,
+      idleTimer: null,
+      hasDirty() { return false },
+      getPayload() { return { blockOrder: [], changes: [] } },
+      commit() {},
+      applyServerVersions(_versions: Record<string, number>) {},
+      subscribeIdle(_cb: () => void, _ms: number) { return () => {} },
+      cancelIdle() {},
+    }
+  },
 
-    onCreate() {
-        const { attributeName } = this.options;
-        const storage = this.storage as DirtyTrackerStorage;
-        const editor = this.editor;
+  onCreate() {
+    const { blockIdAttribute } = this.options
+    const storage = this.storage
 
-        // ── Initialize baseline from current document ──
-        storage.lastSavedBlockIds = collectTopLevelBlockIds(
-            editor.state.doc,
-            attributeName,
-        );
-        storage.initialized = true;
+    storage.committedSnapshot = buildSnapshot(this.editor.state.doc, blockIdAttribute)
+    storage.dirty = false
 
-        // ── Bind public methods (they close over editor & storage) ──
+    storage.hasDirty = () => storage.dirty
 
-        const readChangeSet = (): ChangeSet | null => {
-            const pluginState = DIRTY_TRACKER_KEY.getState(editor.state);
-            return pluginState ? pluginState.changeSet : null;
-        };
+    storage.getPayload = (): IncrementalPayload => {
+      const doc = this.editor.state.doc
+      const blockOrder = blockOrderOf(doc, blockIdAttribute)
+      const current = buildSnapshot(doc, blockIdAttribute)
+      const committed = storage.committedSnapshot
+      const changes: BlockChange[] = []
 
-        storage.getDirtyChanges = (): BlockChange[] => {
-            if (!storage.initialized) return [];
+      // Deletions: present in baseline, absent now.
+      for (const id of committed.keys()) {
+        if (!current.has(id)) {
+          changes.push({ action: 'delete', blockId: id })
+        }
+      }
 
-            const doc = editor.state.doc;
-            const currentBlockIds = collectTopLevelBlockIds(doc, attributeName);
-            const out: BlockChange[] = [];
+      // Insertions / updates: brand new id, or signature differs.
+      for (const [id, snap] of current) {
+        const prev = committed.get(id)
+        if (prev && prev.signature === snap.signature) continue
+        changes.push({
+          action: 'upsert',
+          blockId: id,
+          type: snap.type,
+          content: snap.content,
+          attrs: snap.attrs,
+          prevVersion: storage.blockVersions.get(id) ?? undefined,
+        })
+      }
 
-            // 1. Deletions — blockIds present at last save but missing now.
-            for (const blockId of storage.lastSavedBlockIds) {
-                if (!currentBlockIds.has(blockId)) {
-                    out.push({
-                        blockId,
-                        action: 'delete',
-                        prevVersion: storage.blockVersions.get(blockId),
-                    });
-                }
-            }
+      return { blockOrder, changes }
+    }
 
-            // 2. Updates / inserts — derived from ChangeSet ranges plus the
-            //    legacy touchedBlockIds fallback (covers the rare case where
-            //    the ChangeSet has been reset but transactions haven't been
-            //    flushed yet).
-            const cs = readChangeSet();
-            const dirtyIds = new Set<string>(storage.touchedBlockIds);
-            if (cs) {
-                const simplified = simplifyChanges(cs.changes, doc);
-                blockIdsTouchedByChanges(doc, simplified, attributeName)
-                    .forEach((id) => dirtyIds.add(id));
-            }
+    storage.commit = () => {
+      storage.committedSnapshot = buildSnapshot(this.editor.state.doc, blockIdAttribute)
+      storage.dirty = false
+    }
 
-            const seen = new Set<string>();
-            for (const blockId of dirtyIds) {
-                if (seen.has(blockId)) continue;
-                seen.add(blockId);
-                if (!currentBlockIds.has(blockId)) continue;
+    storage.applyServerVersions = (versions: Record<string, number>) => {
+      for (const [blockId, version] of Object.entries(versions)) {
+        if (version != null) {
+          storage.blockVersions.set(blockId, version)
+        }
+      }
+    }
 
-                doc.forEach((node) => {
-                    if (node.attrs[attributeName] === blockId) {
-                        out.push({
-                            blockId,
-                            action: 'update',
-                            type: node.type.name,
-                            content: node.toJSON(),
-                            prevVersion: storage.blockVersions.get(blockId),
-                        });
-                    }
-                });
-            }
+    storage.subscribeIdle = (callback: () => void, debounceMs: number) => {
+      storage.idleCallback = callback
+      storage.idleDebounceMs = debounceMs
+      return () => {
+        if (storage.idleCallback === callback) {
+          storage.idleCallback = null
+        }
+        if (storage.idleTimer != null) {
+          clearTimeout(storage.idleTimer)
+          storage.idleTimer = null
+        }
+      }
+    }
 
-            return out;
-        };
+    storage.cancelIdle = () => {
+      if (storage.idleTimer != null) {
+        clearTimeout(storage.idleTimer)
+        storage.idleTimer = null
+      }
+    }
 
-        storage.getIncrementalPayload = (): IncrementalSavePayload => ({
-            blockOrder: getTopLevelBlockOrder(editor.state.doc, attributeName),
-            changes: storage.getDirtyChanges(),
-        });
+    storage.initialized = true
+  },
 
-        storage.commitSave = () => {
-            storage.touchedBlockIds.clear();
-            storage.lastSavedBlockIds = collectTopLevelBlockIds(
-                editor.state.doc,
-                attributeName,
-            );
-            // Reset the ChangeSet baseline to the just-saved doc.
-            const view = editor.view;
-            view.dispatch(view.state.tr.setMeta(DIRTY_TRACKER_KEY, { reset: true }));
-        };
+  onTransaction({ transaction }) {
+    const storage = this.storage
+    if (!storage.initialized) return
+    if (!transaction.docChanged) return
+    if (this.options.filterTransaction(transaction)) {
+      storage.dirty = true
+    }
+  },
 
-        storage.hasDirtyChanges = (): boolean => {
-            if (!storage.initialized) return false;
-            if (storage.touchedBlockIds.size > 0) return true;
+  addProseMirrorPlugins() {
+    // The extension instance reference; closed-over by the PM plugin's view.
+    // `this.storage` lookup inside the plugin always returns the same storage
+    // object that lifecycle hooks mutated.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const ext = this
+    return [
+      new Plugin({
+        key: dirtyTrackerViewPluginKey,
+        view() {
+          return {
+            update(view, prevState) {
+              // Doc identity check — selection-only updates are skipped.
+              if (view.state.doc === prevState.doc) return
+              const storage = ext.storage
+              if (!storage.initialized) return
+              if (!storage.idleCallback) return
 
-            const cs = readChangeSet();
-            if (cs && cs.changes.length > 0) return true;
-
-            const currentBlockIds = collectTopLevelBlockIds(
-                editor.state.doc,
-                attributeName,
-            );
-            for (const blockId of storage.lastSavedBlockIds) {
-                if (!currentBlockIds.has(blockId)) return true;
-            }
-            return false;
-        };
-
-        storage.reinitialize = () => {
-            storage.touchedBlockIds.clear();
-            storage.lastSavedBlockIds = collectTopLevelBlockIds(
-                editor.state.doc,
-                attributeName,
-            );
-            storage.initialized = true;
-            const view = editor.view;
-            view.dispatch(view.state.tr.setMeta(DIRTY_TRACKER_KEY, { reset: true }));
-        };
-
-        storage.setBlockVersions = (versions) => {
-            storage.blockVersions = versions instanceof Map
-                ? new Map(versions)
-                : new Map(Object.entries(versions));
-        };
-    },
-
-    addProseMirrorPlugins() {
-        const { attributeName, filterTransaction } = this.options;
-        const storage = this.storage as DirtyTrackerStorage;
-
-        return [
-            new Plugin<{ changeSet: ChangeSet }>({
-                key: DIRTY_TRACKER_KEY,
-
-                state: {
-                    init(_, state) {
-                        return { changeSet: ChangeSet.create(state.doc) };
-                    },
-                    apply(tr, value, oldState, newState) {
-                        // Manual reset (commitSave / reinitialize)
-                        const meta = tr.getMeta(DIRTY_TRACKER_KEY) as { reset?: boolean } | undefined;
-                        if (meta?.reset) {
-                            return { changeSet: ChangeSet.create(newState.doc) };
-                        }
-
-                        // Skip transactions that didn't change the doc.
-                        if (!tr.docChanged) return value;
-
-                        // Apply user-provided filter.
-                        if (filterTransaction && !filterTransaction(tr)) {
-                            return value;
-                        }
-
-                        const updated = value.changeSet.addSteps(
-                            newState.doc,
-                            tr.mapping.maps,
-                            null,
-                        );
-                        return { changeSet: updated };
-                    },
-                },
-
-                appendTransaction: (transactions, oldState, newState) => {
-                    // Maintain `touchedBlockIds` as a fast-path index for
-                    // hasDirtyChanges() and as a fallback for getDirtyChanges().
-                    const docChanged = transactions.some((t) => t.docChanged)
-                        && !oldState.doc.eq(newState.doc);
-                    if (!docChanged) return null;
-
-                    if (filterTransaction && transactions.some((t) => !filterTransaction(t))) {
-                        return null;
-                    }
-
-                    // Aggregate all step maps and walk back to find the affected
-                    // ranges in the new doc.
-                    transactions.forEach((tr) => {
-                        tr.mapping.maps.forEach((stepMap) => {
-                            stepMap.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
-                                const from = Math.max(0, newStart);
-                                const to = Math.min(newEnd, newState.doc.content.size);
-                                if (from >= to) return;
-                                newState.doc.nodesBetween(from, to, (node, _pos, parent) => {
-                                    if (parent === newState.doc) {
-                                        const blockId = node.attrs[attributeName];
-                                        if (blockId) storage.touchedBlockIds.add(blockId);
-                                        return false;
-                                    }
-                                });
-                            });
-                        });
-                    });
-                    return null;
-                },
-            }),
-        ];
-    },
-});
+              if (storage.idleTimer != null) {
+                clearTimeout(storage.idleTimer)
+              }
+              storage.idleTimer = setTimeout(() => {
+                storage.idleTimer = null
+                storage.idleCallback?.()
+              }, storage.idleDebounceMs)
+            },
+            destroy() {
+              const storage = ext.storage
+              if (storage && storage.idleTimer != null) {
+                clearTimeout(storage.idleTimer)
+                storage.idleTimer = null
+              }
+            },
+          }
+        },
+      }),
+    ]
+  },
+})

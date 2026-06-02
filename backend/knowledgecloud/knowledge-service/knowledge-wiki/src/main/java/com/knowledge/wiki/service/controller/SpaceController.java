@@ -29,9 +29,8 @@ import com.knowledge.wiki.service.entity.dto.QueryPageBlockDTO;
 import com.knowledge.wiki.service.entity.dto.QueryPageDTO;
 import com.knowledge.wiki.service.entity.dto.QueryPageTemplateDTO;
 import com.knowledge.wiki.service.entity.dto.QuerySpaceDTO;
-import com.knowledge.wiki.service.entity.dto.SaveBlocksDTO;
 import com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO;
-import com.knowledge.wiki.service.entity.dto.PublishPageDTO;
+import com.knowledge.wiki.service.entity.dto.PatchResultDTO;
 import com.knowledge.wiki.service.entity.dto.ShareLinkRequestDTO;
 import com.knowledge.wiki.service.entity.dto.SpaceDTO;
 import com.knowledge.wiki.service.entity.dto.TemplateDTO;
@@ -191,38 +190,15 @@ public class SpaceController {
     }
 
     /**
-     * 批量保存页面块
-     * POST /knowledge-wiki/space/page/{pageId}/blocks
-     */
-    @PostMapping("/page/{pageId}/blocks")
-    public R<?> savePageBlocks(@PathVariable("pageId") Long pageId,
-            @Valid @RequestBody SaveBlocksDTO dto) {
-        dto.setPageId(pageId);
-        spaceApplication.savePageBlocks(dto);
-        return R.success();
-    }
-
-    /**
      * 增量保存页面块（仅写入发生变更的顶层块）
      * PATCH /knowledge-wiki/space/page/{pageId}/blocks
      */
     @PatchMapping("/page/{pageId}/blocks")
-    public R<?> patchPageBlocks(@PathVariable("pageId") Long pageId,
+    public R<PatchResultDTO> patchPageBlocks(@PathVariable("pageId") Long pageId,
             @Valid @RequestBody PatchPageBlocksDTO dto) {
         dto.setPageId(pageId);
-        spaceApplication.patchPageBlocks(dto);
-        return R.success();
-    }
-
-    /**
-     * 发布页面：以当前 block 存储状态为准创建一个新版本，不需传入全量内容。
-     * POST /knowledge-wiki/space/page/{pageId}/publish
-     */
-    @PostMapping("/page/{pageId}/publish")
-    public R<com.knowledge.wiki.service.entity.PageVersion> publishPage(
-            @PathVariable("pageId") Long pageId,
-            @RequestBody(required = false) PublishPageDTO dto) {
-        return R.data(spaceApplication.publishPage(pageId, dto));
+        PatchResultDTO result = spaceApplication.patchPageBlocks(dto);
+        return R.data(result);
     }
 
     /**

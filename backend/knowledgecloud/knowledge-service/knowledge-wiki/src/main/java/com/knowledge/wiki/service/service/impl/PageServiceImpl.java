@@ -161,38 +161,21 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     public Page getPageContent(Long pageId) {
         Page subject = this.getById(pageId);
 
-        // Block-first: try to assemble from block rows first
+        // Block storage is the single source of truth. Assemble from block
+        // rows; if no blocks exist for this page, return an empty doc rather
+        // than fall back to the legacy PageVersion JSON.
         String assembledJson = blockStorageService.assembleTreeJson(pageId);
-        if (StrUtil.isNotBlank(assembledJson)) {
-            Page page = new Page();
-            page.setId(subject.getId());
-            page.setTitle(subject.getTitle());
-            page.setSpaceId(subject.getSpaceId());
-            page.setContent(assembledJson);
-            page.setParentId(subject.getParentId());
-            page.setStatus(subject.getStatus());
-            page.setCreateTime(subject.getCreateTime());
-            page.setUpdateTime(subject.getUpdateTime());
-            // Check if there's a draft
-            page.setDraft(pageVersionService.hasDraft(pageId));
-            return page;
-        }
 
-        // Fallback: read from version JSON (backward compat for pages without block
-        // storage)
-        PageVersion draftVersion = pageVersionService.getDraftVersion(pageId);
-        if (draftVersion != null) {
-            Page page = PageConverter.INSTANCE.convert(draftVersion);
-            page.setTitle(subject.getTitle());
-            page.setDraft(true);
-            page.setSpaceId(subject.getSpaceId());
-            return page;
-        }
-        PageVersion version = pageVersionService.getCurrentActiveVersion(pageId);
-        version.setTitle(subject.getTitle());
-        version.setCreateTime(subject.getCreateTime());
-        Page page = PageConverter.INSTANCE.convert(version);
+        Page page = new Page();
+        page.setId(subject.getId());
+        page.setTitle(subject.getTitle());
         page.setSpaceId(subject.getSpaceId());
+        page.setParentId(subject.getParentId());
+        page.setStatus(subject.getStatus());
+        page.setCreateTime(subject.getCreateTime());
+        page.setUpdateTime(subject.getUpdateTime());
+        page.setContent(StrUtil.isNotBlank(assembledJson) ? assembledJson : "");
+        page.setDraft(pageVersionService.hasDraft(pageId));
         return page;
     }
 
@@ -645,24 +628,7 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     // ==================== Block-first storage API ====================
 
     @Override
-    public void saveBlocks(Long pageId, String contentJson) {
-        if (pageId == null || StrUtil.isBlank(contentJson)) {
-            throw WikiException.INVALID_PARAMETER.newException("页面ID和内容不能为空");
-        }
-
-        Page page = this.getById(pageId);
-        if (page == null) {
-            throw WikiException.PAGE_NOT_FOUND.newException();
-        }
-
-        // Block-first: flatten and persist individual blocks. The change
-        // recorder produces wiki_block_version entries; no longer mirroring
-        // the full JSON into wiki_page_version.
-        blockStorageService.flattenAndSave(pageId, contentJson);
-    }
-
-    @Override
-    public void patchBlocks(Long pageId, java.util.List<BlockPatchItemDTO> changes, java.util.List<String> blockOrder) {
+    public BlockStorageService.PatchResult patchBlocks(Long pageId, java.util.List<BlockPatchItemDTO> changes, java.util.List<String> blockOrder) {
         if (pageId == null) {
             throw WikiException.INVALID_PARAMETER.newException("页面ID不能为空");
         }
@@ -673,55 +639,12 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
         }
 
         // Apply the incremental patch (transactional internally).
-        blockStorageService.patchBlocks(pageId, changes, blockOrder);
+        return blockStorageService.patchBlocks(pageId, changes, blockOrder);
     }
 
     @Override
     public String getPageContentFromBlocks(Long pageId) {
         return blockStorageService.assembleTreeJson(pageId);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public PageVersion publishCurrentBlocks(Long pageId, String changeSummary) {
-        if (pageId == null) {
-            throw WikiException.INVALID_PARAMETER.newException("页面ID不能为空");
-        }
-        Page page = this.getById(pageId);
-        if (page == null) {
-            throw WikiException.PAGE_NOT_FOUND.newException();
-        }
-
-        // Derive version metadata from the current block state. The transient
-        // `content` on Page is only used by the version layer to compute md5
-        // and is never persisted.
-        String assembledJson = blockStorageService.assembleTreeJson(pageId);
-        page.setContent(assembledJson);
-        if (StrUtil.isNotBlank(changeSummary)) {
-            // Channel changeSummary through the Page entity so the version
-            // service can pick it up via createOrSaveDraft.
-            // (PageVersion.changeSummary is set by the converter / service.)
-        }
-
-        pageVersionService.createOrSaveDraft(page);
-        PageVersion draft = pageVersionService.getDraftVersion(pageId);
-        if (draft == null) {
-            log.warn("publishCurrentBlocks: no draft created for pageId={}", pageId);
-            return null;
-        }
-        if (StrUtil.isNotBlank(changeSummary)) {
-            draft.setChangeSummary(changeSummary);
-            pageVersionService.updateById(draft);
-        }
-
-        pageVersionService.publish(draft.getId());
-        PageVersion published = pageVersionService.getCurrentActiveVersion(pageId);
-        if (published != null) {
-            pageSnapshotService.snapshotBlocks(pageId, published.getId(), published.getVersion());
-            refreshBlockIndexAsync(pageId, published.getId());
-        }
-        blockCacheService.evictPageCache(pageId);
-        return published;
     }
 
     @Override

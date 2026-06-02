@@ -17,6 +17,12 @@ import lombok.Data;
  * that actually changed, plus the full ordered list of top-level blockIds
  * so the backend can reconcile structure and detect deletions.
  * </p>
+ *
+ * <p>
+ * Save is publish: every successful patch atomically seals the changes
+ * into a brand-new ACTIVE {@code PageVersion}, so there is no separate
+ * publish flag.
+ * </p>
  */
 @Data
 public class PatchPageBlocksDTO implements Serializable {
@@ -41,10 +47,5 @@ public class PatchPageBlocksDTO implements Serializable {
      */
     @Valid
     private List<BlockPatchItemDTO> changes;
-
-    /**
-     * 是否在保存后发布版本。默认 false，由调用方决定。
-     */
-    private boolean publish;
 
 }

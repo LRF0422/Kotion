@@ -1,5 +1,18 @@
 import { API } from "@kn/common";
 
+/**
+ * Response from the PATCH /page/:id/blocks incremental save endpoint.
+ * Reports statistics about what was actually changed on the backend.
+ */
+export interface PatchResultResponse {
+  created: number
+  updated: number
+  deleted: number
+  skipped: number
+  conflictBlockIds: string[]
+  /** Block versions after patch (blockId -> new version number) */
+  blockVersions: Record<string, number>
+}
 
 export const APIS = {
     QUERY_SPACE: {
@@ -183,6 +196,42 @@ export const APIS = {
     /** Get inviter's installed plugins */
     GET_INVITER_PLUGINS: {
         url: '/knowledge-wiki/collaboration/invitation/:token/plugins',
+        method: 'GET'
+    } as API,
+    // ==================== Page Lifecycle APIs ====================
+    /** Get paginated version history for a page */
+    GET_PAGE_VERSIONS: {
+        url: '/knowledge-wiki/space/page/:pageId/versions',
+        method: 'GET'
+    } as API,
+    /** Get all versions of a page (non-paginated) */
+    GET_ALL_PAGE_VERSIONS: {
+        url: '/knowledge-wiki/space/page/:pageId/versions/all',
+        method: 'GET'
+    } as API,
+    /** Get specific version content */
+    GET_PAGE_VERSION: {
+        url: '/knowledge-wiki/space/page/version/:versionId',
+        method: 'GET'
+    } as API,
+    /** Rollback page to a specific version */
+    ROLLBACK_PAGE_VERSION: {
+        url: '/knowledge-wiki/space/page/:pageId/rollback',
+        method: 'POST'
+    } as API,
+    /** Compare two page versions */
+    COMPARE_PAGE_VERSIONS: {
+        url: '/knowledge-wiki/space/page/versions/compare',
+        method: 'POST'
+    } as API,
+    /** Delete draft version */
+    DELETE_DRAFT_VERSION: {
+        url: '/knowledge-wiki/space/page/:pageId/draft',
+        method: 'DELETE'
+    } as API,
+    /** Get version count for a page */
+    GET_PAGE_VERSION_COUNT: {
+        url: '/knowledge-wiki/space/page/:pageId/versions/count',
         method: 'GET'
     } as API,
 }

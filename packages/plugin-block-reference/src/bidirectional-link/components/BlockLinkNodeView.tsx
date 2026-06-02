@@ -80,7 +80,7 @@ export const BlockLinkView: React.FC<NodeViewProps> = React.memo((props) => {
         const pageId = blockInfo?.pageId || pageInfo?.id;
         if (spaceId && pageId) {
             navigator.go({
-                to: `/space-detail/${spaceId}/page/${pageId}?blockId=${blockId}`
+                to: `/space-detail/${spaceId}/page/edit/${pageId}?blockId=${blockId}`
             });
         }
     }, [blockInfo, pageInfo, blockId, navigator]);

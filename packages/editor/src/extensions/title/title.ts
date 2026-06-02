@@ -8,7 +8,6 @@ import { getNodeAtPos, isInTitle } from "@editor/utilities";
 export const Title = Node.create({
 	name: 'title',
 	content: 'heading',
-	group: 'block',
 
 
 	addAttributes() {

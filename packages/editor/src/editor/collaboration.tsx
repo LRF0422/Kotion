@@ -150,6 +150,23 @@ export const CollaborationEditor = forwardRef<
   useImperativeHandle(ref, () => editor as Editor)
 
   // Load content into the editor
+  //
+  // When a Yjs collab provider is attached, the local Y.Doc is empty at
+  // mount time and only acquires the page's collaborative state once the
+  // server's SyncStep2 has been processed. Calling `setContent` BEFORE
+  // that point is what produced the duplicate-content bug: the local
+  // insert gets recorded by Yjs as fresh ops, then the server's own
+  // state is layered on top of it during sync, leaving two copies of
+  // every block in the merged document.
+  //
+  // Strategy:
+  //   1. If there is no provider, behave as before — REST content is the
+  //      single source of truth.
+  //   2. If there is a provider, wait for `synced` to arrive (with a
+  //      bounded timeout). After sync, only seed from REST when the
+  //      collaborative doc is still empty (brand-new page, or never
+  //      collaboratively edited). Otherwise the Yjs state already carries
+  //      the latest content and we leave it alone.
   React.useEffect(() => {
     if (!editor) return;
 
@@ -167,6 +184,65 @@ export const CollaborationEditor = forwardRef<
     setLoadProgress(0);
     setIsLargeDoc(false);
 
+    const isCollabDocEmpty = (): boolean => {
+      const doc = editor.state.doc;
+      if (doc.childCount === 0) return true;
+      // Walk every descendant looking for *real* content. Structural size
+      // (e.g. an empty title containing an empty heading) is not enough:
+      // Tiptap's default initialisation is exactly that shape, and so is a
+      // Yjs sync that arrived with no payload yet, so relying on
+      // `firstChild.content.size === 0` would misclassify those cases as
+      // "non-empty" and skip the REST seed entirely (which is what made
+      // the page render blank after a refresh).
+      //
+      // A node counts as content when it is either:
+      //   - a text node with at least one non-whitespace character, or
+      //   - an atom node that isn't text (images, embeds, hard breaks,
+      //     custom inline atoms, etc.).
+      let hasContent = false;
+      doc.descendants((node) => {
+        if (hasContent) return false;
+        if (node.isText) {
+          if (node.text && node.text.trim() !== '') {
+            hasContent = true;
+            return false;
+          }
+          return false;
+        }
+        if (node.isAtom) {
+          hasContent = true;
+          return false;
+        }
+        return true;
+      });
+      return !hasContent;
+    };
+
+    const waitForSync = (): Promise<boolean> => {
+      if (!provider) return Promise.resolve(true);
+      if (provider.synced) return Promise.resolve(true);
+      return new Promise<boolean>((resolve) => {
+        let settled = false;
+        const handler = () => {
+          if (settled) return;
+          settled = true;
+          provider.off('synced', handler);
+          clearTimeout(timeoutId);
+          resolve(true);
+        };
+        // Bounded wait — if the WS is unreachable we still want to surface
+        // *something* rather than spin forever. 5s is generous for the
+        // SyncStep2 round-trip while still bounding the worst case.
+        const timeoutId = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          provider.off('synced', handler);
+          resolve(false);
+        }, 5000);
+        provider.on('synced', handler);
+      });
+    };
+
     // Yield first so the skeleton UI can paint before heavy processing begins
     const timer = setTimeout(async () => {
       if (cancelled) return;
@@ -179,6 +255,19 @@ export const CollaborationEditor = forwardRef<
       ).json;
 
       if (!processedContent || cancelled) return;
+
+      const synced = await waitForSync();
+      if (cancelled) return;
+
+      // If sync succeeded and the collab doc already carries content,
+      // trust Yjs as the source of truth and skip the REST seed —
+      // calling setContent here would duplicate every block.
+      if (synced && provider && !isCollabDocEmpty()) {
+        setLoadProgress(100);
+        setContentReady(true);
+        onContentReady?.();
+        return;
+      }
 
       // For very large documents, load in chunks so the browser stays
       // responsive and we can show progress. Otherwise use the fast path.
@@ -201,7 +290,7 @@ export const CollaborationEditor = forwardRef<
     }, 0);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [editor, content, extensions]);
+  }, [editor, content, provider, extensions]);
 
 
   // Cleanup provider on unmount

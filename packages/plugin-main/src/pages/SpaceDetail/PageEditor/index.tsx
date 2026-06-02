@@ -1,5 +1,5 @@
 import { APIS } from "../../../api";
-import { Badge, useIsMobile, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
+import { useIsMobile, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuPortal, DropdownMenuLabel } from "@kn/ui";
 import { Label } from "@kn/ui";
@@ -7,8 +7,8 @@ import { RadioGroup, RadioGroupItem } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { Switch } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
-import { CollaborationEditor, exportToPDF, useIncrementalSave, AutoSaveStatus, TiptapCollabProvider } from "@kn/editor";
-import type { IncrementalSavePayload } from "@kn/editor";
+import { CollaborationEditor, exportToPDF, useIncrementalSave, TiptapCollabProvider } from "@kn/editor";
+import type { IncrementalPayload } from "@kn/editor";
 import { event, ON_PAGE_REFRESH } from "../../../event";
 import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes } from "@kn/common";
 import { useNavigator } from "@kn/common";
@@ -17,11 +17,11 @@ import { Editor } from "@kn/editor";
 import * as Y from "@kn/editor";
 import { useKeyPress, useToggle } from "@kn/common";
 import {
-    ALargeSmall, ArrowLeft, BookTemplate, CircleArrowUp,
+    ALargeSmall, ArrowLeft, BookTemplate, Check, Pencil,
     Contact2, Download, FileIcon, FileText,
     Link, LoaderCircle, LockIcon, MessageSquareText,
-    MoreHorizontal, MoveDownRight, Save, Trash2, Upload, List,
-    Check, CloudOff, UserPlus
+    MoreHorizontal, MoveDownRight, Trash2, Upload, List,
+    CloudOff, UserPlus
 } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "@kn/common";
@@ -31,24 +31,56 @@ import { CollaborationInvitationDlg } from "../../components/CollaborationInvita
 import { PageBreadcrumb } from "../../../components/PageBreadcrumb";
 import { TemplateCreator } from "../TemplateCreator";
 
-// Status display configuration for auto-save
-const getStatusDisplay = (autoSaveStatus: AutoSaveStatus, isManualSaving: boolean) => {
-    // Manual saving takes priority
-    if (isManualSaving || autoSaveStatus === 'saving') {
-        return { text: 'Saving...', icon: <LoaderCircle className="h-3 w-3 animate-spin" />, variant: 'secondary' as const };
+// Status display configuration for save state
+const getStatusDisplay = (saving: boolean, dirty: boolean, error: Error | null) => {
+    if (saving) {
+        return { text: 'Saving', icon: <LoaderCircle className="h-3 w-3 animate-spin text-muted-foreground" />, className: 'text-muted-foreground' };
     }
-    switch (autoSaveStatus) {
-        case 'unsaved':
-            return { text: 'Unsaved', icon: <CloudOff className="h-3 w-3" />, variant: 'secondary' as const };
-        case 'saved':
-            return { text: 'Saved', icon: <Check className="h-3 w-3" />, variant: 'secondary' as const };
-        case 'error':
-            return { text: 'Save failed', icon: <CloudOff className="h-3 w-3" />, variant: 'destructive' as const };
-        case 'idle':
-        default:
-            return { text: 'Ready', icon: null, variant: 'outline' as const };
+    if (error) {
+        return { text: 'Save failed', icon: <CloudOff className="h-3 w-3 text-destructive" />, className: 'text-destructive' };
     }
+    if (dirty) {
+        return { text: 'Editing', icon: <Pencil className="h-3 w-3 text-muted-foreground" />, className: 'text-muted-foreground' };
+    }
+    return { text: 'Saved', icon: <Check className="h-3 w-3 text-muted-foreground" />, className: 'text-muted-foreground' };
 };
+
+// Custom hook: wraps useIncrementalSave with the actual PATCH API call
+// Includes prevVersion for optimistic concurrency and applies server
+// version info after each successful save.
+function usePageSave(editor: Editor | null, pageId: string | null, enabled: boolean) {
+    const handleSave = useCallback(async (payload: IncrementalPayload) => {
+        if (!pageId) throw new Error('No pageId')
+        const res = await useApi(APIS.PATCH_PAGE_BLOCKS, { id: pageId }, {
+            pageId,
+            blockOrder: payload.blockOrder,
+            changes: payload.changes.map(c => ({
+                blockId: c.blockId,
+                action: c.action,
+                type: c.type,
+                content: c.action === 'upsert'
+                    ? JSON.stringify({ type: c.type, attrs: c.attrs, content: c.content })
+                    : undefined,
+                prevVersion: c.prevVersion,
+            })),
+        })
+        // Apply server-returned version info so subsequent patches
+        // carry the correct prevVersion
+        const data = res?.data
+        if (data?.blockVersions) {
+            const tracker = (editor?.storage as any)?.dirtyTracker
+            if (tracker?.applyServerVersions) {
+                tracker.applyServerVersions(data.blockVersions)
+            }
+        }
+    }, [pageId, editor])
+
+    return useIncrementalSave({
+        editor,
+        enabled,
+        onSave: handleSave,
+    })
+}
 
 export const PageEditor: React.FC = () => {
     const isMobile = useIsMobile()
@@ -56,7 +88,6 @@ export const PageEditor: React.FC = () => {
     const [page, setPage] = useState<any>()
     const params = useParams()
     const { userInfo } = useSelector((state: GlobalState) => state)
-    const [loading, { toggle }] = useToggle(false)
     const [pageLoading, { toggle: toggleLoading }] = useToggle(false)
     const [synceStatus, setSyncStatus] = useState(false)
     const lastAwarenessRef = useRef<any[]>([])
@@ -66,7 +97,6 @@ export const PageEditor: React.FC = () => {
     const navigator = useNavigator()
     const ref = useRef<any>()
     const spaceService = useService("spaceService")
-    const [isManualSaving, setIsManualSaving] = useState(false)
     const { usePath } = useUploadFile();
     const [editorContentReady, setEditorContentReady] = useState(false)
 
@@ -195,93 +225,55 @@ export const PageEditor: React.FC = () => {
         return null
     }, [])
 
-    const getIcon = useCallback((value: any) => {
-        if (value) {
-            const content = value.content[0]
-            if (content) {
-                return content.attrs?.icon
-            }
-        }
-        return null
-    }, [])
 
-    // Auto-save callback - performs incremental save (only changed blocks)
-    const handleIncrementalSave = useCallback(async (payload: IncrementalSavePayload) => {
-        if (!page || !params.pageId) return;
+    // Incremental auto-save via new hook (PATCH blocks only, no ON_PAGE_REFRESH)
+    const { saving, dirty, error: saveError, saveNow } = usePageSave(
+        editor.current,
+        params.pageId || null,
+        !!page && !!params.pageId && editorContentReady
+    )
 
-        await useApi(APIS.PATCH_PAGE_BLOCKS, { id: params.pageId }, {
-            pageId: params.pageId,
-            blockOrder: payload.blockOrder,
-            changes: payload.changes.map(c => ({
-                blockId: c.blockId,
-                action: c.action,
-                type: c.type,
-                content: c.content ? JSON.stringify(c.content) : undefined,
-            })),
-        });
-        event.emit(ON_PAGE_REFRESH);
-    }, [page, params.pageId])
-
-    // Use incremental auto-save hook
-    const { status: autoSaveStatus, isDirty, saveNow, markAsSaved } = useIncrementalSave({
-        editor: editor.current,
-        debounceDelay: 3000, // Auto-save after 3 seconds of inactivity
-        onIncrementalSave: handleIncrementalSave,
-        enabled: !!page && !!params.pageId,
-        contentReady: editorContentReady,
-    });
-
-    // Manual save handler (for Ctrl+S — triggers immediate incremental save)
-    // Publish handler (needs full content for publishing)
-    const handleSave = useCallback(async (publish: boolean = false) => {
-        if (!editor.current || !page) return;
-
-        if (!publish) {
-            // Regular save — just flush the incremental save immediately
-            setIsManualSaving(true);
-            try {
-                await saveNow();
-            } finally {
-                setIsManualSaving(false);
-            }
-            return;
-        }
-
-        // Publish requires full content
-        setIsManualSaving(true);
-        toggle();
-
+    // Rollback handler — restore page to previous version via block snapshots
+    const handleRollback = useCallback(async () => {
+        if (!params.pageId) return
         try {
-            const pageContent = editor.current.getJSON();
-            const title = getTitleContent(pageContent);
-            const icon = getIcon(pageContent);
+            // Get all versions to find the previous one
+            const versionsRes = await useApi(APIS.GET_ALL_PAGE_VERSIONS, { pageId: params.pageId })
+            const versions = versionsRes?.data
+            if (!versions || versions.length < 2) {
+                toast.error('No previous version available')
+                return
+            }
 
-            const pageData = {
-                ...page,
-                title,
-                icon,
-                id: params.pageId,
-                content: JSON.stringify(pageContent),
-                publish: true
-            };
+            // Find the previous IN_ACTIVE version (the one before current ACTIVE)
+            const activeIdx = versions.findIndex((v: any) => v.status === 'ACTIVE')
+            const targetVersion = versions[activeIdx + 1] // next item is older (list is desc)
+            if (!targetVersion || targetVersion.status === 'DRAFT') {
+                toast.error('Cannot rollback: no suitable previous version')
+                return
+            }
 
-            await useApi(APIS.CREATE_OR_SAVE_PAGE, undefined, pageData);
+            await useApi(APIS.ROLLBACK_PAGE_VERSION, { pageId: params.pageId }, {
+                targetVersionId: targetVersion.id,
+                changeSummary: 'Rollback to version ' + targetVersion.version,
+            })
 
-            navigator.go({
-                to: `/space-detail/${params.id}/page/${params.pageId}`
-            });
-            toast.success("发布成功");
+            // Reload the page to reflect rolled-back content
+            const reloadedPage = await spaceService.getPage(params.pageId)
+            setPage(reloadedPage)
+            setEditorContentReady(false)
 
-            event.emit(ON_PAGE_REFRESH);
-            markAsSaved();
+            // Reset the DirtyTracker since content is now from a different version
+            const tracker = (editor.current?.storage as any)?.dirtyTracker
+            if (tracker?.commit) tracker.commit()
+
+            toast.success('Rolled back to version ' + targetVersion.version)
+            event.emit(ON_PAGE_REFRESH)
         } catch (error) {
-            console.error('Publish failed:', error);
-            toast.error('发布失败');
-        } finally {
-            toggle();
-            setIsManualSaving(false);
+            console.error('Rollback failed:', error)
+            toast.error('Rollback failed')
         }
-    }, [editor, page, params.pageId, params.id, getTitleContent, getIcon, toggle, navigator, markAsSaved, saveNow])
+    }, [params.pageId, editor, spaceService])
 
     // Markdown import handler
     const handleImportMarkdown = useCallback(() => {
@@ -350,12 +342,12 @@ export const PageEditor: React.FC = () => {
     }, [editor]);
 
     useKeyPress(["ctrl.s"], (e) => {
-        e.preventDefault();
-        handleSave();
+        e.preventDefault()
+        saveNow()
     })
 
     // Get current status display
-    const statusDisplay = getStatusDisplay(autoSaveStatus, isManualSaving)
+    const statusDisplay = getStatusDisplay(saving, dirty, saveError)
 
 
     // Pre-process page content: parse JSON and unescape HTML entities off the main render path
@@ -471,23 +463,12 @@ export const PageEditor: React.FC = () => {
                     </>
                 )}
 
-                {/* Auto-save Status */}
-                <Badge variant={statusDisplay.variant}>
-                    <div className="flex flex-row items-center gap-1">
-                        {statusDisplay.icon}
-                        {statusDisplay.text}
-                    </div>
-                </Badge>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleSave()}
-                    disabled={loading || isManualSaving}
-                >
-                    <Save className="h-5 w-5" />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => handleSave(true)}><CircleArrowUp className="h-5 w-5" /></Button>
-                <Separator orientation="vertical" />
+                {/* Auto-save Status — always visible */}
+                <div className={`flex items-center gap-1 px-2 py-1 text-xs ${statusDisplay.className}`}>
+                    {statusDisplay.icon}
+                    <span>{statusDisplay.text}</span>
+                </div>
+                <Separator orientation="vertical" className="h-5" />
                 {/* Mobile Toc toggle button */}
                 {isMobile && (
                     <Sheet open={tocOpen} onOpenChange={setTocOpen}>
@@ -586,7 +567,7 @@ export const PageEditor: React.FC = () => {
                                     <span>move to</span>
                                 </div>
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleRollback}>
                                 <div className="flex flex-row items-center gap-1">
                                     <ArrowLeft className="h-4 w-4" />
                                     <span>rollback to last version</span>

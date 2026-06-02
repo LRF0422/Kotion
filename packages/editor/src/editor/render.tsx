@@ -83,7 +83,7 @@ export const EditorRender = forwardRef<
 
   const editor = useEditor(
     {
-      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      // content: { type: 'doc', content: [{ type: 'paragraph' }] },
       editable: isEditable,
       immediatelyRender: false,
       shouldRerenderOnTransaction: false,

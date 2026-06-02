@@ -1,7 +1,6 @@
 import { Home } from './pages/Home'
 import { Spaces } from './pages/Spaces'
 import { SpaceDetail } from './pages/SpaceDetail'
-import { PageViewer } from './pages/SpaceDetail/PageViewer'
 import { PageEditor } from './pages/SpaceDetail/PageEditor'
 import { SpaceSettings } from './pages/SpaceDetail/Settings'
 import { InviteCollaboration } from './pages/InviteCollaboration'
@@ -42,11 +41,6 @@ export const DefaultPluginInstance = new DefaultPlugin({
       path: '/space-detail/:id',
       element: <SpaceDetail />,
       children: [
-        {
-          name: '/space-detail/:id/page/:pageId',
-          path: '/space-detail/:id/page/:pageId',
-          element: <PageViewer />
-        },
         {
           name: '/space-detail/:id/page/edit/:pageId',
           path: '/space-detail/:id/page/edit/:pageId',

@@ -249,7 +249,7 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
 
     // Copy share link
     const handleCopyLink = async () => {
-        const linkToCopy = shareLink || `${window.location.origin}/space-detail/${params.id}/page/${params.pageId}`;
+        const linkToCopy = shareLink || `${window.location.origin}/space-detail/${params.id}/page/edit/${params.pageId}`;
         try {
             await navigator.clipboard.writeText(linkToCopy);
             setLinkCopied(true);
@@ -544,7 +544,7 @@ export const CollaborationInvitationDlg: React.FC<CollaborationInvitationDlgProp
                     <div className="flex gap-2">
                         <Input
                             readOnly
-                            value={shareLink || `${window.location.origin}/space-detail/${params.id}/page/${params.pageId}`}
+                            value={shareLink || `${window.location.origin}/space-detail/${params.id}/page/edit/${params.pageId}`}
                             className="text-sm bg-muted/50"
                         />
                         <Button

@@ -1,9 +1,9 @@
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor"
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useDebounce, useTranslation } from "@kn/common"
 import { EmptyState, Button, Card, CardContent, useTheme } from "@kn/ui"
 import Editor, { Monaco } from '@monaco-editor/react';
-import { HelpCircle, GitBranch, ArrowRightLeft, Network, ZoomIn, ZoomOut, RotateCcw, CopyIcon, DownloadIcon, Maximize2 } from "@kn/icon"
+import { HelpCircle, GitBranch, ArrowRightLeft, Network, ZoomIn, ZoomOut, RotateCcw, CopyIcon, DownloadIcon, Maximize2, Pencil, Check } from "@kn/icon"
 import RenderMermaid from "../../component"
 
 const MIN_ZOOM = 0.25
@@ -35,6 +35,7 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
     const editorRef = useRef<Monaco>();
     const previewRef = useRef<HTMLDivElement | null>(null);
     const diagramRef = useRef<HTMLDivElement | null>(null);
+    const cardRef = useRef<HTMLDivElement | null>(null);
     const { theme } = useTheme()
     const { t } = useTranslation()
     const isEditable = props.editor.isEditable
@@ -42,6 +43,8 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
     const [code, setCode] = useState(props.node.attrs.data)
     const [zoom, setZoom] = useState(1)
     const [isFullscreen, setIsFullscreen] = useState(false)
+    // Click-to-edit: start in edit mode if no code yet (new block)
+    const [isEditing, setIsEditing] = useState(!props.node.attrs.data)
     const value = useDebounce(code, {
         wait: 500,
     })
@@ -52,6 +55,24 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
             data: value
         })
     }, [value])
+
+    // Click outside to exit edit mode
+    useEffect(() => {
+        if (!isEditing) return
+        const handleClickOutside = (e: MouseEvent) => {
+            if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
+                setIsEditing(false)
+            }
+        }
+        // Delay listener to avoid immediate trigger from the click that opened edit mode
+        const timer = setTimeout(() => {
+            document.addEventListener('mousedown', handleClickOutside)
+        }, 100)
+        return () => {
+            clearTimeout(timer)
+            document.removeEventListener('mousedown', handleClickOutside)
+        }
+    }, [isEditing])
 
     // Stop ProseMirror from intercepting events on interactive controls
     const stopPmEvents = {
@@ -115,9 +136,9 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
         }
         container.addEventListener('wheel', handleWheel, { passive: false })
         return () => container.removeEventListener('wheel', handleWheel)
-    }, [isEditable])
+    }, [isEditing])
 
-    const mermaidConfig = {
+    const mermaidConfig = useMemo(() => ({
         theme: isDark ? "dark" : "default" as any,
         themeVariables: {
             primaryColor: '#3b82f6',
@@ -127,7 +148,7 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
             fontSize: '16px',
         },
         securityLevel: 'loose' as const,
-    }
+    }), [isDark])
 
     const renderToolbar = () => (
         <div className="absolute bottom-2 right-2 flex items-center gap-1 z-10"
@@ -216,19 +237,16 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
         if (!code) {
             return (
                 <EmptyState
-                    className="w-full hover:bg-accent/10 border-none rounded-md"
+                    className="w-full hover:bg-accent/10 border-none rounded-md cursor-pointer"
                     title={t('mermaid.title')}
-                    description={isEditable
-                        ? t('mermaid.editDescription')
-                        : t('mermaid.viewDescription')
-                    }
+                    description={t('mermaid.editDescription')}
                     icons={[GitBranch, ArrowRightLeft, Network]}
-                    action={isEditable ? {
+                    action={{
                         label: t('mermaid.learnSyntax'),
                         onClick: () => {
                             window.open("https://mermaid.js.org/intro/", "_blank")
                         }
-                    } : undefined}
+                    }}
                 />
             )
         }
@@ -244,16 +262,30 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
         )
     }
 
-    // --- Edit mode: split layout ---
-    if (isEditable) {
+    // --- Editing mode: split layout with code editor + preview ---
+    if (isEditing && isEditable) {
         return (
             <NodeViewWrapper className="h-auto">
                 <Card
+                    ref={cardRef}
                     className="overflow-hidden"
                     contentEditable={false}
                     suppressContentEditableWarning
                     {...stopPmEvents}
                 >
+                    {/* Done button bar */}
+                    <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/30">
+                        <span className="text-xs font-medium text-muted-foreground">Mermaid</span>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 gap-1 text-xs"
+                            onClick={() => setIsEditing(false)}
+                        >
+                            <Check className="h-3.5 w-3.5" />
+                            {t('common.done') || 'Done'}
+                        </Button>
+                    </div>
                     <div className="flex gap-0 min-h-[400px]">
                         {/* Left Panel: Code Editor */}
                         <div className="w-1/2 border-r min-w-0 flex flex-col">
@@ -313,10 +345,16 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
         )
     }
 
-    // --- View mode: full-width mermaid ---
+    // --- Compact view: rendered diagram only (click to edit) ---
     return (
         <NodeViewWrapper className="h-auto">
-            <Card className="overflow-hidden">
+            <Card
+                ref={cardRef}
+                className="overflow-hidden group cursor-pointer transition-shadow hover:shadow-md"
+                contentEditable={false}
+                suppressContentEditableWarning
+                onDoubleClick={() => isEditable && setIsEditing(true)}
+            >
                 <CardContent className="p-2 relative" ref={previewRef}>
                     <div
                         className="w-full overflow-auto"
@@ -330,8 +368,89 @@ export const MermaidView: React.FC<NodeViewProps> = (props) => {
                             {renderPreview()}
                         </div>
                     </div>
-                    {/* Toolbar: zoom + copy/download/fullscreen */}
-                    {code && renderToolbar()}
+                    {/* Always-visible Edit button in top-right */}
+                    {isEditable && code && (
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            className="absolute top-2 right-2 z-20 h-7 px-2 gap-1 text-xs shadow-sm"
+                            onClick={(e) => { e.stopPropagation(); setIsEditing(true) }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                        >
+                            <Pencil className="h-3 w-3" />
+                            {t('common.edit') || 'Edit'}
+                        </Button>
+                    )}
+                    {/* Toolbar: zoom + copy/download/fullscreen (hover) */}
+                    {code && (
+                        <div className="absolute bottom-2 right-2 flex items-center gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                        >
+                            <div className="mermaid-preview-zoom-controls flex items-center gap-1 bg-gray-100/80 dark:bg-gray-700/80 backdrop-blur-sm rounded-lg p-0.5">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={handleZoomOut}
+                                    disabled={zoom <= MIN_ZOOM}
+                                    className="h-6 w-6 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600"
+                                    title="Zoom out"
+                                >
+                                    <ZoomOut className="h-3.5 w-3.5" />
+                                </Button>
+                                <span className="text-[10px] font-medium text-gray-600 dark:text-gray-300 min-w-[2.5rem] text-center select-none">
+                                    {Math.round(zoom * 100)}%
+                                </span>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={handleZoomIn}
+                                    disabled={zoom >= MAX_ZOOM}
+                                    className="h-6 w-6 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600"
+                                    title="Zoom in"
+                                >
+                                    <ZoomIn className="h-3.5 w-3.5" />
+                                </Button>
+                                <div className="w-px h-3 bg-gray-300 dark:bg-gray-500 mx-0.5" />
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={handleCopyCode}
+                                    className="h-6 w-6 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600"
+                                    title="Copy code"
+                                >
+                                    <CopyIcon className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={handleDownload}
+                                    className="h-6 w-6 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600"
+                                    title="Download SVG"
+                                >
+                                    <DownloadIcon className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={handleOpenFullscreen}
+                                    className="h-6 w-6 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600"
+                                    title="View fullscreen"
+                                >
+                                    <Maximize2 className="h-3.5 w-3.5" />
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                    {/* Empty state: click anywhere to edit */}
+                    {!code && isEditable && (
+                        <div
+                            className="absolute inset-0 cursor-pointer"
+                            onClick={() => setIsEditing(true)}
+                        />
+                    )}
                 </CardContent>
             </Card>
             {/* Fullscreen overlay */}

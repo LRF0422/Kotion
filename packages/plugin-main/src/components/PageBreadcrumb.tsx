@@ -26,7 +26,7 @@ export const PageBreadcrumb: React.FC<PageBreadcrumbProps> = ({
         if (isCurrentPage) return; // Don't navigate if clicking on current page
 
         // Navigate to the selected page
-        navigate(`/space-detail/${spaceId}/page/${pageId}`);
+        navigate(`/space-detail/${spaceId}/page/edit/${pageId}`);
     };
 
     if (breadcrumb.length === 0 && currentTitle) {

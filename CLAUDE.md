@@ -61,7 +61,7 @@ pnpm clean:packages         # Clean all dist directories
 - HTTP 客户端、Logger、工具函数
 
 **packages/plugin-main** - 主应用插件，提供页面路由：
-- `src/pages/` - 应用页面（SpaceDetail, PageViewer 等）
+- `src/pages/` - 应用页面（SpaceDetail, PageEditor 等）
 - 只放应用级别的页面和路由逻辑
 - **不要放核心功能组件**（如设置、AI 技能等应该在 core）
 

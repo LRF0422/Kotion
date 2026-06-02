@@ -1,227 +1,113 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useDebounceFn } from 'ahooks';
-import { Editor } from '@tiptap/core';
-import type { DirtyTrackerStorage, IncrementalSavePayload, BlockChange, BlockChangeAction } from '../extensions/dirty-tracker/dirty-tracker';
-import type { AutoSaveStatus } from './use-auto-save';
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { Editor } from '@tiptap/core'
+import type { IncrementalPayload, DirtyTrackerStorage } from '../extensions/dirty-tracker'
 
-// Re-export types so consumers can import from @kn/editor directly
-export type { IncrementalSavePayload, BlockChange, BlockChangeAction } from '../extensions/dirty-tracker/dirty-tracker';
-
-// ─── Options ─────────────────────────────────────────────────────────
+// Re-export for consumers
+export type { IncrementalPayload, BlockChange } from '../extensions/dirty-tracker'
 
 export interface UseIncrementalSaveOptions {
-    /** Editor instance */
-    editor: Editor | null;
-    /** Debounce delay in milliseconds (default: 2000) */
-    debounceDelay?: number;
-    /** Called for incremental saves with only the changed blocks. */
-    onIncrementalSave: (payload: IncrementalSavePayload) => Promise<void>;
-    /** Whether auto-save is enabled (default: true) */
-    enabled?: boolean;
-    /** Callback when save status changes */
-    onStatusChange?: (status: AutoSaveStatus) => void;
-    /**
-     * Whether the editor content has finished loading (default: true).
-     * While false, editor update events are ignored.
-     */
-    contentReady?: boolean;
+  editor: Editor | null
+  enabled: boolean
+  debounceMs?: number
+  onSave: (payload: IncrementalPayload) => Promise<void>
 }
-
-// ─── Return type ─────────────────────────────────────────────────────
 
 export interface UseIncrementalSaveReturn {
-    /** Current save status */
-    status: AutoSaveStatus;
-    /** Whether there are unsaved changes */
-    isDirty: boolean;
-    /** Manually trigger an immediate save */
-    saveNow: () => Promise<void>;
-    /** Mark content as saved (clears dirty state and DirtyTracker) */
-    markAsSaved: () => void;
-    /** Mark content as dirty */
-    markAsDirty: () => void;
-    /** Timestamp of the last successful save */
-    lastSavedAt: Date | null;
+  saving: boolean
+  dirty: boolean
+  error: Error | null
+  saveNow: () => Promise<void>
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-function getDirtyTrackerStorage(editor: Editor | null): DirtyTrackerStorage | null {
-    if (!editor) return null;
-    return (editor.storage as any)?.dirtyTracker as DirtyTrackerStorage ?? null;
+function getTracker(editor: Editor | null): DirtyTrackerStorage | null {
+  if (!editor) return null
+  const storage = (editor.storage as any)?.dirtyTracker as DirtyTrackerStorage | undefined
+  if (!storage || !storage.initialized) return null
+  return storage
 }
 
-// ─── Hook ────────────────────────────────────────────────────────────
+export function useIncrementalSave(options: UseIncrementalSaveOptions): UseIncrementalSaveReturn {
+  const { editor, enabled, debounceMs = 3000, onSave } = options
 
-/**
- * useIncrementalSave — leverages the DirtyTracker extension to send only
- * changed blocks to the backend. No full-document save is performed;
- * if nothing changed or the tracker isn't ready, the save is simply skipped.
- */
-export function useIncrementalSave({
-    editor,
-    debounceDelay = 2000,
-    onIncrementalSave,
-    enabled = true,
-    onStatusChange,
-    contentReady = true,
-}: UseIncrementalSaveOptions): UseIncrementalSaveReturn {
-    const [status, setStatus] = useState<AutoSaveStatus>('idle');
-    const [isDirty, setIsDirty] = useState(false);
-    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-    const isSavingRef = useRef(false);
-    const pendingSaveRef = useRef(false);
-    const contentReadyRef = useRef(contentReady);
+  const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const savingRef = useRef(false)
+  const onSaveRef = useRef(onSave)
+  onSaveRef.current = onSave
 
-    // Update status and notify
-    const updateStatus = useCallback((newStatus: AutoSaveStatus) => {
-        setStatus(newStatus);
-        onStatusChange?.(newStatus);
-    }, [onStatusChange]);
+  const doSave = useCallback(async () => {
+    if (savingRef.current) return
+    const tracker = getTracker(editor)
+    if (!tracker) return
 
-    // ── Core save logic ──
-    const performSave = useCallback(async () => {
-        if (!editor || isSavingRef.current) {
-            pendingSaveRef.current = true;
-            return;
-        }
+    // Snapshot diff is the source of truth — bail iff there is genuinely
+    // nothing changed against the committed baseline.
+    const payload = tracker.getPayload()
+    if (payload.changes.length === 0) {
+      setDirty(false)
+      return
+    }
 
-        isSavingRef.current = true;
-        updateStatus('saving');
+    savingRef.current = true
+    setSaving(true)
+    setError(null)
 
-        try {
-            const tracker = getDirtyTrackerStorage(editor);
+    try {
+      await onSaveRef.current(payload)
+      tracker.commit()
+      setDirty(false)
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err))
+      setError(e)
+      console.error('[useIncrementalSave] Save failed:', e)
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
+  }, [editor])
 
-            if (tracker && tracker.initialized) {
-                const payload = tracker.getIncrementalPayload();
+  // Mark dirty on any doc-changing transaction so the UI can show
+  // "Unsaved changes" immediately (before the idle debounce fires).
+  useEffect(() => {
+    if (!editor || !enabled) return
+    const handler = ({ transaction }: { transaction: any }) => {
+      if (transaction.docChanged) {
+        setDirty(true)
+      }
+    }
+    editor.on('transaction', handler)
+    return () => { editor.off('transaction', handler) }
+  }, [editor, enabled])
 
-                // Nothing changed — skip save
-                if (payload.changes.length === 0) {
-                    setIsDirty(false);
-                    updateStatus('idle');
-                    return;
-                }
+  // Subscribe to the dirty tracker's idle stream. Triggering is driven by a
+  // ProseMirror view plugin inside the DirtyTracker extension — that fires
+  // on every PM state update at the core level, bypassing Tiptap's event
+  // emitter (which has been observed to be unreliable in this codebase's
+  // collab setup).
+  useEffect(() => {
+    if (!editor || !enabled) return
 
-                await onIncrementalSave(payload);
-                tracker.commitSave();
-            } else {
-                // DirtyTracker not ready — skip
-                updateStatus('idle');
-                return;
-            }
+    const tracker = getTracker(editor)
+    if (!tracker) return
 
-            setIsDirty(false);
-            setLastSavedAt(new Date());
-            updateStatus('saved');
+    // Seed the baseline at the moment tracking turns on. Covers content
+    // loaded into the editor before `enabled` became true (initial Yjs
+    // sync, setContent({emitUpdate:false}), progressive load).
+    tracker.commit()
 
-            setTimeout(() => {
-                if (!pendingSaveRef.current) {
-                    updateStatus('idle');
-                }
-            }, 2000);
-        } catch (error) {
-            console.error('Incremental auto-save failed:', error);
-            updateStatus('error');
-        } finally {
-            isSavingRef.current = false;
+    const unsubscribe = tracker.subscribeIdle(() => {
+      doSave()
+    }, debounceMs)
 
-            if (pendingSaveRef.current) {
-                pendingSaveRef.current = false;
-                performSave();
-            }
-        }
-    }, [editor, onIncrementalSave, updateStatus]);
+    return unsubscribe
+  }, [editor, enabled, debounceMs, doSave])
 
-    // Debounced save
-    const { run: debouncedSave, cancel: cancelDebouncedSave } = useDebounceFn(
-        () => {
-            if (isDirty && enabled) {
-                performSave();
-            }
-        },
-        { wait: debounceDelay },
-    );
+  const saveNow = useCallback(() => {
+    const tracker = getTracker(editor)
+    tracker?.cancelIdle()
+    return doSave()
+  }, [editor, doSave])
 
-    // ── Public helpers ──
-
-    const markAsDirty = useCallback(() => {
-        setIsDirty(true);
-        updateStatus('unsaved');
-    }, [updateStatus]);
-
-    const markAsSaved = useCallback(() => {
-        setIsDirty(false);
-        setLastSavedAt(new Date());
-        updateStatus('saved');
-        cancelDebouncedSave();
-
-        // Also commit the DirtyTracker state
-        const tracker = getDirtyTrackerStorage(editor);
-        if (tracker) tracker.commitSave();
-
-        setTimeout(() => {
-            updateStatus('idle');
-        }, 2000);
-    }, [editor, updateStatus, cancelDebouncedSave]);
-
-    const saveNow = useCallback(async () => {
-        cancelDebouncedSave();
-        if (isDirty) {
-            await performSave();
-        }
-    }, [isDirty, performSave, cancelDebouncedSave]);
-
-    // ── Effects ──
-
-    // Keep contentReadyRef in sync and reinitialize tracker when content loads
-    useEffect(() => {
-        const wasReady = contentReadyRef.current;
-        contentReadyRef.current = contentReady;
-
-        if (contentReady && !wasReady) {
-            cancelDebouncedSave();
-            setIsDirty(false);
-            updateStatus('idle');
-
-            // Reinitialize the tracker baseline after content finishes loading
-            const tracker = getDirtyTrackerStorage(editor);
-            if (tracker) tracker.reinitialize();
-        }
-    }, [contentReady, cancelDebouncedSave, updateStatus, editor]);
-
-    // Listen for editor content changes
-    useEffect(() => {
-        if (!editor || !enabled) return;
-
-        const handleUpdate = () => {
-            if (!contentReadyRef.current) return;
-
-            // The DirtyTracker plugin automatically tracks which blocks
-            // changed via its appendTransaction hook. We just need to
-            // trigger the debounced save.
-            markAsDirty();
-            debouncedSave();
-        };
-
-        editor.on('update', handleUpdate);
-        return () => {
-            editor.off('update', handleUpdate);
-        };
-    }, [editor, enabled, markAsDirty, debouncedSave]);
-
-    // Cleanup on unmount
-    useEffect(() => {
-        return () => {
-            cancelDebouncedSave();
-        };
-    }, [cancelDebouncedSave]);
-
-    return {
-        status,
-        isDirty,
-        saveNow,
-        markAsSaved,
-        markAsDirty,
-        lastSavedAt,
-    };
+  return { saving, dirty, error, saveNow }
 }

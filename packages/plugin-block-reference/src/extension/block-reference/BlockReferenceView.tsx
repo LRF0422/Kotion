@@ -64,7 +64,7 @@ export const BlockReferenceView: React.FC<NodeViewProps> = React.memo((props) =>
     const goToDetail = useCallback(() => {
         if (spaceId && pageId) {
             navigator.go({
-                to: `/space-detail/${spaceId}/page/${pageId}?blockId=${blockId}`
+                to: `/space-detail/${spaceId}/page/edit/${pageId}?blockId=${blockId}`
             });
         }
     }, [spaceId, pageId, blockId, navigator]);

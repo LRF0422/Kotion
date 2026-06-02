@@ -41,6 +41,7 @@ import com.knowledge.wiki.service.entity.dto.SpaceDTO;
 import com.knowledge.wiki.service.entity.dto.TemplateDTO;
 import com.knowledge.wiki.service.entity.dto.CollaborationInvitationRequestDTO;
 import com.knowledge.wiki.service.entity.dto.CollaborationInvitationResponseDTO;
+import com.knowledge.wiki.service.entity.dto.PatchResultDTO;
 import com.knowledge.wiki.service.entity.dto.PageCollaboratorDTO;
 import com.knowledge.wiki.service.entity.dto.ShareLinkRequestDTO;
 import com.knowledge.wiki.service.entity.dto.ShareLinkResponseDTO;
@@ -647,55 +648,19 @@ public class SpaceApplication {
     }
 
     /**
-     * Save page content as individual blocks (block-first storage).
-     * Flattens the JSON tree into block rows and optionally publishes.
-     * Publish and snapshot are executed asynchronously to reduce response time.
-     */
-    public void savePageBlocks(com.knowledge.wiki.service.entity.dto.SaveBlocksDTO dto) {
-        this.pageService.saveBlocks(dto.getPageId(), dto.getContent());
-        if (dto.isPublish()) {
-            publishVersionAndSnapshotAsync(dto.getPageId());
-        }
-    }
-
-    /**
      * Apply an incremental block-level patch from the frontend DirtyTracker.
      * Only the modified top-level blocks are persisted; deletions cascade to
-     * descendants. Optional publish + snapshot run asynchronously.
-     */
-    public void patchPageBlocks(com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto) {
-        this.pageService.patchBlocks(dto.getPageId(), dto.getChanges(), dto.getBlockOrder());
-        if (dto.isPublish()) {
-            publishVersionAndSnapshotAsync(dto.getPageId());
-        }
-    }
-
-    /**
-     * Publish the current block state of a page. Synchronous: callers receive
-     * the new {@code PageVersion} once the version row, block snapshots, and
-     * sealed change records are all committed.
+     * descendants. The block storage layer atomically seals the change set
+     * into a brand-new ACTIVE {@code PageVersion} (save = publish), so there
+     * is no separate publish flag or async fan-out.
      *
-     * @param pageId target page
-     * @param dto    optional metadata (e.g. changeSummary)
+     * @return PatchResultDTO with statistics, the new page version, and any
+     *         detected conflicts
      */
-    public com.knowledge.wiki.service.entity.PageVersion publishPage(Long pageId,
-            com.knowledge.wiki.service.entity.dto.PublishPageDTO dto) {
-        String summary = dto != null ? dto.getChangeSummary() : null;
-        return this.pageService.publishCurrentBlocks(pageId, summary);
-    }
-
-    /**
-     * Async: publish current blocks of a page (used when callers opt in to a
-     * fire-and-forget publish via the {@code publish} flag on a save / patch
-     * request).
-     */
-    @org.springframework.scheduling.annotation.Async
-    public void publishVersionAndSnapshotAsync(Long pageId) {
-        try {
-            this.pageService.publishCurrentBlocks(pageId, null);
-        } catch (Exception e) {
-            log.error("Async publish/snapshot failed for pageId={}", pageId, e);
-        }
+    public PatchResultDTO patchPageBlocks(com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto) {
+        com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result =
+                this.pageService.patchBlocks(dto.getPageId(), dto.getChanges(), dto.getBlockOrder());
+        return PatchResultDTO.from(result);
     }
 
     /**

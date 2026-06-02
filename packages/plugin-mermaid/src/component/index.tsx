@@ -4,7 +4,6 @@ import { Button } from "@kn/ui"
 import { CopyIcon, DownloadIcon, Maximize2, ZoomIn, ZoomOut, RotateCcw } from "@kn/icon"
 // styles
 // import "./styles.css";
-import { uuidv4 } from "lib0/random";
 
 // Download SVG function
 const handleDownloadSvg = (
@@ -66,7 +65,8 @@ function RenderMermaid({
     const MAX_ZOOM = 5;
     const ZOOM_STEP = 0.25;
     const fullscreenRef = useRef<HTMLDivElement | null>(null);
-    const id = uuidv4();
+    const idRef = useRef(`mermaid-${Math.random().toString(36).slice(2, 10)}`);
+    const id = idRef.current;
     const mermaidRef = useRef<HTMLDivElement | null>(null);
     const handleCopyCode = () => {
         navigator.clipboard.writeText(mermaidCode ?? "");
@@ -150,7 +150,7 @@ function RenderMermaid({
                     themeCSS: ".node rect { stroke: #3b82f6; stroke-width: 2px; fill: #eff6ff; } .edgePath path { stroke: #6b7280; stroke-width: 2px; } .cluster rect { stroke: #818cf8; stroke-width: 2px; fill: #e0e7ff; } .label { font-family: 'Inter', sans-serif; font-weight: 500; }", // Custom CSS for better styling
                     ...mermaidConfig, // Allow user overrides
                 });
-                const { svg } = await mermaid.render(`mermaid-${id}`, mermaidCode);
+                const { svg } = await mermaid.render(id, mermaidCode);
 
                 // Only update the DOM if the component is still mounted
                 if (isMounted && mermaidRef.current) {
@@ -171,7 +171,7 @@ function RenderMermaid({
                 currentRef.innerHTML = ""; // Clear the SVG on unmount
             }
         };
-    }, [mermaidCode, id, mermaidConfig]);
+    }, [mermaidCode, mermaidConfig]);
 
     if (error) {
         // Use custom error component if provided

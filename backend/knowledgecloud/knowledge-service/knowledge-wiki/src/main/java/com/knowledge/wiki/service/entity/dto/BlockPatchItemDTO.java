@@ -17,7 +17,12 @@ import lombok.Data;
 public class BlockPatchItemDTO implements Serializable {
 
     /**
-     * 变更动作：update（新增/更新）或 delete（删除）。
+     * 变更动作：upsert（新增/更新）或 delete（删除）。
+     * <p>
+     * Accepted values: "upsert", "update" (legacy alias for upsert), "delete".
+     * Note: "upsert" replaces the old "update" value; "update" is kept for
+     * backward compatibility and treated identically to "upsert".
+     * </p>
      */
     @NotBlank(message = "变更动作不能为空")
     private String action;

@@ -1,9 +1,10 @@
 package com.knowledge.wiki.service.service.impl;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,9 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.github.yulichang.base.MPJBaseServiceImpl;
 import com.knowledge.wiki.service.entity.BlockVersion;
-import com.knowledge.wiki.service.entity.PageContent;
 import com.knowledge.wiki.service.mapper.BlockVersionMapper;
-import com.knowledge.wiki.service.service.IPageContentService;
+import com.knowledge.wiki.service.service.IBlockVersionService;
 import com.knowledge.wiki.service.service.IPageSnapshotService;
 
 import cn.hutool.core.collection.CollUtil;
@@ -31,29 +31,18 @@ public class PageSnapshotServiceImpl extends MPJBaseServiceImpl<BlockVersionMapp
         implements IPageSnapshotService {
 
     @Autowired
-    private IPageContentService pageContentService;
-
-    @Autowired
-    private BlockStorageService blockStorageService;
-
-    @Autowired
-    private BlockChangeRecorder blockChangeRecorder;
+    private IBlockVersionService blockVersionService;
 
     /**
-     * Finalize block change records for a published page version.
+     * Seal pending block change rows under a newly published page version.
      * <p>
-     * Two-step process:
+     * Diff-only model: only the rows that the just-applied patch wrote (with
+     * {@code page_version_id == NULL}) are tagged with the new
+     * {@code page_version_id} / {@code page_version}. There is no
+     * carry-forward of unchanged blocks - readers use
+     * {@link #getPageStateAtVersion(Long, String)} to walk back through
+     * history.
      * </p>
-     * <ol>
-     *   <li>Seal pending change rows (created by auto-saves since the last
-     *       publish) by back-filling {@code page_version_id} and
-     *       {@code page_version}.</li>
-     *   <li>For every block whose current state was NOT touched since the last
-     *       publish (i.e., no pending row exists), insert a carry-forward
-     *       snapshot row tagged with the new page version and a {@code null}
-     *       {@code change_action}, so that callers can retrieve the full state
-     *       of the page at this version with a single query.</li>
-     * </ol>
      *
      * @param pageId        the page ID
      * @param pageVersionId the published page version ID
@@ -66,79 +55,16 @@ public class PageSnapshotServiceImpl extends MPJBaseServiceImpl<BlockVersionMapp
             return;
         }
 
-        // 1. Seal incremental change rows accumulated since last publish.
-        blockChangeRecorder.sealPendingChanges(pageId, pageVersionId, pageVersion);
-
-        // 2. Carry-forward snapshot for unchanged blocks so reads at this version
-        //    return the full page state without walking history.
-        List<PageContent> currentBlocks = pageContentService.findByPageId(pageId);
-        if (CollUtil.isEmpty(currentBlocks)) {
-            log.debug("snapshotBlocks: no current blocks for pageId={}", pageId);
-            return;
-        }
-
-        Set<String> alreadyTagged = new HashSet<>();
-        List<BlockVersion> sealedAtThisVersion = this.lambdaQuery()
-                .select(BlockVersion::getBlockId)
-                .eq(BlockVersion::getPageVersionId, pageVersionId)
-                .list();
-        if (CollUtil.isNotEmpty(sealedAtThisVersion)) {
-            alreadyTagged = sealedAtThisVersion.stream()
-                    .map(BlockVersion::getBlockId)
-                    .collect(Collectors.toCollection(HashSet::new));
-        }
-
-        List<BlockVersion> carryForward = new ArrayList<>();
-        for (PageContent block : currentBlocks) {
-            if (alreadyTagged.contains(block.getId())) {
-                continue;
-            }
-            BlockVersion row = new BlockVersion();
-            row.setBlockId(block.getId());
-            row.setPageId(pageId);
-            row.setPageVersionId(pageVersionId);
-            row.setPageVersion(pageVersion);
-            row.setVersion(block.getVersion() != null ? block.getVersion() : 1);
-            // null change_action denotes a carry-forward snapshot (no edit this cycle).
-            row.setChangeAction(null);
-            row.setPrevVersion(null);
-            row.setType(block.getType());
-            row.setAttrs(block.getAttrs());
-            row.setContent(block.getContent());
-            row.setMarks(block.getMarks());
-            row.setText(block.getText());
-            row.setParentId(block.getParentId());
-            row.setPath(block.getPath());
-            row.setSortOrder(block.getSortOrder());
-            carryForward.add(row);
-        }
-
-        if (!carryForward.isEmpty()) {
-            this.saveBatch(carryForward);
-        }
-
-        log.debug("snapshotBlocks pageId={} pageVersionId={} pageVersion={} sealed={} carryForward={}",
-                pageId, pageVersionId, pageVersion, alreadyTagged.size(), carryForward.size());
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void restoreFromSnapshot(Long pageId, Long versionId, String fallbackContent) {
-        // Get the snapshot blocks
-        List<BlockVersion> blockSnapshots = getSnapshotBlocks(versionId);
-
-        if (CollUtil.isNotEmpty(blockSnapshots)) {
-            // Convert BlockVersion snapshots to PageContent and flatten/save
-            PageContent root = assembleTreeFromSnapshots(blockSnapshots, pageId);
-            if (root != null) {
-                blockStorageService.flattenAndSave(pageId, root);
-            }
-        } else if (StrUtil.isNotBlank(fallbackContent)) {
-            // Fallback: restore from version JSON content passed as parameter
-            blockStorageService.flattenAndSave(pageId, fallbackContent);
-        }
-
-        log.debug("Restored pageId={} from snapshot versionId={}", pageId, versionId);
+        // Seal incremental change rows accumulated since last publish by
+        // back-filling page_version_id and page_version on pending rows.
+        boolean sealed = blockVersionService.lambdaUpdate()
+                .eq(BlockVersion::getPageId, pageId)
+                .isNull(BlockVersion::getPageVersionId)
+                .set(BlockVersion::getPageVersionId, pageVersionId)
+                .set(BlockVersion::getPageVersion, pageVersion)
+                .update();
+        log.debug("snapshotBlocks pageId={} pageVersionId={} pageVersion={} sealed={}",
+                pageId, pageVersionId, pageVersion, sealed);
     }
 
     @Override
@@ -165,73 +91,67 @@ public class PageSnapshotServiceImpl extends MPJBaseServiceImpl<BlockVersionMapp
     }
 
     /**
-     * Assemble a PageContent tree from block version snapshots.
+     * Walk-back read: full block state of a page at the given page version.
+     * <p>
+     * For each block touched at or before {@code pageVersion}, picks the row
+     * with the highest numeric {@code page_version &lt;= pageVersion}, then
+     * filters out blocks whose latest event is a deletion. Sorted by
+     * {@code sort_order}.
+     * </p>
      */
-    private PageContent assembleTreeFromSnapshots(List<BlockVersion> snapshots, Long pageId) {
-        if (CollUtil.isEmpty(snapshots)) {
-            return null;
+    @Override
+    public List<BlockVersion> getPageStateAtVersion(Long pageId, String pageVersion) {
+        if (pageId == null || StrUtil.isBlank(pageVersion)) {
+            return new ArrayList<>();
+        }
+        Integer targetVer = parseVersion(pageVersion);
+        if (targetVer == null) {
+            log.warn("getPageStateAtVersion: invalid version '{}' for pageId={}", pageVersion, pageId);
+            return new ArrayList<>();
         }
 
-        // Convert BlockVersion to PageContent for tree assembly
-        java.util.Map<String, java.util.List<PageContent>> childrenMap = new java.util.HashMap<>();
-        java.util.List<PageContent> rootChildren = new java.util.ArrayList<>();
+        // Fetch all sealed block-version rows for this page at or before the
+        // target page version. page_version is stored as VARCHAR so we cast to
+        // an unsigned integer for numeric comparison.
+        List<BlockVersion> rows = this.lambdaQuery()
+                .eq(BlockVersion::getPageId, pageId)
+                .isNotNull(BlockVersion::getPageVersionId)
+                .apply("CAST(page_version AS UNSIGNED) <= {0}", targetVer)
+                .list();
+        if (CollUtil.isEmpty(rows)) {
+            return new ArrayList<>();
+        }
 
-        for (BlockVersion bv : snapshots) {
-            PageContent pc = new PageContent();
-            pc.setId(bv.getBlockId());
-            pc.setType(bv.getType());
-            pc.setAttrs(bv.getAttrs());
-            pc.setContent(bv.getContent());
-            pc.setMarks(bv.getMarks());
-            pc.setText(bv.getText());
-            pc.setParentId(bv.getParentId());
-            pc.setPageId(pageId);
-            pc.setPath(bv.getPath());
-            pc.setSortOrder(bv.getSortOrder());
-
-            String pid = bv.getParentId();
-            if (StrUtil.isBlank(pid) || "root".equals(pid)) {
-                rootChildren.add(pc);
-            } else {
-                childrenMap.computeIfAbsent(pid, k -> new java.util.ArrayList<>()).add(pc);
+        // Walk back: per block_id, keep the row with the highest page_version.
+        Map<String, BlockVersion> latestPerBlock = new HashMap<>();
+        for (BlockVersion row : rows) {
+            Integer rowVer = parseVersion(row.getPageVersion());
+            if (rowVer == null) {
+                continue;
+            }
+            BlockVersion existing = latestPerBlock.get(row.getBlockId());
+            Integer existingVer = existing == null ? null : parseVersion(existing.getPageVersion());
+            if (existing == null || existingVer == null || existingVer < rowVer) {
+                latestPerBlock.put(row.getBlockId(), row);
             }
         }
 
-        // Sort by sortOrder
-        rootChildren.sort(java.util.Comparator.comparingInt(b -> b.getSortOrder() != null ? b.getSortOrder() : 0));
-        childrenMap.values().forEach(list -> list.sort(
-                java.util.Comparator.comparingInt(b -> b.getSortOrder() != null ? b.getSortOrder() : 0)));
-
-        // Build root
-        PageContent root = new PageContent();
-        root.setType("doc");
-        root.setPageId(pageId);
-        root.setContent(rootChildren);
-
-        // Attach children recursively
-        for (PageContent child : rootChildren) {
-            attachChildrenRecursive(child, childrenMap);
-        }
-
-        return root;
+        // Filter out blocks whose latest event is a deletion; sort by sortOrder.
+        return latestPerBlock.values().stream()
+                .filter(b -> !"delete".equalsIgnoreCase(b.getChangeAction()))
+                .sorted(Comparator.comparingInt(
+                        b -> b.getSortOrder() != null ? b.getSortOrder() : 0))
+                .collect(Collectors.toList());
     }
 
-    private void attachChildrenRecursive(PageContent node,
-            java.util.Map<String, java.util.List<PageContent>> childrenMap) {
-        java.util.List<PageContent> children = childrenMap.get(node.getId());
-        if (CollUtil.isNotEmpty(children)) {
-            // Merge: keep existing inline content, add block children
-            java.util.List<PageContent> existing = node.getContent();
-            if (CollUtil.isNotEmpty(existing)) {
-                java.util.List<PageContent> merged = new java.util.ArrayList<>(existing);
-                merged.addAll(children);
-                node.setContent(merged);
-            } else {
-                node.setContent(children);
-            }
-            for (PageContent child : children) {
-                attachChildrenRecursive(child, childrenMap);
-            }
+    private static Integer parseVersion(String v) {
+        if (v == null || v.isEmpty()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(v);
+        } catch (NumberFormatException ex) {
+            return null;
         }
     }
 }

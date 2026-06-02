@@ -1,8 +1,2 @@
-export {
-    DirtyTracker,
-    type DirtyTrackerOptions,
-    type DirtyTrackerStorage,
-    type BlockChange,
-    type BlockChangeAction,
-    type IncrementalSavePayload,
-} from './dirty-tracker';
+export { DirtyTracker, DirtyTracker as default } from './dirty-tracker'
+export type { DirtyTrackerStorage, DirtyTrackerOptions, IncrementalPayload, BlockChange } from './dirty-tracker'

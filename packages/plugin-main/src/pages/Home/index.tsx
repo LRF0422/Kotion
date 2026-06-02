@@ -158,7 +158,10 @@ export const Home: React.FC = () => {
                             )}
                             containerClassName={isMobile ? "grid-cols-2" : "grid-cols-4"}
                             emptyProps={{
-                                button: <CreateSpaceDlg trigger={<Button>{t("home.create-space") || "Create Space"}</Button>} />
+                                icon: <Box className="h-5 w-5" />,
+                                title: t("home.no-spaces") || "No spaces yet",
+                                desc: t("home.no-spaces-hint") || "Create a space to get started",
+                                button: <CreateSpaceDlg trigger={<Button size="sm" variant="outline" className="mt-1 gap-1.5 h-7 text-xs"><Plus className="w-3 h-3" />{t("home.create-space") || "Create Space"}</Button>} />
                             }}
                             icon={(data: any) => data.icon?.icon}
                             config={{
@@ -208,11 +211,16 @@ export const Home: React.FC = () => {
                             data={recentPages}
                             className="hover:shadow-md transition-shadow"
                             containerClassName={isMobile ? "grid-cols-2" : "grid-cols-4"}
+                            emptyProps={{
+                                icon: <Book className="h-5 w-5" />,
+                                title: t("home.no-recent-pages") || "No recent pages",
+                                desc: t("home.no-recent-pages-hint") || "Pages you visit will appear here"
+                            }}
                             config={{ name: 'title' }}
                             icon={(data: any) => data.icon?.icon || <Box className="text-muted-foreground" />}
                             onClick={(data: any) => {
                                 navigator.go({
-                                    to: `/space-detail/${data.spaceId}/page/${data.id}`
+                                    to: `/space-detail/${data.spaceId}/page/edit/${data.id}`
                                 })
                             }}
                             footer={(data: any) => (
@@ -277,7 +285,7 @@ export const Home: React.FC = () => {
                                     className="flex items-center gap-3 py-2 px-2 -mx-2 rounded-md cursor-pointer hover:bg-muted/60 transition-colors"
                                     onClick={() => {
                                         navigator.go({
-                                            to: `/space-detail/${data.spaceId}/page/${data.id}`
+                                            to: `/space-detail/${data.spaceId}/page/edit/${data.id}`
                                         })
                                     }}
                                 >

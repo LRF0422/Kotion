@@ -131,7 +131,7 @@ export const SpaceDetail: React.FC = () => {
     useEffect(() => {
         if (!params.pageId && space) {
             navigator.go({
-                to: `/space-detail/${params.id}/page/${space?.homePageId}`
+                to: `/space-detail/${params.id}/page/edit/${space?.homePageId}`
             })
         }
     }, [space])
@@ -291,15 +291,9 @@ export const SpaceDetail: React.FC = () => {
                 key: treeNode.id,
                 id: treeNode.id,
                 onClick: () => {
-                    if (treeNode.isDraft) {
-                        navigator.go({
-                            to: `/space-detail/${params.id}/page/edit/${treeNode.id}`
-                        })
-                    } else {
-                        navigator.go({
-                            to: `/space-detail/${params.id}/page/${treeNode.id}`
-                        })
-                    }
+                    navigator.go({
+                        to: `/space-detail/${params.id}/page/edit/${treeNode.id}`
+                    })
                 }
             }
         } else {
@@ -310,15 +304,9 @@ export const SpaceDetail: React.FC = () => {
                 id: treeNode.id,
                 children: treeNode.children.map((i: any) => resolve(i)),
                 onClick: () => {
-                    if (treeNode.isDraft) {
-                        navigator.go({
-                            to: `/space-detail/${params.id}/page/edit/${treeNode.id}`
-                        })
-                    } else {
-                        navigator.go({
-                            to: `/space-detail/${params.id}/page/${treeNode.id}`
-                        })
-                    }
+                    navigator.go({
+                        to: `/space-detail/${params.id}/page/edit/${treeNode.id}`
+                    })
                 }
             }
         }
@@ -336,7 +324,7 @@ export const SpaceDetail: React.FC = () => {
                     <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => {
                             navigator.go({
-                                to: `/space-detail/${params.id}/page/${space.homePageId}`
+                                to: `/space-detail/${params.id}/page/edit/${space.homePageId}`
                             })
                         }}>
                             <div className="text-xl flex-shrink-0">{space?.icon?.icon}</div>
@@ -393,7 +381,7 @@ export const SpaceDetail: React.FC = () => {
                 className: 'group',
                 onClick: () => {
                     navigator.go({
-                        to: `/space-detail/${params.id}/page/${it.id}`
+                        to: `/space-detail/${params.id}/page/edit/${it.id}`
                     })
                 }
             }))

@@ -55,6 +55,10 @@ const httpOnlyUrls = [
     '/knowledge-auth/token',           // Login
     '/knowledge-system/user/register', // Register
     '/instant-message/',               // All IM/WebSocket operations
+    '/publish',                         // Page publish - always use HTTP (needs backend)
+    '/rollback',                        // Page rollback - always use HTTP (needs backend)
+    '/versions',                        // Page version history - always use HTTP
+    '/blocks',                          // Block-level PATCH operations - always use HTTP (needs backend)
 ]
 
 // URLs that require exact match for HTTP-only check (no substring matching)
@@ -81,6 +85,7 @@ const getIpcChannel = (url: string, method: string): string | null => {
         { pattern: /\/knowledge-wiki\/plugin\/([^/]+)/, channel: 'plugin:get' },
         { pattern: /\/knowledge-wiki\/favorite\/([^/]+)/, channel: 'page:removeFavorite' },
         { pattern: /\/knowledge-wiki\/space\/page\/block\/([^/]+)\/versions/, channel: 'page:getBlockVersions' },
+        { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/blocks/, channel: 'page:patchBlocks' },
         // IM patterns removed - use HTTP for WebSocket operations
     ]
 
@@ -116,6 +121,7 @@ const extractIdFromUrl = (url: string): string | null => {
         /\/plugin\/([^/]+)$/,
         /\/favorite\/([^/]+)$/,
         /\/block\/([^/]+)\/versions$/,
+        /\/page\/([^/]+)\/blocks$/,
         // IM patterns removed - use HTTP for WebSocket operations
     ]
 
