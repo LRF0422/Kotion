@@ -1,0 +1,34 @@
+{
+    "name": "@kn/plugin-sticky-note",
+    "version": "0.0.1",
+    "description": "Sticky note plugin for Knowledge Repo - a Post-it style block with rich text content",
+    "main": "src/index.tsx",
+    "publishConfig": {
+        "main": "dist/index.js",
+        "types": "dist/index.d.ts",
+        "registry": "http://localhost:8081/repository/npm-hosted/"
+    },
+    "scripts": {
+        "build": "rollup -c",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "dependencies": {
+        "@kn/common": "workspace:*",
+        "@kn/editor": "workspace:*",
+        "@kn/icon": "workspace:*",
+        "@kn/ui": "workspace:*",
+        "uuid": "^9.0.0",
+        "autoprefixer": "^10.4.20",
+        "postcss": "^8.4.47"
+    },
+    "keywords": [
+        "sticky-note",
+        "post-it",
+        "annotation"
+    ],
+    "author": "",
+    "license": "ISC",
+    "devDependencies": {
+        "@kn/rollup-config": "workspace:*"
+    }
+}

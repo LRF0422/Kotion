@@ -14,10 +14,11 @@ import { drawnix } from "@kn/plugin-drawnix"
 import { mermaid } from "@kn/mermaid-plugin"
 import { excalidraw } from "@kn/plugin-excalidraw"
 import { comment } from "@kn/plugin-comment"
+import { stickyNote } from "@kn/plugin-sticky-note"
 
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <App plugins={[ai, bitable, blockReference, speechToText, chart,
-    comment,
+    comment, stickyNote,
     drawnix, DefaultPluginInstance, fileManager, mermaid, excalidraw]} />
 )
