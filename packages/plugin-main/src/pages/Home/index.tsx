@@ -3,7 +3,7 @@ import { CardList } from "../components/CardList";
 import { Button, Card, CardContent, EmptyState, Skeleton, cn, useIsMobile } from "@kn/ui";
 import { useApi, useNavigator } from "@kn/common";
 import { Space } from "../../model/Space";
-import { BanIcon, Book, Box, Clock, LayoutTemplate, Moon, Plus, Star, Sun, Sunset, UserCircle } from "@kn/icon";
+import { BanIcon, Book, Box, Clock, LayoutTemplate, Moon, Plus, Star, Sun, Sunset } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { useTranslation } from "@kn/common";
@@ -217,34 +217,27 @@ export const Home: React.FC = () => {
                                 desc: t("home.no-recent-pages-hint") || "Pages you visit will appear here"
                             }}
                             config={{ name: 'title' }}
-                            icon={(data: any) => data.icon?.icon || <Box className="text-muted-foreground" />}
+                            icon={(data: any) => data.icon?.icon || <Box className="h-5 w-5 text-muted-foreground" />}
                             onClick={(data: any) => {
                                 navigator.go({
                                     to: `/space-detail/${data.spaceId}/page/edit/${data.id}`
                                 })
                             }}
                             footer={(data: any) => (
-                                <div className="text-sm mt-2 space-y-0.5">
-                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                        <UserCircle className="h-3 w-3" />
-                                        <span className={isMobile ? "truncate" : ""}>
-                                            {data.updateBy ? `Last update by ${data.updateBy}` : 'Last update'}
-                                        </span>
-                                    </div>
-                                    {data.updateTime && (
-                                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                            <Clock className="h-3 w-3" />
-                                            <span className={isMobile ? "truncate" : ""}>
-                                                {(() => {
-                                                    try {
-                                                        return formatDistanceToNow(parseISO(data.updateTime), { addSuffix: true });
-                                                    } catch {
-                                                        return format(parseISO(data.updateTime), 'MM/dd/yyyy');
-                                                    }
-                                                })()}
-                                            </span>
-                                        </div>
-                                    )}
+                                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/80">
+                                    <Clock className="h-3 w-3" />
+                                    <span className={isMobile ? "truncate" : ""}>
+                                        {(() => {
+                                            const timeStr = data.updateTime ? (() => {
+                                                try {
+                                                    return formatDistanceToNow(parseISO(data.updateTime), { addSuffix: true });
+                                                } catch {
+                                                    return format(parseISO(data.updateTime), 'MM/dd/yyyy');
+                                                }
+                                            })() : '';
+                                            return data.updateBy ? `Updated by ${data.updateBy}${timeStr ? ' · ' + timeStr : ''}` : timeStr || 'Last update';
+                                        })()}
+                                    </span>
                                 </div>
                             )}
                         />
