@@ -36,7 +36,8 @@ public class PageContent extends TenantEntity {
     private String contentHash; // MD5 hash of block content for change detection
 
     public String getAttrId() {
-        return attrs == null ? null : attrs.getStr("id");
+        if (attrs == null) return null;
+        return attrs.getStr("id");
     }
 
     /**

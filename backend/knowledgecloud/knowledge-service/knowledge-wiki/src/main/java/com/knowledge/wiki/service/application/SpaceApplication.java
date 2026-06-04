@@ -658,9 +658,114 @@ public class SpaceApplication {
      *         detected conflicts
      */
     public PatchResultDTO patchPageBlocks(com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto) {
-        com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result =
-                this.pageService.patchBlocks(dto.getPageId(), dto.getChanges(), dto.getBlockOrder());
+        com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result = this.pageService
+                .patchBlocks(dto.getPageId(), dto.getChanges(), dto.getBlockOrder());
+        syncPageTitleFromPatch(dto, result);
+
         return PatchResultDTO.from(result);
+    }
+
+    private void syncPageTitleFromPatch(
+            com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto,
+            com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result) {
+        if (dto == null || dto.getPageId() == null || CollUtil.isEmpty(dto.getChanges())) {
+            return;
+        }
+        List<String> conflicts = result != null ? result.getConflictBlockIds() : null;
+        com.knowledge.wiki.service.entity.dto.BlockPatchItemDTO titleChange = null;
+        for (com.knowledge.wiki.service.entity.dto.BlockPatchItemDTO ch : dto.getChanges()) {
+            if (ch == null || ch.getAction() == null || ch.getType() == null) {
+                continue;
+            }
+            String action = ch.getAction();
+            if (!"upsert".equalsIgnoreCase(action) && !"update".equalsIgnoreCase(action)) {
+                continue;
+            }
+            if (!"title".equalsIgnoreCase(ch.getType())) {
+                continue;
+            }
+            if (conflicts != null && conflicts.contains(ch.getBlockId())) {
+                continue;
+            }
+            titleChange = ch;
+            break;
+        }
+        if (titleChange == null || StrUtil.isBlank(titleChange.getContent())) {
+            return;
+        }
+        String newTitle = extractTitleText(titleChange.getContent());
+        // extractTitleText returns null only on parse failure — skip in that case.
+        // An empty string means the user intentionally cleared the title; we must
+        // still sync Page.title so the sidebar/breadcrumb stay consistent with
+        // the actual title block content.
+        if (newTitle == null) {
+            return;
+        }
+        Page existing = pageService.getById(dto.getPageId());
+        if (existing == null) {
+            return;
+        }
+        String existingTitle = existing.getTitle() != null ? existing.getTitle() : "";
+        if (newTitle.equals(existingTitle)) {
+            return;
+        }
+        // Use a targeted UPDATE (only the title column) instead of
+        // updateById(new Page()). The Page entity declares default values
+        // for fields like parentId (= TOP_PAGE_ID/0L) and isTemplate
+        // (= false); MyBatis-Plus's NOT_NULL field strategy treats those
+        // defaults as concrete values and would silently overwrite the
+        // real columns — flattening any sub-page back to the root level.
+        try {
+            pageService.lambdaUpdate()
+                    .eq(Page::getId, existing.getId())
+                    .set(Page::getTitle, newTitle)
+                    .update();
+        } catch (Exception e) {
+            // Title sync is best-effort; never fail the save because of it.
+            log.warn("patchPageBlocks: failed to sync Page.title for pageId={}: {}",
+                    dto.getPageId(), e.getMessage());
+        }
+    }
+
+    /**
+     * Extract the plain-text heading content from a serialized title block.
+     * The title block follows the schema {@code title { heading { text* } }};
+     * any non-text inline children are tolerated and skipped. Returns the
+     * concatenated text or {@code null} when the structure is unexpected.
+     */
+    private String extractTitleText(String contentJson) {
+        if (StrUtil.isBlank(contentJson)) {
+            return null;
+        }
+        try {
+            cn.hutool.json.JSONObject root = cn.hutool.json.JSONUtil.parseObj(contentJson);
+            cn.hutool.json.JSONArray titleChildren = root.getJSONArray("content");
+            if (titleChildren == null || titleChildren.isEmpty()) {
+                return "";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < titleChildren.size(); i++) {
+                cn.hutool.json.JSONObject heading = titleChildren.getJSONObject(i);
+                if (heading == null)
+                    continue;
+                cn.hutool.json.JSONArray inline = heading.getJSONArray("content");
+                if (inline == null)
+                    continue;
+                for (int j = 0; j < inline.size(); j++) {
+                    cn.hutool.json.JSONObject leaf = inline.getJSONObject(j);
+                    if (leaf == null)
+                        continue;
+                    String text = leaf.getStr("text");
+                    if (text != null) {
+                        sb.append(text);
+                    }
+                }
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            log.warn("patchPageBlocks: failed to parse title block content: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**

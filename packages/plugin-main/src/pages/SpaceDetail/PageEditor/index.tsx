@@ -9,7 +9,7 @@ import { Switch } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
 import { CollaborationEditor, exportToPDF, useIncrementalSave, TiptapCollabProvider } from "@kn/editor";
 import type { IncrementalPayload } from "@kn/editor";
-import { event, ON_PAGE_REFRESH } from "../../../event";
+import { event, ON_PAGE_REFRESH, ON_FAVORITE_CHANGE } from "../../../event";
 import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes } from "@kn/common";
 import { useNavigator } from "@kn/common";
 import { GlobalState } from "@kn/common";
@@ -21,7 +21,7 @@ import {
     Contact2, Download, FileIcon, FileText,
     Link, LoaderCircle, LockIcon, MessageSquareText,
     MoreHorizontal, MoveDownRight, Trash2, Upload, List,
-    CloudOff, UserPlus
+    CloudOff, UserPlus, Star
 } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "@kn/common";
@@ -49,8 +49,12 @@ const getStatusDisplay = (saving: boolean, dirty: boolean, error: Error | null) 
 // Includes prevVersion for optimistic concurrency and applies server
 // version info after each successful save.
 function usePageSave(editor: Editor | null, pageId: string | null, enabled: boolean) {
+    // Throttle ON_PAGE_REFRESH emissions caused by rapid title typing
+    const titleRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
     const handleSave = useCallback(async (payload: IncrementalPayload) => {
         if (!pageId) throw new Error('No pageId')
+        const hasTitleChange = payload.changes.some(c => c.type === 'title')
         const res = await useApi(APIS.PATCH_PAGE_BLOCKS, { id: pageId }, {
             pageId,
             blockOrder: payload.blockOrder,
@@ -73,7 +77,29 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
                 tracker.applyServerVersions(data.blockVersions)
             }
         }
+        // After a successful save that touches the title block, notify the
+        // left sidebar (page tree + favorites) to re-fetch so the renamed
+        // title shows up immediately. Throttle to avoid spamming requests
+        // during continuous typing.
+        if (hasTitleChange) {
+            if (titleRefreshTimerRef.current) {
+                clearTimeout(titleRefreshTimerRef.current)
+            }
+            titleRefreshTimerRef.current = setTimeout(() => {
+                event.emit(ON_PAGE_REFRESH)
+                titleRefreshTimerRef.current = null
+            }, 400)
+        }
     }, [pageId, editor])
+
+    useEffect(() => {
+        return () => {
+            if (titleRefreshTimerRef.current) {
+                clearTimeout(titleRefreshTimerRef.current)
+                titleRefreshTimerRef.current = null
+            }
+        }
+    }, [])
 
     return useIncrementalSave({
         editor,
@@ -214,6 +240,58 @@ export const PageEditor: React.FC = () => {
             setEditorContentReady(false)
         }
     }, [params.pageId])
+
+    // Favorite state for the current page
+    const [isFavorited, setIsFavorited] = useState(false)
+    const [favoriteToggling, setFavoriteToggling] = useState(false)
+
+    const refreshFavoriteState = useCallback(async () => {
+        if (!params.pageId) return
+        try {
+            const res = await useApi(APIS.QUERY_FAVORITE, { pageSize: 1000 })
+            const data = res?.data
+            const list = Array.isArray(data) ? data : (data?.records || [])
+            const pid = String(params.pageId)
+            setIsFavorited(list.some((item: any) => String(item.id) === pid))
+        } catch (err) {
+            console.error('Failed to load favorite state:', err)
+        }
+    }, [params.pageId])
+
+    useEffect(() => {
+        refreshFavoriteState()
+    }, [refreshFavoriteState])
+
+    useEffect(() => {
+        const handler = () => { refreshFavoriteState() }
+        event.on(ON_FAVORITE_CHANGE, handler)
+        return () => { event.off(ON_FAVORITE_CHANGE, handler) }
+    }, [refreshFavoriteState])
+
+    const toggleFavorite = useCallback(async () => {
+        if (!params.pageId || favoriteToggling) return
+        setFavoriteToggling(true)
+        const prev = isFavorited
+        // Optimistic update
+        setIsFavorited(!prev)
+        try {
+            if (prev) {
+                await useApi(APIS.REMOVE_FAVORITE, { id: params.pageId })
+                toast.success('Removed from favorites')
+            } else {
+                await useApi(APIS.ADD_FAVORITE_PAGE, { id: params.pageId })
+                toast.success('Added to favorites')
+            }
+            event.emit(ON_FAVORITE_CHANGE)
+        } catch (err) {
+            // Revert on failure
+            setIsFavorited(prev)
+            console.error('Failed to toggle favorite:', err)
+            toast.error(prev ? 'Failed to remove favorite' : 'Failed to add favorite')
+        } finally {
+            setFavoriteToggling(false)
+        }
+    }, [params.pageId, isFavorited, favoriteToggling])
 
     const getTitleContent = useCallback((value: any) => {
         if (value) {
@@ -473,8 +551,8 @@ export const PageEditor: React.FC = () => {
                 {isMobile && (
                     <Sheet open={tocOpen} onOpenChange={setTocOpen}>
                         <SheetTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                                <List className="h-5 w-5" />
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                                <List className="h-3.5 w-3.5" />
                             </Button>
                         </SheetTrigger>
                         <SheetContent side="right" className="w-[280px] p-0">
@@ -482,11 +560,22 @@ export const PageEditor: React.FC = () => {
                         </SheetContent>
                     </Sheet>
                 )}
-                <Button variant="ghost" size="icon">
-                    <MessageSquareText className="h-5 w-5" />
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={toggleFavorite}
+                    disabled={favoriteToggling || !params.pageId}
+                    aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                    title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                    <Star className={`h-3.5 w-3.5 ${isFavorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7">
+                    <MessageSquareText className="h-3.5 w-3.5" />
                 </Button>
                 <DropdownMenu>
-                    <DropdownMenuTrigger><Button variant="ghost" size="icon"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
+                    <DropdownMenuTrigger><Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-3.5 w-3.5" /></Button></DropdownMenuTrigger>
                     <DropdownMenuContent className="w-[300px]">
                         <DropdownMenuLabel>
                             <RadioGroup className="flex flex-row justify-center">

@@ -64,6 +64,7 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean, externalEx
 			filterTransaction: t => !isChangeOrigin(t)
 		}))
 		editorExtensions.push(DirtyTracker.configure({
+			blockIdAttribute: 'id',
 			filterTransaction: t => !isChangeOrigin(t)
 		}))
 		return [editorExtensions, full] as const

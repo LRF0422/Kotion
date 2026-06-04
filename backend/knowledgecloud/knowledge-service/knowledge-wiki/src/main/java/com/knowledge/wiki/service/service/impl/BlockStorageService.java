@@ -1,6 +1,7 @@
 package com.knowledge.wiki.service.service.impl;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -50,6 +51,27 @@ import lombok.extern.slf4j.Slf4j;
 public class BlockStorageService {
 
     private static final String ROOT_PARENT_ID = "root";
+
+    /**
+     * Node types whose children are ALWAYS inline content (text, hardBreak,
+     * image, etc.) and must NEVER be extracted as separate block rows.
+     * <p>
+     * ProseMirror distinguishes between "container blocks" (blockquote,
+     * listItem, tableCell...) whose children are other blocks, and "leaf
+     * blocks" (paragraph, heading, codeBlock...) whose children are inline
+     * nodes. The UniqueID extension assigns ids to ALL node types (except
+     * text), so inline atoms like hardBreak carry an id attribute. Without
+     * this guard the backend would treat those inline atoms as block-level
+     * children, strip them out of the parent's content column, and store
+     * them as separate rows. On reassembly {@link #attachChildren} would
+     * then REPLACE the paragraph's real inline content (text nodes) with
+     * just the atoms -- destroying the paragraph's text.
+     * </p>
+     */
+    private static final Set<String> INLINE_CONTENT_HOLDER_TYPES =
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+                    "paragraph", "heading", "codeBlock"
+            )));
 
     /**
      * Batch size for save/update operations. Larger batches reduce round-trips
@@ -247,8 +269,11 @@ public class BlockStorageService {
         flatBlocks.add(flatBlock);
         blockIds.add(blockId);
 
-        // Recurse only into block children (those with IDs)
-        if (CollUtil.isNotEmpty(node.getContent())) {
+        // Recurse only into block children (those with IDs), but NEVER into
+        // children of "leaf block" types (paragraph, heading, etc.) whose
+        // content is always inline. See INLINE_CONTENT_HOLDER_TYPES.
+        if (CollUtil.isNotEmpty(node.getContent())
+                && !INLINE_CONTENT_HOLDER_TYPES.contains(node.getType())) {
             int blockIndex = 0;
             for (PageContent child : node.getContent()) {
                 if (StrUtil.isNotBlank(resolveBlockId(child))) {
@@ -264,6 +289,13 @@ public class BlockStorageService {
      * Copy a node for DB storage: keeps inline children (text nodes without IDs)
      * in the content field, strips block children (those with IDs) since they are
      * stored as separate rows.
+     * <p>
+     * For "leaf block" types (paragraph, heading, codeBlock, title) ALL children
+     * are inline content and must be preserved in the content column -- even if
+     * they carry an ID attribute (e.g. hardBreak, image atoms that receive an id
+     * from the UniqueID extension). Splitting those out would destroy the
+     * paragraph's text on reassembly.
+     * </p>
      */
     private PageContent copyForStorage(PageContent node) {
         PageContent copy = new PageContent();
@@ -278,7 +310,14 @@ public class BlockStorageService {
         copy.setSortOrder(node.getSortOrder());
         copy.setVersion(node.getVersion());
 
-        // Keep inline children (those without block IDs, e.g. text nodes) in content
+        // For leaf-block types, ALL children are inline -- keep them as-is.
+        if (INLINE_CONTENT_HOLDER_TYPES.contains(node.getType())) {
+            copy.setContent(node.getContent());
+            return copy;
+        }
+
+        // For container-block types, keep inline children (those without block IDs)
+        // in content; block children (those with IDs) are stored as separate rows.
         if (CollUtil.isNotEmpty(node.getContent())) {
             List<PageContent> inlineChildren = node.getContent().stream()
                     .filter(child -> StrUtil.isBlank(resolveBlockId(child)))

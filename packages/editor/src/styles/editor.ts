@@ -116,9 +116,10 @@ export const StyledEditor = styled.div.attrs({
         display: block;
         width: 16px;
         height: 16px;
-        background-color: #fff;
-        border: 1px solid black;
-        border-radius: 2px;
+        background-color: hsl(var(--background));
+        border: 1px solid hsl(var(--muted-foreground) / 0.5);
+        border-radius: 3px;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
 
         > input {
           display: none;
@@ -130,14 +131,19 @@ export const StyledEditor = styled.div.attrs({
           left: 4.071429px;
           width: 6.714286px;
           height: 12.142857px;
-          border: 2px solid black;
+          border: 2px solid hsl(var(--primary-foreground));
           content: " ";
           opacity: 0;
           transform: rotate(45deg) scale(0);
           border-top: 0;
           border-left: 0;
-          transition: all 0.1s cubic-bezier(0.71, -0.46, 0.88, 0.6),
-            opacity 0.1s;
+          transition: all 0.15s cubic-bezier(0.71, -0.46, 0.88, 0.6),
+            opacity 0.15s;
+        }
+
+        &:hover {
+          border-color: hsl(var(--primary) / 0.6);
+          background-color: hsl(var(--muted));
         }
       }
 
@@ -148,15 +154,24 @@ export const StyledEditor = styled.div.attrs({
 
       &[data-checked="true"] {
         > label {
+          background-color: hsl(var(--primary));
+          border-color: hsl(var(--primary));
+
           &::after {
             opacity: 1;
             transform: rotate(45deg) scale(1);
+          }
+
+          &:hover {
+            background-color: hsl(var(--primary) / 0.85);
+            border-color: hsl(var(--primary) / 0.85);
           }
         }
 
         > div {
           p {
-            // text-decoration: line-through;
+            color: hsl(var(--muted-foreground));
+            text-decoration: line-through;
           }
         }
       }
