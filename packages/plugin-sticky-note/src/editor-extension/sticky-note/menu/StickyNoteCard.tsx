@@ -139,7 +139,6 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
                 className="sticky-note-card-shell"
                 style={{
                     background: `linear-gradient(180deg, ${tone.bg} 0%, ${tone.bg} 100%)`,
-                    // accent line on the left edge for affordance
                     boxShadow: `inset 3px 0 0 0 ${tone.border}`,
                     borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
                 }}

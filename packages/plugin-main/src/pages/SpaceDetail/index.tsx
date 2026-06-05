@@ -501,9 +501,9 @@ export const SpaceDetail: React.FC = () => {
 
     // Sidebar content component for reuse
     const SidebarContent = useMemo(() => (
-        <>
+        <div className="h-full flex flex-col min-h-0">
             {error && (
-                <Alert variant="destructive" className="m-2">
+                <Alert variant="destructive" className="m-2 flex-shrink-0">
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
@@ -513,7 +513,7 @@ export const SpaceDetail: React.FC = () => {
                 loading={loading}
                 size="sm"
                 selectParent={true}
-                className="w-full flex-1 flex flex-col"
+                className="w-full flex-1 flex flex-col min-h-0"
                 elements={elements}
                 onTreeSelected={() => {
                     if (isMobile) {
@@ -521,7 +521,7 @@ export const SpaceDetail: React.FC = () => {
                     }
                 }}
             />
-        </>
+        </div>
     ), [error, params.pageId, loading, elements, isMobile])
 
     return space && (
@@ -554,7 +554,7 @@ export const SpaceDetail: React.FC = () => {
 
             {/* Desktop Sidebar */}
             {!isMobile && (
-                <div className="h-screen w-full border-r border-solid flex flex-col overflow-x-hidden overflow-y-auto scrollbar-auto-hide">
+                <div className="h-screen w-full border-r border-solid flex flex-col overflow-hidden">
                     {SidebarContent}
                 </div>
             )}

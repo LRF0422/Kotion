@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Editor } from "@kn/editor";
 import { StickyNoteCard } from "./StickyNoteCard";
 
@@ -51,8 +51,8 @@ function getNotes(editor: Editor): Omit<NotePosition, "top">[] {
 }
 
 const CARD_WIDTH = 280;
-const CARD_MIN_HEIGHT = 70;
-const GAP = 8;
+const CARD_MIN_HEIGHT = 80;
+const GAP = 12;
 const VIEWPORT_PADDING = 12;
 
 /**
@@ -69,6 +69,7 @@ function calcPositions(editor: Editor, raw: Omit<NotePosition, "top">[]): NotePo
             /* skip */
         }
     }
+    // Second pass: resolve overlap using estimated heights (before measurement)
     for (let i = 1; i < positioned.length; i++) {
         const minTop = positioned[i - 1].top + CARD_MIN_HEIGHT + GAP;
         if (positioned[i].top < minTop) positioned[i].top = minTop;
@@ -76,10 +77,29 @@ function calcPositions(editor: Editor, raw: Omit<NotePosition, "top">[]): NotePo
     return positioned;
 }
 
+/**
+ * Resolve overlap using actual measured card heights.
+ */
+function resolveOverlapWithHeights(
+    positions: NotePosition[],
+    heights: Record<string, number>
+): NotePosition[] {
+    const adjusted = positions.map((p) => ({ ...p }));
+    for (let i = 1; i < adjusted.length; i++) {
+        const prevH = heights[adjusted[i - 1].noteId] || CARD_MIN_HEIGHT;
+        const minTop = adjusted[i - 1].top + prevH + GAP;
+        if (adjusted[i].top < minTop) {
+            adjusted[i].top = minTop;
+        }
+    }
+    return adjusted;
+}
+
 export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
     const [notes, setNotes] = useState<NotePosition[]>([]);
     const [panelLeft, setPanelLeft] = useState<number | null>(null);
     const rawRef = useRef<Omit<NotePosition, "top">[]>([]);
+    const [heightMap, setHeightMap] = useState<Record<string, number>>({});
 
     const refreshData = useCallback(() => {
         if (!editor || editor.isDestroyed) return;
@@ -144,6 +164,61 @@ export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) 
         },
         [editor]
     );
+
+    /**
+     * Read actual rendered heights of all card DOM elements by data-note-id.
+     * StickyNoteCard sets data-note-id on its outermost fixed div.
+     */
+    const measureHeights = useCallback((noteIds: string[]): Record<string, number> => {
+        const heights: Record<string, number> = {};
+        for (const id of noteIds) {
+            const el = document.querySelector<HTMLElement>(`[data-note-id="${id}"]`);
+            if (el) heights[id] = el.offsetHeight;
+        }
+        return heights;
+    }, []);
+
+    // Measure actual card heights after render and re-layout to prevent overlap.
+    // useLayoutEffect runs synchronously before paint — no visual flash.
+    useLayoutEffect(() => {
+        const ids = notes.map((n) => n.noteId);
+        const heights = measureHeights(ids);
+        if (Object.keys(heights).length === 0) return;
+
+        const adjusted = resolveOverlapWithHeights(notes, heights);
+        const changed = adjusted.some((a, i) => a.top !== notes[i].top);
+        if (changed) setNotes(adjusted);
+        setHeightMap(heights);
+    }, [notes, measureHeights]);
+
+    // Watch for card height changes (user typing, content wrapping, etc.)
+    useEffect(() => {
+        const observer = new ResizeObserver(() => {
+            const ids = notes.map((n) => n.noteId);
+            const heights = measureHeights(ids);
+            setHeightMap((prev) => {
+                const same =
+                    Object.keys(prev).length === Object.keys(heights).length &&
+                    Object.entries(heights).every(([k, v]) => prev[k] === v);
+                return same ? prev : heights;
+            });
+        });
+        for (const note of notes) {
+            const el = document.querySelector<HTMLElement>(`[data-note-id="${note.noteId}"]`);
+            if (el) observer.observe(el);
+        }
+        return () => observer.disconnect();
+    }, [notes, measureHeights]);
+
+    // When heights change (e.g. user types in a card), re-resolve overlap
+    useEffect(() => {
+        if (Object.keys(heightMap).length === 0) return;
+        setNotes((prev) => {
+            const adjusted = resolveOverlapWithHeights(prev, heightMap);
+            const changed = adjusted.some((a, i) => a.top !== prev[i].top);
+            return changed ? adjusted : prev;
+        });
+    }, [heightMap]);
 
     if (panelLeft === null || notes.length === 0) return null;
 

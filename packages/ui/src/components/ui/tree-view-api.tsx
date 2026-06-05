@@ -199,13 +199,13 @@ const Tree = memo(forwardRef<HTMLDivElement, TreeViewProps>(
 
         return (
             <TreeContext.Provider value={contextValue}>
-                <div ref={ref} className={cn("w-full px-2", className)} dir={dir as Direction}>
+                <div ref={ref} className={cn("w-full px-2 flex flex-col min-h-0", className)} dir={dir as Direction}>
                     <AccordionPrimitive.Root
                         {...props}
                         type="multiple"
                         defaultValue={expendedItems}
                         value={expendedItems}
-                        className="flex flex-col gap-1"
+                        className="flex flex-col gap-1 flex-1 min-h-0"
                         onValueChange={(value) =>
                             setExpendedItems((prev) => [...(prev ?? []), value[0]!])
                         }
@@ -539,7 +539,7 @@ const TreeItemGroup: React.FC<any> = memo((props) => {
         ? { maxHeight: props.height }
         : {};
 
-    return <div className={props.className || ""}>
+    return <div className={cn(props.className || "", "flex flex-col min-h-0")}>
         <div className={`px-1 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground flex justify-between items-center flex-shrink-0`}>
             <div>
                 {props.name}
@@ -548,7 +548,7 @@ const TreeItemGroup: React.FC<any> = memo((props) => {
                 {props.actions}
             </div>
         </div>
-        <div className={contentWrapperClass} style={contentStyle}>
+        <div className={cn(contentWrapperClass, "flex-1 min-h-0")} style={contentStyle}>
             {props.children}
         </div>
     </div>

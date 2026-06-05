@@ -194,7 +194,7 @@ export const TreeItem = memo(forwardRef<
         ));
     }, [elements, indicator]);
 
-    return (<ul ref={ref} className="w-full space-y-1" {...props}>
+    return (<ul ref={ref} className="w-full space-y-1 flex flex-col" {...props}>
         {renderedElements}
     </ul>
     );

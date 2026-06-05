@@ -160,6 +160,11 @@
 }
 
 /* Inner Tiptap editor inside a sticky-note card */
+.sticky-note-card-editor {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
 .sticky-note-card-editor .ProseMirror {
     outline: none;
     min-height: 28px;
