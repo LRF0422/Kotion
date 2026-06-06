@@ -5,13 +5,13 @@ import { API } from "@kn/common";
  * Reports statistics about what was actually changed on the backend.
  */
 export interface PatchResultResponse {
-  created: number
-  updated: number
-  deleted: number
-  skipped: number
-  conflictBlockIds: string[]
-  /** Block versions after patch (blockId -> new version number) */
-  blockVersions: Record<string, number>
+    created: number
+    updated: number
+    deleted: number
+    skipped: number
+    conflictBlockIds: string[]
+    /** Block versions after patch (blockId -> new version number) */
+    blockVersions: Record<string, number>
 }
 
 export const APIS = {

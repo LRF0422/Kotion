@@ -14,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.github.yulichang.toolkit.MPJWrappers;
 import com.github.yulichang.wrapper.MPJLambdaWrapper;
+import com.knowledge.core.common.base.Icon;
+import com.knowledge.core.common.base.IconType;
 import com.knowledge.core.message.feign.IMessageClient;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.KnowledgeUser;
@@ -693,36 +695,74 @@ public class SpaceApplication {
         if (titleChange == null || StrUtil.isBlank(titleChange.getContent())) {
             return;
         }
-        String newTitle = extractTitleText(titleChange.getContent());
-        // extractTitleText returns null only on parse failure — skip in that case.
-        // An empty string means the user intentionally cleared the title; we must
-        // still sync Page.title so the sidebar/breadcrumb stay consistent with
-        // the actual title block content.
-        if (newTitle == null) {
-            return;
-        }
+
         Page existing = pageService.getById(dto.getPageId());
         if (existing == null) {
             return;
         }
-        String existingTitle = existing.getTitle() != null ? existing.getTitle() : "";
-        if (newTitle.equals(existingTitle)) {
+
+        // Parse the title block JSON to extract text, icon, and cover
+        cn.hutool.json.JSONObject root;
+        try {
+            root = cn.hutool.json.JSONUtil.parseObj(titleChange.getContent());
+        } catch (Exception e) {
+            log.warn("patchPageBlocks: failed to parse title block JSON: {}", e.getMessage());
             return;
         }
-        // Use a targeted UPDATE (only the title column) instead of
-        // updateById(new Page()). The Page entity declares default values
-        // for fields like parentId (= TOP_PAGE_ID/0L) and isTemplate
-        // (= false); MyBatis-Plus's NOT_NULL field strategy treats those
-        // defaults as concrete values and would silently overwrite the
-        // real columns — flattening any sub-page back to the root level.
+
+        // --- Sync title text ---
+        String newTitle = extractTitleText(titleChange.getContent());
+        if (newTitle == null) {
+            return;
+        }
+        String existingTitle = existing.getTitle() != null ? existing.getTitle() : "";
+        boolean titleChanged = !newTitle.equals(existingTitle);
+
+        // --- Sync icon from title block attrs ---
+        cn.hutool.json.JSONObject attrs = root.getJSONObject("attrs");
+        boolean iconChanged = false;
+        Icon newIcon = null;
+        if (attrs != null && attrs.containsKey("icon")) {
+            cn.hutool.json.JSONObject iconObj = attrs.getJSONObject("icon");
+            if (iconObj != null) {
+                newIcon = new Icon();
+                newIcon.setIcon(iconObj.getStr("icon"));
+                String typeStr = iconObj.getStr("type");
+                if (typeStr != null) {
+                    try {
+                        newIcon.setType(IconType.valueOf(typeStr));
+                    } catch (IllegalArgumentException ignored) {
+                    }
+                }
+            }
+            // Compare new icon with existing icon
+            String newIconStr = newIcon != null ? newIcon.getIcon() : null;
+            String existingIconStr = existing.getIcon() != null ? existing.getIcon().getIcon() : null;
+            iconChanged = !java.util.Objects.equals(newIconStr, existingIconStr);
+        }
+
+        if (!titleChanged && !iconChanged) {
+            return;
+        }
+
+        // Use a targeted UPDATE — only set the columns that actually changed.
+        // This avoids overwriting other fields with their Java defaults.
         try {
-            pageService.lambdaUpdate()
-                    .eq(Page::getId, existing.getId())
-                    .set(Page::getTitle, newTitle)
-                    .update();
+            if (titleChanged) {
+                pageService.lambdaUpdate()
+                        .eq(Page::getId, existing.getId())
+                        .set(Page::getTitle, newTitle)
+                        .update();
+            }
+            if (iconChanged) {
+                pageService.lambdaUpdate()
+                        .eq(Page::getId, existing.getId())
+                        .set(Page::getIcon, newIcon)
+                        .update();
+            }
         } catch (Exception e) {
-            // Title sync is best-effort; never fail the save because of it.
-            log.warn("patchPageBlocks: failed to sync Page.title for pageId={}: {}",
+            // Title/icon sync is best-effort; never fail the save because of it.
+            log.warn("patchPageBlocks: failed to sync Page.title/icon for pageId={}: {}",
                     dto.getPageId(), e.getMessage());
         }
     }

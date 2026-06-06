@@ -131,7 +131,7 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
                 top: `${top}px`,
                 left: `${left}px`,
                 width: `${width}px`,
-                maxWidth: "calc(100vw - 24px)",
+                maxWidth: "calc(100vw - 24px)"
             }}
             data-note-id={noteId}
         >

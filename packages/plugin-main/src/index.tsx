@@ -81,6 +81,10 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "favorites": "收藏页面",
           "no-favorites": "暂无收藏页面",
           "no-favorites-hint": "给页面加星标即可在此快速访问",
+          "no-spaces": "暂无空间",
+          "no-spaces-hint": "创建一个空间开始使用",
+          "no-recent-pages": "暂无最近页面",
+          "no-recent-pages-hint": "您访问过的页面将显示在这里",
           "learning": "学习使用 Knowledge",
           "coming-soon-desc": "功能即将上线，敬请期待！",
           "greeting": {
@@ -277,6 +281,10 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "favorites": "Favorite Pages",
           "no-favorites": "No favorite pages yet",
           "no-favorites-hint": "Star pages to add them here",
+          "no-spaces": "No spaces yet",
+          "no-spaces-hint": "Create a space to get started",
+          "no-recent-pages": "No recent pages",
+          "no-recent-pages-hint": "Pages you visit will appear here",
           "learning": "Learn Knowledge",
           "coming-soon-desc": "This feature is coming soon, stay tuned!",
           "greeting": {
