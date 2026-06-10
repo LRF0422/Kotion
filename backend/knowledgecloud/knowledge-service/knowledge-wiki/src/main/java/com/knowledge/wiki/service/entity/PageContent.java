@@ -9,6 +9,7 @@ import com.knowledge.core.common.base.TenantEntity;
 import com.knowledge.wiki.service.typeHandler.MarkListTypeHandler;
 import com.knowledge.wiki.service.typeHandler.PageContgentListTypehandler;
 
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -38,6 +39,17 @@ public class PageContent extends TenantEntity {
     public String getAttrId() {
         if (attrs == null) return null;
         return attrs.getStr("id");
+    }
+
+    /**
+     * Canonical block identity assigned by the editor's UniqueID extension.
+     * Prefer {@code attrs.blockId}; fall back to {@code attrs.id} for nodes
+     * that self-manage their own id (e.g. syncBlock).
+     */
+    public String getAttrBlockId() {
+        if (attrs == null) return null;
+        String blockId = attrs.getStr("blockId");
+        return StrUtil.isNotBlank(blockId) ? blockId : attrs.getStr("id");
     }
 
     /**

@@ -41,10 +41,11 @@ export function useIncrementalSave(options: UseIncrementalSaveOptions): UseIncre
     const tracker = getTracker(editor)
     if (!tracker) return
 
-    // Snapshot diff is the source of truth — bail iff there is genuinely
-    // nothing changed against the committed baseline.
+    // Bail iff there is genuinely nothing to persist: no content changes AND
+    // no reorder. A pure block move produces zero `changes` but `orderChanged`,
+    // and must still be sent so the backend can persist the new order.
     const payload = tracker.getPayload()
-    if (payload.changes.length === 0) {
+    if (payload.changes.length === 0 && !payload.orderChanged) {
       setDirty(false)
       return
     }

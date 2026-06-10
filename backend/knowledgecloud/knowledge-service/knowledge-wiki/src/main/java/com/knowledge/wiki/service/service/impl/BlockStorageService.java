@@ -776,12 +776,28 @@ public class BlockStorageService {
      * @return PatchResult with statistics and any detected conflicts
      */
     public PatchResult patchBlocks(Long pageId, List<BlockPatchItemDTO> changes, List<String> blockOrder) {
+        return patchBlocks(pageId, changes, blockOrder, false);
+    }
+
+    /**
+     * @param orderChanged whether the top-level block order changed since the
+     *        client's last save. When true, the new order is reconciled even if
+     *        {@code changes} is empty (a pure move). When false the expensive
+     *        top-level reorder query is skipped entirely (the typing hot path).
+     */
+    public PatchResult patchBlocks(Long pageId, List<BlockPatchItemDTO> changes,
+            List<String> blockOrder, boolean orderChanged) {
         if (pageId == null) {
             return PatchResult.empty();
         }
-        if (CollUtil.isEmpty(changes)) {
+        // Allow an order-only patch (empty changes but a reorder) to proceed so
+        // the new block order is persisted. Bail only when there is nothing at all.
+        if (CollUtil.isEmpty(changes) && !orderChanged) {
             log.debug("patchBlocks: no changes for pageId={}", pageId);
             return PatchResult.empty();
+        }
+        if (changes == null) {
+            changes = new ArrayList<>();
         }
 
         // Map blockId -> index in blockOrder (used as sortOrder for updates)
@@ -827,8 +843,8 @@ public class BlockStorageService {
                     log.warn("patchBlocks: failed to parse content for block id={} pageId={}", blockId, pageId);
                     continue;
                 }
-                // Inject identity in case attrs.id is missing
-                if (rootNode.getAttrs() == null || StrUtil.isBlank(rootNode.getAttrId())) {
+                // Inject identity in case attrs.blockId / attrs.id are missing
+                if (rootNode.getAttrs() == null || StrUtil.isBlank(rootNode.getAttrBlockId())) {
                     rootNode.setId(blockId);
                 }
                 int sortOrder = orderMap.getOrDefault(blockId, 0);
@@ -847,7 +863,7 @@ public class BlockStorageService {
 
         // Apply through proxy so @Transactional takes effect
         PatchResult result = self.persistPatch(pageId, toUpsert, deletedRootIds,
-                newSubtreeIdsByRoot, clientPrevVersions);
+                newSubtreeIdsByRoot, clientPrevVersions, blockOrder, orderChanged);
 
         // Cache invalidation (outside transaction)
         blockCacheService.evictAssembledTree(pageId);
@@ -879,7 +895,9 @@ public class BlockStorageService {
             List<PageContent> toUpsert,
             Set<String> deletedRootIds,
             Map<String, Set<String>> newSubtreeIdsByRoot,
-            Map<String, Integer> clientPrevVersions) {
+            Map<String, Integer> clientPrevVersions,
+            List<String> blockOrder,
+            boolean orderChanged) {
 
         PatchResult result = new PatchResult();
 
@@ -946,6 +964,24 @@ public class BlockStorageService {
                     toUpsert, clientPrevVersions, result);
             createdBlocks = batchResult.created;
             updatedBlocks = batchResult.updated;
+        }
+
+        // --- Phase 3.5: Reconcile top-level order for moved-but-unchanged blocks ---
+        // Upserted blocks already carry the correct sortOrder (from blockOrder).
+        // Blocks that merely shifted position (a move, or siblings after an
+        // insert/delete) are NOT in `changes`, so their sort_order would go stale.
+        // Only runs when the client signals a reorder, keeping the typing hot path
+        // free of the full top-level scan. This is a pure sort_order/path fix — no
+        // content snapshot and no version bump, so rollback snapshots stay intact.
+        if (orderChanged && CollUtil.isNotEmpty(blockOrder)) {
+            Set<String> upsertedRootIds = newSubtreeIdsByRoot != null
+                    ? newSubtreeIdsByRoot.keySet() : Collections.emptySet();
+            int reconciled = reconcileTopLevelOrder(pageId, blockOrder,
+                    upsertedRootIds, allDeletedIds);
+            if (reconciled > 0) {
+                log.debug("patchBlocks: reconciled order for {} top-level block(s) pageId={}",
+                        reconciled, pageId);
+            }
         }
 
         // --- Phase 4: Build and persist all change records (deduplicated) ---
@@ -1419,9 +1455,66 @@ public class BlockStorageService {
         }
     }
 
+    /**
+     * Reconcile {@code sort_order}/{@code path} for top-level blocks whose
+     * position shifted but whose content did not change (so they were not part
+     * of {@code changes}). Returns the number of rows updated.
+     *
+     * <p>Pure structure update — no version bump and no change record, so
+     * rollback snapshots are unaffected. Upserted and deleted ids are skipped
+     * (upserts already carry the correct order). Only invoked when the client
+     * signalled a reorder, so the full top-level scan stays off the typing path.</p>
+     */
+    private int reconcileTopLevelOrder(Long pageId, List<String> blockOrder,
+            Set<String> upsertedRootIds, Set<String> deletedIds) {
+        // Snapshot current top-level blocks: id -> [sortOrder, path]
+        Map<String, Object[]> existing = new HashMap<>();
+        List<Map<String, Object>> rows = pageContentService.listMaps(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PageContent>()
+                        .select(PageContent::getId, PageContent::getSortOrder, PageContent::getPath)
+                        .eq(PageContent::getPageId, pageId)
+                        .eq(PageContent::getParentId, ROOT_PARENT_ID));
+        for (Map<String, Object> map : rows) {
+            String id = (String) map.get("id");
+            Object sortObj = map.get("sort_order");
+            Integer sortOrder = sortObj != null ? ((Number) sortObj).intValue() : null;
+            String path = (String) map.get("path");
+            existing.put(id, new Object[] { sortOrder, path });
+        }
+
+        List<PageContent> toUpdate = new ArrayList<>();
+        for (int i = 0; i < blockOrder.size(); i++) {
+            String id = blockOrder.get(i);
+            if (StrUtil.isBlank(id) || upsertedRootIds.contains(id) || deletedIds.contains(id)) {
+                continue;
+            }
+            Object[] info = existing.get(id);
+            if (info == null) {
+                continue; // not a stored top-level block (e.g. brand new — handled by upsert)
+            }
+            String desiredPath = String.valueOf(i);
+            if (Objects.equals(info[0], i) && Objects.equals(info[1], desiredPath)) {
+                continue; // already in the right place
+            }
+            PageContent upd = new PageContent();
+            upd.setId(id);
+            upd.setPageId(pageId);
+            upd.setParentId(ROOT_PARENT_ID);
+            upd.setSortOrder(i);
+            upd.setPath(desiredPath);
+            toUpdate.add(upd);
+        }
+
+        if (CollUtil.isNotEmpty(toUpdate)) {
+            processBatched(toUpdate, BATCH_SIZE, batch -> pageContentMapper.batchUpdateStructure(batch));
+        }
+        return toUpdate.size();
+    }
+
     private String resolveBlockId(PageContent node) {
-        // Prefer attrs.id, fall back to node.id
-        String attrId = node.getAttrId();
+        // Canonical identity is attrs.blockId (UniqueID); fall back to attrs.id
+        // (self-managing nodes), then node.id.
+        String attrId = node.getAttrBlockId();
         if (StrUtil.isNotBlank(attrId)) {
             return attrId;
         }

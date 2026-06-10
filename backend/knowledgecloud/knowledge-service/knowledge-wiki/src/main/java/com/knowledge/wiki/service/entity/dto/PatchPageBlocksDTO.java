@@ -48,4 +48,10 @@ public class PatchPageBlocksDTO implements Serializable {
     @Valid
     private List<BlockPatchItemDTO> changes;
 
+    /**
+     * 顶层块顺序相对上次保存是否发生变化（移动/重排）。
+     * 为 true 时即使 {@code changes} 为空也需要落库，以持久化新的块顺序。
+     */
+    private Boolean orderChanged;
+
 }

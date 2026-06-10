@@ -629,6 +629,12 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
 
     @Override
     public BlockStorageService.PatchResult patchBlocks(Long pageId, java.util.List<BlockPatchItemDTO> changes, java.util.List<String> blockOrder) {
+        return patchBlocks(pageId, changes, blockOrder, false);
+    }
+
+    @Override
+    public BlockStorageService.PatchResult patchBlocks(Long pageId, java.util.List<BlockPatchItemDTO> changes,
+            java.util.List<String> blockOrder, boolean orderChanged) {
         if (pageId == null) {
             throw WikiException.INVALID_PARAMETER.newException("页面ID不能为空");
         }
@@ -639,7 +645,7 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
         }
 
         // Apply the incremental patch (transactional internally).
-        return blockStorageService.patchBlocks(pageId, changes, blockOrder);
+        return blockStorageService.patchBlocks(pageId, changes, blockOrder, orderChanged);
     }
 
     @Override

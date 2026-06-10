@@ -5,8 +5,16 @@ import { Node as ProseMirrorNode } from '@tiptap/pm/model'
 // ─── Public Types ────────────────────────────────────────────────────
 
 export interface IncrementalPayload {
+  /** All top-level block ids, in document order. */
   blockOrder: string[]
+  /** Content changes (insert/update/delete) since the last commit. */
   changes: BlockChange[]
+  /**
+   * True when `blockOrder` differs from the committed order (a block was
+   * moved/reordered) — even if no block's *content* changed. The save path
+   * must not skip a patch that only changes order.
+   */
+  orderChanged: boolean
 }
 
 export interface BlockChange {
@@ -23,25 +31,19 @@ export interface DirtyTrackerOptions {
   filterTransaction: (tr: Transaction) => boolean
 }
 
-/**
- * Frozen description of one top-level block at a known-clean state.
- * `signature` is a deterministic JSON fingerprint used for O(1) equality
- * checks during the on-idle diff.
- */
-interface BlockSnapshot {
-  type: string
-  attrs: Record<string, unknown> | undefined
-  content: JSONContent | undefined
-  signature: string
-}
-
 export interface DirtyTrackerStorage {
   initialized: boolean
   /**
-   * Last-committed top-level blocks, keyed by blockId. Updated by
-   * `commit()` after a successful save.
+   * Top-level block ids in document order, as of the last successful save.
+   * Used to detect deletions and reorders without re-serialising the doc.
    */
-  committedSnapshot: Map<string, BlockSnapshot>
+  committedOrder: string[]
+  /**
+   * Ids of top-level blocks whose content changed (insert/update) since the
+   * last commit. Maintained incrementally per-transaction — this is what makes
+   * save cost proportional to the edit, not to document size.
+   */
+  dirtyBlockIds: Set<string>
   /** Optimization hint — flipped true on any user-origin doc-changing tx. */
   dirty: boolean
   /** Latest backend version per block (blockId -> version). */
@@ -67,32 +69,7 @@ export interface DirtyTrackerStorage {
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-/**
- * Deterministic content fingerprint. ProseMirror's `node.toJSON()` always
- * emits keys in a stable order (type, attrs, content, marks, text), so its
- * stringification can be used directly as a signature without extra
- * canonicalisation.
- */
-function signatureOf(node: ProseMirrorNode): string {
-  return JSON.stringify(node.toJSON())
-}
-
-function buildSnapshot(doc: ProseMirrorNode, attr: string): Map<string, BlockSnapshot> {
-  const snapshot = new Map<string, BlockSnapshot>()
-  doc.forEach(node => {
-    const id = node.attrs[attr]
-    if (!id) return
-    const json = node.toJSON() as JSONContent
-    snapshot.set(id, {
-      type: json.type ?? node.type.name,
-      attrs: json.attrs,
-      content: json.content as unknown as JSONContent | undefined,
-      signature: signatureOf(node),
-    })
-  })
-  return snapshot
-}
-
+/** Ordered list of top-level block ids — a cheap attribute-only walk. */
 function blockOrderOf(doc: ProseMirrorNode, attr: string): string[] {
   const ids: string[] = []
   doc.forEach(node => {
@@ -102,30 +79,42 @@ function blockOrderOf(doc: ProseMirrorNode, attr: string): string[] {
   return ids
 }
 
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
 // ─── Extension ───────────────────────────────────────────────────────
 
 const dirtyTrackerViewPluginKey = new PluginKey('dirtyTrackerView')
 
 /**
- * Block-level dirty tracker — snapshot-diff strategy with a ProseMirror
- * view-plugin trigger.
+ * Block-level dirty tracker — incremental change tracking with a ProseMirror
+ * view-plugin idle trigger.
  *
- * Save scheduling does NOT rely on Tiptap's `update` event (which can be
- * suppressed by `setContent({emitUpdate: false})` and has been observed to
- * occasionally not fire in this codebase's collaborative setup). Instead a
- * ProseMirror plugin's `view.update` is used — that is fundamental PM core
- * and fires on every state update with no Tiptap-level filtering.
+ * The previous implementation rebuilt a full `blockId -> JSON signature`
+ * snapshot of the *entire document* on every save and diffed it. That made
+ * each save O(document size) — fatal for very large documents. This version
+ * instead maintains a `dirtyBlockIds` set incrementally:
  *
- * Pipeline:
- *   1. `onCreate` captures the initial `blockId -> JSON signature` snapshot.
- *   2. `onTransaction` flips a cheap `dirty` hint for user-origin
- *      transactions. The save flow does not gate on this flag — it exists
- *      for diagnostic / external consumers.
- *   3. The PM view plugin re-arms a debounce on every doc-changing state
- *      update; on idle it invokes the registered idle callback.
- *   4. `getPayload()` rebuilds a fresh snapshot and diffs it against the
- *      committed snapshot, emitting `upsert` / `delete` per blockId.
- *   5. `commit()` advances the baseline after a successful save.
+ *   - A ProseMirror plugin's `state.apply` runs for every transaction (including
+ *     the UniqueID extension's appended id-assignment transaction). It diffs the
+ *     top-level children of the old vs new doc by *node reference* — ProseMirror
+ *     preserves the identity of untouched nodes, so only the edited block (and
+ *     any newly inserted block) yields a fresh reference. Their ids are added to
+ *     `dirtyBlockIds`. This is O(top-level block count) per transaction (cheap,
+ *     no serialisation) and is robust to deferred id assignment.
+ *   - `getPayload()` serialises *only* the dirty blocks, derives deletions and
+ *     reorders from a cheap ordered-id walk, and never calls `toJSON()` on an
+ *     unchanged block.
+ *   - `commit()` clears the dirty set and snapshots the new committed order.
+ *
+ * The idle trigger uses a PM view plugin (fires on every PM state update,
+ * bypassing Tiptap's `update` event which can be suppressed by
+ * `setContent({emitUpdate:false})` and is unreliable in the collab setup).
  */
 export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerStorage>({
   name: 'dirtyTracker',
@@ -133,7 +122,9 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
 
   addOptions() {
     return {
-      blockIdAttribute: 'id',
+      // Must match the UniqueID extension's `attributeName` (`blockId`),
+      // otherwise the diff keys on an attribute ordinary blocks never carry.
+      blockIdAttribute: 'blockId',
       filterTransaction: () => true,
     }
   },
@@ -141,14 +132,15 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
   addStorage() {
     return {
       initialized: false,
-      committedSnapshot: new Map<string, BlockSnapshot>(),
+      committedOrder: [],
+      dirtyBlockIds: new Set<string>(),
       dirty: false,
       blockVersions: new Map<string, number>(),
       idleCallback: null,
       idleDebounceMs: 3000,
       idleTimer: null,
       hasDirty() { return false },
-      getPayload() { return { blockOrder: [], changes: [] } },
+      getPayload() { return { blockOrder: [], changes: [], orderChanged: false } },
       commit() {},
       applyServerVersions(_versions: Record<string, number>) {},
       subscribeIdle(_cb: () => void, _ms: number) { return () => {} },
@@ -160,44 +152,58 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
     const { blockIdAttribute } = this.options
     const storage = this.storage
 
-    storage.committedSnapshot = buildSnapshot(this.editor.state.doc, blockIdAttribute)
+    storage.committedOrder = blockOrderOf(this.editor.state.doc, blockIdAttribute)
+    storage.dirtyBlockIds = new Set<string>()
     storage.dirty = false
 
     storage.hasDirty = () => storage.dirty
 
     storage.getPayload = (): IncrementalPayload => {
       const doc = this.editor.state.doc
-      const blockOrder = blockOrderOf(doc, blockIdAttribute)
-      const current = buildSnapshot(doc, blockIdAttribute)
-      const committed = storage.committedSnapshot
+
+      // Single cheap pass: ordered ids + id -> node index. No serialisation.
+      const currentOrder: string[] = []
+      const nodeById = new Map<string, ProseMirrorNode>()
+      doc.forEach(node => {
+        const id = node.attrs[blockIdAttribute]
+        if (id) {
+          currentOrder.push(id)
+          nodeById.set(id, node)
+        }
+      })
+      const currentSet = new Set(currentOrder)
       const changes: BlockChange[] = []
 
-      // Deletions: present in baseline, absent now.
-      for (const id of committed.keys()) {
-        if (!current.has(id)) {
+      // Deletions: present in committed order, absent now.
+      for (const id of storage.committedOrder) {
+        if (!currentSet.has(id)) {
           changes.push({ action: 'delete', blockId: id })
         }
       }
 
-      // Insertions / updates: brand new id, or signature differs.
-      for (const [id, snap] of current) {
-        const prev = committed.get(id)
-        if (prev && prev.signature === snap.signature) continue
+      // Upserts: only the dirty blocks that still exist. Serialise just these.
+      for (const id of storage.dirtyBlockIds) {
+        const node = nodeById.get(id)
+        if (!node) continue // deleted before save — covered by deletion pass
+        const json = node.toJSON() as JSONContent
         changes.push({
           action: 'upsert',
           blockId: id,
-          type: snap.type,
-          content: snap.content,
-          attrs: snap.attrs,
+          type: json.type ?? node.type.name,
+          content: json.content as unknown as JSONContent | undefined,
+          attrs: json.attrs,
           prevVersion: storage.blockVersions.get(id) ?? undefined,
         })
       }
 
-      return { blockOrder, changes }
+      const orderChanged = !arraysEqual(storage.committedOrder, currentOrder)
+
+      return { blockOrder: currentOrder, changes, orderChanged }
     }
 
     storage.commit = () => {
-      storage.committedSnapshot = buildSnapshot(this.editor.state.doc, blockIdAttribute)
+      storage.committedOrder = blockOrderOf(this.editor.state.doc, blockIdAttribute)
+      storage.dirtyBlockIds.clear()
       storage.dirty = false
     }
 
@@ -233,24 +239,42 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
     storage.initialized = true
   },
 
-  onTransaction({ transaction }) {
-    const storage = this.storage
-    if (!storage.initialized) return
-    if (!transaction.docChanged) return
-    if (this.options.filterTransaction(transaction)) {
-      storage.dirty = true
-    }
-  },
-
   addProseMirrorPlugins() {
-    // The extension instance reference; closed-over by the PM plugin's view.
-    // `this.storage` lookup inside the plugin always returns the same storage
-    // object that lifecycle hooks mutated.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const ext = this
+    const { blockIdAttribute } = this.options
     return [
       new Plugin({
         key: dirtyTrackerViewPluginKey,
+
+        // Per-transaction incremental dirty tracking. `apply` runs for EVERY
+        // transaction in a dispatch — including UniqueID's appended id-assignment
+        // transaction — so freshly-inserted blocks are captured once their id
+        // exists. We diff top-level children by node reference: ProseMirror keeps
+        // the identity of untouched nodes, so only changed/new blocks appear.
+        state: {
+          init: () => null,
+          apply: (tr, _value, oldState, newState) => {
+            const storage = ext.storage
+            if (!storage.initialized) return _value
+            if (!tr.docChanged) return _value
+            // Only user-origin edits count as dirty; remote/collab edits are
+            // saved by the client that authored them.
+            if (!ext.options.filterTransaction(tr)) return _value
+
+            const oldRefs = new Set<ProseMirrorNode>()
+            oldState.doc.forEach(node => oldRefs.add(node))
+            newState.doc.forEach(node => {
+              if (!oldRefs.has(node)) {
+                const id = node.attrs[blockIdAttribute]
+                if (id) storage.dirtyBlockIds.add(id)
+              }
+            })
+            storage.dirty = true
+            return _value
+          },
+        },
+
         view() {
           return {
             update(view, prevState) {

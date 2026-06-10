@@ -87,6 +87,14 @@ public interface IPageService extends ISubjectService<Page> {
     BlockStorageService.PatchResult patchBlocks(Long pageId, List<BlockPatchItemDTO> changes, List<String> blockOrder);
 
     /**
+     * @param orderChanged whether the top-level block order changed since the
+     *        client's last save; when true the new order is reconciled even if
+     *        {@code changes} is empty (a pure move)
+     */
+    BlockStorageService.PatchResult patchBlocks(Long pageId, List<BlockPatchItemDTO> changes,
+            List<String> blockOrder, boolean orderChanged);
+
+    /**
      * Assemble and return page content JSON from block rows.
      *
      * @param pageId the page ID

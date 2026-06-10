@@ -64,7 +64,9 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean, externalEx
 			filterTransaction: t => !isChangeOrigin(t)
 		}))
 		editorExtensions.push(DirtyTracker.configure({
-			blockIdAttribute: 'id',
+			// Canonical block identity is `blockId` (assigned by UniqueID above);
+			// keep this in sync with that attributeName or the diff tracks nothing.
+			blockIdAttribute: 'blockId',
 			filterTransaction: t => !isChangeOrigin(t)
 		}))
 		return [editorExtensions, full] as const

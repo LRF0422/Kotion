@@ -661,7 +661,8 @@ public class SpaceApplication {
      */
     public PatchResultDTO patchPageBlocks(com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto) {
         com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result = this.pageService
-                .patchBlocks(dto.getPageId(), dto.getChanges(), dto.getBlockOrder());
+                .patchBlocks(dto.getPageId(), dto.getChanges(), dto.getBlockOrder(),
+                        Boolean.TRUE.equals(dto.getOrderChanged()));
         syncPageTitleFromPatch(dto, result);
 
         return PatchResultDTO.from(result);
