@@ -69,11 +69,21 @@ export interface DirtyTrackerStorage {
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
+/**
+ * Resolve a top-level block's stable id. The configured attribute (`id`) is
+ * tried first, then `blockId` as a fallback — different node types in this
+ * editor carry their identity under one or the other, and reading the wrong
+ * one silently makes the diff track nothing.
+ */
+function resolveBlockId(node: ProseMirrorNode, attr: string): string | undefined {
+  return (node.attrs[attr] ?? node.attrs.id ?? node.attrs.blockId) as string | undefined
+}
+
 /** Ordered list of top-level block ids — a cheap attribute-only walk. */
 function blockOrderOf(doc: ProseMirrorNode, attr: string): string[] {
   const ids: string[] = []
   doc.forEach(node => {
-    const id = node.attrs[attr]
+    const id = resolveBlockId(node, attr)
     if (id) ids.push(id)
   })
   return ids
@@ -122,9 +132,8 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
 
   addOptions() {
     return {
-      // Must match the UniqueID extension's `attributeName` (`blockId`),
-      // otherwise the diff keys on an attribute ordinary blocks never carry.
-      blockIdAttribute: 'blockId',
+      // Primary id attribute; `resolveBlockId` also falls back to `blockId`.
+      blockIdAttribute: 'id',
       filterTransaction: () => true,
     }
   },
@@ -165,7 +174,7 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
       const currentOrder: string[] = []
       const nodeById = new Map<string, ProseMirrorNode>()
       doc.forEach(node => {
-        const id = node.attrs[blockIdAttribute]
+        const id = resolveBlockId(node, blockIdAttribute)
         if (id) {
           currentOrder.push(id)
           nodeById.set(id, node)
@@ -266,7 +275,7 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
             oldState.doc.forEach(node => oldRefs.add(node))
             newState.doc.forEach(node => {
               if (!oldRefs.has(node)) {
-                const id = node.attrs[blockIdAttribute]
+                const id = resolveBlockId(node, blockIdAttribute)
                 if (id) storage.dirtyBlockIds.add(id)
               }
             })

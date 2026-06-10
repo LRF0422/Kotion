@@ -130,10 +130,8 @@ export const findNodeByBlockId = (
   let pos = -1;
 
   state.doc.nodesBetween(0, state.doc.content.size, (node, p) => {
-    // Canonical block identity is `attrs.blockId` (assigned by the UniqueID
-    // extension). A few self-managing nodes (e.g. syncBlock) only carry their
-    // own `attrs.id`, so fall back to it.
-    const id = (node.attrs.blockId ?? node.attrs.id) as string | undefined;
+    // Top-level blocks carry their id in `attrs.id`; fall back to `attrs.blockId`.
+    const id = (node.attrs.id ?? node.attrs.blockId) as string | undefined;
     if (id === blockId) {
       target = node;
       pos = p;
@@ -158,7 +156,7 @@ export const findNodesByBlockIds = (
   const results = new Map<string, { node: Node; pos: number }>();
 
   state.doc.nodesBetween(0, state.doc.content.size, (node, p) => {
-    const id = (node.attrs.blockId ?? node.attrs.id) as string | undefined;
+    const id = (node.attrs.id ?? node.attrs.blockId) as string | undefined;
     if (id && idSet.has(id)) {
       results.set(id, { node, pos: p });
       // Stop early if all found

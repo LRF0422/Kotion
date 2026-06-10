@@ -843,8 +843,8 @@ public class BlockStorageService {
                     log.warn("patchBlocks: failed to parse content for block id={} pageId={}", blockId, pageId);
                     continue;
                 }
-                // Inject identity in case attrs.blockId / attrs.id are missing
-                if (rootNode.getAttrs() == null || StrUtil.isBlank(rootNode.getAttrBlockId())) {
+                // Inject identity in case attrs.id is missing
+                if (rootNode.getAttrs() == null || StrUtil.isBlank(rootNode.getAttrId())) {
                     rootNode.setId(blockId);
                 }
                 int sortOrder = orderMap.getOrDefault(blockId, 0);
@@ -1512,9 +1512,8 @@ public class BlockStorageService {
     }
 
     private String resolveBlockId(PageContent node) {
-        // Canonical identity is attrs.blockId (UniqueID); fall back to attrs.id
-        // (self-managing nodes), then node.id.
-        String attrId = node.getAttrBlockId();
+        // Prefer attrs.id, fall back to node.id
+        String attrId = node.getAttrId();
         if (StrUtil.isNotBlank(attrId)) {
             return attrId;
         }
