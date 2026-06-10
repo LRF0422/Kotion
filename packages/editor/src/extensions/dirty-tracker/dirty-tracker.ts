@@ -36,6 +36,14 @@ export interface DirtyTrackerStorage {
    */
   committedOrder: string[]
   /**
+   * Committed `attrs.rank` per top-level block (blockId -> rank). A move only
+   * changes the moved block's rank (see the BlockRank extension), so comparing
+   * current vs committed rank reliably detects moves even when ProseMirror's
+   * native drag-drop reuses the moved node object (which defeats the
+   * reference-diff below).
+   */
+  committedRanks: Map<string, string>
+  /**
    * Ids of top-level blocks whose content changed (insert/update) since the
    * last commit. Maintained incrementally per-transaction — this is what makes
    * save cost proportional to the edit, not to document size.
@@ -86,6 +94,17 @@ function blockOrderOf(doc: ProseMirrorNode, attr: string): string[] {
   return ids
 }
 
+/** Snapshot of each top-level block's `attrs.rank` (cheap attribute-only walk). */
+function rankSnapshot(doc: ProseMirrorNode, attr: string): Map<string, string> {
+  const ranks = new Map<string, string>()
+  doc.forEach(node => {
+    const id = resolveBlockId(node, attr)
+    const rank = node.attrs.rank as string | undefined
+    if (id && rank != null) ranks.set(id, rank)
+  })
+  return ranks
+}
+
 // ─── Extension ───────────────────────────────────────────────────────
 
 const dirtyTrackerViewPluginKey = new PluginKey('dirtyTrackerView')
@@ -131,6 +150,7 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
     return {
       initialized: false,
       committedOrder: [],
+      committedRanks: new Map<string, string>(),
       dirtyBlockIds: new Set<string>(),
       dirty: false,
       blockVersions: new Map<string, number>(),
@@ -151,6 +171,7 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
     const storage = this.storage
 
     storage.committedOrder = blockOrderOf(this.editor.state.doc, blockIdAttribute)
+    storage.committedRanks = rankSnapshot(this.editor.state.doc, blockIdAttribute)
     storage.dirtyBlockIds = new Set<string>()
     storage.dirty = false
 
@@ -159,15 +180,21 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
     storage.getPayload = (): IncrementalPayload => {
       const doc = this.editor.state.doc
 
-      // Single cheap pass: current top-level id set + id -> node index. No
-      // serialisation of unchanged blocks.
+      // Single cheap pass (attribute-only): current id set, id -> node index,
+      // and the set of blocks whose rank changed since the last commit. The rank
+      // comparison catches moves that the reference-diff misses (native drag-drop
+      // reuses the moved node object, so its reference is unchanged).
       const currentSet = new Set<string>()
       const nodeById = new Map<string, ProseMirrorNode>()
+      const upsertIds = new Set<string>(storage.dirtyBlockIds)
       doc.forEach(node => {
         const id = resolveBlockId(node, blockIdAttribute)
-        if (id) {
-          currentSet.add(id)
-          nodeById.set(id, node)
+        if (!id) return
+        currentSet.add(id)
+        nodeById.set(id, node)
+        const rank = node.attrs.rank as string | undefined
+        if (rank != null && rank !== storage.committedRanks.get(id)) {
+          upsertIds.add(id) // moved (or newly ranked) — rank differs from baseline
         }
       })
       const changes: BlockChange[] = []
@@ -179,10 +206,9 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
         }
       }
 
-      // Upserts: only the dirty blocks that still exist. Serialise just these.
-      // A moved block is dirty because the BlockRank extension changed its
-      // `attrs.rank`, so its new position rides along in this upsert.
-      for (const id of storage.dirtyBlockIds) {
+      // Upserts: dirty (content-changed) + rank-changed (moved) blocks that still
+      // exist. Only these are serialised — cost stays proportional to the edit.
+      for (const id of upsertIds) {
         const node = nodeById.get(id)
         if (!node) continue // deleted before save — covered by deletion pass
         const json = node.toJSON() as JSONContent
@@ -201,6 +227,7 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
 
     storage.commit = () => {
       storage.committedOrder = blockOrderOf(this.editor.state.doc, blockIdAttribute)
+      storage.committedRanks = rankSnapshot(this.editor.state.doc, blockIdAttribute)
       storage.dirtyBlockIds.clear()
       storage.dirty = false
     }
