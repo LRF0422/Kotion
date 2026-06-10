@@ -5,16 +5,13 @@ import { Node as ProseMirrorNode } from '@tiptap/pm/model'
 // ─── Public Types ────────────────────────────────────────────────────
 
 export interface IncrementalPayload {
-  /** All top-level block ids, in document order. */
-  blockOrder: string[]
-  /** Content changes (insert/update/delete) since the last commit. */
-  changes: BlockChange[]
   /**
-   * True when `blockOrder` differs from the committed order (a block was
-   * moved/reordered) — even if no block's *content* changed. The save path
-   * must not skip a patch that only changes order.
+   * Content changes (insert/update/delete) since the last commit. Order is
+   * carried inside each block's `attrs.rank` (see the BlockRank extension), so
+   * a move is just an upsert of the moved block — there is no separate order
+   * payload and no full block-id list.
    */
-  orderChanged: boolean
+  changes: BlockChange[]
 }
 
 export interface BlockChange {
@@ -89,14 +86,6 @@ function blockOrderOf(doc: ProseMirrorNode, attr: string): string[] {
   return ids
 }
 
-function arraysEqual(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false
-  }
-  return true
-}
-
 // ─── Extension ───────────────────────────────────────────────────────
 
 const dirtyTrackerViewPluginKey = new PluginKey('dirtyTrackerView')
@@ -149,7 +138,7 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
       idleDebounceMs: 3000,
       idleTimer: null,
       hasDirty() { return false },
-      getPayload() { return { blockOrder: [], changes: [], orderChanged: false } },
+      getPayload() { return { changes: [] } },
       commit() {},
       applyServerVersions(_versions: Record<string, number>) {},
       subscribeIdle(_cb: () => void, _ms: number) { return () => {} },
@@ -170,17 +159,17 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
     storage.getPayload = (): IncrementalPayload => {
       const doc = this.editor.state.doc
 
-      // Single cheap pass: ordered ids + id -> node index. No serialisation.
-      const currentOrder: string[] = []
+      // Single cheap pass: current top-level id set + id -> node index. No
+      // serialisation of unchanged blocks.
+      const currentSet = new Set<string>()
       const nodeById = new Map<string, ProseMirrorNode>()
       doc.forEach(node => {
         const id = resolveBlockId(node, blockIdAttribute)
         if (id) {
-          currentOrder.push(id)
+          currentSet.add(id)
           nodeById.set(id, node)
         }
       })
-      const currentSet = new Set(currentOrder)
       const changes: BlockChange[] = []
 
       // Deletions: present in committed order, absent now.
@@ -191,6 +180,8 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
       }
 
       // Upserts: only the dirty blocks that still exist. Serialise just these.
+      // A moved block is dirty because the BlockRank extension changed its
+      // `attrs.rank`, so its new position rides along in this upsert.
       for (const id of storage.dirtyBlockIds) {
         const node = nodeById.get(id)
         if (!node) continue // deleted before save — covered by deletion pass
@@ -205,9 +196,7 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
         })
       }
 
-      const orderChanged = !arraysEqual(storage.committedOrder, currentOrder)
-
-      return { blockOrder: currentOrder, changes, orderChanged }
+      return { changes }
     }
 
     storage.commit = () => {

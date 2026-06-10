@@ -4,7 +4,6 @@ import java.io.Serializable;
 import java.util.List;
 
 import javax.validation.Valid;
-import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 
 import lombok.Data;
@@ -34,12 +33,9 @@ public class PatchPageBlocksDTO implements Serializable {
     private Long pageId;
 
     /**
-     * 当前文档中所有顶层块的有序 ID 列表。
-     * 用于：
-     * 1) 同步顶层块的排序；
-     * 2) 检测被删除的块（前端快照与当前差异）。
+     * 可选：顶层块的有序 ID 列表（旧协议字段）。
+     * 顶层排序现由每个块的分数排名 {@code attrs.rank} 决定，故该字段可为空。
      */
-    @NotEmpty(message = "块顺序不能为空")
     private List<String> blockOrder;
 
     /**
@@ -47,11 +43,5 @@ public class PatchPageBlocksDTO implements Serializable {
      */
     @Valid
     private List<BlockPatchItemDTO> changes;
-
-    /**
-     * 顶层块顺序相对上次保存是否发生变化（移动/重排）。
-     * 为 true 时即使 {@code changes} 为空也需要落库，以持久化新的块顺序。
-     */
-    private Boolean orderChanged;
 
 }

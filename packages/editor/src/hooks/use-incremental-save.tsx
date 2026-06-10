@@ -41,11 +41,10 @@ export function useIncrementalSave(options: UseIncrementalSaveOptions): UseIncre
     const tracker = getTracker(editor)
     if (!tracker) return
 
-    // Bail iff there is genuinely nothing to persist: no content changes AND
-    // no reorder. A pure block move produces zero `changes` but `orderChanged`,
-    // and must still be sent so the backend can persist the new order.
+    // Bail iff there is genuinely nothing to persist. A move is itself a change
+    // (the moved block's `attrs.rank` changed), so it shows up in `changes`.
     const payload = tracker.getPayload()
-    if (payload.changes.length === 0 && !payload.orderChanged) {
+    if (payload.changes.length === 0) {
       setDirty(false)
       return
     }

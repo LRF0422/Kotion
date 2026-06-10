@@ -36,6 +36,7 @@ import com.knowledge.wiki.service.service.IPageVersionService;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
+import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import lombok.extern.slf4j.Slf4j;
 
@@ -396,17 +397,24 @@ public class BlockStorageService {
             }
         }
 
-        // Sort each group with a stable comparator: sortOrder ASC, then
-        // createTime ASC, then id ASC. The fallback keys matter when the
-        // table accidentally contains duplicates at the same sortOrder
-        // (e.g. legacy data corrupted by an earlier Yjs/REST race) so the
-        // assembled doc is deterministic across reads.
+        // Nested siblings are ordered by sortOrder ASC, then createTime, then id
+        // (deterministic even if legacy data has duplicate sortOrders).
         Comparator<PageContent> stableSiblingOrder = Comparator
                 .comparingInt((PageContent b) -> b.getSortOrder() != null ? b.getSortOrder() : 0)
                 .thenComparing(b -> b.getCreateTime(),
                         Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(b -> b.getId() != null ? b.getId() : "");
-        rootChildren.sort(stableSiblingOrder);
+
+        // Top-level blocks are ordered by their fractional rank (attrs.rank). For
+        // legacy rows without a rank, an equivalent key is derived from the old
+        // integer sort_order — so ordering is correct with no migration. id is the
+        // final tiebreak for concurrent inserts that produced equal ranks.
+        Comparator<PageContent> rootOrder = Comparator
+                .comparing((PageContent b) -> rankKey(b))
+                .thenComparing(b -> b.getCreateTime(),
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(b -> b.getId() != null ? b.getId() : "");
+        rootChildren.sort(rootOrder);
         childrenMap.values().forEach(list -> list.sort(stableSiblingOrder));
 
         // Defensive: the editor schema is `doc = title block*`, i.e. exactly
@@ -416,6 +424,21 @@ public class BlockStorageService {
         // rendering two title nodes would otherwise violate the schema and
         // also propagate the duplicates back into the next save.
         rootChildren = dedupRootTitles(pageId, rootChildren);
+
+        // Ensure every top-level block carries a `rank` in attrs so the editor's
+        // BlockRank extension has neighbour ranks to interpolate against. Legacy
+        // rows get a derived (sort_order-based) rank injected here only — the DB
+        // row is NOT rewritten; it gains a stored rank lazily when next edited.
+        for (PageContent child : rootChildren) {
+            JSONObject attrs = child.getAttrs();
+            if (attrs == null) {
+                attrs = new JSONObject();
+                child.setAttrs(attrs);
+            }
+            if (StrUtil.isBlank(attrs.getStr("rank"))) {
+                attrs.set("rank", rankKey(child));
+            }
+        }
 
         // Build root node
         PageContent root = new PageContent();
@@ -776,31 +799,18 @@ public class BlockStorageService {
      * @return PatchResult with statistics and any detected conflicts
      */
     public PatchResult patchBlocks(Long pageId, List<BlockPatchItemDTO> changes, List<String> blockOrder) {
-        return patchBlocks(pageId, changes, blockOrder, false);
-    }
-
-    /**
-     * @param orderChanged whether the top-level block order changed since the
-     *        client's last save. When true, the new order is reconciled even if
-     *        {@code changes} is empty (a pure move). When false the expensive
-     *        top-level reorder query is skipped entirely (the typing hot path).
-     */
-    public PatchResult patchBlocks(Long pageId, List<BlockPatchItemDTO> changes,
-            List<String> blockOrder, boolean orderChanged) {
         if (pageId == null) {
             return PatchResult.empty();
         }
-        // Allow an order-only patch (empty changes but a reorder) to proceed so
-        // the new block order is persisted. Bail only when there is nothing at all.
-        if (CollUtil.isEmpty(changes) && !orderChanged) {
+        if (CollUtil.isEmpty(changes)) {
             log.debug("patchBlocks: no changes for pageId={}", pageId);
             return PatchResult.empty();
         }
-        if (changes == null) {
-            changes = new ArrayList<>();
-        }
 
-        // Map blockId -> index in blockOrder (used as sortOrder for updates)
+        // Map blockId -> index in blockOrder (used as sortOrder for updates).
+        // Top-level order is now governed by the per-block fractional `attrs.rank`,
+        // so blockOrder is optional; when absent, nested ordering still works via
+        // each subtree's local sortOrder assigned in flattenRecursive.
         Map<String, Integer> orderMap = new HashMap<>();
         if (CollUtil.isNotEmpty(blockOrder)) {
             for (int i = 0; i < blockOrder.size(); i++) {
@@ -863,7 +873,7 @@ public class BlockStorageService {
 
         // Apply through proxy so @Transactional takes effect
         PatchResult result = self.persistPatch(pageId, toUpsert, deletedRootIds,
-                newSubtreeIdsByRoot, clientPrevVersions, blockOrder, orderChanged);
+                newSubtreeIdsByRoot, clientPrevVersions);
 
         // Cache invalidation (outside transaction)
         blockCacheService.evictAssembledTree(pageId);
@@ -895,9 +905,7 @@ public class BlockStorageService {
             List<PageContent> toUpsert,
             Set<String> deletedRootIds,
             Map<String, Set<String>> newSubtreeIdsByRoot,
-            Map<String, Integer> clientPrevVersions,
-            List<String> blockOrder,
-            boolean orderChanged) {
+            Map<String, Integer> clientPrevVersions) {
 
         PatchResult result = new PatchResult();
 
@@ -964,24 +972,6 @@ public class BlockStorageService {
                     toUpsert, clientPrevVersions, result);
             createdBlocks = batchResult.created;
             updatedBlocks = batchResult.updated;
-        }
-
-        // --- Phase 3.5: Reconcile top-level order for moved-but-unchanged blocks ---
-        // Upserted blocks already carry the correct sortOrder (from blockOrder).
-        // Blocks that merely shifted position (a move, or siblings after an
-        // insert/delete) are NOT in `changes`, so their sort_order would go stale.
-        // Only runs when the client signals a reorder, keeping the typing hot path
-        // free of the full top-level scan. This is a pure sort_order/path fix — no
-        // content snapshot and no version bump, so rollback snapshots stay intact.
-        if (orderChanged && CollUtil.isNotEmpty(blockOrder)) {
-            Set<String> upsertedRootIds = newSubtreeIdsByRoot != null
-                    ? newSubtreeIdsByRoot.keySet() : Collections.emptySet();
-            int reconciled = reconcileTopLevelOrder(pageId, blockOrder,
-                    upsertedRootIds, allDeletedIds);
-            if (reconciled > 0) {
-                log.debug("patchBlocks: reconciled order for {} top-level block(s) pageId={}",
-                        reconciled, pageId);
-            }
         }
 
         // --- Phase 4: Build and persist all change records (deduplicated) ---
@@ -1455,60 +1445,44 @@ public class BlockStorageService {
         }
     }
 
+    /** Fixed width of the base-36 integer encoding used to derive legacy ranks. */
+    private static final int RANK_ORDER_WIDTH = 6;
+
     /**
-     * Reconcile {@code sort_order}/{@code path} for top-level blocks whose
-     * position shifted but whose content did not change (so they were not part
-     * of {@code changes}). Returns the number of rows updated.
-     *
-     * <p>Pure structure update — no version bump and no change record, so
-     * rollback snapshots are unaffected. Upserted and deleted ids are skipped
-     * (upserts already carry the correct order). Only invoked when the client
-     * signalled a reorder, so the full top-level scan stays off the typing path.</p>
+     * Sort key for a top-level block: its stored fractional {@code attrs.rank}
+     * if present, otherwise a key derived from the legacy integer
+     * {@code sort_order}. Both live in the same base-36 string space and compare
+     * lexicographically the same way as the frontend's fractional-index keys.
      */
-    private int reconcileTopLevelOrder(Long pageId, List<String> blockOrder,
-            Set<String> upsertedRootIds, Set<String> deletedIds) {
-        // Snapshot current top-level blocks: id -> [sortOrder, path]
-        Map<String, Object[]> existing = new HashMap<>();
-        List<Map<String, Object>> rows = pageContentService.listMaps(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PageContent>()
-                        .select(PageContent::getId, PageContent::getSortOrder, PageContent::getPath)
-                        .eq(PageContent::getPageId, pageId)
-                        .eq(PageContent::getParentId, ROOT_PARENT_ID));
-        for (Map<String, Object> map : rows) {
-            String id = (String) map.get("id");
-            Object sortObj = map.get("sort_order");
-            Integer sortOrder = sortObj != null ? ((Number) sortObj).intValue() : null;
-            String path = (String) map.get("path");
-            existing.put(id, new Object[] { sortOrder, path });
+    private String rankKey(PageContent block) {
+        String rank = block.getAttrs() != null ? block.getAttrs().getStr("rank") : null;
+        if (StrUtil.isNotBlank(rank)) {
+            return rank;
         }
+        int order = block.getSortOrder() != null ? block.getSortOrder() : 0;
+        return encodeOrder(order);
+    }
 
-        List<PageContent> toUpdate = new ArrayList<>();
-        for (int i = 0; i < blockOrder.size(); i++) {
-            String id = blockOrder.get(i);
-            if (StrUtil.isBlank(id) || upsertedRootIds.contains(id) || deletedIds.contains(id)) {
-                continue;
-            }
-            Object[] info = existing.get(id);
-            if (info == null) {
-                continue; // not a stored top-level block (e.g. brand new — handled by upsert)
-            }
-            String desiredPath = String.valueOf(i);
-            if (Objects.equals(info[0], i) && Objects.equals(info[1], desiredPath)) {
-                continue; // already in the right place
-            }
-            PageContent upd = new PageContent();
-            upd.setId(id);
-            upd.setPageId(pageId);
-            upd.setParentId(ROOT_PARENT_ID);
-            upd.setSortOrder(i);
-            upd.setPath(desiredPath);
-            toUpdate.add(upd);
+    /**
+     * Encode a non-negative integer as a fixed-width, zero-padded base-36 string
+     * so lexicographic order matches numeric order, with a trailing non-zero
+     * digit so fractional keys can always be inserted between any two values.
+     */
+    private static String encodeOrder(int n) {
+        if (n < 0) {
+            n = 0;
         }
-
-        if (CollUtil.isNotEmpty(toUpdate)) {
-            processBatched(toUpdate, BATCH_SIZE, batch -> pageContentMapper.batchUpdateStructure(batch));
+        String s = Integer.toString(n, 36); // 0-9a-z, lowercase
+        if (s.length() > RANK_ORDER_WIDTH) {
+            s = s.substring(s.length() - RANK_ORDER_WIDTH);
         }
-        return toUpdate.size();
+        StringBuilder sb = new StringBuilder();
+        for (int i = s.length(); i < RANK_ORDER_WIDTH; i++) {
+            sb.append('0');
+        }
+        sb.append(s);
+        sb.append('i'); // mid, non-zero digit — never a trailing '0'
+        return sb.toString();
     }
 
     private String resolveBlockId(PageContent node) {

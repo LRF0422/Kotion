@@ -12,6 +12,7 @@ import { Paragraph } from "../extensions/paragraph"
 import { Placeholder } from "../extensions/placeholder"
 import { Perf } from "../extensions/perf"
 import { UniqueID } from "../extensions/unique-id"
+import { BlockRank } from "../extensions/block-rank"
 import { DirtyTracker } from "../extensions/dirty-tracker"
 import { Doc } from "../extensions"
 import Document from "@tiptap/extension-document";
@@ -59,8 +60,15 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean, externalEx
 		if (ext) {
 			editorExtensions = editorExtensions.filter(it => it.name !== ext);
 		}
+		const idTypes = editorExtensions.filter(it => it.name !== 'text').map(it => it.name)
 		editorExtensions.push(UniqueID.configure({
-			types: editorExtensions.filter(it => it.name !== 'text').map(it => it.name),
+			types: idTypes,
+			filterTransaction: t => !isChangeOrigin(t)
+		}))
+		// Fractional ordering: assign each top-level block a sortable `rank` so
+		// inserts/moves only re-rank the changed block, never its siblings.
+		editorExtensions.push(BlockRank.configure({
+			types: idTypes,
 			filterTransaction: t => !isChangeOrigin(t)
 		}))
 		editorExtensions.push(DirtyTracker.configure({

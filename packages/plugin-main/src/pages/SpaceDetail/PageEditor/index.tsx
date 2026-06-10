@@ -57,8 +57,6 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
         const hasTitleChange = payload.changes.some(c => c.type === 'title')
         const res = await useApi(APIS.PATCH_PAGE_BLOCKS, { id: pageId }, {
             pageId,
-            blockOrder: payload.blockOrder,
-            orderChanged: payload.orderChanged,
             changes: payload.changes.map(c => ({
                 blockId: c.blockId,
                 action: c.action,
