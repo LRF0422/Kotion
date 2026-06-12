@@ -103,21 +103,6 @@ public class BlockStorageService {
     @Autowired
     private BlockCacheService blockCacheService;
 
-    @Autowired
-    private IBlockVersionService blockVersionService;
-
-    /**
-     * {@code @Lazy} to avoid circular construction:
-     * {@code PageVersionServiceImpl -> IPageSnapshotService -> PageSnapshotServiceImpl -> BlockStorageService}.
-     * The proxy is only resolved on first call inside
-     * {@link #persistPatch}.
-     */
-    @Autowired
-    @Lazy
-    private IPageVersionService pageVersionService;
-
-    private final BlockChangeRecorder changeRecorder = new BlockChangeRecorder();
-
     /**
      * Self-injection (via proxy) so methods that have already done CPU-only work
      * outside a transaction can still invoke @Transactional methods via the
@@ -194,38 +179,13 @@ public class BlockStorageService {
      */
     @Transactional(rollbackFor = Exception.class, timeout = 60)
     public void persistFlattenedBlocks(Long pageId, List<PageContent> flatBlocks, Set<String> currentBlockIds) {
-        // Capture full snapshots of rows that will be removed BEFORE deleting them,
-        // so the change recorder can persist their final state as "delete" events.
-        List<PageContent> toDelete = findBlocksToDelete(pageId, currentBlockIds);
-
-        // Collect existing versions for deleted blocks
-        Map<String, Integer> deletedVersions = new HashMap<>();
-        if (CollUtil.isNotEmpty(toDelete)) {
-            for (PageContent b : toDelete) {
-                deletedVersions.put(b.getId(), b.getVersion());
-            }
-        }
-
         // Delete blocks no longer present in this page (runs even when flatBlocks is empty)
         deleteRemovedBlocks(pageId, currentBlockIds);
 
-        // Collect created and updated blocks
-        List<PageContent> createdBlocks = new ArrayList<>();
-        List<BlockChangeRecorder.BlockUpdate> updatedBlocks = new ArrayList<>();
+        // Upsert the current blocks. Version *history* is no longer recorded
+        // (version & rollback removed).
         if (CollUtil.isNotEmpty(flatBlocks)) {
-            BatchChangeResult result = batchUpsert(flatBlocks);
-            createdBlocks = result.created;
-            updatedBlocks = result.updated;
-        }
-
-        // Build all change records with deduplication and persist in one batch
-        Set<String> deletedIds = toDelete != null
-                ? toDelete.stream().map(PageContent::getId).collect(Collectors.toSet())
-                : new HashSet<>();
-        List<BlockVersion> changeRecords = changeRecorder.buildAllRecords(
-                pageId, createdBlocks, updatedBlocks, deletedIds, deletedVersions);
-        if (CollUtil.isNotEmpty(changeRecords)) {
-            blockVersionService.saveBatch(changeRecords);
+            batchUpsert(flatBlocks);
         }
     }
 
@@ -972,9 +932,6 @@ public class BlockStorageService {
             self.bulkInsertChunk(chunk);
         }
 
-        // Phase 3: seal exactly one new ACTIVE PageVersion (own transaction).
-        PageVersion newVersion = self.bulkCreateVersion(pageId);
-
         // Cache invalidation (outside any transaction).
         blockCacheService.evictAssembledTree(pageId);
         blockCacheService.evictPageCache(pageId);
@@ -986,12 +943,7 @@ public class BlockStorageService {
             versions.put(id, 1);
         }
         result.setBlockVersions(versions);
-        if (newVersion != null) {
-            result.setPageVersionId(newVersion.getId());
-            result.setPageVersion(newVersion.getVersion());
-        }
-        log.debug("bulkReplaceBlocks: pageId={} blocks={} pageVersion={}",
-                pageId, total, result.getPageVersion());
+        log.debug("bulkReplaceBlocks: pageId={} blocks={}", pageId, total);
         return result;
     }
 
@@ -1007,12 +959,6 @@ public class BlockStorageService {
         if (CollUtil.isNotEmpty(chunk)) {
             pageContentMapper.batchInsertOnDuplicate(chunk);
         }
-    }
-
-    /** Seal one new ACTIVE PageVersion for the import. Own transaction. */
-    @Transactional(rollbackFor = Exception.class, timeout = 30)
-    public PageVersion bulkCreateVersion(Long pageId) {
-        return createNewActiveVersion(pageId);
     }
 
     /**
@@ -1082,19 +1028,7 @@ public class BlockStorageService {
         }
 
         // --- Phase 2: Execute deletes ---
-        Map<String, Integer> deletedVersions = new HashMap<>();
-        List<String> deletedIdList = new ArrayList<>();
         if (CollUtil.isNotEmpty(allDeletedIds)) {
-            // Snapshot before deletion for change log (capture versions)
-            List<PageContent> deletedSnapshots = pageContentService.lambdaQuery()
-                    .eq(PageContent::getPageId, pageId)
-                    .in(PageContent::getId, allDeletedIds)
-                    .list();
-            for (PageContent snap : deletedSnapshots) {
-                deletedVersions.put(snap.getId(), snap.getVersion());
-                deletedIdList.add(snap.getId());
-            }
-
             // Batched delete to avoid oversized IN clauses
             processBatched(new ArrayList<>(allDeletedIds), BATCH_SIZE, batch -> {
                 pageContentService.lambdaUpdate()
@@ -1102,8 +1036,7 @@ public class BlockStorageService {
                         .in(PageContent::getId, batch)
                         .remove();
             });
-
-            result.setDeleted(deletedSnapshots.size());
+            result.setDeleted(allDeletedIds.size());
         }
 
         // --- Phase 3: Upsert with 3-tier classification ---
@@ -1116,30 +1049,10 @@ public class BlockStorageService {
             updatedBlocks = batchResult.updated;
         }
 
-        // --- Phase 4: Build and persist all change records (deduplicated) ---
-        List<BlockVersion> changeRecords = changeRecorder.buildAllRecords(
-                pageId, createdBlocks, updatedBlocks, deletedIdList, deletedVersions);
-
-        // --- Phase 4.5: Save = Publish.
-        //     Atomically seal these change records under a brand new ACTIVE
-        //     PageVersion so a successful return guarantees a durable version.
-        //     Skipped patches (no changeRecords) do not produce a version.
-        if (CollUtil.isNotEmpty(changeRecords)) {
-            PageVersion newVersion = createNewActiveVersion(pageId);
-            for (BlockVersion bv : changeRecords) {
-                bv.setPageVersionId(newVersion.getId());
-                bv.setPageVersion(newVersion.getVersion());
-            }
-            result.setPageVersionId(newVersion.getId());
-            result.setPageVersion(newVersion.getVersion());
-        }
-
-        // --- Phase 5: Persist sealed change records ---
-        if (CollUtil.isNotEmpty(changeRecords)) {
-            blockVersionService.saveBatch(changeRecords);
-        }
-
-        // --- Phase 6: Collect new block versions for client round-trip ---
+        // --- Phase 4: Collect new block versions for client round-trip ---
+        // Page/block version *history* is intentionally NOT recorded (version &
+        // rollback removed). The per-block `version` column is kept only for
+        // optimistic-concurrency (prevVersion) on the next patch.
         Map<String, Integer> newVersions = new HashMap<>();
         for (PageContent b : createdBlocks) {
             newVersions.put(b.getId(), b.getVersion() != null ? b.getVersion() : 1);
@@ -1151,55 +1064,6 @@ public class BlockStorageService {
         result.setBlockVersions(newVersions);
 
         return result;
-    }
-
-    /**
-     * Create and persist a brand new ACTIVE {@link PageVersion} for {@code pageId},
-     * demoting any existing ACTIVE version to {@code IN_ACTIVE}.
-     * <p>
-     * Must be called inside a transaction so the demote/insert pair is atomic.
-     * Used by {@link #persistPatch} to enforce the "save = publish" contract.
-     * </p>
-     *
-     * @param pageId target page
-     * @return the freshly inserted ACTIVE {@link PageVersion} (id and version populated)
-     */
-    private PageVersion createNewActiveVersion(Long pageId) {
-        PageVersion currentActive = pageVersionService.lambdaQuery()
-                .eq(PageVersion::getSubjectId, pageId)
-                .eq(PageVersion::getStatus, VersionStatus.ACTIVE)
-                .one();
-
-        int nextVer = 1;
-        if (currentActive != null && StrUtil.isNotBlank(currentActive.getVersion())) {
-            try {
-                nextVer = Integer.parseInt(currentActive.getVersion()) + 1;
-            } catch (NumberFormatException ex) {
-                log.warn("createNewActiveVersion: non-numeric current version '{}' for pageId={}, resetting to 1",
-                        currentActive.getVersion(), pageId);
-            }
-        }
-
-        PageVersion newVersion = new PageVersion();
-        newVersion.setSubjectId(pageId);
-        newVersion.setStatus(VersionStatus.ACTIVE);
-        newVersion.setVersion(String.valueOf(nextVer));
-        if (currentActive != null) {
-            newVersion.setLastVersionId(currentActive.getId());
-        }
-        // md5Code is informational only post-refactor; block rows are the source of truth.
-        pageVersionService.save(newVersion);
-
-        if (currentActive != null) {
-            pageVersionService.lambdaUpdate()
-                    .eq(PageVersion::getId, currentActive.getId())
-                    .set(PageVersion::getStatus, VersionStatus.IN_ACTIVE)
-                    .update();
-        }
-
-        log.debug("createNewActiveVersion pageId={} newVersionId={} version={}",
-                pageId, newVersion.getId(), newVersion.getVersion());
-        return newVersion;
     }
 
     /**

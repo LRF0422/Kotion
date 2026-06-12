@@ -17,7 +17,7 @@ import { Editor } from "@kn/editor";
 import * as Y from "@kn/editor";
 import { useKeyPress, useToggle } from "@kn/common";
 import {
-    ALargeSmall, ArrowLeft, BookTemplate, Check, Pencil,
+    ALargeSmall, BookTemplate, Check, Pencil,
     Contact2, Download, FileIcon, FileText,
     Link, LoaderCircle, LockIcon, MessageSquareText,
     MoreHorizontal, MoveDownRight, Trash2, Upload, List,
@@ -348,48 +348,6 @@ export const PageEditor: React.FC = () => {
         !!page && !!params.pageId && editorContentReady
     )
 
-    // Rollback handler — restore page to previous version via block snapshots
-    const handleRollback = useCallback(async () => {
-        if (!params.pageId) return
-        try {
-            // Get all versions to find the previous one
-            const versionsRes = await useApi(APIS.GET_ALL_PAGE_VERSIONS, { pageId: params.pageId })
-            const versions = versionsRes?.data
-            if (!versions || versions.length < 2) {
-                toast.error('No previous version available')
-                return
-            }
-
-            // Find the previous IN_ACTIVE version (the one before current ACTIVE)
-            const activeIdx = versions.findIndex((v: any) => v.status === 'ACTIVE')
-            const targetVersion = versions[activeIdx + 1] // next item is older (list is desc)
-            if (!targetVersion || targetVersion.status === 'DRAFT') {
-                toast.error('Cannot rollback: no suitable previous version')
-                return
-            }
-
-            await useApi(APIS.ROLLBACK_PAGE_VERSION, { pageId: params.pageId }, {
-                targetVersionId: targetVersion.id,
-                changeSummary: 'Rollback to version ' + targetVersion.version,
-            })
-
-            // Reload the page to reflect rolled-back content
-            const reloadedPage = await spaceService.getPage(params.pageId)
-            setPage(reloadedPage)
-            setEditorContentReady(false)
-
-            // Reset the DirtyTracker since content is now from a different version
-            const tracker = (editor.current?.storage as any)?.dirtyTracker
-            if (tracker?.commit) tracker.commit()
-
-            toast.success('Rolled back to version ' + targetVersion.version)
-            event.emit(ON_PAGE_REFRESH)
-        } catch (error) {
-            console.error('Rollback failed:', error)
-            toast.error('Rollback failed')
-        }
-    }, [params.pageId, editor, spaceService])
-
     // Markdown import handler
     const handleImportMarkdown = useCallback(() => {
         const input = document.createElement('input');
@@ -691,12 +649,6 @@ export const PageEditor: React.FC = () => {
                                 <div className="flex flex-row items-center gap-1">
                                     <MoveDownRight className="h-4 w-4" />
                                     <span>move to</span>
-                                </div>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleRollback}>
-                                <div className="flex flex-row items-center gap-1">
-                                    <ArrowLeft className="h-4 w-4" />
-                                    <span>rollback to last version</span>
                                 </div>
                             </DropdownMenuItem>
                             <DropdownMenuItem>

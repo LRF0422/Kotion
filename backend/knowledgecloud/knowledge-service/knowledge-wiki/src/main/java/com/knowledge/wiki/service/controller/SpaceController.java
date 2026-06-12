@@ -351,21 +351,6 @@ public class SpaceController {
     }
 
     /**
-     * Rollback page to specific version
-     * POST /knowledge-wiki/space/page/:pageId/rollback
-     */
-    @PostMapping("/page/{pageId}/rollback")
-    public R<com.knowledge.wiki.service.entity.PageVersion> rollbackPageVersion(
-            @PathVariable("pageId") Long pageId,
-            @Valid @RequestBody com.knowledge.wiki.service.entity.dto.RollbackVersionDTO dto) {
-        dto.setPageId(pageId);
-        return R.data(spaceApplication.rollbackPageVersion(
-                dto.getPageId(),
-                dto.getTargetVersionId(),
-                dto.getChangeSummary()));
-    }
-
-    /**
      * Compare two versions
      * POST /knowledge-wiki/space/page/versions/compare
      */

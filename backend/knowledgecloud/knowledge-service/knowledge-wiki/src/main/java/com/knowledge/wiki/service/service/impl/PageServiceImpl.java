@@ -98,8 +98,7 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
             }
             PageConverter.INSTANCE.update(page, db);
             this.updateById(db);
-            pageVersionService.createOrSaveDraft(db);
-            // Block-first: also persist blocks individually
+            // Block storage is the single source of truth (no draft/publish version).
             if (StrUtil.isNotBlank(db.getContent())) {
                 blockStorageService.flattenAndSave(db.getId(), db.getContent());
             }
@@ -113,21 +112,13 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
                 page.setAncestors(parent.getAncestors() + "," + parent.getId());
             }
             this.save(page);
-            pageVersionService.createOrSaveDraft(page);
-            // Block-first: also persist blocks individually
+            // Block storage is the single source of truth (no draft/publish version).
             if (StrUtil.isNotBlank(page.getContent())) {
                 blockStorageService.flattenAndSave(page.getId(), page.getContent());
             }
         }
-        if (publish) {
-            Long draftId = pageVersionService.getDraftVersion(page.getId()).getId();
-            pageVersionService.publish(draftId);
-            // Create block snapshot after publish
-            PageVersion published = pageVersionService.getCurrentActiveVersion(page.getId());
-            if (published != null) {
-                pageSnapshotService.snapshotBlocks(page.getId(), published.getId(), published.getVersion());
-            }
-        }
+        // The `publish` flag is retained for interface compatibility but is now a
+        // no-op: draft/publish versioning has been removed; saving is the only state.
         return page;
     }
 
@@ -149,8 +140,7 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
         return TreeUtil.build(allPage, 0L, (object, node) -> {
             node.setId(object.getId())
                     .setName(object.getTitle())
-                    .setParentId(object.getParentId())
-                    .putExtra("isDraft", pageVersionService.hasDraft(object.getId()));
+                    .setParentId(object.getParentId());
             node.putExtra("updateTime", object.getUpdateTime());
             node.putExtra("createUser", object.getCreateUser());
             node.putExtra("icon", object.getIcon());
@@ -175,7 +165,6 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
         page.setCreateTime(subject.getCreateTime());
         page.setUpdateTime(subject.getUpdateTime());
         page.setContent(StrUtil.isNotBlank(assembledJson) ? assembledJson : "");
-        page.setDraft(pageVersionService.hasDraft(pageId));
         return page;
     }
 
@@ -191,21 +180,16 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     @Override
     public Page copyPage(Long pageId, String... ignore) {
         Page page = this.getById(pageId);
-        PageVersion version = pageVersionService.getCurrentActiveVersion(pageId);
-        if (version == null) {
-            throw WikiException.UNPUBLISHED_PAGE_CANNOT_BE_TEMPLATE.newException();
-        }
         Page template = BeanUtil.copyProperties(page, Page.class, ignore);
         template.setId(null);
         this.save(template);
-        // Get content from block storage
-        template.setContent(blockStorageService.assembleTreeJson(pageId));
-        PageVersion templateVersion = pageVersionService.createOrSaveDraft(template);
-        pageVersionService.publish(templateVersion.getId());
-        // Create block snapshot after publish
-        PageVersion published = pageVersionService.getCurrentActiveVersion(template.getId());
-        if (published != null) {
-            pageSnapshotService.snapshotBlocks(template.getId(), published.getId(), published.getVersion());
+        // Content is assembled from the source page's blocks and persisted as the
+        // template's own block rows (the single source of truth). No draft/publish
+        // version is involved anymore.
+        String content = blockStorageService.assembleTreeJson(pageId);
+        template.setContent(content);
+        if (StrUtil.isNotBlank(content)) {
+            blockStorageService.flattenAndSave(template.getId(), content);
         }
         return template;
     }
@@ -336,19 +320,8 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
      * @return PageBlockVO 对象
      */
     private PageBlockVO extractBlockFromPageContent(Long pageId, String blockId) {
-        // 获取页面的最新版本
-        PageVersion latestVersion = pageVersionService.lambdaQuery()
-                .eq(PageVersion::getSubjectId, pageId)
-                .eq(PageVersion::getStatus, VersionStatus.ACTIVE)
-                .orderByDesc(PageVersion::getVersion)
-                .last("LIMIT 1")
-                .one();
-
-        if (latestVersion == null) {
-            return null;
-        }
-
-        // 从块存储重新组装内容
+        // Block storage is the single source of truth (no version gate). An empty
+        // assembled tree simply yields null below.
         String contentJson = blockStorageService.assembleTreeJson(pageId);
         if (StrUtil.isBlank(contentJson)) {
             return null;
