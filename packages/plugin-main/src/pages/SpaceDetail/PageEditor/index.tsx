@@ -32,9 +32,10 @@ import { PageBreadcrumb } from "../../../components/PageBreadcrumb";
 import { TemplateCreator } from "../TemplateCreator";
 
 // Status display configuration for save state
-const getStatusDisplay = (saving: boolean, dirty: boolean, error: Error | null) => {
+const getStatusDisplay = (saving: boolean, dirty: boolean, error: Error | null, progress?: { done: number; total: number } | null) => {
     if (saving) {
-        return { text: 'Saving', icon: <LoaderCircle className="h-3 w-3 animate-spin text-muted-foreground" />, className: 'text-muted-foreground' };
+        const text = progress ? `Saving ${progress.done}/${progress.total}` : 'Saving';
+        return { text, icon: <LoaderCircle className="h-3 w-3 animate-spin text-muted-foreground" />, className: 'text-muted-foreground' };
     }
     if (error) {
         return { text: 'Save failed', icon: <CloudOff className="h-3 w-3 text-destructive" />, className: 'text-destructive' };
@@ -91,6 +92,42 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
         }
     }, [pageId, editor])
 
+    // Bulk fast path for a first import/paste of a huge document: one POST that
+    // the backend persists in chunked transactions and seals as a single page
+    // version. Applies returned versions so later incremental patches are valid.
+    const handleBulkSave = useCallback(async (payload: IncrementalPayload) => {
+        if (!pageId) throw new Error('No pageId')
+        const hasTitleChange = payload.changes.some(c => c.type === 'title')
+        const res = await useApi(APIS.BULK_PATCH_PAGE_BLOCKS, { id: pageId }, {
+            pageId,
+            changes: payload.changes.map(c => ({
+                blockId: c.blockId,
+                action: c.action,
+                type: c.type,
+                content: c.action === 'upsert'
+                    ? JSON.stringify({ type: c.type, attrs: c.attrs, content: c.content })
+                    : undefined,
+                prevVersion: c.prevVersion,
+            })),
+        })
+        const data = res?.data
+        if (data?.blockVersions) {
+            const tracker = (editor?.storage as any)?.dirtyTracker
+            if (tracker?.applyServerVersions) {
+                tracker.applyServerVersions(data.blockVersions)
+            }
+        }
+        if (hasTitleChange) {
+            if (titleRefreshTimerRef.current) {
+                clearTimeout(titleRefreshTimerRef.current)
+            }
+            titleRefreshTimerRef.current = setTimeout(() => {
+                event.emit(ON_PAGE_REFRESH)
+                titleRefreshTimerRef.current = null
+            }, 400)
+        }
+    }, [pageId, editor])
+
     useEffect(() => {
         return () => {
             if (titleRefreshTimerRef.current) {
@@ -104,6 +141,7 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
         editor,
         enabled,
         onSave: handleSave,
+        onBulkSave: handleBulkSave,
     })
 }
 
@@ -304,7 +342,7 @@ export const PageEditor: React.FC = () => {
 
 
     // Incremental auto-save via new hook (PATCH blocks only, no ON_PAGE_REFRESH)
-    const { saving, dirty, error: saveError, saveNow } = usePageSave(
+    const { saving, dirty, error: saveError, progress: saveProgress, saveNow } = usePageSave(
         editor.current,
         params.pageId || null,
         !!page && !!params.pageId && editorContentReady
@@ -424,7 +462,7 @@ export const PageEditor: React.FC = () => {
     })
 
     // Get current status display
-    const statusDisplay = getStatusDisplay(saving, dirty, saveError)
+    const statusDisplay = getStatusDisplay(saving, dirty, saveError, saveProgress)
 
 
     // Pre-process page content: parse JSON and unescape HTML entities off the main render path

@@ -62,6 +62,11 @@ export const APIS = {
         url: '/knowledge-wiki/space/page/:id/blocks',
         method: 'PATCH'
     } as API,
+    /** Bulk replace — first import/paste of a huge doc; one request, chunked server-side */
+    BULK_PATCH_PAGE_BLOCKS: {
+        url: '/knowledge-wiki/space/page/:id/blocks/bulk',
+        method: 'POST'
+    } as API,
     CREATE_SPACE: {
         url: '/knowledge-wiki/space',
         method: 'POST'

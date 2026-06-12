@@ -87,6 +87,19 @@ public interface IPageService extends ISubjectService<Page> {
     BlockStorageService.PatchResult patchBlocks(Long pageId, List<BlockPatchItemDTO> changes, List<String> blockOrder);
 
     /**
+     * Bulk-replace a page's blocks for a first import / paste of a very large
+     * document. Skips per-block version history and seals a single new ACTIVE
+     * PageVersion, writing blocks in independent batched transactions so a
+     * million-block import never times out. See
+     * {@link BlockStorageService#bulkReplaceBlocks(Long, List)}.
+     *
+     * @param pageId  the page ID
+     * @param changes the full set of top-level blocks (all upserts)
+     * @return PatchResult with created count and the new page version
+     */
+    BlockStorageService.PatchResult bulkReplaceBlocks(Long pageId, List<BlockPatchItemDTO> changes);
+
+    /**
      * Assemble and return page content JSON from block rows.
      *
      * @param pageId the page ID

@@ -202,6 +202,18 @@ public class SpaceController {
     }
 
     /**
+     * 批量替换页面块（首次导入/粘贴大文档专用快路径，分片独立事务、单一新版本、无逐块版本历史）
+     * POST /knowledge-wiki/space/page/{pageId}/blocks/bulk
+     */
+    @PostMapping("/page/{pageId}/blocks/bulk")
+    public R<PatchResultDTO> bulkReplacePageBlocks(@PathVariable("pageId") Long pageId,
+            @Valid @RequestBody PatchPageBlocksDTO dto) {
+        dto.setPageId(pageId);
+        PatchResultDTO result = spaceApplication.bulkReplacePageBlocks(dto);
+        return R.data(result);
+    }
+
+    /**
      * 按内容搜索块
      * GET
      * /knowledge-wiki/space/page/block/search?keyword={keyword}&pageId={pageId}&spaceId={spaceId}

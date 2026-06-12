@@ -893,6 +893,129 @@ public class BlockStorageService {
     }
 
     /**
+     * Bulk replace path for a first import / paste of a very large document.
+     * <p>
+     * The incremental {@link #patchBlocks} path is wrong for a million-block
+     * import: it would run one oversized 30s transaction and write a
+     * {@code wiki_block_version} row per block plus a new {@code PageVersion}
+     * per request batch. A fresh import has no diff history to preserve, so this
+     * path:
+     * <ul>
+     *   <li>flattens the whole document (CPU work, outside any transaction);</li>
+     *   <li>removes blocks no longer present (orphans), then inserts the new
+     *       blocks in {@link #BATCH_SIZE}-sized <b>independent</b> transactions —
+     *       so no single transaction is large enough to time out;</li>
+     *   <li>seals exactly ONE new ACTIVE {@code PageVersion};</li>
+     *   <li>writes NO per-block {@code wiki_block_version} rows.</li>
+     * </ul>
+     * Intended to be called only when every change is an upsert of a brand-new
+     * block (no {@code prevVersion}) — i.e. a full fresh import — which the
+     * frontend detects before routing here.
+     *
+     * @param pageId  target page id
+     * @param changes the full set of top-level blocks (all upserts)
+     * @return PatchResult with {@code created}, the new page version, and the
+     *         top-level blockId -> version(=1) map for the client
+     */
+    public PatchResult bulkReplaceBlocks(Long pageId, List<BlockPatchItemDTO> changes) {
+        if (pageId == null || CollUtil.isEmpty(changes)) {
+            return PatchResult.empty();
+        }
+
+        // Flatten every upsert subtree OUTSIDE any transaction (pure CPU).
+        List<PageContent> toUpsert = new ArrayList<>();
+        Set<String> allBlockIds = new HashSet<>();
+        List<String> topLevelIds = new ArrayList<>();
+        int sortOrder = 0;
+        for (BlockPatchItemDTO ch : changes) {
+            if (ch == null || StrUtil.isBlank(ch.getBlockId())) {
+                continue;
+            }
+            // A fresh import carries only upserts; ignore any stray delete.
+            if ("delete".equalsIgnoreCase(ch.getAction())) {
+                continue;
+            }
+            if (StrUtil.isBlank(ch.getContent())) {
+                continue;
+            }
+            PageContent rootNode = JSONUtil.toBean(ch.getContent(), PageContent.class);
+            if (rootNode == null) {
+                continue;
+            }
+            if (rootNode.getAttrs() == null || StrUtil.isBlank(rootNode.getAttrId())) {
+                rootNode.setId(ch.getBlockId());
+            }
+            String path = String.valueOf(sortOrder);
+            flattenRecursive(rootNode, pageId, ROOT_PARENT_ID, path, sortOrder, toUpsert, allBlockIds);
+            topLevelIds.add(ch.getBlockId());
+            sortOrder++;
+        }
+
+        // Content hashes in parallel (CPU-bound, thread-safe); seed version = 1.
+        if (CollUtil.isNotEmpty(toUpsert)) {
+            toUpsert.parallelStream().forEach(b -> {
+                b.setContentHash(computeContentHash(b));
+                if (b.getVersion() == null) {
+                    b.setVersion(1);
+                }
+            });
+        }
+
+        // Phase 1: drop blocks not in the new document (own transaction).
+        self.bulkRemoveOrphans(pageId, allBlockIds);
+
+        // Phase 2: insert in independent per-chunk transactions so no single
+        // transaction is ever large enough to hit the timeout.
+        int total = toUpsert.size();
+        for (int i = 0; i < total; i += BATCH_SIZE) {
+            List<PageContent> chunk = toUpsert.subList(i, Math.min(i + BATCH_SIZE, total));
+            self.bulkInsertChunk(chunk);
+        }
+
+        // Phase 3: seal exactly one new ACTIVE PageVersion (own transaction).
+        PageVersion newVersion = self.bulkCreateVersion(pageId);
+
+        // Cache invalidation (outside any transaction).
+        blockCacheService.evictAssembledTree(pageId);
+        blockCacheService.evictPageCache(pageId);
+
+        PatchResult result = new PatchResult();
+        result.setCreated(total);
+        Map<String, Integer> versions = new HashMap<>();
+        for (String id : topLevelIds) {
+            versions.put(id, 1);
+        }
+        result.setBlockVersions(versions);
+        if (newVersion != null) {
+            result.setPageVersionId(newVersion.getId());
+            result.setPageVersion(newVersion.getVersion());
+        }
+        log.debug("bulkReplaceBlocks: pageId={} blocks={} pageVersion={}",
+                pageId, total, result.getPageVersion());
+        return result;
+    }
+
+    /** Remove blocks no longer present in the imported doc. Own transaction. */
+    @Transactional(rollbackFor = Exception.class, timeout = 30)
+    public void bulkRemoveOrphans(Long pageId, Set<String> keepIds) {
+        pageContentService.deleteByPageIdAndNotInIds(pageId, keepIds);
+    }
+
+    /** Insert one chunk of blocks. Own transaction so it can't grow unbounded. */
+    @Transactional(rollbackFor = Exception.class, timeout = 30)
+    public void bulkInsertChunk(List<PageContent> chunk) {
+        if (CollUtil.isNotEmpty(chunk)) {
+            pageContentMapper.batchInsertOnDuplicate(chunk);
+        }
+    }
+
+    /** Seal one new ACTIVE PageVersion for the import. Own transaction. */
+    @Transactional(rollbackFor = Exception.class, timeout = 30)
+    public PageVersion bulkCreateVersion(Long pageId) {
+        return createNewActiveVersion(pageId);
+    }
+
+    /**
      * Transactional DB phase of {@link #patchBlocks}. Must be invoked through
      * the Spring proxy ({@code self.persistPatch}) so {@code @Transactional}
      * is honored.
@@ -1064,50 +1187,21 @@ public class BlockStorageService {
      * Collect all block ids that belong to the subtree rooted at any of the
      * given root ids. The returned set INCLUDES the root ids themselves.
      *
-     * <p>BFS over the {@code parent_id} relation, batched per level.</p>
+     * <p>Single recursive-CTE round-trip over the {@code parent_id} relation
+     * (was a per-level BFS = one query per tree depth). Non-existent root ids
+     * simply contribute nothing — the CTE anchor filters by existence.</p>
      */
     private Set<String> collectSubtreeIdsFromDb(Long pageId, Set<String> rootIds) {
         Set<String> result = new HashSet<>();
         if (pageId == null || CollUtil.isEmpty(rootIds)) {
             return result;
         }
-
-        // Verify root ids actually exist for this page
-        List<String> rootList = new ArrayList<>(rootIds);
-        List<PageContent> existingRoots = pageContentService.lambdaQuery()
-                .select(PageContent::getId)
-                .eq(PageContent::getPageId, pageId)
-                .in(PageContent::getId, rootList)
-                .list();
-        for (PageContent r : existingRoots) {
-            result.add(r.getId());
+        // rootIds here is bounded by the patch size (changed blocks), so a single
+        // IN clause in the CTE anchor is safe.
+        List<String> ids = pageContentMapper.selectSubtreeIds(pageId, rootIds);
+        if (CollUtil.isNotEmpty(ids)) {
+            result.addAll(ids);
         }
-        if (result.isEmpty()) {
-            return result;
-        }
-
-        // BFS by parent_id
-        Set<String> currentLevel = new HashSet<>(result);
-        while (!currentLevel.isEmpty()) {
-            List<String> levelList = new ArrayList<>(currentLevel);
-            Set<String> nextLevel = new HashSet<>();
-            // Chunk to avoid oversized IN clauses
-            for (int i = 0; i < levelList.size(); i += BATCH_SIZE) {
-                List<String> chunk = levelList.subList(i, Math.min(i + BATCH_SIZE, levelList.size()));
-                List<PageContent> children = pageContentService.lambdaQuery()
-                        .select(PageContent::getId, PageContent::getParentId)
-                        .eq(PageContent::getPageId, pageId)
-                        .in(PageContent::getParentId, chunk)
-                        .list();
-                for (PageContent c : children) {
-                    if (result.add(c.getId())) {
-                        nextLevel.add(c.getId());
-                    }
-                }
-            }
-            currentLevel = nextLevel;
-        }
-
         return result;
     }
 
@@ -1123,19 +1217,10 @@ public class BlockStorageService {
             return;
         }
 
-        // Increment version for existing blocks
-        PageContent existing = pageContentService.lambdaQuery()
-                .select(PageContent::getId, PageContent::getVersion)
-                .eq(PageContent::getId, block.getId())
-                .one();
-        if (existing != null) {
-            int currentVersion = existing.getVersion() != null ? existing.getVersion() : 1;
-            block.setVersion(currentVersion + 1);
-        } else if (block.getVersion() == null) {
-            block.setVersion(1);
-        }
-
-        pageContentService.upsertBlock(block);
+        // Single round-trip upsert; version is incremented DB-side
+        // (version = version + 1) on conflict, so there is no SELECT-then-write
+        // race. `COALESCE(version, 1)` seeds new rows at 1.
+        pageContentMapper.upsertBlockVersionInc(block);
 
         // Evict caches
         if (block.getPageId() != null) {

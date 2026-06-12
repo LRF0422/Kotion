@@ -1,5 +1,6 @@
 package com.knowledge.wiki.service.service.impl;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -60,10 +61,31 @@ public class PageContentServiceImpl extends MPJBaseServiceImpl<PageContentMapper
                         this.lambdaUpdate()
                                         .eq(PageContent::getPageId, pageId)
                                         .remove();
-                } else {
+                        return;
+                }
+                // Avoid `NOT IN (huge list)` — for a million-block page that SQL is
+                // oversized and the optimizer drops the index. Instead read this page's
+                // ids (single-column index scan), diff in memory (the to-delete set is
+                // usually tiny), then delete it in small IN batches.
+                List<PageContent> rows = this.lambdaQuery()
+                                .select(PageContent::getId)
+                                .eq(PageContent::getPageId, pageId)
+                                .list();
+                List<String> toDelete = new ArrayList<>();
+                for (PageContent r : rows) {
+                        if (!keepIds.contains(r.getId())) {
+                                toDelete.add(r.getId());
+                        }
+                }
+                if (toDelete.isEmpty()) {
+                        return;
+                }
+                final int batch = 1000;
+                for (int i = 0; i < toDelete.size(); i += batch) {
+                        List<String> chunk = toDelete.subList(i, Math.min(i + batch, toDelete.size()));
                         this.lambdaUpdate()
                                         .eq(PageContent::getPageId, pageId)
-                                        .notIn(PageContent::getId, keepIds)
+                                        .in(PageContent::getId, chunk)
                                         .remove();
                 }
         }

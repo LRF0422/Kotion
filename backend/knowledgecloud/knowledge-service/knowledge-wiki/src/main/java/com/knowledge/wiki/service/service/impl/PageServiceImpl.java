@@ -643,6 +643,19 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     }
 
     @Override
+    public BlockStorageService.PatchResult bulkReplaceBlocks(Long pageId, java.util.List<BlockPatchItemDTO> changes) {
+        if (pageId == null) {
+            throw WikiException.INVALID_PARAMETER.newException("页面ID不能为空");
+        }
+        Page page = this.getById(pageId);
+        if (page == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        // Bulk replace path (chunked independent transactions, one PageVersion).
+        return blockStorageService.bulkReplaceBlocks(pageId, changes);
+    }
+
+    @Override
     public String getPageContentFromBlocks(Long pageId) {
         return blockStorageService.assembleTreeJson(pageId);
     }

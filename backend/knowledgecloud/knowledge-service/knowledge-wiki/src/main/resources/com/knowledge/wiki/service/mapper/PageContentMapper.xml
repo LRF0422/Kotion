@@ -67,4 +67,70 @@
         </foreach>
     </update>
 
+    <!--
+        Collect a whole subtree (roots + all descendants) in one recursive-CTE
+        round-trip instead of one query per tree level. Requires MySQL 8+ and the
+        composite index (page_id, parent_id) for the recursive JOIN to stay fast.
+    -->
+    <select id="selectSubtreeIds" resultType="java.lang.String">
+        WITH RECURSIVE subtree (id) AS (
+            SELECT id FROM wiki_page_block
+            WHERE page_id = #{pageId}
+              AND is_deleted = 0
+              AND id IN
+              <foreach collection="rootIds" item="r" open="(" separator="," close=")">#{r}</foreach>
+            UNION ALL
+            SELECT c.id FROM wiki_page_block c
+            INNER JOIN subtree s ON c.parent_id = s.id
+            WHERE c.page_id = #{pageId}
+              AND c.is_deleted = 0
+        )
+        SELECT id FROM subtree
+    </select>
+
+    <!--
+        Single-block INSERT ... ON DUPLICATE KEY UPDATE with DB-side version bump.
+        One round-trip, race-free version increment (vs SELECT-then-UPDATE).
+    -->
+    <insert id="upsertBlockVersionInc" parameterType="com.knowledge.wiki.service.entity.PageContent">
+        INSERT INTO wiki_page_block (
+            id, type, attrs, content, marks, text,
+            parent_id, page_id, path, sort_order,
+            version, content_hash,
+            tenant_id, create_user, create_time, update_user, update_time, is_deleted
+        ) VALUES (
+            #{item.id},
+            #{item.type},
+            #{item.attrs, typeHandler=com.baomidou.mybatisplus.extension.handlers.FastjsonTypeHandler},
+            #{item.content, typeHandler=com.knowledge.wiki.service.typeHandler.PageContgentListTypehandler},
+            #{item.marks, typeHandler=com.knowledge.wiki.service.typeHandler.MarkListTypeHandler},
+            #{item.text},
+            #{item.parentId},
+            #{item.pageId},
+            #{item.path},
+            #{item.sortOrder},
+            COALESCE(#{item.version}, 1),
+            #{item.contentHash},
+            #{item.tenantId},
+            #{item.createUser},
+            NOW(),
+            #{item.updateUser},
+            NOW(),
+            0
+        )
+        ON DUPLICATE KEY UPDATE
+            type = VALUES(type),
+            attrs = VALUES(attrs),
+            content = VALUES(content),
+            marks = VALUES(marks),
+            text = VALUES(text),
+            parent_id = VALUES(parent_id),
+            path = VALUES(path),
+            sort_order = VALUES(sort_order),
+            content_hash = VALUES(content_hash),
+            version = version + 1,
+            update_user = VALUES(update_user),
+            update_time = NOW()
+    </insert>
+
 </mapper>

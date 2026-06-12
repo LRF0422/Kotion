@@ -1,6 +1,7 @@
 import { Extension, JSONContent } from '@tiptap/core'
 import { Plugin, PluginKey, Transaction } from '@tiptap/pm/state'
 import { Node as ProseMirrorNode } from '@tiptap/pm/model'
+import getChangedRanges from '../unique-id/utilities/get-changed-ranges'
 
 // ─── Public Types ────────────────────────────────────────────────────
 
@@ -61,6 +62,14 @@ export interface DirtyTrackerStorage {
   hasDirty(): boolean
   getPayload(): IncrementalPayload
   commit(): void
+  /**
+   * Partial commit — used when a large save is split into batches and only some
+   * batches succeeded. Clears the succeeded ids from the dirty set and updates
+   * the committed baseline for them ONLY, leaving failed blocks dirty (and failed
+   * deletions still in `committedOrder`) so the next save retries exactly them.
+   * Unlike `commit()`, it does NOT re-baseline the whole document.
+   */
+  commitBlocks(succeededUpsertIds: string[], succeededDeleteIds: string[]): void
   applyServerVersions(versions: Record<string, number>): void
   /**
    * Register a callback invoked `debounceMs` after the last doc-changing
@@ -103,6 +112,58 @@ function rankSnapshot(doc: ProseMirrorNode, attr: string): Map<string, string> {
     if (id && rank != null) ranks.set(id, rank)
   })
   return ranks
+}
+
+/**
+ * Map an absolute document position to the index of the top-level (depth-1)
+ * block that owns it. `ResolvedPos.index(0)` returns the child index the
+ * position falls into; for a position on a boundary between two blocks it
+ * returns the block to the *right*. Callers bias the end of a range by `-1`
+ * (see `markChangedTopBlocks`) so a range's end is attributed to the block it
+ * actually touches rather than the untouched next block. O(tree depth), not
+ * O(block count). Result is NOT clamped — callers clamp to a valid child index.
+ */
+function topIndexAt(doc: ProseMirrorNode, pos: number): number {
+  const clamped = Math.max(0, Math.min(pos, doc.content.size))
+  return doc.resolve(clamped).index(0)
+}
+
+/**
+ * Add the ids of every top-level block touched by `tr` to `dirtyBlockIds`.
+ *
+ * This is the heart of the O(edit-size) tracking: instead of diffing the whole
+ * document, we ask `getChangedRanges(tr)` for the (new-doc) position ranges the
+ * transaction's steps actually altered — O(steps) — and map each range's
+ * endpoints to top-level block indices via `topIndexAt`. Only those blocks are
+ * marked. A typical keystroke yields one range spanning one block.
+ *
+ * Newly-inserted blocks have no id yet at insert time (UniqueID assigns ids in a
+ * *separate* appended transaction). That appended tx's `setNodeMarkup` step
+ * covers the new block's position, so when `apply` runs for it this function
+ * marks the block once its id exists — no special-casing needed here.
+ */
+function markChangedTopBlocks(
+  tr: Transaction,
+  newDoc: ProseMirrorNode,
+  attr: string,
+  dirtyBlockIds: Set<string>,
+): void {
+  const childCount = newDoc.childCount
+  if (childCount === 0) return
+  const lastIndex = childCount - 1
+  for (const range of getChangedRanges(tr)) {
+    let from = topIndexAt(newDoc, range.newStart)
+    // Bias the end left by one position so a range ending on a block boundary
+    // is attributed to the block whose content ends there, not the next block.
+    let to = topIndexAt(newDoc, Math.max(range.newStart, range.newEnd - 1))
+    if (from > to) { const t = from; from = to; to = t }
+    from = Math.max(0, Math.min(from, lastIndex))
+    to = Math.max(0, Math.min(to, lastIndex))
+    for (let i = from; i <= to; i++) {
+      const id = resolveBlockId(newDoc.child(i), attr)
+      if (id) dirtyBlockIds.add(id)
+    }
+  }
 }
 
 // ─── Extension ───────────────────────────────────────────────────────
@@ -160,6 +221,7 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
       hasDirty() { return false },
       getPayload() { return { changes: [] } },
       commit() {},
+      commitBlocks(_up: string[], _del: string[]) {},
       applyServerVersions(_versions: Record<string, number>) {},
       subscribeIdle(_cb: () => void, _ms: number) { return () => {} },
       cancelIdle() {},
@@ -232,6 +294,29 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
       storage.dirty = false
     }
 
+    storage.commitBlocks = (succeededUpsertIds: string[], succeededDeleteIds: string[]) => {
+      // O(N + succeeded): snapshot current ranks once, mutate the committed
+      // baseline through a Set so membership ops aren't O(N) each.
+      const doc = this.editor.state.doc
+      const rankById = rankSnapshot(doc, blockIdAttribute)
+      const orderSet = new Set(storage.committedOrder)
+      for (const id of succeededUpsertIds) {
+        storage.dirtyBlockIds.delete(id)
+        const rank = rankById.get(id)
+        if (rank != null) storage.committedRanks.set(id, rank)
+        orderSet.add(id) // now committed — must not look like a deletion later
+      }
+      for (const id of succeededDeleteIds) {
+        storage.dirtyBlockIds.delete(id)
+        storage.committedRanks.delete(id)
+        orderSet.delete(id) // deletion acked — stop reporting it
+      }
+      // Failed upserts stay in dirtyBlockIds; failed deletions stay in
+      // committedOrder (absent from the doc → re-detected next getPayload).
+      storage.committedOrder = Array.from(orderSet)
+      storage.dirty = storage.dirtyBlockIds.size > 0
+    }
+
     storage.applyServerVersions = (versions: Record<string, number>) => {
       for (const [blockId, version] of Object.entries(versions)) {
         if (version != null) {
@@ -275,11 +360,12 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
         // Per-transaction incremental dirty tracking. `apply` runs for EVERY
         // transaction in a dispatch — including UniqueID's appended id-assignment
         // transaction — so freshly-inserted blocks are captured once their id
-        // exists. We diff top-level children by node reference: ProseMirror keeps
-        // the identity of untouched nodes, so only changed/new blocks appear.
+        // exists. We derive the touched top-level blocks from the transaction's
+        // changed ranges (O(steps)), never walking the whole document — this is
+        // what keeps per-keystroke cost proportional to the edit, not the doc.
         state: {
           init: () => null,
-          apply: (tr, _value, oldState, newState) => {
+          apply: (tr, _value, _oldState, newState) => {
             const storage = ext.storage
             if (!storage.initialized) return _value
             if (!tr.docChanged) return _value
@@ -287,14 +373,7 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
             // saved by the client that authored them.
             if (!ext.options.filterTransaction(tr)) return _value
 
-            const oldRefs = new Set<ProseMirrorNode>()
-            oldState.doc.forEach(node => oldRefs.add(node))
-            newState.doc.forEach(node => {
-              if (!oldRefs.has(node)) {
-                const id = resolveBlockId(node, blockIdAttribute)
-                if (id) storage.dirtyBlockIds.add(id)
-              }
-            })
+            markChangedTopBlocks(tr, newState.doc, blockIdAttribute, storage.dirtyBlockIds)
             storage.dirty = true
             return _value
           },

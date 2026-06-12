@@ -667,6 +667,20 @@ public class SpaceApplication {
         return PatchResultDTO.from(result);
     }
 
+    /**
+     * Bulk-replace path for a first import / paste of a very large document.
+     * Reuses the same request shape as {@link #patchPageBlocks} but routes to the
+     * chunked, version-history-free bulk persistence path. Frontend only calls
+     * this when every change is an upsert of a brand-new block (fresh import).
+     */
+    public PatchResultDTO bulkReplacePageBlocks(com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto) {
+        com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result = this.pageService
+                .bulkReplaceBlocks(dto.getPageId(), dto.getChanges());
+        syncPageTitleFromPatch(dto, result);
+
+        return PatchResultDTO.from(result);
+    }
+
     private void syncPageTitleFromPatch(
             com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto,
             com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result) {
