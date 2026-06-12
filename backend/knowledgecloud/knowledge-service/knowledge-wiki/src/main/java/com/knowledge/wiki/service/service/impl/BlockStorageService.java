@@ -1062,6 +1062,25 @@ public class BlockStorageService {
             }
         }
 
+        // CRITICAL: never delete a block that is also being upserted. A block
+        // moved from the top level INTO another block's subtree (e.g. dragging a
+        // paragraph into a new columns/分栏 layout) leaves the top level, so the
+        // frontend reports it as a deletion — but it still exists, now nested, and
+        // is carried inside the upserted parent's subtree. Deleting it here (soft
+        // delete) and then re-inserting via ON DUPLICATE KEY UPDATE would leave it
+        // flagged is_deleted=1, so the reparented content vanishes on reload.
+        // `toUpsert` already holds the full flattened subtree (all nested ids), so
+        // subtracting it makes reparenting a pure move.
+        if (CollUtil.isNotEmpty(allDeletedIds) && CollUtil.isNotEmpty(toUpsert)) {
+            Set<String> upsertedIds = new HashSet<>();
+            for (PageContent b : toUpsert) {
+                if (b.getId() != null) {
+                    upsertedIds.add(b.getId());
+                }
+            }
+            allDeletedIds.removeAll(upsertedIds);
+        }
+
         // --- Phase 2: Execute deletes ---
         Map<String, Integer> deletedVersions = new HashMap<>();
         List<String> deletedIdList = new ArrayList<>();

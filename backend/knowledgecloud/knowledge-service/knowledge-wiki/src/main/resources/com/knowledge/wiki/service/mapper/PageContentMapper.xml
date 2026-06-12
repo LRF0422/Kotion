@@ -47,6 +47,10 @@
             sort_order = VALUES(sort_order),
             version = VALUES(version),
             content_hash = VALUES(content_hash),
+            -- An upsert means the block currently exists; revive any row that was
+            -- soft-deleted (e.g. reparented top-level -> nested block) so its
+            -- content does not vanish on reassembly.
+            is_deleted = 0,
             update_user = VALUES(update_user),
             update_time = NOW()
     </insert>
@@ -62,6 +66,7 @@
             SET parent_id = #{item.parentId},
                 path = #{item.path},
                 sort_order = #{item.sortOrder},
+                is_deleted = 0,
                 update_time = NOW()
             WHERE id = #{item.id}
         </foreach>
@@ -129,6 +134,7 @@
             sort_order = VALUES(sort_order),
             content_hash = VALUES(content_hash),
             version = version + 1,
+            is_deleted = 0,
             update_user = VALUES(update_user),
             update_time = NOW()
     </insert>
