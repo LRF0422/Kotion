@@ -120,7 +120,7 @@ export const EditorMenu: React.FC<{
     return (
         <>
             {toolbar && (
-                <div className="flex items-center gap-0.5 w-full px-1 py-0.5 z-20 border-b bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80 z-50">
+                <div className="flex items-center gap-0.5 w-full px-1 py-0.5 z-20 border-b bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80">
                     {/* Undo / Redo group */}
                     <div className="flex items-center gap-0.5">
                         <TooltipProvider delayDuration={400}>
