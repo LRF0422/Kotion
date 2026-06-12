@@ -58,12 +58,23 @@ const VIEWPORT_PADDING = 12;
 /**
  * Compute viewport-relative `top` and resolve overlap by pushing
  * subsequent cards downward.
+ *
+ * `bounds` is the visible vertical range of the editor's scroll container.
+ * Notes whose anchor has scrolled out of that range are dropped so their
+ * fixed cards don't float over the toolbar / page chrome above the editor.
  */
-function calcPositions(editor: Editor, raw: Omit<NotePosition, "top">[]): NotePosition[] {
+function calcPositions(
+    editor: Editor,
+    raw: Omit<NotePosition, "top">[],
+    bounds: { top: number; bottom: number }
+): NotePosition[] {
     const positioned: NotePosition[] = [];
     for (const note of raw) {
         try {
             const coords = editor.view.coordsAtPos(note.from);
+            // Skip notes whose anchor is scrolled above/below the visible
+            // editor viewport. Otherwise the card overlaps unrelated elements.
+            if (coords.top < bounds.top || coords.top > bounds.bottom) continue;
             positioned.push({ ...note, top: coords.top });
         } catch {
             /* skip */
@@ -118,7 +129,18 @@ export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) 
             setPanelLeft(Math.max(idealLeft, minLeft));
         }
 
-        setNotes(calcPositions(editor, rawRef.current));
+        // Visible vertical range of the editor's scroll container. Cards are
+        // clamped to this so they never float over the toolbar (a sibling
+        // rendered above #editor-container) or below the editor when scrolling.
+        const container = document.getElementById("editor-container");
+        const bounds = container
+            ? (() => {
+                  const r = container.getBoundingClientRect();
+                  return { top: r.top, bottom: r.bottom };
+              })()
+            : { top: 0, bottom: window.innerHeight };
+
+        setNotes(calcPositions(editor, rawRef.current, bounds));
     }, [editor]);
 
     useEffect(() => {
