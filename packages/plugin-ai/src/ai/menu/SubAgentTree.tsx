@@ -60,9 +60,30 @@ function statusLabel(status: SubAgentNodeView['status']): string {
     }
 }
 
-function SubAgentCard({ node, indent }: { node: SubAgentNodeView; indent: number }) {
+/**
+ * One-line "what is this sub-agent doing right now" summary, derived from live
+ * state. Shown inline (not gated by the collapse toggle) so progress is visible
+ * at a glance without expanding the card.
+ */
+function currentActivity(node: SubAgentNodeView): string | null {
+    if (node.status === 'error') return null // error shown separately in red below
+    if (node.status === 'completed') {
+        const okTools = node.steps.filter(s => s.status === 'success').length
+        return okTools > 0 ? `已完成 · 调用 ${okTools} 个工具` : '已完成'
+    }
+    // running / spawned — surface the most recent live signal
+    const runningStep = [...node.steps].reverse().find(s => s.status === 'running')
+    if (runningStep) return `正在调用 ${runningStep.toolName}…`
+    if (node.streamingContent) return '正在生成…'
+    if (node.reasoningContent) return '正在思考…'
+    if (node.status === 'spawned') return '已派生，等待启动…'
+    return '运行中…'
+}
+
+function SubAgentCard({ node, indent, parentLabel }: { node: SubAgentNodeView; indent: number; parentLabel: string }) {
     const [open, setOpen] = useState(node.status === 'running' || node.status === 'spawned')
 
+    const activity = currentActivity(node)
     const hasBody =
         !!node.reasoningContent || node.steps.length > 0 || !!node.streamingContent || !!node.error
 
@@ -96,6 +117,16 @@ function SubAgentCard({ node, indent }: { node: SubAgentNodeView; indent: number
                         </span>
                     )}
                 </button>
+
+                {/* Inline progress + reporting target — always visible, no expand needed. */}
+                {activity && (
+                    <div className="ml-5 text-[10px] text-muted-foreground truncate" title={activity}>
+                        {activity}
+                    </div>
+                )}
+                <div className="ml-5 text-[10px] text-muted-foreground/70 truncate" title={`汇报给 ${parentLabel}`}>
+                    ↳ 汇报给 {parentLabel}
+                </div>
 
                 {open && hasBody && (
                     <div className="ml-5 mt-1 space-y-1">
@@ -136,6 +167,16 @@ function SubAgentCard({ node, indent }: { node: SubAgentNodeView; indent: number
     )
 }
 
+/** Display name of the agent a node reports to (its parent, or the root agent). */
+function parentLabelFor(node: SubAgentNodeView, subAgents: Record<string, SubAgentNodeView>): string {
+    const pid = node.parentAgentId
+    const parent = pid ? subAgents[pid] : undefined
+    if (!parent) return '主 Agent'
+    const t = (parent.task || parent.agentId || '').trim()
+    if (!t) return '主 Agent'
+    return t.length > 20 ? `${t.slice(0, 20)}…` : t
+}
+
 export const SubAgentTree: React.FC<SubAgentTreeProps> = ({ subAgents, className }) => {
     const ordered = useMemo(() => {
         const nodes = Object.values(subAgents)
@@ -147,10 +188,10 @@ export const SubAgentTree: React.FC<SubAgentTreeProps> = ({ subAgents, className
             arr.push(n)
             byParent.set(parent, arr)
         }
-        const out: Array<{ node: SubAgentNodeView; indent: number }> = []
+        const out: Array<{ node: SubAgentNodeView; indent: number; parentLabel: string }> = []
         const visit = (parent: string | null, indent: number) => {
             for (const n of byParent.get(parent) || []) {
-                out.push({ node: n, indent })
+                out.push({ node: n, indent, parentLabel: parentLabelFor(n, subAgents) })
                 visit(n.agentId, indent + 1)
             }
         }
@@ -166,8 +207,8 @@ export const SubAgentTree: React.FC<SubAgentTreeProps> = ({ subAgents, className
                 子 Agent ({ordered.length})
             </p>
             <div className="space-y-1">
-                {ordered.map(({ node, indent }) => (
-                    <SubAgentCard key={node.agentId} node={node} indent={indent} />
+                {ordered.map(({ node, indent, parentLabel }) => (
+                    <SubAgentCard key={node.agentId} node={node} indent={indent} parentLabel={parentLabel} />
                 ))}
             </div>
         </div>
