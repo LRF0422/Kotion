@@ -31,6 +31,8 @@ import {
     cn
 } from '@kn/ui'
 import { SystemAgentProvider, useSystemAgent, type ExecutionStep } from '@kn/common'
+import { SubAgentTree } from '../ai/system-agent/SubAgentTree'
+import { PlanApprovalCard } from '../ai/system-agent/PlanApprovalCard'
 
 // ============ Types ============
 
@@ -378,6 +380,22 @@ const AIChatInterface: React.FC = () => {
                                         ))}
                                     </div>
                                 </div>
+                            )}
+
+                            {/* Sub-agent tree (P6) */}
+                            {Object.keys(agent.state.subAgents).length > 0 && (
+                                <SubAgentTree subAgents={agent.state.subAgents} className="mt-4" />
+                            )}
+
+                            {/* Plan approval card (P7) */}
+                            {agent.state.pendingPlan && (
+                                <PlanApprovalCard
+                                    plan={agent.state.pendingPlan.plan}
+                                    disabled={agent.state.isGenerating}
+                                    onApprove={() => { void agent.resolvePlan('approved') }}
+                                    onReject={() => { void agent.resolvePlan('rejected') }}
+                                    className="mt-4"
+                                />
                             )}
 
                             <div ref={messagesEndRef} />

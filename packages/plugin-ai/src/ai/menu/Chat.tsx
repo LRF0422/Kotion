@@ -25,8 +25,10 @@ import {
 } from "@kn/ui"
 import React from "react"
 import { Editor } from "@kn/editor"
-import { useEditorAgentOptimized, ToolExecutionEvent, UserChoiceRequest, fetchModels } from "@kn/common"
+import { useEditorAgentOptimized, ToolExecutionEvent, UserChoiceRequest, fetchModels, applySubAgentAnnotations } from "@kn/common"
 import type { ModelInfo } from "@kn/common"
+import { SubAgentTree } from "./SubAgentTree"
+import { PlanApprovalCard } from "./PlanApprovalCard"
 
 import {
     ExecutionStep, PendingUserChoice, ChatError,
@@ -337,6 +339,18 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
     const [annotations, setAnnotations] = useState<AnnotationData[]>([])
     const teamState = useTeamStatus(annotations)
 
+    // Sub-agent tree (P6) + pending plan (P7), derived from the annotation
+    // stream. applySubAgentAnnotations folds the full annotation list from
+    // scratch, replaying all deltas — so deriving per render is correct.
+    const subAgents = useMemo(() => applySubAgentAnnotations({}, annotations as any[]), [annotations])
+    const pendingPlan = useMemo<{ plan: any } | null>(() => {
+        for (let i = annotations.length - 1; i >= 0; i--) {
+            const a = annotations[i] as any
+            if (a && a.type === 'plan_proposed' && a.plan) return { plan: a.plan }
+        }
+        return null
+    }, [annotations])
+
     const [input, setInput] = useState("")
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<ChatError | null>(null)
@@ -494,6 +508,27 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         if (isLoading) return
         submitMessage(prompt)
     }, [isLoading, submitMessage])
+
+    // Plan mode (P7): approve → execute the plan; reject → re-plan. Both resume
+    // the same conversation via submitMessage (history + session carry context).
+    const handlePlanDecision = useCallback((decision: 'approved' | 'rejected') => {
+        if (isLoading) return
+        const plan = pendingPlan?.plan
+        if (!plan) return
+        if (decision === 'rejected') {
+            submitMessage('我不同意这个计划，请重新规划。')
+            return
+        }
+        const steps = (plan.steps || [])
+            .map((s: any, i: number) => `${i + 1}. ${s.action}`)
+            .join('\n')
+        const prompt =
+            `我已批准以下计划，请直接按计划执行，不要再次询问确认：\n` +
+            (plan.title ? `标题：${plan.title}\n` : '') +
+            (plan.summary ? `概述：${plan.summary}\n` : '') +
+            (steps ? `步骤：\n${steps}` : '')
+        submitMessage(prompt)
+    }, [isLoading, pendingPlan, submitMessage])
 
     // Retry last failed message
     const handleRetry = useCallback(() => {
@@ -703,6 +738,25 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                         <ChatBubble variant="received">
                             <ChatBubbleMessage isLoading className="bg-white dark:bg-muted/40 p-2.5 rounded-xl rounded-tl-sm" />
                         </ChatBubble>
+                    )}
+
+                    {/* Sub-agent tree (P6) — live while delegating */}
+                    {Object.keys(subAgents).length > 0 && (
+                        <div className="mx-2 my-1.5">
+                            <SubAgentTree subAgents={subAgents} />
+                        </div>
+                    )}
+
+                    {/* Plan approval (P7) — shown once the agent proposes a plan */}
+                    {pendingPlan && !isLoading && (
+                        <div className="mx-2 my-1.5">
+                            <PlanApprovalCard
+                                plan={pendingPlan.plan}
+                                disabled={isLoading}
+                                onApprove={() => handlePlanDecision('approved')}
+                                onReject={() => handlePlanDecision('rejected')}
+                            />
+                        </div>
                     )}
 
                     {/* User Choice Dialog */}

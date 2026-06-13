@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Editor, Plugin, PluginKey, Decoration, DecorationSet } from '@kn/editor'
 import { Sparkles, Send, X, Loader2, CheckCircle2, XCircle, MessageSquare, AlertTriangle } from '@kn/icon'
 import { Button, Badge, Streamdown } from '@kn/ui'
-import { useEditorAgentOptimized, useStreamBuffer, type ToolExecutionEvent, type UserChoiceRequest } from '@kn/common'
+import { useEditorAgentOptimized, useStreamBuffer, applySubAgentAnnotations, type ToolExecutionEvent, type UserChoiceRequest } from '@kn/common'
+import { SubAgentTree } from './system-agent/SubAgentTree'
 
 // ─── shared ─────────────────────────────────────────────────────
 
@@ -124,7 +125,12 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
     const [response, setResponse] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [streamText, setStreamText] = useState<string | null>(null)
+    const [annotations, setAnnotations] = useState<any[]>([])
     const [position, setPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+
+    // Sub-agent tree (P6) derived from the annotation stream (read-only here —
+    // the inline bubble is single-turn so there is no plan-approval resume).
+    const subAgents = useMemo(() => applySubAgentAnnotations({}, annotations), [annotations])
 
     const selectionRef = useRef<SelectionSnapshot | null>(null)
     const panelRef = useRef<HTMLDivElement>(null)
@@ -283,10 +289,14 @@ ${selectedText}
         setResponse(null)
         stepsRef.current = []
         setSteps([])
+        setAnnotations([])
         resetBuffer()
 
         try {
-            const { textStream } = await stream({ prompt })
+            const { textStream } = await stream({
+                prompt,
+                onAnnotation: (anns: any[]) => setAnnotations(prev => [...prev, ...anns]),
+            })
             for await (const part of textStream) {
                 streamBuffer.append(part)
             }
@@ -415,6 +425,13 @@ ${selectedText}
                                 </div>
                             ))}
                         </div>
+                    </div>
+                )}
+
+                {/* Sub-agent tree (P6) */}
+                {Object.keys(subAgents).length > 0 && (
+                    <div className="px-3 py-2 border-b border-border/30">
+                        <SubAgentTree subAgents={subAgents} />
                     </div>
                 )}
 

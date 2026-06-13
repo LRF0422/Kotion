@@ -9,11 +9,13 @@ export {
     SystemAgentProvider,
     useSystemAgent,
     useSystemAgentAvailable,
+    applySubAgentAnnotations,
     type SystemAgentState,
     type SystemAgentContextValue,
     type SystemAgentProviderProps,
     type ExecutionStep,
-    type StreamPromptOptions
+    type StreamPromptOptions,
+    type SubAgentNode
 } from './context'
 
 // Hooks

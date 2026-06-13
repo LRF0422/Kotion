@@ -32,6 +32,8 @@ import {
 } from '@kn/ui'
 import type { Editor } from '@kn/editor'
 import { useSystemAgent, type ExecutionStep } from '@kn/common'
+import { SubAgentTree } from './SubAgentTree'
+import { PlanApprovalCard } from './PlanApprovalCard'
 
 // ============ Types ============
 
@@ -397,6 +399,21 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                                     ))}
                                 </div>
                             </div>
+                        )}
+
+                        {/* Sub-agent tree (P6) */}
+                        {Object.keys(agent.state.subAgents).length > 0 && (
+                            <SubAgentTree subAgents={agent.state.subAgents} />
+                        )}
+
+                        {/* Plan approval card (P7) */}
+                        {agent.state.pendingPlan && (
+                            <PlanApprovalCard
+                                plan={agent.state.pendingPlan.plan}
+                                disabled={agent.state.isGenerating}
+                                onApprove={() => { void agent.resolvePlan('approved') }}
+                                onReject={() => { void agent.resolvePlan('rejected') }}
+                            />
                         )}
 
                         <div ref={messagesEndRef} />
