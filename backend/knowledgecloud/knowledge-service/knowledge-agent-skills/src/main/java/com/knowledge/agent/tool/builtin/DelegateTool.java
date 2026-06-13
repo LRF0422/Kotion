@@ -277,9 +277,13 @@ public class DelegateTool implements AsyncTool {
                 Flux<StreamEvent> mergedAgentEvents = Flux.fromIterable(subAgentFluxes)
                         .flatMap(flux -> flux, maxParallel);
 
-                // After all sub-agents complete, emit the aggregated result
+                // Forward every live sub-agent event (status/output/reasoning/
+                // tool_call/finish) to the frontend, THEN append the aggregated
+                // ToolResult once all sub-agents complete. Must be concatWith, not
+                // thenMany: thenMany discards mergedAgentEvents' elements, which
+                // would drop all live progress and leave the UI stuck at "spawned".
                 Flux<StreamEvent> resultFlux = mergedAgentEvents
-                        .thenMany(Mono.fromCallable(() -> buildAggregatedResult(resultEntries, descriptors)))
+                        .concatWith(Mono.fromCallable(() -> buildAggregatedResult(resultEntries, descriptors)))
                         .doFinally(signal -> channelHub.remove(channelId));
 
                 return Flux.concat(
