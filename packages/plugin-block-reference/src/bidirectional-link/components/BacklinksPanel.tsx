@@ -5,15 +5,19 @@
  * @module @kn/plugin-block-reference/bidirectional-link/components
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { cn, ScrollArea, Skeleton } from '@kn/ui';
 import { Link2, FileText, SquareDashedBottom } from '@kn/icon';
 import { useNavigator } from "@kn/common";
-import { getPageBacklinks, BacklinkVO } from '../services/linkService';
+import { PageContext } from "@kn/editor";
+import { getPageBacklinks } from '../services/linkService';
+import { getLocalPageBacklinks } from '../services/localBacklinkIndex';
+import { useSpaceService } from '../../hooks';
+import type { BacklinkVO } from '../../types';
 
 interface BacklinksPanelProps {
-    /** Page ID to fetch backlinks for */
-    pageId: number;
+    /** Page ID to fetch backlinks for. Falls back to the current PageContext when omitted. */
+    pageId?: number;
     /** Optional className for styling */
     className?: string;
 }
@@ -96,30 +100,53 @@ LoadingSkeleton.displayName = 'LoadingSkeleton';
  * <BacklinksPanel pageId={123} />
  */
 export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
-    pageId,
+    pageId: pageIdProp,
     className,
 }) => {
+    const pageCtx = useContext(PageContext);
+    const spaceService = useSpaceService();
+    const pageId = pageIdProp ?? (pageCtx.id ? Number(pageCtx.id) : undefined);
+    const currentSpaceId = pageCtx.spaceId;
+
     const [backlinks, setBacklinks] = useState<BacklinkVO[]>([]);
     const [loading, setLoading] = useState(false);
     const navigator = useNavigator();
 
-    // Fetch backlinks when pageId changes
+    // Fetch backlinks when the target page changes.
+    // Prefer the backend index; fall back to a local scan of the current space
+    // while the backend backlinks endpoint is not yet available.
     useEffect(() => {
-        if (pageId) {
-            setLoading(true);
-            getPageBacklinks(pageId)
-                .then(setBacklinks)
-                .catch(() => setBacklinks([]))
-                .finally(() => setLoading(false));
+        if (!pageId) {
+            setBacklinks([]);
+            return;
         }
-    }, [pageId]);
+        let cancelled = false;
+        setLoading(true);
+        (async () => {
+            try {
+                const remote = await getPageBacklinks(pageId);
+                const result = remote.length
+                    ? remote
+                    : await getLocalPageBacklinks(currentSpaceId, pageId, spaceService);
+                if (!cancelled) setBacklinks(result);
+            } catch {
+                if (!cancelled) setBacklinks([]);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [pageId, currentSpaceId, spaceService]);
 
-    // Handle click to navigate to source page
+    // Handle click to navigate to the source page (resolving cross-space targets).
     const handleClick = useCallback((link: BacklinkVO) => {
+        const targetSpaceId = link.sourceSpaceId ?? currentSpaceId;
+        if (!targetSpaceId) return;
+        const suffix = link.sourceBlockId ? `?blockId=${link.sourceBlockId}` : '';
         navigator.go({
-            to: `/wiki/page/${link.sourcePageId}`
+            to: `/space-detail/${targetSpaceId}/page/edit/${link.sourcePageId}${suffix}`
         });
-    }, [navigator]);
+    }, [navigator, currentSpaceId]);
 
     // Don't render if loading or no backlinks
     if (loading) {
@@ -127,7 +154,7 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
             <div className={cn("border-t mt-6 pt-4", className)}>
                 <div className="flex items-center gap-2 mb-3 px-2">
                     <Link2 className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">Backlinks</span>
+                    <span className="text-sm font-medium">反向链接</span>
                 </div>
                 <LoadingSkeleton />
             </div>

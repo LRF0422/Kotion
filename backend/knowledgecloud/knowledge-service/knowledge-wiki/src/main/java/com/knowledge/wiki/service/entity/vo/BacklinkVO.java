@@ -17,6 +17,9 @@ public class BacklinkVO implements Serializable {
 
     private String sourcePageTitle;
 
+    /** Space the source page lives in — required for cross-space navigation. */
+    private String sourceSpaceId;
+
     private String sourceBlockId;
 
     private String snippet;

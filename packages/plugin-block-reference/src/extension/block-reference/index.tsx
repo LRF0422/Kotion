@@ -6,7 +6,7 @@ import { computePosition, flip, posToDOMRect, ReactRenderer } from "@kn/editor";
 import { PageSelector } from "./PageSelector";
 import { BlockSelector } from "./BlockSelector";
 import { BlockReference } from "./block-references";
-import { PageLink, BlockLink, LinkTrigger } from "../../bidirectional-link";
+import { PageLink, BlockLink, LinkTrigger, PageFooter } from "../../bidirectional-link";
 
 /**
  * Block Reference Extension
@@ -16,6 +16,7 @@ import { PageLink, BlockLink, LinkTrigger } from "../../bidirectional-link";
 export const BlockReferenceExtension: ExtensionWrapper = {
     name: "blockReference",
     extendsion: [PageReference, BlockReference, PageLink, BlockLink, LinkTrigger],
+    pageFooter: PageFooter,
     slashConfig: [
         {
             divider: true,

@@ -13,9 +13,9 @@ export const APIS = {
         name: 'Get Page Backlinks'
     } as API,
 
-    /** Get backlinks for a block */
+    /** Get backlinks for a block (path matches SpaceController @GetMapping("/block/{blockId}/backlinks")) */
     GET_BLOCK_BACKLINKS: {
-        url: '/knowledge-wiki/space/page/block/:blockId/backlinks',
+        url: '/knowledge-wiki/space/block/:blockId/backlinks',
         method: 'GET',
         name: 'Get Block Backlinks'
     } as API,

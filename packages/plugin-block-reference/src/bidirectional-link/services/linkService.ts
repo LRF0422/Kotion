@@ -6,19 +6,9 @@
 import { useApi } from "@kn/common";
 import { APIS } from "../api";
 
-/**
- * Backlink data structure
- */
-export interface BacklinkVO {
-    sourceType: 'PAGE' | 'BLOCK';
-    sourceId: string;
-    sourcePageId: number;
-    sourcePageTitle: string;
-    sourceBlockId: string | null;
-    snippet: string;
-    linkKind: string;
-    sourcePageIcon: { type: string; icon: string } | null;
-}
+// Single source of truth for the backlink shape lives in ../../types.
+export type { BacklinkVO } from "../../types";
+import type { BacklinkVO } from "../../types";
 
 /**
  * Page tree node structure

@@ -13,7 +13,7 @@
 export { APIS } from './api';
 
 // Extensions
-export { PageLink } from './extensions/PageLink';
+export { PageLink, PAGE_LINK_CLICK } from './extensions/PageLink';
 export type { PageLinkAttributes } from './extensions/PageLink';
 export { BlockLink } from './extensions/BlockLink';
 export type { BlockLinkAttributes } from './extensions/BlockLink';
@@ -23,6 +23,7 @@ export { LinkTrigger } from './extensions/LinkTrigger';
 export { PageLinkPicker } from './components/PageLinkPicker';
 export { BlockLinkPicker } from './components/BlockLinkPicker';
 export { BacklinksPanel } from './components/BacklinksPanel';
+export { PageFooter } from './components/PageFooter';
 
 // Hooks
 export { useLinkTriggers } from './hooks/useLinkTriggers';
@@ -34,6 +35,10 @@ export {
     searchPages,
     searchBlocks,
 } from './services/linkService';
+export {
+    getLocalPageBacklinks,
+    buildSpaceBacklinkIndex,
+} from './services/localBacklinkIndex';
 export type {
     BacklinkVO,
     PageTreeNode,

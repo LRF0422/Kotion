@@ -392,6 +392,9 @@ public class SpaceApplication {
             if (sourcePage != null) {
                 backlink.setSourcePageTitle(sourcePage.getTitle());
                 backlink.setSourcePageIcon(sourcePage.getIcon());
+                if (sourcePage.getSpaceId() != null) {
+                    backlink.setSourceSpaceId(String.valueOf(sourcePage.getSpaceId()));
+                }
             }
 
             if ("BLOCK".equalsIgnoreCase(link.getSourceType())) {
@@ -444,6 +447,9 @@ public class SpaceApplication {
             if (sourcePage != null) {
                 backlink.setSourcePageTitle(sourcePage.getTitle());
                 backlink.setSourcePageIcon(sourcePage.getIcon());
+                if (sourcePage.getSpaceId() != null) {
+                    backlink.setSourceSpaceId(String.valueOf(sourcePage.getSpaceId()));
+                }
             }
 
             if ("BLOCK".equalsIgnoreCase(link.getSourceType())) {

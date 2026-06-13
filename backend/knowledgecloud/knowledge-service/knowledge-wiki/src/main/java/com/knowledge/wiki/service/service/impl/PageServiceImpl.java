@@ -3,7 +3,9 @@ package com.knowledge.wiki.service.service.impl;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import cn.hutool.json.JSONObject;
@@ -22,6 +24,7 @@ import com.knowledge.core.version.service.AbstractSubjectService;
 import com.knowledge.wiki.service.converter.PageConverter;
 import com.knowledge.wiki.service.cache.BlockCacheService;
 import com.knowledge.wiki.service.entity.BlockIndex;
+import com.knowledge.wiki.service.entity.Mark;
 import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.PageContent;
 import com.knowledge.wiki.service.entity.PagePermission;
@@ -441,6 +444,12 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     private static final String NODE_TYPE_BLOCK_MENTION = "blockMention";
     private static final String NODE_TYPE_PAGE_EMBED = "pageEmbed";
     private static final String NODE_TYPE_BLOCK_EMBED = "blockEmbed";
+    // Node/mark types actually produced by the editor (plugin-block-reference):
+    // - PageReference / BlockReference: atom nodes inserted via the selectors
+    // - pageLink: a MARK on a text node ([[Title]] bidirectional link), not a node type
+    private static final String NODE_TYPE_PAGE_REFERENCE = "PageReference";
+    private static final String NODE_TYPE_BLOCK_REFERENCE = "BlockReference";
+    private static final String MARK_TYPE_PAGE_LINK = "pageLink";
 
     @EventListener(PagePublishEvent.class)
     @Async
@@ -462,17 +471,35 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
             }
 
             // Refresh link index for this page
-            List<WikiLink> pageLinks = extractLinks(pageVersion);
-            // Delete existing links from this page source
+            syncPageLinks(pageVersion.getSubjectId());
+        });
+    }
+
+    /**
+     * Rebuild the {@code wiki_link} backlink index for a single page from its
+     * current block content. Deletes the page's existing outgoing links and
+     * re-inserts the freshly extracted set. Best-effort: a failure here never
+     * breaks the save that triggered it.
+     *
+     * @param pageId source page whose outgoing links should be re-synced
+     */
+    public void syncPageLinks(Long pageId) {
+        if (pageId == null) {
+            return;
+        }
+        try {
+            List<WikiLink> links = extractLinks(pageId);
             this.wikiLinkService.remove(
                     this.wikiLinkService.lambdaQuery()
                             .eq(WikiLink::getSourceType, LINK_TYPE_PAGE)
-                            .eq(WikiLink::getSourcePageId, pageVersion.getSubjectId())
+                            .eq(WikiLink::getSourcePageId, pageId)
                             .getWrapper());
-            if (CollUtil.isNotEmpty(pageLinks)) {
-                this.wikiLinkService.saveBatch(pageLinks);
+            if (CollUtil.isNotEmpty(links)) {
+                this.wikiLinkService.saveBatch(links);
             }
-        });
+        } catch (Exception e) {
+            log.warn("Failed to sync wiki links for pageId={}", pageId, e);
+        }
     }
 
     @Override
@@ -612,7 +639,10 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
         }
 
         // Apply the incremental patch (transactional internally).
-        return blockStorageService.patchBlocks(pageId, changes, blockOrder);
+        BlockStorageService.PatchResult result = blockStorageService.patchBlocks(pageId, changes, blockOrder);
+        // Keep the backlink index in step with every incremental save.
+        syncPageLinks(pageId);
+        return result;
     }
 
     @Override
@@ -625,7 +655,10 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
             throw WikiException.PAGE_NOT_FOUND.newException();
         }
         // Bulk replace path (chunked independent transactions, one PageVersion).
-        return blockStorageService.bulkReplaceBlocks(pageId, changes);
+        BlockStorageService.PatchResult result = blockStorageService.bulkReplaceBlocks(pageId, changes);
+        // Keep the backlink index in step with bulk imports/replaces.
+        syncPageLinks(pageId);
+        return result;
     }
 
     @Override
@@ -734,23 +767,45 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     }
 
     private List<WikiLink> extractLinks(PageVersion pageVersion) {
-        List<WikiLink> links = new ArrayList<>();
-        Long pageId = pageVersion.getSubjectId();
+        return extractLinks(pageVersion.getSubjectId());
+    }
+
+    /**
+     * Extract the outgoing links of a page from its current block content,
+     * de-duplicated so the same (target, kind) is recorded at most once per page.
+     */
+    private List<WikiLink> extractLinks(Long pageId) {
+        List<WikiLink> result = new ArrayList<>();
+        if (pageId == null) {
+            return result;
+        }
 
         // Get content from block storage
         String rawContent = blockStorageService.assembleTreeJson(pageId);
         if (StrUtil.isBlank(rawContent)) {
-            return links;
+            return result;
         }
 
         PageContent root = JSONUtil.toBean(rawContent, PageContent.class);
         if (root == null || CollUtil.isEmpty(root.getContent())) {
-            return links;
+            return result;
         }
 
-        // Walk through content tree and extract links by type
-        walkForLinks(root, pageId, links);
-        return links;
+        // Walk through content tree and extract links by node type and marks
+        List<WikiLink> raw = new ArrayList<>();
+        walkForLinks(root, pageId, raw);
+
+        // De-dup: a page references the same target once (keep the first snippet).
+        Set<String> seen = new HashSet<>();
+        for (WikiLink link : raw) {
+            String key = link.getTargetType() + ":" + link.getLinkKind() + ":"
+                    + (link.getTargetId() != null ? link.getTargetId() : "")
+                    + ":" + (link.getTargetPageId() != null ? link.getTargetPageId() : "");
+            if (seen.add(key)) {
+                result.add(link);
+            }
+        }
+        return result;
     }
 
     private void walkForLinks(PageContent node, Long sourcePageId, List<WikiLink> links) {
@@ -766,12 +821,55 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
             }
         }
 
+        // pageLink is a MARK on a text node ([[Title]] bidirectional link), so the
+        // reference lives in node.marks rather than as a dedicated node type.
+        if (CollUtil.isNotEmpty(node.getMarks())) {
+            for (Mark mark : node.getMarks()) {
+                WikiLink markLink = createLinkFromMark(mark, node, sourcePageId);
+                if (markLink != null) {
+                    links.add(markLink);
+                }
+            }
+        }
+
         // Recursively walk children
         if (CollUtil.isNotEmpty(node.getContent())) {
             for (PageContent child : node.getContent()) {
                 walkForLinks(child, sourcePageId, links);
             }
         }
+    }
+
+    /**
+     * Build a wiki link from a {@code pageLink} mark carried by a text node.
+     * Returns null for any other mark type or when the target is unresolved.
+     */
+    private WikiLink createLinkFromMark(Mark mark, PageContent node, Long sourcePageId) {
+        if (mark == null || !MARK_TYPE_PAGE_LINK.equals(mark.getType())) {
+            return null;
+        }
+        JSONObject attrs = mark.getAttrs();
+        if (attrs == null) {
+            return null;
+        }
+        Long targetPageId = attrs.getLong("pageId");
+        String targetId = attrs.getStr("pageId");
+        if (targetPageId == null && StrUtil.isBlank(targetId)) {
+            return null;
+        }
+
+        WikiLink link = new WikiLink();
+        link.setSourceType(LINK_TYPE_PAGE);
+        link.setSourceId(String.valueOf(sourcePageId));
+        link.setSourcePageId(sourcePageId);
+        link.setTargetType(LINK_TYPE_PAGE);
+        link.setLinkKind(LINK_KIND_NORMAL);
+        link.setTargetPageId(targetPageId);
+        link.setTargetId(targetId);
+        if (StrUtil.isNotBlank(node.getText())) {
+            link.setSnippet(node.getText());
+        }
+        return link;
     }
 
     private WikiLink createLinkFromNode(PageContent node, String type, Long sourcePageId) {
@@ -784,11 +882,20 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
 
         switch (type) {
             case NODE_TYPE_PAGE_LINK:
+            case NODE_TYPE_PAGE_REFERENCE:
                 link.setTargetType(LINK_TYPE_PAGE);
                 link.setLinkKind(LINK_KIND_NORMAL);
                 if (attrs != null) {
                     link.setTargetPageId(attrs.getLong("pageId"));
                     link.setTargetId(attrs.getStr("pageId"));
+                }
+                break;
+            case NODE_TYPE_BLOCK_REFERENCE:
+                link.setTargetType(LINK_TYPE_BLOCK);
+                link.setLinkKind(LINK_KIND_EMBED);
+                if (attrs != null) {
+                    link.setTargetId(attrs.getStr("blockId"));
+                    link.setTargetPageId(attrs.getLong("pageId"));
                 }
                 break;
             case NODE_TYPE_BLOCK_LINK:
@@ -833,6 +940,11 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
                 break;
             default:
                 return null;
+        }
+
+        // Skip unresolved references (e.g. a page being created with no id yet).
+        if (link.getTargetPageId() == null && StrUtil.isBlank(link.getTargetId())) {
+            return null;
         }
 
         // Build snippet from node text
