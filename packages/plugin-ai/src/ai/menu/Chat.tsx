@@ -365,6 +365,21 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
     // Last user message ref for retry
     const lastUserMessageRef = useRef<string>("")
 
+    // Textarea ref — used for auto-resize and refocus-after-send.
+    const inputRef = useRef<HTMLTextAreaElement>(null)
+
+    // Auto-grow the input with its content, capped at ~5 lines. The @kn/ui
+    // ChatInput is otherwise a fixed-height box, which makes multi-line input
+    // cramped. Inline height wins over the kit's height class.
+    useEffect(() => {
+        const el = inputRef.current
+        if (!el) return
+        // Inline styles win over the kit's height/max-height utility classes.
+        el.style.maxHeight = '120px'
+        el.style.height = 'auto'
+        el.style.height = `${Math.min(el.scrollHeight, 120)}px`
+    }, [input])
+
     // Generate unique message ID
     const generateMessageId = useCallback(() => {
         return `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -501,6 +516,11 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         const messageText = input
         setInput("")
         submitMessage(messageText)
+        // Reset the auto-grown height and keep focus for the next message.
+        requestAnimationFrame(() => {
+            if (inputRef.current) inputRef.current.style.height = 'auto'
+            inputRef.current?.focus()
+        })
     }, [input, isInputValid, submitMessage])
 
     // Quick prompt submit
@@ -859,12 +879,14 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                         </div>
                     )}
                     <ChatInput
+                        ref={inputRef}
                         value={input}
                         onChange={handleInputChange}
                         onKeyDown={handleKeyDown}
                         placeholder="Do anything with AI..."
                         disabled={isLoading}
-                        className="min-h-[40px] resize-none rounded-xl bg-transparent border-0 px-3 py-2 text-xs shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
+                        rows={1}
+                        className="min-h-[40px] max-h-[120px] overflow-y-auto resize-none rounded-xl bg-transparent border-0 px-3 py-2 text-xs shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
                     />
                     <div className="flex items-center px-2 pb-2 pt-0 justify-between">
                         <div className="flex items-center gap-px">
@@ -923,7 +945,8 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                             <Button
                                 type="submit"
                                 size="sm"
-                                className="h-7 w-7 p-0 rounded-lg bg-foreground text-background hover:bg-foreground/90 transition-all"
+                                aria-label="Send message"
+                                className="h-7 w-7 p-0 rounded-lg bg-foreground text-background hover:bg-foreground/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-foreground"
                                 disabled={!isInputValid}
                             >
                                 <Send className="h-3.5 w-3.5" />
