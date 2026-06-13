@@ -21,8 +21,9 @@ const PageItem = React.memo<{
 }>(({ page, isSelected, onSelect, onHover }) => (
     <div
         className={cn(
-            "rounded-sm hover:bg-muted cursor-pointer flex items-center gap-2 p-2 transition-colors",
-            isSelected && "bg-muted ring-1 ring-primary/20"
+            "flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-150",
+            "hover:bg-muted/60 hover:translate-x-0.5",
+            isSelected && "bg-primary/10 ring-1 ring-inset ring-primary/30 translate-x-0.5"
         )}
         onClick={onSelect}
         onMouseEnter={onHover}
@@ -30,8 +31,13 @@ const PageItem = React.memo<{
         aria-selected={isSelected}
         tabIndex={0}
     >
-        <span className="text-base">{page.icon?.icon || <FileText className="h-4 w-4" />}</span>
-        <span className="truncate">{page.title || '未命名'}</span>
+        <span className={cn(
+            "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground text-base transition-transform duration-150",
+            isSelected && "scale-105"
+        )}>
+            {page.icon?.icon || <FileText className="h-4 w-4" />}
+        </span>
+        <span className="truncate text-sm">{page.title || '未命名'}</span>
     </div>
 ));
 PageItem.displayName = 'PageItem';
@@ -150,7 +156,7 @@ export const PageSelector: React.FC<PageSelectorProps> = React.memo(({ onCancel,
 
     return (
         <div
-            className="w-[320px] z-50 p-2 bg-popover shadow-lg rounded-lg relative border"
+            className="w-[320px] z-50 p-2 bg-popover text-popover-foreground shadow-xl dark:shadow-2xl rounded-xl backdrop-blur-sm relative border border-border/60"
             ref={ref}
             role="dialog"
             aria-label="选择页面"

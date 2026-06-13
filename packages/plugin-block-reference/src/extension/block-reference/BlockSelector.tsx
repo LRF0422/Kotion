@@ -21,8 +21,9 @@ const BlockItem = React.memo<{
 }>(({ block, isSelected, onSelect, onHover, getTextContent }) => (
     <div
         className={cn(
-            "rounded-sm hover:bg-muted p-2 cursor-pointer transition-colors",
-            isSelected && "bg-muted ring-1 ring-primary/20"
+            "rounded-lg px-2 py-1.5 cursor-pointer transition-all duration-150",
+            "hover:bg-muted/60 hover:translate-x-0.5",
+            isSelected && "bg-primary/10 ring-1 ring-inset ring-primary/30 translate-x-0.5"
         )}
         onClick={onSelect}
         onMouseEnter={onHover}
@@ -237,7 +238,7 @@ export const BlockSelector: React.FC<BlockSelectorProps> = React.memo(({ onCance
 
     return (
         <div
-            className="w-[420px] z-50 p-3 bg-popover shadow-lg rounded-lg flex flex-col gap-2 relative border"
+            className="w-[420px] z-50 p-3 bg-popover text-popover-foreground shadow-xl dark:shadow-2xl rounded-xl backdrop-blur-sm flex flex-col gap-2 relative border border-border/60"
             ref={ref}
             role="dialog"
             aria-label="选择块"

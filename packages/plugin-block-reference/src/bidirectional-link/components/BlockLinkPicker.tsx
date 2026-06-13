@@ -1,23 +1,18 @@
 /**
- * BlockLinkPicker Modal Component
- * Allows users to search and select a block to link to.
- * 
+ * BlockLinkPicker — cursor-anchored command menu (slash-menu style)
+ * Allows users to search and select a block to link to via (( )).
+ *
+ * Rendered as a floating dropdown anchored at the caret (positioned by
+ * LinkTrigger), NOT a modal dialog.
+ *
  * @module @kn/plugin-block-reference/bidirectional-link/components
  */
 
-import React, { useState, useEffect, useCallback, useMemo, useContext } from 'react';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    Input,
-    ScrollArea,
-    cn,
-    Skeleton,
-} from '@kn/ui';
+import React, { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react';
+import { Input, ScrollArea, cn, Skeleton } from '@kn/ui';
 import { SquareDashedBottom, SearchIcon, Loader2 } from '@kn/icon';
 import { PageContext } from '@kn/editor';
+import { useClickAway } from '@kn/common';
 import { searchBlocks, BlockInfo } from '../services/linkService';
 
 interface BlockLinkPickerProps {
@@ -78,46 +73,57 @@ const getBlockTypeLabel = (type: string): string => {
     return typeLabels[type] || type;
 };
 
-/** Block item component */
+/** Block item — slash-menu look (icon chip + hover shift). */
 const BlockItem = React.memo<{
     block: BlockInfo;
+    index: number;
     isSelected: boolean;
     onSelect: () => void;
     onHover: () => void;
-}>(({ block, isSelected, onSelect, onHover }) => {
+}>(({ block, index, isSelected, onSelect, onHover }) => {
     const preview = getBlockPreview(block);
     const typeLabel = getBlockTypeLabel(block.type);
-    
+
     return (
         <div
+            data-index={index}
             className={cn(
-                "flex items-start gap-3 p-2.5 rounded-md cursor-pointer transition-colors",
-                "hover:bg-muted",
-                isSelected && "bg-muted ring-1 ring-primary/20"
+                "flex items-start gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer",
+                "transition-all duration-150",
+                "hover:bg-muted/60 hover:translate-x-0.5",
+                isSelected && "bg-primary/10 ring-1 ring-inset ring-primary/30 translate-x-0.5"
             )}
             onClick={onSelect}
             onMouseEnter={onHover}
             role="option"
             aria-selected={isSelected}
         >
-            <SquareDashedBottom className="h-4 w-4 text-purple-500 flex-shrink-0 mt-0.5" />
+            <span
+                className={cn(
+                    "mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md",
+                    "bg-purple-500/10 text-purple-500 transition-transform duration-150",
+                    isSelected && "scale-105"
+                )}
+            >
+                <SquareDashedBottom className="h-4 w-4" />
+            </span>
             <div className="flex-1 min-w-0">
                 {preview ? (
                     <>
                         <div className="text-sm line-clamp-2">{preview}</div>
-                        <div className="flex items-center gap-2 mt-1">
-                            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                        <div className="mt-1 flex items-center gap-2">
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                                 {typeLabel}
                             </span>
                         </div>
                     </>
                 ) : (
                     <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground italic">
+                        <span className="text-sm italic text-muted-foreground">
                             {typeLabel} block
                         </span>
-                        <span className="text-xs text-muted-foreground/70 font-mono">
-                            ({block.id.slice(0, 8)}...)
+                        <span className="font-mono text-xs text-muted-foreground/70">
+                            ({block.id.slice(0, 8)}…)
                         </span>
                     </div>
                 )}
@@ -129,10 +135,10 @@ BlockItem.displayName = 'BlockItem';
 
 /** Loading skeleton */
 const LoadingSkeleton = React.memo(() => (
-    <div className="space-y-2 p-2">
+    <div className="space-y-1.5 p-1">
         {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex items-start gap-2">
-                <Skeleton className="h-4 w-4 rounded" />
+            <div key={i} className="flex items-start gap-2.5 px-2 py-1.5">
+                <Skeleton className="h-7 w-7 rounded-md" />
                 <div className="flex-1 space-y-1">
                     <Skeleton className="h-3 w-20" />
                     <Skeleton className="h-4 w-full" />
@@ -145,8 +151,8 @@ LoadingSkeleton.displayName = 'LoadingSkeleton';
 
 /**
  * BlockLinkPicker Component
- * 
- * Modal for selecting blocks to create ((block-id)) links.
+ *
+ * Floating command menu for selecting blocks to create ((block-id)) links.
  */
 export const BlockLinkPicker: React.FC<BlockLinkPickerProps> = ({
     visible,
@@ -162,7 +168,20 @@ export const BlockLinkPicker: React.FC<BlockLinkPickerProps> = ({
     const [loading, setLoading] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
 
-    // Fetch blocks when visible
+    const containerRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const listRef = useRef<HTMLDivElement>(null);
+
+    // Close when clicking outside the floating menu.
+    useClickAway(() => onCancel(), containerRef);
+
+    // Auto-focus the search field on mount.
+    useEffect(() => {
+        const timer = setTimeout(() => inputRef.current?.focus(), 50);
+        return () => clearTimeout(timer);
+    }, []);
+
+    // Fetch blocks when visible.
     useEffect(() => {
         if (visible && spaceId) {
             setLoading(true);
@@ -175,15 +194,6 @@ export const BlockLinkPicker: React.FC<BlockLinkPickerProps> = ({
         }
     }, [visible, spaceId]);
 
-    // Reset state when closed
-    useEffect(() => {
-        if (!visible) {
-            setQuery('');
-            setBlocks([]);
-            setSelectedIndex(0);
-        }
-    }, [visible]);
-
     // Filter blocks by query
     const filteredBlocks = useMemo(() => {
         if (!query) return blocks;
@@ -194,16 +204,22 @@ export const BlockLinkPicker: React.FC<BlockLinkPickerProps> = ({
         });
     }, [blocks, query]);
 
+    // Keep the keyboard-selected item scrolled into view.
+    useEffect(() => {
+        const el = listRef.current?.querySelector<HTMLElement>(`[data-index="${selectedIndex}"]`);
+        el?.scrollIntoView({ block: 'nearest' });
+    }, [selectedIndex, filteredBlocks.length]);
+
     // Keyboard navigation
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         switch (e.key) {
             case 'ArrowDown':
                 e.preventDefault();
-                setSelectedIndex((prev) => Math.min(prev + 1, filteredBlocks.length - 1));
+                setSelectedIndex((prev) => (filteredBlocks.length ? (prev + 1) % filteredBlocks.length : 0));
                 break;
             case 'ArrowUp':
                 e.preventDefault();
-                setSelectedIndex((prev) => Math.max(prev - 1, 0));
+                setSelectedIndex((prev) => (filteredBlocks.length ? (prev - 1 + filteredBlocks.length) % filteredBlocks.length : 0));
                 break;
             case 'Enter':
                 e.preventDefault();
@@ -219,61 +235,66 @@ export const BlockLinkPicker: React.FC<BlockLinkPickerProps> = ({
     }, [filteredBlocks, selectedIndex, onSelect, onCancel]);
 
     return (
-        <Dialog open={visible} onOpenChange={(open) => !open && onCancel()}>
-            <DialogContent className="sm:max-w-[480px]" onKeyDown={handleKeyDown}>
-                <DialogHeader>
-                    <DialogTitle>Insert Block Link</DialogTitle>
-                </DialogHeader>
-
-                {/* Search input */}
-                <div className="relative">
-                    <Input
-                        placeholder="Search blocks..."
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        className="pr-8"
-                        autoFocus
-                    />
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                        {loading ? (
-                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                        ) : (
-                            <SearchIcon className="h-4 w-4 text-muted-foreground" />
-                        )}
-                    </div>
+        <div
+            ref={containerRef}
+            onKeyDown={handleKeyDown}
+            className={cn(
+                "w-[420px] p-2 rounded-xl backdrop-blur-sm",
+                "bg-popover text-popover-foreground",
+                "border border-border/60 shadow-xl dark:shadow-2xl"
+            )}
+            role="dialog"
+            aria-label="插入块链接"
+        >
+            {/* Search input */}
+            <div className="relative">
+                <Input
+                    ref={inputRef}
+                    placeholder="搜索块…"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    className="h-9 pr-8"
+                />
+                <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2">
+                    {loading ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    ) : (
+                        <SearchIcon className="h-4 w-4 text-muted-foreground" />
+                    )}
                 </div>
+            </div>
 
-                {/* Block list */}
-                <ScrollArea className="h-[300px] mt-2">
+            {/* Block list */}
+            <ScrollArea className="mt-2 max-h-[300px]">
+                <div ref={listRef} className="space-y-0.5 pr-1">
                     {loading ? (
                         <LoadingSkeleton />
                     ) : filteredBlocks.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm py-8">
-                            <SquareDashedBottom className="h-8 w-8 mb-2 opacity-50" />
-                            <span>No blocks found</span>
-                            <span className="text-xs mt-1">Try a different search term</span>
+                        <div className="flex flex-col items-center justify-center gap-1 py-8 text-sm text-muted-foreground">
+                            <SquareDashedBottom className="mb-1 h-7 w-7 opacity-40" />
+                            <span>未找到块</span>
+                            <span className="text-xs opacity-70">换个关键词试试</span>
                         </div>
                     ) : (
-                        <div className="space-y-1">
-                            {filteredBlocks.map((block, index) => (
-                                <BlockItem
-                                    key={block.id}
-                                    block={block}
-                                    isSelected={selectedIndex === index}
-                                    onSelect={() => onSelect({ id: block.id })}
-                                    onHover={() => setSelectedIndex(index)}
-                                />
-                            ))}
-                        </div>
+                        filteredBlocks.map((block, index) => (
+                            <BlockItem
+                                key={block.id}
+                                block={block}
+                                index={index}
+                                isSelected={selectedIndex === index}
+                                onSelect={() => onSelect({ id: block.id })}
+                                onHover={() => setSelectedIndex(index)}
+                            />
+                        ))
                     )}
-                </ScrollArea>
-
-                {/* Footer hint */}
-                <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-2">
-                    <span>↑↓ Navigate</span>
-                    <span>Enter to select · Esc to close</span>
                 </div>
-            </DialogContent>
-        </Dialog>
+            </ScrollArea>
+
+            {/* Footer hint */}
+            <div className="mt-2 flex items-center justify-between border-t border-border/60 px-1 pt-2 text-xs text-muted-foreground">
+                <span>↑↓ 导航</span>
+                <span>Enter 选择 · Esc 关闭</span>
+            </div>
+        </div>
     );
 };
