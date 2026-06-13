@@ -312,7 +312,7 @@ public class HarnessLoop {
         List<LlmResponse.ToolCall> backendCalls = new ArrayList<>();
         for (LlmResponse.ToolCall tc : response.getToolCalls()) {
             boolean allowedReadOnly = !planMode || isReadOnlyTool(tc.getName());
-            if (state.frontendToolNames.contains(tc.getName()) && allowedReadOnly) {
+            if (isFrontendCall(tc.getName(), state) && allowedReadOnly) {
                 frontendCalls.add(tc);
             } else {
                 backendCalls.add(tc);
@@ -466,6 +466,23 @@ public class HarnessLoop {
     }
 
     /**
+     * Decide whether a tool call should be routed to the frontend for execution.
+     *
+     * <p>A tool registered as a (non-frontend) <b>backend</b> tool ALWAYS executes
+     * on the backend — even if a skill or the client catalog also advertised a
+     * tool of the same name. Without this precedence, backend tools like
+     * {@code web_search} get misrouted to the client (which has no implementation),
+     * producing "Tool X is not available on frontend" and stalling the agent.
+     */
+    private boolean isFrontendCall(String toolName, LoopState state) {
+        Tool registered = toolRegistry.get(toolName);
+        if (registered != null && !registered.isFrontend()) {
+            return false;
+        }
+        return state.frontendToolNames.contains(toolName);
+    }
+
+    /**
      * Whether a tool is safe to run in PLAN mode (read-only / no side effects).
      * Combines an explicit allowlist with a conservative name heuristic; default
      * is to treat unknown tools as mutating (default-deny).
@@ -593,11 +610,14 @@ public class HarnessLoop {
 
                     // Handle tool calls
                     if (response.hasToolCalls()) {
-                        // Separate frontend and backend tool calls
+                        // Separate frontend and backend tool calls. Backend-
+                        // registered tools always run on the backend (see
+                        // isFrontendCall) so tools like web_search are never
+                        // misrouted to the client.
                         List<LlmResponse.ToolCall> frontendCalls = new ArrayList<>();
                         List<LlmResponse.ToolCall> backendCalls = new ArrayList<>();
                         for (LlmResponse.ToolCall tc : response.getToolCalls()) {
-                            if (state.frontendToolNames.contains(tc.getName())) {
+                            if (isFrontendCall(tc.getName(), state)) {
                                 frontendCalls.add(tc);
                             } else {
                                 backendCalls.add(tc);
