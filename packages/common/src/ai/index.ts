@@ -44,9 +44,6 @@ export type {
     ModelsResponse,
 } from "./chat-client/types"
 
-// Model Providers
-export { createKnowledgeModel, type KnowledgeModelOptions } from "./model-provider/knowledge-provider"
-
 // Discovery
 export * from "./discovery"
 
@@ -55,9 +52,6 @@ export * from "./skills"
 
 // Utils
 export * from "./utils"
-
-// Foundation - Global AI Architecture
-export * from "./foundation"
 
 // System Agent - Logic (context + hooks, no UI)
 export * from "./system-agent"

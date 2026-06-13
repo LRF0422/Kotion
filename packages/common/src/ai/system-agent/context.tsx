@@ -7,23 +7,24 @@
 
 import React, { createContext, useContext, useCallback, useRef, useState, useEffect, useMemo } from 'react'
 import type { Editor } from '@tiptap/core'
-import type { AIAgent, StreamResult, AgentOptions } from '../foundation/types'
+import type { ChatMessage } from '../chat-client/types'
 import type { OnToolExecution, OnUserChoiceRequest } from '../types'
-import { useAIFoundation } from '../foundation'
+import { useCapabilityProviders } from '../use-capability-providers'
+import { AgentHarnessImpl } from '../harness'
+import type { ExecutionStep } from '../harness'
 import { useStreamBuffer } from '../utils/use-stream-buffer'
 import { SYSTEM_AGENT_PROMPT } from '../constants'
 
+// Re-export ExecutionStep so existing `@kn/common` consumers keep working.
+export type { ExecutionStep }
+
 // ============ Types ============
 
-export interface ExecutionStep {
-    id: string
-    toolName: string
-    args: any
-    result?: any
-    error?: string
-    status: 'running' | 'success' | 'error'
-    timestamp: number
-    duration?: number
+/** Minimal default options for the system agent provider. */
+export interface SystemAgentOptions {
+    systemPrompt?: string
+    model?: string
+    maxSteps?: number
 }
 
 export interface SystemAgentState {
@@ -88,7 +89,7 @@ export interface SystemAgentContextValue {
 export interface SystemAgentProviderProps {
     children: React.ReactNode
     /** Default agent options */
-    defaultOptions?: AgentOptions
+    defaultOptions?: SystemAgentOptions
     /** Initial tool execution callback */
     onToolExecution?: OnToolExecution
     /** Initial user choice callback */
@@ -105,8 +106,6 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
     onToolExecution: initialOnToolExecution,
     onUserChoiceRequest: initialOnUserChoiceRequest
 }) => {
-    const aiFoundation = useAIFoundation()
-
     // State
     const [state, setState] = useState<SystemAgentState>({
         isGenerating: false,
@@ -119,47 +118,44 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
     })
 
     // Use ref for activeSkills to avoid stale closure in stream callback
-    const activeSkillsRef = useRef<string[]>([])
+    const activeSkillsRef = useRef<Set<string>>(new Set())
     const sessionIdRef = useRef<string | null>(null)
 
     // Shared streaming buffer
     const streamBuffer = useStreamBuffer()
 
     // Refs
-    const agentRef = useRef<AIAgent | null>(null)
     const editorRef = useRef<Editor | null>(null)
+    const [editor, setEditorState] = useState<Editor | null>(null)
     const abortControllerRef = useRef<AbortController | null>(null)
     const onToolExecutionRef = useRef<OnToolExecution | undefined>(initialOnToolExecution)
     const onUserChoiceRequestRef = useRef<OnUserChoiceRequest | undefined>(initialOnUserChoiceRequest)
     const stepCounterRef = useRef(0)
+    const harnessRef = useRef<AgentHarnessImpl>(new AgentHarnessImpl())
 
-    // Initialize agent
-    useEffect(() => {
-        const initAgent = async () => {
-            await aiFoundation.initialize()
+    // Stable callback wrappers that read the latest refs, so the shared
+    // capability providers don't rebuild when consumers swap callbacks.
+    const onToolExecution = useCallback<OnToolExecution>((e) => {
+        onToolExecutionRef.current?.(e)
+    }, [])
+    const onUserChoiceRequest = useCallback<OnUserChoiceRequest>((req) => {
+        const fn = onUserChoiceRequestRef.current
+        return fn ? fn(req) : Promise.reject(new Error('No user choice handler registered'))
+    }, [])
 
-            agentRef.current = aiFoundation.createAgent({
-                ...defaultOptions,
-                systemPrompt: defaultOptions?.systemPrompt || SYSTEM_AGENT_PROMPT
-            })
-        }
-
-        initAgent()
-
-        return () => {
-            if (agentRef.current) {
-                aiFoundation.destroyAgent(agentRef.current.getId())
-            }
-        }
-    }, [aiFoundation, defaultOptions])
+    // Shared capability catalog wiring (providers, plugins, skills). The editor
+    // may be null until one is bound via setEditor; built-in tools are still
+    // advertised but only execute once a real editor is present.
+    const { getCatalog, resolveTool } = useCapabilityProviders(editor, {
+        onToolExecution,
+        onUserChoiceRequest,
+    })
 
     // Set editor context
     const setEditor = useCallback((editor: Editor | null) => {
         editorRef.current = editor
-        if (editor) {
-            aiFoundation.setEditorContext(editor)
-        }
-    }, [aiFoundation])
+        setEditorState(editor)
+    }, [])
 
     const getEditor = useCallback(() => {
         return editorRef.current
@@ -172,18 +168,13 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         }
     }, [streamBuffer.content])
 
-    // Stream function
+    // Stream function — drives the unified harness and maps its typed events
+    // onto reactive state (text, annotations, session, execution steps).
     const stream = useCallback(async (prompt: string, options?: StreamPromptOptions): Promise<void> => {
-        if (!agentRef.current) {
-            throw new Error('Agent not initialized')
-        }
-
         // Abort any previous generation
         if (abortControllerRef.current) {
             abortControllerRef.current.abort()
         }
-
-        // Create new abort controller
         abortControllerRef.current = new AbortController()
 
         // Set editor if provided
@@ -193,21 +184,18 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
 
         // Reset state
         streamBuffer.reset()
+        stepCounterRef.current = 0
         setState({
             isGenerating: true,
             streamingContent: '',
             error: null,
             executionSteps: [],
-            activeSkills: activeSkillsRef.current,
+            activeSkills: Array.from(activeSkillsRef.current),
             annotations: [],
             sessionId: options?.sessionId || sessionIdRef.current
         })
 
-        // Track annotations locally
-        const collectedAnnotations: any[] = []
         const handleAnnotation = (annotations: any[]) => {
-            collectedAnnotations.push(...annotations)
-
             // Extract session ID from annotations (first SSE event)
             for (const ann of annotations) {
                 if (ann && typeof ann === 'object' && 'sessionId' in ann && typeof ann.sessionId === 'string') {
@@ -224,31 +212,73 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         }
 
         try {
-            const result = await agentRef.current.stream({
-                prompt,
-                messages: options?.messages,
-                abortSignal: options?.abortSignal || abortControllerRef.current.signal,
-                systemPrompt: options?.systemPrompt,
+            const messages: ChatMessage[] = [{
+                role: 'system',
+                content: options?.systemPrompt || defaultOptions?.systemPrompt || SYSTEM_AGENT_PROMPT,
+            }]
+            if (options?.messages && options.messages.length > 0) {
+                for (const m of options.messages) {
+                    messages.push({ role: m.role, content: m.content })
+                }
+            }
+            messages.push({ role: 'user', content: prompt })
+
+            const events = harnessRef.current.run({
+                messages,
+                model: defaultOptions?.model,
+                catalog: getCatalog(),
+                resolveTool,
                 sessionId: options?.sessionId || sessionIdRef.current || undefined,
                 conversationId: options?.conversationId,
-                onAnnotation: handleAnnotation
+                signal: options?.abortSignal || abortControllerRef.current.signal,
+                maxSteps: defaultOptions?.maxSteps,
+                onToolExecution,
             })
 
-            // Process the stream
-            if (result.stream) {
-                try {
-                    // The stream is an async iterable that yields text chunks
-                    for await (const chunk of result.stream) {
-                        // Handle different chunk formats
-                        const text = chunk?.text || chunk?.content || chunk?.delta || ''
-                        if (text) {
-                            streamBuffer.append(text)
+            for await (const ev of events) {
+                switch (ev.type) {
+                    case 'text-delta':
+                        streamBuffer.append(ev.content)
+                        break
+                    case 'annotation':
+                        handleAnnotation(ev.annotations)
+                        break
+                    case 'session':
+                        handleAnnotation([{
+                            type: 'session-info',
+                            sessionId: ev.sessionId,
+                            conversationId: ev.conversationId,
+                        }])
+                        break
+                    case 'tool-call-start': {
+                        const step: ExecutionStep = {
+                            id: ev.id || `step-${++stepCounterRef.current}`,
+                            toolName: ev.toolName,
+                            args: ev.args,
+                            status: 'running',
+                            timestamp: Date.now(),
                         }
+                        setState(prev => ({ ...prev, executionSteps: [...prev.executionSteps, step] }))
+                        break
                     }
-                } catch (streamError: any) {
-                    if (streamError.name !== 'AbortError') {
-                        throw streamError
-                    }
+                    case 'tool-call-end':
+                        setState(prev => ({
+                            ...prev,
+                            executionSteps: prev.executionSteps.map(s =>
+                                s.id === ev.id
+                                    ? {
+                                        ...s,
+                                        status: ev.error ? 'error' : 'success',
+                                        result: ev.result,
+                                        error: ev.error,
+                                        duration: ev.durationMs,
+                                    }
+                                    : s
+                            ),
+                        }))
+                        break
+                    case 'error':
+                        throw new Error(ev.error)
                 }
             }
 
@@ -273,7 +303,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             }))
             throw error
         }
-    }, [setEditor, streamBuffer])
+    }, [setEditor, streamBuffer, getCatalog, resolveTool, onToolExecution, defaultOptions])
 
     // Stop function
     const stop = useCallback(() => {
@@ -281,46 +311,26 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             abortControllerRef.current.abort()
             abortControllerRef.current = null
         }
-        if (agentRef.current) {
-            agentRef.current.stop()
-        }
         setState(prev => ({ ...prev, isGenerating: false }))
     }, [])
 
-    // Skill management - update ref when skills change
+    // Skill management — tracked locally; the backend performs progressive
+    // activation from the full catalog, so this is informational state.
     const activateSkill = useCallback((skillName: string) => {
-        if (agentRef.current) {
-            const result = agentRef.current.activateSkill(skillName)
-            if (result.success) {
-                const skills = agentRef.current?.getActiveSkills() || []
-                activeSkillsRef.current = skills
-                setState(prev => ({
-                    ...prev,
-                    activeSkills: skills
-                }))
-            }
-        }
+        activeSkillsRef.current.add(skillName)
+        setState(prev => ({ ...prev, activeSkills: Array.from(activeSkillsRef.current) }))
     }, [])
 
     const deactivateSkill = useCallback((skillName: string) => {
-        if (agentRef.current) {
-            const result = agentRef.current.deactivateSkill(skillName)
-            if (result.success) {
-                const skills = agentRef.current?.getActiveSkills() || []
-                activeSkillsRef.current = skills
-                setState(prev => ({
-                    ...prev,
-                    activeSkills: skills
-                }))
-            }
-        }
+        activeSkillsRef.current.delete(skillName)
+        setState(prev => ({ ...prev, activeSkills: Array.from(activeSkillsRef.current) }))
     }, [])
 
     // Reset
     const reset = useCallback(() => {
         stop()
         streamBuffer.reset()
-        activeSkillsRef.current = []
+        activeSkillsRef.current.clear()
         setState({
             isGenerating: false,
             streamingContent: '',
