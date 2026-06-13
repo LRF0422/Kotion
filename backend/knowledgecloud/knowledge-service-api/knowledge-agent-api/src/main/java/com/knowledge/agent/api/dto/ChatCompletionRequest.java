@@ -56,4 +56,7 @@ public class ChatCompletionRequest {
 
     @ApiModelProperty("Skills sent from frontend for progressive discovery by the agent")
     private List<SkillPayload> skills;
+
+    @ApiModelProperty(value = "Run mode: 'execute' (default) or 'plan' (read-only research → plan → approval)", example = "execute")
+    private String mode;
 }

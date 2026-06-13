@@ -112,6 +112,10 @@ export class KnowledgeChatClient {
             body.capabilitiesVersion = request.capabilitiesVersion
         }
 
+        if (request.mode) {
+            body.mode = request.mode
+        }
+
         if (request.data) {
             body.data = request.data
         }

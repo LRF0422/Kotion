@@ -44,6 +44,7 @@ export class AgentHarnessImpl implements AgentHarness {
             model,
             conversationId,
             onToolExecution,
+            mode,
         } = input
         const maxSteps = input.maxSteps ?? DEFAULT_MAX_STEPS
         const inactivityTimeoutMs = input.inactivityTimeoutMs ?? DEFAULT_INACTIVITY_TIMEOUT_MS
@@ -59,6 +60,7 @@ export class AgentHarnessImpl implements AgentHarness {
                 conversationId,
                 signal,
                 stream: true,
+                mode,
                 skills: catalog.skills.length > 0 ? catalog.skills : undefined,
                 tools: catalog.tools.length > 0 ? catalog.tools : undefined,
                 capabilitiesVersion: catalog.version,

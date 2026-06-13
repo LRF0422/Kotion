@@ -1,12 +1,16 @@
 package com.knowledge.agent.controller;
 
+import com.knowledge.agent.api.dto.AgentMode;
 import com.knowledge.agent.api.dto.ChatCompletionRequest;
 import com.knowledge.agent.core.engine.DataStreamEncoder;
+import com.knowledge.agent.core.engine.EventSequencer;
 import com.knowledge.agent.core.engine.StreamEvent;
 import com.knowledge.agent.harness.AgentHarness;
 import com.knowledge.agent.llm.LlmClientFactory;
+import com.knowledge.agent.observability.AgentMetrics;
 import com.knowledge.agent.session.Session;
 import com.knowledge.agent.session.SessionManager;
+import com.knowledge.agent.store.AgentEventStore;
 import com.knowledge.agent.tool.ToolContext;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import io.swagger.annotations.Api;
@@ -46,6 +50,8 @@ public class ChatController {
     private final LlmClientFactory llmClientFactory;
     private final DataStreamEncoder dataStreamEncoder;
     private final SessionManager sessionManager;
+    private final AgentMetrics agentMetrics;
+    private final AgentEventStore agentEventStore;
 
     /** SSE timeout: 5 minutes */
     private static final long SSE_TIMEOUT_MS = 300_000L;
@@ -59,6 +65,15 @@ public class ChatController {
             @RequestBody ChatCompletionRequest request) {
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+
+        // Per-request trace id for correlating logs/metrics across the turn.
+        // (MDC propagation across reactor schedulers is deferred to a later
+        // phase; for now the id is passed explicitly to logs and metrics.)
+        final String traceId = UUID.randomUUID().toString().substring(0, 8);
+
+        // Per-turn event sequencer: stamps every outgoing event with a gap-free
+        // seq used as the SSE id (enables Last-Event-ID resume later).
+        final EventSequencer sequencer = new EventSequencer();
 
         String conversationId = request.getConversationId() != null
                 ? request.getConversationId()
@@ -96,14 +111,17 @@ public class ChatController {
                 .account(account)
                 .tenantIdStr(tenantIdStr)
                 .roleName(roleName)
+                .mode(AgentMode.from(request.getMode()))
                 .build();
 
         // Log request
-        log.info("Chat request: conversationId={}, model={}, tools={}, skills={}, sessionId={}",
-                conversationId, request.getModel(),
+        log.info("Chat request: trace={}, conversationId={}, model={}, tools={}, skills={}, sessionId={}",
+                traceId, conversationId, request.getModel(),
                 request.getTools() != null ? request.getTools().size() + " tool(s)" : "null",
                 request.getSkills() != null ? request.getSkills().size() + " skill(s)" : "null",
                 session.getSessionId());
+
+        final long turnStartedAt = agentMetrics.turnStarted(traceId, conversationId, request.getModel());
 
         // Run the agent harness
         Flux<StreamEvent> eventStream = agentHarness.run(
@@ -127,20 +145,23 @@ public class ChatController {
 
         // Register emitter callbacks for cleanup
         emitter.onCompletion(() -> {
+            agentMetrics.turnFinished(traceId, turnStartedAt);
             Disposable sub = subscriptionRef.get();
             if (sub != null && !sub.isDisposed()) {
                 sub.dispose();
             }
         });
         emitter.onTimeout(() -> {
-            log.warn("SSE emitter timeout for conversationId={}", conversationId);
+            log.warn("SSE emitter timeout for trace={} conversationId={}", traceId, conversationId);
+            agentMetrics.turnFailed(traceId, turnStartedAt, "sse-timeout");
             Disposable sub = subscriptionRef.get();
             if (sub != null && !sub.isDisposed()) {
                 sub.dispose();
             }
         });
         emitter.onError(e -> {
-            log.error("SSE emitter error for conversationId={}: {}", conversationId, e.getMessage());
+            log.error("SSE emitter error for trace={} conversationId={}: {}", traceId, conversationId, e.getMessage());
+            agentMetrics.turnFailed(traceId, turnStartedAt, e.getMessage());
             Disposable sub = subscriptionRef.get();
             if (sub != null && !sub.isDisposed()) {
                 sub.dispose();
@@ -155,12 +176,27 @@ public class ChatController {
                 .subscribe(
                         event -> {
                             try {
+                                // Stamp a monotonic seq + timestamp before send so
+                                // the SSE `id:` enables Last-Event-ID resume later.
+                                sequencer.stamp(event);
+
+                                // Surface classified errors to the metrics seam.
+                                if (event instanceof StreamEvent.ErrorEvent) {
+                                    StreamEvent.ErrorEvent ee = (StreamEvent.ErrorEvent) event;
+                                    agentMetrics.recordError(traceId, ee.getCode(), ee.getError());
+                                }
+
                                 // Use toSseData() to avoid double-encoding:
                                 // SseEmitter.send() adds "data: ...\n\n" framing,
                                 // so we only provide the JSON-serializable Map payload.
                                 Object payload = dataStreamEncoder.toSseData(event);
                                 if (payload != null) {
+                                    // Write-through persistence (P3): store the exact
+                                    // payload so a reconnecting client can replay it (P5).
+                                    agentEventStore.append(conversationId, event.getSeq(),
+                                            event.getTs(), event.getType(), payload);
                                     emitter.send(SseEmitter.event()
+                                            .id(String.valueOf(event.getSeq()))
                                             .data(payload, MediaType.APPLICATION_JSON));
                                 }
 
@@ -172,19 +208,24 @@ public class ChatController {
                                     emitter.complete();
                                 }
                             } catch (Exception e) {
-                                log.error("Error sending SSE event: {}", e.getMessage());
+                                log.error("Error sending SSE event for trace={}: {}", traceId, e.getMessage());
                                 emitter.completeWithError(e);
                             }
                         },
                         error -> {
-                            log.error("Chat stream error: {}", error.getMessage(), error);
+                            log.error("Chat stream error for trace={}: {}", traceId, error.getMessage(), error);
+                            agentMetrics.recordError(traceId, "INTERNAL", error.getMessage());
                             try {
-                                Object errorPayload = dataStreamEncoder.toSseData(
-                                        StreamEvent.ErrorEvent.builder()
-                                                .error(error.getMessage())
-                                                .build());
+                                StreamEvent.ErrorEvent errEvent = StreamEvent.ErrorEvent.builder()
+                                        .error(error.getMessage())
+                                        .code("INTERNAL")
+                                        .retriable(Boolean.FALSE)
+                                        .build();
+                                sequencer.stamp(errEvent);
+                                Object errorPayload = dataStreamEncoder.toSseData(errEvent);
                                 if (errorPayload != null) {
                                     emitter.send(SseEmitter.event()
+                                            .id(String.valueOf(errEvent.getSeq()))
                                             .data(errorPayload, MediaType.APPLICATION_JSON));
                                 }
                                 emitter.send(SseEmitter.event().data("[DONE]"));
@@ -204,6 +245,78 @@ public class ChatController {
 
         subscriptionRef.set(subscription);
         return emitter;
+    }
+
+    /**
+     * Resume endpoint (P5): replay persisted events for a conversation after the
+     * client's {@code Last-Event-ID}. Lets a reconnecting / refreshed client
+     * restore the (completed-so-far) turn — sub-agent tree, pending plan, text —
+     * without re-running the agent.
+     *
+     * <p>This is replay-only resume. Live attach to an in-flight turn (hot Flux)
+     * is a follow-up; until then a reconnect replays everything persisted so far
+     * and then closes.
+     */
+    @ApiOperation("Resume: replay persisted events after Last-Event-ID")
+    @GetMapping("/chat/resume")
+    public SseEmitter resume(
+            @RequestParam("conversationId") String conversationId,
+            @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
+            @RequestParam(value = "lastEventId", required = false) String lastEventIdParam) {
+
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+
+        long afterSeq = parseSeq(lastEventId != null ? lastEventId : lastEventIdParam);
+
+        Disposable subscription = Flux
+                .fromIterable(agentEventStore.replayAfter(conversationId, afterSeq))
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe(
+                        record -> {
+                            try {
+                                if (record.payload != null) {
+                                    emitter.send(SseEmitter.event()
+                                            .id(String.valueOf(record.seq))
+                                            .data(record.payload, MediaType.APPLICATION_JSON));
+                                }
+                            } catch (Exception e) {
+                                emitter.completeWithError(e);
+                            }
+                        },
+                        error -> {
+                            log.error("Resume replay error for conversationId={}: {}", conversationId,
+                                    error.getMessage());
+                            try {
+                                emitter.send(SseEmitter.event().data("[DONE]"));
+                                emitter.complete();
+                            } catch (Exception ignored) {
+                            }
+                        },
+                        () -> {
+                            try {
+                                emitter.send(SseEmitter.event().data("[DONE]"));
+                                emitter.complete();
+                            } catch (Exception ignored) {
+                            }
+                        });
+
+        emitter.onCompletion(() -> {
+            if (!subscription.isDisposed()) {
+                subscription.dispose();
+            }
+        });
+        return emitter;
+    }
+
+    private static long parseSeq(String s) {
+        if (s == null || s.isEmpty()) {
+            return -1L;
+        }
+        try {
+            return Long.parseLong(s.trim());
+        } catch (NumberFormatException e) {
+            return -1L;
+        }
     }
 
     /**

@@ -58,6 +58,8 @@ export interface HarnessRunInput {
     signal: AbortSignal
     /** Max tool-loop iterations (default DEFAULT_MAX_STEPS). */
     maxSteps?: number
+    /** Run mode: 'plan' (read-only research → plan → approval) or 'execute' (default). */
+    mode?: 'plan' | 'execute'
     /** Per-yield SSE inactivity timeout in ms (default 10 minutes). */
     inactivityTimeoutMs?: number
     /**

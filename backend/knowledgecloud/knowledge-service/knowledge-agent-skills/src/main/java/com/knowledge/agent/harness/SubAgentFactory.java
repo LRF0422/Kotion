@@ -4,6 +4,7 @@ import com.knowledge.agent.channel.AgentChannel;
 import com.knowledge.agent.tool.ToolContext;
 import com.knowledge.agent.tool.ToolRegistry;
 import com.knowledge.agent.llm.LlmClientFactory;
+import com.knowledge.agent.llm.LlmResilience;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
@@ -25,13 +26,16 @@ public class SubAgentFactory {
     private final LlmClientFactory llmClientFactory;
     private final ContextManager contextManager;
     private final ToolRegistry toolRegistry;
+    private final LlmResilience llmResilience;
 
     public SubAgentFactory(LlmClientFactory llmClientFactory,
             ContextManager contextManager,
-            ToolRegistry toolRegistry) {
+            ToolRegistry toolRegistry,
+            LlmResilience llmResilience) {
         this.llmClientFactory = llmClientFactory;
         this.contextManager = contextManager;
         this.toolRegistry = toolRegistry;
+        this.llmResilience = llmResilience;
     }
 
     /**
@@ -51,7 +55,7 @@ public class SubAgentFactory {
             ToolContext context) {
         return new SubAgent(agentId, description,
                 toolRegistry, toolIds, channel, context,
-                llmClientFactory, contextManager);
+                llmClientFactory, contextManager, llmResilience);
     }
 
     LlmClientFactory getLlmClientFactory() {

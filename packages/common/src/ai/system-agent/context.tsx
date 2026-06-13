@@ -7,7 +7,7 @@
 
 import React, { createContext, useContext, useCallback, useRef, useState, useEffect, useMemo } from 'react'
 import type { Editor } from '@tiptap/core'
-import type { ChatMessage } from '../chat-client/types'
+import type { ChatMessage, PlanArtifact } from '../chat-client/types'
 import type { OnToolExecution, OnUserChoiceRequest } from '../types'
 import { useCapabilityProviders } from '../use-capability-providers'
 import { AgentHarnessImpl } from '../harness'
@@ -17,6 +17,162 @@ import { SYSTEM_AGENT_PROMPT } from '../constants'
 
 // Re-export ExecutionStep so existing `@kn/common` consumers keep working.
 export type { ExecutionStep }
+
+// ============ Sub-agent tree (P6) ============
+
+/**
+ * One node in the sub-agent tree. Built from the `subagent_*` / `delegate_start`
+ * annotations the backend streams on the `8:` channel. Events are routed by
+ * `agentId` (tolerant of parallel interleaving), so a node accumulates its own
+ * text / reasoning / tool steps independently of siblings.
+ */
+export interface SubAgentNode {
+    agentId: string
+    parentAgentId: string | null
+    depth: number
+    task: string
+    status: 'spawned' | 'running' | 'completed' | 'error'
+    reasoningContent: string
+    streamingContent: string
+    steps: ExecutionStep[]
+    usage?: { promptTokens: number; completionTokens: number }
+    startedAt: number
+    endedAt?: number
+    error?: string
+}
+
+function ensureNode(
+    map: Record<string, SubAgentNode>,
+    agentId: string,
+    parentAgentId?: string | null,
+    depth?: number,
+): SubAgentNode {
+    const existing = map[agentId]
+    if (existing) {
+        // Backfill identity if a later event carries it first.
+        if (parentAgentId !== undefined && existing.parentAgentId == null) {
+            existing.parentAgentId = parentAgentId ?? null
+        }
+        if (depth !== undefined && !existing.depth) existing.depth = depth
+        return existing
+    }
+    const node: SubAgentNode = {
+        agentId,
+        parentAgentId: parentAgentId ?? null,
+        depth: depth ?? 1,
+        task: '',
+        status: 'spawned',
+        reasoningContent: '',
+        streamingContent: '',
+        steps: [],
+        startedAt: Date.now(),
+    }
+    map[agentId] = node
+    return node
+}
+
+/**
+ * Fold a batch of annotations into the sub-agent tree, returning a NEW map
+ * (immutable update) when anything sub-agent-related changed, else the original.
+ */
+export function applySubAgentAnnotations(
+    current: Record<string, SubAgentNode>,
+    annotations: any[],
+): Record<string, SubAgentNode> {
+    let changed = false
+    // Work on a shallow clone; nodes are cloned on first touch below.
+    const next: Record<string, SubAgentNode> = { ...current }
+    const touch = (agentId: string, parentAgentId?: string | null, depth?: number): SubAgentNode => {
+        // Clone the node before mutating so React sees a new reference.
+        const base = ensureNode(next, agentId, parentAgentId, depth)
+        const clone: SubAgentNode = { ...base, steps: [...base.steps] }
+        next[agentId] = clone
+        changed = true
+        return clone
+    }
+
+    for (const ann of annotations) {
+        if (!ann || typeof ann !== 'object') continue
+        switch (ann.type) {
+            case 'delegate_start':
+                if (Array.isArray(ann.subTasks)) {
+                    for (const st of ann.subTasks) {
+                        if (st?.agentId) {
+                            const n = touch(st.agentId, ann.parentAgentId, ann.depth)
+                            if (st.description && !n.task) n.task = st.description
+                        }
+                    }
+                }
+                break
+            case 'subagent_spawned': {
+                const n = touch(ann.agentId, ann.parentAgentId, ann.depth)
+                if (ann.task) n.task = ann.task
+                n.status = 'spawned'
+                break
+            }
+            case 'subagent_status': {
+                const n = touch(ann.agentId, ann.parentAgentId, ann.depth)
+                if (ann.status === 'running' || ann.status === 'working') n.status = 'running'
+                else if (ann.status === 'completed') n.status = 'completed'
+                else if (ann.status === 'error') {
+                    n.status = 'error'
+                    if (ann.detail) n.error = ann.detail
+                }
+                break
+            }
+            case 'subagent_output': {
+                const n = touch(ann.agentId, ann.parentAgentId, ann.depth)
+                n.streamingContent += ann.content ?? ''
+                if (n.status === 'spawned') n.status = 'running'
+                break
+            }
+            case 'subagent_reasoning': {
+                const n = touch(ann.agentId, ann.parentAgentId, ann.depth)
+                n.reasoningContent += ann.content ?? ''
+                if (n.status === 'spawned') n.status = 'running'
+                break
+            }
+            case 'subagent_tool_call': {
+                const n = touch(ann.agentId, ann.parentAgentId, ann.depth)
+                n.steps.push({
+                    id: ann.toolCallId || `${ann.agentId}-step-${n.steps.length}`,
+                    toolName: ann.toolName,
+                    args: ann.args,
+                    status: 'running',
+                    timestamp: Date.now(),
+                })
+                if (n.status === 'spawned') n.status = 'running'
+                break
+            }
+            case 'subagent_tool_result': {
+                const n = touch(ann.agentId, ann.parentAgentId, ann.depth)
+                n.steps = n.steps.map(s =>
+                    s.id === ann.toolCallId
+                        ? { ...s, status: ann.error ? 'error' : 'success', result: ann.result, error: ann.error }
+                        : s,
+                )
+                break
+            }
+            case 'subagent_error': {
+                const n = touch(ann.agentId, ann.parentAgentId, ann.depth)
+                n.status = 'error'
+                n.error = ann.error
+                break
+            }
+            case 'subagent_finish': {
+                const n = touch(ann.agentId, ann.parentAgentId, ann.depth)
+                n.status = ann.status === 'error' ? 'error' : 'completed'
+                n.endedAt = Date.now()
+                if (ann.usage) n.usage = ann.usage
+                break
+            }
+            default:
+                break
+        }
+    }
+
+    return changed ? next : current
+}
 
 // ============ Types ============
 
@@ -42,6 +198,14 @@ export interface SystemAgentState {
     annotations: any[]
     /** Current session ID */
     sessionId: string | null
+    /** Sub-agent tree, keyed by agentId (P6). Built from subagent_* annotations. */
+    subAgents: Record<string, SubAgentNode>
+    /**
+     * Pending plan awaiting the user's approval (P7), or null. Set when a
+     * `plan_proposed` annotation arrives; the UI renders an approve/edit/reject
+     * card and resumes by streaming again with the decision.
+     */
+    pendingPlan: { plan: PlanArtifact; planId?: string } | null
 }
 
 export interface StreamPromptOptions {
@@ -57,6 +221,8 @@ export interface StreamPromptOptions {
     sessionId?: string
     /** Conversation ID for multi-turn conversations */
     conversationId?: string
+    /** Run mode: 'plan' (read-only research → plan → approval) or 'execute' (default). */
+    mode?: 'plan' | 'execute'
     /** Callback for annotation events */
     onAnnotation?: (annotations: any[]) => void
 }
@@ -114,7 +280,9 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         executionSteps: [],
         activeSkills: [],
         annotations: [],
-        sessionId: null
+        sessionId: null,
+        subAgents: {},
+        pendingPlan: null
     })
 
     // Use ref for activeSkills to avoid stale closure in stream callback
@@ -192,7 +360,9 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             executionSteps: [],
             activeSkills: Array.from(activeSkillsRef.current),
             annotations: [],
-            sessionId: options?.sessionId || sessionIdRef.current
+            sessionId: options?.sessionId || sessionIdRef.current,
+            subAgents: {},
+            pendingPlan: null
         })
 
         const handleAnnotation = (annotations: any[]) => {
@@ -203,10 +373,20 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
                 }
             }
 
+            // Plan mode (P7): capture a proposed plan awaiting approval.
+            let pendingPlanUpdate: SystemAgentState['pendingPlan'] | undefined
+            for (const ann of annotations) {
+                if (ann && ann.type === 'plan_proposed' && ann.plan) {
+                    pendingPlanUpdate = { plan: ann.plan, planId: ann.planId }
+                }
+            }
+
             setState(prev => ({
                 ...prev,
                 annotations: [...prev.annotations, ...annotations],
-                sessionId: sessionIdRef.current
+                sessionId: sessionIdRef.current,
+                subAgents: applySubAgentAnnotations(prev.subAgents, annotations),
+                pendingPlan: pendingPlanUpdate !== undefined ? pendingPlanUpdate : prev.pendingPlan
             }))
             options?.onAnnotation?.(annotations)
         }
@@ -232,6 +412,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
                 conversationId: options?.conversationId,
                 signal: options?.abortSignal || abortControllerRef.current.signal,
                 maxSteps: defaultOptions?.maxSteps,
+                mode: options?.mode,
                 onToolExecution,
             })
 
@@ -338,7 +519,9 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             executionSteps: [],
             activeSkills: [],
             annotations: [],
-            sessionId: sessionIdRef.current
+            sessionId: sessionIdRef.current,
+            subAgents: {},
+            pendingPlan: null
         })
     }, [stop, streamBuffer])
 

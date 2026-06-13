@@ -131,6 +131,14 @@ public class DataStreamEncoder {
         try {
             Map<String, Object> payload = new LinkedHashMap<String, Object>();
             payload.put("error", event.getError() != null ? event.getError() : "Unknown error");
+            // Optional structured fields — omitted when null so older clients
+            // see the exact same frame as before.
+            if (event.getCode() != null) {
+                payload.put("code", event.getCode());
+            }
+            if (event.getRetriable() != null) {
+                payload.put("retriable", event.getRetriable());
+            }
             return "d:" + objectMapper.writeValueAsString(payload) + "\n";
         } catch (JsonProcessingException e) {
             log.error("Failed to encode error event", e);
@@ -149,112 +157,22 @@ public class DataStreamEncoder {
 
     /**
      * Encode a SubAgentEvent for Data Stream Protocol v2.
-     * Unwraps the inner event and delegates to the type-specific encoder,
-     * but injects {@code agentId} into the payload so the frontend can
-     * attribute the event to the originating sub-agent.
      *
-     * <p>For DataEvent and FinishEvent inner types, we fall back to
-     * wrapping them as a generic data annotation with agentId so no
-     * information is lost.
+     * <p>All sub-agent inner events are emitted on the {@code 8:} data/annotation
+     * channel as a typed {@code subagent_*} annotation (see
+     * {@link #buildSubAgentAnnotation}). They never reuse the {@code 0:/9:/a:/g:}
+     * main frames, so the root answer text stays clean and the frontend can build
+     * the sub-agent tree by {@code agentId} / {@code parentAgentId}.
      */
     private String encodeSubAgentDataStream(SubAgentEvent event) {
-        StreamEvent inner = event.getInner();
-        String agentId = event.getAgentId();
-
-        if (inner instanceof StreamEvent.TextEvent) {
-            // Encode as text delta but inject agentId
-            StreamEvent.TextEvent te = (StreamEvent.TextEvent) inner;
-            try {
-                Map<String, Object> payload = new LinkedHashMap<>();
-                payload.put("agentId", agentId);
-                payload.put("content", te.getContent() != null ? te.getContent() : "");
-                return "0:" + objectMapper.writeValueAsString(payload) + "\n";
-            } catch (JsonProcessingException e) {
-                return "";
-            }
-        } else if (inner instanceof StreamEvent.ReasoningEvent) {
-            StreamEvent.ReasoningEvent re = (StreamEvent.ReasoningEvent) inner;
-            try {
-                Map<String, Object> payload = new LinkedHashMap<>();
-                payload.put("agentId", agentId);
-                payload.put("reasoningContent", re.getReasoningContent() != null ? re.getReasoningContent() : "");
-                return "g:" + objectMapper.writeValueAsString(payload) + "\n";
-            } catch (JsonProcessingException e) {
-                return "";
-            }
-        } else if (inner instanceof StreamEvent.ToolCallEvent) {
-            StreamEvent.ToolCallEvent tc = (StreamEvent.ToolCallEvent) inner;
-            try {
-                Map<String, Object> payload = new LinkedHashMap<>();
-                payload.put("agentId", agentId);
-                payload.put("toolCallId", tc.getToolCallId());
-                payload.put("toolName", tc.getToolName());
-                if (tc.getArgs() != null && !tc.getArgs().isEmpty()) {
-                    try {
-                        payload.put("args", objectMapper.readValue(tc.getArgs(), Object.class));
-                    } catch (Exception ex) {
-                        payload.put("args", tc.getArgs());
-                    }
-                } else {
-                    payload.put("args", new LinkedHashMap<String, Object>());
-                }
-                return "9:" + objectMapper.writeValueAsString(payload) + "\n";
-            } catch (JsonProcessingException e) {
-                return "";
-            }
-        } else if (inner instanceof StreamEvent.ToolResultEvent) {
-            StreamEvent.ToolResultEvent tr = (StreamEvent.ToolResultEvent) inner;
-            try {
-                Map<String, Object> payload = new LinkedHashMap<>();
-                payload.put("agentId", agentId);
-                payload.put("toolCallId", tr.getToolCallId());
-                payload.put("result", tr.getResult());
-                return "a:" + objectMapper.writeValueAsString(payload) + "\n";
-            } catch (JsonProcessingException e) {
-                return "";
-            }
-        } else if (inner instanceof StreamEvent.ErrorEvent) {
-            StreamEvent.ErrorEvent ee = (StreamEvent.ErrorEvent) inner;
-            try {
-                Map<String, Object> payload = new LinkedHashMap<>();
-                payload.put("agentId", agentId);
-                payload.put("error", ee.getError() != null ? ee.getError() : "Unknown error");
-                return "d:" + objectMapper.writeValueAsString(payload) + "\n";
-            } catch (JsonProcessingException e) {
-                return "";
-            }
-        } else if (inner instanceof StreamEvent.FinishEvent) {
-            // Sub-agent finish: encode as data annotation so it doesn't
-            // terminate the parent stream
-            StreamEvent.FinishEvent fe = (StreamEvent.FinishEvent) inner;
-            try {
-                Map<String, Object> payload = new LinkedHashMap<>();
-                payload.put("type", "subagent_finish");
-                payload.put("agentId", agentId);
-                payload.put("finishReason", fe.getFinishReason() != null ? fe.getFinishReason() : "stop");
-                if (fe.getPromptTokens() != null || fe.getCompletionTokens() != null) {
-                    Map<String, Object> usage = new LinkedHashMap<>();
-                    usage.put("promptTokens", fe.getPromptTokens() != null ? fe.getPromptTokens() : 0);
-                    usage.put("completionTokens", fe.getCompletionTokens() != null ? fe.getCompletionTokens() : 0);
-                    payload.put("usage", usage);
-                }
-                return "8:" + objectMapper.writeValueAsString(java.util.Collections.singletonList(payload)) + "\n";
-            } catch (JsonProcessingException e) {
-                return "";
-            }
-        } else if (inner instanceof StreamEvent.DataEvent) {
-            // Wrap with agentId and emit as data annotation
-            StreamEvent.DataEvent de = (StreamEvent.DataEvent) inner;
-            try {
-                Map<String, Object> wrapper = new LinkedHashMap<>();
-                wrapper.put("agentId", agentId);
-                wrapper.put("detail", de.getData());
-                return "8:" + objectMapper.writeValueAsString(java.util.Collections.singletonList(wrapper)) + "\n";
-            } catch (JsonProcessingException e) {
-                return "";
-            }
+        try {
+            Map<String, Object> annotation = buildSubAgentAnnotation(event);
+            return "8:" + objectMapper.writeValueAsString(
+                    java.util.Collections.singletonList(annotation)) + "\n";
+        } catch (JsonProcessingException e) {
+            log.error("Failed to encode sub-agent data stream event", e);
+            return "";
         }
-        return "";
     }
 
     // -------------------------------------------------------------------------
@@ -499,6 +417,14 @@ public class DataStreamEncoder {
         Map<String, Object> wrapper = new LinkedHashMap<>();
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("message", event.getError() != null ? event.getError() : "Unknown error");
+        // Optional structured fields — omitted when null so older clients
+        // see the exact same payload as before.
+        if (event.getCode() != null) {
+            detail.put("code", event.getCode());
+        }
+        if (event.getRetriable() != null) {
+            detail.put("retriable", event.getRetriable());
+        }
         wrapper.put("error", detail);
         return wrapper;
     }
@@ -516,65 +442,91 @@ public class DataStreamEncoder {
 
     /**
      * Convert a SubAgentEvent to a Map for SSE emission.
-     * Unwraps the inner event, delegates to the appropriate toMap method,
-     * and injects {@code agentId} into the resulting payload.
      *
-     * <p>For FinishEvent inner types, wraps as a data annotation to avoid
-     * prematurely terminating the parent SSE stream.
+     * <p><b>All</b> sub-agent inner events are routed through the annotation
+     * channel as a typed {@code subagent_*} annotation — they never reuse the
+     * main text/tool frames. This keeps the root agent's answer text clean (a
+     * sub-agent's tokens must not be concatenated into the main reply) and lets
+     * the frontend attribute every event to a node in the sub-agent tree.
      */
-    @SuppressWarnings("unchecked")
     private Map<String, Object> subAgentEventToMap(SubAgentEvent event) {
-        StreamEvent inner = event.getInner();
-        String agentId = event.getAgentId();
-
-        // FinishEvent from a sub-agent must NOT be encoded as a finish event
-        // on the parent stream — it would close the SSE connection.
-        // Instead, wrap it as a data annotation.
-        if (inner instanceof StreamEvent.FinishEvent) {
-            Map<String, Object> wrapper = new LinkedHashMap<>();
-            wrapper.put("type", "subagent_finish");
-            wrapper.put("agentId", agentId);
-            wrapper.put("finishReason", ((StreamEvent.FinishEvent) inner).getFinishReason());
-            Map<String, Object> delta = new LinkedHashMap<>();
-            delta.put("annotations", java.util.Collections.singletonList(wrapper));
-            Map<String, Object> choice = new LinkedHashMap<>();
-            choice.put("delta", delta);
-            choice.put("finish_reason", null);
-            Map<String, Object> resp = new LinkedHashMap<>();
-            resp.put("choices", new Object[] { choice });
-            return resp;
-        }
-
-        // For all other inner types, delegate to the existing toMap method
-        // and inject agentId into the delta.
-        Object innerMap = toSseData(inner);
-        if (innerMap instanceof Map) {
-            Map<String, Object> map = (Map<String, Object>) innerMap;
-            Object choicesObj = map.get("choices");
-            if (choicesObj instanceof Object[]) {
-                Object[] choices = (Object[]) choicesObj;
-                if (choices.length > 0 && choices[0] instanceof Map) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> choice = (Map<String, Object>) choices[0];
-                    Object deltaObj = choice.get("delta");
-                    if (deltaObj instanceof Map) {
-                        ((Map<String, Object>) deltaObj).put("agentId", agentId);
-                    }
-                }
-            }
-            return map;
-        }
-
-        // Fallback: wrap as data annotation
+        Map<String, Object> annotation = buildSubAgentAnnotation(event);
         Map<String, Object> delta = new LinkedHashMap<>();
-        delta.put("agentId", agentId);
-        delta.put("annotations", innerMap);
+        delta.put("annotations", java.util.Collections.singletonList(annotation));
         Map<String, Object> choice = new LinkedHashMap<>();
         choice.put("delta", delta);
         choice.put("finish_reason", null);
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("choices", new Object[] { choice });
         return resp;
+    }
+
+    /**
+     * Build the typed {@code subagent_*} annotation for a sub-agent event,
+     * carrying the common identity header (agentId / parentAgentId / depth)
+     * plus type-specific fields. Shared by the SSE and Data-Stream encoders.
+     */
+    private Map<String, Object> buildSubAgentAnnotation(SubAgentEvent event) {
+        StreamEvent inner = event.getInner();
+        Map<String, Object> ann = new LinkedHashMap<>();
+        // Common identity header
+        ann.put("agentId", event.getAgentId());
+        ann.put("parentAgentId", event.getParentAgentId());
+        ann.put("depth", event.getDepth());
+
+        if (inner instanceof StreamEvent.TextEvent) {
+            ann.put("type", "subagent_output");
+            ann.put("content", nullToEmpty(((StreamEvent.TextEvent) inner).getContent()));
+        } else if (inner instanceof StreamEvent.ReasoningEvent) {
+            ann.put("type", "subagent_reasoning");
+            ann.put("content", nullToEmpty(((StreamEvent.ReasoningEvent) inner).getReasoningContent()));
+        } else if (inner instanceof StreamEvent.ToolCallEvent) {
+            StreamEvent.ToolCallEvent tc = (StreamEvent.ToolCallEvent) inner;
+            ann.put("type", "subagent_tool_call");
+            ann.put("toolCallId", tc.getToolCallId());
+            ann.put("toolName", tc.getToolName());
+            ann.put("args", parseArgsOrRaw(tc.getArgs()));
+        } else if (inner instanceof StreamEvent.ToolResultEvent) {
+            StreamEvent.ToolResultEvent tr = (StreamEvent.ToolResultEvent) inner;
+            ann.put("type", "subagent_tool_result");
+            ann.put("toolCallId", tr.getToolCallId());
+            ann.put("result", tr.getResult());
+        } else if (inner instanceof StreamEvent.ErrorEvent) {
+            StreamEvent.ErrorEvent ee = (StreamEvent.ErrorEvent) inner;
+            ann.put("type", "subagent_error");
+            ann.put("error", ee.getError() != null ? ee.getError() : "Unknown error");
+        } else if (inner instanceof StreamEvent.FinishEvent) {
+            StreamEvent.FinishEvent fe = (StreamEvent.FinishEvent) inner;
+            ann.put("type", "subagent_finish");
+            ann.put("finishReason", fe.getFinishReason() != null ? fe.getFinishReason() : "stop");
+            if (fe.getPromptTokens() != null || fe.getCompletionTokens() != null) {
+                Map<String, Object> usage = new LinkedHashMap<>();
+                usage.put("promptTokens", fe.getPromptTokens() != null ? fe.getPromptTokens() : 0);
+                usage.put("completionTokens", fe.getCompletionTokens() != null ? fe.getCompletionTokens() : 0);
+                ann.put("usage", usage);
+            }
+        } else if (inner instanceof StreamEvent.DataEvent) {
+            ann.put("type", "subagent_progress");
+            ann.put("detail", ((StreamEvent.DataEvent) inner).getData());
+        } else {
+            ann.put("type", "subagent_event");
+        }
+        return ann;
+    }
+
+    private String nullToEmpty(String s) {
+        return s != null ? s : "";
+    }
+
+    private Object parseArgsOrRaw(String args) {
+        if (args == null || args.isEmpty()) {
+            return new LinkedHashMap<String, Object>();
+        }
+        try {
+            return objectMapper.readValue(args, Object.class);
+        } catch (Exception e) {
+            return args;
+        }
     }
 
     // -------------------------------------------------------------------------

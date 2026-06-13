@@ -5,6 +5,7 @@ import com.knowledge.agent.channel.AgentChannel;
 import com.knowledge.agent.channel.AgentMessage;
 import com.knowledge.agent.core.engine.StreamEvent;
 import com.knowledge.agent.llm.LlmClientFactory;
+import com.knowledge.agent.llm.LlmResilience;
 import com.knowledge.agent.tool.*;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -37,6 +38,7 @@ public class SubAgent {
     private final ToolContext context;
     private final LlmClientFactory llmClientFactory;
     private final ContextManager contextManager;
+    private final LlmResilience llmResilience;
 
     // Collects the final text output produced by this sub-agent
     private final StringBuilder finalOutput = new StringBuilder();
@@ -51,7 +53,8 @@ public class SubAgent {
             AgentChannel channel,
             ToolContext context,
             LlmClientFactory llmClientFactory,
-            ContextManager contextManager) {
+            ContextManager contextManager,
+            LlmResilience llmResilience) {
         this.agentId = agentId;
         this.description = description;
         this.toolRegistry = toolRegistry;
@@ -60,6 +63,7 @@ public class SubAgent {
         this.context = context;
         this.llmClientFactory = llmClientFactory;
         this.contextManager = contextManager;
+        this.llmResilience = llmResilience;
     }
 
     /**
@@ -121,7 +125,8 @@ public class SubAgent {
                 llmClientFactory,
                 toolRegistry,
                 contextManager,
-                new DynamicSkillRegistry());  // sub-agents get a fresh, empty registry
+                new DynamicSkillRegistry(),  // sub-agents get a fresh, empty registry
+                llmResilience);
 
         return loop.run(messages, null, toolIds, subPrompt.toString(), context, 10)
                 .doOnSubscribe(s -> {

@@ -1,5 +1,6 @@
 package com.knowledge.agent.harness;
 
+import com.knowledge.agent.api.dto.AgentMode;
 import com.knowledge.agent.api.dto.ChatTool;
 import com.knowledge.agent.tool.Tool;
 import com.knowledge.agent.tool.ToolContext;
@@ -78,6 +79,20 @@ public class SystemPromptBuilder {
 
         // --- Context section (current time + user info) ---
         sb.append(buildContextSection(context));
+
+        // --- Plan mode instructions (P7), layer 2 ---
+        if (context != null && context.getMode() == AgentMode.PLAN) {
+            sb.append("=== PLAN MODE ACTIVE ===\n");
+            sb.append("You are in PLAN MODE. You MUST NOT modify anything. ");
+            sb.append("Only use read-only tools (search / read / fetch / list / get) and `delegate` ");
+            sb.append("for read-only research. Do NOT call any tool that writes, deletes, updates, or ");
+            sb.append("otherwise changes state — such calls will be rejected.\n");
+            sb.append("When you have finished researching, you MUST call the `present_plan` tool with a ");
+            sb.append("structured plan (title, summary, ordered steps with their tools and risk levels, ");
+            sb.append("open questions, estimated number of mutations). Do not start executing the plan — ");
+            sb.append("it will be shown to the user for approval first.\n");
+            sb.append("=== END PLAN MODE ===\n\n");
+        }
 
         // --- Base prompt + tool list ---
         sb.append(BASE_PROMPT);

@@ -122,9 +122,14 @@ function normalizeFinishReason(reason: string): FinishEvent['finishReason'] {
 function parseEventData(json: any): ChatStreamEvent[] {
     // 1. Error event (top-level "error" field)
     if (json.error) {
+        const errObj = typeof json.error === 'object' && json.error !== null ? json.error : null
         return [{
             type: 'error',
-            error: typeof json.error === 'string' ? json.error : json.error?.message || 'Unknown error',
+            error: typeof json.error === 'string' ? json.error : errObj?.message || 'Unknown error',
+            // Optional structured fields — present only when the backend
+            // classified the error (P0+). Older payloads simply omit them.
+            code: errObj?.code,
+            retriable: errObj?.retriable,
         } as ErrorEvent]
     }
 

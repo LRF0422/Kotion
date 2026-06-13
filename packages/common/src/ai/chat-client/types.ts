@@ -116,6 +116,8 @@ export interface ChatRequest {
     capabilitiesVersion?: string
     /** Frontend passthrough metadata */
     data?: Record<string, any>
+    /** Run mode: 'plan' (read-only research → plan → approval) or 'execute' (default). */
+    mode?: 'plan' | 'execute'
     /** Abort signal for the fetch request (not sent to backend) */
     signal?: AbortSignal
 }
@@ -136,32 +138,80 @@ export interface DelegateStartAnnotation {
         agentId: string
         description: string
     }>
+    /** Spawner agent id (null = root). */
+    parentAgentId?: string | null
+    /** Depth of the spawned sub-agents (root spawn = 1). */
+    depth?: number
 }
 
-export interface SubagentStatusAnnotation {
-    type: 'subagent_status'
+/**
+ * Common identity header carried by every sub-agent annotation, used to build
+ * the sub-agent tree on the frontend.
+ */
+export interface SubagentHeader {
     agentId: string
-    status: 'spawned' | 'working' | 'completed' | 'error'
+    /** Spawner agent id; null/undefined = root. */
+    parentAgentId?: string | null
+    /** Delegation depth (root spawn = 1). */
+    depth?: number
+}
+
+/** A sub-agent has been created. */
+export interface SubagentSpawnedAnnotation extends SubagentHeader {
+    type: 'subagent_spawned'
+    task?: string
+    capabilities?: string[]
+}
+
+export interface SubagentStatusAnnotation extends SubagentHeader {
+    type: 'subagent_status'
+    status: 'spawned' | 'running' | 'working' | 'completed' | 'error'
     detail?: string
 }
 
-export interface SubagentOutputAnnotation {
+/** Live text delta produced by a sub-agent. */
+export interface SubagentOutputAnnotation extends SubagentHeader {
     type: 'subagent_output'
-    agentId: string
     content: string
 }
 
-export interface SubagentToolCallAnnotation {
-    type: 'subagent_tool_call'
-    agentId: string
-    toolName: string
-    toolCallId: string
+/** Live reasoning/thinking delta produced by a sub-agent. */
+export interface SubagentReasoningAnnotation extends SubagentHeader {
+    type: 'subagent_reasoning'
+    content: string
 }
 
-export interface SubagentToolResultAnnotation {
-    type: 'subagent_tool_result'
-    agentId: string
+export interface SubagentToolCallAnnotation extends SubagentHeader {
+    type: 'subagent_tool_call'
+    toolName: string
     toolCallId: string
+    args?: unknown
+}
+
+export interface SubagentToolResultAnnotation extends SubagentHeader {
+    type: 'subagent_tool_result'
+    toolCallId: string
+    result?: unknown
+    error?: string
+}
+
+/** A sub-agent's own iteration status (thinking / tool_calling). */
+export interface SubagentProgressAnnotation extends SubagentHeader {
+    type: 'subagent_progress'
+    detail?: unknown
+}
+
+export interface SubagentErrorAnnotation extends SubagentHeader {
+    type: 'subagent_error'
+    error: string
+}
+
+/** A sub-agent has finished. */
+export interface SubagentFinishAnnotation extends SubagentHeader {
+    type: 'subagent_finish'
+    finishReason?: string
+    status?: 'completed' | 'error'
+    usage?: { promptTokens: number; completionTokens: number }
 }
 
 export interface DelegateResultAnnotation {
@@ -175,16 +225,52 @@ export interface ContextCompressedAnnotation {
     to: number
 }
 
+// ---- Plan mode (P7) ----
+
+/** Structured plan the agent submits via `present_plan` for approval. */
+export interface PlanArtifact {
+    title?: string
+    summary: string
+    steps: Array<{
+        id?: number
+        action: string
+        tools?: string[]
+        risk?: 'low' | 'medium' | 'high'
+    }>
+    openQuestions?: string[]
+    estimatedMutations?: number
+}
+
+/** Emitted when the run enters plan mode. */
+export interface PlanModeEnteredAnnotation {
+    type: 'plan_mode_entered'
+    trigger?: 'request' | 'agent'
+}
+
+/** The agent has proposed a plan and is waiting for the user's decision. */
+export interface PlanProposedAnnotation {
+    type: 'plan_proposed'
+    plan: PlanArtifact
+    planId?: string
+}
+
 /** All annotation types from the spec */
 export type Annotation =
     | AgentStatusAnnotation
     | DelegateStartAnnotation
+    | SubagentSpawnedAnnotation
     | SubagentStatusAnnotation
     | SubagentOutputAnnotation
+    | SubagentReasoningAnnotation
     | SubagentToolCallAnnotation
     | SubagentToolResultAnnotation
+    | SubagentProgressAnnotation
+    | SubagentErrorAnnotation
+    | SubagentFinishAnnotation
     | DelegateResultAnnotation
     | ContextCompressedAnnotation
+    | PlanModeEnteredAnnotation
+    | PlanProposedAnnotation
 
 // ============ Stream Event Types ============
 
@@ -236,6 +322,14 @@ export interface FinishEvent {
 export interface ErrorEvent {
     type: 'error'
     error: string
+    /**
+     * Machine-readable error class (mirrors backend `AgentErrorCode`, e.g.
+     * 'LLM_RATE_LIMIT', 'TOOL_TIMEOUT'). Optional — absent on legacy/unclassified
+     * errors. Lets the UI decide whether to offer a retry.
+     */
+    code?: string
+    /** Whether the client may retry this request. Optional. */
+    retriable?: boolean
 }
 
 /** All stream event types */

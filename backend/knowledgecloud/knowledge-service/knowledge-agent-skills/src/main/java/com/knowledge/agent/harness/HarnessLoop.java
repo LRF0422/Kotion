@@ -1,21 +1,27 @@
 package com.knowledge.agent.harness;
 
+import com.knowledge.agent.api.dto.AgentMode;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.api.dto.ChatTool;
 import com.knowledge.agent.core.engine.StreamEvent;
 import com.knowledge.agent.llm.LlmClient;
 import com.knowledge.agent.llm.LlmClientFactory;
 import com.knowledge.agent.llm.LlmRequest;
+import com.knowledge.agent.llm.LlmResilience;
 import com.knowledge.agent.llm.LlmResponse;
 import com.knowledge.agent.llm.StreamChunk;
 import com.knowledge.agent.tool.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 /**
  * The agentic loop: LLM call → tool call → observe → repeat.
@@ -40,15 +46,38 @@ public class HarnessLoop {
     private final ToolRegistry toolRegistry;
     private final ContextManager contextManager;
     private final DynamicSkillRegistry dynamicSkillRegistry;
+    private final LlmResilience llmResilience;
+
+    /**
+     * When true (default), use the token-level streaming loop that forwards LLM
+     * deltas as they arrive. When false, fall back to the legacy buffer-then-emit
+     * loop. Lets the streaming rewrite be rolled out / rolled back per environment.
+     */
+    @Value("${agent.harness.streaming.enabled:true}")
+    private boolean streamingEnabled;
+
+    /** Per-tool execution timeout for synchronous tools (P4). */
+    @Value("${agent.tool.timeout-seconds:180}")
+    private int toolTimeoutSeconds;
+
+    /**
+     * Extra tool names to treat as read-only in PLAN mode, beyond the built-in
+     * heuristic (get*/search*/read*/list*/fetch*/query* + delegate/search_skills).
+     * Comma-separated (P7).
+     */
+    @Value("${agent.plan-mode.read-only-tools:}")
+    private String planReadOnlyToolsCsv;
 
     public HarnessLoop(LlmClientFactory llmClientFactory,
             ToolRegistry toolRegistry,
             ContextManager contextManager,
-            DynamicSkillRegistry dynamicSkillRegistry) {
+            DynamicSkillRegistry dynamicSkillRegistry,
+            LlmResilience llmResilience) {
         this.llmClientFactory = llmClientFactory;
         this.toolRegistry = toolRegistry;
         this.contextManager = contextManager;
         this.dynamicSkillRegistry = dynamicSkillRegistry;
+        this.llmResilience = llmResilience;
     }
 
     /**
@@ -110,18 +139,27 @@ public class HarnessLoop {
             }
         }
 
-        // Iteration state — mutable references shared across the reactive chain
+        // Iteration state — references shared across the reactive chain
         AtomicInteger iteration = new AtomicInteger(0);
         LlmClient client = llmClientFactory.getClientForModel(model);
+        LoopState state = new LoopState(workingMessages, iteration, maxIterations,
+                client, toolIds, frontendTools, frontendToolNames, context);
 
-        // Use expand() for a fully reactive loop:
+        if (streamingEnabled) {
+            // Token-level streaming loop: each iteration is itself a Flux that
+            // forwards LLM deltas live, then recurses via concatWith(defer).
+            // Flux.defer ensures the first iteration's side effects (iteration
+            // increment, context compression) run at subscribe time.
+            return Flux.defer(() -> runTurn(state));
+        }
+
+        // Legacy buffer-then-emit loop (expand over collected IterationResults).
         // 1. Seed: a Mono<IterationResult> representing the first iteration
         // 2. expand(): if the result needs to continue, run the next iteration
         // 3. Take up to maxIterations
         // 4. Flatten all events from each iteration
-        return Mono.fromCallable(() -> new LoopState(workingMessages, iteration, maxIterations,
-                client, toolIds, frontendTools, frontendToolNames, context))
-                .flatMapMany(state -> runIteration(state)
+        return Mono.fromCallable(() -> state)
+                .flatMapMany(s -> runIteration(s)
                         .expand(result -> {
                             if (result.shouldContinue()) {
                                 return runIteration(result.getState());
@@ -130,6 +168,351 @@ public class HarnessLoop {
                         })
                         .take(maxIterations)
                         .flatMapIterable(IterationResult::getEvents));
+    }
+
+    // -------------------------------------------------------------------------
+    // Streaming loop (P1): one iteration = one Flux of live events
+    // -------------------------------------------------------------------------
+
+    /**
+     * Run a single streaming iteration and recurse.
+     *
+     * <p>Structure: {@code thinking-status} → live LLM deltas (text/reasoning
+     * forwarded as they arrive) → {@code continueOrFinish} (tool execution +
+     * recursion or terminal finish). The LLM stream is consumed once: a side
+     * {@link ResponseAccumulator} captures the full content + tool calls while
+     * deltas flow to the client, so nothing is buffered before first paint.
+     */
+    private Flux<StreamEvent> runTurn(LoopState state) {
+        int iter = state.iteration.incrementAndGet();
+        if (iter > state.maxIterations) {
+            return Flux.just(StreamEvent.FinishEvent.builder()
+                    .finishReason("max_iterations")
+                    .build());
+        }
+
+        // Context window management
+        contextManager.compressIfNeeded(state.workingMessages);
+
+        // Rebuild tools each iteration to pick up dynamically activated skills
+        List<ChatTool> mergedFrontend = mergeFrontendAndDynamicTools(
+                state.initialFrontendTools, dynamicSkillRegistry.getActiveTools());
+
+        // PLAN mode (P7), layer 1: only advertise read-only tools to the LLM so
+        // it cannot even see mutating tools.
+        boolean planMode = isPlanMode(state);
+        Collection<String> effectiveToolIds = state.toolIds;
+        List<ChatTool> effectiveFrontend = mergedFrontend;
+        if (planMode) {
+            effectiveToolIds = state.toolIds == null ? null : state.toolIds.stream()
+                    .filter(this::isReadOnlyTool)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            effectiveFrontend = mergedFrontend.stream()
+                    .filter(ft -> ft.getFunction() == null || isReadOnlyTool(ft.getFunction().getName()))
+                    .collect(Collectors.toList());
+        }
+        String toolsJson = toolRegistry.buildToolsJson(effectiveToolIds, effectiveFrontend);
+
+        // frontendToolNames keeps the FULL set so the classifier can still detect
+        // a (disallowed) frontend tool the model might call despite the catalog.
+        state.frontendToolNames.clear();
+        state.frontendToolNames.addAll(toolRegistry.getFrontendToolIds());
+        for (ChatTool ft : mergedFrontend) {
+            if (ft.getFunction() != null) {
+                state.frontendToolNames.add(ft.getFunction().getName());
+            }
+        }
+
+        String dynamicPrompt = dynamicSkillRegistry.getPromptFragment();
+        if (dynamicPrompt != null && !dynamicPrompt.isEmpty()) {
+            updateSystemPromptWithDynamicFragment(state.workingMessages, dynamicPrompt);
+        }
+
+        StreamEvent thinkingEvent = StreamEvent.DataEvent.builder()
+                .data(Collections.singletonList(mapOf(
+                        "type", "agent_status",
+                        "phase", "thinking",
+                        "iteration", String.valueOf(iter))))
+                .build();
+
+        LlmRequest request = LlmRequest.builder()
+                .model(null)
+                .messages(state.workingMessages)
+                .toolsJson(toolsJson)
+                .stream(true)
+                .build();
+
+        ResponseAccumulator acc = new ResponseAccumulator();
+
+        // Live deltas: feed the accumulator and forward user-visible deltas in
+        // a single pass via handle() (no buffering, no mapNotNull dependency).
+        // The LLM stream is wrapped with resilience (idle/first-token timeout).
+        Flux<StreamEvent> live = llmResilience.apply(state.client.streamChat(request))
+                .handle((chunk, sink) -> {
+                    acc.feed(chunk);
+                    StreamEvent delta = ResponseAccumulator.toDeltaEvent(chunk);
+                    if (delta != null) {
+                        sink.next(delta);
+                    }
+                });
+
+        // After the stream completes, decide: execute tools + recurse, or finish.
+        Flux<StreamEvent> tail = Flux.defer(() -> continueOrFinish(acc.assemble(), state));
+
+        return Flux.concat(Flux.just(thinkingEvent), live, tail)
+                .onErrorResume(e -> {
+                    log.error("HarnessLoop streaming iteration error", e);
+                    return Flux.just(
+                            StreamEvent.ErrorEvent.builder()
+                                    .error(e.getMessage())
+                                    .code("INTERNAL")
+                                    .retriable(Boolean.FALSE)
+                                    .build(),
+                            StreamEvent.FinishEvent.builder().finishReason("error").build());
+                });
+    }
+
+    /**
+     * Decide the next step after a streamed LLM turn has been assembled.
+     * Mirrors the legacy {@code runIteration} tail logic but returns a live Flux.
+     */
+    private Flux<StreamEvent> continueOrFinish(LlmResponse response, LoopState state) {
+        if (response == null) {
+            return Flux.just(
+                    StreamEvent.ErrorEvent.builder().error("Empty LLM response").build(),
+                    StreamEvent.FinishEvent.builder().finishReason("error").build());
+        }
+
+        if (!response.hasToolCalls()) {
+            return Flux.just(StreamEvent.FinishEvent.builder()
+                    .finishReason(response.getFinishReason() != null ? response.getFinishReason() : "stop")
+                    .promptTokens(response.getUsage() != null ? response.getUsage().getPromptTokens() : 0)
+                    .completionTokens(response.getUsage() != null ? response.getUsage().getCompletionTokens() : 0)
+                    .build());
+        }
+
+        // PLAN mode (P7): intercept present_plan → propose the plan and pause for
+        // approval. The tool is never executed; the turn ends with a dedicated
+        // "plan-approval" finish reason.
+        for (LlmResponse.ToolCall tc : response.getToolCalls()) {
+            if ("present_plan".equals(tc.getName())) {
+                return Flux.just(
+                        planProposedEvent(tc.getArguments()),
+                        StreamEvent.FinishEvent.builder().finishReason("plan-approval").build());
+            }
+        }
+
+        boolean planMode = isPlanMode(state);
+
+        // Separate frontend and backend tool calls. In PLAN mode, any non
+        // read-only call is routed to the backend path so it gets rejected with
+        // PLAN_MODE_VIOLATION (layer 3) instead of executing — even if it is a
+        // frontend tool that would otherwise run on the client.
+        List<LlmResponse.ToolCall> frontendCalls = new ArrayList<>();
+        List<LlmResponse.ToolCall> backendCalls = new ArrayList<>();
+        for (LlmResponse.ToolCall tc : response.getToolCalls()) {
+            boolean allowedReadOnly = !planMode || isReadOnlyTool(tc.getName());
+            if (state.frontendToolNames.contains(tc.getName()) && allowedReadOnly) {
+                frontendCalls.add(tc);
+            } else {
+                backendCalls.add(tc);
+            }
+        }
+
+        // Frontend tools: emit calls, finish (loop pauses; client executes)
+        if (!frontendCalls.isEmpty()) {
+            List<StreamEvent> events = new ArrayList<>();
+            for (LlmResponse.ToolCall tc : frontendCalls) {
+                events.add(StreamEvent.ToolCallEvent.builder()
+                        .toolCallId(tc.getId())
+                        .toolName(tc.getName())
+                        .args(tc.getArguments())
+                        .build());
+            }
+            events.add(StreamEvent.FinishEvent.builder().finishReason("tool-calls").build());
+            return Flux.fromIterable(events);
+        }
+
+        // Backend tools: append a single assistant message carrying all tool
+        // calls, execute them (streaming), then recurse.
+        List<ChatMessage.ToolCallInfo> tcInfos = new ArrayList<>();
+        for (LlmResponse.ToolCall tc : response.getToolCalls()) {
+            tcInfos.add(new ChatMessage.ToolCallInfo(
+                    tc.getId(), "function",
+                    new ChatMessage.ToolCallInfo.FunctionInfo(tc.getName(), tc.getArguments())));
+        }
+        ChatMessage.ChatMessageBuilder assistantMsgBuilder = ChatMessage.builder().role("assistant");
+        assistantMsgBuilder.content(
+                response.getContent() != null && !response.getContent().isEmpty() ? response.getContent() : null);
+        if (response.getReasoningContent() != null && !response.getReasoningContent().isEmpty()) {
+            assistantMsgBuilder.reasoningContent(response.getReasoningContent());
+        }
+        assistantMsgBuilder.toolCalls(tcInfos);
+        state.workingMessages.add(assistantMsgBuilder.build());
+
+        return executeBackendToolsStreaming(backendCalls, state)
+                .concatWith(Flux.defer(() -> runTurn(state)));
+    }
+
+    /**
+     * Execute backend tool calls sequentially (ordering preserved), streaming
+     * each tool's events live instead of collecting them first.
+     */
+    private Flux<StreamEvent> executeBackendToolsStreaming(List<LlmResponse.ToolCall> backendCalls, LoopState state) {
+        return Flux.fromIterable(backendCalls)
+                .concatMap(tc -> executeOneBackendTool(tc, state));
+    }
+
+    private Flux<StreamEvent> executeOneBackendTool(LlmResponse.ToolCall tc, LoopState state) {
+        StreamEvent toolCallEvent = StreamEvent.ToolCallEvent.builder()
+                .toolCallId(tc.getId())
+                .toolName(tc.getName())
+                .args(tc.getArguments())
+                .build();
+
+        // PLAN mode (P7), layer 3 — hard backstop: refuse any mutating tool, even
+        // if it slipped past the catalog filter. Fed back to the LLM so it can
+        // re-plan via read-only tools, never actually executed.
+        if (isPlanMode(state) && !isReadOnlyTool(tc.getName())) {
+            ToolResult violation = ToolResult.error(
+                    "PLAN_MODE_VIOLATION: tool '" + tc.getName() + "' may modify state and cannot run in "
+                            + "plan mode. Use only read-only tools, then call present_plan to submit your plan.");
+            appendToolMessage(state, tc, violation.getError());
+            return Flux.just(toolCallEvent,
+                    StreamEvent.ToolResultEvent.builder()
+                            .toolCallId(tc.getId())
+                            .result(violation)
+                            .build());
+        }
+
+        Tool tool = toolRegistry.get(tc.getName());
+        if (tool == null) {
+            ToolResult errorResult = ToolResult.error("Unknown tool: " + tc.getName());
+            appendToolMessage(state, tc,
+                    errorResult.getOutput() != null ? errorResult.getOutput() : errorResult.getError());
+            return Flux.just(toolCallEvent,
+                    StreamEvent.ToolResultEvent.builder()
+                            .toolCallId(tc.getId())
+                            .result(errorResult)
+                            .build());
+        }
+
+        if (tool instanceof AsyncTool) {
+            AsyncTool asyncTool = (AsyncTool) tool;
+            StringBuilder resultHolder = new StringBuilder();
+            Flux<StreamEvent> inner = asyncTool.executeAsync(state.context, tc.getArguments())
+                    .doOnNext(ev -> {
+                        if (ev instanceof StreamEvent.ToolResultEvent) {
+                            Object result = ((StreamEvent.ToolResultEvent) ev).getResult();
+                            resultHolder.setLength(0);
+                            resultHolder.append(result != null ? result.toString() : "");
+                        }
+                    })
+                    .concatWith(Flux.defer(() -> {
+                        appendToolMessage(state, tc, resultHolder.toString());
+                        return Flux.<StreamEvent>empty();
+                    }));
+            return Flux.concat(Flux.just(toolCallEvent), inner);
+        }
+
+        // Sync tool: emit progress, then execute off the event loop.
+        StreamEvent statusEvent = StreamEvent.DataEvent.builder()
+                .data(Collections.singletonList(mapOf(
+                        "type", "agent_status",
+                        "phase", "tool_calling",
+                        "tool", tc.getName())))
+                .build();
+
+        Mono<StreamEvent> resultMono = Mono.fromCallable(() -> {
+            ToolResult result = tool.execute(state.context, tc.getArguments());
+            appendToolMessage(state, tc, result.isSuccess()
+                    ? (result.getOutput() != null ? result.getOutput() : "")
+                    : (result.getError() != null ? result.getError() : "Error"));
+            return (StreamEvent) StreamEvent.ToolResultEvent.builder()
+                    .toolCallId(tc.getId())
+                    .result(result)
+                    .build();
+        }).subscribeOn(Schedulers.boundedElastic())
+                // Per-tool timeout (P4): a hung sync tool becomes a recoverable
+                // tool error fed back to the LLM, instead of stalling the turn.
+                .timeout(Duration.ofSeconds(toolTimeoutSeconds))
+                .onErrorResume(err -> {
+                    String msg = (err instanceof java.util.concurrent.TimeoutException)
+                            ? "Tool " + tc.getName() + " timed out after " + toolTimeoutSeconds + "s"
+                            : "Tool " + tc.getName() + " failed: " + err.getMessage();
+                    appendToolMessage(state, tc, msg);
+                    return Mono.just((StreamEvent) StreamEvent.ToolResultEvent.builder()
+                            .toolCallId(tc.getId())
+                            .result(ToolResult.error(msg))
+                            .build());
+                });
+
+        return Flux.concat(Flux.just(toolCallEvent, statusEvent), resultMono);
+    }
+
+    private void appendToolMessage(LoopState state, LlmResponse.ToolCall tc, String content) {
+        state.workingMessages.add(ChatMessage.builder()
+                .role("tool")
+                .toolCallId(tc.getId())
+                .name(tc.getName())
+                .content(content != null ? content : "")
+                .build());
+    }
+
+    // ---- Plan mode helpers (P7) ----
+
+    private boolean isPlanMode(LoopState state) {
+        return state.context != null && state.context.getMode() == AgentMode.PLAN;
+    }
+
+    /**
+     * Whether a tool is safe to run in PLAN mode (read-only / no side effects).
+     * Combines an explicit allowlist with a conservative name heuristic; default
+     * is to treat unknown tools as mutating (default-deny).
+     */
+    private boolean isReadOnlyTool(String name) {
+        if (name == null) {
+            return false;
+        }
+        if ("present_plan".equals(name) || "search_skills".equals(name)) {
+            // present_plan ends the plan; search_skills only reveals more tools.
+            // NB: `delegate` is intentionally NOT allowed in plan mode — sub-agents
+            // run a loop that doesn't yet enforce plan gating, so spawning them
+            // could bypass the read-only guarantee. Disallow until that's closed.
+            return true;
+        }
+        if (planReadOnlyToolsCsv != null && !planReadOnlyToolsCsv.isEmpty()) {
+            for (String t : planReadOnlyToolsCsv.split(",")) {
+                if (name.equals(t.trim())) {
+                    return true;
+                }
+            }
+        }
+        String n = name.toLowerCase();
+        return n.startsWith("get") || n.startsWith("search") || n.startsWith("read")
+                || n.startsWith("list") || n.startsWith("fetch") || n.startsWith("query")
+                || n.contains("search") || n.equals("selection") || n.equals("range") || n.equals("history");
+    }
+
+    /**
+     * Build the {@code plan_proposed} annotation event from the present_plan
+     * arguments (the structured PlanArtifact JSON).
+     */
+    private StreamEvent planProposedEvent(String planArgsJson) {
+        Object plan = planArgsJson;
+        try {
+            // Parse so the frontend receives a structured object, not a string.
+            plan = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readValue(planArgsJson != null ? planArgsJson : "{}", Object.class);
+        } catch (Exception ignore) {
+            // fall back to raw string
+        }
+        Map<String, Object> annotation = new LinkedHashMap<>();
+        annotation.put("type", "plan_proposed");
+        annotation.put("plan", plan);
+        return StreamEvent.DataEvent.builder()
+                .data(Collections.singletonList(annotation))
+                .build();
     }
 
     /**
@@ -565,10 +948,17 @@ public class HarnessLoop {
         return new ArrayList<>(merged.values());
     }
 
+    // Markers delimiting the re-renderable dynamic-skills section of the system
+    // prompt. Using a replaceable section (P2) instead of blind string-append +
+    // contains() makes dynamic skill activation idempotent and updatable: the
+    // section is recomputed from the current DynamicCapabilityState each turn.
+    private static final String DYN_BEGIN = "<<<DYNAMIC_SKILLS_BEGIN>>>";
+    private static final String DYN_END = "<<<DYNAMIC_SKILLS_END>>>";
+
     /**
-     * Update the system message in workingMessages to include dynamic prompt
-     * fragments from newly activated skills. Only adds fragments that aren't
-     * already present (idempotent).
+     * Render the system message's dynamic-skills section to reflect the current
+     * set of activated skill fragments. Idempotent and re-renderable: any prior
+     * section is replaced, not appended to.
      */
     private void updateSystemPromptWithDynamicFragment(
             List<ChatMessage> workingMessages, String dynamicPrompt) {
@@ -579,11 +969,24 @@ public class HarnessLoop {
         if (!"system".equals(first.getRole())) {
             return;
         }
-        String currentContent = first.getContent() != null ? first.getContent() : "";
-        // Only append if not already present (idempotent check)
-        if (!currentContent.contains(dynamicPrompt)) {
-            String newContent = currentContent + "\n\nDynamically activated skill instructions:\n" + dynamicPrompt;
-            first.setContent(newContent);
+        String content = first.getContent() != null ? first.getContent() : "";
+
+        // Strip any existing dynamic section first (makes this re-renderable).
+        int begin = content.indexOf(DYN_BEGIN);
+        if (begin >= 0) {
+            int end = content.indexOf(DYN_END);
+            int cut = end >= 0 ? end + DYN_END.length() : content.length();
+            content = (content.substring(0, begin) + content.substring(Math.min(cut, content.length())))
+                    .replaceAll("\\s+$", "");
         }
+
+        if (dynamicPrompt != null && !dynamicPrompt.isEmpty()) {
+            content = content
+                    + "\n\n" + DYN_BEGIN + "\n"
+                    + "Dynamically activated skill instructions:\n"
+                    + dynamicPrompt + "\n"
+                    + DYN_END;
+        }
+        first.setContent(content);
     }
 }

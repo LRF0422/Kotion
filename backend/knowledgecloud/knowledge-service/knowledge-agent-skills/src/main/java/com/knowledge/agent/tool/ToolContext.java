@@ -1,5 +1,6 @@
 package com.knowledge.agent.tool;
 
+import com.knowledge.agent.api.dto.AgentMode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -52,7 +53,23 @@ public class ToolContext {
     private int delegateDepth = 0;
 
     /**
-     * Create a child context with incremented delegate depth.
+     * Id of the agent that owns this context. {@code null} for the root agent;
+     * a sub-agent's own id once spawned. DelegateTool reads this as the
+     * {@code parentAgentId} of any sub-agents it spawns, enabling a sub-agent
+     * tree (including nested delegation).
+     */
+    private String agentId;
+
+    /**
+     * Run mode (P7). PLAN restricts the agent to read-only tools; sub-agents
+     * inherit it so plan-mode research delegation stays read-only.
+     */
+    @Builder.Default
+    private AgentMode mode = AgentMode.EXECUTE;
+
+    /**
+     * Create a child context with incremented delegate depth, preserving the
+     * owning {@code agentId} of the spawner and the run {@code mode}.
      */
     public ToolContext incrementDepth() {
         return ToolContext.builder()
@@ -66,6 +83,8 @@ public class ToolContext {
                 .tenantIdStr(this.tenantIdStr)
                 .roleName(this.roleName)
                 .delegateDepth(this.delegateDepth + 1)
+                .agentId(this.agentId)
+                .mode(this.mode)
                 .build();
     }
 }

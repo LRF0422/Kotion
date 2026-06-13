@@ -34,6 +34,18 @@ public class SubAgentEvent extends StreamEvent {
     private String agentId;
 
     /**
+     * The id of the agent that spawned this sub-agent. {@code null} means the
+     * root agent (top-level delegate). Lets the frontend build a sub-agent tree
+     * and support nested delegation (depth &gt; 1).
+     */
+    private String parentAgentId;
+
+    /**
+     * Delegation depth of the producing sub-agent (root spawn = 1).
+     */
+    private int depth;
+
+    /**
      * The original event from the sub-agent's HarnessLoop.
      * Preserves the concrete type (TextEvent, ToolCallEvent, etc.) so
      * that the SSE / Data-Stream encoder can use the correct wire format.
@@ -48,9 +60,21 @@ public class SubAgentEvent extends StreamEvent {
     // ---- Convenience helpers ----
 
     /**
-     * Wrap a sub-agent event, tagging it with the agent ID.
+     * Wrap a sub-agent event, tagging it with the agent ID only (root parent).
      */
     public static SubAgentEvent of(String agentId, StreamEvent inner) {
         return SubAgentEvent.builder().agentId(agentId).inner(inner).build();
+    }
+
+    /**
+     * Wrap a sub-agent event with full identity (agent id, parent id, depth).
+     */
+    public static SubAgentEvent of(String agentId, String parentAgentId, int depth, StreamEvent inner) {
+        return SubAgentEvent.builder()
+                .agentId(agentId)
+                .parentAgentId(parentAgentId)
+                .depth(depth)
+                .inner(inner)
+                .build();
     }
 }

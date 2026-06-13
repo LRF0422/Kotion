@@ -15,6 +15,35 @@ import java.util.List;
 public abstract class StreamEvent {
 
     /**
+     * Monotonic per-turn sequence number, stamped by the transport layer just
+     * before the event is sent. Used as the SSE {@code id:} for resumable
+     * streaming (Last-Event-ID replay). {@code -1} means "not yet stamped".
+     */
+    private long seq = -1L;
+
+    /**
+     * Wall-clock timestamp (epoch millis) when the event was stamped for send.
+     * {@code 0} means "not yet stamped".
+     */
+    private long ts = 0L;
+
+    public long getSeq() {
+        return seq;
+    }
+
+    public void setSeq(long seq) {
+        this.seq = seq;
+    }
+
+    public long getTs() {
+        return ts;
+    }
+
+    public void setTs(long ts) {
+        this.ts = ts;
+    }
+
+    /**
      * Returns the event type identifier.
      */
     public abstract String getType();
@@ -147,6 +176,19 @@ public abstract class StreamEvent {
     @AllArgsConstructor
     public static class ErrorEvent extends StreamEvent {
         private String error;
+
+        /**
+         * Machine-readable error class name (see {@code AgentErrorCode}).
+         * Optional — null on legacy/unclassified errors, omitted from the wire
+         * when null so older clients are unaffected.
+         */
+        private String code;
+
+        /**
+         * Whether the client may retry. Optional (nullable); omitted from the
+         * wire when null.
+         */
+        private Boolean retriable;
 
         @Override
         public String getType() {

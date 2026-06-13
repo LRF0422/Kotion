@@ -134,6 +134,11 @@ public class DelegateTool implements AsyncTool {
                 // Limit sub-agents
                 int subtaskCount = Math.min(subtasksNode.size(), maxSubAgents);
 
+                // Identity for the sub-agent tree: the spawner is this context's
+                // agent (null at the root); children sit one level deeper.
+                final String parentAgentId = context.getAgentId();
+                final int childDepth = context.getDelegateDepth() + 1;
+
                 // 3. Emit delegate_start event
                 List<Map<String, String>> subtaskInfo = new ArrayList<>();
                 for (int i = 0; i < subtaskCount; i++) {
@@ -173,24 +178,34 @@ public class DelegateTool implements AsyncTool {
                     // Always include delegate tool so sub-agents can further delegate
                     resolvedToolIds.add("delegate");
 
-                    // Create child context with incremented depth
+                    // Create child context with incremented depth; tag it with
+                    // the sub-agent's own id so nested delegations know their parent.
                     ToolContext childContext = context.incrementDepth();
+                    childContext.setAgentId(subtaskId);
 
                     SubAgent subAgent = subAgentFactory.create(
                             subtaskId, description, resolvedToolIds, channel, childContext);
 
-                    descriptors.add(new SubAgentDescriptor(subtaskId, description, subAgent));
+                    descriptors.add(new SubAgentDescriptor(
+                            subtaskId, description, new ArrayList<>(resolvedToolIds), subAgent));
                 }
 
-                // 6. Emit initial status events (delegate_start + spawned)
+                // 6. Emit initial status events (delegate_start + spawned).
+                // delegate_start carries the spawner's identity so the frontend
+                // can hang the sub-agent subtree under the right node.
+                startData.put("parentAgentId", parentAgentId);
+                startData.put("depth", childDepth);
                 List<StreamEvent> initEvents = new ArrayList<>();
                 initEvents.add(StreamEvent.DataEvent.builder()
                         .data(Collections.singletonList(startData))
                         .build());
                 for (SubAgentDescriptor desc : descriptors) {
-                    initEvents.add(dataEvent("subagent_status",
+                    initEvents.add(dataEvent("subagent_spawned",
                             "agentId", desc.subtaskId,
-                            "status", "spawned"));
+                            "parentAgentId", parentAgentId,
+                            "depth", childDepth,
+                            "task", desc.description,
+                            "capabilities", desc.capabilities));
                 }
 
                 // 7. Run sub-agents with maxParallel concurrency.
@@ -210,9 +225,12 @@ public class DelegateTool implements AsyncTool {
 
                     Flux<StreamEvent> agentFlux = subAgent.run()
                             .timeout(timeout)
-                            .map(event -> (StreamEvent) SubAgentEvent.of(subtaskId, event))
+                            .map(event -> (StreamEvent) SubAgentEvent.of(
+                                    subtaskId, parentAgentId, childDepth, event))
                             .startWith(dataEvent("subagent_status",
                                     "agentId", subtaskId,
+                                    "parentAgentId", parentAgentId,
+                                    "depth", childDepth,
                                     "status", "running"))
                             .doOnComplete(() -> {
                                 resultEntries.put(subtaskId, new SubAgentResultEntry(
@@ -228,13 +246,26 @@ public class DelegateTool implements AsyncTool {
                             .onErrorResume(e -> Flux.just(
                                     dataEvent("subagent_status",
                                             "agentId", subtaskId,
+                                            "parentAgentId", parentAgentId,
+                                            "depth", childDepth,
                                             "status", "error",
                                             "detail", e.getMessage()),
-                                    SubAgentEvent.of(subtaskId,
+                                    SubAgentEvent.of(subtaskId, parentAgentId, childDepth,
                                             StreamEvent.ErrorEvent.builder()
                                                     .error("Sub-agent " + subtaskId
                                                             + " error: " + e.getMessage())
                                                     .build())))
+                            // Emit a terminal subagent_finish carrying status +
+                            // captured output so the UI can close the node.
+                            .concatWith(Flux.defer(() -> {
+                                SubAgentResultEntry entry = resultEntries.get(subtaskId);
+                                boolean ok = entry == null || entry.success;
+                                return Flux.just(dataEvent("subagent_finish",
+                                        "agentId", subtaskId,
+                                        "parentAgentId", parentAgentId,
+                                        "depth", childDepth,
+                                        "status", ok ? "completed" : "error"));
+                            }))
                             .subscribeOn(Schedulers.boundedElastic());
 
                     subAgentFluxes.add(agentFlux);
@@ -317,11 +348,13 @@ public class DelegateTool implements AsyncTool {
     private static class SubAgentDescriptor {
         final String subtaskId;
         final String description;
+        final List<String> capabilities;
         final SubAgent subAgent;
 
-        SubAgentDescriptor(String subtaskId, String description, SubAgent subAgent) {
+        SubAgentDescriptor(String subtaskId, String description, List<String> capabilities, SubAgent subAgent) {
             this.subtaskId = subtaskId;
             this.description = description;
+            this.capabilities = capabilities;
             this.subAgent = subAgent;
         }
     }
