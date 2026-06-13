@@ -22,6 +22,11 @@ export interface ExtensionWrapper {
     } | { divider: true; title: string })[],
     flotMenuConfig?: ElementType[],
     floatingUI?: ElementType,  // Floating UI component (e.g., chat widget)
+    /**
+     * Rendered once below EditorContent after content is ready (e.g. backlinks panel).
+     * Receives `{ editor }` as prop, same convention as floatingUI/flotMenuConfig.
+     */
+    pageFooter?: ElementType,
     tools?: {
         name: string,
         description: string,

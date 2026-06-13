@@ -5,7 +5,16 @@
  * @module @kn/plugin-block-reference/bidirectional-link/extensions
  */
 
-import { Mark, mergeAttributes, ChainedCommands } from "@kn/editor";
+import { Mark, mergeAttributes, ChainedCommands, Plugin, PluginKey } from "@kn/editor";
+import { event } from "@kn/common";
+
+/**
+ * Global event emitted when a [[page link]] is clicked in the editor.
+ * A ProseMirror plugin cannot use React hooks (useNavigator), so the click is
+ * bridged to PageFooter (always mounted) which resolves the spaceId and navigates.
+ * Payload: { pageId: string }
+ */
+export const PAGE_LINK_CLICK = "WIKI_PAGE_LINK_CLICK";
 
 export interface PageLinkAttributes {
     pageId: number | null;
@@ -51,6 +60,24 @@ export const PageLink = Mark.create({
                 style: 'color: var(--primary); cursor: pointer; border-bottom: 1px dashed currentColor;',
             }),
             0,
+        ];
+    },
+
+    addProseMirrorPlugins() {
+        return [
+            new Plugin({
+                key: new PluginKey('pageLinkClick'),
+                props: {
+                    handleClick(_view, _pos, e) {
+                        const el = (e.target as HTMLElement)?.closest('[data-page-link]');
+                        const pageId = el?.getAttribute('data-page-id');
+                        if (!pageId) return false;
+                        e.preventDefault();
+                        event.emit(PAGE_LINK_CLICK as any, { pageId });
+                        return true;
+                    },
+                },
+            }),
         ];
     },
 

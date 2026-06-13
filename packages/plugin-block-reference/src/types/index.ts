@@ -28,6 +28,8 @@ export interface BacklinkVO {
     sourcePageTitle: string;
     /** Block ID if source is a block */
     sourceBlockId: string | null;
+    /** Space ID of the source page (needed for cross-space navigation; optional until backend provides it) */
+    sourceSpaceId?: string;
     /** Text snippet around the link */
     snippet: string;
     /** Link kind: NORMAL, MENTION, EMBED */

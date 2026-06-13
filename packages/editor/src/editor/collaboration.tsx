@@ -314,6 +314,12 @@ export const CollaborationEditor = forwardRef<
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
             <StyledEditor>
               <EditorContent editor={editor} />
+              {contentReady && (extensionWrappers as ExtensionWrapper[])
+                .filter((w) => w.pageFooter)
+                .map((w, i) => {
+                  const Footer = w.pageFooter!;
+                  return <Footer key={`page-footer-${w.name}-${i}`} editor={editor} />;
+                })}
               {!contentReady && (
                 <div className="space-y-3 p-4">
                   {isLargeDoc && (
