@@ -250,6 +250,15 @@ export interface SystemAgentContextValue {
     setOnUserChoiceRequest: (callback: OnUserChoiceRequest | undefined) => void
     /** Set session ID */
     setSessionId: (sessionId: string | null) => void
+    /**
+     * Respond to a pending plan (P7). `approved` resumes execution of the
+     * (optionally edited) plan; `rejected` re-plans with feedback. Clears
+     * `state.pendingPlan` and continues the same conversation.
+     */
+    resolvePlan: (
+        decision: 'approved' | 'rejected',
+        opts?: { feedback?: string; editedPlan?: PlanArtifact }
+    ) => Promise<void>
 }
 
 export interface SystemAgentProviderProps {
@@ -288,6 +297,8 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
     // Use ref for activeSkills to avoid stale closure in stream callback
     const activeSkillsRef = useRef<Set<string>>(new Set())
     const sessionIdRef = useRef<string | null>(null)
+    // Mirror of state.pendingPlan for stable access inside callbacks (P7).
+    const pendingPlanRef = useRef<{ plan: PlanArtifact; planId?: string } | null>(null)
 
     // Shared streaming buffer
     const streamBuffer = useStreamBuffer()
@@ -353,6 +364,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         // Reset state
         streamBuffer.reset()
         stepCounterRef.current = 0
+        pendingPlanRef.current = null
         setState({
             isGenerating: true,
             streamingContent: '',
@@ -379,6 +391,9 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
                 if (ann && ann.type === 'plan_proposed' && ann.plan) {
                     pendingPlanUpdate = { plan: ann.plan, planId: ann.planId }
                 }
+            }
+            if (pendingPlanUpdate !== undefined) {
+                pendingPlanRef.current = pendingPlanUpdate
             }
 
             setState(prev => ({
@@ -531,6 +546,39 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         setState(prev => ({ ...prev, sessionId }))
     }, [])
 
+    // Plan mode (P7): respond to a pending plan and resume the conversation.
+    const resolvePlan = useCallback(async (
+        decision: 'approved' | 'rejected',
+        opts?: { feedback?: string; editedPlan?: PlanArtifact }
+    ): Promise<void> => {
+        const pending = pendingPlanRef.current
+        // Clear the pending plan immediately so the card dismisses.
+        pendingPlanRef.current = null
+        setState(prev => ({ ...prev, pendingPlan: null }))
+        if (!pending) return
+
+        const sessionId = sessionIdRef.current || undefined
+
+        if (decision === 'rejected') {
+            const fb = opts?.feedback?.trim() || '请重新规划。'
+            // Stay in plan mode and re-plan with the feedback.
+            await stream(`我不同意这个计划。${fb}`, { mode: 'plan', sessionId })
+            return
+        }
+
+        // Approved / edited: inject the plan and execute it.
+        const plan = opts?.editedPlan || pending.plan
+        const steps = (plan.steps || [])
+            .map((s, i) => `${i + 1}. ${s.action}`)
+            .join('\n')
+        const prompt =
+            `我已批准以下计划，请直接按计划执行，不要再次询问确认：\n` +
+            (plan.title ? `标题：${plan.title}\n` : '') +
+            (plan.summary ? `概述：${plan.summary}\n` : '') +
+            (steps ? `步骤：\n${steps}` : '')
+        await stream(prompt, { mode: 'execute', sessionId })
+    }, [stream])
+
     // Callback setters
     const setOnToolExecution = useCallback((callback: OnToolExecution | undefined) => {
         onToolExecutionRef.current = callback
@@ -552,7 +600,8 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         reset,
         setOnToolExecution,
         setOnUserChoiceRequest,
-        setSessionId
+        setSessionId,
+        resolvePlan
     }), [
         state,
         stream,
@@ -564,7 +613,8 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         reset,
         setOnToolExecution,
         setOnUserChoiceRequest,
-        setSessionId
+        setSessionId,
+        resolvePlan
     ])
 
     return (

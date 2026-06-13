@@ -312,7 +312,7 @@ export interface SessionInfoEvent {
 
 export interface FinishEvent {
     type: 'finish'
-    finishReason: 'stop' | 'tool-calls' | 'max_iterations' | 'error' | 'length'
+    finishReason: 'stop' | 'tool-calls' | 'max_iterations' | 'error' | 'length' | 'plan-approval'
     usage?: {
         promptTokens: number
         completionTokens: number

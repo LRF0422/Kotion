@@ -108,6 +108,10 @@ function normalizeFinishReason(reason: string): FinishEvent['finishReason'] {
         'max_iterations': 'max_iterations',
         'error': 'error',
         'length': 'length',
+        // Plan mode (P7): the agent paused to await plan approval. Accept both
+        // hyphen and underscore spellings.
+        'plan-approval': 'plan-approval',
+        'plan_approval': 'plan-approval',
     }
     return mapping[reason] || (reason as FinishEvent['finishReason'])
 }
