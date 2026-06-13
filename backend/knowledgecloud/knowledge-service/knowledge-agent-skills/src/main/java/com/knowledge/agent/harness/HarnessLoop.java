@@ -60,11 +60,12 @@ public class HarnessLoop {
     @Value("${agent.tool.timeout-seconds:180}")
     private int toolTimeoutSeconds;
 
-    /**
-     * Extra tool names to treat as read-only in PLAN mode, beyond the built-in
-     * heuristic (get*/search*/read*/list*/fetch*/query* + delegate/search_skills).
-     * Comma-separated (P7).
-     */
+    // /**
+    // * Extra tool names to treat as read-only in PLAN mode, beyond the built-in
+    // * heuristic (get*/search*/read*/list*/fetch*/query* +
+    // delegate/search_skills).
+    // * Comma-separated (P7).
+    // ** /
     @Value("${agent.plan-mode.read-only-tools:}")
     private String planReadOnlyToolsCsv;
 
@@ -177,7 +178,8 @@ public class HarnessLoop {
     /**
      * Run a single streaming iteration and recurse.
      *
-     * <p>Structure: {@code thinking-status} → live LLM deltas (text/reasoning
+     * <p>
+     * Structure: {@code thinking-status} → live LLM deltas (text/reasoning
      * forwarded as they arrive) → {@code continueOrFinish} (tool execution +
      * recursion or terminal finish). The LLM stream is consumed once: a side
      * {@link ResponseAccumulator} captures the full content + tool calls while
@@ -204,9 +206,10 @@ public class HarnessLoop {
         Collection<String> effectiveToolIds = state.toolIds;
         List<ChatTool> effectiveFrontend = mergedFrontend;
         if (planMode) {
-            effectiveToolIds = state.toolIds == null ? null : state.toolIds.stream()
-                    .filter(this::isReadOnlyTool)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            effectiveToolIds = state.toolIds == null ? null
+                    : state.toolIds.stream()
+                            .filter(this::isReadOnlyTool)
+                            .collect(Collectors.toCollection(LinkedHashSet::new));
             effectiveFrontend = mergedFrontend.stream()
                     .filter(ft -> ft.getFunction() == null || isReadOnlyTool(ft.getFunction().getName()))
                     .collect(Collectors.toList());
@@ -810,9 +813,9 @@ public class HarnessLoop {
         final AtomicInteger iteration;
         final int maxIterations;
         final LlmClient client;
-        final Collection<String> toolIds;  // backend tool IDs (not frontend)
-        final List<ChatTool> initialFrontendTools;  // mutable: merged with dynamic tools each iter
-        final Set<String> frontendToolNames;  // mutable: rebuilt each iter
+        final Collection<String> toolIds; // backend tool IDs (not frontend)
+        final List<ChatTool> initialFrontendTools; // mutable: merged with dynamic tools each iter
+        final Set<String> frontendToolNames; // mutable: rebuilt each iter
         final ToolContext context;
 
         LoopState(List<ChatMessage> workingMessages,

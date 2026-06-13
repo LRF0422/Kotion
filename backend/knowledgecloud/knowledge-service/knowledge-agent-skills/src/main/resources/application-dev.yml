@@ -13,36 +13,3 @@ spring:
       password: ${blade.redis.dev.password:}
       database: 0
 
-agent:
-  providers:
-    deepseek:
-      base-url: https://api.deepseek.com
-      api-key: sk-9b062a7c948747479e680e3a7fce8b85
-      models:
-        - name: deepseek-v4-pro
-          max-tokens: 8192
-          temperature: 0.7
-        - name: deepseek-v4-flash
-          max-tokens: 8192
-          temperature: 0.7
-  default-provider: deepseek
-  default-model: deepseek-v4-pro
-  context:
-    max-tokens: 32768
-    compression-threshold: 0.75
-    strategy: truncate
-  delegate:
-    max-depth: 2
-    max-sub-agents: 5
-    max-parallel: 3
-  skill:
-    web-search:
-      enabled: true
-      provider: tavily
-      api-url: https://api.tavily.com/search
-      api-key: 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
-      timeout-seconds: 10
-      default-max-results: 5
-      max-results-limit: 20
-    web-fetch:
-      timeout-seconds: 15
