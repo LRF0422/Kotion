@@ -1,4 +1,4 @@
-import { PMNode as Node, ReactNodeViewRenderer, mergeAttributes } from "@kn/editor"
+import { PMNode as Node, ReactNodeViewRenderer, mergeAttributes, withNodeViewErrorBoundary } from "@kn/editor"
 import { DrawnixView } from "./DrawnixView"
 import type { PlaitElement } from '@plait/core'
 
@@ -197,7 +197,7 @@ export const Drawnix = Node.create({
         return ["div", mergeAttributes(HTMLAttributes, { class: "node-drawnix" })]
     },
     addNodeView() {
-        return ReactNodeViewRenderer(DrawnixView, {
+        return ReactNodeViewRenderer(withNodeViewErrorBoundary(DrawnixView), {
             stopEvent: () => true
         })
     },
