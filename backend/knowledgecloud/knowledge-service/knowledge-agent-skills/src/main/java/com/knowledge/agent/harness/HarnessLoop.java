@@ -52,13 +52,28 @@ public class HarnessLoop {
      * When true (default), use the token-level streaming loop that forwards LLM
      * deltas as they arrive. When false, fall back to the legacy buffer-then-emit
      * loop. Lets the streaming rewrite be rolled out / rolled back per environment.
+     *
+     * <p>The Java field initializer ({@code = true}) is the default for instances
+     * built via {@code new HarnessLoop(...)} (e.g. {@link SubAgent}, which is not
+     * a Spring bean and therefore never gets {@code @Value} injection). For
+     * Spring-managed beans, {@code @Value} runs after construction and overrides
+     * this. Without the initializer, hand-constructed sub-agents would default to
+     * {@code false} and run the legacy buffered loop — emitting no live
+     * {@code subagent_*} progress, so the UI shows sub-agents stuck at "spawned".
      */
     @Value("${agent.harness.streaming.enabled:true}")
-    private boolean streamingEnabled;
+    private boolean streamingEnabled = true;
 
-    /** Per-tool execution timeout for synchronous tools (P4). */
+    /**
+     * Per-tool execution timeout for synchronous tools (P4). Field initializer is
+     * the default for hand-constructed (non-Spring) instances; {@code @Value}
+     * overrides for Spring beans. Must stay non-zero — the streaming path applies
+     * {@code .timeout(toolTimeoutSeconds)} to every sync tool, so a 0 default
+     * (what an uninitialized field would give a sub-agent) would time out
+     * instantly.
+     */
     @Value("${agent.tool.timeout-seconds:180}")
-    private int toolTimeoutSeconds;
+    private int toolTimeoutSeconds = 180;
 
     // /**
     // * Extra tool names to treat as read-only in PLAN mode, beyond the built-in
