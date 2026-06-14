@@ -262,7 +262,7 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                         {/* Mobile Header + Content */}
                         <div className="flex flex-col h-screen w-full relative">
                             {/* Draggable region at the top of main content area */}
-                            {!isMobile && <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region z-10" />}
+                            {!isMobile && <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region" />}
                             {/* Mobile Header */}
                             {isMobile && (
                                 <MobileHeader sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
