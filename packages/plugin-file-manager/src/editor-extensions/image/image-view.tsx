@@ -1,18 +1,24 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { NodeViewWrapper, NodeViewProps } from "@kn/editor";
 
 import { Resizable } from "@kn/editor";
 import { useFileService } from "@kn/common";
 
+/** 初始展示时的最大宽度回退值(容器宽度不可测时使用) */
+const FALLBACK_MAX_WIDTH = 640;
+
 export const ImageView: React.FC<NodeViewProps> = ({
   editor,
   node: { attrs },
   updateAttributes,
-  getPos
+  getPos,
+  selected
 }) => {
   const { src, width, height, align, aspectRatio, float, alt, title } = attrs;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   const fileService = useFileService();
 
@@ -22,11 +28,40 @@ export const ImageView: React.FC<NodeViewProps> = ({
     return "flex-start";
   }, [align]);
 
+  // 优先使用已保存的宽高比;否则用图片自然尺寸推导;都没有时不锁定。
+  const ratio = useMemo<number | undefined>(() => {
+    if (typeof aspectRatio === "number" && aspectRatio > 0) return aspectRatio;
+    if (natural && natural.h > 0) return natural.w / natural.h;
+    if (typeof width === "number" && typeof height === "number" && height > 0) {
+      return width / height;
+    }
+    return undefined;
+  }, [aspectRatio, natural, width, height]);
+
+  // 展示宽度:已保存则用之;否则按自然宽度并受容器宽度约束。
+  const displayWidth = useMemo<number>(() => {
+    if (typeof width === "number" && width > 0) return width;
+    const containerW = wrapperRef.current?.clientWidth || 0;
+    const naturalW = natural?.w || FALLBACK_MAX_WIDTH;
+    const cap = containerW > 0 ? Math.min(naturalW, containerW) : Math.min(naturalW, FALLBACK_MAX_WIDTH);
+    return Math.round(cap);
+  }, [width, natural]);
+
+  // 展示高度:已保存则用之;否则按比例推导,避免出现 auto/NaN。
+  const displayHeight = useMemo<number>(() => {
+    if (typeof height === "number" && height > 0) return height;
+    return ratio ? Math.round(displayWidth / ratio) : displayWidth;
+  }, [height, displayWidth, ratio]);
+
   const onResize = useCallback(
-    (size: any) => {
-      updateAttributes({ width: size.width, height: size.height });
+    (size: { width: number; height: number }) => {
+      const w = Math.round(size.width);
+      // 高度始终按比例换算,re-resizable 在锁定比例时 height 也可靠,
+      // 但显式换算可彻底规避 parseInt("") => NaN 的历史问题。
+      const h = ratio ? Math.round(w / ratio) : Math.round(size.height);
+      updateAttributes({ width: w, height: h, aspectRatio: ratio ?? null });
     },
-    [updateAttributes]
+    [updateAttributes, ratio]
   );
 
   const getSrc = useCallback((src: string) => {
@@ -40,7 +75,11 @@ export const ImageView: React.FC<NodeViewProps> = ({
     return fileService.getDownloadUrl(src);
   }, [fileService]);
 
-  const handleImageLoad = useCallback(() => {
+  const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    if (img.naturalWidth && img.naturalHeight) {
+      setNatural({ w: img.naturalWidth, h: img.naturalHeight });
+    }
     setLoading(false);
     setError(false);
   }, []);
@@ -54,6 +93,7 @@ export const ImageView: React.FC<NodeViewProps> = ({
 
   return (
     <NodeViewWrapper
+      ref={wrapperRef as any}
       draggable
       style={{
         float: float || "none",
@@ -64,12 +104,24 @@ export const ImageView: React.FC<NodeViewProps> = ({
         justifyContent: flexJustifyContent
       } as React.CSSProperties}>
       <Resizable
-        width={width || 100}
-        height={height || 100}
+        width={displayWidth}
+        height={displayHeight}
         editor={editor}
         getPos={getPos}
+        selected={selected}
         className="max-w-full"
-        aspectRatio={aspectRatio}
+        minWidth={48}
+        aspectRatio={ratio}
+        enable={{
+          top: false,
+          right: false,
+          bottom: false,
+          left: false,
+          topRight: true,
+          bottomRight: true,
+          bottomLeft: true,
+          topLeft: true
+        }}
         onResizeStop={onResize}>
         <div style={{ position: "relative", width: "100%", height: "100%" }}>
           {loading && (
@@ -93,7 +145,7 @@ export const ImageView: React.FC<NodeViewProps> = ({
             <div
               style={{
                 width: "100%",
-                height: height || 100,
+                height: displayHeight,
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
@@ -125,11 +177,13 @@ export const ImageView: React.FC<NodeViewProps> = ({
               src={imageSrc}
               alt={alt || "Image"}
               title={title}
-              width="100%"
               loading="lazy"
               onLoad={handleImageLoad}
               onError={handleImageError}
               style={{
+                display: "block",
+                width: "100%",
+                height: "auto",
                 opacity: loading ? 0 : 1,
                 transition: "opacity 0.3s ease-in-out",
                 objectFit: "contain",
