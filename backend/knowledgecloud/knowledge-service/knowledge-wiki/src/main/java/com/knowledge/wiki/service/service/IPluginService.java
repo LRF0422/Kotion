@@ -24,4 +24,10 @@ public interface IPluginService extends ISubjectService<Plugin> {
 
     PluginVersion getActiveVersion(Long pluginId);
 
+    void enablePlugin(Long versionId);
+
+    void disablePlugin(Long versionId);
+
+    void deleteInstalledPlugin(Long versionId);
+
 }

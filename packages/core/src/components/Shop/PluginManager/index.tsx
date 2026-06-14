@@ -10,9 +10,13 @@ import { useTranslation } from "@kn/common";
 const PLUGIN_CATEGORIES = [
     { id: 'all', labelKey: 'pluginManager.allPlugins', icon: LayoutGridIcon },
     { id: 'active', labelKey: 'pluginManager.active', icon: CheckCircleIcon },
-    { id: 'inactive', labelKey: 'pluginManager.inactive', icon: XCircleIcon },
-    { id: 'pending', labelKey: 'pluginManager.pendingReview', icon: ClockIcon },
+    { id: 'disabled', labelKey: 'pluginManager.inactive', icon: XCircleIcon },
+    { id: 'uninstalled', labelKey: 'pluginManager.notInstalled', icon: ClockIcon },
 ] as const;
+
+// Backend serializes the install status enum as a bare string or { value, desc }.
+const installState = (p: { installStatus?: string | { value: string } | null }): string | undefined =>
+    typeof p.installStatus === 'string' ? p.installStatus : (p.installStatus?.value ?? undefined);
 
 const PLUGIN_TYPES = [
     { id: 'feature', labelKey: 'pluginManager.feature', icon: CodeIcon },
@@ -35,6 +39,8 @@ interface PluginData {
     currentVersion?: string;
     key?: string;
     type?: string;
+    installStatus?: string | { value: string } | null;
+    currentVersionId?: string;
 }
 
 export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
@@ -55,26 +61,26 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
         setRefreshKey(k => k + 1)
     }, [])
 
-    // Calculate statistics
+    // Calculate statistics based on the runtime install status axis.
     const stats = useMemo(() => {
         const total = plugins.length;
-        const active = plugins.filter(p => p.status?.code === 'ACTIVE').length;
-        const inactive = plugins.filter(p => p.status?.code === 'INACTIVE').length;
-        const pending = plugins.filter(p => p.status?.code === 'PENDING').length;
-        return { total, active, inactive, pending };
+        const active = plugins.filter(p => installState(p) === 'ACTIVE').length;
+        const disabled = plugins.filter(p => installState(p) === 'DISABLED').length;
+        const uninstalled = plugins.filter(p => !installState(p)).length;
+        return { total, active, disabled, uninstalled };
     }, [plugins]);
 
     // Filter plugins based on selected category and type
     const filteredPlugins = useMemo(() => {
         let result = [...plugins];
 
-        // Filter by status category
+        // Filter by install-status category
         if (selectedCategory === 'active') {
-            result = result.filter(p => p.status?.code === 'ACTIVE');
-        } else if (selectedCategory === 'inactive') {
-            result = result.filter(p => p.status?.code === 'INACTIVE');
-        } else if (selectedCategory === 'pending') {
-            result = result.filter(p => p.status?.code === 'PENDING');
+            result = result.filter(p => installState(p) === 'ACTIVE');
+        } else if (selectedCategory === 'disabled') {
+            result = result.filter(p => installState(p) === 'DISABLED');
+        } else if (selectedCategory === 'uninstalled') {
+            result = result.filter(p => !installState(p));
         }
 
         // Filter by type
@@ -89,8 +95,8 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
         switch (categoryId) {
             case 'all': return stats.total;
             case 'active': return stats.active;
-            case 'inactive': return stats.inactive;
-            case 'pending': return stats.pending;
+            case 'disabled': return stats.disabled;
+            case 'uninstalled': return stats.uninstalled;
             default: return 0;
         }
     };
@@ -123,12 +129,12 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
                                 <div className="text-xs text-muted-foreground">{t('pluginManager.active')}</div>
                             </div>
                             <div className="p-3 bg-gray-500/10 rounded-lg">
-                                <div className="text-2xl font-bold text-gray-500">{stats.inactive}</div>
+                                <div className="text-2xl font-bold text-gray-500">{stats.disabled}</div>
                                 <div className="text-xs text-muted-foreground">{t('pluginManager.inactive')}</div>
                             </div>
                             <div className="p-3 bg-yellow-500/10 rounded-lg">
-                                <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
-                                <div className="text-xs text-muted-foreground">{t('pluginManager.pending')}</div>
+                                <div className="text-2xl font-bold text-yellow-600">{stats.uninstalled}</div>
+                                <div className="text-xs text-muted-foreground">{t('pluginManager.notInstalled')}</div>
                             </div>
                         </div>
                     </div>

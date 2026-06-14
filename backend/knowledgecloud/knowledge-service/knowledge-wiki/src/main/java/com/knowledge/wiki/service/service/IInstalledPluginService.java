@@ -19,4 +19,16 @@ public interface IInstalledPluginService extends MPJBaseService<InstalledPlugin>
 
     List<InstalledPlugin> getByPluginId(Long pluginId, boolean active);
 
+    /** Re-activate an installed plugin (any non-uninstalled row) by pluginId. */
+    void enable(Long pluginId);
+
+    /** Disable the active installed plugin by pluginId. */
+    void disableByPluginId(Long pluginId);
+
+    /** Remove the install record(s) of a plugin by pluginId. */
+    void remove(Long pluginId);
+
+    /** Latest non-uninstalled install record of a plugin, or null. */
+    InstalledPlugin getInstallRecord(Long pluginId);
+
 }

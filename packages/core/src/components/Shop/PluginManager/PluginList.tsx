@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { KnowledgeFile, useApi, useUploadFile, APIS } from "@kn/common";
+import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { KnowledgeFile, useApi, useUploadFile, APIS, AppContext, event, PLUGIN_CHANGED } from "@kn/common";
 import {
     Avatar, Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger,
     IconButton, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger, AlertDialog, AlertDialogAction,
@@ -36,7 +36,16 @@ interface Plugin {
     key?: string;
     createdAt?: string;
     updatedAt?: string;
+    // Runtime install status (from backend PluginVO.installStatus): undefined/null = not installed
+    installStatus?: string | { value: string; desc?: string } | null;
+    currentVersionId?: string;
+    pluginKey?: string;
+    resourcePath?: string;
 }
+
+// Backend may serialize an enum as a bare string or as { value, desc }; normalize to a code.
+const installState = (p: Pick<Plugin, 'installStatus'>): string | undefined =>
+    typeof p.installStatus === 'string' ? p.installStatus : (p.installStatus?.value ?? undefined);
 
 interface PluginVersion {
     label: string;
@@ -55,6 +64,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
 
     const { t } = useTranslation();
     const { usePath, upload } = useUploadFile();
+    const { pluginManager } = useContext(AppContext);
     const [open, setOpen] = useState(false);
     const [currentId, setCurrentId] = useState<string>();
     const [currentPlugin, setCurrentPlugin] = useState<Plugin>();
@@ -99,7 +109,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                     comparison = a.name.localeCompare(b.name);
                     break;
                 case 'status':
-                    comparison = (a.status?.code || '').localeCompare(b.status?.code || '');
+                    comparison = (installState(a) || '').localeCompare(installState(b) || '');
                     break;
                 case 'updated':
                     comparison = (a.updatedAt || '').localeCompare(b.updatedAt || '');
@@ -175,13 +185,37 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
     }, []);
 
     // Bulk actions
-    const handleBulkEnable = useCallback(async () => {
+    // Run an API call for every selected (installed) plugin, then sync the runtime
+    // PluginManager once and report aggregate success. Uses allSettled so a single
+    // failure doesn't abort the batch.
+    const runBulk = useCallback(async (
+        api: typeof APIS.ENABLE_PLUGIN,
+        successKey: string,
+        sync: ((p: Plugin) => void | Promise<void>) | undefined,
+    ) => {
         if (selectedPlugins.size === 0) return;
+        const targets = processedPlugins.filter(p => selectedPlugins.has(p.id) && p.currentVersionId);
+        if (targets.length === 0) {
+            toast.error(t('pluginManager.notInstalled'));
+            return;
+        }
         setBulkActionLoading(true);
         try {
-            // TODO: Implement bulk enable API call
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated delay
-            toast.success(`${selectedPlugins.size} ${t('pluginManager.bulkEnableSuccess')}`);
+            const results = await Promise.allSettled(
+                targets.map(p => useApi(api, { versionId: p.currentVersionId }))
+            );
+            const succeeded = targets.filter((_, i) => results[i].status === 'fulfilled');
+            if (sync) {
+                await Promise.all(succeeded.map(p => Promise.resolve(sync(p))));
+            }
+            if (succeeded.length > 0) {
+                event.emit(PLUGIN_CHANGED, { source: 'bulk' });
+            }
+            if (succeeded.length === targets.length) {
+                toast.success(`${succeeded.length} ${t(successKey)}`);
+            } else {
+                toast.error(`${succeeded.length}/${targets.length} ${t(successKey)}`);
+            }
             setSelectedPlugins(new Set());
             props.onRefresh?.();
         } catch (error) {
@@ -189,39 +223,22 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         } finally {
             setBulkActionLoading(false);
         }
-    }, [selectedPlugins, props.onRefresh, t]);
+    }, [selectedPlugins, processedPlugins, pluginManager, props.onRefresh, t]);
 
-    const handleBulkDisable = useCallback(async () => {
-        if (selectedPlugins.size === 0) return;
-        setBulkActionLoading(true);
-        try {
-            // TODO: Implement bulk disable API call
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated delay
-            toast.success(`${selectedPlugins.size} ${t('pluginManager.bulkDisableSuccess')}`);
-            setSelectedPlugins(new Set());
-            props.onRefresh?.();
-        } catch (error) {
-            toast.error(t('pluginManager.operationFailed'));
-        } finally {
-            setBulkActionLoading(false);
-        }
-    }, [selectedPlugins, props.onRefresh, t]);
+    const handleBulkEnable = useCallback(
+        () => runBulk(APIS.ENABLE_PLUGIN, 'pluginManager.bulkEnableSuccess', p => pluginManager?.installPlugin(p as any)),
+        [runBulk, pluginManager]
+    );
 
-    const handleBulkDelete = useCallback(async () => {
-        if (selectedPlugins.size === 0) return;
-        setBulkActionLoading(true);
-        try {
-            // TODO: Implement bulk delete API call
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated delay
-            toast.success(`${selectedPlugins.size} ${t('pluginManager.bulkDeleteSuccess')}`);
-            setSelectedPlugins(new Set());
-            props.onRefresh?.();
-        } catch (error) {
-            toast.error(t('pluginManager.operationFailed'));
-        } finally {
-            setBulkActionLoading(false);
-        }
-    }, [selectedPlugins, props.onRefresh, t]);
+    const handleBulkDisable = useCallback(
+        () => runBulk(APIS.DISABLE_PLUGIN, 'pluginManager.bulkDisableSuccess', p => pluginManager?.uninstallPlugin(p.name)),
+        [runBulk, pluginManager]
+    );
+
+    const handleBulkDelete = useCallback(
+        () => runBulk(APIS.DELETE_INSTALLED_PLUGIN, 'pluginManager.bulkDeleteSuccess', p => pluginManager?.uninstallPlugin(p.name)),
+        [runBulk, pluginManager]
+    );
 
     const handleAddTab = useCallback(() => {
         if (!newTabName.trim()) {
@@ -255,18 +272,31 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
     }, []);
 
     const handleToggleActive = useCallback(async (plugin: Plugin) => {
+        if (!plugin.currentVersionId) {
+            toast.error(t('pluginManager.notInstalled'));
+            return;
+        }
+        const isActive = installState(plugin) === 'ACTIVE';
         setActivePluginId(plugin.id);
         try {
-            // TODO: Implement activate/deactivate API call
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated delay
-            toast.success(plugin.status.code === 'ACTIVE' ? t('pluginManager.disableSuccess') : t('pluginManager.enableSuccess'));
+            if (isActive) {
+                await useApi(APIS.DISABLE_PLUGIN, { versionId: plugin.currentVersionId });
+                pluginManager?.uninstallPlugin(plugin.name);
+                event.emit(PLUGIN_CHANGED, { source: 'disable' });
+                toast.success(t('pluginManager.disableSuccess'));
+            } else {
+                await useApi(APIS.ENABLE_PLUGIN, { versionId: plugin.currentVersionId });
+                await pluginManager?.installPlugin(plugin as any);
+                event.emit(PLUGIN_CHANGED, { source: 'enable' });
+                toast.success(t('pluginManager.enableSuccess'));
+            }
             props.onRefresh?.();
         } catch (error) {
             toast.error(t('pluginManager.operationFailed'));
         } finally {
             setActivePluginId(undefined);
         }
-    }, [props.onRefresh, t]);
+    }, [pluginManager, props.onRefresh, t]);
 
     const handleDeletePlugin = useCallback((plugin: Plugin) => {
         setPluginToDelete(plugin);
@@ -275,10 +305,16 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
 
     const confirmDelete = useCallback(async () => {
         if (!pluginToDelete) return;
-
+        if (!pluginToDelete.currentVersionId) {
+            toast.error(t('pluginManager.notInstalled'));
+            setDeleteDialogOpen(false);
+            setPluginToDelete(undefined);
+            return;
+        }
         try {
-            // TODO: Implement delete API call
-            await new Promise(resolve => setTimeout(resolve, 500)); // Simulated delay
+            await useApi(APIS.DELETE_INSTALLED_PLUGIN, { versionId: pluginToDelete.currentVersionId });
+            pluginManager?.uninstallPlugin(pluginToDelete.name);
+            event.emit(PLUGIN_CHANGED, { source: 'delete' });
             toast.success(t('pluginManager.deleteSuccess'));
             props.onRefresh?.();
         } catch (error) {
@@ -287,7 +323,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
             setDeleteDialogOpen(false);
             setPluginToDelete(undefined);
         }
-    }, [pluginToDelete, props.onRefresh, t]);
+    }, [pluginToDelete, pluginManager, props.onRefresh, t]);
 
     const handleCopyPluginKey = useCallback((plugin: Plugin) => {
         navigator.clipboard.writeText(plugin.key || plugin.id);
@@ -328,21 +364,29 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
         }
     }, [currentPlugin, file, descriptions, props.onRefresh, t]);
 
-    const getStatusBadgeVariant = (status: PluginStatus) => {
-        switch (status?.code) {
+    // Badge/color/label are driven by the runtime install state (ACTIVE / DISABLED /
+    // not installed), not the catalog review status — that's what the toggle controls.
+    const getStatusBadgeVariant = (code?: string) => {
+        switch (code) {
             case 'ACTIVE': return 'default';
-            case 'INACTIVE': return 'secondary';
-            case 'PENDING': return 'outline';
-            default: return 'secondary';
+            case 'DISABLED': return 'secondary';
+            default: return 'outline';
         }
     };
 
-    const getStatusColor = (status: PluginStatus) => {
-        switch (status?.code) {
+    const getStatusColor = (code?: string) => {
+        switch (code) {
             case 'ACTIVE': return 'text-green-500';
-            case 'INACTIVE': return 'text-gray-400';
-            case 'PENDING': return 'text-yellow-500';
+            case 'DISABLED': return 'text-gray-400';
             default: return 'text-gray-400';
+        }
+    };
+
+    const installLabel = (p: Plugin) => {
+        switch (installState(p)) {
+            case 'ACTIVE': return t('pluginManager.active');
+            case 'DISABLED': return t('pluginManager.inactive');
+            default: return t('pluginManager.notInstalled');
         }
     };
     return <div className="w-full h-full flex flex-col overflow-hidden">
@@ -486,7 +530,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                     ) : (
                         processedPlugins.map((item, index) => {
                             const isActivating = activePluginId === item.id;
-                            const isActive = item.status?.code === 'ACTIVE';
+                            const isActive = installState(item) === 'ACTIVE';
                             const isSelected = selectedPlugins.has(item.id);
                             const isDetailOpen = detailPlugin?.id === item.id;
 
@@ -525,9 +569,9 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                             )}
                                             <Badge
                                                 className="h-5 shrink-0 text-xs"
-                                                variant={getStatusBadgeVariant(item.status)}
+                                                variant={getStatusBadgeVariant(installState(item))}
                                             >
-                                                {item.status?.desc || 'Unknown'}
+                                                {installLabel(item)}
                                             </Badge>
                                         </div>
                                         <div className="text-xs text-muted-foreground truncate">
@@ -557,7 +601,7 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                                             isActivating ? (
                                                                 <Loader2Icon className="h-4 w-4 animate-spin" />
                                                             ) : (
-                                                                <PowerIcon className={cn("h-4 w-4", getStatusColor(item.status))} />
+                                                                <PowerIcon className={cn("h-4 w-4", getStatusColor(installState(item)))} />
                                                             )
                                                         }
                                                         onClick={() => handleToggleActive(item)}
@@ -633,8 +677,8 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                     <div className="text-sm text-muted-foreground">
                                         v{detailPlugin.currentVersion || '1.0.0'}
                                     </div>
-                                    <Badge variant={getStatusBadgeVariant(detailPlugin.status)} className="mt-1">
-                                        {detailPlugin.status?.desc || t('pluginManager.unknown')}
+                                    <Badge variant={getStatusBadgeVariant(installState(detailPlugin))} className="mt-1">
+                                        {installLabel(detailPlugin)}
                                     </Badge>
                                 </div>
                             </div>
@@ -685,8 +729,8 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
                                         className="justify-start"
                                         onClick={() => handleToggleActive(detailPlugin)}
                                     >
-                                        <PowerIcon className={cn("h-4 w-4 mr-2", getStatusColor(detailPlugin.status))} />
-                                        {detailPlugin.status?.code === 'ACTIVE' ? t('pluginManager.disable') : t('pluginManager.enable')}
+                                        <PowerIcon className={cn("h-4 w-4 mr-2", getStatusColor(installState(detailPlugin)))} />
+                                        {installState(detailPlugin) === 'ACTIVE' ? t('pluginManager.disable') : t('pluginManager.enable')}
                                     </Button>
                                     <Button
                                         variant="outline"

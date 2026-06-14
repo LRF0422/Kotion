@@ -76,4 +76,22 @@ public class PluginController {
         return R.success();
     }
 
+    @PostMapping("/enable")
+    public R<?> enable(@RequestParam("versionId") Long versionId) {
+        pluginApplication.enable(versionId);
+        return R.success();
+    }
+
+    @PostMapping("/disable")
+    public R<?> disable(@RequestParam("versionId") Long versionId) {
+        pluginApplication.disable(versionId);
+        return R.success();
+    }
+
+    @PostMapping("/remove")
+    public R<?> remove(@RequestParam("versionId") Long versionId) {
+        pluginApplication.deleteInstalled(versionId);
+        return R.success();
+    }
+
 }

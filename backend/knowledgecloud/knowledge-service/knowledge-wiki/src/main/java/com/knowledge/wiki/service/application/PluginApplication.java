@@ -11,6 +11,7 @@ import com.github.yulichang.wrapper.MPJLambdaWrapper;
 import com.knowledge.core.version.VersionStatus;
 import com.knowledge.wiki.service.converter.PluginConverter;
 import com.knowledge.wiki.service.converter.PluginVersionConverter;
+import com.knowledge.wiki.service.entity.InstalledPlugin;
 import com.knowledge.wiki.service.entity.Plugin;
 import com.knowledge.wiki.service.entity.PluginLogo;
 import com.knowledge.wiki.service.entity.PluginVersion;
@@ -19,6 +20,7 @@ import com.knowledge.wiki.service.entity.dto.QueryPluginDTO;
 import com.knowledge.wiki.service.entity.vo.PluginVO;
 import com.knowledge.wiki.service.entity.vo.PluginVersionVO;
 import com.knowledge.wiki.service.exception.WikiException;
+import com.knowledge.wiki.service.service.IInstalledPluginService;
 import com.knowledge.wiki.service.service.IPluginService;
 
 import cn.hutool.core.collection.CollUtil;
@@ -31,6 +33,8 @@ public class PluginApplication {
 
     @Autowired
     private IPluginService pluginService;
+    @Autowired
+    private IInstalledPluginService installedPluginService;
 
     public void createPlugin(PluginDTO dto) {
         log.info("Creating plugin: {}", dto.getName());
@@ -83,12 +87,26 @@ public class PluginApplication {
         IPage<PluginVO> page = this.pluginService.selectJoinListPage(dto.page(), PluginVO.class, wrapper);
         page.getRecords().forEach(it -> {
             it.setInstalleddVersions(PluginVersionConverter.INSTANCE.convertVO(pluginService.checkInstall(it.getId())));
+            InstalledPlugin record = installedPluginService.getInstallRecord(it.getId());
+            it.setInstallStatus(record == null ? null : record.getStatus());
         });
         return page;
     }
 
     public void updatePluginToLatestVersion(Long pluginVersionId) {
         this.pluginService.updatePluginToLatestVersion(pluginVersionId);
+    }
+
+    public void enable(Long versionId) {
+        this.pluginService.enablePlugin(versionId);
+    }
+
+    public void disable(Long versionId) {
+        this.pluginService.disablePlugin(versionId);
+    }
+
+    public void deleteInstalled(Long versionId) {
+        this.pluginService.deleteInstalledPlugin(versionId);
     }
 
 }

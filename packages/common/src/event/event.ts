@@ -3,7 +3,7 @@
  * Each key is an event name; the value is the payload type (undefined for no payload).
  */
 export interface EventMap {
-  PLUGIN_CHANGED: { source: 'install' | 'uninstall' | 'update' | 'init' | 'refresh' }
+  PLUGIN_CHANGED: { source: 'install' | 'uninstall' | 'update' | 'init' | 'refresh' | 'enable' | 'disable' | 'delete' | 'bulk' }
   PLUGIN_INIT_SUCCESS: undefined
   ON_PAGE_REFRESH: undefined
   ON_FAVORITE_CHANGE: undefined

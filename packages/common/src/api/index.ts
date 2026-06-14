@@ -50,6 +50,18 @@ export const APIS = {
         url: '/knowledge-wiki/plugin/update',
         method: 'POST'
     } as API,
+    ENABLE_PLUGIN: {
+        url: '/knowledge-wiki/plugin/enable',
+        method: 'POST'
+    } as API,
+    DISABLE_PLUGIN: {
+        url: '/knowledge-wiki/plugin/disable',
+        method: 'POST'
+    } as API,
+    DELETE_INSTALLED_PLUGIN: {
+        url: '/knowledge-wiki/plugin/remove',
+        method: 'POST'
+    } as API,
 
     // ==================== Instant Message APIs ====================
     /** Send a message */

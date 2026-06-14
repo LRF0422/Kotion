@@ -77,4 +77,39 @@ public class InstalledPluginServiceImpl extends MPJBaseServiceImpl<InstalledPlug
                 .list();
     }
 
+    @Override
+    public void enable(Long pluginId) {
+        this.lambdaUpdate()
+                .eq(InstalledPlugin::getPluginId, pluginId)
+                .ne(InstalledPlugin::getStatus, InstalledPluginStatus.UNINSTALLED)
+                .set(InstalledPlugin::getStatus, InstalledPluginStatus.ACTIVE)
+                .update();
+    }
+
+    @Override
+    public void disableByPluginId(Long pluginId) {
+        this.lambdaUpdate()
+                .eq(InstalledPlugin::getPluginId, pluginId)
+                .eq(InstalledPlugin::getStatus, InstalledPluginStatus.ACTIVE)
+                .set(InstalledPlugin::getStatus, InstalledPluginStatus.DISABLED)
+                .update();
+    }
+
+    @Override
+    public void remove(Long pluginId) {
+        this.lambdaUpdate()
+                .eq(InstalledPlugin::getPluginId, pluginId)
+                .remove();
+    }
+
+    @Override
+    public InstalledPlugin getInstallRecord(Long pluginId) {
+        return this.lambdaQuery()
+                .eq(InstalledPlugin::getPluginId, pluginId)
+                .ne(InstalledPlugin::getStatus, InstalledPluginStatus.UNINSTALLED)
+                .orderByDesc(InstalledPlugin::getId)
+                .last("limit 1")
+                .one();
+    }
+
 }

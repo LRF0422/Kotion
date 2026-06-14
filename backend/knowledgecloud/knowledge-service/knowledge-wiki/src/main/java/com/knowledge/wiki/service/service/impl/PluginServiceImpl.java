@@ -135,6 +135,19 @@ public class PluginServiceImpl extends AbstractSubjectService<PluginMapper, Plug
 
     @Override
     public void uninstallPlugin(Long versionId) {
+        PluginVersion pluginVersion = pluginVersionService.getById(versionId);
+        if (pluginVersion == null) {
+            throw WikiException.PLUGIN_VERSION_NOT_FOUND.newException();
+        }
+        Plugin plugin = resolvePlugin(versionId);
+        installedPluginService.uninstall(plugin, pluginVersion);
+    }
+
+    /**
+     * Resolve the owning {@link Plugin} from a plugin version id, validating each
+     * step the same way install/uninstall do.
+     */
+    private Plugin resolvePlugin(Long versionId) {
         if (versionId == null) {
             throw WikiException.INVALID_PARAMETER.newException();
         }
@@ -146,7 +159,22 @@ public class PluginServiceImpl extends AbstractSubjectService<PluginMapper, Plug
         if (plugin == null) {
             throw WikiException.PLUGIN_NOT_FOUND.newException();
         }
-        installedPluginService.uninstall(plugin, pluginVersion);
+        return plugin;
+    }
+
+    @Override
+    public void enablePlugin(Long versionId) {
+        installedPluginService.enable(resolvePlugin(versionId).getId());
+    }
+
+    @Override
+    public void disablePlugin(Long versionId) {
+        installedPluginService.disableByPluginId(resolvePlugin(versionId).getId());
+    }
+
+    @Override
+    public void deleteInstalledPlugin(Long versionId) {
+        installedPluginService.remove(resolvePlugin(versionId).getId());
     }
 
     @Override
