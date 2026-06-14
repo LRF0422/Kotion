@@ -762,45 +762,51 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                     )}>
                         {
                             loading ? (
-                                <div className="p-6 space-y-4 animate-in fade-in duration-200">
-                                    <div className="flex flex-wrap gap-2">
-                                        {[...Array(6)].map((_, i) => (
-                                            <Skeleton key={i} className="w-[200px] h-[180px]" />
+                                viewMode === 'grid' ? (
+                                    <div className="flex flex-wrap gap-2 p-6">
+                                        {[...Array(8)].map((_, i) => (
+                                            <Skeleton key={i} className="w-[160px] h-[150px] rounded-lg" />
                                         ))}
                                     </div>
-                                </div>
+                                ) : (
+                                    <div className="flex flex-col">
+                                        {[...Array(8)].map((_, i) => (
+                                            <div key={i} className="flex items-center gap-3 px-3 py-2 border-b">
+                                                <Skeleton className="h-5 w-5 rounded" />
+                                                <Skeleton className="h-4 flex-1 max-w-[240px]" />
+                                                <Skeleton className="h-4 w-[60px]" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
                             ) : error ? (
-                                <div className="animate-in fade-in zoom-in-95 duration-300">
-                                    <EmptyState
-                                        icons={[FolderOpenIcon]}
-                                        title="Error loading files"
-                                        description={error}
-                                        className=" h-full w-full max-w-none border-none rounded-none"
-                                        action={{
-                                            label: 'Retry',
-                                            onClick: refreshFolder
-                                        }}
-                                    />
-                                </div>
+                                <EmptyState
+                                    icons={[FolderOpenIcon]}
+                                    title="Error loading files"
+                                    description={error}
+                                    className=" h-full w-full max-w-none border-none rounded-none"
+                                    action={{
+                                        label: 'Retry',
+                                        onClick: refreshFolder
+                                    }}
+                                />
                             ) : currentFolderItems.length > 0 ? (
-                                <div key={currentFolderId} className="animate-in fade-in zoom-in-95 duration-300">
+                                <div key={currentFolderId} className="animate-in fade-in duration-150">
                                     <Menu>
                                         {viewMode === 'grid' ? <FileCardList /> : <FileListView />}
                                     </Menu>
                                 </div>
                             ) : (
-                                <div className="animate-in fade-in zoom-in-95 duration-300">
-                                    <EmptyState
-                                        icons={[FolderOpenIcon]}
-                                        title="No files"
-                                        description=""
-                                        className=" h-full w-full max-w-none border-none rounded-none"
-                                        action={{
-                                            label: 'Upload Files',
-                                            onClick: () => handleCreateFile('FILE')
-                                        }}
-                                    />
-                                </div>
+                                <EmptyState
+                                    icons={[FolderOpenIcon]}
+                                    title="No files"
+                                    description=""
+                                    className=" h-full w-full max-w-none border-none rounded-none"
+                                    action={{
+                                        label: 'Upload Files',
+                                        onClick: () => handleCreateFile('FILE')
+                                    }}
+                                />
                             )
                         }
                     </div>

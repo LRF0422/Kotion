@@ -153,7 +153,7 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
     return <>
         <div
             className={cn(
-                "flex items-center px-3 py-2 border-b cursor-pointer hover:bg-muted/50 transition-all duration-150 active:bg-muted",
+                "flex items-center px-3 py-2 border-b cursor-pointer hover:bg-muted/50 transition-colors duration-150",
                 checked && "bg-primary/5",
                 loading && "opacity-50 pointer-events-none"
             )}
@@ -343,18 +343,8 @@ export const FileListView: React.FC = React.memo(() => {
             </div>
             {/* Body */}
             <div>
-                {currentFolderItems.map((item, index) => (
-                    <div
-                        key={item.id}
-                        className="animate-in fade-in slide-in-from-left-2"
-                        style={{
-                            animationDelay: `${index * 20}ms`,
-                            animationDuration: '250ms',
-                            animationFillMode: 'backwards'
-                        }}
-                    >
-                        <FileListRow {...item} />
-                    </div>
+                {currentFolderItems.map((item) => (
+                    <FileListRow key={item.id} {...item} />
                 ))}
             </div>
         </div>

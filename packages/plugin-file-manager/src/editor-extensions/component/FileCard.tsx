@@ -139,7 +139,7 @@ export const FileCard: React.FC<FileItem> = React.memo((props) => {
             className="group"
         >
             <Card className={cn(
-                "w-[160px] border hover:border-primary/50 hover:shadow-md transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98]",
+                "w-[160px] border hover:border-primary/60 hover:bg-muted/40 transition-colors duration-150 cursor-pointer",
                 checked && "border-primary bg-primary/5",
                 loading && "opacity-50 pointer-events-none"
             )}>
@@ -270,18 +270,8 @@ export const FileCardList: React.FC = React.memo(() => {
     return <div className="h-full w-full overflow-auto max-h-full">
         <div className="flex flex-wrap w-full gap-2 p-6">
             {
-                currentFolderItems.map((it, index) => (
-                    <div
-                        key={it.id}
-                        className="animate-in fade-in slide-in-from-bottom-2"
-                        style={{
-                            animationDelay: `${index * 30}ms`,
-                            animationDuration: '300ms',
-                            animationFillMode: 'backwards'
-                        }}
-                    >
-                        <FileCard {...it} />
-                    </div>
+                currentFolderItems.map((it) => (
+                    <FileCard key={it.id} {...it} />
                 ))
             }
         </div>
