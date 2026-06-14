@@ -32,9 +32,10 @@ export interface BlockInfo {
 
 /**
  * Get backlinks for a page
- * @param pageId Target page ID
+ * @param pageId Target page ID. Accepts string to preserve 19-digit snowflake
+ *   precision (Number would corrupt ids > 2^53 and 404 the request).
  */
-export async function getPageBacklinks(pageId: number): Promise<BacklinkVO[]> {
+export async function getPageBacklinks(pageId: string | number): Promise<BacklinkVO[]> {
     try {
         const res = await useApi(APIS.GET_PAGE_BACKLINKS, { pageId });
         return res.data || [];

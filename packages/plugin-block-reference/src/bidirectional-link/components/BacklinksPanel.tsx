@@ -16,8 +16,12 @@ import { useSpaceService } from '../../hooks';
 import type { BacklinkVO } from '../../types';
 
 interface BacklinksPanelProps {
-    /** Page ID to fetch backlinks for. Falls back to the current PageContext when omitted. */
-    pageId?: number;
+    /**
+     * Page ID to fetch backlinks for. Falls back to the current PageContext when
+     * omitted. Kept as string|number: page ids are 19-digit snowflakes that
+     * exceed Number.MAX_SAFE_INTEGER, so they must NOT be coerced to Number.
+     */
+    pageId?: string | number;
     /** Optional className for styling */
     className?: string;
 }
@@ -105,7 +109,10 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
 }) => {
     const pageCtx = useContext(PageContext);
     const spaceService = useSpaceService();
-    const pageId = pageIdProp ?? (pageCtx.id ? Number(pageCtx.id) : undefined);
+    // Keep the raw (string) id. Page ids are 19-digit snowflakes > 2^53, so
+    // Number(id) corrupts the last digits — the backlinks request then 404s and
+    // the global interceptor pops a "页面不存在" toast on every page open.
+    const pageId = pageIdProp ?? pageCtx.id ?? undefined;
     const currentSpaceId = pageCtx.spaceId;
 
     const [backlinks, setBacklinks] = useState<BacklinkVO[]>([]);
