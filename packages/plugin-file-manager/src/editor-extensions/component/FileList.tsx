@@ -11,7 +11,7 @@ import {
     DropdownMenuTrigger,
 } from "@kn/ui"
 import { useSafeState } from "@kn/common"
-import { Download, FcFile, FcOpenedFolder, MoreVertical, Pencil, FolderInput, Copy, Files, Info, Trash2 } from "@kn/icon"
+import { Download, FcFile, FcOpenedFolder, MoreVertical, Pencil, FolderInput, Copy, Files, Info, Trash2, StarIcon, ArrowLeft } from "@kn/icon"
 import { formatFileSize } from "../../utils/fileUtils"
 import { RenameDialog, MoveDialog, FileDetailsDialog } from "./dialogs"
 
@@ -54,7 +54,14 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
         handleDuplicate,
         handleDelete,
         currentFolderId,
+        view,
+        toggleFavorite,
+        restoreFiles,
+        purgeFiles,
+        downloadFile,
     } = useFileManagerState() as FileManagerState
+    const isTrash = view === 'trash'
+    const isFavorite = props.favorite === 1
 
     const [checked, setChecked] = useSafeState<boolean>(false)
 
@@ -78,10 +85,13 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
     const handleDoubleClick = useCallback((e: React.MouseEvent) => {
         e.preventDefault()
         e.stopPropagation()
+        if (isTrash) return
         if (isFolder) {
             navigateToFolder(id, name)
+        } else {
+            downloadFile(props)
         }
-    }, [isFolder, id, name, navigateToFolder])
+    }, [isTrash, isFolder, id, name, navigateToFolder, downloadFile, props])
 
     const handleRowClick = useCallback(() => {
         handleCheckChange(!checked)
@@ -120,8 +130,23 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
 
     const handleDownloadClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation()
-        // TODO: Implement download
-    }, [])
+        downloadFile(props)
+    }, [downloadFile, props])
+
+    const handleFavoriteClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation()
+        toggleFavorite(props)
+    }, [toggleFavorite, props])
+
+    const handleRestoreClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation()
+        restoreFiles([id])
+    }, [restoreFiles, id])
+
+    const handlePurgeClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation()
+        purgeFiles([id])
+    }, [purgeFiles, id])
 
     if (!name) return null
 
@@ -156,6 +181,9 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
                         <FcFile className="h-5 w-5 flex-shrink-0" />
                     )}
                     <span className="truncate" title={name}>{name}</span>
+                    {isFavorite && !isTrash && (
+                        <StarIcon className="h-3.5 w-3.5 flex-shrink-0 fill-yellow-400 text-yellow-400" />
+                    )}
                 </div>
             </div>
 
@@ -170,7 +198,18 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
             </div>
 
             {/* Actions */}
-            <div className="w-[40px] flex-shrink-0 flex justify-end">
+            <div className="w-[72px] flex-shrink-0 flex justify-end items-center gap-0.5">
+                {!isTrash && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={handleFavoriteClick}
+                        title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                    >
+                        <StarIcon className={cn("h-4 w-4", isFavorite && "fill-yellow-400 text-yellow-400")} />
+                    </Button>
+                )}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                         <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -178,38 +217,54 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-[180px]">
-                        <DropdownMenuItem onClick={handleRenameClick}>
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={handleMoveClick}>
-                            <FolderInput className="h-4 w-4 mr-2" />
-                            Move to...
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={handleCopyClick}>
-                            <Copy className="h-4 w-4 mr-2" />
-                            Copy
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={handleDuplicateClick}>
-                            <Files className="h-4 w-4 mr-2" />
-                            Duplicate
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        {!isFolder && (
-                            <DropdownMenuItem onClick={handleDownloadClick}>
-                                <Download className="h-4 w-4 mr-2" />
-                                Download
-                            </DropdownMenuItem>
+                        {isTrash ? (
+                            <>
+                                <DropdownMenuItem onClick={handleRestoreClick}>
+                                    <ArrowLeft className="h-4 w-4 mr-2" />
+                                    Restore
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={handlePurgeClick} className="text-destructive focus:text-destructive">
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete forever
+                                </DropdownMenuItem>
+                            </>
+                        ) : (
+                            <>
+                                <DropdownMenuItem onClick={handleRenameClick}>
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    Rename
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleMoveClick}>
+                                    <FolderInput className="h-4 w-4 mr-2" />
+                                    Move to...
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleCopyClick}>
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    Copy
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleDuplicateClick}>
+                                    <Files className="h-4 w-4 mr-2" />
+                                    Duplicate
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                {!isFolder && (
+                                    <DropdownMenuItem onClick={handleDownloadClick}>
+                                        <Download className="h-4 w-4 mr-2" />
+                                        Download
+                                    </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem onClick={handleDetailsClick}>
+                                    <Info className="h-4 w-4 mr-2" />
+                                    Properties
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={handleDeleteClick} className="text-destructive focus:text-destructive">
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                </DropdownMenuItem>
+                            </>
                         )}
-                        <DropdownMenuItem onClick={handleDetailsClick}>
-                            <Info className="h-4 w-4 mr-2" />
-                            Properties
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={handleDeleteClick} className="text-destructive focus:text-destructive">
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                        </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
@@ -282,7 +337,7 @@ export const FileListView: React.FC = React.memo(() => {
                 <div className="flex-1 min-w-0">Name</div>
                 <div className="w-[100px] flex-shrink-0">Size</div>
                 <div className="w-[180px] flex-shrink-0 hidden md:block">Modified</div>
-                <div className="w-[40px] flex-shrink-0">
+                <div className="w-[72px] flex-shrink-0">
                     <span className="sr-only">Actions</span>
                 </div>
             </div>

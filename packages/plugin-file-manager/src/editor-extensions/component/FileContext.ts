@@ -2,6 +2,9 @@ import { createContext, useContext } from "react"
 
 export type ViewMode = 'grid' | 'list'
 
+/** 侧栏视图 */
+export type FileView = 'home' | 'recent' | 'favorites' | 'trash' | 'search'
+
 export interface FileItem {
     name: string,
     isFolder: boolean,
@@ -12,8 +15,15 @@ export interface FileItem {
     }
     path?: string
     size?: number
+    mediaType?: string
+    /** 0/1 收藏标记 */
+    favorite?: number
+    /** 0/1 回收站标记 */
+    trashed?: number
     createdAt?: string
     updatedAt?: string
+    lastAccessedTime?: string
+    trashedTime?: string
     icon?: React.ReactNode
     onClick?: () => void
 }
@@ -55,6 +65,15 @@ export interface FileManagerState {
     // View mode
     viewMode: ViewMode
     setViewMode: React.Dispatch<React.SetStateAction<ViewMode>>
+    // Sidebar views + trash/favorite/recent/search operations
+    view: FileView
+    setView: (view: FileView) => void
+    toggleFavorite: (file: FileItem) => void
+    restoreFiles: (ids: string[]) => void
+    purgeFiles: (ids: string[]) => void
+    emptyTrash: () => void
+    searchFiles: (keyword: string) => void
+    downloadFile: (file: FileItem) => void
 }
 
 export const FileManageContext = createContext<FileManagerState | null>(null)

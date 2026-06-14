@@ -72,6 +72,10 @@ export interface FileService {
     moveFile?: (fileId: string, targetFolderId: string) => Promise<void>;
     /** Open file selector dialog to select files from file manager */
     openFileSelector?: (options?: FileSelectorOptions, editor?: any) => Promise<SelectedFile[] | null>;
+    /** Open the OS file picker and return the selected File objects (no upload) */
+    pickFiles?: (options?: UploadOptions) => Promise<File[]>;
+    /** Upload a file to the file center (single-step: OSS + DB record) under a folder */
+    uploadToFileCenter?: (file: File, parentId?: string, repositoryKey?: string) => Promise<any>;
 }
 
 /**

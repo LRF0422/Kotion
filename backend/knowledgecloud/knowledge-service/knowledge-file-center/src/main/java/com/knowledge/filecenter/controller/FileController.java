@@ -13,10 +13,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.file.api.entity.dto.KnowledgeFileDTO;
 import com.knowledge.file.api.entity.dto.MoveFileDTO;
 import com.knowledge.file.api.entity.dto.QueryFileDTO;
+import com.knowledge.file.api.entity.dto.RenameFileDTO;
 import com.knowledge.filecenter.application.FileApplication;
 import com.knowledge.filecenter.entity.vo.KnowledgeFileVO;
 
@@ -83,8 +85,8 @@ public class FileController {
     @ApiOperation("Rename file or folder")
     public R<?> renameFile(
             @ApiParam("File ID") @PathVariable("fileId") Long fileId,
-            @ApiParam("New name") @RequestParam("newName") String newName) {
-        fileApplication.renameFile(fileId, newName);
+            @RequestBody RenameFileDTO dto) {
+        fileApplication.renameFile(fileId, dto.getNewName());
         return R.success();
     }
 
@@ -95,18 +97,86 @@ public class FileController {
         return R.success();
     }
 
+    @PostMapping("/file/{fileId}/copy")
+    @ApiOperation("Copy file or folder")
+    public R<KnowledgeFileVO> copyFile(
+            @ApiParam("File ID") @PathVariable("fileId") Long fileId,
+            @ApiParam("Target folder ID") @RequestParam(value = "targetParentId", required = false) Long targetParentId) {
+        return R.data(fileApplication.copyFile(fileId, targetParentId));
+    }
+
     @DeleteMapping("/file/{fileId}")
-    @ApiOperation("Delete file or folder")
+    @ApiOperation("Delete file or folder (move to trash)")
     public R<?> deleteFile(@ApiParam("File ID") @PathVariable("fileId") Long fileId) {
         fileApplication.deleteFile(fileId);
         return R.success();
     }
 
     @DeleteMapping("/file/batch")
-    @ApiOperation("Batch delete files")
+    @ApiOperation("Batch delete files (move to trash)")
     public R<?> batchDeleteFiles(@ApiParam("File IDs") @RequestParam("fileIds") List<Long> fileIds) {
         fileApplication.batchDeleteFiles(fileIds);
         return R.success();
+    }
+
+    // ===== 回收站 =====
+
+    @PutMapping("/file/{fileId}/trash")
+    @ApiOperation("Move file or folder to trash")
+    public R<?> trashFile(@ApiParam("File ID") @PathVariable("fileId") Long fileId) {
+        fileApplication.deleteFile(fileId);
+        return R.success();
+    }
+
+    @PutMapping("/file/{fileId}/restore")
+    @ApiOperation("Restore file or folder from trash")
+    public R<?> restoreFile(@ApiParam("File ID") @PathVariable("fileId") Long fileId) {
+        fileApplication.restore(fileId);
+        return R.success();
+    }
+
+    @GetMapping("/trash")
+    @ApiOperation("List trashed files")
+    public R<List<KnowledgeFileVO>> listTrash() {
+        return R.data(fileApplication.listTrash());
+    }
+
+    @DeleteMapping("/file/{fileId}/purge")
+    @ApiOperation("Permanently delete file or folder")
+    public R<?> purgeFile(@ApiParam("File ID") @PathVariable("fileId") Long fileId) {
+        fileApplication.purge(fileId);
+        return R.success();
+    }
+
+    @DeleteMapping("/trash")
+    @ApiOperation("Empty trash (permanently delete all trashed files)")
+    public R<?> emptyTrash() {
+        fileApplication.emptyTrash();
+        return R.success();
+    }
+
+    // ===== 收藏 / 最近访问 =====
+
+    @PostMapping("/file/{fileId}/favorite")
+    @ApiOperation("Toggle favorite")
+    public R<?> toggleFavorite(
+            @ApiParam("File ID") @PathVariable("fileId") Long fileId,
+            @ApiParam("Favorite flag") @RequestParam("favorite") boolean favorite) {
+        fileApplication.toggleFavorite(fileId, favorite);
+        return R.success();
+    }
+
+    @GetMapping("/favorites")
+    @ApiOperation("List favorite files")
+    public R<List<KnowledgeFileVO>> listFavorites() {
+        return R.data(fileApplication.listFavorites());
+    }
+
+    @GetMapping("/recent")
+    @ApiOperation("List recently accessed files")
+    public R<List<KnowledgeFileVO>> listRecent(
+            @ApiParam("Limit") @RequestParam(value = "limit", required = false, defaultValue = "20") Integer limit) {
+        return R.data(fileApplication.listRecent(limit));
     }
 
     @GetMapping("/repo/{repoKey}/folder/tree")
@@ -122,9 +192,15 @@ public class FileController {
     }
 
     @GetMapping("/folder/children")
-    @ApiOperation("Get folder children with pagination")
+    @ApiOperation("Get folder children")
     public R<List<KnowledgeFileVO>> getChildren(QueryFileDTO dto) {
         return R.data(fileApplication.getChildren(dto));
+    }
+
+    @GetMapping("/folder/children/page")
+    @ApiOperation("Get folder children with pagination")
+    public R<IPage<KnowledgeFileVO>> getChildrenPage(QueryFileDTO dto) {
+        return R.data(fileApplication.getChildrenPage(dto));
     }
 
     @GetMapping("/file/{fileId}")

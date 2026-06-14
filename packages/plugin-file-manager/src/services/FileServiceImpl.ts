@@ -28,10 +28,23 @@ export class FileServiceImpl implements FileService {
     }
 
     /**
-     * Upload a single file to the server
+     * Open the OS file picker and return selected File objects (no upload)
+     */
+    async pickFiles(options?: UploadOptions): Promise<File[]> {
+        const blobs = await fileOpen({
+            mimeTypes: options?.mimeTypes || ["**/*"],
+            multiple: options?.multiple ?? true,
+        });
+        const arr = Array.isArray(blobs) ? blobs : [blobs];
+        return arr as File[];
+    }
+
+    /**
+     * Upload a single file to OSS (raw upload, returns uploaded file metadata).
+     * Note: this does NOT create a file-center record — use uploadToFileCenter for that.
      */
     async uploadFile(file: File, options?: Omit<UploadOptions, 'mimeTypes' | 'multiple'>): Promise<UploadedFile> {
-        // Use core's UPLOAD_FILE API for basic file upload
+        // Use core's OSS upload API for basic file upload
         const res = await useApi(CORE_APIS.UPLOAD_FILE, null, {
             file: file
         }, { 'Content-Type': 'multipart/form-data' });
@@ -77,14 +90,14 @@ export class FileServiceImpl implements FileService {
      * Delete a file by ID
      */
     async deleteFile(fileId: string): Promise<void> {
-        await useApi(APIS.DELETE_FILE, { id: fileId }, null);
+        await useApi(APIS.DELETE_FILE, { fileId }, null);
     }
 
     /**
      * Create a folder in the file center
      */
     async createFolder(name: string, parentId?: string, repositoryKey?: string): Promise<any> {
-        const res = await useApi(APIS.CREATE_FOLDER, null, {
+        const res = await useApi(APIS.CREATE_FILE, null, {
             name,
             parentId: parentId || '',
             type: 'FOLDER',
@@ -97,18 +110,17 @@ export class FileServiceImpl implements FileService {
      * Rename a file or folder
      */
     async renameFile(fileId: string, newName: string): Promise<void> {
-        await useApi(APIS.RENAME_FILE, null, {
-            id: fileId,
-            name: newName,
-        });
+        await useApi(APIS.RENAME_FILE, { fileId }, { newName });
     }
 
     /**
      * Move a file to another folder
      */
     async moveFile(fileId: string, targetFolderId: string): Promise<void> {
-        // TODO: Implement move file API when available
-        console.warn('moveFile API not implemented yet');
+        await useApi(APIS.MOVE_FILE, null, {
+            sourceId: fileId,
+            targetId: targetFolderId,
+        });
     }
 
     /**
@@ -134,19 +146,21 @@ export class FileServiceImpl implements FileService {
     }
 
     /**
-     * Upload file to file center (with folder management)
+     * Upload file to file center in a single step.
+     * Backend /file/upload handles OSS upload + DB record creation together.
      */
     async uploadToFileCenter(file: File, parentId?: string, repositoryKey?: string): Promise<any> {
-        // First upload the file
-        const uploadResult = await this.uploadFile(file);
+        const formData = new FormData();
+        formData.append('file', file);
+        if (parentId) {
+            formData.append('parentId', parentId);
+        }
+        if (repositoryKey) {
+            formData.append('repositoryKey', repositoryKey);
+        }
 
-        // Then create a file record in file center
-        const res = await useApi(APIS.CREATE_FOLDER, null, {
-            name: uploadResult.originalName,
-            parentId: parentId || '',
-            type: 'FILE',
-            repositoryKey,
-            path: uploadResult.name,
+        const res = await useApi(APIS.UPLOAD_FILE, null, formData, {
+            'Content-Type': 'multipart/form-data',
         });
 
         return res.data;

@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.oss.OssClient;
 import com.knowledge.core.oss.props.OssProperties;
 import cn.hutool.http.HttpRequest;
@@ -79,12 +80,45 @@ public class FileApplication {
     }
 
     public KnowledgeFileVO getById(Long fileId) {
+        fileService.touchAccess(fileId);
         return KnowledgeFileConverter.INSTANCE.convertVO(
                 this.fileService.getById(fileId));
     }
 
+    public IPage<KnowledgeFileVO> getChildrenPage(QueryFileDTO dto) {
+        IPage<KnowledgeFile> page = fileService.getChildrenPage(dto);
+        return page.convert(KnowledgeFileConverter.INSTANCE::convertVO);
+    }
+
     public void moveFile(MoveFileDTO dto) {
         fileService.moveFile(dto.getSourceId(), dto.getTargetId());
+    }
+
+    public KnowledgeFileVO copyFile(Long fileId, Long targetParentId) {
+        return KnowledgeFileConverter.INSTANCE.convertVO(
+                fileService.copyFile(fileId, targetParentId));
+    }
+
+    // ===== 回收站 / 收藏 / 最近访问 =====
+
+    public void restore(Long fileId) {
+        fileService.restore(fileId);
+    }
+
+    public List<KnowledgeFileVO> listTrash() {
+        return KnowledgeFileConverter.INSTANCE.convertVO(fileService.listTrash());
+    }
+
+    public void toggleFavorite(Long fileId, boolean favorite) {
+        fileService.toggleFavorite(fileId, favorite);
+    }
+
+    public List<KnowledgeFileVO> listFavorites() {
+        return KnowledgeFileConverter.INSTANCE.convertVO(fileService.listFavorites());
+    }
+
+    public List<KnowledgeFileVO> listRecent(int limit) {
+        return KnowledgeFileConverter.INSTANCE.convertVO(fileService.listRecent(limit));
     }
 
     /**
@@ -175,6 +209,9 @@ public class FileApplication {
         // Write file to response
         IoUtil.copy(inputStream, response.getOutputStream());
         IoUtil.close(inputStream);
+
+        // 记录最近访问
+        fileService.touchAccess(fileId);
     }
 
     /**
@@ -205,10 +242,37 @@ public class FileApplication {
     }
 
     /**
-     * Delete file or folder
+     * Delete file or folder —— 软删除,移入回收站(可还原)。
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteFile(Long fileId) {
+        fileService.moveToTrash(fileId);
+    }
+
+    /**
+     * Batch delete files —— 批量移入回收站
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void batchDeleteFiles(List<Long> fileIds) {
+        if (fileIds == null || fileIds.isEmpty()) {
+            throw new IllegalArgumentException("File IDs cannot be empty");
+        }
+
+        for (Long fileId : fileIds) {
+            try {
+                fileService.moveToTrash(fileId);
+            } catch (Exception e) {
+                log.error("Failed to move file to trash: {}", fileId, e);
+                // Continue with other files
+            }
+        }
+    }
+
+    /**
+     * 永久删除(从回收站彻底移除,删除 OSS 对象,文件夹递归)
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void purge(Long fileId) {
         KnowledgeFile file = fileService.getById(fileId);
         if (file == null) {
             throw new IllegalArgumentException("File not found");
@@ -223,33 +287,31 @@ public class FileApplication {
             }
         }
 
-        // If it's a folder, delete all children recursively
+        // If it's a folder, purge all children recursively (include trashed ones)
         if (file.getType() == FileType.FOLDER) {
-            List<KnowledgeFile> children = fileService.getChildren(fileId, false, null, null);
+            List<KnowledgeFile> children = fileService.lambdaQuery()
+                    .eq(KnowledgeFile::getParentId, fileId)
+                    .list();
             for (KnowledgeFile child : children) {
-                deleteFile(child.getId());
+                purge(child.getId());
             }
         }
 
-        // Delete from database
+        // Delete from database (logic delete via @TableLogic)
         fileService.removeById(fileId);
     }
 
     /**
-     * Batch delete files
+     * 清空回收站(永久删除所有已回收项)
      */
     @Transactional(rollbackFor = Exception.class)
-    public void batchDeleteFiles(List<Long> fileIds) {
-        if (fileIds == null || fileIds.isEmpty()) {
-            throw new IllegalArgumentException("File IDs cannot be empty");
-        }
-
-        for (Long fileId : fileIds) {
+    public void emptyTrash() {
+        List<KnowledgeFile> trashed = fileService.listTrash();
+        for (KnowledgeFile file : trashed) {
             try {
-                deleteFile(fileId);
+                purge(file.getId());
             } catch (Exception e) {
-                log.error("Failed to delete file: {}", fileId, e);
-                // Continue with other files
+                log.error("Failed to purge file: {}", file.getId(), e);
             }
         }
     }
@@ -373,6 +435,7 @@ public class FileApplication {
 
         List<KnowledgeFile> files = fileService.lambdaQuery()
                 .like(KnowledgeFile::getName, keyword)
+                .eq(KnowledgeFile::getTrashed, 0)
                 .eq(StrUtil.isNotBlank(repositoryKey), KnowledgeFile::getRepositoryKey, repositoryKey)
                 .list();
 
