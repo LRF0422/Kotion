@@ -55,6 +55,19 @@ module.exports = {
       screens: {
         "3xl": "1900px",
       },
+      // iOS safe-area inset utilities (e.g. pt-safe-top, pb-safe-bottom, h-screen-safe)
+      spacing: {
+        "safe-top": "env(safe-area-inset-top)",
+        "safe-bottom": "env(safe-area-inset-bottom)",
+        "safe-left": "env(safe-area-inset-left)",
+        "safe-right": "env(safe-area-inset-right)",
+      },
+      minHeight: {
+        "screen-dvh": "100dvh",
+      },
+      height: {
+        "screen-dvh": "100dvh",
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

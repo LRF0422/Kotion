@@ -2,8 +2,9 @@
 import { Outlet } from "react-router-dom"
 import { SiderMenu } from "./components/SiderMenu"
 import { useContext, useEffect, useState } from "react"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Onboarding, OnboardingStep, Rate, SparklesText, cn, useIsMobile, Sheet, SheetContent, SheetTrigger, Button } from "@kn/ui"
-import { Menu, ChevronLeft } from "@kn/icon"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Onboarding, OnboardingStep, Rate, SparklesText, cn, useIsMobile, useVirtualKeyboard, Button } from "@kn/ui"
+import { ChevronLeft } from "@kn/icon"
+import { MobileTabBar } from "./components/mobile/MobileTabBar"
 import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, TOGGLE_AI_ASSISTANT, SystemAgentProvider } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
@@ -18,61 +19,44 @@ interface LayoutProps {
     onPluginsReady: (ready: boolean) => void
 }
 
-// Mobile header component that uses the page header context
-const MobileHeader: React.FC<{
-    sidebarOpen: boolean;
-    setSidebarOpen: (open: boolean) => void;
-}> = ({ sidebarOpen, setSidebarOpen }) => {
+// Mobile top app bar. Navigation lives in the bottom MobileTabBar; this bar is
+// purely contextual — back button + page title/icon + page-contributed actions
+// (e.g. a space's page-tree trigger), all driven by MobilePageHeaderContext.
+const MobileAppBar: React.FC = () => {
     const { headerInfo } = useMobilePageHeader();
-    const navigator = useNavigator();
 
     const handleBack = () => {
         window.history.back();
     };
 
     return (
-        <div className="flex items-center justify-between px-2 h-14 border-b bg-background sticky top-0 z-40">
-            {/* Left side - back button or logo */}
-            <div className="flex items-center gap-1 flex-1 min-w-0">
-                {headerInfo ? (
-                    <>
-                        <Button variant="ghost" size="icon" onClick={handleBack} className="flex-shrink-0">
-                            <ChevronLeft className="h-5 w-5" />
-                        </Button>
-                        <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-                            {headerInfo.icon && <span className="text-lg flex-shrink-0">{headerInfo.icon}</span>}
-                            <span className="text-sm font-medium truncate">{headerInfo.title}</span>
+        <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur pt-safe">
+            <div className="flex items-center justify-between gap-2 px-2 h-14">
+                {/* Left side - back button + title, or brand on top-level pages */}
+                <div className="flex items-center gap-1 flex-1 min-w-0">
+                    {headerInfo ? (
+                        <>
+                            <Button variant="ghost" size="icon" onClick={handleBack} className="flex-shrink-0">
+                                <ChevronLeft className="h-5 w-5" />
+                            </Button>
+                            <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                                {headerInfo.icon && <span className="text-lg flex-shrink-0">{headerInfo.icon}</span>}
+                                <span className="text-sm font-medium truncate">{headerInfo.title}</span>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="px-2">
+                            <SparklesText className="text-[24px]" sparklesCount={3} text="KN" />
                         </div>
-                    </>
-                ) : (
-                    <div className="px-2">
-                        <SparklesText className="text-[24px]" sparklesCount={3} text="KN" />
-                    </div>
-                )}
-            </div>
+                    )}
+                </div>
 
-            {/* Right side - actions or menu */}
-            <div className="flex items-center gap-1 flex-shrink-0">
-                {headerInfo?.actions}
-                <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-                    <SheetTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                            <Menu className="h-5 w-5" />
-                        </Button>
-                    </SheetTrigger>
-                    <SheetContent side="left" className="w-[280px] p-0">
-                        <div className="flex flex-col h-full">
-                            <div className="flex items-center justify-center py-4 border-b">
-                                <SparklesText className="text-[30px]" sparklesCount={5} text="KN" />
-                            </div>
-                            <div className="flex-1 overflow-auto px-2 py-2">
-                                <SiderMenu onItemClick={() => setSidebarOpen(false)} />
-                            </div>
-                        </div>
-                    </SheetContent>
-                </Sheet>
+                {/* Right side - page-contributed actions (e.g. page-tree drawer trigger) */}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                    {headerInfo?.actions}
+                </div>
             </div>
-        </div>
+        </header>
     );
 };
 
@@ -221,7 +205,9 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
 
     const isMobile = useIsMobile()
-    const [sidebarOpen, setSidebarOpen] = useState(false)
+    // Hide the bottom tab bar while the soft keyboard is open so it doesn't
+    // collide with the editor's keyboard-docked toolbar.
+    const { isOpen: keyboardOpen } = useVirtualKeyboard()
 
     return (
         <SystemAgentProvider>
@@ -268,21 +254,25 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                             </div>
                         )}
 
-                        {/* Mobile Header + Content */}
-                        <div className="flex flex-col h-screen w-full relative">
+                        {/* Mobile Header + Content + bottom Tab Bar */}
+                        <div className={cn(
+                            "flex flex-col w-full relative",
+                            isMobile ? "h-[100dvh]" : "h-screen"
+                        )}>
                             {/* Draggable region at the top of main content area */}
                             {!isMobile && <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region" />}
-                            {/* Mobile Header */}
-                            {isMobile && (
-                                <MobileHeader sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-                            )}
+                            {/* Mobile top app bar */}
+                            {isMobile && <MobileAppBar />}
 
                             <main className={cn(
                                 "w-full overflow-hidden",
-                                isMobile ? "flex-1" : "h-screen"
+                                isMobile ? "flex-1 min-h-0" : "h-screen"
                             )}>
                                 {pluginsLoaded ? <Outlet /> : null}
                             </main>
+
+                            {/* Mobile bottom navigation (hidden while typing) */}
+                            {isMobile && !keyboardOpen && <MobileTabBar />}
                         </div>
                         <AlertDialog open={open} onOpenChange={setOpen}>
                             <AlertDialogTrigger />

@@ -109,7 +109,8 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
                     <Button
                         variant="outline"
                         size="icon"
-                        className="fixed bottom-20 right-4 z-40 h-10 w-10 rounded-full shadow-lg bg-background"
+                        className="fixed right-4 z-40 h-10 w-10 rounded-full shadow-lg bg-background"
+                        style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }}
                         aria-label="Table of contents"
                     >
                         <List className="h-4 w-4" />

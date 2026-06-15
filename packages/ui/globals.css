@@ -157,6 +157,28 @@
     width: 0;
     height: 0;
   }
+
+  /* Touch ergonomics: remove the grey tap flash and contain overscroll so
+     pull-to-refresh / rubber-banding doesn't fight the in-app scroll areas. */
+  html {
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* Safe-area helpers for notch / home-indicator devices (used by the mobile
+   app bar, bottom tab bar and editor toolbar). Pairs with the Tailwind
+   `*-safe-*` spacing utilities. */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+.h-safe-bottom {
+  height: env(safe-area-inset-bottom);
 }
 
 @layer base {

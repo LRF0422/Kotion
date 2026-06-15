@@ -1,8 +1,8 @@
 import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
-import { IconButton, TreeView, useIsMobile, Button, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
+import { IconButton, TreeView, useIsMobile, Button, Sheet, SheetContent, SheetTitle } from "@kn/ui";
 import { CircleArrowUp, LayoutDashboard, LayoutTemplate, Menu, MoreHorizontal, Package, Plus, Settings, Star, StarIcon, Trash2, Undo2, AlertCircle } from "@kn/icon";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { useApi, useService, useUploadFile, useNavigator, useToggle } from "@kn/common";
+import { useApi, useService, useUploadFile, useNavigator, useToggle, useMobilePageHeader } from "@kn/common";
 import { APIS } from "../../api";
 import { Outlet, useParams } from "@kn/common";
 import { Space } from "../../model/Space";
@@ -40,6 +40,7 @@ export const SpaceDetail: React.FC = () => {
     const [loading, { toggle: toggleLoading }] = useToggle(true)
     const [error, setError] = useState<string | null>(null)
     const { usePath } = useUploadFile()
+    const { setHeaderInfo, clearHeaderInfo } = useMobilePageHeader()
     const spaceService = useService("spaceService")
     useEffect(() => {
         if (params.id) {
@@ -523,32 +524,42 @@ export const SpaceDetail: React.FC = () => {
         </div>
     ), [error, params.pageId, loading, elements, isMobile])
 
+    // On mobile, contribute the space title + a page-tree trigger to the single
+    // top app bar (Layout's MobileAppBar), instead of rendering a second header.
+    useEffect(() => {
+        if (!isMobile || !space) return
+        setHeaderInfo({
+            title: space.name,
+            icon: space?.icon?.icon,
+            actions: (
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="页面目录"
+                    onClick={() => setSidebarOpen(true)}
+                >
+                    <Menu className="h-5 w-5" />
+                </Button>
+            ),
+        })
+        return () => clearHeaderInfo()
+    }, [isMobile, space, setHeaderInfo, clearHeaderInfo])
+
     return space && (
         <div className={cn(
-            "h-screen w-full bg-muted/40",
-            isMobile ? "flex flex-col" : "grid grid-cols-[280px_1fr]"
+            "w-full bg-muted/40",
+            isMobile ? "h-full flex flex-col" : "h-screen grid grid-cols-[280px_1fr]"
         )}>
-            {/* Mobile Header */}
+            {/* Mobile page-tree drawer — triggered from the unified app bar */}
             {isMobile && (
-                <div className="flex items-center justify-between px-3 sm:px-4 h-11 sm:h-12 border-b bg-background sticky top-0 z-40">
-                    <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
-                        <span className="text-base sm:text-lg">{space?.icon?.icon}</span>
-                        <span className="font-medium truncate text-sm sm:text-base">{space.name}</span>
-                    </div>
-                    <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-                        <SheetTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9">
-                                <Menu className="h-4 w-4 sm:h-5 sm:w-5" />
-                            </Button>
-                        </SheetTrigger>
-                        <SheetContent side="left" className="w-[260px] sm:w-[280px] p-0">
-                            <SheetTitle className="sr-only">Navigation</SheetTitle>
-                            <div className="h-full flex flex-col overflow-hidden">
-                                {SidebarContent}
-                            </div>
-                        </SheetContent>
-                    </Sheet>
-                </div>
+                <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+                    <SheetContent side="left" className="w-[280px] p-0">
+                        <SheetTitle className="sr-only">页面目录</SheetTitle>
+                        <div className="h-full flex flex-col overflow-hidden pt-safe">
+                            {SidebarContent}
+                        </div>
+                    </SheetContent>
+                </Sheet>
             )}
 
             {/* Desktop Sidebar */}
@@ -561,7 +572,7 @@ export const SpaceDetail: React.FC = () => {
             {/* Main Content */}
             <div className={cn(
                 "w-full overflow-hidden",
-                isMobile ? "flex-1" : "h-full"
+                isMobile ? "flex-1 min-h-0" : "h-full"
             )}>
                 <Outlet />
             </div>

@@ -14,6 +14,7 @@ import { useSafeState, useUnmount } from "ahooks";
 import { NotionToC } from "./NotionToC";
 import { cn, useIsMobile, useTheme } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
+import { MobileEditorToolbar } from "./MobileEditorToolbar";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
 import { loadContentProgressive, isLargeDocument } from "./loadContentProgressive";
@@ -310,6 +311,11 @@ export const CollaborationEditor = forwardRef<
       <ThemeProvider theme={selectedTheme}>
         <div className={cn("flex flex-col z-30 relative", width, props.className)}>
           {!isMobile && <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />}
+          {/* Mobile: keep bubble/floating menus (toolbar={false}) and add a
+              keyboard-docked formatting toolbar in place of the hidden top bar. */}
+          {isMobile && (
+            <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} toolbar={false} />
+          )}
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
             <StyledEditor>
               <EditorContent editor={editor} />
@@ -350,6 +356,10 @@ export const CollaborationEditor = forwardRef<
           {/* ToC - Notion-style floating outline on the right edge */}
           {toc && contentReady && (
             <NotionToC editor={editor} items={items} />
+          )}
+          {/* Mobile: formatting toolbar docked above the soft keyboard */}
+          {isMobile && contentReady && (
+            <MobileEditorToolbar editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />
           )}
         </div>
       </ThemeProvider >
