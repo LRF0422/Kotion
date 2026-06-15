@@ -1,7 +1,7 @@
 import { Home } from './pages/Home'
 import { Spaces } from './pages/Spaces'
 import { SpaceDetail } from './pages/SpaceDetail'
-import { PageEditor } from './pages/SpaceDetail/PageEditor'
+import { PageRouteSync } from './pages/SpaceDetail/PageEditor/PageRouteSync'
 import { SpaceSettings } from './pages/SpaceDetail/Settings'
 import { InviteCollaboration } from './pages/InviteCollaboration'
 import { SpaceHub } from './pages/SpaceHub'
@@ -44,7 +44,9 @@ export const DefaultPluginInstance = new DefaultPlugin({
         {
           name: '/space-detail/:id/page/edit/:pageId',
           path: '/space-detail/:id/page/edit/:pageId',
-          element: <PageEditor />
+          // Renders null; only syncs the URL → page-tab Redux state. The actual
+          // editor is rendered by <TabbedEditorArea/> in SpaceDetail.
+          element: <PageRouteSync />
         },
         {
           name: '/space-detail/:id/settings',

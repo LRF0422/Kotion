@@ -8,7 +8,8 @@ const store = createStore((state: GlobalState = {
     tabs: [],
     activeTabKey: '',
     collpase: false,
-    rightCollpase: false
+    rightCollpase: false,
+    pageTabs: { bySpace: {} }
 }, action: AnyAction) => {
     if (action.type === "UPDATE_USER") {
         const userInfo = action?.payload
@@ -67,6 +68,62 @@ const store = createStore((state: GlobalState = {
             rightCollpase: collpase
         }
     }
+
+    // ---- Per-space page tabs (immutable updates; do NOT mutate like ADD_TAB above) ----
+    if (
+        action.type === "PAGE_TAB_OPEN" ||
+        action.type === "PAGE_TAB_ACTIVATE" ||
+        action.type === "PAGE_TAB_CLOSE" ||
+        action.type === "PAGE_TAB_UPDATE_META"
+    ) {
+        const { spaceId } = action.payload
+        if (!spaceId) return state
+        const bySpace = state.pageTabs?.bySpace ?? {}
+        const bucket = bySpace[spaceId] ?? { openPages: [], activePageId: undefined }
+
+        let nextBucket = bucket
+
+        if (action.type === "PAGE_TAB_OPEN") {
+            const { pageId, title, lastActiveAt } = action.payload
+            const exists = bucket.openPages.some(p => p.pageId === pageId)
+            const openPages = exists
+                // keep existing title unless we now have one and it was missing
+                ? bucket.openPages.map(p => (p.pageId === pageId && title && !p.title ? { ...p, title } : p))
+                : [...bucket.openPages, { pageId, title, lastActiveAt: lastActiveAt ?? 0 }]
+            nextBucket = { ...bucket, openPages }
+        } else if (action.type === "PAGE_TAB_ACTIVATE") {
+            const { pageId, lastActiveAt } = action.payload
+            const openPages = bucket.openPages.map(p =>
+                p.pageId === pageId ? { ...p, lastActiveAt: lastActiveAt ?? p.lastActiveAt } : p
+            )
+            nextBucket = { ...bucket, openPages, activePageId: pageId }
+        } else if (action.type === "PAGE_TAB_CLOSE") {
+            const { pageId } = action.payload
+            const openPages = bucket.openPages.filter(p => p.pageId !== pageId)
+            let activePageId = bucket.activePageId
+            if (activePageId === pageId) {
+                // Closing the active tab: fall back to the most-recently-active remaining tab.
+                const next = openPages.reduce<{ pageId: string; lastActiveAt: number } | undefined>(
+                    (best, p) => (!best || p.lastActiveAt > best.lastActiveAt ? p : best),
+                    undefined
+                )
+                activePageId = next?.pageId
+            }
+            nextBucket = { ...bucket, openPages, activePageId }
+        } else if (action.type === "PAGE_TAB_UPDATE_META") {
+            const { pageId, title } = action.payload
+            const openPages = bucket.openPages.map(p =>
+                p.pageId === pageId ? { ...p, title } : p
+            )
+            nextBucket = { ...bucket, openPages }
+        }
+
+        return {
+            ...state,
+            pageTabs: { bySpace: { ...bySpace, [spaceId]: nextBucket } }
+        }
+    }
+
     return state;
 })
 

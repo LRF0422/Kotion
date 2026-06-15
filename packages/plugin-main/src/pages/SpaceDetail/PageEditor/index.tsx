@@ -8,7 +8,7 @@ import { CollaborationEditor, exportToPDF, useIncrementalSave, TiptapCollabProvi
 import type { IncrementalPayload } from "@kn/editor";
 import { event, ON_PAGE_REFRESH, ON_FAVORITE_CHANGE } from "../../../event";
 import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation } from "@kn/common";
-import { useNavigator } from "@kn/common";
+import { useNavigator, usePageTabs } from "@kn/common";
 import { GlobalState } from "@kn/common";
 import { Editor } from "@kn/editor";
 import * as Y from "@kn/editor";
@@ -142,11 +142,27 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
     })
 }
 
-export const PageEditor: React.FC = () => {
+export interface PageEditorProps {
+    /** Explicit page id (tab mode). Falls back to the route `:pageId`. */
+    pageId?: string
+    /** Explicit space id (tab mode). Falls back to the route `:id`. */
+    spaceId?: string
+    /** Whether this editor is the visible/active tab. Inactive tabs skip auto-focus. */
+    active?: boolean
+}
+
+export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const { t } = useTranslation()
     const [showToc, setShowToc] = useState(true)
     const [page, setPage] = useState<any>()
     const params = useParams()
+    // Prefer explicit props (rendered inside the tab container) and fall back to
+    // the route params (legacy / direct route render). Everything below uses
+    // these locals — never `params.*` directly — so a backgrounded tab keeps
+    // editing its own page even though the URL points at the active tab.
+    const pageId = props.pageId ?? params.pageId
+    const spaceId = props.spaceId ?? params.id
+    const { updateMeta } = usePageTabs(spaceId)
     const { userInfo } = useSelector((state: GlobalState) => state)
     const [pageLoading, { toggle: toggleLoading }] = useToggle(false)
     const [synceStatus, setSyncStatus] = useState(false)
@@ -193,10 +209,10 @@ export const PageEditor: React.FC = () => {
     // Delay provider creation to next tick to avoid blocking UI
     React.useEffect(() => {
         const timer = setTimeout(() => {
-            setDeferredPageId(params.pageId);
+            setDeferredPageId(pageId);
         }, 50);
         return () => clearTimeout(timer);
-    }, [params.pageId]);
+    }, [pageId]);
 
     const provider = React.useMemo(() => {
         const pageId = deferredPageId;
@@ -266,12 +282,14 @@ export const PageEditor: React.FC = () => {
         setSyncTimedOut(false)
         const t = setTimeout(() => setSyncTimedOut(true), 8000)
         return () => clearTimeout(t)
-    }, [params.pageId])
+    }, [pageId])
 
     useEffect(() => {
         toggleLoading()
-        spaceService.getPage(params.pageId!).then((res: any) => {
+        spaceService.getPage(pageId!).then((res: any) => {
             setPage(res)
+            // Backfill the tab title now that the page has loaded.
+            if (res?.title && pageId) updateMeta(pageId, res.title)
         }).catch((err: any) => {
             console.error('Failed to load page:', err)
             toast.error('Failed to load page content')
@@ -283,24 +301,24 @@ export const PageEditor: React.FC = () => {
             setPage(null)
             setEditorContentReady(false)
         }
-    }, [params.pageId])
+    }, [pageId])
 
     // Favorite state for the current page
     const [isFavorited, setIsFavorited] = useState(false)
     const [favoriteToggling, setFavoriteToggling] = useState(false)
 
     const refreshFavoriteState = useCallback(async () => {
-        if (!params.pageId) return
+        if (!pageId) return
         try {
             const res = await useApi(APIS.QUERY_FAVORITE, { pageSize: 1000 })
             const data = res?.data
             const list = Array.isArray(data) ? data : (data?.records || [])
-            const pid = String(params.pageId)
+            const pid = String(pageId)
             setIsFavorited(list.some((item: any) => String(item.id) === pid))
         } catch (err) {
             console.error('Failed to load favorite state:', err)
         }
-    }, [params.pageId])
+    }, [pageId])
 
     useEffect(() => {
         refreshFavoriteState()
@@ -313,17 +331,17 @@ export const PageEditor: React.FC = () => {
     }, [refreshFavoriteState])
 
     const toggleFavorite = useCallback(async () => {
-        if (!params.pageId || favoriteToggling) return
+        if (!pageId || favoriteToggling) return
         setFavoriteToggling(true)
         const prev = isFavorited
         // Optimistic update
         setIsFavorited(!prev)
         try {
             if (prev) {
-                await useApi(APIS.REMOVE_FAVORITE, { id: params.pageId })
+                await useApi(APIS.REMOVE_FAVORITE, { id: pageId })
                 toast.success('Removed from favorites')
             } else {
-                await useApi(APIS.ADD_FAVORITE_PAGE, { id: params.pageId })
+                await useApi(APIS.ADD_FAVORITE_PAGE, { id: pageId })
                 toast.success('Added to favorites')
             }
             event.emit(ON_FAVORITE_CHANGE)
@@ -335,7 +353,7 @@ export const PageEditor: React.FC = () => {
         } finally {
             setFavoriteToggling(false)
         }
-    }, [params.pageId, isFavorited, favoriteToggling])
+    }, [pageId, isFavorited, favoriteToggling])
 
     const getTitleContent = useCallback((value: any) => {
         if (value) {
@@ -351,13 +369,14 @@ export const PageEditor: React.FC = () => {
     // Incremental auto-save via new hook (PATCH blocks only, no ON_PAGE_REFRESH)
     const { saving, dirty, error: saveError, progress: saveProgress, saveNow } = usePageSave(
         editor.current,
-        params.pageId || null,
-        !!page && !!params.pageId && editorContentReady
+        pageId || null,
+        // NOT gated on `active`: backgrounded tabs must keep auto-saving.
+        !!page && !!pageId && editorContentReady
     )
 
     // Copy a shareable link to the current page to the clipboard
     const handleCopyLink = useCallback(async () => {
-        const url = `${window.location.origin}/space-detail/${params.id}/page/edit/${params.pageId}`
+        const url = `${window.location.origin}/space-detail/${spaceId}/page/edit/${pageId}`
         try {
             await window.navigator.clipboard.writeText(url)
             toast.success(t('editor.linkCopied', 'Link copied'))
@@ -365,21 +384,21 @@ export const PageEditor: React.FC = () => {
             console.error('Failed to copy link:', err)
             toast.error(t('editor.linkCopyFailed', 'Failed to copy link'))
         }
-    }, [params.id, params.pageId, t])
+    }, [spaceId, pageId, t])
 
     // Move the current page to trash, then return to the space
     const handleMoveToTrash = useCallback(async () => {
-        if (!params.pageId) return
+        if (!pageId) return
         try {
-            await useApi(APIS.MOVE_TO_TRASH, { id: params.pageId })
+            await useApi(APIS.MOVE_TO_TRASH, { id: pageId })
             toast.success(t('editor.movedToTrash', 'Moved to trash'))
             event.emit(ON_PAGE_REFRESH)
-            navigator.go({ to: `/space-detail/${params.id}` })
+            navigator.go({ to: `/space-detail/${spaceId}` })
         } catch (err) {
             console.error('Failed to move page to trash:', err)
             toast.error(t('editor.moveToTrashFailed', 'Failed to move to trash'))
         }
-    }, [params.pageId, params.id, navigator, t])
+    }, [pageId, spaceId, navigator, t])
 
     // Markdown import handler
     const handleImportMarkdown = useCallback(() => {
@@ -505,9 +524,9 @@ export const PageEditor: React.FC = () => {
         <header className="h-11 flex-shrink-0 w-full flex flex-row justify-between px-1 border-b relative">
             <div className="flex flex-row items-center gap-2 px-1 text-sm flex-1 min-w-0 overflow-hidden">
                 <PageBreadcrumb
-                    currentPageId={params.pageId!}
+                    currentPageId={pageId!}
                     pageTree={page.parents}
-                    spaceId={params.id!}
+                    spaceId={spaceId!}
                     currentTitle={page.title}
                 />
             </div>
@@ -580,7 +599,7 @@ export const PageEditor: React.FC = () => {
                     size="icon"
                     className="h-7 w-7"
                     onClick={toggleFavorite}
-                    disabled={favoriteToggling || !params.pageId}
+                    disabled={favoriteToggling || !pageId}
                     aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
                     title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
                 >
@@ -603,7 +622,7 @@ export const PageEditor: React.FC = () => {
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
-                            <TemplateCreator mode="page" pageId={params.pageId!} defaultName={page?.title} className="flex flex-row items-center gap-2 w-full relative select-none rounded-sm px-2 py-1.5 text-sm outline-none cursor-default hover:bg-accent hover:text-accent-foreground">
+                            <TemplateCreator mode="page" pageId={pageId!} defaultName={page?.title} className="flex flex-row items-center gap-2 w-full relative select-none rounded-sm px-2 py-1.5 text-sm outline-none cursor-default hover:bg-accent hover:text-accent-foreground">
                                 <BookTemplate className="h-4 w-4" />
                                 <span>{t('editor.saveAsTemplate', 'Save as template')}</span>
                             </TemplateCreator>
@@ -683,9 +702,9 @@ export const PageEditor: React.FC = () => {
                     synced={synceStatus}
                     provider={provider}
                     className="h-full"
-                    id={params.pageId as string}
+                    id={pageId as string}
                     user={collaborationUser}
-                    token={params.pageId as string}
+                    token={pageId as string}
                     toc={showToc}
                     withTitle={true}
                     width="w-full"

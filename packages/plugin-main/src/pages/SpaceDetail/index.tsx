@@ -4,8 +4,9 @@ import { CircleArrowUp, LayoutDashboard, LayoutTemplate, Menu, MoreHorizontal, P
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useApi, useService, useUploadFile, useNavigator, useToggle, useMobilePageHeader } from "@kn/common";
 import { APIS } from "../../api";
-import { Outlet, useParams } from "@kn/common";
+import { Outlet, useParams, useMatch } from "@kn/common";
 import { Space } from "../../model/Space";
+import { TabbedEditorArea } from "./PageEditor/TabbedEditorArea";
 
 import { Input } from "@kn/ui";
 import { Badge } from "@kn/ui";
@@ -47,6 +48,9 @@ export const SpaceDetail: React.FC = () => {
     const [flag, setFlag] = useState(0)
     const [restoreFlag, setRestoreFlag] = useState(0)
     const params = useParams()
+    // Whether we're on a page-edit route. Can't read `:pageId` via useParams here
+    // (it belongs to the child route), so match the full path instead.
+    const isPageEdit = !!useMatch("/space-detail/:id/page/edit/:pageId")
     const navigator = useNavigator()
     const [searchValue, setSearchValue] = useState<string>()
     const [loading, { toggle: toggleLoading }] = useToggle(true)
@@ -606,7 +610,16 @@ export const SpaceDetail: React.FC = () => {
                 "w-full overflow-hidden",
                 isMobile ? "flex-1 min-h-0" : "h-full"
             )}>
-                <Outlet />
+                {isPageEdit ? (
+                    <>
+                        {/* Outlet renders <PageRouteSync/> (null) to sync URL → tabs */}
+                        <Outlet />
+                        <TabbedEditorArea spaceId={params.id} />
+                    </>
+                ) : (
+                    // Non-page routes (e.g. settings) render normally.
+                    <Outlet />
+                )}
             </div>
             <TemplateSelector
                 open={visible}
