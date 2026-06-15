@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 import { Layout } from "./Layout";
-import { ThemeProvider, Toaster } from "@kn/ui";
+import { ThemeProvider, Toaster, ResponsiveProvider } from "@kn/ui";
 import { store } from '@kn/common'
 import { Login } from "./components/Login";
 import { SignUpForm } from "./components/SignUp";
@@ -175,6 +175,7 @@ export const App: React.FC<AppProps> = (props) => {
         serviceRegistry: pluginManager?.serviceRegistry
     }}>
         <ThemeProvider>
+            <ResponsiveProvider>
             <Provider store={store}>
                 {router
                     ? <RouterProvider router={router} />
@@ -191,6 +192,7 @@ export const App: React.FC<AppProps> = (props) => {
                 }
                 <Toaster />
             </Provider>
+            </ResponsiveProvider>
         </ThemeProvider>
     </AppContext.Provider>
 }

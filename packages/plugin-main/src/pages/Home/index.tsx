@@ -288,7 +288,7 @@ export const Home: React.FC = () => {
                         </Button>
                     </div>
                     {loading ? (
-                        <div className={cn("grid gap-3 w-full", isMobile ? "grid-cols-2" : "grid-cols-4")}>
+                        <div className="grid gap-3 w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                             {[...Array(isMobile ? 2 : 4)].map((_, index) => (
                                 <Skeleton key={index} className={cn("w-full rounded-lg", isMobile ? "h-[120px]" : "h-[128px]")} />
                             ))}
@@ -310,7 +310,7 @@ export const Home: React.FC = () => {
                             }
                         />
                     ) : (
-                        <div className={cn("grid gap-3 w-full", isMobile ? "grid-cols-2" : "grid-cols-4")}>
+                        <div className="grid gap-3 w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                             {recentSpaces.map((space: any) => {
                                 const hue = pickHue(space.id)
                                 const styles = hueStyles(hue)
@@ -351,7 +351,7 @@ export const Home: React.FC = () => {
                         <h2 className="text-sm font-medium text-muted-foreground">{t("home.recent-pages") || "Recent Pages"}</h2>
                     </div>
                     {loading ? (
-                        <div className={cn("grid gap-3 w-full", isMobile ? "grid-cols-1" : "grid-cols-2")}>
+                        <div className="grid gap-3 w-full grid-cols-1 md:grid-cols-2">
                             {[...Array(isMobile ? 4 : 6)].map((_, index) => (
                                 <Skeleton key={index} className="w-full h-[60px] rounded-lg" />
                             ))}
@@ -363,7 +363,7 @@ export const Home: React.FC = () => {
                             desc={t("home.no-recent-pages-hint") || "Pages you visit will appear here"}
                         />
                     ) : (
-                        <div className={cn("grid gap-3 w-full", isMobile ? "grid-cols-1" : "grid-cols-2")}>
+                        <div className="grid gap-3 w-full grid-cols-1 md:grid-cols-2">
                             {recentPages.map((page: any) => {
                                 const hue = pickHue(page.id)
                                 const styles = hueStyles(hue)

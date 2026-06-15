@@ -169,6 +169,20 @@ description: 技能描述
 - `SkillCard` - 技能卡片展示
 - `CreateSkillDialog` - 创建/导入技能对话框
 
+## Responsive / 响应式规范
+
+本仓库使用统一的**三层设备体系**（mobile `<768` / tablet `768–1023` / desktop `≥1024`）。
+所有页面、组件、插件都应遵循 **[docs/RESPONSIVE.md](docs/RESPONSIVE.md)**，不要各自散写媒体查询。
+
+核心 API（均从 `@kn/ui` 导入）：
+- `useResponsive()` → `{ device, isMobile, isTablet, isDesktop, isMobileOrTablet, isTabletOrDesktop }`
+- `<DeviceSwitch mobile tablet desktop />`、`<ShowOn>` / `<HideOn>` —— 声明式、含级联回退
+- `useIsMobile()` 仍可用（= `useResponsive().isMobile`，向后兼容）
+- 断点常量唯一来源：`packages/ui/src/hooks/breakpoints.ts`（勿硬编码 768/1024）
+
+原则：**纯外观差异用 Tailwind `md:`/`lg:` 前缀；结构性差异才用 `useResponsive`/`<DeviceSwitch>`**。
+触摸目标 ≥44px；固定贴边元素用安全区类 `pb-safe`/`pt-safe`/`*-safe-*`。
+
 ## Logging
 
 Use the centralized logger from `@kn/common`:

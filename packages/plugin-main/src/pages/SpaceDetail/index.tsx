@@ -1,6 +1,6 @@
 import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
-import { IconButton, TreeView, useIsMobile, Button, Sheet, SheetContent, SheetTitle } from "@kn/ui";
-import { CircleArrowUp, LayoutDashboard, LayoutTemplate, Menu, MoreHorizontal, Package, Plus, Settings, Star, StarIcon, Trash2, Undo2, AlertCircle } from "@kn/icon";
+import { IconButton, TreeView, useResponsive, Button, Sheet, SheetContent, SheetTitle } from "@kn/ui";
+import { CircleArrowUp, LayoutDashboard, LayoutTemplate, Menu, MoreHorizontal, Package, Plus, Settings, Star, StarIcon, Trash2, Undo2, AlertCircle, PanelLeftClose, PanelLeftOpen } from "@kn/icon";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useApi, useService, useUploadFile, useNavigator, useToggle, useMobilePageHeader } from "@kn/common";
 import { APIS } from "../../api";
@@ -21,8 +21,20 @@ import { TemplateSelector } from "../../components/TemplateSelector";
 
 export const SpaceDetail: React.FC = () => {
 
-    const isMobile = useIsMobile()
+    const { isMobile, isTablet } = useResponsive()
     const [sidebarOpen, setSidebarOpen] = useState(false)
+    // Tablet: the page-tree sidebar is collapsible. Persisted across reloads
+    // (the Redux store is in-memory only, so use localStorage for durability).
+    const [treeCollapsed, setTreeCollapsed] = useState<boolean>(
+        () => typeof window !== "undefined" && localStorage.getItem("kn:space-tree-collapsed") === "1"
+    )
+    const toggleTreeCollapsed = useCallback(() => {
+        setTreeCollapsed((v) => {
+            const next = !v
+            try { localStorage.setItem("kn:space-tree-collapsed", next ? "1" : "0") } catch { }
+            return next
+        })
+    }, [])
     const [visible, setVisible] = useState(false)
     const [space, setSpace] = useState<Space>()
     const [pageTree, setPageTree] = useState([])
@@ -545,10 +557,17 @@ export const SpaceDetail: React.FC = () => {
         return () => clearHeaderInfo()
     }, [isMobile, space, setHeaderInfo, clearHeaderInfo])
 
+    // Tree column width: mobile uses a drawer (no column); tablet is collapsible
+    // (48px rail when collapsed, 240px when open); desktop is a fixed 280px.
+    const collapsedOnTablet = isTablet && treeCollapsed
+    const gridCols = isTablet
+        ? (treeCollapsed ? "grid-cols-[48px_1fr]" : "grid-cols-[240px_1fr]")
+        : "grid-cols-[280px_1fr]"
+
     return space && (
         <div className={cn(
             "w-full bg-muted/40",
-            isMobile ? "h-full flex flex-col" : "h-screen grid grid-cols-[280px_1fr]"
+            isMobile ? "h-full flex flex-col" : cn("h-screen grid", gridCols)
         )}>
             {/* Mobile page-tree drawer — triggered from the unified app bar */}
             {isMobile && (
@@ -562,10 +581,23 @@ export const SpaceDetail: React.FC = () => {
                 </Sheet>
             )}
 
-            {/* Desktop Sidebar */}
+            {/* Desktop / tablet sidebar. On tablet it's collapsible. */}
             {!isMobile && (
                 <div className="h-screen w-full border-r border-solid flex flex-col overflow-hidden">
-                    {SidebarContent}
+                    {isTablet && (
+                        <div className="flex items-center justify-end px-1 py-1 border-b flex-shrink-0">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={toggleTreeCollapsed}
+                                aria-label={treeCollapsed ? "展开页面树" : "收起页面树"}
+                            >
+                                {treeCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+                            </Button>
+                        </div>
+                    )}
+                    {!collapsedOnTablet && SidebarContent}
                 </div>
             )}
 

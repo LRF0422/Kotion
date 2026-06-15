@@ -231,10 +231,7 @@ export const SpaceHub: React.FC = () => {
                     </div>
 
                     {/* Stats Cards */}
-                    <div className={cn(
-                        "grid gap-2",
-                        isMobile ? "grid-cols-2" : "grid-cols-4"
-                    )}>
+                    <div className="grid gap-2 grid-cols-2 md:grid-cols-4">
                         <Card className="border-border/50 bg-card">
                             <CardContent className="p-3 flex items-center gap-2">
                                 <div className="p-1.5 rounded-md bg-blue-500/10">
