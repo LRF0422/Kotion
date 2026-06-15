@@ -11,8 +11,8 @@ import light, { dark } from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
 import { ExtensionWrapper } from "@kn/common";
 import { useSafeState, useUnmount } from "ahooks";
-import { ToC } from "./ToC";
-import { cn, useIsMobile, useTheme, Button } from "@kn/ui";
+import { NotionToC } from "./NotionToC";
+import { cn, useIsMobile, useTheme } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
@@ -20,7 +20,7 @@ import { loadContentProgressive, isLargeDocument } from "./loadContentProgressiv
 import { TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-caret";
-import { List, X, Loader2 } from "@kn/icon";
+import { Loader2 } from "@kn/icon";
 import "../styles/editor.css"
 
 
@@ -54,7 +54,6 @@ export const CollaborationEditor = forwardRef<
   const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle, externalExtensions)
   const blockMenuItems = React.useMemo(() => resolveBlockMenuItems(extensionWrappers as ExtensionWrapper[]), [extensionWrappers])
   const [items, setItems] = useSafeState<any[]>([])
-  const [tocVisible, setTocVisible] = useSafeState(false)
   const [contentReady, setContentReady] = useSafeState(false)
   const [loadProgress, setLoadProgress] = useSafeState(0)
   const [isLargeDoc, setIsLargeDoc] = useSafeState(false)
@@ -348,31 +347,9 @@ export const CollaborationEditor = forwardRef<
               )}
             </StyledEditor>
           </div>
-          {/* ToC - fixed position */}
+          {/* ToC - Notion-style floating outline on the right edge */}
           {toc && contentReady && (
-            <>
-              {/* Toggle button */}
-              <Button
-                variant="outline"
-                size="icon"
-                className={cn(
-                  "fixed z-50 top-[100px] shadow-md bg-background",
-                  tocVisible ? "right-[310px]" : "right-4"
-                )}
-                onClick={() => setTocVisible(!tocVisible)}
-              >
-                {tocVisible ? <X className="h-4 w-4" /> : <List className="h-4 w-4" />}
-              </Button>
-              {/* ToC panel */}
-              <div
-                className={cn(
-                  "fixed top-[80px] right-0 w-[300px] h-[calc(100vh-80px)] border-l bg-background z-40 transition-transform duration-300",
-                  tocVisible ? "translate-x-0" : "translate-x-full"
-                )}
-              >
-                <ToC editor={editor} items={items} />
-              </div>
-            </>
+            <NotionToC editor={editor} items={items} />
           )}
         </div>
       </ThemeProvider >

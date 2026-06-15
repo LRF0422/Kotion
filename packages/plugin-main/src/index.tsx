@@ -87,6 +87,11 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "no-recent-pages-hint": "您访问过的页面将显示在这里",
           "learning": "学习使用 Knowledge",
           "coming-soon-desc": "功能即将上线，敬请期待！",
+          "new-page": "新建页面",
+          "all-spaces": "全部空间",
+          "ai-assistant": "AI 助手",
+          "last-update": "最近更新",
+          "week-stat": "本周编辑 {{count}} 篇",
           "greeting": {
             "morning": "早上好",
             "afternoon": "下午好",
@@ -287,6 +292,11 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "no-recent-pages-hint": "Pages you visit will appear here",
           "learning": "Learn Knowledge",
           "coming-soon-desc": "This feature is coming soon, stay tuned!",
+          "new-page": "New Page",
+          "all-spaces": "All Spaces",
+          "ai-assistant": "AI Assistant",
+          "last-update": "Last update",
+          "week-stat": "{{count}} pages this week",
           "greeting": {
             "morning": "Good Morning",
             "afternoon": "Good Afternoon",

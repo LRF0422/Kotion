@@ -28,7 +28,10 @@
       "Bash(git:*)",
       "Bash(pnpm --filter @kn/resume-plugin build)",
       "Bash(cd /home/Leong/Desktop/knowledge-repo/.worktrees/resume-column && pnpm -F @kn/resume-plugin build 2>&1 | tail -20)",
-      "Bash(pnpm build:editor 2>&1 | head -50)"
+      "Bash(pnpm build:editor 2>&1 | head -50)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(ls node_modules/.bin/tsc)",
+      "Bash(ls packages/plugin-main/node_modules/.bin/tsc)"
     ]
   },
   "disabledMcpjsonServers": [

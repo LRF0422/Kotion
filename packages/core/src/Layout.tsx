@@ -4,7 +4,7 @@ import { SiderMenu } from "./components/SiderMenu"
 import { useContext, useEffect, useState } from "react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Onboarding, OnboardingStep, Rate, SparklesText, cn, useIsMobile, Sheet, SheetContent, SheetTrigger, Button } from "@kn/ui"
 import { Menu, ChevronLeft } from "@kn/icon"
-import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, SystemAgentProvider } from "@kn/common"
+import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, TOGGLE_AI_ASSISTANT, SystemAgentProvider } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { useAsyncEffect } from "ahooks"
@@ -87,6 +87,15 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
     // AI Assistant keyboard shortcut
     useAIAssistantShortcut(aiPanelOpen, setAiPanelOpen)
+
+    // Allow other parts of the app (e.g. Home quick actions) to toggle the AI panel
+    useEffect(() => {
+        const handleToggleAi = () => setAiPanelOpen(prev => !prev)
+        event.on(TOGGLE_AI_ASSISTANT, handleToggleAi)
+        return () => {
+            event.off(TOGGLE_AI_ASSISTANT, handleToggleAi)
+        }
+    }, [])
 
     const searchParams = new URLSearchParams(window.location.search);
     const requestPluginId = searchParams.get('requestPluginId');
