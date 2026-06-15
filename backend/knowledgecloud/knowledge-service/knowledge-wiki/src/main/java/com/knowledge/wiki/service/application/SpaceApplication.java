@@ -775,9 +775,14 @@ public class SpaceApplication {
                         .update();
             }
             if (iconChanged) {
+                // Icon maps to a JSON column via JacksonTypeHandler (@TableField on
+                // Page.icon). lambdaUpdate().set() does NOT pick up that handler
+                // automatically, so it must be named explicitly here or the Icon
+                // object would be bound as a raw parameter and fail to persist.
                 pageService.lambdaUpdate()
                         .eq(Page::getId, existing.getId())
-                        .set(Page::getIcon, newIcon)
+                        .set(Page::getIcon, newIcon,
+                                "typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler")
                         .update();
             }
         } catch (Exception e) {
