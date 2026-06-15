@@ -22,13 +22,11 @@ const pickHue = (key?: string): number => {
     return HUE_PALETTE[Math.abs(hash) % HUE_PALETTE.length]
 }
 
+// Notion-style: flat surfaces, color lives only in the small icon chip.
 const hueStyles = (hue: number) => ({
-    card: {
-        backgroundImage: `linear-gradient(135deg, hsl(${hue} 75% 55% / 0.16), hsl(${(hue + 28) % 360} 75% 55% / 0.04))`,
-    } as React.CSSProperties,
     chip: {
-        backgroundColor: `hsl(${hue} 70% 55% / 0.16)`,
-        color: `hsl(${hue} 65% 55%)`,
+        backgroundColor: `hsl(${hue} 70% 55% / 0.14)`,
+        color: `hsl(${hue} 60% 48%)`,
     } as React.CSSProperties,
 })
 
@@ -78,18 +76,12 @@ export const Home: React.FC = () => {
     }
 
     const getGreetingIcon = () => {
-        if (isMorning) return <Sun className="h-7 w-7 text-amber-500 animate-slow-spin" />
-        if (isAfternoon) return <Sunset className="h-7 w-7 text-orange-500" />
-        return <Moon className="h-7 w-7 text-indigo-400" />
+        if (isMorning) return <Sun className="h-6 w-6 text-amber-500" />
+        if (isAfternoon) return <Sunset className="h-6 w-6 text-orange-500" />
+        return <Moon className="h-6 w-6 text-indigo-400" />
     }
 
-    // Soft, theme-friendly gradient for the hero banner; shifts with the time of day.
-    const heroGradient = isMorning
-        ? "from-amber-400/15 via-orange-300/10 to-transparent"
-        : isAfternoon
-            ? "from-orange-400/15 via-rose-300/10 to-transparent"
-            : "from-indigo-500/15 via-violet-500/10 to-transparent"
-
+    // Small tinted square behind the time-of-day icon — the only color in the header.
     const heroIconBg = isMorning
         ? "bg-amber-500/10"
         : isAfternoon
@@ -171,14 +163,14 @@ export const Home: React.FC = () => {
                 onClick={onClick}
                 disabled={btnLoading}
                 className={cn(
-                    "group flex items-center gap-2.5 rounded-xl border border-border/60 bg-card/60 px-3 py-2.5",
-                    "text-left transition-all duration-200 hover:border-border hover:shadow-sm hover:-translate-y-0.5",
-                    "active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed",
-                    isMobile && "flex-1"
+                    "group flex items-center gap-2.5 rounded-md border border-border/60 bg-transparent px-3 py-2",
+                    "text-left transition-colors duration-150 hover:bg-muted/60",
+                    "disabled:opacity-60 disabled:cursor-not-allowed",
+                    isMobile && "flex-1 justify-center"
                 )}
             >
                 <span
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-transform group-hover:scale-105"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
                     style={styles.chip}
                 >
                     {icon}
@@ -194,42 +186,32 @@ export const Home: React.FC = () => {
             isMobile && "px-4"
         )}>
             <style>{`
-                @keyframes slow-spin {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(360deg); }
-                }
-                .animate-slow-spin { animation: slow-spin 6s linear infinite; }
                 @keyframes home-fade-up {
-                    from { opacity: 0; transform: translateY(8px); }
+                    from { opacity: 0; transform: translateY(6px); }
                     to { opacity: 1; transform: translateY(0); }
                 }
-                .home-fade-up { animation: home-fade-up 0.4s ease both; }
+                .home-fade-up { animation: home-fade-up 0.35s ease both; }
             `}</style>
             <div className={cn(
-                "flex flex-col gap-8 w-full",
+                "flex flex-col gap-9 w-full",
                 !isMobile && "max-w-[800px]"
             )}>
-                {/* Hero / Greeting */}
+                {/* Greeting */}
                 <div className={cn(
-                    "home-fade-up relative shrink-0 rounded-2xl border border-border/60",
-                    "bg-gradient-to-br p-6",
-                    heroGradient,
-                    isMobile ? "mt-2" : "mt-4"
+                    "home-fade-up shrink-0",
+                    isMobile ? "mt-4" : "mt-8"
                 )}>
-                    <div className={cn(
-                        "flex gap-4",
-                        isMobile ? "flex-col items-start" : "items-center"
-                    )}>
+                    <div className="flex items-center gap-3">
                         <div className={cn(
-                            "flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl",
+                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
                             heroIconBg
                         )}>
                             {getGreetingIcon()}
                         </div>
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col">
                             <h1 className={cn(
                                 "font-semibold tracking-tight",
-                                isMobile ? "text-xl" : "text-2xl"
+                                isMobile ? "text-2xl" : "text-3xl"
                             )}>
                                 {getGreeting()}{userInfo?.name ? `, ${userInfo.name}` : ""}
                             </h1>
@@ -239,10 +221,7 @@ export const Home: React.FC = () => {
                                     <>
                                         {" · "}
                                         <span className="text-foreground/70">
-                                            {t("home.week-stat", {
-                                                count: weekEditedCount,
-                                                defaultValue: `${weekEditedCount} pages this week`,
-                                            })}
+                                            {t("home.week-stat", { n: weekEditedCount })}
                                         </span>
                                     </>
                                 )}
@@ -252,7 +231,7 @@ export const Home: React.FC = () => {
 
                     {/* Quick actions */}
                     <div className={cn(
-                        "mt-5 flex gap-2.5",
+                        "mt-4 flex gap-2",
                         isMobile ? "flex-row" : "flex-wrap"
                     )}>
                         <QuickAction
@@ -295,8 +274,8 @@ export const Home: React.FC = () => {
                 <section className="flex flex-col gap-3.5 shrink-0">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <Clock size={15} className="text-muted-foreground" />
-                            <h2 className="font-semibold text-sm">{t("home.rs") || "Recent Spaces"}</h2>
+                            <Clock size={14} className="text-muted-foreground" />
+                            <h2 className="text-sm font-medium text-muted-foreground">{t("home.rs") || "Recent Spaces"}</h2>
                         </div>
                         <Button
                             variant="ghost"
@@ -309,9 +288,9 @@ export const Home: React.FC = () => {
                         </Button>
                     </div>
                     {loading ? (
-                        <div className={cn("grid gap-4 w-full", isMobile ? "grid-cols-2" : "grid-cols-4")}>
+                        <div className={cn("grid gap-3 w-full", isMobile ? "grid-cols-2" : "grid-cols-4")}>
                             {[...Array(isMobile ? 2 : 4)].map((_, index) => (
-                                <Skeleton key={index} className={cn("w-full rounded-2xl", isMobile ? "h-[120px]" : "h-[132px]")} />
+                                <Skeleton key={index} className={cn("w-full rounded-lg", isMobile ? "h-[120px]" : "h-[128px]")} />
                             ))}
                         </div>
                     ) : recentSpaces.length === 0 ? (
@@ -331,7 +310,7 @@ export const Home: React.FC = () => {
                             }
                         />
                     ) : (
-                        <div className={cn("grid gap-4 w-full", isMobile ? "grid-cols-2" : "grid-cols-4")}>
+                        <div className={cn("grid gap-3 w-full", isMobile ? "grid-cols-2" : "grid-cols-4")}>
                             {recentSpaces.map((space: any) => {
                                 const hue = pickHue(space.id)
                                 const styles = hueStyles(hue)
@@ -340,21 +319,20 @@ export const Home: React.FC = () => {
                                         key={space.id}
                                         type="button"
                                         onClick={() => navigator.go({ to: `/space-detail/${space.id}` })}
-                                        style={styles.card}
                                         className={cn(
-                                            "group relative flex flex-col items-start overflow-hidden rounded-2xl border border-border/50 p-4 text-left",
-                                            "transition-all duration-200 hover:border-border hover:shadow-md hover:-translate-y-0.5 active:translate-y-0",
-                                            isMobile ? "h-[120px]" : "h-[132px]"
+                                            "group relative flex flex-col items-start overflow-hidden rounded-lg border border-border/60 bg-card p-4 text-left",
+                                            "transition-colors duration-150 hover:bg-muted/50",
+                                            isMobile ? "h-[120px]" : "h-[128px]"
                                         )}
                                     >
                                         <span
-                                            className="flex h-11 w-11 items-center justify-center rounded-xl text-2xl leading-none transition-transform group-hover:scale-105"
+                                            className="flex h-10 w-10 items-center justify-center rounded-lg text-2xl leading-none"
                                             style={styles.chip}
                                         >
                                             {space.icon?.icon || <Box className="h-5 w-5" />}
                                         </span>
                                         <div className="mt-auto w-full">
-                                            <p className="truncate text-sm font-semibold">{space.name}</p>
+                                            <p className="truncate text-sm font-medium">{space.name}</p>
                                             <p className="truncate text-xs text-muted-foreground">
                                                 {relativeTime(space.updateTime)}
                                             </p>
@@ -369,13 +347,13 @@ export const Home: React.FC = () => {
                 {/* Recent Pages */}
                 <section className="flex flex-col gap-3.5 shrink-0">
                     <div className="flex items-center gap-2">
-                        <Clock size={15} className="text-muted-foreground" />
-                        <h2 className="font-semibold text-sm">{t("home.recent-pages") || "Recent Pages"}</h2>
+                        <Clock size={14} className="text-muted-foreground" />
+                        <h2 className="text-sm font-medium text-muted-foreground">{t("home.recent-pages") || "Recent Pages"}</h2>
                     </div>
                     {loading ? (
                         <div className={cn("grid gap-3 w-full", isMobile ? "grid-cols-1" : "grid-cols-2")}>
                             {[...Array(isMobile ? 4 : 6)].map((_, index) => (
-                                <Skeleton key={index} className="w-full h-[64px] rounded-xl" />
+                                <Skeleton key={index} className="w-full h-[60px] rounded-lg" />
                             ))}
                         </div>
                     ) : recentPages.length === 0 ? (
@@ -395,12 +373,12 @@ export const Home: React.FC = () => {
                                         type="button"
                                         onClick={() => navigator.go({ to: `/space-detail/${page.spaceId}/page/edit/${page.id}` })}
                                         className={cn(
-                                            "group flex items-center gap-3 rounded-xl border border-border/50 bg-card/50 p-3 text-left",
-                                            "transition-all duration-200 hover:border-border hover:shadow-sm hover:bg-card hover:-translate-y-0.5 active:translate-y-0"
+                                            "group flex items-center gap-3 rounded-lg border border-border/60 bg-card p-3 text-left",
+                                            "transition-colors duration-150 hover:bg-muted/50"
                                         )}
                                     >
                                         <span
-                                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg leading-none"
+                                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg leading-none"
                                             style={styles.chip}
                                         >
                                             {page.icon?.icon || <Box className="h-4 w-4" />}
@@ -426,8 +404,8 @@ export const Home: React.FC = () => {
                 {/* Favorite Pages */}
                 <section className="flex flex-col gap-3.5 shrink-0">
                     <div className="flex items-center gap-2">
-                        <Star size={15} className="text-amber-500" />
-                        <h2 className="font-semibold text-sm">{t("home.favorites") || "Favorite Pages"}</h2>
+                        <Star size={14} className="text-amber-500" />
+                        <h2 className="text-sm font-medium text-muted-foreground">{t("home.favorites") || "Favorite Pages"}</h2>
                     </div>
                     {loading ? (
                         <div className="flex flex-col gap-1">
@@ -453,11 +431,11 @@ export const Home: React.FC = () => {
                                 return (
                                     <li
                                         key={data.id}
-                                        className="flex items-center gap-3 rounded-xl px-2 py-2 cursor-pointer transition-colors hover:bg-muted/60"
+                                        className="flex items-center gap-3 rounded-md px-2 py-1.5 cursor-pointer transition-colors hover:bg-muted/60"
                                         onClick={() => navigator.go({ to: `/space-detail/${data.spaceId}/page/edit/${data.id}` })}
                                     >
                                         <span
-                                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base leading-none"
+                                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-base leading-none"
                                             style={styles.chip}
                                         >
                                             {data.icon?.icon || <Box className="h-4 w-4" />}
@@ -479,8 +457,8 @@ export const Home: React.FC = () => {
                 {/* Learn Knowledge */}
                 <section className="flex flex-col gap-3.5 shrink-0">
                     <div className="flex items-center gap-2">
-                        <Book size={15} className="text-muted-foreground" />
-                        <h2 className="font-semibold text-sm">{t("home.learning") || "Learn Knowledge"}</h2>
+                        <Book size={14} className="text-muted-foreground" />
+                        <h2 className="text-sm font-medium text-muted-foreground">{t("home.learning") || "Learn Knowledge"}</h2>
                     </div>
                     <Card className="border-dashed bg-muted/20">
                         <CardContent className="flex items-center gap-3 py-4">
@@ -506,7 +484,7 @@ const EmptyBlock: React.FC<{
     desc?: string
     action?: React.ReactNode
 }> = ({ icon, title, desc, action }) => (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 py-10 text-center">
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border/60 py-10 text-center">
         <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
             {icon}
         </div>

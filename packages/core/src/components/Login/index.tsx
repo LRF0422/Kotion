@@ -8,6 +8,7 @@ import { zodResolver } from '@kn/ui';
 import { useApi } from "@kn/common"
 import { APIS } from "@kn/common"
 import { saveTokens } from "@kn/common"
+import { useTranslation } from "@kn/common"
 import { useState } from "react"
 import { Loader2, Eye, EyeOff, Check, ArrowRight } from "@kn/icon"
 import { ModeToggle } from "@kn/ui"
@@ -22,6 +23,7 @@ export function Login() {
     const [loginSuccess, setLoginSuccess] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
     const navigate = useNavigate()
+    const { t } = useTranslation()
 
     const formSchema = z.object({
         account: z.string().min(1, {
@@ -89,7 +91,7 @@ export function Login() {
             </div>
 
             {/* Left Side - Brand Panel (Notion-style) */}
-            <div className="hidden lg:flex relative overflow-hidden bg-gradient-to-b from-slate-50 to-slate-100/80 dark:from-slate-950 dark:to-slate-900/80">
+            <div className="hidden lg:flex relative overflow-hidden bg-muted/30 dark:bg-muted/10 border-r border-border">
                 {/* Decorative background — dot grid + soft radial accents */}
                 <svg className="absolute inset-0 w-full h-full opacity-[0.4] dark:opacity-[0.2]" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                     <defs>
@@ -109,38 +111,25 @@ export function Login() {
                         <rect width="100%" height="100%" fill="url(#login-fade-center)" />
                     </mask>
                 </svg>
-                {/* Soft gradient orbs */}
-                <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full bg-primary/[0.03] dark:bg-primary/[0.02] blur-3xl" />
-                <div className="absolute bottom-[-15%] left-[-5%] w-[400px] h-[400px] rounded-full bg-primary/[0.04] dark:bg-primary/[0.02] blur-3xl" />
-                {/* Subtle concentric rings */}
-                <svg className="absolute top-[5%] right-[5%] w-[280px] h-[280px] opacity-[0.06] dark:opacity-[0.04]" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                    <circle cx="100" cy="100" r="40" className="stroke-foreground" strokeWidth="0.5" fill="none" />
-                    <circle cx="100" cy="100" r="65" className="stroke-foreground" strokeWidth="0.5" fill="none" />
-                    <circle cx="100" cy="100" r="90" className="stroke-foreground" strokeWidth="0.5" fill="none" />
-                </svg>
-                <svg className="absolute bottom-[10%] right-[15%] w-[200px] h-[200px] opacity-[0.05] dark:opacity-[0.03]" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                    <circle cx="100" cy="100" r="50" className="stroke-foreground" strokeWidth="0.5" fill="none" />
-                    <circle cx="100" cy="100" r="80" className="stroke-foreground" strokeWidth="0.5" fill="none" />
-                </svg>
 
                 <div className="relative z-10 flex flex-col justify-between w-full h-full p-12 xl:p-16 animate-fade-in-up">
                     {/* Center — Hero (no logo per request) */}
                     <div className="flex-1 flex flex-col justify-center max-w-lg">
-                        <h2 className="text-4xl xl:text-[44px] font-bold leading-[1.2] tracking-tight text-foreground">
-                            你的想法，
+                        <h2 className="text-4xl xl:text-[44px] font-semibold leading-[1.2] tracking-tight text-foreground">
+                            {t("auth.login.heroLine1")}
                             <br />
-                            值得被好好组织。
+                            {t("auth.login.heroLine2")}
                         </h2>
                         <p className="mt-5 text-base text-muted-foreground leading-relaxed max-w-sm">
-                            一款为个人创作者和团队打造的笔记与协作工具。写作、计划、协作，全部在一个地方完成。
+                            {t("auth.login.heroSubtitle")}
                         </p>
 
                         {/* Feature list with checkmarks */}
                         <div className="mt-8 space-y-4">
                             {[
-                                '无限层级页面，灵活组织知识结构',
-                                '实时多人协作，团队高效同步',
-                                'Markdown 支持，专注写作体验',
+                                t("auth.login.feature1"),
+                                t("auth.login.feature2"),
+                                t("auth.login.feature3"),
                             ].map((text, index) => (
                                 <div
                                     key={index}
@@ -191,16 +180,16 @@ export function Login() {
                 <div className="mx-auto w-full max-w-[340px] space-y-7 animate-fade-in">
                     {/* Mobile Logo (shown on small screens only) */}
                     <div className="lg:hidden text-center mb-6">
-                        <h2 className="text-xl font-bold tracking-tight">Knowledge</h2>
+                        <h2 className="text-xl font-semibold tracking-tight">Knowledge</h2>
                     </div>
 
                     {/* Header */}
                     <div className="space-y-1.5">
-                        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                            登录
+                        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                            {t("auth.login.title")}
                         </h1>
                         <p className="text-sm text-muted-foreground">
-                            欢迎回来，请输入你的账号信息
+                            {t("auth.login.subtitle")}
                         </p>
                     </div>
 
@@ -212,10 +201,10 @@ export function Login() {
                                 name="account"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel className="text-sm font-medium text-foreground">邮箱地址</FormLabel>
+                                        <FormLabel className="text-sm font-medium text-foreground">{t("auth.common.email")}</FormLabel>
                                         <FormControl>
                                             <Input
-                                                placeholder="name@example.com"
+                                                placeholder={t("auth.common.emailPlaceholder")}
                                                 className="h-10 bg-background border-border focus-visible:ring-1 focus-visible:ring-primary/30 transition-all"
                                                 {...field}
                                             />
@@ -230,19 +219,19 @@ export function Login() {
                                 render={({ field }) => (
                                     <FormItem>
                                         <div className="flex items-center justify-between">
-                                            <FormLabel className="text-sm font-medium text-foreground">密码</FormLabel>
+                                            <FormLabel className="text-sm font-medium text-foreground">{t("auth.common.password")}</FormLabel>
                                             <Link
                                                 to="/forgot-password"
                                                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                                             >
-                                                忘记密码？
+                                                {t("auth.login.forgotPassword")}
                                             </Link>
                                         </div>
                                         <FormControl>
                                             <div className="relative">
                                                 <Input
                                                     type={showPassword ? 'text' : 'password'}
-                                                    placeholder="请输入密码"
+                                                    placeholder={t("auth.login.passwordPlaceholder")}
                                                     className="h-10 bg-background border-border pr-10 focus-visible:ring-1 focus-visible:ring-primary/30 transition-all"
                                                     {...field}
                                                 />
@@ -264,12 +253,12 @@ export function Login() {
                             <Button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full h-10 font-medium shadow-sm hover:shadow-md transition-all"
+                                className="w-full h-10 font-medium transition-colors"
                             >
                                 {loading ? (
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 ) : (
-                                    <span>继续</span>
+                                    <span>{t("auth.login.submit")}</span>
                                 )}
                                 {!loading && <ArrowRight className="ml-1.5 h-4 w-4" />}
                             </Button>
@@ -281,7 +270,7 @@ export function Login() {
                                 </div>
                                 <div className="relative flex justify-center text-xs">
                                     <span className="bg-background px-3 text-muted-foreground">
-                                        或使用以下方式继续
+                                        {t("auth.common.orContinueWith")}
                                     </span>
                                 </div>
                             </div>
@@ -294,13 +283,13 @@ export function Login() {
                                 <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178A1.17 1.17 0 0 1 4.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178 1.17 1.17 0 0 1-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.653 3.75 4.84 7.093 5.088a9.536 9.536 0 0 0 2.354-.164l1.578.924a.271.271 0 0 0 .14.047c.133 0 .241-.112.241-.248 0-.06-.023-.12-.038-.178l-.326-1.233a.492.492 0 0 1 .177-.553C23.022 18.342 24 16.65 24 14.771c0-3.328-3.238-6.057-7.062-5.913zm-2.8 2.987c.534 0 .966.44.966.982a.974.974 0 0 1-.966.983.974.974 0 0 1-.966-.983c0-.542.433-.982.966-.982zm4.843 0c.534 0 .966.44.966.982a.974.974 0 0 1-.966.983.974.974 0 0 1-.966-.983c0-.542.433-.982.966-.982z"/>
                                 </svg>
-                                使用微信登录
+                                {t("auth.login.wechat")}
                             </Button>
 
                             <div className="text-center text-sm text-muted-foreground pt-1">
-                                还没有账号？{' '}
+                                {t("auth.login.noAccount")}{' '}
                                 <Link to="/sign-up" className="text-primary font-medium hover:text-primary/80 transition-colors">
-                                    免费注册
+                                    {t("auth.login.signUpLink")}
                                 </Link>
                             </div>
                         </form>

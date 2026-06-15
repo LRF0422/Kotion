@@ -316,6 +316,72 @@ export const resources = {
                     "cancel": "取消",
                     "delete": "删除"
                 }
+            },
+            "home": {
+                "greeting": {
+                    "morning": "早上好",
+                    "afternoon": "下午好",
+                    "evening": "晚上好"
+                },
+                "week-stat": "本周编辑了 {{n}} 个页面",
+                "new-page": "新建页面",
+                "create-space": "新建空间",
+                "all-spaces": "全部空间",
+                "ai-assistant": "AI 助手",
+                "rs": "最近空间",
+                "all": "查看全部",
+                "no-spaces": "还没有空间",
+                "no-spaces-hint": "创建一个空间开始使用",
+                "recent-pages": "最近页面",
+                "no-recent-pages": "暂无最近页面",
+                "no-recent-pages-hint": "你访问过的页面会显示在这里",
+                "favorites": "收藏页面",
+                "last-update": "最近更新",
+                "no-favorites": "还没有收藏的页面",
+                "no-favorites-hint": "收藏页面后会显示在这里",
+                "learning": "知识学习",
+                "coming-soon-desc": "该功能即将上线，敬请期待！"
+            },
+            "auth": {
+                "common": {
+                    "email": "邮箱地址",
+                    "emailPlaceholder": "name@example.com",
+                    "password": "密码",
+                    "orContinueWith": "或使用以下方式继续"
+                },
+                "login": {
+                    "heroLine1": "你的想法，",
+                    "heroLine2": "值得被好好组织。",
+                    "heroSubtitle": "一款为个人创作者和团队打造的笔记与协作工具。写作、计划、协作，全部在一个地方完成。",
+                    "feature1": "无限层级页面，灵活组织知识结构",
+                    "feature2": "实时多人协作，团队高效同步",
+                    "feature3": "Markdown 支持，专注写作体验",
+                    "title": "登录",
+                    "subtitle": "欢迎回来，请输入你的账号信息",
+                    "forgotPassword": "忘记密码？",
+                    "passwordPlaceholder": "请输入密码",
+                    "submit": "继续",
+                    "wechat": "使用微信登录",
+                    "noAccount": "还没有账号？",
+                    "signUpLink": "免费注册"
+                },
+                "signup": {
+                    "heroLine1": "开始构建，",
+                    "heroLine2": "你的知识库。",
+                    "heroSubtitle": "注册即可免费使用全部功能。记录灵感、管理知识、与团队协作，从一个账号开始。",
+                    "feature1": "免费创建无限知识库",
+                    "feature2": "跨设备实时同步",
+                    "feature3": "AI 辅助写作与整理",
+                    "title": "创建账号",
+                    "subtitle": "填写以下信息，开始你的知识管理之旅",
+                    "name": "昵称",
+                    "namePlaceholder": "你的名字",
+                    "passwordPlaceholder": "至少6位密码",
+                    "submit": "创建账号",
+                    "wechat": "使用微信注册",
+                    "haveAccount": "已经拥有账号？",
+                    "loginLink": "登录"
+                }
             }
         }
     },
@@ -634,6 +700,72 @@ export const resources = {
                     "deleteViewDescription": "Are you sure you want to delete this view? This action cannot be undone.",
                     "cancel": "Cancel",
                     "delete": "Delete"
+                }
+            },
+            "home": {
+                "greeting": {
+                    "morning": "Good Morning",
+                    "afternoon": "Good Afternoon",
+                    "evening": "Good Evening"
+                },
+                "week-stat": "{{n}} pages this week",
+                "new-page": "New Page",
+                "create-space": "New Space",
+                "all-spaces": "All Spaces",
+                "ai-assistant": "AI Assistant",
+                "rs": "Recent Spaces",
+                "all": "View All",
+                "no-spaces": "No spaces yet",
+                "no-spaces-hint": "Create a space to get started",
+                "recent-pages": "Recent Pages",
+                "no-recent-pages": "No recent pages",
+                "no-recent-pages-hint": "Pages you visit will appear here",
+                "favorites": "Favorite Pages",
+                "last-update": "Last update",
+                "no-favorites": "No favorite pages yet",
+                "no-favorites-hint": "Star pages to add them here",
+                "learning": "Learn Knowledge",
+                "coming-soon-desc": "This feature is coming soon, stay tuned!"
+            },
+            "auth": {
+                "common": {
+                    "email": "Email",
+                    "emailPlaceholder": "name@example.com",
+                    "password": "Password",
+                    "orContinueWith": "Or continue with"
+                },
+                "login": {
+                    "heroLine1": "Your ideas,",
+                    "heroLine2": "beautifully organized.",
+                    "heroSubtitle": "A note-taking and collaboration tool built for individual creators and teams. Write, plan, and collaborate — all in one place.",
+                    "feature1": "Unlimited nested pages to organize your knowledge",
+                    "feature2": "Real-time collaboration to keep your team in sync",
+                    "feature3": "Markdown support for a focused writing experience",
+                    "title": "Sign In",
+                    "subtitle": "Welcome back, please enter your account details",
+                    "forgotPassword": "Forgot password?",
+                    "passwordPlaceholder": "Enter your password",
+                    "submit": "Continue",
+                    "wechat": "Sign in with WeChat",
+                    "noAccount": "Don't have an account?",
+                    "signUpLink": "Sign up free"
+                },
+                "signup": {
+                    "heroLine1": "Start building",
+                    "heroLine2": "your knowledge base.",
+                    "heroSubtitle": "Sign up to use all features for free. Capture ideas, manage knowledge, and collaborate with your team — all from one account.",
+                    "feature1": "Create unlimited knowledge bases for free",
+                    "feature2": "Real-time sync across all your devices",
+                    "feature3": "AI-assisted writing and organization",
+                    "title": "Create Account",
+                    "subtitle": "Fill in the details below to start your knowledge journey",
+                    "name": "Name",
+                    "namePlaceholder": "Your name",
+                    "passwordPlaceholder": "At least 6 characters",
+                    "submit": "Create Account",
+                    "wechat": "Sign up with WeChat",
+                    "haveAccount": "Already have an account?",
+                    "loginLink": "Sign in"
                 }
             }
         }
