@@ -1,26 +1,23 @@
 import { APIS } from "../../../api";
-import { useIsMobile, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
 import { Button } from "@kn/ui";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuPortal, DropdownMenuLabel } from "@kn/ui";
-import { Label } from "@kn/ui";
-import { RadioGroup, RadioGroupItem } from "@kn/ui";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuPortal } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { Switch } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
 import { CollaborationEditor, exportToPDF, useIncrementalSave, TiptapCollabProvider } from "@kn/editor";
 import type { IncrementalPayload } from "@kn/editor";
 import { event, ON_PAGE_REFRESH, ON_FAVORITE_CHANGE } from "../../../event";
-import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes } from "@kn/common";
+import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation } from "@kn/common";
 import { useNavigator } from "@kn/common";
 import { GlobalState } from "@kn/common";
 import { Editor } from "@kn/editor";
 import * as Y from "@kn/editor";
 import { useKeyPress, useToggle } from "@kn/common";
 import {
-    ALargeSmall, BookTemplate, Check, Pencil,
-    Contact2, Download, FileIcon, FileText,
-    Link, LoaderCircle, LockIcon, MessageSquareText,
-    MoreHorizontal, MoveDownRight, Trash2, Upload, List,
+    BookTemplate, Check, Pencil,
+    Download, FileIcon, FileText,
+    Link, LoaderCircle,
+    MoreHorizontal, Trash2, Upload, List,
     CloudOff, UserPlus, Star
 } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -146,13 +143,17 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
 }
 
 export const PageEditor: React.FC = () => {
-    const isMobile = useIsMobile()
-    const [tocOpen, setTocOpen] = useState(false)
+    const { t } = useTranslation()
+    const [showToc, setShowToc] = useState(true)
     const [page, setPage] = useState<any>()
     const params = useParams()
     const { userInfo } = useSelector((state: GlobalState) => state)
     const [pageLoading, { toggle: toggleLoading }] = useToggle(false)
     const [synceStatus, setSyncStatus] = useState(false)
+    // Fallback so the editor still renders if the collab server never syncs
+    // (offline / WS unreachable). CollaborationEditor waits for sync internally
+    // before seeding, so rendering on timeout is safe and avoids a blank page.
+    const [syncTimedOut, setSyncTimedOut] = useState(false)
     const lastAwarenessRef = useRef<any[]>([])
     const [users, setUsers] = useState<any[]>([])
     const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
@@ -176,11 +177,11 @@ export const PageEditor: React.FC = () => {
 
     // Memoize user object to prevent infinite loop in CollaborationEditor
     const collaborationUser = useMemo(() => ({
-        name: userInfo?.name || userInfo?.name || 'Anonymous',
+        name: userInfo?.name || 'Anonymous',
         color: userColor,
         id: userInfo?.id,
         avatar: userInfo?.avatar ? usePath(userInfo.avatar) : undefined,
-    }), [userInfo?.name, userInfo?.name, userInfo?.id, userColor, userInfo?.avatar, usePath]);
+    }), [userInfo?.name, userInfo?.id, userColor, userInfo?.avatar, usePath]);
 
     // Track previous pageId and provider for cleanup
     const prevPageIdRef = useRef<string | undefined>(undefined);
@@ -260,6 +261,12 @@ export const PageEditor: React.FC = () => {
             }
         };
     }, [provider]);
+
+    useEffect(() => {
+        setSyncTimedOut(false)
+        const t = setTimeout(() => setSyncTimedOut(true), 8000)
+        return () => clearTimeout(t)
+    }, [params.pageId])
 
     useEffect(() => {
         toggleLoading()
@@ -347,6 +354,32 @@ export const PageEditor: React.FC = () => {
         params.pageId || null,
         !!page && !!params.pageId && editorContentReady
     )
+
+    // Copy a shareable link to the current page to the clipboard
+    const handleCopyLink = useCallback(async () => {
+        const url = `${window.location.origin}/space-detail/${params.id}/page/edit/${params.pageId}`
+        try {
+            await window.navigator.clipboard.writeText(url)
+            toast.success(t('editor.linkCopied', 'Link copied'))
+        } catch (err) {
+            console.error('Failed to copy link:', err)
+            toast.error(t('editor.linkCopyFailed', 'Failed to copy link'))
+        }
+    }, [params.id, params.pageId, t])
+
+    // Move the current page to trash, then return to the space
+    const handleMoveToTrash = useCallback(async () => {
+        if (!params.pageId) return
+        try {
+            await useApi(APIS.MOVE_TO_TRASH, { id: params.pageId })
+            toast.success(t('editor.movedToTrash', 'Moved to trash'))
+            event.emit(ON_PAGE_REFRESH)
+            navigator.go({ to: `/space-detail/${params.id}` })
+        } catch (err) {
+            console.error('Failed to move page to trash:', err)
+            toast.error(t('editor.moveToTrashFailed', 'Failed to move to trash'))
+        }
+    }, [params.pageId, params.id, navigator, t])
 
     // Markdown import handler
     const handleImportMarkdown = useCallback(() => {
@@ -468,8 +501,8 @@ export const PageEditor: React.FC = () => {
                 </div>
             </div>
         </main>
-    </div> : (page && <div className="w-full h-full" ref={ref}>
-        <header className="h-11 w-full flex flex-row justify-between px-1 border-b relative">
+    </div> : (page && <div className="w-full h-full flex flex-col" ref={ref}>
+        <header className="h-11 flex-shrink-0 w-full flex flex-row justify-between px-1 border-b relative">
             <div className="flex flex-row items-center gap-2 px-1 text-sm flex-1 min-w-0 overflow-hidden">
                 <PageBreadcrumb
                     currentPageId={params.pageId!}
@@ -542,19 +575,6 @@ export const PageEditor: React.FC = () => {
                     <span>{statusDisplay.text}</span>
                 </div>
                 <Separator orientation="vertical" className="h-5" />
-                {/* Mobile Toc toggle button */}
-                {isMobile && (
-                    <Sheet open={tocOpen} onOpenChange={setTocOpen}>
-                        <SheetTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7">
-                                <List className="h-3.5 w-3.5" />
-                            </Button>
-                        </SheetTrigger>
-                        <SheetContent side="right" className="w-[280px] p-0">
-                            <SheetTitle className="sr-only">Table of Contents</SheetTitle>
-                        </SheetContent>
-                    </Sheet>
-                )}
                 <Button
                     variant="ghost"
                     size="icon"
@@ -566,95 +586,40 @@ export const PageEditor: React.FC = () => {
                 >
                     <Star className={`h-3.5 w-3.5 ${isFavorited ? 'fill-yellow-400 text-yellow-400' : ''}`} />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7">
-                    <MessageSquareText className="h-3.5 w-3.5" />
-                </Button>
                 <DropdownMenu>
                     <DropdownMenuTrigger><Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-3.5 w-3.5" /></Button></DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[300px]">
-                        <DropdownMenuLabel>
-                            <RadioGroup className="flex flex-row justify-center">
-                                <div>
-                                    <RadioGroupItem value="1" id="font1" className="peer sr-only" />
-                                    <Label
-                                        className="flex cursor-pointer flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-5 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                                        htmlFor="font1">
-                                        Font1
-                                    </Label>
-                                </div>
-                                <div>
-                                    <RadioGroupItem value="2" id="font2" className="peer sr-only" />
-                                    <Label
-                                        className="flex flex-col cursor-pointer items-center justify-between rounded-md border-2 border-muted bg-popover p-5 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                                        htmlFor="font2">
-                                        Font2
-                                    </Label>
-                                </div>
-                                <div>
-                                    <RadioGroupItem value="3" id="font3" className="peer sr-only" />
-                                    <Label
-                                        className="flex flex-col cursor-pointer items-center justify-between rounded-md border-2 border-muted bg-popover p-5 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                                        htmlFor="font3">
-                                        Font3
-                                    </Label>
-                                </div>
-                            </RadioGroup>
-                        </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
+                    <DropdownMenuContent className="w-[260px]">
                         <DropdownMenuGroup>
-                            <DropdownMenuItem className="flex flex-row justify-between">
-                                <div className="flex flex-row items-center gap-1">
-                                    <ALargeSmall className="h-4 w-4" />
-                                    <span>小号字体</span>
+                            <DropdownMenuItem
+                                className="flex flex-row justify-between"
+                                onSelect={(e) => e.preventDefault()}
+                            >
+                                <div className="flex flex-row items-center gap-2">
+                                    <List className="h-4 w-4" />
+                                    <span>{t('editor.showToc', '显示目录')}</span>
                                 </div>
-                                <Switch onClick={(e) => {
-                                    e.stopPropagation()
-                                }} />
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="flex flex-row justify-between">
-                                <div className="flex flex-row items-center gap-1">
-                                    <LockIcon className="h-4 w-4" />
-                                    <span>Lock Page</span>
-                                </div>
-                                <Switch onClick={(e) => {
-                                    e.stopPropagation()
-                                }} />
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="flex flex-row justify-between">
-                                <div className="flex flex-row items-center gap-1">
-                                    <Contact2 className="h-4 w-4" />
-                                    <span>显示目录</span>
-                                </div>
-                                <Switch onClick={(e) => {
-                                    // e.preventDefault()
-                                    e.stopPropagation()
-                                }} />
+                                <Switch checked={showToc} onCheckedChange={setShowToc} />
                             </DropdownMenuItem>
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
-                            <TemplateCreator mode="page" pageId={params.pageId!} defaultName={page?.title} className="flex flex-row items-center gap-1 w-full relative select-none rounded-sm px-2 py-1.5 text-sm outline-none cursor-default hover:bg-accent hover:text-accent-foreground">
+                            <TemplateCreator mode="page" pageId={params.pageId!} defaultName={page?.title} className="flex flex-row items-center gap-2 w-full relative select-none rounded-sm px-2 py-1.5 text-sm outline-none cursor-default hover:bg-accent hover:text-accent-foreground">
                                 <BookTemplate className="h-4 w-4" />
-                                <span>save as template</span>
+                                <span>{t('editor.saveAsTemplate', 'Save as template')}</span>
                             </TemplateCreator>
-                            <DropdownMenuItem onClick={() => {
-                                toast.success("copy success")
-                            }}>
-                                <div className="flex flex-row items-center gap-1">
+                            <DropdownMenuItem onClick={handleCopyLink}>
+                                <div className="flex flex-row items-center gap-2">
                                     <Link className="h-4 w-4" />
-                                    <span>copy link</span>
+                                    <span>{t('editor.copyLink', 'Copy link')}</span>
                                 </div>
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
-                                <div className="flex flex-row items-center gap-1">
-                                    <MoveDownRight className="h-4 w-4" />
-                                    <span>move to</span>
-                                </div>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                                <div className="flex flex-row items-center gap-1 text-red-500">
+                            <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={handleMoveToTrash}
+                            >
+                                <div className="flex flex-row items-center gap-2">
                                     <Trash2 className="h-4 w-4" />
-                                    <span>move to trash</span>
+                                    <span>{t('editor.moveToTrash', 'Move to trash')}</span>
                                 </div>
                             </DropdownMenuItem>
                         </DropdownMenuGroup>
@@ -662,17 +627,17 @@ export const PageEditor: React.FC = () => {
                         <DropdownMenuGroup>
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
-                                    <div className="flex flex-row items-center gap-1">
+                                    <div className="flex flex-row items-center gap-2">
                                         <Download className="h-4 w-4" />
-                                        <span>import</span>
+                                        <span>{t('editor.import', 'Import')}</span>
                                     </div>
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuPortal>
                                     <DropdownMenuSubContent>
                                         <DropdownMenuItem onClick={handleImportMarkdown}>
-                                            <div className="flex flex-row items-center gap-1">
+                                            <div className="flex flex-row items-center gap-2">
                                                 <FileText className="h-4 w-4" />
-                                                <span>from Markdown</span>
+                                                <span>{t('editor.fromMarkdown', 'From Markdown')}</span>
                                             </div>
                                         </DropdownMenuItem>
                                     </DropdownMenuSubContent>
@@ -680,19 +645,13 @@ export const PageEditor: React.FC = () => {
                             </DropdownMenuSub>
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
-                                    <div className="flex flex-row items-center gap-1">
+                                    <div className="flex flex-row items-center gap-2">
                                         <Upload className="h-4 w-4" />
-                                        <span>export</span>
+                                        <span>{t('editor.export', 'Export')}</span>
                                     </div>
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuPortal>
                                     <DropdownMenuSubContent>
-                                        <DropdownMenuItem>
-                                            <div className="flex flex-row items-center gap-1">
-                                                <FileIcon className="h-4 w-4" />
-                                                <span>as word</span>
-                                            </div>
-                                        </DropdownMenuItem>
                                         <DropdownMenuItem onClick={async () => {
                                             if (editor.current) {
                                                 exportToPDF(editor.current.view, {
@@ -703,9 +662,9 @@ export const PageEditor: React.FC = () => {
                                                 });
                                             }
                                         }}>
-                                            <div className="flex flex-row items-center gap-1">
+                                            <div className="flex flex-row items-center gap-2">
                                                 <FileIcon className="h-4 w-4" />
-                                                <span>as pdf</span>
+                                                <span>{t('editor.asPdf', 'As PDF')}</span>
                                             </div>
                                         </DropdownMenuItem>
                                     </DropdownMenuSubContent>
@@ -716,9 +675,9 @@ export const PageEditor: React.FC = () => {
                 </DropdownMenu>
             </div>
         </header>
-        <main className="w-full h-[calc(100%-44px)]">
+        <main className="w-full flex-1 min-h-0">
             {
-                page && synceStatus && <CollaborationEditor
+                page && (synceStatus || syncTimedOut) && <CollaborationEditor
                     pageInfo={page}
                     ref={editor}
                     synced={synceStatus}
@@ -727,9 +686,9 @@ export const PageEditor: React.FC = () => {
                     id={params.pageId as string}
                     user={collaborationUser}
                     token={params.pageId as string}
-                    toc={!isMobile}
+                    toc={showToc}
                     withTitle={true}
-                    width={isMobile ? "w-full" : "w-[calc(100vw-350px)]"}
+                    width="w-full"
                     content={parsedContent}
                     onContentReady={() => setEditorContentReady(true)}
                 />

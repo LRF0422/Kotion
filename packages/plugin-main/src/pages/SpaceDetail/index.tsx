@@ -1,6 +1,6 @@
 import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
 import { IconButton, TreeView, useIsMobile, Button, Sheet, SheetContent, SheetTrigger, SheetTitle } from "@kn/ui";
-import { ArrowLeft, CircleArrowUp, Clock, Copy, LayoutDashboard, LayoutTemplate, Menu, MoreHorizontal, Package, Plus, Settings, Star, StarIcon, Trash2, Undo2, UserCircle, AlertCircle } from "@kn/icon";
+import { CircleArrowUp, LayoutDashboard, LayoutTemplate, Menu, MoreHorizontal, Package, Plus, Settings, Star, StarIcon, Trash2, Undo2, AlertCircle } from "@kn/icon";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useApi, useService, useUploadFile, useNavigator, useToggle } from "@kn/common";
 import { APIS } from "../../api";
@@ -210,6 +210,18 @@ export const SpaceDetail: React.FC = () => {
         })
     }, [params.id])
 
+    const handleAddPageFavorite = useCallback((pageId: string) => {
+        useApi(APIS.ADD_FAVORITE_PAGE, { id: pageId }).then(() => {
+            event.emit(ON_FAVORITE_CHANGE)
+        })
+    }, [])
+
+    const handleRemoveFavorite = useCallback((pageId: string) => {
+        useApi(APIS.REMOVE_FAVORITE, { id: pageId }).then(() => {
+            event.emit(ON_FAVORITE_CHANGE)
+        })
+    }, [])
+
 
     const resolve = useCallback((treeNode: any): SiderMenuItemProps => {
 
@@ -247,18 +259,18 @@ export const SpaceDetail: React.FC = () => {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent side="right" align="start" className="w-[200px] sm:w-[220px]">
-                        <DropdownMenuItem className="flex flex-row gap-2 text-xs sm:text-sm">
+                        <DropdownMenuItem
+                            className="flex flex-row gap-2 text-xs sm:text-sm"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleAddPageFavorite(treeNode.id);
+                            }}
+                        >
                             <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Add to favorites
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem className="flex flex-row gap-2 text-xs sm:text-sm">
-                            <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />Duplicate
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="flex flex-row gap-2 text-xs sm:text-sm">
-                            <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Move to
-                        </DropdownMenuItem>
                         <DropdownMenuItem
-                            className="flex flex-row gap-2 text-red-600 focus:text-red-600 text-xs sm:text-sm"
+                            className="flex flex-row gap-2 text-destructive focus:text-destructive text-xs sm:text-sm"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 handleMoveToTrash(treeNode.id);
@@ -266,19 +278,6 @@ export const SpaceDetail: React.FC = () => {
                         >
                             <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Move to trash
                         </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuLabel>
-                            <div className="text-gray-500 text-[10px] sm:text-xs flex flex-col gap-1 sm:gap-1.5 font-normal">
-                                <div className="flex flex-row gap-1 sm:gap-1.5 items-center">
-                                    <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                    <span>Last updated by Leong</span>
-                                </div>
-                                <div className="flex flex-row gap-1 sm:gap-1.5 items-center">
-                                    <UserCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                    <span>2024年8月19日</span>
-                                </div>
-                            </div>
-                        </DropdownMenuLabel>
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
@@ -310,7 +309,7 @@ export const SpaceDetail: React.FC = () => {
                 }
             }
         }
-    }, [params.id, navigator, handleCreatePage, handleMoveToTrash])
+    }, [params.id, navigator, handleCreatePage, handleMoveToTrash, handleAddPageFavorite])
 
     const elements: SiderMenuItemProps[] = useMemo(() => space ? [
         {
@@ -368,10 +367,10 @@ export const SpaceDetail: React.FC = () => {
                             className="h-5 w-5 sm:h-6 sm:w-6 p-0"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                // Remove from favorites
+                                handleRemoveFavorite(it.id);
                             }}
                         >
-                            <Trash2 className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground hover:text-red-500" />
+                            <Trash2 className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground hover:text-destructive" />
                         </Button>
                     </div>
                 </div>,
@@ -497,7 +496,7 @@ export const SpaceDetail: React.FC = () => {
                 </TemplateCreator>
             </div>
         }
-    ] : [], [space, favorites, pageTree, trash, params.id, navigator, toggle, handleFavorite, handleCreatePage, handleRestorePage, resolve])
+    ] : [], [space, favorites, pageTree, trash, params.id, navigator, toggle, handleFavorite, handleCreatePage, handleRestorePage, handleRemoveFavorite, resolve])
 
     // Sidebar content component for reuse
     const SidebarContent = useMemo(() => (

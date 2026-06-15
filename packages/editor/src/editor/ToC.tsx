@@ -97,10 +97,11 @@ export const ToCEmptyState = () => {
     )
 }
 
-export const ToC: React.FC<{ editor: Editor; className?: string; items: TocItem[] }> = ({
+export const ToC: React.FC<{ editor: Editor; className?: string; items: TocItem[]; onNavigate?: () => void }> = ({
     editor,
     className,
-    items
+    items,
+    onNavigate
 }) => {
     const [activeId, setActiveId] = useState<string | null>(null)
     const { t } = useTranslation()
@@ -182,8 +183,9 @@ export const ToC: React.FC<{ editor: Editor; className?: string; items: TocItem[
             }, 300)
 
             setActiveId(item.id)
+            onNavigate?.()
         }
-    }, [editor])
+    }, [editor, onNavigate])
 
     const onItemKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
         if (e.key === 'ArrowDown') {

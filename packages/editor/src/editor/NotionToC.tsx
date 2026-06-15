@@ -1,9 +1,10 @@
-import { cn, useIsMobile } from '@kn/ui'
+import { cn, useIsMobile, Button, Sheet, SheetContent, SheetTrigger, SheetTitle } from '@kn/ui'
+import { List } from '@kn/icon'
 import { Editor } from '@tiptap/core'
 import { TextSelection } from '@tiptap/pm/state'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import scrollIntoView from 'scroll-into-view-if-needed'
-import type { TocItem } from './ToC'
+import { ToC, type TocItem } from './ToC'
 
 /**
  * Notion-style floating outline.
@@ -24,6 +25,7 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
     offsetTop = 80,
 }) => {
     const [activeId, setActiveId] = useState<string | null>(null)
+    const [mobileOpen, setMobileOpen] = useState(false)
     const rafRef = useRef<number>(0)
     const isMobile = useIsMobile()
 
@@ -95,7 +97,31 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
         [editor]
     )
 
-    if (isMobile || items.length === 0) return null
+    if (items.length === 0) return null
+
+    // Mobile: a floating button opens the full outline in a bottom-anchored
+    // sheet. The thin tick strip is a hover affordance, so it has no place on
+    // touch devices.
+    if (isMobile) {
+        return (
+            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                <SheetTrigger asChild>
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        className="fixed bottom-20 right-4 z-40 h-10 w-10 rounded-full shadow-lg bg-background"
+                        aria-label="Table of contents"
+                    >
+                        <List className="h-4 w-4" />
+                    </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-[280px] p-0">
+                    <SheetTitle className="sr-only">Table of Contents</SheetTitle>
+                    <ToC editor={editor} items={items} onNavigate={() => setMobileOpen(false)} />
+                </SheetContent>
+            </Sheet>
+        )
+    }
 
     return (
         <div
