@@ -6,6 +6,7 @@ declare module "@kn/editor" {
         meetingMinutes: {
             insertMeetingMinutes: (options?: {
                 title?: string;
+                lang?: string;
             }) => ReturnType;
         };
     }
@@ -13,25 +14,9 @@ declare module "@kn/editor" {
 
 // ─── Child Tab Nodes ────────────────────────────────────
 // Each tab is an independent ProseMirror node with its own content.
-// The parent meetingMinutes node contains exactly these three children.
+// The parent meetingMinutes node contains exactly these two children
+// (Notes + Transcript), matching Notion's AI Meeting Notes block.
 // CSS visibility is controlled by the parent's data-active-tab attribute.
-
-export const MeetingTabSummaryNode = Node.create({
-    name: "meetingTabSummary",
-    group: "block",
-    content: "block+",
-    inline: false,
-    defining: true,
-    isolating: true,
-
-    parseHTML() {
-        return [{ tag: 'div[data-tab="summary"]' }];
-    },
-
-    renderHTML({ HTMLAttributes }) {
-        return ['div', mergeAttributes(HTMLAttributes, { 'data-tab': 'summary', class: 'meeting-tab-content' }), 0];
-    },
-});
 
 export const MeetingTabNotesNode = Node.create({
     name: "meetingTabNotes",
@@ -72,7 +57,7 @@ export const MeetingTabTranscriptNode = Node.create({
 export const MeetingMinutesNode = Node.create({
     name: "meetingMinutes",
     group: "block",
-    content: "meetingTabSummary meetingTabNotes meetingTabTranscript",
+    content: "meetingTabNotes meetingTabTranscript",
     inline: false,
     draggable: true,
     isolating: true,
@@ -119,6 +104,42 @@ export const MeetingMinutesNode = Node.create({
             },
             updatedAt: {
                 default: null
+            },
+            // Attendees: Array<{ id, name, avatar }> — persisted as JSON.
+            attendees: {
+                default: [],
+                parseHTML: (element: HTMLElement) => {
+                    try {
+                        return JSON.parse(element.getAttribute('data-attendees') || '[]');
+                    } catch {
+                        return [];
+                    }
+                },
+                renderHTML: (attributes: Record<string, any>) => {
+                    if (!attributes.attendees || attributes.attendees.length === 0) return {};
+                    return { 'data-attendees': JSON.stringify(attributes.attendees) };
+                },
+            },
+            // Tags: string[] — persisted as JSON.
+            tags: {
+                default: [],
+                parseHTML: (element: HTMLElement) => {
+                    try {
+                        return JSON.parse(element.getAttribute('data-tags') || '[]');
+                    } catch {
+                        return [];
+                    }
+                },
+                renderHTML: (attributes: Record<string, any>) => {
+                    if (!attributes.tags || attributes.tags.length === 0) return {};
+                    return { 'data-tags': JSON.stringify(attributes.tags) };
+                },
+            },
+            // Speech-recognition language (configurable, defaults to zh-CN).
+            lang: {
+                default: 'zh-CN',
+                parseHTML: (element: HTMLElement) => element.getAttribute('data-lang') || 'zh-CN',
+                renderHTML: (attributes: Record<string, any>) => ({ 'data-lang': attributes.lang || 'zh-CN' }),
             }
         }
     },
@@ -149,19 +170,19 @@ export const MeetingMinutesNode = Node.create({
 
     addCommands() {
         return {
-            insertMeetingMinutes: (options?: { title?: string }) => ({ chain }: CommandProps) => {
+            insertMeetingMinutes: (options?: { title?: string; lang?: string }) => ({ chain }: CommandProps) => {
                 return chain().insertContent({
                     type: this.name,
                     attrs: {
                         title: options?.title || 'Meeting Minutes',
+                        attendees: [],
+                        tags: [],
+                        lang: options?.lang || 'zh-CN',
+                        activeTab: 'notes',
                         createdAt: Date.now(),
                         updatedAt: Date.now()
                     },
                     content: [
-                        {
-                            type: 'meetingTabSummary',
-                            content: [{ type: 'paragraph' }]
-                        },
                         {
                             type: 'meetingTabNotes',
                             content: [{ type: 'paragraph' }]

@@ -3,7 +3,7 @@ import { ExtensionWrapper } from "@kn/common";
 import { Extension } from "@kn/editor";
 import { SpeechToTextPanel } from "./menu/SpeechToTextPanel";
 import { SpeechToTextStaticMenu } from "./menu/static";
-import { MeetingMinutesNode, MeetingTabSummaryNode, MeetingTabNotesNode, MeetingTabTranscriptNode } from "./meeting-minutes/meeting-minutes";
+import { MeetingMinutesNode, MeetingTabNotesNode, MeetingTabTranscriptNode } from "./meeting-minutes/meeting-minutes";
 import { FileAudio } from "@kn/icon";
 
 const SpeechToTextExt = Extension.create({
@@ -12,7 +12,7 @@ const SpeechToTextExt = Extension.create({
 
 export const SpeechToTextExtension: ExtensionWrapper = {
     name: 'speechToText',
-    extendsion: [SpeechToTextExt, MeetingMinutesNode, MeetingTabSummaryNode, MeetingTabNotesNode, MeetingTabTranscriptNode],
+    extendsion: [SpeechToTextExt, MeetingMinutesNode, MeetingTabNotesNode, MeetingTabTranscriptNode],
     menuConfig: {
         group: 'block',
         menu: SpeechToTextStaticMenu,
