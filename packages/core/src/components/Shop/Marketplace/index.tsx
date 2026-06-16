@@ -1,67 +1,105 @@
-import { ArchiveIcon, ArrowUpRight, BoxIcon, CheckCircle2, Dot, DownloadIcon, FilePlus2, Loader2, PlusIcon, RiNftFill, SearchIcon } from "@kn/icon";
+import { ArrowUpRight, BoxIcon, CheckCircle2, DownloadIcon, FilePlus2, Loader2, PlusIcon, SearchIcon } from "@kn/icon";
 import {
-    Avatar, Button, Card, CardDescription, CardFooter, CardHeader, CardTitle, EmptyState, IconButton, Input,
-    Rate,
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Separator, Skeleton, cn
+    Avatar, Badge, Button, Card, CardContent, CardFooter, CardHeader, EmptyState, Input,
+    Rate, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, cn
 } from "@kn/ui";
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import { PluginUploader } from "../PluginUploader";
-import { useApi, useNavigator, useUploadFile, usePluginState, PLUGIN_CHANGED, event } from "@kn/common";
+import { useApi, useNavigator, useUploadFile, usePluginState, useDebounce, PLUGIN_CHANGED, event } from "@kn/common";
 import { APIS } from "@kn/common";
 import { useToggle } from "ahooks";
 import { AppContext, useTranslation } from "@kn/common";
 
+const CATEGORIES = ["All", "App", "Feature", "Connector"] as const
+type SortKey = "relevance" | "popular" | "recent" | "rating"
+const PAGE_SIZE = 12
+
 export const Marketplace: React.FC = () => {
-
-    const [categories, setCategories] = React.useState<string[]>([
-        "All",
-        "App",
-        "Feature",
-        "Connector"
-    ])
-
-    const [selectCategory, setSelectCategory] = useState<string>("All")
-    const [plugins, setPlugins] = useState<any[]>([])
-    const [installing, { toggle }] = useToggle(false)
-    const [installingPluginId, setInstallingPluginId] = useState<string>()
     const { usePath } = useUploadFile()
     const navigator = useNavigator()
-    const [flag, setFlag] = useState(0)
     const { t } = useTranslation()
     const { pluginManager } = useContext(AppContext)
-    const [isLoading, setIsLoading] = useState<boolean>(false)
-    const [showLoading, setShowLoading] = useState<boolean>(false)
 
-    // Use consolidated hook for plugin runtime state tracking
+    const [rawPlugins, setRawPlugins] = useState<any[]>([])
+    const [selectCategory, setSelectCategory] = useState<string>("All")
+    const [keyword, setKeyword] = useState("")
+    const [sort, setSort] = useState<SortKey>("relevance")
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+
+    const [installing, { toggle }] = useToggle(false)
+    const [installingPluginId, setInstallingPluginId] = useState<string>()
+    const [showLoading, setShowLoading] = useState(false)
+    const [refetchKey, setRefetchKey] = useState(0)
+
+    // Runtime state for "Active" badge on loaded plugins
     const { loadedPluginNames, pluginVersion } = usePluginState()
 
+    const debouncedKeyword = useDebounce(keyword, { wait: 300 })
+
+    // Server fetch: only the proven params (category + a generous pageSize).
+    // Keyword search and sort are applied client-side below so they always work
+    // regardless of backend support. NOTE: pageSize:200 ceiling — if the catalog
+    // grows beyond this, switch to server-side search.
     useEffect(() => {
-        setIsLoading(true)
-
-        // Delay showing loading state to avoid flicker on fast loads
-        const loadingTimer = setTimeout(() => {
-            setShowLoading(true)
-        }, 300)
-
-        useApi(APIS.GET_PLUGIN_LIST, { pageSize: 10, category: selectCategory === "All" ? null : selectCategory.toLocaleUpperCase() }).then(res => {
-            setPlugins(res.data.records)
+        const loadingTimer = setTimeout(() => setShowLoading(true), 300)
+        useApi(APIS.GET_PLUGIN_LIST, {
+            pageSize: 200,
+            category: selectCategory === "All" ? null : selectCategory.toLocaleUpperCase()
+        }).then(res => {
+            setRawPlugins(res.data.records ?? [])
         }).finally(() => {
             clearTimeout(loadingTimer)
             setShowLoading(false)
-            setIsLoading(false)
         })
-    }, [pluginVersion, selectCategory])
+    }, [selectCategory, pluginVersion, refetchKey])
 
+    // Single refetch mechanism on plugin changes (install / uninstall / update)
     useEffect(() => {
-        const handlePluginChange = () => {
-            setFlag(f => f + 1)
-        }
+        const handlePluginChange = () => setRefetchKey(k => k + 1)
         event.on(PLUGIN_CHANGED, handlePluginChange)
-
-        return () => {
-            event.off(PLUGIN_CHANGED, handlePluginChange)
-        }
+        return () => { event.off(PLUGIN_CHANGED, handlePluginChange) }
     }, [])
+
+    // Client-side keyword filter + sort — the reliable source of truth.
+    const filtered = useMemo(() => {
+        const q = debouncedKeyword.trim().toLowerCase()
+        let list = rawPlugins
+        if (q) {
+            list = list.filter(p =>
+                [p.name, p.description, p.developer, p.maintainer, p.category?.value]
+                    .filter(Boolean)
+                    .some(s => String(s).toLowerCase().includes(q)))
+        }
+        const out = [...list]
+        switch (sort) {
+            case "popular":
+                out.sort((a, b) => (b.downloads ?? 0) - (a.downloads ?? 0))
+                break
+            case "rating":
+                out.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+                break
+            case "recent":
+                out.sort((a, b) =>
+                    new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
+                break
+            case "relevance":
+            default:
+                // With a query, surface name-prefix matches first; otherwise keep server order.
+                if (q) {
+                    out.sort((a, b) =>
+                        Number(b.name?.toLowerCase().startsWith(q)) -
+                        Number(a.name?.toLowerCase().startsWith(q)))
+                }
+        }
+        return out
+    }, [rawPlugins, debouncedKeyword, sort])
+
+    const visible = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount])
+
+    // Reset paging whenever the filter inputs change.
+    useEffect(() => {
+        setVisibleCount(PAGE_SIZE)
+    }, [debouncedKeyword, sort, selectCategory])
 
     const installPlugin = (plugin: any) => {
         toggle()
@@ -75,229 +113,220 @@ export const Marketplace: React.FC = () => {
                 event.emit(PLUGIN_CHANGED, { source: 'install' })
             })
         })
-
     }
 
-    return <div className="w-full min-h-screen bg-gradient-to-b from-background to-muted/20">
-        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center w-full px-4 sm:px-6 py-3 sm:py-4 border-b bg-background/95 backdrop-blur-sm sticky top-0 z-10 shadow-sm gap-2 sm:gap-0">
-            <div className="flex-1 w-full sm:max-w-2xl sm:mx-6">
-                <Input
-                    placeholder="Search plugins..."
-                    className="h-9 bg-background border-2 shadow-sm focus-visible:shadow-md transition-all text-sm w-full"
-                    icon={<SearchIcon className="h-4 w-4" />}
-                />
-            </div>
-            <div className="flex gap-2 items-center justify-end sm:justify-start">
-                <Button size="sm" variant="outline" className="shadow-sm hover:shadow-md transition-shadow h-8 text-xs flex-1 sm:flex-initial">
-                    <FilePlus2 className="h-3.5 w-3.5 sm:mr-1.5" />
-                    <span className="hidden sm:inline">Request Plugin</span>
-                </Button>
-                <PluginUploader>
-                    <Button size="sm" className="shadow-sm hover:shadow-md transition-shadow bg-primary h-8 text-xs flex-1 sm:flex-initial">
-                        <PlusIcon className="h-3.5 w-3.5 sm:mr-1.5" />
-                        <span className="hidden sm:inline">Publish Plugin</span>
-                    </Button>
-                </PluginUploader>
-            </div>
-        </div>
-        <div className="w-full px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 h-[calc(100vh-89px)] sm:h-[calc(100vh-73px)] overflow-auto">
-            {/* Hero Section */}
-            <div className="w-full max-w-7xl mx-auto text-left py-6 sm:py-8 space-y-3 sm:space-y-4 px-2">
-                <div className="space-y-2 sm:space-y-3">
-                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                        {t("marketplace.title", "Enhance your Kotion experience")}
+    const isFirstLoad = showLoading && rawPlugins.length === 0
+    const hasRawData = rawPlugins.length > 0
+
+    return (
+        <div className="w-full min-h-full bg-background flex flex-col">
+            {/* Header */}
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-background px-4 sm:px-6 py-3">
+                <div className="flex items-center gap-2 min-w-0">
+                    <h1 className="text-base sm:text-lg font-semibold truncate">
+                        {t("marketplace.title", "Plugins")}
                     </h1>
-                    <p className="text-sm sm:text-base md:text-lg text-muted-foreground max-w-3xl font-light">
-                        {t("marketplace.description", "Discover plugins that extend Kotion's capabilities and help you work more efficiently.")}
-                    </p>
+                    <Badge variant="secondary" className="shrink-0">{filtered.length}</Badge>
                 </div>
-
-                {/* Category Pills */}
-                <div className="flex gap-2 items-center justify-start flex-wrap pt-3 sm:pt-4">
-                    {
-                        categories.map((it, index) => <button
-                            onClick={() => setSelectCategory(it)}
-                            className={cn(
-                                "rounded-full px-4 sm:px-5 py-1.5 sm:py-2 font-medium text-xs transition-all duration-200",
-                                "hover:scale-105 hover:shadow-md",
-                                selectCategory === it
-                                    ? "bg-primary text-primary-foreground shadow-lg scale-105"
-                                    : "bg-background border-2 hover:border-primary/50"
-                            )}
-                            key={index}>
-                            {it}
-                        </button>)
-                    }
+                <div className="flex items-center gap-2 shrink-0">
+                    <Button size="sm" variant="outline" className="h-9">
+                        <FilePlus2 className="h-4 w-4 sm:mr-1.5" />
+                        <span className="hidden sm:inline">{t("marketplace.request", "Request")}</span>
+                    </Button>
+                    <PluginUploader>
+                        <Button size="sm" className="h-9">
+                            <PlusIcon className="h-4 w-4 sm:mr-1.5" />
+                            <span className="hidden sm:inline">{t("marketplace.publish", "Publish")}</span>
+                        </Button>
+                    </PluginUploader>
                 </div>
             </div>
 
-            {/* Filters Bar */}
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center justify-between max-w-7xl mx-auto px-2 sm:px-4">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="font-medium">Results</span>
-                    <Separator orientation="vertical" className="h-4" />
-                    <span>{plugins.length} plugins found</span>
+            <div className="flex-1 px-4 sm:px-6 py-4 sm:py-5 space-y-4 max-w-7xl w-full mx-auto">
+                {/* Toolbar: search + sort */}
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                        placeholder={t("marketplace.search-placeholder", "Search plugins...")}
+                        value={keyword}
+                        onChange={e => setKeyword(e.target.value)}
+                        className="flex-1 h-11 sm:h-9"
+                        icon={<SearchIcon className="h-4 w-4" />}
+                    />
+                    <Select value={sort} onValueChange={(v: SortKey) => setSort(v)}>
+                        <SelectTrigger className="w-full sm:w-[170px] h-11 sm:h-9 shrink-0">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="relevance">{t("marketplace.sort.relevance", "Relevance")}</SelectItem>
+                            <SelectItem value="popular">{t("marketplace.sort.popular", "Most Popular")}</SelectItem>
+                            <SelectItem value="recent">{t("marketplace.sort.recent", "Recently Added")}</SelectItem>
+                            <SelectItem value="rating">{t("marketplace.sort.rating", "Highest Rated")}</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
-                <Select>
-                    <SelectTrigger className="w-full sm:w-[160px] h-8 shadow-sm text-xs">
-                        <div className="mr-2 text-xs">Sort by</div> <SelectValue placeholder="Relevance" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="relevance">Relevance</SelectItem>
-                        <SelectItem value="popular">Most Popular</SelectItem>
-                        <SelectItem value="recent">Recently Added</SelectItem>
-                        <SelectItem value="rating">Highest Rated</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-            {/* Plugin Grid */}
-            <div className="max-w-7xl mx-auto px-2 sm:px-4">
-                {
-                    showLoading ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 3xl:grid-cols-5 gap-3 sm:gap-4 w-full">
-                            {Array.from({ length: 8 }).map((_, index) => (
-                                <Card key={index} className="relative animate-pulse border shadow-lg" style={{
-                                    animationDelay: `${index * 50}ms`,
-                                    animationDuration: '1.5s'
-                                }}>
-                                    <div className="w-[70px] h-[20px] absolute right-0 top-0 rounded-bl-md rounded-tr-md">
-                                        <Skeleton className="w-full h-full" />
-                                    </div>
-                                    <CardHeader className="pb-3">
-                                        <CardTitle className="text-sm">
-                                            <div className="flex items-center gap-2">
-                                                <Skeleton className="rounded-sm w-[50px] h-[50px]" />
-                                                <div className="flex flex-col gap-1.5 flex-1">
-                                                    <Skeleton className="h-3 w-3/4" />
-                                                    <Skeleton className="h-2.5 w-1/2" />
-                                                    <Skeleton className="h-2.5 w-2/3" />
-                                                </div>
-                                            </div>
-                                        </CardTitle>
-                                        <CardDescription className="h-[60px] space-y-1.5 pt-2">
-                                            <Skeleton className="h-2.5 w-full" />
-                                            <Skeleton className="h-2.5 w-full" />
-                                            <Skeleton className="h-2.5 w-4/5" />
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardFooter className="pb-3 space-x-1">
-                                        <Skeleton className="h-8 w-20" />
-                                        <Skeleton className="h-8 w-20" />
-                                    </CardFooter>
-                                </Card>
-                            ))}
-                        </div>
-                    ) : plugins.length === 0 ? (
-                        <EmptyState
-                            className="h-[calc(100vh-300px)] sm:h-[calc(100vh-160px)] hover:bg-background w-full max-w-none border-none flex flex-col justify-center"
-                            title="No plugins found"
-                            icons={[BoxIcon]}
-                            description="Try adjusting your search or category filter"
-                        />
-                    ) : <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 3xl:grid-cols-5 gap-3 sm:gap-4 w-full animate-in fade-in-50 duration-500">
-                        {
-                            plugins.map((plugin, index) => (
-                                <div key={index} className="group">
-                                    <Card className="relative h-full border hover:border-primary/50 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-card overflow-hidden">
-                                        <div className="absolute right-0 top-0 px-2.5 py-1 text-[10px] font-semibold rounded-bl-xl bg-primary/10 text-primary border-l border-b border-primary/20">
-                                            {plugin?.category?.value}
+
+                {/* Category pills */}
+                <div className="flex flex-wrap gap-2">
+                    {CATEGORIES.map(cat => (
+                        <Badge
+                            key={cat}
+                            variant={selectCategory === cat ? "default" : "outline"}
+                            className="cursor-pointer h-9 sm:h-8 px-3 text-xs font-medium"
+                            onClick={() => setSelectCategory(cat)}
+                        >
+                            {cat}
+                        </Badge>
+                    ))}
+                </div>
+
+                {/* Results count */}
+                <div className="text-xs text-muted-foreground">
+                    {t("marketplace.results-count", "Showing {{count}} plugins", { count: filtered.length })}
+                </div>
+
+                {/* Grid / states */}
+                {isFirstLoad ? (
+                    <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {Array.from({ length: 8 }).map((_, index) => (
+                            <Card key={index} className="border">
+                                <CardHeader className="pb-3">
+                                    <div className="flex items-start gap-3">
+                                        <Skeleton className="rounded-lg w-12 h-12 shrink-0" />
+                                        <div className="flex flex-col gap-1.5 flex-1">
+                                            <Skeleton className="h-3.5 w-3/4" />
+                                            <Skeleton className="h-2.5 w-1/2" />
+                                            <Skeleton className="h-2.5 w-2/3" />
                                         </div>
-                                        <CardHeader className="space-y-3 pb-3">
-                                            <CardTitle className="text-sm">
-                                                <div className="flex items-start gap-2.5">
-                                                    <Avatar className="rounded-lg w-12 h-12">
-                                                        <img src={usePath(plugin.icon)} alt={plugin.name} className="object-cover" />
-                                                    </Avatar>
-                                                    <div className="flex flex-col gap-1 flex-1 min-w-0">
-                                                        <div className="font-semibold text-sm truncate group-hover:text-primary transition-colors" title={plugin.name}>
-                                                            {plugin.name}
-                                                        </div>
-                                                        <div className="text-[10px] text-muted-foreground flex items-center gap-1 min-w-0">
-                                                            <span className="truncate max-w-[70px]" title={plugin.developer}>{plugin.developer}</span>
-                                                            <span className="flex-shrink-0">/</span>
-                                                            <span className="truncate max-w-[70px]" title={plugin.maintainer}>{plugin.maintainer}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1 text-muted-foreground">
-                                                            <Rate rating={plugin.rating} variant="yellow" disabled size={12} />
-                                                            <Dot className="opacity-50" />
-                                                            <div className="text-[10px] flex items-center gap-0.5">
-                                                                <DownloadIcon className="h-2.5 w-2.5" />
-                                                                <span className="font-medium">{plugin.downloads}</span>
-                                                            </div>
-                                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="pb-3 space-y-1.5">
+                                    <Skeleton className="h-2.5 w-full" />
+                                    <Skeleton className="h-2.5 w-4/5" />
+                                </CardContent>
+                                <CardFooter className="pb-3 gap-2">
+                                    <Skeleton className="h-9 flex-1" />
+                                    <Skeleton className="h-9 flex-1" />
+                                </CardFooter>
+                            </Card>
+                        ))}
+                    </div>
+                ) : filtered.length === 0 ? (
+                    <EmptyState
+                        className="min-h-[40vh] hover:bg-background w-full max-w-none border-none flex flex-col justify-center"
+                        title={
+                            hasRawData
+                                ? t("marketplace.empty.no-match", "No matches for your search")
+                                : t("marketplace.empty.none", "No plugins found")
+                        }
+                        icons={[BoxIcon]}
+                        description={
+                            hasRawData
+                                ? t("marketplace.empty.no-match-desc", "Try a different keyword or sort option")
+                                : t("marketplace.empty.none-desc", "Try adjusting your category filter")
+                        }
+                    />
+                ) : (
+                    <>
+                        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            {visible.map((plugin, index) => {
+                                const installed = plugin.installeddVersions.length > 0
+                                const active = installed && loadedPluginNames.has(plugin.name)
+                                const isInstalling = installing && installingPluginId === plugin.currentVersionId
+                                return (
+                                    <Card
+                                        key={plugin.id ?? index}
+                                        className="group flex flex-col border hover:border-primary/50 transition-colors"
+                                    >
+                                        <CardHeader className="pb-3">
+                                            <div className="flex items-start gap-3">
+                                                <Avatar className="rounded-lg w-12 h-12 shrink-0">
+                                                    <img src={usePath(plugin.icon)} alt={plugin.name} className="object-cover" />
+                                                </Avatar>
+                                                <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                                                    <div className="font-semibold text-sm truncate group-hover:text-primary transition-colors" title={plugin.name}>
+                                                        {plugin.name}
+                                                    </div>
+                                                    <div className="text-[11px] text-muted-foreground flex items-center gap-1 min-w-0">
+                                                        <span className="truncate" title={plugin.developer}>{plugin.developer}</span>
+                                                        {plugin.maintainer && (
+                                                            <>
+                                                                <span className="shrink-0">/</span>
+                                                                <span className="truncate" title={plugin.maintainer}>{plugin.maintainer}</span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-muted-foreground pt-0.5">
+                                                        <Rate rating={plugin.rating} variant="yellow" disabled size={12} />
+                                                        <span className="text-[11px] flex items-center gap-0.5">
+                                                            <DownloadIcon className="h-3 w-3" />
+                                                            {plugin.downloads ?? 0}
+                                                        </span>
                                                     </div>
                                                 </div>
-                                            </CardTitle>
-                                            <CardDescription className="h-16 text-xs leading-relaxed line-clamp-3 overflow-hidden" title={plugin.description}>
-                                                {plugin.description}
-                                            </CardDescription>
+                                                {plugin?.category?.value && (
+                                                    <Badge variant="outline" className="text-[10px] shrink-0">
+                                                        {plugin.category.value}
+                                                    </Badge>
+                                                )}
+                                            </div>
                                         </CardHeader>
-                                        <CardFooter className="pb-3 pt-0 gap-1.5 flex-col">
+                                        <CardContent className="pb-3 flex-1">
+                                            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2" title={plugin.description}>
+                                                {plugin.description}
+                                            </p>
+                                        </CardContent>
+                                        <CardFooter className="pt-0 gap-2">
                                             <Button
-                                                disabled={!!(plugin.installeddVersions.length > 0)}
+                                                disabled={installed}
                                                 className={cn(
-                                                    "w-full shadow-sm hover:shadow-md transition-all h-8 text-xs",
-                                                    plugin.installeddVersions.length > 0 && loadedPluginNames.has(plugin.name) && "bg-green-600 hover:bg-green-700 text-white"
+                                                    "flex-1 h-9 text-xs",
+                                                    active && "bg-green-600 hover:bg-green-700 text-white"
                                                 )}
                                                 size="sm"
                                                 onClick={() => installPlugin(plugin)}
                                             >
-                                                {(installing && installingPluginId === plugin.currentVersionId) ? (
+                                                {isInstalling ? (
                                                     <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                                                ) : plugin.installeddVersions.length > 0 ? (
+                                                ) : installed ? (
                                                     <>
                                                         <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
-                                                        {loadedPluginNames.has(plugin.name) ? "Active" : "Installed"}
+                                                        {active ? t("marketplace.active", "Active") : t("marketplace.installed", "Installed")}
                                                     </>
                                                 ) : (
-                                                    <DownloadIcon className="w-3.5 h-3.5 mr-1.5" />
+                                                    <>
+                                                        <DownloadIcon className="w-3.5 h-3.5 mr-1.5" />
+                                                        {t("marketplace.install", "Install")}
+                                                    </>
                                                 )}
-                                                {plugin.installeddVersions.length === 0 && "Install"}
                                             </Button>
                                             <Button
                                                 variant="outline"
-                                                className="w-full shadow-sm hover:shadow-md transition-all h-8 text-xs"
+                                                className="flex-1 h-9 text-xs"
                                                 size="sm"
-                                                onClick={() => {
-                                                    navigator.go({
-                                                        to: `/plugin-hub/${plugin.id}`
-                                                    })
-                                                }}
+                                                onClick={() => navigator.go({ to: `/plugin-hub/${plugin.id}` })}
                                             >
                                                 <ArrowUpRight className="w-3.5 h-3.5 mr-1.5" />
-                                                View Details
+                                                {t("marketplace.details", "Details")}
                                             </Button>
                                         </CardFooter>
                                     </Card>
-                                </div>
-                            ))
-                        }
-                    </div>
-                }
-                {/* CTA Section */}
-                <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 py-6 sm:py-8">
-                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/20">
-                        <div className="relative flex flex-col md:flex-row justify-between items-center p-6 sm:p-8 gap-4 sm:gap-6">
-                            <div className="flex-1 space-y-2 text-center md:text-left">
-                                <h2 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text ">
-                                    {t("marketplace.create-your-own-plugin", "Create Your Own Plugin")}
-                                </h2>
-                                <p className="text-xs sm:text-sm text-muted-foreground max-w-xl mx-auto md:mx-0">
-                                    Create plugins for Kotion and reach thousands of users worldwide. Share your ideas and innovations with the community.
-                                </p>
-                            </div>
-                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full md:w-auto">
-                                <Button size="sm" className="shadow-lg hover:shadow-xl transition-all hover:scale-105 h-9 text-sm w-full sm:w-auto">
-                                    {t("marketplace.get-started", "Get Started")}
-                                </Button>
-                                <Button size="sm" variant="outline" className="shadow-lg hover:shadow-xl transition-all hover:scale-105 bg-background h-9 text-sm w-full sm:w-auto">
-                                    {t("marketplace.doc", "Documentation")}
-                                </Button>
-                            </div>
+                                )
+                            })}
                         </div>
-                    </div>
-                </div>
+
+                        {visibleCount < filtered.length && (
+                            <div className="flex justify-center pt-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
+                                >
+                                    {t("marketplace.load-more", "Load more")}
+                                </Button>
+                            </div>
+                        )}
+                    </>
+                )}
             </div>
         </div>
-    </div>
+    )
 }

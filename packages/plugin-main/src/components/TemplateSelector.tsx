@@ -1,5 +1,5 @@
 import { Card, Input, MultiSelect, Sheet, SheetContent, SheetTitle, Button, toast } from "@kn/ui";
-import { useApi, useUploadFile } from "@kn/common"
+import { useApi, useUploadFile, useTranslation } from "@kn/common"
 import { UserCircle, Trash2, FileText } from "@kn/icon";
 import React, { useState, useEffect, useCallback } from "react";
 import { APIS } from "../api";
@@ -8,8 +8,28 @@ import { Template } from "../model/Template";
 interface TemplateSelectorProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onCreateFromTemplate: (templateId: string) => void;
+    onCreateFromTemplate: (templateId: string, title?: string) => void;
 }
+
+/**
+ * Normalize a raw template record from the backend into the shape the cards
+ * render. The backend's field names aren't guaranteed to match exactly
+ * (e.g. it stores the template name as `name`, and `cover` may come back as a
+ * single string), so we apply defensive fallbacks here.
+ */
+const normalizeTemplate = (item: any, untitled: string): Template => {
+    const coverRaw = item?.cover;
+    const cover = Array.isArray(coverRaw) ? coverRaw : (coverRaw ? [coverRaw] : []);
+    return {
+        ...item,
+        id: item?.id,
+        title: item?.title ?? item?.name ?? untitled,
+        description: item?.description ?? "",
+        cover,
+        author: item?.author ?? item?.authorName ?? "",
+        category: item?.category ?? item?.categories?.[0]?.text ?? "",
+    };
+};
 
 export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     open,
@@ -23,6 +43,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     const [loading, setLoading] = useState<boolean>(false);
 
     const { usePath } = useUploadFile();
+    const { t } = useTranslation();
 
     // Load templates when the sheet opens
     useEffect(() => {
@@ -61,22 +82,27 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
         setLoading(true);
         try {
             const templateResponse = await useApi(APIS.QUERY_TEMPLATE);
-            const templatesData: Template[] = Array.isArray(templateResponse.data) ? templateResponse.data : [];
+            // Backend may return either a plain array or a paginated { records: [] }
+            // object — handle both, mirroring how favorites are read in Home/index.tsx.
+            const raw = templateResponse?.data;
+            const list = Array.isArray(raw) ? raw : (raw?.records || []);
+            const untitled = t('template.untitled');
+            const templatesData: Template[] = list.map((item: any) => normalizeTemplate(item, untitled));
             setAllTemplates(templatesData);
             setFilteredTemplates(templatesData);
 
             // Extract categories dynamically from templates
             const categorySet = new Map<string, string>();
-            templatesData.forEach(t => {
-                if (t.category) {
-                    categorySet.set(t.category.toLowerCase(), t.category);
+            templatesData.forEach(tpl => {
+                if (tpl.category) {
+                    categorySet.set(tpl.category.toLowerCase(), tpl.category);
                 }
-                if (t.categories) {
-                    t.categories.forEach(c => categorySet.set(c.id, c.text));
+                if (tpl.categories) {
+                    tpl.categories.forEach(c => categorySet.set(c.id, c.text));
                 }
             });
             const dynamicCategories = [
-                { id: 'all', text: 'All Templates' },
+                { id: 'all', text: t('template.allTemplates') },
                 ...Array.from(categorySet.entries()).map(([id, text]) => ({ id, text }))
             ];
             setCategories(dynamicCategories);
@@ -84,7 +110,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
             console.error("Error loading templates:", error);
             setAllTemplates([]);
             setFilteredTemplates([]);
-            toast.error("加载模板失败");
+            toast.error(t('template.loadFailed'));
         } finally {
             setLoading(false);
         }
@@ -94,12 +120,12 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
         e.stopPropagation();
         try {
             await useApi(APIS.DELETE_TEMPLATE, { id: templateId });
-            setAllTemplates(prev => prev.filter(t => t.id !== templateId));
-            toast.success("删除模板成功");
+            setAllTemplates(prev => prev.filter(tpl => tpl.id !== templateId));
+            toast.success(t('template.deleteSuccess'));
         } catch (error) {
-            toast.error("删除模板失败");
+            toast.error(t('template.deleteFailed'));
         }
-    }, []);
+    }, [t]);
 
     const handleCategoryChange = (value: string[]) => {
         setSelectedCategories(value);
@@ -107,22 +133,22 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-[1000px] sm:max-w-none max-h-[90vh] overflow-y-auto">
-                <SheetTitle className="flex flex-row items-center gap-1">
-                    选择一个模板
+            <SheetContent className="w-[1000px] sm:max-w-none h-full flex flex-col">
+                <SheetTitle className="flex flex-row items-center gap-1 shrink-0">
+                    {t('template.selectTemplate')}
                 </SheetTitle>
-                <div className="flex flex-col gap-4 mt-4">
-                    <div className="font-bold text-lg">个人模板</div>
+                <div className="flex flex-col gap-4 mt-4 flex-1 min-h-0">
+                    <div className="font-bold text-lg">{t('template.personalTemplates')}</div>
                     <div className="flex flex-row items-center gap-4">
                         <Input
                             className="w-[300px] h-9"
-                            placeholder="搜索模板..."
+                            placeholder={t('template.search')}
                             value={searchValue}
                             onChange={(e) => setSearchValue(e.target.value)}
                         />
                         {categories.length > 1 && (
                             <MultiSelect
-                                placeholder="模板类型"
+                                placeholder={t('template.typeFilter')}
                                 className="h-9 min-w-[180px]"
                                 options={categories.map(cat => ({ value: cat.id, label: cat.text }))}
                                 defaultValue={[]}
@@ -133,17 +159,25 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                     </div>
 
                     {loading ? (
-                        <div className="flex justify-center items-center h-64">
+                        <div className="flex flex-1 justify-center items-center">
                             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
                         </div>
+                    ) : filteredTemplates.length === 0 ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground">
+                            <FileText className="h-12 w-12 mb-4 text-muted-foreground/30" />
+                            <p className="text-base font-medium mb-1">{t('template.noTemplates')}</p>
+                            <p className="text-sm">
+                                {searchValue ? t('template.noMatch') : t('template.emptyHint')}
+                            </p>
+                        </div>
                     ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 flex-1 min-h-0 overflow-y-auto content-start">
                             {filteredTemplates.map((item, index) => (
                                 <div key={`${item.id}-${index}`} className="flex flex-col gap-3">
                                     <Card
                                         className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow h-[200px] cursor-pointer group relative"
                                         onClick={() => {
-                                            onCreateFromTemplate(item.id);
+                                            onCreateFromTemplate(item.id, item.title);
                                             onOpenChange(false);
                                         }}
                                     >
@@ -151,7 +185,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                                         <button
                                             className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-background/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive hover:text-destructive-foreground"
                                             onClick={(e) => handleDeleteTemplate(e, item.id)}
-                                            title="删除模板"
+                                            title={t('template.delete')}
                                         >
                                             <Trash2 className="h-3.5 w-3.5" />
                                         </button>
@@ -187,23 +221,14 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                                         className="w-full"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            onCreateFromTemplate(item.id);
+                                            onCreateFromTemplate(item.id, item.title);
                                             onOpenChange(false);
                                         }}
                                     >
-                                        使用此模板
+                                        {t('template.useThis')}
                                     </Button>
                                 </div>
                             ))}
-                            {filteredTemplates.length === 0 && (
-                                <div className="col-span-full text-center py-16 text-muted-foreground">
-                                    <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
-                                    <p className="text-base font-medium mb-1">暂无模板</p>
-                                    <p className="text-sm">
-                                        {searchValue ? "没有找到匹配的模板，请尝试其他关键词" : "在编辑器中保存页面为模板后，将在此处显示"}
-                                    </p>
-                                </div>
-                            )}
                         </div>
                     )}
                 </div>

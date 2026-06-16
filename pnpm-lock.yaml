@@ -222,6 +222,9 @@ importers:
       '@kn/plugin-mindmap-canvas':
         specifier: workspace:*
         version: link:../../packages/plugin-mindmap-canvas
+      '@kn/plugin-theme':
+        specifier: workspace:*
+        version: link:../../packages/plugin-theme
       '@kn/plugin-weaver-oa':
         specifier: workspace:*
         version: link:../../packages/plugin-weaver-oa
@@ -468,6 +471,9 @@ importers:
       '@kn/plugin-sticky-note':
         specifier: workspace:*
         version: link:../../packages/plugin-sticky-note
+      '@kn/plugin-theme':
+        specifier: workspace:*
+        version: link:../../packages/plugin-theme
       '@kn/plugin-weaver-oa':
         specifier: workspace:*
         version: link:../../packages/plugin-weaver-oa
@@ -1639,6 +1645,28 @@ importers:
       uuid:
         specifier: ^9.0.0
         version: 9.0.1
+    devDependencies:
+      '@kn/rollup-config':
+        specifier: workspace:*
+        version: link:../rollup-config
+
+  packages/plugin-theme:
+    dependencies:
+      '@kn/common':
+        specifier: workspace:*
+        version: link:../common
+      '@kn/icon':
+        specifier: workspace:*
+        version: link:../icon
+      '@kn/ui':
+        specifier: workspace:*
+        version: link:../ui
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.4.27(postcss@8.5.10)
+      postcss:
+        specifier: ^8.4.47
+        version: 8.5.10
     devDependencies:
       '@kn/rollup-config':
         specifier: workspace:*

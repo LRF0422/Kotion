@@ -33,6 +33,7 @@ import com.knowledge.wiki.service.entity.WikiLink;
 import com.knowledge.wiki.service.entity.enums.PagePermissionEnum;
 import com.knowledge.wiki.service.entity.dto.UpdateBlockDTO;
 import com.knowledge.wiki.service.entity.dto.BlockPatchItemDTO;
+import com.knowledge.wiki.service.entity.dto.SaveTemplateDTO;
 import com.knowledge.wiki.service.entity.vo.PageBlockVO;
 import com.knowledge.wiki.service.service.IBlockIndexService;
 import com.knowledge.wiki.service.service.IPageSnapshotService;
@@ -172,12 +173,26 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     }
 
     @Override
-    public void saveAsTemplate(Long pageId) {
+    public void saveAsTemplate(Long pageId, SaveTemplateDTO dto) {
         Page template = copyPage(pageId, "id", "parentId", "spaceId", "ancestors");
-        this.lambdaUpdate()
+        com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper<Page> update = this.lambdaUpdate()
                 .eq(Page::getId, template.getId())
-                .set(Page::getIsTemplate, true)
-                .update();
+                .set(Page::getIsTemplate, true);
+        // Apply metadata from the save dialog so the template carries the
+        // user-supplied name / description / cover instead of just the copied
+        // page values. All fields are optional.
+        if (dto != null) {
+            if (StrUtil.isNotBlank(dto.getName())) {
+                update.set(Page::getTitle, dto.getName());
+            }
+            if (dto.getDescription() != null) {
+                update.set(Page::getDescription, dto.getDescription());
+            }
+            if (CollUtil.isNotEmpty(dto.getCover())) {
+                update.set(Page::getCover, dto.getCover().get(0));
+            }
+        }
+        update.update();
     }
 
     @Override

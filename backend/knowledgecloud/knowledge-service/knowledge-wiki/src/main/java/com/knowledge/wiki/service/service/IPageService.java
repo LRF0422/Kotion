@@ -9,6 +9,7 @@ import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.PageVersion;
 import com.knowledge.wiki.service.entity.dto.UpdateBlockDTO;
 import com.knowledge.wiki.service.entity.dto.BlockPatchItemDTO;
+import com.knowledge.wiki.service.entity.dto.SaveTemplateDTO;
 import com.knowledge.wiki.service.entity.PageContent;
 import com.knowledge.wiki.service.service.impl.BlockStorageService;
 import com.knowledge.wiki.service.entity.vo.PageBlockVO;
@@ -38,7 +39,7 @@ public interface IPageService extends ISubjectService<Page> {
 
     IPage<Page> queryRecentPage(String rearchValue, Pageable dto);
 
-    void saveAsTemplate(Long pageId);
+    void saveAsTemplate(Long pageId, SaveTemplateDTO dto);
 
     List<Tree<Long>> getPageTree(Long spaceId, String searchValue);
 

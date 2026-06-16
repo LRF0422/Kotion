@@ -34,6 +34,7 @@
         "@kn/plugin-main": "workspace:*",
         "@kn/plugin-mindmap-canvas": "workspace:*",
         "@kn/plugin-weaver-oa": "workspace:*",
+        "@kn/plugin-theme": "workspace:*",
         "@kn/ui": "workspace:*",
         "fs-extra": "^11.2.0",
         "next-themes": "^0.3.0"

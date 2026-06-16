@@ -46,7 +46,7 @@ export const StyledEditor = styled.div.attrs({
 
   .has-focus {
     border-radius: 3px;
-    box-shadow: 0 0 0 1px #0C66E4;
+    box-shadow: 0 0 0 1px #2383E2;
   }
 
   iframe {

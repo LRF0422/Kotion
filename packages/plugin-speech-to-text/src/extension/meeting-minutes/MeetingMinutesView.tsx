@@ -1,22 +1,19 @@
 import { NodeViewProps, NodeViewWrapper, NodeViewContent, Editor, Node as PMNode } from "@kn/editor";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useMeetingRecorder } from "../../hooks/useMeetingRecorder";
-import { useFileService, useEditorAgentOptimized } from "@kn/common";
-import { useTranslation } from "@kn/common";
-import { Button, Popover, PopoverContent, PopoverTrigger, Calendar } from "@kn/ui";
-import { cn } from "@kn/ui";
-import { toast } from "@kn/ui";
-import { format } from "@kn/ui";
+import { useFileService, useEditorAgentOptimized, useTranslation } from "@kn/common";
+import { Popover, PopoverContent, PopoverTrigger, Calendar, cn, toast, format } from "@kn/ui";
 import {
     Mic, Pause, Play, Square, Sparkles,
-    Loader2, Save, RotateCcw, Share2,
-    PenLine, ListTree, ThumbsUp, ThumbsDown, ChevronDown,
-    Lightbulb, Settings, Volume2, Copy, Pencil
+    Loader2, RotateCcw, Share2,
+    PenLine, ListTree, ChevronDown,
+    Lightbulb, Languages, Check,
 } from "@kn/icon";
+import { AttendeePicker, Attendee } from "./AttendeePicker";
 
 // ─── Tab Visibility CSS ───────────────────────────────
-// The parent div has data-active-tab="summary|notes|transcript".
-// Each child tab node renders a div with data-tab="summary|notes|transcript".
+// The container div has data-active-tab="notes|transcript".
+// Each child tab node renders a div with data-tab="notes|transcript".
 // Only the active tab's content is visible and editable.
 
 const TAB_VISIBILITY_STYLE_ID = 'meeting-minutes-tab-styles';
@@ -28,7 +25,6 @@ function injectTabStyles() {
     style.id = TAB_VISIBILITY_STYLE_ID;
     style.textContent = `
 .meeting-tabs-container [data-tab] { display: none; }
-.meeting-tabs-container[data-active-tab="summary"] [data-tab="summary"],
 .meeting-tabs-container[data-active-tab="notes"] [data-tab="notes"],
 .meeting-tabs-container[data-active-tab="transcript"] [data-tab="transcript"] { display: block; }
 .meeting-notes-placeholder p.is-empty:first-child::before {
@@ -38,13 +34,11 @@ function injectTabStyles() {
   pointer-events: none;
   color: hsl(var(--muted-foreground));
   opacity: 0.6;
-  font-style: italic;
 }
 `;
     document.head.appendChild(style);
 }
 
-// Inject on module load
 injectTabStyles();
 
 // ─── Helpers ────────────────────────────────────────────
@@ -60,10 +54,7 @@ const formatDuration = (seconds: number): string => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-// ─── Types ──────────────────────────────────────────────
-
 // ─── Date Picker Button ────────────────────────────────
-// Replaces the static CalendarDayIcon with a clickable date picker.
 
 interface DatePickerButtonProps {
     value: Date;
@@ -71,7 +62,7 @@ interface DatePickerButtonProps {
 }
 
 const DatePickerButton: React.FC<DatePickerButtonProps> = ({ value, onChange }) => {
-    const dateStr = format(value, 'MMM d');
+    const dateStr = format(value, 'MMM d, yyyy');
     return (
         <Popover>
             <PopoverTrigger asChild>
@@ -153,14 +144,36 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl }) => {
     );
 };
 
+// ─── Recording dots indicator (Notion-style waveform) ───
+
+const DotsIndicator: React.FC<{ active: boolean }> = ({ active }) => (
+    <div className="flex-1 flex items-center gap-1 overflow-hidden px-2">
+        {Array.from({ length: 40 }).map((_, i) => (
+            <span
+                key={i}
+                className={cn(
+                    "w-0.5 h-0.5 rounded-full shrink-0",
+                    active ? "bg-blue-500/60 animate-pulse" : "bg-muted-foreground/30"
+                )}
+                style={active ? { animationDelay: `${(i % 8) * 80}ms` } : undefined}
+            />
+        ))}
+    </div>
+);
+
 // ─── Types ──────────────────────────────────────────────
 
 type RecordingState = 'idle' | 'recording' | 'paused' | 'processing' | 'completed';
-type MeetingTab = 'summary' | 'notes' | 'transcript';
+type MeetingTab = 'notes' | 'transcript';
+
+const LANG_OPTIONS = [
+    { value: 'zh-CN', label: '中文' },
+    { value: 'en-US', label: 'English' },
+    { value: 'ja-JP', label: '日本語' },
+];
 
 /**
  * Find the position + size of a specific child tab node inside the meetingMinutes node.
- * Returns { pos, node } or null.
  */
 const findTabChild = (
     doc: { nodeAt: (pos: number) => PMNode | null },
@@ -185,43 +198,44 @@ const findTabChild = (
 export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
     const { node, editor, updateAttributes, getPos } = props;
     const { t } = useTranslation();
+    const m = useCallback((key: string) => t(`meetingMinutes.${key}`), [t]);
+
+    const lang = node.attrs.lang || 'zh-CN';
+
+    const [transcript, setTranscript] = useState(node.attrs.transcript || '');
 
     const {
-        isRecording, isPaused, duration,
+        isRecording, isPaused, duration, speechSupported,
         startRecording, pauseRecording, resumeRecording, stopRecording,
-    } = useMeetingRecorder();
+    } = useMeetingRecorder({ lang, onTranscriptionUpdate: setTranscript });
 
     const fileService = useFileService();
 
-    // On reload, if isRecording was left true (browser crash), reset it.
-    // A node is considered "completed" if it has transcript or audio data persisted.
+    // AI streaming agent — MUST be called at the top level (not inside a callback).
+    const { stream } = useEditorAgentOptimized(editor as Editor);
+
     const hasCompletedData = !!(node.attrs.transcript || node.attrs.audioPath || node.attrs.audioUrl);
-    const [state, setState] = useState<RecordingState>(() => {
-        if (node.attrs.isRecording && !hasCompletedData) return 'recording'; // edge case: stale
-        if (hasCompletedData) return 'completed';
-        return 'idle';
-    });
-    const [transcript, setTranscript] = useState(node.attrs.transcript || '');
+    const [state, setState] = useState<RecordingState>(() => (hasCompletedData ? 'completed' : 'idle'));
     const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
-    // Use persisted remote URL if available; otherwise fall back to local blob URL
-    const [localAudioUrl, setLocalAudioUrl] = useState<string | null>(
-        node.attrs.audioUrl || null
+    const [localAudioUrl, setLocalAudioUrl] = useState<string | null>(node.attrs.audioUrl || null);
+    const [activeTab, setActiveTab] = useState<MeetingTab>(
+        (node.attrs.activeTab === 'transcript' ? 'transcript' : 'notes')
     );
-    const [activeTab, setActiveTab] = useState<MeetingTab>((node.attrs.activeTab as MeetingTab) || 'notes');
-    const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
     const [isEditingTitle, setIsEditingTitle] = useState(false);
-    const [consentMode, setConsentMode] = useState<'myself' | 'audio'>('myself');
-    const [showConsentCard, setShowConsentCard] = useState(true);
     const [meetingDate, setMeetingDate] = useState<Date>(() =>
         node.attrs.createdAt ? new Date(node.attrs.createdAt) : new Date()
     );
     const titleInputRef = useRef<HTMLInputElement>(null);
 
-    // On mount, reset stale isRecording flag from a previous session
+    const isEditable = editor.isEditable;
+    const isBusy = state === 'recording' || state === 'paused' || state === 'processing';
+
+    // Reset stale isRecording flag from a previous session
     useEffect(() => {
-        if (node.attrs.isRecording && state !== 'recording') {
+        if (node.attrs.isRecording) {
             updateAttributes({ isRecording: false, isPaused: false });
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Recording state sync
@@ -230,25 +244,20 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
         else if (isPaused) setState('paused');
     }, [isRecording, isPaused]);
 
-    // Sync transcript to node
+    // Persist transcript to node attribute (skip during active recording churn)
     useEffect(() => {
-        if (transcript !== node.attrs.transcript) {
+        if (!isRecording && transcript !== node.attrs.transcript) {
             updateAttributes({ transcript, updatedAt: Date.now() });
         }
-    }, [transcript]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [transcript, isRecording]);
 
     // Sync active tab
     useEffect(() => {
         if (activeTab !== node.attrs.activeTab) {
             updateAttributes({ activeTab });
         }
-    }, [activeTab]);
-
-    // ─── Tab switching (CSS-based, no content swapping) ────
-
-    const handleTabSwitch = useCallback((newTab: MeetingTab) => {
-        if (newTab === activeTab) return;
-        setActiveTab(newTab);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab]);
 
     // ─── Recording Handlers ─────────────────────────────
@@ -257,17 +266,20 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
         setState('recording');
         setTranscript('');
         setLocalAudioUrl(null);
+        setActiveTab('transcript');
         updateAttributes({ isRecording: true, isPaused: false, duration: 0 });
         await startRecording();
     };
 
     const handlePause = () => {
         pauseRecording();
+        setState('paused');
         updateAttributes({ isPaused: true });
     };
 
     const handleResume = () => {
         resumeRecording();
+        setState('recording');
         updateAttributes({ isPaused: false });
     };
 
@@ -276,11 +288,11 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
         setState('processing');
         const result = await stopRecording();
         if (result) {
-            const t = result.transcript || '';
-            setTranscript(t);
+            const tText = result.transcript || '';
+            setTranscript(tText);
             setLocalAudioUrl(result.audioBlob ? URL.createObjectURL(result.audioBlob) : null);
 
-            // Auto-upload recording to default folder via fileService
+            // Auto-upload recording via fileService
             if (result.audioBlob) {
                 try {
                     const fileName = `${m('recordingFilePrefix')}_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}_${new Date().toLocaleTimeString('zh-CN', { hour12: false }).replace(/:/g, '-')}.webm`;
@@ -298,14 +310,14 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
                 }
             }
 
-            // Insert transcript text into the meetingTabTranscript child node
+            // Insert transcript text into the transcript child node
             const pos = getPos();
-            if (typeof pos === 'number' && t) {
+            if (typeof pos === 'number' && tText) {
                 const tabInfo = findTabChild(editor.state.doc, pos, 'meetingTabTranscript');
                 if (tabInfo) {
                     editor.chain()
                         .deleteRange({ from: tabInfo.pos + 1, to: tabInfo.pos + tabInfo.node.nodeSize - 1 })
-                        .insertContentAt(tabInfo.pos + 1, t, {
+                        .insertContentAt(tabInfo.pos + 1, tText, {
                             applyInputRules: false,
                             applyPasteRules: false,
                             parseOptions: { preserveWhitespace: true }
@@ -314,36 +326,21 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
                 }
             }
 
-            setActiveTab('transcript');
             setState('completed');
         } else {
             setState('idle');
         }
     };
 
-    // ─── AI Summary ─────────────────────────────────────
+    // ─── AI Summary → writes into the Notes tab ─────────
 
     const handleGenerateSummary = useCallback(async () => {
         if (!transcript) return;
         setIsGeneratingSummary(true);
-        setActiveTab('summary');
+        setActiveTab('notes');
 
         try {
             const prompt = m('summaryPrompt').replace('{{transcript}}', transcript);
-
-            const { stream } = useEditorAgentOptimized(editor as Editor);
-
-            // Clear existing summary content and insert placeholder
-            const pos = getPos();
-            if (typeof pos === 'number') {
-                const tabInfo = findTabChild(editor.state.doc, pos, 'meetingTabSummary');
-                if (tabInfo) {
-                    editor.chain().focus()
-                        .deleteRange({ from: tabInfo.pos + 1, to: tabInfo.pos + tabInfo.node.nodeSize - 1 })
-                        .insertContentAt(tabInfo.pos + 1, { type: 'paragraph' })
-                        .run();
-                }
-            }
 
             let summaryText = '';
             try {
@@ -356,9 +353,10 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
                 summaryText = `**[${m('summaryGenerationFailed')}]**\n\n${transcript.slice(0, 500)}${transcript.length > 500 ? '...' : ''}`;
             }
 
-            // Insert generated summary into the meetingTabSummary child node
+            // Re-resolve position AFTER the await, then insert into the Notes child.
+            const pos = getPos();
             if (typeof pos === 'number' && summaryText) {
-                const tabInfo = findTabChild(editor.state.doc, pos, 'meetingTabSummary');
+                const tabInfo = findTabChild(editor.state.doc, pos, 'meetingTabNotes');
                 if (tabInfo) {
                     editor.chain().focus()
                         .deleteRange({ from: tabInfo.pos + 1, to: tabInfo.pos + tabInfo.node.nodeSize - 1 })
@@ -373,71 +371,24 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
         } finally {
             setIsGeneratingSummary(false);
         }
-    }, [transcript, editor, getPos]);
+    }, [transcript, editor, getPos, stream, m]);
 
-    // ─── Insert Transcript ──────────────────────────────
-
-    const handleInsertTranscript = useCallback(() => {
-        if (!transcript) return;
-        // Insert transcript raw text into the transcript tab child node
-        const pos = getPos();
-        if (typeof pos === 'number') {
-            const tabInfo = findTabChild(editor.state.doc, pos, 'meetingTabTranscript');
-            if (tabInfo) {
-                editor.chain().focus()
-                    .deleteRange({ from: tabInfo.pos + 1, to: tabInfo.pos + tabInfo.node.nodeSize - 1 })
-                    .insertContentAt(tabInfo.pos + 1, transcript, {
-                        applyInputRules: false,
-                        applyPasteRules: false,
-                        parseOptions: { preserveWhitespace: true }
-                    })
-                    .run();
-            }
-        }
-    }, [transcript, editor, getPos]);
-
-    // ─── File & Share ───────────────────────────────────
-
-    const handleSaveToFile = useCallback(async () => {
-        if (!localAudioUrl) return;
-        try {
-            const response = await fetch(localAudioUrl);
-            const blob = await response.blob();
-            const fileName = `${m('recordingFilePrefix')}_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}_${new Date().toLocaleTimeString('zh-CN', { hour12: false }).replace(/:/g, '-')}.webm`;
-            const file = new File([blob], fileName, { type: 'audio/webm' });
-            const result = await fileService.uploadFile(file);
-            updateAttributes({ audioPath: result.path });
-            toast.success(m('audioSaved'));
-        } catch (err) {
-            console.error('Error saving file:', err);
-            toast.error(m('saveFailed'));
-        }
-    }, [localAudioUrl, fileService, updateAttributes]);
-
-    const handleShareSummary = useCallback(() => {
-        const title = node.attrs.title || m('title');
-        const content = `# ${title}\n\n${transcript ? `## ${m('transcript')}\n${transcript}` : ''}`;
-        navigator.clipboard.writeText(content).then(() => {
-            toast.success(m('copiedToClipboard'));
-        }).catch(() => toast.error(m('copyFailed')));
-    }, [transcript, node.attrs.title]);
+    // ─── Reset ──────────────────────────────────────────
 
     const handleReset = () => {
         setState('idle');
         setTranscript('');
         setLocalAudioUrl(null);
-        setFeedbackGiven(null);
         setActiveTab('notes');
         updateAttributes({
             isRecording: false, isPaused: false, duration: 0,
             audioPath: null, audioUrl: null, transcript: '',
             activeTab: 'notes'
         });
-        // Reset all three child tab nodes to empty paragraphs
         const pos = getPos();
         if (typeof pos === 'number') {
-            const tabTypes = ['meetingTabSummary', 'meetingTabNotes', 'meetingTabTranscript'];
-            // Process in reverse order so position offsets remain valid
+            const tabTypes = ['meetingTabNotes', 'meetingTabTranscript'];
+            // Reverse order so position offsets remain valid
             for (let i = tabTypes.length - 1; i >= 0; i--) {
                 const tabInfo = findTabChild(editor.state.doc, pos, tabTypes[i]);
                 if (tabInfo) {
@@ -450,25 +401,20 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
         }
     };
 
-    // ─── Title Editing ──────────────────────────────────
+    // ─── Metadata handlers ──────────────────────────────
 
     const handleTitleClick = useCallback(() => {
+        if (!isEditable) return;
         setIsEditingTitle(true);
         setTimeout(() => titleInputRef.current?.focus(), 0);
-    }, []);
-
-    const handleTitleBlur = useCallback(() => {
-        setIsEditingTitle(false);
-    }, []);
+    }, [isEditable]);
 
     const handleTitleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         updateAttributes({ title: e.target.value, updatedAt: Date.now() });
     }, [updateAttributes]);
 
     const handleTitleKeyDown = useCallback((e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            setIsEditingTitle(false);
-        }
+        if (e.key === 'Enter') setIsEditingTitle(false);
     }, []);
 
     const handleDateChange = useCallback((date: Date) => {
@@ -476,293 +422,45 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
         updateAttributes({ createdAt: date.getTime(), updatedAt: Date.now() });
     }, [updateAttributes]);
 
-    const m = useCallback((key: string) => t(`meetingMinutes.${key}`), [t]);
+    const handleAttendeesChange = useCallback((attendees: Attendee[]) => {
+        updateAttributes({ attendees, updatedAt: Date.now() });
+    }, [updateAttributes]);
 
-    // Use persisted duration on reload, live duration during recording
-    const displayDuration = isRecording || isPaused ? duration : (node.attrs.duration || duration);
+    const handleLangChange = useCallback((value: string) => {
+        updateAttributes({ lang: value });
+    }, [updateAttributes]);
 
-    const formatDateStr = useCallback((date: Date): string => {
-        const now = new Date();
-        if (date.toDateString() === now.toDateString()) return m('today');
-        return format(date, 'MMM d');
-    }, [m]);
+    const handleShare = useCallback(() => {
+        const title = node.attrs.title || m('title');
+        const content = `# ${title}\n\n${transcript ? `## ${m('transcript')}\n${transcript}` : ''}`;
+        navigator.clipboard.writeText(content)
+            .then(() => toast.success(m('copiedToClipboard')))
+            .catch(() => toast.error(m('copyFailed')));
+    }, [transcript, node.attrs.title, m]);
 
+    const dateLabel = format(meetingDate, 'MMM d, yyyy');
     const meetingTitle = node.attrs.title || m('meetingTitle');
+    const attendees: Attendee[] = Array.isArray(node.attrs.attendees) ? node.attrs.attendees : [];
 
     const tabs: { key: MeetingTab; label: string; icon: React.ReactNode }[] = [
-        { key: 'summary', label: m('summary'), icon: <Sparkles className="h-3.5 w-3.5" /> },
         { key: 'notes', label: m('notes'), icon: <PenLine className="h-3.5 w-3.5" /> },
         { key: 'transcript', label: m('transcript'), icon: <ListTree className="h-3.5 w-3.5" /> },
     ];
-
-    // ─── Render: Idle (Notion-style) ────────────────────
-
-    if (state === 'idle') {
-        return (
-            <NodeViewWrapper as="div" className="my-4 not-prose">
-                <div className="w-full rounded-lg border border-border bg-card overflow-hidden" contentEditable={false}>
-                    {/* ── Title Bar ── */}
-                    <div className="px-5 pt-4 pb-2 flex items-center gap-1.5 border-b border-border">
-                        <DatePickerButton value={meetingDate} onChange={handleDateChange} />
-                        <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
-                        {isEditingTitle ? (
-                            <input
-                                ref={titleInputRef}
-                                value={node.attrs.title || ''}
-                                onChange={handleTitleChange}
-                                onBlur={handleTitleBlur}
-                                onKeyDown={handleTitleKeyDown}
-                                className="text-base font-semibold text-foreground bg-transparent outline-none border-none flex-1 min-w-0"
-                                placeholder={m('meetingTitlePlaceholder')}
-                            />
-                        ) : (
-                            <h3
-                                className="text-base font-semibold text-foreground truncate cursor-text flex-1 min-w-0"
-                                onClick={handleTitleClick}
-                            >
-                                {meetingTitle}
-                            </h3>
-                        )}
-                    </div>
-
-                    {/* ── Navigation Bar ── */}
-                    <div className="px-5 py-2 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            {/* Notes pill button */}
-                            <button
-                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-sm text-foreground hover:bg-muted/80 transition-colors"
-                            >
-                                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                                {m('notes')}
-                            </button>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            {/* Tip icon */}
-                            <button className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('tips')}>
-                                <Lightbulb className="h-4 w-4" />
-                            </button>
-                            {/* Settings icon */}
-                            <button className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('settings')}>
-                                <Settings className="h-4 w-4" />
-                            </button>
-                            {/* Start transcribing button */}
-                            <Button
-                                onClick={handleStart}
-                                size="sm"
-                                className="gap-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-3 h-7 text-xs"
-                            >
-                                {m('startTranscribing')}
-                                <ChevronDown className="h-3 w-3" />
-                            </Button>
-                        </div>
-                    </div>
-
-                    {/* ── Notes Editor (only meetingTabNotes visible) ── */}
-                    <div data-active-tab="notes" className="meeting-tabs-container px-5 py-2 meeting-notes-placeholder" data-placeholder={m('notesPlaceholder')}>
-                        <NodeViewContent className="prose prose-sm dark:prose-invert max-w-none focus:outline-none prose-p:my-1 prose-p:text-sm prose-p:text-muted-foreground prose-headings:mt-3 prose-headings:mb-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5" />
-                    </div>
-
-                    {/* ── How it works ── */}
-                    <div className="px-5 pt-3 pb-3 border-t border-border/50">
-                        <p className="text-sm text-muted-foreground font-medium mb-2">{m('howItWorks')}</p>
-                        <ol className="text-sm text-muted-foreground space-y-1.5 list-decimal list-inside">
-                            <li>{m('howItWorks1')}</li>
-                            <li>{m('howItWorks2')}</li>
-                            <li>{m('howItWorks3')}</li>
-                        </ol>
-                    </div>
-
-                    {/* ── Notification Consent Card ── */}
-                    {showConsentCard && (
-                        <div className="mx-5 mb-3 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-500/20">
-                            <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-1.5">{m('consentTitle')}</p>
-                            <p className="text-xs text-blue-700/70 dark:text-blue-300/80 mb-3 leading-relaxed">
-                                {m('consentDesc')}
-                            </p>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => setConsentMode('myself')}
-                                    className={cn(
-                                        "flex-1 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors",
-                                        consentMode === 'myself'
-                                            ? "border-blue-500 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300"
-                                            : "border-blue-300 dark:border-blue-500/40 text-blue-500 dark:text-blue-300/60 hover:border-blue-500 hover:text-blue-700 dark:hover:border-blue-500/70 dark:hover:text-blue-300"
-                                    )}
-                                >
-                                    {m('consentMyself')}
-                                </button>
-                                <button
-                                    onClick={() => setConsentMode('audio')}
-                                    className={cn(
-                                        "flex-1 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors",
-                                        consentMode === 'audio'
-                                            ? "border-blue-500 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300"
-                                            : "border-blue-300 dark:border-blue-500/40 text-blue-500 dark:text-blue-300/60 hover:border-blue-500 hover:text-blue-700 dark:hover:border-blue-500/70 dark:hover:text-blue-300"
-                                    )}
-                                >
-                                    {m('consentAudio')}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ── Footer ── */}
-                    <div className="px-5 py-2 border-t border-border flex items-center text-xs text-muted-foreground select-none gap-2">
-                        <span>{m('instructions')}</span>
-                        <button className="inline-flex items-center gap-0.5 font-semibold text-foreground hover:text-foreground/80 transition-colors">
-                            {m('auto')}
-                            <ChevronDown className="h-3 w-3" />
-                        </button>
-                        <div className="w-px h-3 bg-border mx-1" />
-                        <span className="flex-1 truncate">{m('consentNote')}</span>
-                        <div className="flex items-center gap-1 shrink-0">
-                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('volume')}>
-                                <Volume2 className="h-3 w-3" />
-                            </button>
-                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('copy')}>
-                                <Copy className="h-3 w-3" />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </NodeViewWrapper>
-        );
-    }
-
-    // ─── Render: Recording / Paused ─────────────────────
-
-    if (state === 'recording' || state === 'paused') {
-        return (
-            <NodeViewWrapper as="div" className="my-4 not-prose">
-                <div className="w-full rounded-lg border border-blue-500/30 bg-card overflow-hidden">
-                    {/* ── Title Bar ── */}
-                    <div className="px-5 pt-4 pb-2 flex items-center gap-1.5">
-                        <DatePickerButton value={meetingDate} onChange={handleDateChange} />
-                        <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
-                        <span className="text-base font-semibold text-foreground">{meetingTitle}</span>
-                    </div>
-
-                    {/* ── Recording Nav Bar ── */}
-                    <div className="px-5 py-2 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className={cn(
-                                "w-2 h-2 rounded-full",
-                                state === 'recording' ? "bg-red-500 animate-pulse" : "bg-yellow-500"
-                            )} />
-                            <span className="text-sm text-muted-foreground">
-                                {state === 'recording' ? m('transcribing') : m('paused')}
-                            </span>
-                            <span className="text-xl font-mono font-semibold tabular-nums text-foreground">
-                                {formatDuration(duration)}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {state === 'recording' ? (
-                                <button onClick={handlePause} className="h-7 px-3 rounded-md bg-muted hover:bg-muted/80 text-sm text-foreground flex items-center gap-1.5 transition-colors">
-                                    <Pause className="h-3.5 w-3.5" />
-                                    {m('pause')}
-                                </button>
-                            ) : (
-                                <button onClick={handleResume} className="h-7 px-3 rounded-md bg-muted hover:bg-muted/80 text-sm text-foreground flex items-center gap-1.5 transition-colors">
-                                    <Play className="h-3.5 w-3.5" />
-                                    {m('resume')}
-                                </button>
-                            )}
-                            <button onClick={handleStop} className="h-7 px-3 rounded-md bg-red-500 hover:bg-red-600 text-sm text-white flex items-center gap-1.5 transition-colors">
-                                <Square className="h-3.5 w-3.5" />
-                                {m('stop')}
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* ── Notes Editor (only meetingTabNotes visible) ── */}
-                    <div data-active-tab="notes" className="meeting-tabs-container px-5 pt-3 pb-2 min-h-[48px] meeting-notes-placeholder" data-placeholder={m('notesPlaceholder')}>
-                        <NodeViewContent className="prose prose-sm dark:prose-invert max-w-none focus:outline-none prose-p:my-1 prose-p:text-sm prose-headings:mt-3 prose-headings:mb-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5" />
-                    </div>
-
-                    {/* ── Live Transcript (editable) ── */}
-                    <div className="px-5 pb-5">
-                        <div className="border-t border-border/50 pt-3">
-                            <div className="flex items-center justify-between mb-1.5">
-                                <span className="text-xs text-muted-foreground font-medium">{m('liveTranscript')}</span>
-                                <span className="text-[10px] text-muted-foreground">{m('editable')}</span>
-                            </div>
-                            {transcript ? (
-                                <textarea
-                                    value={transcript}
-                                    onChange={(e) => setTranscript(e.target.value)}
-                                    className="w-full text-sm leading-relaxed bg-muted/40 rounded-md p-3 max-h-28 overflow-y-auto resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/40 text-foreground/90 placeholder:text-muted-foreground"
-                                    placeholder={m('transcriptWillAppear')}
-                                    rows={3}
-                                />
-                            ) : (
-                                <p className="text-sm text-muted-foreground text-center py-3">{m('listening')}</p>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* ── Footer ── */}
-                    <div className="px-5 py-2 border-t border-border flex items-center text-xs text-muted-foreground select-none gap-2">
-                        <span>{m('instructions')}</span>
-                        <button className="inline-flex items-center gap-0.5 font-semibold text-foreground hover:text-foreground/80 transition-colors">
-                            {m('auto')}
-                            <ChevronDown className="h-3 w-3" />
-                        </button>
-                        <div className="w-px h-3 bg-border mx-1" />
-                        <span className="flex-1 truncate">{m('consentNote')}</span>
-                        <div className="flex items-center gap-1 shrink-0">
-                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('volume')}>
-                                <Volume2 className="h-3 w-3" />
-                            </button>
-                            <button className="h-5 w-5 rounded hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('copy')}>
-                                <Copy className="h-3 w-3" />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </NodeViewWrapper>
-        );
-    }
-
-    // ─── Render: Processing ─────────────────────────────
-
-    if (state === 'processing') {
-        return (
-            <NodeViewWrapper as="div" className="my-4 not-prose">
-                <div className="w-full rounded-lg border border-border bg-card overflow-hidden">
-                    {/* ── Title Bar ── */}
-                    <div className="px-5 pt-4 pb-2 flex items-center gap-1.5">
-                        <DatePickerButton value={meetingDate} onChange={handleDateChange} />
-                        <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
-                        <span className="text-base font-semibold text-foreground">{meetingTitle}</span>
-                    </div>
-                    <div className="flex flex-col items-center justify-center py-10 gap-3">
-                        <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-                        <p className="text-sm text-muted-foreground">{m('processing')}</p>
-                    </div>
-                    <div className="hidden"><NodeViewContent /></div>
-                </div>
-            </NodeViewWrapper>
-        );
-    }
-
-    // ─── Render: Completed (Notion-like) ────────────────
 
     return (
         <NodeViewWrapper as="div" className="my-4 not-prose">
             <div className="w-full rounded-lg border border-border bg-card overflow-hidden shadow-sm">
 
-                {/* ── Title Bar ── */}
-                <div className="px-5 pt-4 pb-2 flex items-center gap-1.5">
+                {/* ── Header: date · title ── */}
+                <div contentEditable={false} suppressContentEditableWarning className="px-5 pt-4 pb-1.5 flex items-center gap-1.5">
                     <DatePickerButton value={meetingDate} onChange={handleDateChange} />
                     <ChevronDown className="h-3 w-3 text-muted-foreground/60 shrink-0" />
-
                     {isEditingTitle ? (
                         <input
                             ref={titleInputRef}
                             value={node.attrs.title || ''}
                             onChange={handleTitleChange}
-                            onBlur={handleTitleBlur}
+                            onBlur={() => setIsEditingTitle(false)}
                             onKeyDown={handleTitleKeyDown}
                             className="text-base font-semibold text-foreground bg-transparent outline-none border-none flex-1 min-w-0"
                             placeholder={m('meetingTitlePlaceholder')}
@@ -772,122 +470,172 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
                             className="text-base font-semibold text-foreground truncate cursor-text flex-1 min-w-0"
                             onClick={handleTitleClick}
                         >
-                            {meetingTitle}
+                            {meetingTitle} <span className="text-muted-foreground font-normal">@{dateLabel}</span>
                         </h3>
                     )}
                 </div>
 
-                {/* ── Tab Bar ── */}
-                <div className="px-5 flex items-center justify-between border-b border-border/50">
-                    <div className="flex items-center gap-0">
-                        {tabs.map((tab) => (
-                            <button
-                                key={tab.key}
-                                onClick={() => handleTabSwitch(tab.key)}
-                                className={cn(
-                                    "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors select-none",
-                                    activeTab === tab.key
-                                        ? "border-blue-500 text-foreground"
-                                        : "border-transparent text-muted-foreground hover:text-foreground"
-                                )}
-                            >
-                                {tab.icon}
-                                {tab.label}
-                            </button>
-                        ))}
-                    </div>
-                    <div className="flex items-center gap-0.5">
-                        <button onClick={handleReset} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('newRecording')}>
-                            <RotateCcw className="h-3.5 w-3.5" />
+                {/* ── Attendees property row ── */}
+                <div contentEditable={false} suppressContentEditableWarning className="px-5 pb-2.5">
+                    <AttendeePicker
+                        value={attendees}
+                        onChange={handleAttendeesChange}
+                        disabled={!isEditable}
+                    />
+                </div>
+
+                {/* ── Toolbar: tabs · recording controls ── */}
+                <div contentEditable={false} suppressContentEditableWarning className="px-3 py-1.5 flex items-center gap-1 border-y border-border/60 bg-muted/20">
+                    {/* Tabs */}
+                    {tabs.map((tab) => (
+                        <button
+                            key={tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={cn(
+                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium transition-colors select-none",
+                                activeTab === tab.key
+                                    ? "bg-background text-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            {tab.icon}
+                            {tab.label}
                         </button>
-                        {localAudioUrl && !node.attrs.audioPath && (
-                            <button onClick={handleSaveToFile} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('saveRecording')}>
-                                <Save className="h-3.5 w-3.5" />
-                            </button>
-                        )}
-                        <Button size="sm" onClick={handleShareSummary} className="ml-1.5 h-7 text-xs gap-1 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-3">
-                            <Share2 className="h-3 w-3" />
-                            {m('share')}
-                        </Button>
-                    </div>
-                </div>
+                    ))}
 
-                {/* ── Tab Content ── */}
-                <div className="min-h-[100px]">
-                    {/* Audio player (shown in all tabs) */}
-                    {localAudioUrl && (
-                        <div className="mx-5 mt-4 p-2.5 bg-muted/30 rounded-md">
-                            <AudioPlayer audioUrl={localAudioUrl} />
+                    {/* Center: recording dots / duration */}
+                    {isBusy ? (
+                        <div className="flex-1 flex items-center gap-2 px-2 min-w-0">
+                            <span className={cn(
+                                "w-2 h-2 rounded-full shrink-0",
+                                state === 'recording' ? "bg-red-500 animate-pulse" : state === 'paused' ? "bg-yellow-500" : "bg-blue-500"
+                            )} />
+                            <span className="text-xs font-mono tabular-nums text-foreground shrink-0">{formatDuration(duration)}</span>
+                            <DotsIndicator active={state === 'recording'} />
                         </div>
+                    ) : (
+                        <DotsIndicator active={false} />
                     )}
 
-                    {/* Summary tab header: Generate AI summary button */}
-                    {activeTab === 'summary' && !isGeneratingSummary && transcript && (
-                        <div className="mx-5 mt-3">
-                            <Button variant="outline" size="sm" onClick={handleGenerateSummary} className="gap-1.5 text-xs h-7">
-                                <Sparkles className="h-3.5 w-3.5 text-blue-500" />
-                                {m('generateAISummary')}
-                            </Button>
-                        </div>
-                    )}
-
-                    {/* Generating indicator */}
-                    {activeTab === 'summary' && isGeneratingSummary && (
-                        <div className="mx-5 mt-3 flex items-center gap-2">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
-                            <span className="text-xs text-muted-foreground">{m('generatingSummary')}</span>
-                        </div>
-                    )}
-
-                    {/* Transcript tab header: char count + insert button */}
-                    {activeTab === 'transcript' && (
-                        <div className="mx-5 mt-3 flex items-center justify-between">
-                            <span className="text-xs font-medium text-muted-foreground">{m('transcript')}</span>
-                            <div className="flex items-center gap-2">
-                                {transcript && (
-                                    <span className="text-xs text-muted-foreground">{transcript.length} {m('chars')}</span>
-                                )}
-                                <Button
-                                    variant="ghost" size="sm"
-                                    onClick={handleInsertTranscript}
-                                    className="h-6 text-xs gap-1 px-2"
+                    {/* Right cluster */}
+                    {isEditable && (
+                        <div className="flex items-center gap-0.5 shrink-0">
+                            {/* AI summary */}
+                            {!isBusy && transcript && (
+                                <button
+                                    onClick={handleGenerateSummary}
+                                    disabled={isGeneratingSummary}
+                                    className="h-7 px-2 rounded-md hover:bg-muted flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                                    title={m('generateAISummary')}
                                 >
-                                    <PenLine className="h-3 w-3" />
-                                    {m('insertToEditor')}
-                                </Button>
-                            </div>
+                                    {isGeneratingSummary
+                                        ? <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+                                        : <Sparkles className="h-3.5 w-3.5 text-blue-500" />}
+                                    <span className="hidden sm:inline">{m('summary')}</span>
+                                </button>
+                            )}
+
+                            {/* Language settings */}
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <button className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('language')}>
+                                        <Languages className="h-4 w-4" />
+                                    </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-40 p-1" align="end">
+                                    <p className="px-2 py-1 text-xs text-muted-foreground">{m('language')}</p>
+                                    {LANG_OPTIONS.map((opt) => (
+                                        <button
+                                            key={opt.value}
+                                            onClick={() => handleLangChange(opt.value)}
+                                            className="w-full flex items-center justify-between px-2 py-1.5 rounded text-sm hover:bg-muted transition-colors"
+                                        >
+                                            {opt.label}
+                                            {lang === opt.value && <Check className="h-3.5 w-3.5 text-blue-500" />}
+                                        </button>
+                                    ))}
+                                </PopoverContent>
+                            </Popover>
+
+                            {/* Recording controls */}
+                            {state === 'processing' ? (
+                                <div className="h-7 px-2 flex items-center gap-1 text-xs text-muted-foreground">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    {m('processing')}
+                                </div>
+                            ) : state === 'recording' ? (
+                                <>
+                                    <button onClick={handlePause} className="h-7 px-2.5 rounded-md bg-muted hover:bg-muted/80 text-xs text-foreground flex items-center gap-1 transition-colors">
+                                        <Pause className="h-3.5 w-3.5" />{m('pause')}
+                                    </button>
+                                    <button onClick={handleStop} className="h-7 px-2.5 rounded-md bg-red-500 hover:bg-red-600 text-xs text-white flex items-center gap-1 transition-colors">
+                                        <Square className="h-3 w-3" />{m('stop')}
+                                    </button>
+                                </>
+                            ) : state === 'paused' ? (
+                                <>
+                                    <button onClick={handleResume} className="h-7 px-2.5 rounded-md bg-muted hover:bg-muted/80 text-xs text-foreground flex items-center gap-1 transition-colors">
+                                        <Play className="h-3.5 w-3.5" />{m('resume')}
+                                    </button>
+                                    <button onClick={handleStop} className="h-7 px-2.5 rounded-md bg-red-500 hover:bg-red-600 text-xs text-white flex items-center gap-1 transition-colors">
+                                        <Square className="h-3 w-3" />{m('stop')}
+                                    </button>
+                                </>
+                            ) : state === 'completed' ? (
+                                <>
+                                    <button onClick={handleReset} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('newRecording')}>
+                                        <RotateCcw className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button onClick={handleShare} className="h-7 w-7 rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" title={m('share')}>
+                                        <Share2 className="h-3.5 w-3.5" />
+                                    </button>
+                                </>
+                            ) : (
+                                <button
+                                    onClick={handleStart}
+                                    className="h-7 px-2.5 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-xs flex items-center gap-1 transition-colors"
+                                >
+                                    <Mic className="h-3.5 w-3.5" />{m('startTranscribing')}
+                                </button>
+                            )}
                         </div>
                     )}
-
-                    {/* Editor: NodeViewContent renders all 3 tab child nodes.
-                        CSS toggles visibility based on data-active-tab. */}
-                    <div data-active-tab={activeTab} className="meeting-tabs-container px-5 py-3 meeting-notes-placeholder" data-placeholder={m('notesPlaceholder')}>
-                        <NodeViewContent className="min-h-[60px] prose prose-sm dark:prose-invert max-w-none focus:outline-none prose-p:my-1.5 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5" />
-                    </div>
                 </div>
 
-                {/* ── Footer ── */}
-                <div className="px-5 py-2 border-t border-border flex items-center text-xs text-muted-foreground select-none gap-2">
-                    <span>{m('duration')}&nbsp;</span>
-                    <span className="font-medium text-foreground tabular-nums">{formatDuration(displayDuration)}</span>
-                    <div className="w-px h-3 bg-border mx-2" />
-                    <span>{m('helpfulQuestion')}</span>
-                    <button
-                        onClick={() => setFeedbackGiven(feedbackGiven === 'up' ? null : 'up')}
-                        className={cn("ml-1 h-5 w-5 rounded flex items-center justify-center transition-colors",
-                            feedbackGiven === 'up' ? "text-blue-500 bg-blue-500/10" : "hover:bg-muted hover:text-foreground"
-                        )}
-                    >
-                        <ThumbsUp className="h-3 w-3" />
-                    </button>
-                    <button
-                        onClick={() => setFeedbackGiven(feedbackGiven === 'down' ? null : 'down')}
-                        className={cn("h-5 w-5 rounded flex items-center justify-center transition-colors",
-                            feedbackGiven === 'down' ? "text-orange-500 bg-orange-500/10" : "hover:bg-muted hover:text-foreground"
-                        )}
-                    >
-                        <ThumbsDown className="h-3 w-3" />
-                    </button>
+                {/* ── Unsupported hint ── */}
+                {!speechSupported && (state === 'idle') && (
+                    <div contentEditable={false} suppressContentEditableWarning className="px-5 pt-2">
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            <Lightbulb className="h-3 w-3" />
+                            {m('transcriptionUnavailable')}
+                        </p>
+                    </div>
+                )}
+
+                {/* ── Audio player ── */}
+                {localAudioUrl && state === 'completed' && (
+                    <div contentEditable={false} suppressContentEditableWarning className="mx-5 mt-3 p-2.5 bg-muted/30 rounded-md">
+                        <AudioPlayer audioUrl={localAudioUrl} />
+                    </div>
+                )}
+
+                {/* ── Live transcript preview (during recording, transcript tab) ── */}
+                {isBusy && activeTab === 'transcript' && (
+                    <div contentEditable={false} suppressContentEditableWarning className="mx-5 mt-3">
+                        <div className="text-sm leading-relaxed bg-muted/40 rounded-md p-3 min-h-[48px] max-h-40 overflow-y-auto text-foreground/90 whitespace-pre-wrap">
+                            {transcript || <span className="text-muted-foreground italic">{m('listening')}</span>}
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Tab content (editable) ──
+                    NodeViewContent renders both child tab nodes; CSS toggles visibility. */}
+                <div
+                    data-active-tab={activeTab}
+                    className="meeting-tabs-container px-5 py-3 meeting-notes-placeholder"
+                    data-placeholder={activeTab === 'notes' ? m('notesPlaceholder') : m('transcriptWillAppear')}
+                >
+                    <NodeViewContent className="min-h-[60px] prose prose-sm dark:prose-invert max-w-none focus:outline-none prose-p:my-1.5 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5" />
                 </div>
             </div>
         </NodeViewWrapper>

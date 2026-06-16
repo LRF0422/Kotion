@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from '@kn/ui';
 
 export interface UseMeetingRecorderOptions {
+    /** Speech-recognition language (BCP-47), e.g. 'zh-CN', 'en-US'. Defaults to 'zh-CN'. */
+    lang?: string;
     onTranscriptionUpdate?: (text: string) => void;
     onTranscriptionComplete?: (text: string) => void;
 }
@@ -12,6 +14,8 @@ export interface UseMeetingRecorderReturn {
     duration: number;
     audioUrl: string | null;
     error: string | null;
+    /** Whether the browser supports live speech-to-text (audio recording works regardless). */
+    speechSupported: boolean;
     startRecording: () => Promise<void>;
     pauseRecording: () => void;
     resumeRecording: () => void;
@@ -21,7 +25,7 @@ export interface UseMeetingRecorderReturn {
 export const useMeetingRecorder = (
     options: UseMeetingRecorderOptions = {}
 ): UseMeetingRecorderReturn => {
-    const { onTranscriptionUpdate, onTranscriptionComplete } = options;
+    const { lang = 'zh-CN', onTranscriptionUpdate, onTranscriptionComplete } = options;
     const [isRecording, setIsRecording] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
     const [duration, setDuration] = useState(0);
@@ -60,6 +64,10 @@ export const useMeetingRecorder = (
     const isSupported = typeof window !== 'undefined' &&
         navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
 
+    // Whether live speech-to-text is available (audio recording works regardless).
+    const speechSupported = typeof window !== 'undefined' &&
+        !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+
     // Initialize speech recognition
     const initSpeechRecognition = useCallback(() => {
         const SpeechRecognition = (window as any).SpeechRecognition ||
@@ -69,7 +77,7 @@ export const useMeetingRecorder = (
         const recognition = new SpeechRecognition();
         recognition.continuous = true;
         recognition.interimResults = false;
-        recognition.lang = 'zh-CN';
+        recognition.lang = lang || 'zh-CN';
         recognition.maxAlternatives = 1;
 
         recognition.onresult = (event: any) => {
@@ -90,7 +98,7 @@ export const useMeetingRecorder = (
         };
 
         return recognition;
-    }, [onTranscriptionUpdate]);
+    }, [onTranscriptionUpdate, lang]);
 
     const startRecording = useCallback(async () => {
         if (!isSupported) {
@@ -238,6 +246,7 @@ export const useMeetingRecorder = (
         duration,
         audioUrl,
         error,
+        speechSupported,
         startRecording,
         pauseRecording,
         resumeRecording,

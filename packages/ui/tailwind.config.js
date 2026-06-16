@@ -55,6 +55,33 @@ module.exports = {
       screens: {
         "3xl": "1900px",
       },
+      // Notion-like system font stack (zero web-font dependency, CJK fallbacks)
+      fontFamily: {
+        sans: [
+          "ui-sans-serif",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          '"Segoe UI"',
+          '"PingFang SC"',
+          '"Hiragino Sans GB"',
+          '"Microsoft YaHei"',
+          '"Helvetica Neue"',
+          "Helvetica",
+          "Arial",
+          "sans-serif",
+          '"Apple Color Emoji"',
+          '"Segoe UI Emoji"',
+        ],
+        serif: ['Georgia', '"Times New Roman"', "ui-serif", "serif"],
+        mono: [
+          '"SFMono-Regular"',
+          "Menlo",
+          "Consolas",
+          '"Liberation Mono"',
+          '"Courier New"',
+          "monospace",
+        ],
+      },
       // iOS safe-area inset utilities (e.g. pt-safe-top, pb-safe-bottom, h-screen-safe)
       spacing: {
         "safe-top": "env(safe-area-inset-top)",
@@ -167,12 +194,41 @@ module.exports = {
         "dialog-out": "dialog-out 0.15s ease-in",
       },
       typography: {
+        // Notion-like reading experience for `prose` content
         DEFAULT: {
           css: {
+            maxWidth: "none",
+            color: "hsl(var(--foreground))",
+            fontSize: "16px",
+            lineHeight: "1.5",
             strong: {
               color: "inherit",
               fontWeight: "600",
             },
+            a: {
+              color: "hsl(var(--ring))",
+              textDecoration: "underline",
+              textUnderlineOffset: "2px",
+              fontWeight: "inherit",
+            },
+            "h1, h2, h3, h4": {
+              color: "inherit",
+              fontWeight: "700",
+              letterSpacing: "-0.01em",
+            },
+            h1: { fontSize: "1.875em", marginTop: "1.6em", marginBottom: "0.4em" },
+            h2: { fontSize: "1.5em", marginTop: "1.4em", marginBottom: "0.4em" },
+            h3: { fontSize: "1.25em", marginTop: "1.2em", marginBottom: "0.4em" },
+            p: { marginTop: "0.4em", marginBottom: "0.4em" },
+            code: {
+              fontWeight: "400",
+              backgroundColor: "hsl(var(--muted))",
+              padding: "0.15em 0.35em",
+              borderRadius: "4px",
+              color: "#eb5757",
+            },
+            "code::before": { content: '""' },
+            "code::after": { content: '""' },
           },
         },
       },
