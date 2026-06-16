@@ -288,8 +288,8 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         toggleLoading()
         spaceService.getPage(pageId!).then((res: any) => {
             setPage(res)
-            // Backfill the tab title now that the page has loaded.
-            if (res?.title && pageId) updateMeta(pageId, res.title)
+            // Backfill the tab title + icon now that the page has loaded.
+            if (pageId) updateMeta(pageId, { title: res?.title, icon: res?.icon?.icon })
         }).catch((err: any) => {
             console.error('Failed to load page:', err)
             toast.error('Failed to load page content')

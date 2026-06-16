@@ -34,7 +34,7 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activePageId, onActivate, 
                         ref={isActive ? activeRef : undefined}
                         role="tab"
                         aria-selected={isActive}
-                        onClick={() => { console.log('[TAB] click', tab.pageId); onActivate(tab.pageId) }}
+                        onClick={() => onActivate(tab.pageId)}
                         className={cn(
                             "group flex max-w-[180px] flex-shrink-0 cursor-pointer select-none items-center gap-1.5 border-r px-3 text-sm transition-colors",
                             isActive
@@ -43,7 +43,13 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activePageId, onActivate, 
                         )}
                         title={tab.title}
                     >
-                        <FileText className="h-3.5 w-3.5 flex-shrink-0 opacity-70" />
+                        {tab.icon ? (
+                            <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center text-[13px] leading-none">
+                                {tab.icon}
+                            </span>
+                        ) : (
+                            <FileText className="h-3.5 w-3.5 flex-shrink-0 opacity-70" />
+                        )}
                         <span className="truncate">
                             {tab.title || "Untitled"}
                         </span>

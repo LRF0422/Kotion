@@ -32,7 +32,7 @@ export interface GlobalState {
     // Bucketed by spaceId so tabs never leak across spaces.
     pageTabs?: {
         bySpace: Record<string, {
-            openPages: { pageId: string; title?: string; lastActiveAt: number }[];
+            openPages: { pageId: string; title?: string; icon?: string; lastActiveAt: number }[];
             activePageId?: string;
         }>
     }

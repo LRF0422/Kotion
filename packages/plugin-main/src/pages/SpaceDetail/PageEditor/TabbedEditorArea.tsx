@@ -45,7 +45,6 @@ export const TabbedEditorArea: React.FC<TabbedEditorAreaProps> = ({ spaceId }) =
     }, [activePageId, openIdsKey, cap])
 
     const navigateTo = (pageId: string) => {
-        console.log('[TAB] navigateTo', pageId, 'spaceId', spaceId)
         // Switch active state immediately (don't wait for the URL → PageRouteSync
         // → Redux roundtrip), then keep the URL in sync so refresh/deep-link work.
         activateTab(pageId)

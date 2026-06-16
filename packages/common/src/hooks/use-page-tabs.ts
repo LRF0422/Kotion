@@ -5,13 +5,15 @@ import { GlobalState } from "../store/GlobalState"
 export interface PageTab {
     pageId: string
     title?: string
+    /** Page's own icon (emoji string, e.g. "📊"). Falls back to a file icon. */
+    icon?: string
     lastActiveAt: number
 }
 
 const storageKey = (spaceId: string) => `kn:page-tabs:${spaceId}`
 
 interface PersistedTabs {
-    openPages: { pageId: string; title?: string }[]
+    openPages: { pageId: string; title?: string; icon?: string }[]
     activePageId?: string
 }
 
@@ -31,9 +33,9 @@ export const usePageTabs = (spaceId?: string) => {
     const openPages = bucket?.openPages ?? []
     const activePageId = bucket?.activePageId
 
-    const openTab = useCallback((pageId: string, title?: string) => {
+    const openTab = useCallback((pageId: string, title?: string, icon?: string) => {
         if (!spaceId || !pageId) return
-        dispatch({ type: "PAGE_TAB_OPEN", payload: { spaceId, pageId, title, lastActiveAt: Date.now() } })
+        dispatch({ type: "PAGE_TAB_OPEN", payload: { spaceId, pageId, title, icon, lastActiveAt: Date.now() } })
     }, [dispatch, spaceId])
 
     const activateTab = useCallback((pageId: string) => {
@@ -46,9 +48,9 @@ export const usePageTabs = (spaceId?: string) => {
         dispatch({ type: "PAGE_TAB_CLOSE", payload: { spaceId, pageId } })
     }, [dispatch, spaceId])
 
-    const updateMeta = useCallback((pageId: string, title?: string) => {
+    const updateMeta = useCallback((pageId: string, meta: { title?: string; icon?: string }) => {
         if (!spaceId || !pageId) return
-        dispatch({ type: "PAGE_TAB_UPDATE_META", payload: { spaceId, pageId, title } })
+        dispatch({ type: "PAGE_TAB_UPDATE_META", payload: { spaceId, pageId, ...meta } })
     }, [dispatch, spaceId])
 
     // Hydrate once per space from localStorage when Redux has no tabs yet.
@@ -62,7 +64,7 @@ export const usePageTabs = (spaceId?: string) => {
             if (!raw) return
             const data: PersistedTabs = JSON.parse(raw)
             data.openPages?.forEach(p =>
-                dispatch({ type: "PAGE_TAB_OPEN", payload: { spaceId, pageId: p.pageId, title: p.title, lastActiveAt: 0 } })
+                dispatch({ type: "PAGE_TAB_OPEN", payload: { spaceId, pageId: p.pageId, title: p.title, icon: p.icon, lastActiveAt: 0 } })
             )
         } catch {
             // ignore malformed cache
@@ -74,7 +76,7 @@ export const usePageTabs = (spaceId?: string) => {
         if (!spaceId) return
         try {
             const data: PersistedTabs = {
-                openPages: openPages.map(p => ({ pageId: p.pageId, title: p.title })),
+                openPages: openPages.map(p => ({ pageId: p.pageId, title: p.title, icon: p.icon })),
                 activePageId,
             }
             localStorage.setItem(storageKey(spaceId), JSON.stringify(data))

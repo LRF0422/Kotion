@@ -84,12 +84,12 @@ const store = createStore((state: GlobalState = {
         let nextBucket = bucket
 
         if (action.type === "PAGE_TAB_OPEN") {
-            const { pageId, title, lastActiveAt } = action.payload
+            const { pageId, title, icon, lastActiveAt } = action.payload
             const exists = bucket.openPages.some(p => p.pageId === pageId)
             const openPages = exists
                 // keep existing title unless we now have one and it was missing
                 ? bucket.openPages.map(p => (p.pageId === pageId && title && !p.title ? { ...p, title } : p))
-                : [...bucket.openPages, { pageId, title, lastActiveAt: lastActiveAt ?? 0 }]
+                : [...bucket.openPages, { pageId, title, icon, lastActiveAt: lastActiveAt ?? 0 }]
             nextBucket = { ...bucket, openPages }
         } else if (action.type === "PAGE_TAB_ACTIVATE") {
             const { pageId, lastActiveAt } = action.payload
@@ -111,9 +111,15 @@ const store = createStore((state: GlobalState = {
             }
             nextBucket = { ...bucket, openPages, activePageId }
         } else if (action.type === "PAGE_TAB_UPDATE_META") {
-            const { pageId, title } = action.payload
+            const { pageId, title, icon } = action.payload
             const openPages = bucket.openPages.map(p =>
-                p.pageId === pageId ? { ...p, title } : p
+                p.pageId === pageId
+                    ? {
+                        ...p,
+                        ...(title !== undefined ? { title } : {}),
+                        ...(icon !== undefined ? { icon } : {}),
+                    }
+                    : p
             )
             nextBucket = { ...bucket, openPages }
         }
