@@ -32,6 +32,7 @@ import com.knowledge.wiki.service.entity.dto.QuerySpaceDTO;
 import com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO;
 import com.knowledge.wiki.service.entity.dto.PatchResultDTO;
 import com.knowledge.wiki.service.entity.dto.ShareLinkRequestDTO;
+import com.knowledge.wiki.service.entity.dto.SaveTemplateDTO;
 import com.knowledge.wiki.service.entity.dto.SpaceDTO;
 import com.knowledge.wiki.service.entity.dto.TemplateDTO;
 import com.knowledge.wiki.service.entity.dto.UpdateBlockDTO;
@@ -106,8 +107,15 @@ public class SpaceController {
     }
 
     @PostMapping("/page/{id}/template")
-    public R<?> savePageAsTemplate(@PathVariable("id") Long id) {
-        spaceApplication.savePageAsTemplate(id);
+    public R<?> savePageAsTemplate(@PathVariable("id") Long id,
+            @RequestBody(required = false) SaveTemplateDTO dto) {
+        spaceApplication.savePageAsTemplate(id, dto);
+        return R.success();
+    }
+
+    @DeleteMapping("/page/template/{id}")
+    public R<?> deleteTemplate(@PathVariable("id") Long id) {
+        spaceApplication.deleteTemplate(id);
         return R.success();
     }
 

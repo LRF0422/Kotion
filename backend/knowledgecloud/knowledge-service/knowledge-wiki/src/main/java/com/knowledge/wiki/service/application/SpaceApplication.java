@@ -39,6 +39,7 @@ import com.knowledge.wiki.service.entity.dto.QueryPageBlockDTO;
 import com.knowledge.wiki.service.entity.dto.QueryPageDTO;
 import com.knowledge.wiki.service.entity.dto.QueryPageTemplateDTO;
 import com.knowledge.wiki.service.entity.dto.QuerySpaceDTO;
+import com.knowledge.wiki.service.entity.dto.SaveTemplateDTO;
 import com.knowledge.wiki.service.entity.dto.SpaceDTO;
 import com.knowledge.wiki.service.entity.dto.TemplateDTO;
 import com.knowledge.wiki.service.entity.dto.CollaborationInvitationRequestDTO;
@@ -50,6 +51,7 @@ import com.knowledge.wiki.service.entity.dto.ShareLinkResponseDTO;
 import com.knowledge.wiki.service.entity.dto.SpaceMemberDTO;
 import com.knowledge.wiki.service.entity.enums.SpaceType;
 import com.knowledge.wiki.service.entity.enums.SpacePermissionEnum;
+import com.knowledge.wiki.service.entity.enums.PageStatus;
 import com.knowledge.wiki.service.entity.vo.InvitedPageVO;
 import com.knowledge.wiki.service.entity.vo.PageBlockVO;
 import com.knowledge.wiki.service.entity.vo.PageContentVO;
@@ -471,8 +473,12 @@ public class SpaceApplication {
                 dto.getSpaceId(), dto.getParentId()));
     }
 
-    public void savePageAsTemplate(Long pageId) {
-        this.spaceService.getPageService().saveAsTemplate(pageId);
+    public void savePageAsTemplate(Long pageId, SaveTemplateDTO dto) {
+        this.spaceService.getPageService().saveAsTemplate(pageId, dto);
+    }
+
+    public void deleteTemplate(Long templateId) {
+        this.spaceService.getPageService().delete(templateId);
     }
 
     public void movePageToTrash(Long pageId) {
@@ -493,6 +499,7 @@ public class SpaceApplication {
         // Get templates from Page table (content now stored in blocks)
         List<Page> templates = spaceService.getPageService().lambdaQuery()
                 .eq(Page::getIsTemplate, true)
+                .ne(Page::getStatus, PageStatus.DELETED)
                 .list();
         return templates.stream()
                 .map(page -> {

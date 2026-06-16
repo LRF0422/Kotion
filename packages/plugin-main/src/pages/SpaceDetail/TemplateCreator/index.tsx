@@ -4,9 +4,9 @@ import {
     AlertDialog, AlertDialogAction, AlertDialogCancel,
     AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
     AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, Avatar, Controller, Field,
-    FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet, FileUploader, Input, ScrollArea, TagInput, Textarea, cn, toast, useForm, z, zodResolver
+    FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet, FileUploader, Input, ScrollArea, Textarea, cn, toast, useForm, z, zodResolver
 } from "@kn/ui";
-import React, { PropsWithChildren, useState, type Dispatch, type SetStateAction } from "react";
+import React, { PropsWithChildren, useState } from "react";
 import { APIS } from "../../../api";
 
 
@@ -40,7 +40,6 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { usePath, uploadFile } = useUploadFile()
     const [open, setOpen] = useState(false)
-    const [activeTagIndex, setActiveTagIndex] = useState<number | null>(null)
 
     const defaultValues = props.mode === 'space'
         ? {
@@ -62,21 +61,26 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
     })
 
     const onSubmit = async (values: z.infer<typeof formSchema>) => {
+        // Send both `title` and `name`: the form collects `name`, but the
+        // template list reads `title`. Carrying both avoids a "saved but no
+        // title in the list" mismatch regardless of which the backend stores.
+        const payload = { ...values, title: values.name, name: values.name }
         try {
             if (props.mode === 'space') {
                 await useApi(APIS.SAVE_SPACE_AS_TEMPLATE, null, {
-                    ...values,
+                    ...payload,
+                    // Backend TemplateDTO reads `screenShot` for the cover images.
+                    screenShot: values.cover,
                     spaceId: props.space.id,
                 })
             } else {
-                await useApi(APIS.SAVE_AS_TEMPLATE, { id: props.pageId }, {
-                    ...values,
-                })
+                await useApi(APIS.SAVE_AS_TEMPLATE, { id: props.pageId }, payload)
             }
             toast.success("保存模板成功")
             setOpen(false)
             form.reset(defaultValues)
         } catch (error) {
+            console.error("Failed to save template:", error)
             toast.error("保存模板失败")
         }
     }
@@ -145,22 +149,7 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                                             </Field>
                                         )}
                                     />
-                                    <Controller
-                                        name="categories"
-                                        control={form.control}
-                                        render={({ field }) => (
-                                            <Field>
-                                                <FieldLabel>Categories</FieldLabel>
-                                                <TagInput
-                                                    tags={field.value || []}
-                                                    setTags={field.onChange as Dispatch<SetStateAction<{ id: string; text: string }[]>>}
-                                                    activeTagIndex={activeTagIndex}
-                                                    setActiveTagIndex={setActiveTagIndex}
-                                                    placeholder="输入分类后按回车添加"
-                                                />
-                                            </Field>
-                                        )}
-                                    />
+                                    {/* Categories deferred: backend Page has no category field yet. */}
                                 </FieldGroup>
                             </FieldSet>
                         </FieldGroup>

@@ -15,7 +15,7 @@ import { event, ON_FAVORITE_CHANGE, ON_PAGE_REFRESH } from "../../event";
 import { Card } from "@kn/ui";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@kn/ui";
 
-import { MultiSelect, cn } from "@kn/ui";
+import { MultiSelect, cn, toast } from "@kn/ui";
 import { TemplateCreator } from "./TemplateCreator";
 import { TemplateSelector } from "../../components/TemplateSelector";
 
@@ -183,16 +183,30 @@ export const SpaceDetail: React.FC = () => {
         })
     }, [params.id, navigator])
 
-    const handleCreateByTemplate = useCallback((id: string) => {
+    const handleCreateByTemplate = useCallback((id: string, title?: string) => {
         useApi(APIS.CREATE_OR_SAVE_PAGE, null, {
             templateId: id,
             spaceId: params.id,
-            parentId: params.pageId
-        }).then(() => {
+            parentId: params.pageId,
+            // Backend PageDTO.title is @NotBlank; the created page inherits the
+            // template's content regardless, so pass the template title to pass
+            // validation (falls back to a default when the template is untitled).
+            title: title || '未命名文档'
+        }).then(res => {
+            const page = res?.data
             setFlag(f => f + 1)
             setVisible(false)
+            // Open the freshly created page so the user lands on the template content.
+            if (page?.id) {
+                navigator.go({
+                    to: `/space-detail/${params.id}/page/edit/${page.id}`
+                })
+            }
+        }).catch(err => {
+            console.error('Failed to create page from template:', err)
+            toast.error("使用模板创建页面失败")
         })
-    }, [params.id, params.pageId])
+    }, [params.id, params.pageId, navigator])
 
     const handleGoToPersonalSpace = useCallback(() => {
         useApi(APIS.PERSONAL_SPACE).then((res) => {

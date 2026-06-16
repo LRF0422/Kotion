@@ -8,8 +8,28 @@ import { Template } from "../model/Template";
 interface TemplateSelectorProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onCreateFromTemplate: (templateId: string) => void;
+    onCreateFromTemplate: (templateId: string, title?: string) => void;
 }
+
+/**
+ * Normalize a raw template record from the backend into the shape the cards
+ * render. The backend's field names aren't guaranteed to match exactly
+ * (e.g. it stores the template name as `name`, and `cover` may come back as a
+ * single string), so we apply defensive fallbacks here.
+ */
+const normalizeTemplate = (item: any): Template => {
+    const coverRaw = item?.cover;
+    const cover = Array.isArray(coverRaw) ? coverRaw : (coverRaw ? [coverRaw] : []);
+    return {
+        ...item,
+        id: item?.id,
+        title: item?.title ?? item?.name ?? "未命名模板",
+        description: item?.description ?? "",
+        cover,
+        author: item?.author ?? item?.authorName ?? "",
+        category: item?.category ?? item?.categories?.[0]?.text ?? "",
+    };
+};
 
 export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     open,
@@ -61,7 +81,11 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
         setLoading(true);
         try {
             const templateResponse = await useApi(APIS.QUERY_TEMPLATE);
-            const templatesData: Template[] = Array.isArray(templateResponse.data) ? templateResponse.data : [];
+            // Backend may return either a plain array or a paginated { records: [] }
+            // object — handle both, mirroring how favorites are read in Home/index.tsx.
+            const raw = templateResponse?.data;
+            const list = Array.isArray(raw) ? raw : (raw?.records || []);
+            const templatesData: Template[] = list.map(normalizeTemplate);
             setAllTemplates(templatesData);
             setFilteredTemplates(templatesData);
 
@@ -143,7 +167,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                                     <Card
                                         className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow h-[200px] cursor-pointer group relative"
                                         onClick={() => {
-                                            onCreateFromTemplate(item.id);
+                                            onCreateFromTemplate(item.id, item.title);
                                             onOpenChange(false);
                                         }}
                                     >
@@ -187,7 +211,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
                                         className="w-full"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            onCreateFromTemplate(item.id);
+                                            onCreateFromTemplate(item.id, item.title);
                                             onOpenChange(false);
                                         }}
                                     >
