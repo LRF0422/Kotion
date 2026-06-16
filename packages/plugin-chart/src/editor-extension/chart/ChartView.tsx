@@ -82,6 +82,25 @@ function getFallbackColor(index: number, isDark: boolean, colorScheme?: string):
 }
 
 /**
+ * Resolve a concrete color for a series/category.
+ *
+ * Priority: explicit custom color → colorScheme palette (theme-aware).
+ *
+ * We compute the color directly instead of relying on the `var(--color-<key>)`
+ * CSS variables emitted by ChartStyle. Those variables are named after the raw
+ * dataKey, so a key containing characters that are invalid in a CSS custom
+ * property name (a space, parens, etc. — e.g. "Q1 Revenue") produces a
+ * malformed variable that fails to resolve, leaving the series filled with the
+ * SVG default (black). Resolving the color here sidesteps that entirely and
+ * stays theme-aware because ChartView re-renders on theme change (isDark).
+ */
+function resolveSeriesColor(chartData: ChartData, key: string, index: number, isDark: boolean): string {
+    const custom = chartData.colors?.[key]
+    if (custom) return custom
+    return getFallbackColor(index, isDark, chartData.colorScheme)
+}
+
+/**
  * Build a ChartConfig from ChartData for shadcn ChartContainer.
  * Uses the selected colorScheme palette with light/dark theme support.
  * When no custom color is set, each series gets a `theme` entry
@@ -119,8 +138,8 @@ function buildChartConfig(chartData: ChartData): ChartConfig {
 /**
  * Render a Bar Chart
  */
-const BarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number }> = ({
-    chartData, config, height
+const BarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number; isDark: boolean }> = ({
+    chartData, config, height, isDark
 }) => {
     const dataKeys = chartData.dataKeys || []
     const categoryKey = chartData.categoryKey || "name"
@@ -149,7 +168,7 @@ const BarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; heig
                     <Bar
                         key={key}
                         dataKey={key}
-                        fill={`var(--color-${key})`}
+                        fill={resolveSeriesColor(chartData, key, index, isDark)}
                         stackId={chartData.stacked ? "stack" : undefined}
                         radius={chartData.stacked ? undefined : [4, 4, 0, 0]}
                     >
@@ -167,8 +186,8 @@ const BarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; heig
 /**
  * Render a Line Chart
  */
-const LineChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number }> = ({
-    chartData, config, height
+const LineChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number; isDark: boolean }> = ({
+    chartData, config, height, isDark
 }) => {
     const dataKeys = chartData.dataKeys || []
     const categoryKey = chartData.categoryKey || "name"
@@ -185,7 +204,7 @@ const LineChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; hei
                         key={key}
                         type={chartData.smoothLine !== false ? "monotone" : "linear"}
                         dataKey={key}
-                        stroke={`var(--color-${key})`}
+                        stroke={resolveSeriesColor(chartData, key, index, isDark)}
                         strokeWidth={2}
                         dot={{ r: 4 }}
                     >
@@ -203,8 +222,8 @@ const LineChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; hei
 /**
  * Render an Area Chart
  */
-const AreaChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number }> = ({
-    chartData, config, height
+const AreaChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number; isDark: boolean }> = ({
+    chartData, config, height, isDark
 }) => {
     const dataKeys = chartData.dataKeys || []
     const categoryKey = chartData.categoryKey || "name"
@@ -221,9 +240,9 @@ const AreaChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; hei
                         key={key}
                         type={chartData.smoothLine !== false ? "monotone" : "linear"}
                         dataKey={key}
-                        fill={`var(--color-${key})`}
+                        fill={resolveSeriesColor(chartData, key, index, isDark)}
                         fillOpacity={0.4}
-                        stroke={`var(--color-${key})`}
+                        stroke={resolveSeriesColor(chartData, key, index, isDark)}
                         stackId={chartData.stacked ? "stack" : undefined}
                     />
                 ))}
@@ -276,8 +295,8 @@ const PieChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; heig
 /**
  * Render a Radar Chart
  */
-const RadarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number }> = ({
-    chartData, config, height
+const RadarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number; isDark: boolean }> = ({
+    chartData, config, height, isDark
 }) => {
     const dataKeys = chartData.dataKeys || []
     const categoryKey = chartData.categoryKey || "name"
@@ -294,8 +313,8 @@ const RadarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; he
                         key={key}
                         name={key}
                         dataKey={key}
-                        stroke={`var(--color-${key})`}
-                        fill={`var(--color-${key})`}
+                        stroke={resolveSeriesColor(chartData, key, index, isDark)}
+                        fill={resolveSeriesColor(chartData, key, index, isDark)}
                         fillOpacity={0.3}
                     />
                 ))}
@@ -308,8 +327,8 @@ const RadarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; he
 /**
  * Render a Radial Bar Chart
  */
-const RadialBarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number }> = ({
-    chartData, config, height
+const RadialBarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number; isDark: boolean }> = ({
+    chartData, config, height, isDark
 }) => {
     const dataKeys = chartData.dataKeys || []
     const dataKey = dataKeys[0] || "value"
@@ -318,9 +337,19 @@ const RadialBarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig
     return (
         <ChartContainer config={config} className="w-full" style={{ height }}>
             <RadialBarChart data={chartData.data} cx="50%" cy="50%" innerRadius="20%" outerRadius="90%">
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartTooltip content={<ChartTooltipContent nameKey={categoryKey} />} />
                 <PolarAngleAxis dataKey={dataKey} domain={[0, 100]} tick={false} />
-                <RadialBar dataKey={dataKey} background cornerRadius={10} />
+                {/* Each ring is a separate category, so color per-row via <Cell>
+                    (like the pie chart). Without explicit fills, RadialBar falls
+                    back to the SVG default and renders every ring black. */}
+                <RadialBar dataKey={dataKey} background cornerRadius={10}>
+                    {chartData.data.map((row, index) => {
+                        const name = String(row?.[categoryKey] ?? "")
+                        const customColor = chartData.colors?.[name]
+                        const fill = customColor || getFallbackColor(index, isDark, chartData.colorScheme)
+                        return <Cell key={`cell-${index}`} fill={fill} />
+                    })}
+                </RadialBar>
                 {chartData.showLegend !== false && <ChartLegend content={<ChartLegendContent nameKey={categoryKey} />} />}
             </RadialBarChart>
         </ChartContainer>
@@ -330,8 +359,8 @@ const RadialBarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig
 /**
  * Render a Scatter Chart
  */
-const ScatterChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number }> = ({
-    chartData, config, height
+const ScatterChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number; isDark: boolean }> = ({
+    chartData, config, height, isDark
 }) => {
     const dataKeys = chartData.dataKeys || []
 
@@ -343,7 +372,7 @@ const ScatterChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; 
                 <YAxis type="number" dataKey={dataKeys[1] || "y"} name={dataKeys[1] || "Y"} tickLine={false} axisLine={false} />
                 <ZAxis type="number" dataKey={dataKeys[2]} range={[50, 400]} />
                 <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltipContent />} />
-                <Scatter data={chartData.data} fill={`var(--color-${dataKeys[0]})`} />
+                <Scatter data={chartData.data} fill={resolveSeriesColor(chartData, dataKeys[0] || "x", 0, isDark)} />
                 {chartData.showLegend !== false && <ChartLegend content={<ChartLegendContent />} />}
             </ScatterChart>
         </ChartContainer>
@@ -354,8 +383,8 @@ const ScatterChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; 
  * Render a Composed (combination) Chart
  * Mixes bar, line, and area series in a single chart with optional dual Y-axes.
  */
-const ComposedChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number }> = ({
-    chartData, config, height
+const ComposedChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number; isDark: boolean }> = ({
+    chartData, config, height, isDark
 }) => {
     const dataKeys = chartData.dataKeys || []
     const categoryKey = chartData.categoryKey || "name"
@@ -378,7 +407,7 @@ const ComposedChartRender: React.FC<{ chartData: ChartData; config: ChartConfig;
                 {dataKeys.map((key, index) => {
                     const sc: SeriesConfig = seriesConfig[key] || { type: 'bar' }
                     const yAxisId = sc.yAxisId === 'right' && (showRight || hasRightSeries) ? 'right' : 'left'
-                    const colorVar = `var(--color-${key})`
+                    const colorVar = resolveSeriesColor(chartData, key, index, isDark)
 
                     switch (sc.type) {
                         case 'line':
@@ -954,24 +983,24 @@ export const ChartView: React.FC<NodeViewProps> = (props) => {
 
         switch (activeChartData.type) {
             case "bar":
-                return <BarChartRender chartData={activeChartData} config={chartConfig} height={height} />
+                return <BarChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
             case "line":
-                return <LineChartRender chartData={activeChartData} config={chartConfig} height={height} />
+                return <LineChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
             case "area":
-                return <AreaChartRender chartData={activeChartData} config={chartConfig} height={height} />
+                return <AreaChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
             case "pie":
                 return <PieChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
             case "radar":
-                return <RadarChartRender chartData={activeChartData} config={chartConfig} height={height} />
+                return <RadarChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
             case "radialBar":
-                return <RadialBarChartRender chartData={activeChartData} config={chartConfig} height={height} />
+                return <RadialBarChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
             case "scatter":
-                return <ScatterChartRender chartData={activeChartData} config={chartConfig} height={height} />
+                return <ScatterChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
             case "compose":
-                return <ComposedChartRender chartData={activeChartData} config={chartConfig} height={height} />
+                return <ComposedChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
             default:
                 // Default to bar chart for unknown types
-                return <BarChartRender chartData={{ ...activeChartData, type: "bar" }} config={chartConfig} height={height} />
+                return <BarChartRender chartData={{ ...activeChartData, type: "bar" }} config={chartConfig} height={height} isDark={isDark} />
         }
     }
 
@@ -993,11 +1022,13 @@ export const ChartView: React.FC<NodeViewProps> = (props) => {
                     suppressContentEditableWarning
                     {...stopPmEvents}
                 >
-                    <div className="flex gap-0">
+                    {/* Mobile: stack vertically (preview on top, editor below).
+                        Tablet/Desktop: side-by-side 50/50 split. */}
+                    <div className="flex flex-col md:flex-row gap-0">
                         {/* Left Panel: Data + Config */}
-                        <div className="w-1/2 border-r min-w-0">
+                        <div className="w-full md:w-1/2 border-b md:border-b-0 md:border-r min-w-0 order-2 md:order-none">
                             <Tabs defaultValue="table" className="h-full flex flex-col">
-                                <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-9 px-1">
+                                <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-11 md:h-9 px-1">
                                     <TabsTrigger value="table" className="text-xs gap-1 data-[state=active]:shadow-none">
                                         <Table2 className="h-3.5 w-3.5" />
                                         Table
@@ -1055,7 +1086,7 @@ export const ChartView: React.FC<NodeViewProps> = (props) => {
                         </div>
 
                         {/* Right Panel: Chart Preview */}
-                        <div className="w-1/2 p-2 flex flex-col items-center justify-center">
+                        <div className="w-full md:w-1/2 p-2 flex flex-col items-center justify-center order-1 md:order-none">
                             {(activeChartData?.title || activeChartData?.description) && (
                                 <div className="w-full text-center mb-1">
                                     {activeChartData.title && <div className="text-sm font-medium">{activeChartData.title}</div>}

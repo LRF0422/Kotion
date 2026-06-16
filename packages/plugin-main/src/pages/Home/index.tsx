@@ -245,7 +245,10 @@ export const Home: React.FC = () => {
                         />
                         <CreateSpaceDlg
                             trigger={
-                                <div>
+                                // Wrapper must mirror the other direct flex children so all
+                                // four actions share width equally on mobile (flex-1 + flex
+                                // lets the inner button stretch to fill this item).
+                                <div className={cn(isMobile && "flex flex-1")}>
                                     <QuickAction
                                         icon={<FolderPlus className="h-4 w-4" />}
                                         label={t("home.create-space") || "New Space"}
