@@ -2,7 +2,7 @@ import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
 import { IconButton, TreeView, useResponsive, Button, Sheet, SheetContent, SheetTitle } from "@kn/ui";
 import { CircleArrowUp, LayoutDashboard, LayoutTemplate, Menu, MoreHorizontal, Package, Plus, Settings, Star, StarIcon, Trash2, Undo2, AlertCircle, PanelLeftClose, PanelLeftOpen } from "@kn/icon";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { useApi, useService, useUploadFile, useNavigator, useToggle, useMobilePageHeader } from "@kn/common";
+import { useApi, useService, useUploadFile, useNavigator, useToggle, useMobilePageHeader, useTranslation } from "@kn/common";
 import { APIS } from "../../api";
 import { Outlet, useParams } from "@kn/common";
 import { Space } from "../../model/Space";
@@ -21,6 +21,7 @@ import { TemplateSelector } from "../../components/TemplateSelector";
 
 export const SpaceDetail: React.FC = () => {
 
+    const { t } = useTranslation()
     const { isMobile, isTablet } = useResponsive()
     const [sidebarOpen, setSidebarOpen] = useState(false)
     // Tablet: the page-tree sidebar is collapsible. Persisted across reloads
@@ -204,9 +205,9 @@ export const SpaceDetail: React.FC = () => {
             }
         }).catch(err => {
             console.error('Failed to create page from template:', err)
-            toast.error("使用模板创建页面失败")
+            toast.error(t('template.useFailed'))
         })
-    }, [params.id, params.pageId, navigator])
+    }, [params.id, params.pageId, navigator, t])
 
     const handleGoToPersonalSpace = useCallback(() => {
         useApi(APIS.PERSONAL_SPACE).then((res) => {
@@ -517,13 +518,15 @@ export const SpaceDetail: React.FC = () => {
                         </div>
                     </DropdownMenuContent>
                 </DropdownMenu>
-                <TemplateCreator mode="space" space={space} className="flex items-center gap-2 w-full py-1 px-1 rounded-md text-xs sm:text-sm hover:bg-muted transition-colors">
-                    <CircleArrowUp className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="flex-1">Save as Template</span>
-                </TemplateCreator>
+                {params.pageId && (
+                    <TemplateCreator mode="page" pageId={params.pageId} className="flex items-center gap-2 w-full py-1 px-1 rounded-md text-xs sm:text-sm hover:bg-muted transition-colors">
+                        <CircleArrowUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="flex-1">{t('template.saveAsTemplate')}</span>
+                    </TemplateCreator>
+                )}
             </div>
         }
-    ] : [], [space, favorites, pageTree, trash, params.id, navigator, toggle, handleFavorite, handleCreatePage, handleRestorePage, handleRemoveFavorite, resolve])
+    ] : [], [space, favorites, pageTree, trash, params.id, params.pageId, navigator, toggle, handleFavorite, handleCreatePage, handleRestorePage, handleRemoveFavorite, resolve, t])
 
     // Sidebar content component for reuse
     const SidebarContent = useMemo(() => (

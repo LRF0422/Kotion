@@ -1,12 +1,12 @@
 import { useSelector } from "@kn/common";
-import { GlobalState, useApi, useUploadFile } from "@kn/common";
+import { GlobalState, useApi, useUploadFile, useTranslation } from "@kn/common";
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel,
     AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
     AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, Avatar, Controller, Field,
     FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet, FileUploader, Input, ScrollArea, Textarea, cn, toast, useForm, z, zodResolver
 } from "@kn/ui";
-import React, { PropsWithChildren, useState } from "react";
+import React, { PropsWithChildren, useState, useMemo } from "react";
 import { APIS } from "../../../api";
 
 
@@ -37,15 +37,27 @@ const formSchema = z.object({
 
 export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
     const { className } = props
+    const { t } = useTranslation()
     const { userInfo } = useSelector((state: GlobalState) => state)
     const { usePath, uploadFile } = useUploadFile()
     const [open, setOpen] = useState(false)
+
+    // Localize the validation message (schema literals can't call t()).
+    const localizedSchema = useMemo(
+        () => formSchema.extend({ name: z.string().min(1, t('template.nameRequired')) }),
+        [t]
+    )
+
+    // The backend stores cover as a single string, but the form schema expects
+    // string[] — coerce so zod validation doesn't reject a space's existing cover.
+    const toCoverArray = (cover: unknown): string[] =>
+        Array.isArray(cover) ? cover as string[] : (cover ? [cover as string] : [])
 
     const defaultValues = props.mode === 'space'
         ? {
             name: props.space.name || '',
             description: props.space.description || '',
-            cover: props.space.cover || [],
+            cover: toCoverArray(props.space.cover),
             categories: props.space.categories || [],
         }
         : {
@@ -56,7 +68,7 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
         }
 
     const form = useForm<z.infer<typeof formSchema>>({
-        resolver: zodResolver(formSchema),
+        resolver: zodResolver(localizedSchema),
         defaultValues
     })
 
@@ -76,12 +88,12 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
             } else {
                 await useApi(APIS.SAVE_AS_TEMPLATE, { id: props.pageId }, payload)
             }
-            toast.success("保存模板成功")
+            toast.success(t('template.saveSuccess'))
             setOpen(false)
             form.reset(defaultValues)
         } catch (error) {
             console.error("Failed to save template:", error)
-            toast.error("保存模板失败")
+            toast.error(t('template.saveFailed'))
         }
     }
 
@@ -89,21 +101,21 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
         <AlertDialogTrigger className={className}>{props.children}</AlertDialogTrigger>
         <AlertDialogContent className={cn("max-w-none w-[80%] max-h-[90%] 3xl:w-[60%]")}>
             <AlertDialogHeader>
-                <AlertDialogTitle>Save as Template</AlertDialogTitle>
+                <AlertDialogTitle>{t('template.dialogTitle')}</AlertDialogTitle>
                 <AlertDialogDescription>
-                    填写模板信息，方便后续快速使用
+                    {t('template.dialogDesc')}
                 </AlertDialogDescription>
                 <ScrollArea className="h-[90%]">
                     <form onSubmit={form.handleSubmit(onSubmit)} id="template-form">
                         <FieldGroup>
                             <FieldSet className="p-2">
-                                <FieldLegend>模板信息</FieldLegend>
+                                <FieldLegend>{t('template.sectionInfo')}</FieldLegend>
                                 <FieldDescription>
-                                    设置模板名称、描述和封面等信息
+                                    {t('template.sectionInfoDesc')}
                                 </FieldDescription>
                                 <FieldGroup>
                                     <Field>
-                                        <FieldLabel>Author</FieldLabel>
+                                        <FieldLabel>{t('template.author')}</FieldLabel>
                                         <Avatar>
                                             <img src={usePath(userInfo?.avatar as string)} alt="" />
                                         </Avatar>
@@ -113,8 +125,8 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                                         control={form.control}
                                         render={({ field, fieldState }) => (
                                             <Field>
-                                                <FieldLabel>Template Name *</FieldLabel>
-                                                <Input {...field} placeholder="输入模板名称" />
+                                                <FieldLabel>{t('template.nameLabel')} *</FieldLabel>
+                                                <Input {...field} placeholder={t('template.namePlaceholder')} />
                                                 {fieldState.error && (
                                                     <p className="text-sm text-destructive">{fieldState.error.message}</p>
                                                 )}
@@ -126,7 +138,7 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                                         control={form.control}
                                         render={({ field }) => (
                                             <Field>
-                                                <FieldLabel>Cover</FieldLabel>
+                                                <FieldLabel>{t('template.cover')}</FieldLabel>
                                                 <FileUploader multiple maxFileCount={5} onUpload={(files) => {
                                                     return Promise.all(files.map(it => {
                                                         return uploadFile(it).then(res => {
@@ -144,8 +156,8 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                                         control={form.control}
                                         render={({ field }) => (
                                             <Field>
-                                                <FieldLabel>Description</FieldLabel>
-                                                <Textarea {...field} placeholder="输入模板描述" />
+                                                <FieldLabel>{t('template.description')}</FieldLabel>
+                                                <Textarea {...field} placeholder={t('template.descPlaceholder')} />
                                             </Field>
                                         )}
                                     />
@@ -156,12 +168,12 @@ export const TemplateCreator: React.FC<TemplateCreatorProps> = (props) => {
                     </form>
                 </ScrollArea>
                 <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogCancel>{t('template.cancel')}</AlertDialogCancel>
                     <AlertDialogAction onClick={(e) => {
                         e.preventDefault()
                         form.handleSubmit(onSubmit)()
                     }}>
-                        Confirm
+                        {t('template.confirm')}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogHeader>
