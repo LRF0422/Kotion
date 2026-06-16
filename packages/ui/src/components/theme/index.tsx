@@ -1,4 +1,5 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { applyColorScheme, subscribe, ResolvedMode } from "./color-scheme"
 
 type Theme = "dark" | "light" | "system"
 
@@ -30,23 +31,38 @@ export function ThemeProvider({
         () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
     )
 
+    // Track the currently resolved light/dark mode so the color-scheme subscription
+    // can re-apply the right (light vs dark) palette without recomputing the mode.
+    const resolvedModeRef = useRef<ResolvedMode>("light")
+
     useEffect(() => {
         const root = window.document.documentElement
 
-        root.classList.remove("light", "dark")
-
-        if (theme === "system") {
-            const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-                .matches
-                ? "dark"
-                : "light"
-
-            root.classList.add(systemTheme)
-            return
+        const apply = (mode: ResolvedMode) => {
+            root.classList.remove("light", "dark")
+            root.classList.add(mode)
+            resolvedModeRef.current = mode
+            // Re-apply the active color scheme for the resolved mode (inline CSS vars
+            // win over globals.css). Pairs with the subscription effect below.
+            applyColorScheme(mode)
         }
 
-        root.classList.add(theme)
+        if (theme === "system") {
+            const mql = window.matchMedia("(prefers-color-scheme: dark)")
+            apply(mql.matches ? "dark" : "light")
+            // Follow OS changes while in "system" mode.
+            const onChange = (e: MediaQueryListEvent) => apply(e.matches ? "dark" : "light")
+            mql.addEventListener("change", onChange)
+            return () => mql.removeEventListener("change", onChange)
+        }
+
+        apply(theme)
     }, [theme])
+
+    // Re-apply when the color scheme (preset / accent) changes from the settings UI.
+    useEffect(() => {
+        return subscribe(() => applyColorScheme(resolvedModeRef.current))
+    }, [])
 
     const setThemeStable = useCallback((newTheme: Theme) => {
         if (typeof window !== "undefined") {
@@ -66,6 +82,11 @@ export function ThemeProvider({
         </ThemeProviderContext.Provider>
     )
 }
+
+// Re-export the color-scheme engine + hook so they ship as part of `@kn/ui`
+// (@kn/ui → ./components → ./theme).
+export * from "./color-scheme"
+export * from "./use-color-scheme"
 
 export const useTheme = () => {
     const context = useContext(ThemeProviderContext)

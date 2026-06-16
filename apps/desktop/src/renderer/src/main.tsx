@@ -7,6 +7,7 @@ import { blockReference } from "@kn/plugin-block-reference"
 import { ai } from "@kn/plugin-ai"
 import { bitable } from "@kn/plugin-bitable"
 import { weaverOA } from "@kn/plugin-weaver-oa"
+import { theme } from "@kn/plugin-theme"
 import './index.css'
 import React from 'react'
 
@@ -67,6 +68,6 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <ErrorBoundary>
-        <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, ai, weaverOA]} />
+        <App plugins={[DefaultPluginInstance, fileManager, bitable, blockReference, ai, weaverOA, theme]} />
     </ErrorBoundary>
 )
