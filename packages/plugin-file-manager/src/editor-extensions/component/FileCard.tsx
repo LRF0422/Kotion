@@ -7,7 +7,8 @@ import {
 import { useSafeState } from "@kn/common";
 import React, { useEffect, useMemo, useCallback, useState } from "react";
 import { FileItem, FileManagerState, useFileManagerState } from "./FileContext";
-import { RenameDialog, MoveDialog, FileDetailsDialog } from "./dialogs";
+import { RenameDialog, MoveDialog, FileDetailsDialog, FilePreviewDialog } from "./dialogs";
+import { isPreviewable } from "../../utils/fileUtils";
 
 
 export interface FileCardProps {
@@ -43,12 +44,14 @@ export const FileCard: React.FC<FileItem> = React.memo((props) => {
     } = useFileManagerState() as FileManagerState
     const isTrash = view === 'trash'
     const isFavorite = props.favorite === 1
+    const canPreview = !isFolder && isPreviewable(name)
     const [checked, setChecked] = useSafeState<boolean>(false)
 
     // Dialog states
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
     const [moveDialogOpen, setMoveDialogOpen] = useState(false);
     const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+    const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
 
     useEffect(() => {
         setChecked(!!selectedFiles.find(it => it.id === id))
@@ -68,10 +71,12 @@ export const FileCard: React.FC<FileItem> = React.memo((props) => {
         if (isTrash) return
         if (isFolder) {
             navigateToFolder(id, name)
+        } else if (canPreview) {
+            setPreviewDialogOpen(true)
         } else {
             downloadFile(props)
         }
-    }, [isTrash, isFolder, id, name, navigateToFolder, downloadFile, props])
+    }, [isTrash, isFolder, id, name, canPreview, navigateToFolder, downloadFile, props])
 
     const handleContextMenu = useCallback(() => {
         if (selectable) {
@@ -115,6 +120,11 @@ export const FileCard: React.FC<FileItem> = React.memo((props) => {
         downloadFile(props);
     }, [downloadFile, props])
 
+    const handlePreviewClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        setPreviewDialogOpen(true);
+    }, [])
+
     const handleFavoriteClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
         toggleFavorite(props);
@@ -153,6 +163,17 @@ export const FileCard: React.FC<FileItem> = React.memo((props) => {
                             />
                         }
                         <div className="flex items-center gap-0.5 ml-auto">
+                            {!isTrash && canPreview && (
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={handlePreviewClick}
+                                    title="Preview"
+                                >
+                                    <EyeIcon className="h-3.5 w-3.5" />
+                                </Button>
+                            )}
                             {!isTrash && (
                                 <Button
                                     variant="ghost"
@@ -188,6 +209,15 @@ export const FileCard: React.FC<FileItem> = React.memo((props) => {
                                         </>
                                     ) : (
                                         <>
+                                            {canPreview && (
+                                                <>
+                                                    <DropdownMenuItem onClick={handlePreviewClick}>
+                                                        <EyeIcon className="h-4 w-4 mr-2" />
+                                                        Preview
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                </>
+                                            )}
                                             <DropdownMenuItem onClick={handleRenameClick}>
                                                 <Pencil className="h-4 w-4 mr-2" />
                                                 Rename
@@ -260,6 +290,12 @@ export const FileCard: React.FC<FileItem> = React.memo((props) => {
             open={detailsDialogOpen}
             onOpenChange={setDetailsDialogOpen}
             file={props}
+        />
+        <FilePreviewDialog
+            open={previewDialogOpen}
+            onOpenChange={setPreviewDialogOpen}
+            file={props}
+            onDownload={downloadFile}
         />
     </>
 })

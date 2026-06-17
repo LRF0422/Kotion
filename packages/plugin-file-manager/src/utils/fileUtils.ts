@@ -58,6 +58,66 @@ export const isDocumentFile = (filename: string): boolean => {
 };
 
 /**
+ * Check if file is an audio file by extension
+ * @param filename File name
+ * @returns True if file is audio
+ */
+export const isAudioFile = (filename: string): boolean => {
+    const audioExtensions = ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'];
+    return audioExtensions.includes(getFileExtension(filename));
+};
+
+/**
+ * Check if file is a PDF by extension
+ * @param filename File name
+ * @returns True if file is a PDF
+ */
+export const isPdfFile = (filename: string): boolean => {
+    return getFileExtension(filename) === 'pdf';
+};
+
+/**
+ * Check if file is a plain-text / code file by extension
+ * @param filename File name
+ * @returns True if file can be shown as text
+ */
+export const isTextFile = (filename: string): boolean => {
+    const textExtensions = [
+        'txt', 'md', 'markdown', 'json', 'xml', 'yaml', 'yml', 'csv', 'log',
+        'js', 'jsx', 'ts', 'tsx', 'css', 'scss', 'less', 'html', 'htm',
+        'java', 'py', 'go', 'rs', 'c', 'cpp', 'h', 'sh', 'sql', 'ini', 'conf',
+    ];
+    return textExtensions.includes(getFileExtension(filename));
+};
+
+/**
+ * Kind of inline preview a file supports.
+ * 'none' means the file cannot be previewed in the browser.
+ */
+export type PreviewKind = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'none';
+
+/**
+ * Determine how a file should be previewed based on its name.
+ * @param filename File name
+ * @returns The preview kind
+ */
+export const getPreviewKind = (filename: string): PreviewKind => {
+    if (isImageFile(filename)) return 'image';
+    if (isVideoFile(filename)) return 'video';
+    if (isAudioFile(filename)) return 'audio';
+    if (isPdfFile(filename)) return 'pdf';
+    if (isTextFile(filename)) return 'text';
+    return 'none';
+};
+
+/**
+ * Whether a file can be previewed inline in the browser.
+ * @param filename File name
+ * @returns True if previewable
+ */
+export const isPreviewable = (filename: string): boolean => getPreviewKind(filename) !== 'none';
+
+/**
  * Truncate filename if too long
  * @param filename File name
  * @param maxLength Maximum length

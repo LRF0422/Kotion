@@ -10,3 +10,6 @@ export type { CreateFolderDialogProps } from './CreateFolderDialog';
 export { FileDetailsDialog } from './FileDetailsDialog';
 export type { FileDetailsDialogProps } from './FileDetailsDialog';
 
+export { FilePreviewDialog } from './FilePreviewDialog';
+export type { FilePreviewDialogProps } from './FilePreviewDialog';
+

@@ -11,9 +11,9 @@ import {
     DropdownMenuTrigger,
 } from "@kn/ui"
 import { useSafeState } from "@kn/common"
-import { Download, FcFile, FcOpenedFolder, MoreVertical, Pencil, FolderInput, Copy, Files, Info, Trash2, StarIcon, ArrowLeft } from "@kn/icon"
-import { formatFileSize } from "../../utils/fileUtils"
-import { RenameDialog, MoveDialog, FileDetailsDialog } from "./dialogs"
+import { Download, EyeIcon, FcFile, FcOpenedFolder, MoreVertical, Pencil, FolderInput, Copy, Files, Info, Trash2, StarIcon, ArrowLeft } from "@kn/icon"
+import { formatFileSize, isPreviewable } from "../../utils/fileUtils"
+import { RenameDialog, MoveDialog, FileDetailsDialog, FilePreviewDialog } from "./dialogs"
 
 
 export interface FileListProps {
@@ -62,6 +62,7 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
     } = useFileManagerState() as FileManagerState
     const isTrash = view === 'trash'
     const isFavorite = props.favorite === 1
+    const canPreview = !isFolder && isPreviewable(name)
 
     const [checked, setChecked] = useSafeState<boolean>(false)
 
@@ -69,6 +70,7 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
     const [renameDialogOpen, setRenameDialogOpen] = useState(false)
     const [moveDialogOpen, setMoveDialogOpen] = useState(false)
     const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
+    const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
 
     useEffect(() => {
         setChecked(!!selectedFiles.find(it => it.id === id))
@@ -88,10 +90,12 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
         if (isTrash) return
         if (isFolder) {
             navigateToFolder(id, name)
+        } else if (canPreview) {
+            setPreviewDialogOpen(true)
         } else {
             downloadFile(props)
         }
-    }, [isTrash, isFolder, id, name, navigateToFolder, downloadFile, props])
+    }, [isTrash, isFolder, id, name, canPreview, navigateToFolder, downloadFile, props])
 
     const handleRowClick = useCallback(() => {
         handleCheckChange(!checked)
@@ -132,6 +136,11 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
         e.stopPropagation()
         downloadFile(props)
     }, [downloadFile, props])
+
+    const handlePreviewClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation()
+        setPreviewDialogOpen(true)
+    }, [])
 
     const handleFavoriteClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation()
@@ -231,6 +240,15 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
                             </>
                         ) : (
                             <>
+                                {canPreview && (
+                                    <>
+                                        <DropdownMenuItem onClick={handlePreviewClick}>
+                                            <EyeIcon className="h-4 w-4 mr-2" />
+                                            Preview
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                    </>
+                                )}
                                 <DropdownMenuItem onClick={handleRenameClick}>
                                     <Pencil className="h-4 w-4 mr-2" />
                                     Rename
@@ -288,6 +306,12 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
             open={detailsDialogOpen}
             onOpenChange={setDetailsDialogOpen}
             file={props}
+        />
+        <FilePreviewDialog
+            open={previewDialogOpen}
+            onOpenChange={setPreviewDialogOpen}
+            file={props}
+            onDownload={downloadFile}
         />
     </>
 })
