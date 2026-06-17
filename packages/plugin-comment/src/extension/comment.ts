@@ -10,7 +10,7 @@ export type { CommentUser, CommentItem, CommentOptions, CommentStorage } from ".
 /**
  * Get the current user info from the Redux store.
  */
-function getCurrentUser(): CommentUser {
+export function getCurrentUser(): CommentUser {
     const state = store.getState();
     const userInfo = state.userInfo;
     if (userInfo?.id) {
@@ -182,6 +182,35 @@ const Comments = Mark.create<CommentOptions, CommentStorage>({
                 const newMark = markType.create({
                     thread_id: threadId,
                     comments: JSON.stringify(existingComments),
+                });
+
+                tr.removeMark(range.from, range.to, markType);
+                tr.addMark(range.from, range.to, newMark);
+                tr.setMeta('addToHistory', false);
+
+                return true;
+            },
+
+            editComment: (threadId: string, commentId: string, content: string) => ({ tr, state }) => {
+                const markType = state.schema.marks.comment;
+                const range = findMarkRange(state.doc, markType, threadId);
+                if (!range) return false;
+
+                const trimmed = content.trim();
+                if (!trimmed) return false;
+
+                const existingComments: CommentItem[] = JSON.parse(range.mark.attrs.comments || '[]');
+                let changed = false;
+                const updated = existingComments.map((c) => {
+                    if (c.id !== commentId) return c;
+                    changed = true;
+                    return { ...c, content: trimmed, updatedAt: Date.now() };
+                });
+                if (!changed) return false;
+
+                const newMark = markType.create({
+                    thread_id: threadId,
+                    comments: JSON.stringify(updated),
                 });
 
                 tr.removeMark(range.from, range.to, markType);

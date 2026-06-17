@@ -1,7 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Editor } from "@kn/editor";
+import { useIsMobile } from "@kn/ui";
 import type { CommentItem as CommentItemType } from "../types";
 import { MarginCommentCard } from "./MarginCommentCard";
+import { CommentSheet } from "./CommentSheet";
+import { getCurrentUser } from "../comment";
 
 interface ThreadPosition {
     threadId: string;
@@ -81,10 +84,14 @@ function calcPositions(editor: Editor, threads: Omit<ThreadPosition, 'top'>[]): 
 }
 
 export const CommentMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
+    const isMobile = useIsMobile();
     const [threads, setThreads] = useState<ThreadPosition[]>([]);
     const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
     const [panelLeft, setPanelLeft] = useState<number | null>(null);
     const rawThreadsRef = useRef<Omit<ThreadPosition, 'top'>[]>([]);
+    const prevActiveRef = useRef<string | null>(null);
+
+    const currentUserId = useMemo(() => getCurrentUser().id, []);
 
     // Update thread data on document changes
     const updateThreadData = useCallback(() => {
@@ -101,7 +108,7 @@ export const CommentMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) => 
         const proseMirrorEl = editor.view.dom;
         if (proseMirrorEl) {
             const rect = proseMirrorEl.getBoundingClientRect();
-            const CARD_WIDTH = 260;
+            const CARD_WIDTH = 300;
             const VIEWPORT_PADDING = 12;
             const idealLeft = rect.right + 16;
             const maxLeft = window.innerWidth - CARD_WIDTH - VIEWPORT_PADDING;
@@ -137,15 +144,34 @@ export const CommentMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) => 
         };
     }, [editor, updateThreadData, updatePositions]);
 
-    const handleCardClick = useCallback((threadId: string, from: number) => {
-        // Card is already visible (user clicked on highlight), no need to scroll
+    // Clean up orphaned empty threads: when the user leaves a thread that still
+    // has no real comment content, remove its (empty) highlight mark.
+    useEffect(() => {
+        const prev = prevActiveRef.current;
+        if (prev && prev !== activeThreadId && editor && !editor.isDestroyed) {
+            const outgoing = rawThreadsRef.current.find((t) => t.threadId === prev);
+            if (outgoing && outgoing.isNew) {
+                editor.commands.resolveThread(prev);
+            }
+        }
+        prevActiveRef.current = activeThreadId;
+    }, [activeThreadId, editor]);
+
+    const setActive = useCallback((threadId: string | null) => {
         setActiveThreadId(threadId);
-        (editor.storage as any).comment.activeThreadId = threadId;
+        if ((editor.storage as any).comment) {
+            (editor.storage as any).comment.activeThreadId = threadId;
+        }
     }, [editor]);
 
     const handleReply = useCallback((threadId: string, content: string, parentId?: string) => {
         if (!content.trim()) return;
         editor.commands.replyComment(threadId, content, parentId);
+    }, [editor]);
+
+    const handleEdit = useCallback((threadId: string, commentId: string, content: string) => {
+        if (!content.trim()) return;
+        editor.commands.editComment(threadId, commentId, content);
     }, [editor]);
 
     const handleDelete = useCallback((threadId: string, commentId: string) => {
@@ -161,12 +187,32 @@ export const CommentMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) => 
         editor.commands.setFirstComment(threadId, content);
     }, [editor]);
 
-    if (panelLeft === null || !activeThreadId) return null;
+    if (!activeThreadId) return null;
 
     // Only show the thread that's currently active (user clicked on its highlight)
     const visibleThread = threads.find((t) => t.threadId === activeThreadId);
-
     if (!visibleThread) return null;
+
+    if (isMobile) {
+        return (
+            <CommentSheet
+                key={visibleThread.threadId}
+                open
+                onOpenChange={(open) => { if (!open) setActive(null); }}
+                comments={visibleThread.comments}
+                isNew={visibleThread.isNew}
+                isEditable={editor.isEditable}
+                currentUserId={currentUserId}
+                onReply={(content, parentId) => handleReply(visibleThread.threadId, content, parentId)}
+                onEdit={(commentId, content) => handleEdit(visibleThread.threadId, commentId, content)}
+                onDelete={(commentId) => handleDelete(visibleThread.threadId, commentId)}
+                onResolve={() => handleResolve(visibleThread.threadId)}
+                onSetFirstComment={(content) => handleSetFirstComment(visibleThread.threadId, content)}
+            />
+        );
+    }
+
+    if (panelLeft === null) return null;
 
     return (
         <MarginCommentCard
@@ -178,8 +224,10 @@ export const CommentMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) => 
             isNew={visibleThread.isNew}
             isActive={true}
             isEditable={editor.isEditable}
-            onClick={() => handleCardClick(visibleThread.threadId, visibleThread.from)}
+            currentUserId={currentUserId}
+            onClick={() => setActive(visibleThread.threadId)}
             onReply={(content, parentId) => handleReply(visibleThread.threadId, content, parentId)}
+            onEdit={(commentId, content) => handleEdit(visibleThread.threadId, commentId, content)}
             onDelete={(commentId) => handleDelete(visibleThread.threadId, commentId)}
             onResolve={() => handleResolve(visibleThread.threadId)}
             onSetFirstComment={(content) => handleSetFirstComment(visibleThread.threadId, content)}

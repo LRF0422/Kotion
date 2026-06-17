@@ -21,6 +21,32 @@
     }
 }
 
+/* Thin, unobtrusive scrollbar for the comment list */
+.comment-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+}
+
+.comment-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+
+.comment-scroll::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.comment-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+    background-clip: padding-box;
+}
+
+.comment-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
 /* Margin comment card enter animation */
 .comment-card-enter {
     animation: comment-card-slide-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;

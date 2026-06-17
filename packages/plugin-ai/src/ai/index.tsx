@@ -6,7 +6,7 @@ import { AiImage } from "./ai-image";
 import React from "react";
 import TextLoadingDecorationExtension from "./text-loading";
 import { LoadingMark } from "./marks/loading-mark";
-import { ExpandableChatDemo } from "./menu/Chat";
+import { AiFloatingUI } from "./menu/AiFloatingUI";
 import { AiCompletionExtension } from "./completion";
 
 /**
@@ -26,8 +26,8 @@ export const AIExtension: ExtensionWrapper = {
     name: Ai.name,
     extendsion: [Ai, AiImage, TextLoadingDecorationExtension, LoadingMark, AiCompletionExtension],
     flotMenuConfig: [AiStaticMenu],
-    floatingUI: ExpandableChatDemo,
-    // Chat component is a floating UI, render it separately via floatingUI
+    floatingUI: AiFloatingUI,
+    // Chat widget + AI Tools preview panel, both rendered via floatingUI
     slashConfig: [
         {
             divider: true,

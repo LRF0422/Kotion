@@ -1,12 +1,20 @@
 import React, { useState } from "react";
 import { Button, Textarea } from "@kn/ui";
-import { SendHorizontal } from "@kn/icon";
+import { SendHorizontal, X } from "@kn/icon";
 
 export interface CommentInputProps {
     onSubmit: (content: string) => void;
     placeholder?: string;
     autoFocus?: boolean;
     onCancel?: () => void;
+    /** Pre-fill the textarea (used for edit mode). */
+    initialValue?: string;
+    /** Label for the submit button. Defaults to "Send". */
+    submitLabel?: string;
+    /** Optional context shown above the input, e.g. "Replying to Alice". */
+    contextLabel?: React.ReactNode;
+    /** Compact paddings/sizes for tight margin cards. */
+    compact?: boolean;
 }
 
 export const CommentInput: React.FC<CommentInputProps> = ({
@@ -14,50 +22,65 @@ export const CommentInput: React.FC<CommentInputProps> = ({
     placeholder = "Comment...",
     autoFocus = false,
     onCancel,
+    initialValue = "",
+    submitLabel = "Send",
+    contextLabel,
+    compact = false,
 }) => {
-    const [value, setValue] = useState('');
+    const [value, setValue] = useState(initialValue);
 
     const handleSubmit = () => {
-        if (!value.trim()) return;
-        onSubmit(value.trim());
-        setValue('');
+        const trimmed = value.trim();
+        if (!trimmed) return;
+        onSubmit(trimmed);
+        setValue("");
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             handleSubmit();
-            // Blur to exit edit mode
-            (e.target as HTMLTextAreaElement).blur();
         }
-        if (e.key === 'Escape' && onCancel) {
+        if (e.key === "Escape" && onCancel) {
+            e.preventDefault();
             onCancel();
         }
     };
 
     return (
-        <div className="p-2.5 border-t border-border/50 bg-muted/20">
-            <div className="relative">
-                <Textarea
-                    placeholder={placeholder}
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    className="min-h-[48px] resize-none text-[12px] border-border/60 bg-background/80 backdrop-blur-sm focus:bg-background transition-colors placeholder:text-muted-foreground/50"
-                    spellCheck={false}
-                    autoFocus={autoFocus}
-                />
-            </div>
-            <div className="flex items-center justify-between mt-2">
-                <span className="text-[11px] text-muted-foreground/50 font-medium">
-                    Enter to send, Esc to cancel
-                </span>
-                <div className="flex gap-1.5">
+        <div>
+            {contextLabel && (
+                <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="truncate">{contextLabel}</span>
                     {onCancel && (
+                        <button
+                            type="button"
+                            className="flex-shrink-0 rounded-sm p-0.5 hover:bg-accent hover:text-accent-foreground transition-colors"
+                            onClick={onCancel}
+                            aria-label="Cancel"
+                        >
+                            <X className="h-3.5 w-3.5" />
+                        </button>
+                    )}
+                </div>
+            )}
+            <Textarea
+                placeholder={placeholder}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className={`resize-none text-sm ${compact ? "min-h-[38px]" : "min-h-[60px]"}`}
+                spellCheck={false}
+                autoFocus={autoFocus}
+            />
+            <div className="mt-2 flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground">Enter to send · Esc to cancel</span>
+                <div className="flex items-center gap-1.5">
+                    {onCancel && !contextLabel && (
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-3 text-xs font-medium text-muted-foreground hover:text-foreground"
+                            className="h-7 px-2.5 text-xs"
                             onClick={onCancel}
                         >
                             Cancel
@@ -65,12 +88,12 @@ export const CommentInput: React.FC<CommentInputProps> = ({
                     )}
                     <Button
                         size="sm"
-                        className="h-7 px-3 text-xs font-medium gap-1.5"
+                        className="h-7 gap-1.5 px-2.5 text-xs"
                         onClick={handleSubmit}
                         disabled={!value.trim()}
                     >
-                        <SendHorizontal className="h-3.5 w-3.5" />
-                        Send
+                        {!compact && <SendHorizontal className="h-3.5 w-3.5" />}
+                        {submitLabel}
                     </Button>
                 </div>
             </div>

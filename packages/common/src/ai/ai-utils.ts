@@ -1,72 +1,69 @@
 /**
- * @deprecated Legacy AI utilities. Use KnowledgeChatClient or createKnowledgeModel() instead.
- * These functions are kept for backward compatibility only.
+ * Legacy AI text helpers, now backed by the Knowledge Agent backend.
+ *
+ * Historically these called DeepSeek directly from the browser with an API key,
+ * which never worked in production (no key / CORS). They now delegate to the
+ * same backend SSE proxy the chat uses ({@link KnowledgeChatClient}), so every
+ * caller (AI Tools, /ai block, /aicomplete, plugin uploader) shares one working
+ * path. Prefer {@link streamKnowledgeText} / {@link KnowledgeChatClient} in new code.
  */
 
-import { streamText } from "ai"
-import { createDeepSeek } from "@ai-sdk/deepseek"
-import { getEnvVariable } from '../utils/env-utils';
+import { KnowledgeChatClient, createChatRequest } from "./chat-client"
+import type { ChatMessage } from "./chat-client/types"
 
-export const deepseek = createDeepSeek({
-    apiKey: getEnvVariable("DEEPSERACH_API_KEY")
-})
-
+export interface StreamTextOptions {
+    /** Abort the underlying request. */
+    signal?: AbortSignal
+    /** Override the model (defaults to the backend's default, deepseek-chat). */
+    model?: string
+    /** Optional system instruction prepended before the user prompt. */
+    system?: string
+}
 
 /**
- * @deprecated Use KnowledgeChatClient or createKnowledgeModel() instead.
+ * Stream plain text from the Knowledge Agent backend.
+ *
+ * Returns `{ textStream }` — an async iterable of text deltas — so it is a
+ * drop-in for the old `generateText().textStream` consumption pattern. Only
+ * `text-delta` events are surfaced; reasoning/tool/annotation events are
+ * ignored and an `error` event rejects the stream.
  */
-const generateText = (prompt: string, tools?: any): any => {
-    console.log("generateText", prompt);
-    return streamText({
-        model: deepseek("deepseek-chat"),
-        prompt: prompt,
-        tools: tools,
+export function streamKnowledgeText(
+    prompt: string,
+    options: StreamTextOptions = {}
+): { textStream: AsyncGenerator<string> } {
+    const client = new KnowledgeChatClient()
+
+    const messages: ChatMessage[] | undefined = options.system
+        ? [{ role: "system", content: options.system }]
+        : undefined
+
+    const request = createChatRequest(prompt, {
+        model: options.model,
+        signal: options.signal,
+        messages,
     })
+
+    async function* textStream(): AsyncGenerator<string> {
+        for await (const event of client.chat(request)) {
+            if (event.type === "text-delta") {
+                yield event.content
+            } else if (event.type === "error") {
+                throw new Error(event.error)
+            }
+        }
+    }
+
+    return { textStream: textStream() }
+}
+
+/**
+ * @deprecated Use {@link streamKnowledgeText} or {@link KnowledgeChatClient}.
+ * Thin backwards-compatible wrapper kept for existing callers; the second
+ * argument (previously `tools`) is ignored.
+ */
+const generateText = (prompt: string, _tools?: any): { textStream: AsyncGenerator<string> } => {
+    return streamKnowledgeText(prompt)
 }
 
 export { generateText }
-
-
-const API_BASE = '/api/knowledge-agent/api/v1';
-
-/**
- * @deprecated Use KnowledgeChatClient from chat-client/ instead.
- * This was a simple provider that didn't support all spec features.
- */
-export function createKnowledgeProvider(): any {
-    return {
-        // Chat model factory
-        chat(modelId: string = 'deepseek-chat') {
-            return {
-                modelId,
-                provider: 'knowledge',
-                // This tells AI SDK to use Data Stream Protocol v2
-                streamProtocol: 'data' as const,
-
-                async doStream(options: any) {
-                    const { messages, tools, abortSignal } = options;
-
-                    const response = await fetch(`${API_BASE}/chat/completions`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            model: modelId,
-                            messages: messages.map((m: any) => ({
-                                role: m.role,
-                                content: m.content,
-                            })),
-                            tools: tools,
-                            streamProtocol: 'data', // Use Data Stream Protocol v2
-                        }),
-                        signal: abortSignal,
-                    });
-
-                    return {
-                        stream: response.body!,
-                        rawCall: { rawPrompt: messages, rawSettings: {} },
-                    };
-                },
-            };
-        },
-    };
-}

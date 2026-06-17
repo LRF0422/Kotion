@@ -1,6 +1,4 @@
 import { generateText } from "@kn/common";
-import { Editor } from "@kn/editor";
-import { TextSelection } from "@kn/editor";
 import { logger } from "@kn/common";
 
 // API Configuration - should be moved to environment variables
@@ -14,55 +12,6 @@ interface AIImageResponse {
         message: string;
         code?: string;
     };
-}
-
-/**
- * Generate AI text based on editor selection
- * @param editor - The editor instance
- * @param tips - Prompt/instruction for AI generation
- */
-
-export const aiText = async (editor: Editor, tips: string): Promise<void> => {
-    const selection = editor.state.selection;
-    let result = ""
-
-    if (!(selection instanceof TextSelection)) {
-        logger.warn('AI text generation requires text selection');
-        return;
-    }
-
-    try {
-        let from = editor.state.selection.from
-        let text = editor.state.doc.textBetween(selection.from, selection.to)
-
-        if (!text.trim()) {
-            logger.warn('Cannot generate AI text from empty selection');
-            return;
-        }
-
-        const { textStream } = generateText(`${tips}，内容如下：${text}，请不要说多余的话`)
-        editor.commands.deleteSelection()
-        editor.commands.toggleLoadingDecoration(from, "")
-
-        for await (const part of textStream) {
-            result += part
-            editor.chain().focus().toggleLoadingDecoration(from, result).run()
-        }
-
-        editor.chain().focus()
-            .insertContentAt(from, result, {
-                applyInputRules: false,
-                applyPasteRules: false,
-                parseOptions: {
-                    preserveWhitespace: false
-                }
-            }).run();
-        editor.chain().removeLoadingDecoration().run()
-    } catch (error) {
-        logger.error('Failed to generate AI text:', error);
-        editor.chain().removeLoadingDecoration().run();
-        throw error;
-    }
 }
 
 /**

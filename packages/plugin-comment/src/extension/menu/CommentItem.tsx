@@ -1,170 +1,156 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import type { CommentItem as CommentItemType } from "../types";
-import { Avatar, AvatarFallback, AvatarImage, Button, Textarea } from "@kn/ui";
-import { CornerDownRight, Trash2 } from "@kn/icon";
+import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
+import { CornerDownRight, Pencil, Trash2 } from "@kn/icon";
+import { CommentInput } from "./CommentInput";
+import { formatFullTime, formatTime, getAvatarColor, getInitial } from "./utils";
 
 export interface CommentItemProps {
     comment: CommentItemType;
-    onReply?: (parentId: string, content: string) => void;
-    onDelete?: (commentId: string) => void;
+    /** Current viewer's id; gates edit/delete to the comment's author. */
+    currentUserId?: string;
     isReply?: boolean;
-    isLast?: boolean;
+    /** When this reply targets another reply, the parent author's name. */
+    replyToName?: string;
     readOnly?: boolean;
+    /** Start a reply to this comment (parented at the thread level). */
+    onStartReply?: (commentId: string) => void;
+    onEdit?: (commentId: string, content: string) => void;
+    onDelete?: (commentId: string) => void;
 }
+
+const actionBtn =
+    "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
 
 export const CommentItem: React.FC<CommentItemProps> = ({
     comment,
-    onReply,
-    onDelete,
+    currentUserId,
     isReply = false,
-    isLast = false,
+    replyToName,
     readOnly = false,
+    onStartReply,
+    onEdit,
+    onDelete,
 }) => {
-    const [isReplying, setIsReplying] = useState(false);
-    const [replyText, setReplyText] = useState('');
+    const [isEditing, setIsEditing] = useState(false);
+    const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-    const formattedDate = useMemo(() => {
-        const date = new Date(comment.createdAt);
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
+    const isOwn = !!currentUserId && comment.user.id === currentUserId;
+    const canModify = !readOnly && isOwn;
 
-        if (diffMins < 1) return 'just now';
-        if (diffMins < 60) return `${diffMins}m`;
-        if (diffHours < 24) return `${diffHours}h`;
-        if (diffDays < 30) return `${diffDays}d`;
-
-        return date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-        });
-    }, [comment.createdAt]);
-
-    const handleReplySubmit = () => {
-        if (replyText.trim() && onReply) {
-            onReply(comment.id, replyText.trim());
-            setReplyText('');
-            setIsReplying(false);
-        }
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            handleReplySubmit();
-        }
-        if (e.key === 'Escape') {
-            setReplyText('');
-            setIsReplying(false);
-        }
-    };
-
-    // Generate a consistent color based on user name
-    const avatarColors = [
-        'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400',
-        'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400',
-        'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400',
-        'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400',
-        'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
-        'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/40 dark:text-cyan-400',
-    ];
-    const colorIndex = comment.user.name.charCodeAt(0) % avatarColors.length;
-    const avatarColorClass = avatarColors[colorIndex];
+    if (isEditing) {
+        return (
+            <div className={`py-1.5 ${isReply ? "ml-6" : ""}`}>
+                <CommentInput
+                    compact
+                    autoFocus
+                    initialValue={comment.content}
+                    placeholder="Edit comment..."
+                    submitLabel="Save"
+                    onCancel={() => setIsEditing(false)}
+                    onSubmit={(content) => {
+                        onEdit?.(comment.id, content);
+                        setIsEditing(false);
+                    }}
+                />
+            </div>
+        );
+    }
 
     return (
-        <div className={`group ${isReply ? 'ml-6 relative before:absolute before:left-[-14px] before:top-0 before:bottom-0 before:w-px before:bg-border/50' : ''}`}>
-            <div className={`flex gap-2 py-1.5 ${isReply ? 'relative' : ''}`}>
-                {/* Avatar with consistent user color */}
-                <Avatar className={`h-6 w-6 flex-shrink-0 ring-1 ring-background shadow-sm`}>
+        <div
+            className={`group/item relative py-2 ${isReply ? "ml-6 before:absolute before:left-[-14px] before:top-0 before:bottom-0 before:w-px before:bg-border" : ""}`}
+        >
+            <div className="flex items-start gap-2.5">
+                <Avatar className="h-6 w-6 flex-shrink-0">
                     <AvatarImage src={comment.user.avatar} alt={comment.user.name} />
-                    <AvatarFallback className={`text-[9px] font-semibold ${avatarColorClass}`}>
-                        {comment.user.name.charAt(0).toUpperCase()}
+                    <AvatarFallback className={`text-[10px] font-medium ${getAvatarColor(comment.user.name)}`}>
+                        {getInitial(comment.user.name)}
                     </AvatarFallback>
                 </Avatar>
 
-                {/* Content area */}
-                <div className="flex-1 min-w-0">
-                    {/* Header: name + timestamp */}
-                    <div className="flex items-center gap-2">
-                        <span className="font-semibold text-[13px] text-foreground truncate">
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-medium text-foreground">
                             {comment.user.name}
                         </span>
-                        <span className="text-[11px] text-muted-foreground/60 flex-shrink-0 tabular-nums">
-                            {formattedDate}
+                        <span
+                            className="flex-shrink-0 text-xs tabular-nums text-muted-foreground"
+                            title={formatFullTime(comment.createdAt)}
+                        >
+                            {formatTime(comment.createdAt)}
                         </span>
+                        {comment.updatedAt && (
+                            <span
+                                className="flex-shrink-0 text-xs text-muted-foreground/70"
+                                title={`Edited ${formatFullTime(comment.updatedAt)}`}
+                            >
+                                · edited
+                            </span>
+                        )}
                     </div>
 
-                    {/* Comment content */}
-                    <p className="text-[12px] leading-[1.4] text-foreground/85 whitespace-pre-wrap break-words">
+                    {replyToName && (
+                        <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                            <CornerDownRight className="h-3 w-3 flex-shrink-0" />
+                            <span className="truncate">
+                                Reply to <span className="text-foreground/80">{replyToName}</span>
+                            </span>
+                        </div>
+                    )}
+
+                    <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-normal text-foreground/90">
                         {comment.content}
                     </p>
 
-                    {/* Action buttons - show on hover */}
-                    {!isReplying && !readOnly && (
-                        <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                                onClick={() => setIsReplying(true)}
+                    {!readOnly && !confirmingDelete && (
+                        <div className="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover/item:opacity-100">
+                            {onStartReply && (
+                                <button className={actionBtn} onClick={() => onStartReply(comment.id)}>
+                                    <CornerDownRight className="h-3 w-3" />
+                                    Reply
+                                </button>
+                            )}
+                            {canModify && onEdit && (
+                                <button className={actionBtn} onClick={() => setIsEditing(true)}>
+                                    <Pencil className="h-3 w-3" />
+                                    Edit
+                                </button>
+                            )}
+                            {canModify && onDelete && (
+                                <button
+                                    className="inline-flex items-center rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                    onClick={() => setConfirmingDelete(true)}
+                                    aria-label="Delete comment"
+                                >
+                                    <Trash2 className="h-3 w-3" />
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {confirmingDelete && (
+                        <div className="mt-1.5 flex items-center gap-2 text-xs">
+                            <span className="text-muted-foreground">Delete this comment?</span>
+                            <button
+                                className="font-medium text-destructive hover:underline"
+                                onClick={() => {
+                                    onDelete?.(comment.id);
+                                    setConfirmingDelete(false);
+                                }}
                             >
-                                <CornerDownRight className="h-3 w-3 mr-1" />
-                                Reply
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                onClick={() => onDelete?.(comment.id)}
+                                Delete
+                            </button>
+                            <button
+                                className="text-muted-foreground hover:text-foreground"
+                                onClick={() => setConfirmingDelete(false)}
                             >
-                                <Trash2 className="h-3 w-3" />
-                            </Button>
+                                Cancel
+                            </button>
                         </div>
                     )}
                 </div>
             </div>
-
-            {/* Inline reply input */}
-            {isReplying && !readOnly && (
-                <div className="ml-8 mb-1.5 animate-in slide-in-from-top-1 duration-200">
-                    <div className="relative">
-                        <Textarea
-                            spellCheck={false}
-                            placeholder="Write a reply..."
-                            value={replyText}
-                            onChange={(e) => setReplyText(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            className="min-h-[48px] resize-none text-[12px] border-border/60 bg-muted/30 focus:bg-background focus:border-border transition-colors"
-                            autoFocus
-                        />
-                    </div>
-                    <div className="flex items-center justify-end gap-1.5 mt-1.5">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-3 text-xs font-medium"
-                            onClick={() => { setReplyText(''); setIsReplying(false); }}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            size="sm"
-                            className="h-7 px-3 text-xs font-medium"
-                            onClick={handleReplySubmit}
-                            disabled={!replyText.trim()}
-                        >
-                            Reply
-                        </Button>
-                    </div>
-                </div>
-            )}
-
-            {/* Divider for non-last items */}
-            {!isLast && !isReplying && (
-                <div className="border-b border-border/40 ml-8" />
-            )}
         </div>
     );
 };

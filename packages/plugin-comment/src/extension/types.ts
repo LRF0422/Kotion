@@ -9,6 +9,8 @@ export interface CommentItem {
     user: CommentUser;
     content: string;
     createdAt: number;
+    /** Set when the comment has been edited after creation. */
+    updatedAt?: number;
     parentId: string | null;
 }
 
@@ -26,6 +28,7 @@ declare module '@kn/editor' {
             addComment: (content: string) => ReturnType;
             setFirstComment: (threadId: string, content: string) => ReturnType;
             replyComment: (threadId: string, content: string, parentId?: string) => ReturnType;
+            editComment: (threadId: string, commentId: string, content: string) => ReturnType;
             deleteComment: (threadId: string, commentId: string) => ReturnType;
             resolveThread: (threadId: string) => ReturnType;
         }
