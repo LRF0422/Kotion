@@ -15,6 +15,7 @@ import { NotionToC } from "./NotionToC";
 import { cn, useIsMobile, useTheme } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
 import { MobileEditorToolbar } from "./MobileEditorToolbar";
+import { PageHeader } from "./PageHeader";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
 import { loadContentProgressive, isLargeDocument } from "./loadContentProgressive";
@@ -318,6 +319,7 @@ export const CollaborationEditor = forwardRef<
           )}
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
             <StyledEditor>
+              {contentReady && <PageHeader editor={editor} />}
               <EditorContent editor={editor} />
               {contentReady && (extensionWrappers as ExtensionWrapper[])
                 .filter((w) => w.pageFooter)

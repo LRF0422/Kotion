@@ -32,9 +32,20 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean, externalEx
 			Paragraph,
 			UndoRedo,
 			Placeholder.configure({
-				placeholder: ({ node }) => {
+				placeholder: ({ editor, node, pos }) => {
+					// 标题文字（title 内的 heading）始终由 title 扩展自带的 decoration
+					// 显示 “Untitled”（不受光标位置限制、合成安全）。通用 Placeholder
+					// 在光标位于标题时也会装饰该 heading，这里返回相同文案以避免两个
+					// decoration 的 data-placeholder 冲突；正文 heading 占位符保持不变。
 					if (node.type.name === 'title') {
-						return 'What\'s the title?'
+						return 'Untitled'
+					}
+					try {
+						if (editor.state.doc.resolve(pos).parent?.type.name === 'title') {
+							return 'Untitled'
+						}
+					} catch {
+						// ignore — fall through to default placeholder
 					}
 					if (node.type.name === 'codeBlock') {
 						return ''

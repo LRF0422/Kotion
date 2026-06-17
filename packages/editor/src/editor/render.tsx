@@ -17,6 +17,7 @@ import light, { dark } from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
 import { cn, useTheme } from "@kn/ui";
 import { NotionToC } from "./NotionToC";
+import { PageHeader } from "./PageHeader";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
 import { loadContentProgressive, isLargeDocument } from "./loadContentProgressive";
@@ -173,6 +174,7 @@ export const EditorRender = forwardRef<
         <div className={cn("flex flex-col z-30 relative", width, props.className)}>
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
             <StyledEditor>
+              {contentReady && <PageHeader editor={editor} />}
               <EditorContent editor={editor} />
               {!contentReady && (
                 <div className="space-y-3 p-4">
