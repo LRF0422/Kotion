@@ -1,137 +1,316 @@
-import { NodeViewProps } from "@kn/editor";
-import { NodeViewContent, NodeViewWrapper } from "@kn/editor";
-import React, { useCallback, useMemo } from "react";
-import { aiGeneration } from "./utils";
-import { Textarea } from "@kn/ui";
-import { useToggle } from "ahooks";
-import { Label } from "@kn/ui";
-import { Loader2, Sparkles, X } from "@kn/icon";
-import { useTranslation } from "@kn/common";
-import { logger } from "@kn/common";
+import { NodeViewProps, NodeViewContent, NodeViewWrapper } from "@kn/editor";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Button, Streamdown, toast } from "@kn/ui";
+import { Check, Copy, Loader2, RotateCcw, Send, Sparkles, Square, X } from "@kn/icon";
+import {
+    streamKnowledgeChat,
+    parseMarkdownToNodes,
+    useTranslation,
+    type ChatMessage,
+} from "@kn/common";
 
-// Constants
-const MIN_PROMPT_LENGTH = 1;
+const AI_BLOCK_SYSTEM =
+    "你是写作助手。请根据用户的要求生成内容，使用 Markdown 格式，直接输出正文，不要解释或寒暄。";
+
+const QUICK_PROMPTS: Array<{ zh: string; en: string; seed: string }> = [
+    { zh: "写大纲", en: "Outline", seed: "帮我写一份关于以下主题的大纲：" },
+    { zh: "头脑风暴", en: "Brainstorm", seed: "围绕以下主题头脑风暴一些想法：" },
+    { zh: "写一段", en: "Draft", seed: "帮我写一段关于以下内容的文字：" },
+];
+
+const INSERT_OPTS = {
+    applyInputRules: false,
+    applyPasteRules: false,
+    parseOptions: { preserveWhitespace: false },
+} as const;
 
 /**
- * AI text generation node view component
- * Allows users to generate text content using AI based on custom prompts
+ * Notion-style AI block.
+ *
+ * Flow: write a prompt → stream a preview → accept (replace the block with the
+ * generated content), discard, regenerate, or refine with a follow-up. Nothing
+ * is committed to the document until the user accepts.
  */
-
-
 export const AiView: React.FC<NodeViewProps> = (props) => {
-    const [loading, { toggle }] = useToggle(false);
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
+    const lang = i18n.language?.startsWith("zh") ? "zh" : "en";
+    const editable = props.editor.isEditable;
 
-    // Check if prompt is valid for generation
-    const isPromptValid = useMemo(() => {
-        return props.node.attrs.prompt && props.node.attrs.prompt.trim().length >= MIN_PROMPT_LENGTH;
-    }, [props.node.attrs.prompt]);
+    const [prompt, setPrompt] = useState<string>(props.node.attrs.prompt || "");
+    const [refineText, setRefineText] = useState("");
+    const [result, setResult] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    // Handle AI text generation
-    const handleGenerate = useCallback(async () => {
-        if (!isPromptValid) {
-            logger.warn('Cannot generate AI text: prompt is empty');
-            return;
-        }
+    const abortRef = useRef<AbortController | null>(null);
+    const messagesRef = useRef<ChatMessage[]>([]);
+    const promptRef = useRef<HTMLTextAreaElement>(null);
 
-        toggle();
-        let buff = "";
+    useEffect(() => () => abortRef.current?.abort(), []);
 
+    const stop = useCallback(() => {
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setIsLoading(false);
+    }, []);
+
+    const runMessages = useCallback(async (messages: ChatMessage[]) => {
+        messagesRef.current = messages;
+        abortRef.current?.abort();
+        const ac = new AbortController();
+        abortRef.current = ac;
+
+        setIsLoading(true);
+        setError(null);
+        setResult("");
+
+        let acc = "";
         try {
-            // Clear existing content
-            props.editor.commands.deleteRange({
-                from: props.getPos()! + 1,
-                to: props.getPos()! + props.node.nodeSize - 1
-            });
-
-            // Generate AI text with streaming
-            const result = await aiGeneration(props.node.attrs.prompt, (res) => {
-                buff += res;
-                props.editor.chain().focus().toggleLoadingDecoration(props.getPos()! + 1, buff).run();
-            });
-
-            // Insert generated content
-            props.editor.chain().focus()
-                .insertContentAt(props.getPos()! + 1, result, {
-                    applyInputRules: false,
-                    applyPasteRules: false,
-                    parseOptions: {
-                        preserveWhitespace: false
-                    }
-                }).run();
-
-            // Update generation date
-            props.updateAttributes({
-                ...props.node.attrs,
-                generateDate: new Date().toLocaleString()
-            });
-        } catch (error) {
-            logger.error('Failed to generate AI text:', error);
+            const { textStream } = streamKnowledgeChat(messages, { signal: ac.signal });
+            for await (const part of textStream) {
+                if (ac.signal.aborted) break;
+                acc += part;
+                setResult(acc);
+            }
+        } catch (err: any) {
+            if (!ac.signal.aborted) {
+                setError(err?.message || t("ai.generateFailed", { defaultValue: "生成失败，请重试" }));
+            }
         } finally {
-            props.editor.chain().removeLoadingDecoration().run();
-            toggle();
+            if (abortRef.current === ac) abortRef.current = null;
+            setIsLoading(false);
         }
-    }, [isPromptValid, props, toggle]);
+    }, [t]);
 
-    // Handle prompt change
-    const handlePromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        props.updateAttributes({
-            ...props.node.attrs,
-            prompt: e.target.value
-        });
-    }, [props]);
+    const generate = useCallback((p: string) => {
+        const text = p.trim();
+        if (!text || isLoading) return;
+        props.updateAttributes({ ...props.node.attrs, prompt: text });
+        runMessages([
+            { role: "system", content: AI_BLOCK_SYSTEM },
+            { role: "user", content: text },
+        ]);
+    }, [isLoading, props, runMessages]);
 
-    // Handle keyboard shortcut in textarea: Enter to generate, Shift+Enter for newline
-    const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+    const refine = useCallback(() => {
+        const text = refineText.trim();
+        if (!text || isLoading || !result.trim()) return;
+        setRefineText("");
+        runMessages([
+            ...messagesRef.current,
+            { role: "assistant", content: result },
+            { role: "user", content: text },
+        ]);
+    }, [refineText, isLoading, result, runMessages]);
+
+    const accept = useCallback(() => {
+        if (!result.trim()) return;
+        const pos = props.getPos();
+        if (typeof pos !== "number") return;
+
+        let content: any = result.trim();
+        try {
+            const nodes = parseMarkdownToNodes(result.trim());
+            if (Array.isArray(nodes) && nodes.length > 0) content = nodes;
+        } catch {
+            /* fall back to plain text */
+        }
+
+        // Replace the whole AI block with the generated content.
+        props.editor
+            .chain()
+            .focus()
+            .insertContentAt({ from: pos, to: pos + props.node.nodeSize }, content, INSERT_OPTS)
+            .run();
+    }, [result, props]);
+
+    const copy = useCallback(() => {
+        if (!result.trim()) return;
+        navigator.clipboard?.writeText(result).then(
+            () => toast.success(t("ai.copied", { defaultValue: "已复制" })),
+            () => toast.error(t("ai.copyFailed", { defaultValue: "复制失败" }))
+        );
+    }, [result, t]);
+
+    const onPromptKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            handleGenerate();
+            generate(prompt);
         }
-    }, [handleGenerate]);
+        e.stopPropagation();
+    };
 
-    return <NodeViewWrapper as="div" className="relative flex flex-col w-full border border-dashed p-2 pt-9 rounded-sm text-popover-foreground group/ai">
-        <div className="absolute right-0 top-0 border border-t-0 border-l border-r-0 border-b rounded-sm text-sm text-gray-500 p-1 flex items-center gap-2">
-            <span className="flex items-center gap-1">
-                {loading ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                    <Sparkles className="h-3.5 w-3.5" />
+    const onRefineKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            refine();
+        }
+        e.stopPropagation();
+    };
+
+    const hasResult = !isLoading && !!result.trim() && !error;
+
+    // Read-only / non-editable: don't show the authoring UI.
+    if (!editable) {
+        return (
+            <NodeViewWrapper as="div">
+                <div className="hidden">
+                    <NodeViewContent />
+                </div>
+            </NodeViewWrapper>
+        );
+    }
+
+    return (
+        <NodeViewWrapper as="div" className="my-2">
+            <div className="overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm">
+                {/* Header */}
+                <div className="flex items-center justify-between border-b px-3 py-2">
+                    <div className="flex items-center gap-1.5 text-sm font-medium">
+                        {isLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-purple-500" />
+                        ) : (
+                            <Sparkles className="h-4 w-4 text-purple-500" />
+                        )}
+                        {t("ai.title", { defaultValue: "AI 写作" })}
+                    </div>
+                    <button
+                        onClick={props.deleteNode}
+                        disabled={isLoading}
+                        title={t("ai.delete", { defaultValue: "删除" })}
+                        className="rounded-sm p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                {/* Preview (streaming / result / error) */}
+                {(isLoading || result || error) && (
+                    <div className="max-h-[360px] overflow-y-auto border-b px-3 py-2.5">
+                        {error ? (
+                            <div className="flex items-start gap-2 text-sm text-destructive">
+                                <X className="mt-0.5 h-4 w-4 shrink-0" />
+                                <span className="break-words">{error}</span>
+                            </div>
+                        ) : result ? (
+                            <div className="text-sm leading-normal text-foreground/90">
+                                <Streamdown isAnimating={isLoading}>{result}</Streamdown>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                {t("ai.generating", { defaultValue: "生成中…" })}
+                            </div>
+                        )}
+                    </div>
                 )}
-                {t('ai.title')}
-            </span>
-            {props.node.attrs.generateDate && (
-                <span>
-                    ，{t('ai.generateDate', { defaultValue: '生成日期' })}：
-                    {props.node.attrs.generateDate}
-                </span>
-            )}
-            {props.editor.isEditable && (
-                <button
-                    className="ml-1 p-0.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover/ai:opacity-100"
-                    onClick={props.deleteNode}
-                    disabled={loading}
-                    title={t('ai.delete', { defaultValue: '删除' })}
-                >
-                    <X className="h-3.5 w-3.5" />
-                </button>
-            )}
-        </div>
-        <NodeViewContent className="w-full prose-p:mt-0 leading-1 min-h-[40px]" />
-        {props.editor.isEditable && (
-            <div className="flex flex-col gap-1 items-start">
-                <Label htmlFor="prompt" className="font-bold flex gap-1 items-center text-xs text-muted-foreground">
-                    <Sparkles className="h-3 w-3" /> {t('ai.promptLabel', { defaultValue: '提示语' })}
-                    <span className="font-normal text-muted-foreground/60 ml-1">⏎</span>
-                </Label>
-                <Textarea
-                    id="prompt"
-                    className="h-[60px] text-sm resize-none"
-                    defaultValue={props.node.attrs.prompt}
-                    onChange={handlePromptChange}
-                    onKeyDown={handleKeyDown}
-                    placeholder={t('ai.promptPlaceholder', { defaultValue: '请输入AI生成的提示语...' })}
-                />
+
+                {/* Input row: initial prompt, or follow-up refine after a result */}
+                {!isLoading && (
+                    <div className="px-3 py-2">
+                        <div className="flex items-end gap-2">
+                            <textarea
+                                ref={promptRef}
+                                value={hasResult ? refineText : prompt}
+                                onChange={(e) =>
+                                    hasResult ? setRefineText(e.target.value) : setPrompt(e.target.value)
+                                }
+                                onKeyDown={hasResult ? onRefineKeyDown : onPromptKeyDown}
+                                rows={2}
+                                autoFocus
+                                placeholder={
+                                    hasResult
+                                        ? t("ai.refinePlaceholder", { defaultValue: "继续修改，如：再正式一点…" })
+                                        : t("ai.blockPlaceholder", { defaultValue: "让 AI 帮你写点什么…" })
+                                }
+                                className="flex-1 resize-none rounded-md border border-input bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring"
+                            />
+                            <Button
+                                size="icon"
+                                className="h-7 w-7 shrink-0"
+                                disabled={hasResult ? !refineText.trim() : !prompt.trim()}
+                                onClick={() => (hasResult ? refine() : generate(prompt))}
+                                aria-label="Send"
+                            >
+                                <Send className="h-3.5 w-3.5" />
+                            </Button>
+                        </div>
+
+                        {/* Quick prompts (idle only) */}
+                        {!hasResult && !result && (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                {QUICK_PROMPTS.map((q) => (
+                                    <button
+                                        key={q.zh}
+                                        onClick={() => {
+                                            setPrompt(q.seed);
+                                            setTimeout(() => promptRef.current?.focus(), 0);
+                                        }}
+                                        className="rounded-full border bg-muted/40 px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                                    >
+                                        {q[lang]}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Footer actions */}
+                <div className="flex items-center justify-between gap-2 border-t bg-muted/30 px-3 py-2">
+                    <div className="flex items-center gap-0.5">
+                        {hasResult && (
+                            <button
+                                title={t("ai.copy", { defaultValue: "复制" })}
+                                onClick={copy}
+                                className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                            >
+                                <Copy className="h-3.5 w-3.5" />
+                            </button>
+                        )}
+                        {(hasResult || error) && messagesRef.current.length > 0 && (
+                            <button
+                                title={t("ai.regenerate", { defaultValue: "重新生成" })}
+                                onClick={() => runMessages(messagesRef.current)}
+                                className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                            >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                        {isLoading ? (
+                            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2.5 text-xs" onClick={stop}>
+                                <Square className="h-3 w-3" />
+                                {t("ai.stop", { defaultValue: "停止" })}
+                            </Button>
+                        ) : (
+                            <>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2.5 text-xs text-muted-foreground"
+                                    onClick={props.deleteNode}
+                                >
+                                    {t("ai.discard", { defaultValue: "丢弃" })}
+                                </Button>
+                                {hasResult && (
+                                    <Button size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={accept}>
+                                        <Check className="h-3 w-3" />
+                                        {t("ai.accept", { defaultValue: "完成" })}
+                                    </Button>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </div>
             </div>
-        )}
-    </NodeViewWrapper>
-}
+
+            {/* Hidden content slot to satisfy the node's `block+` schema. */}
+            <div className="hidden">
+                <NodeViewContent />
+            </div>
+        </NodeViewWrapper>
+    );
+};

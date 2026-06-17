@@ -16,7 +16,7 @@ import { Decoration, DecorationSet, EditorView } from '@tiptap/pm/view';
 import { createColumnsFromNodes } from '../columns/utilities';
 import { Node } from '@tiptap/pm/model';
 import React from 'react';
-import { BlockMenu, BlockMenuItem } from './block-menu';
+import { DragHandle, BlockMenuItem } from './block-menu';
 import { Editor } from '@tiptap/core';
 
 const DragablePluginKey = new PMPluginKey('dragable');
@@ -46,7 +46,6 @@ export const Dragable = Extension.create<DragableStorage>({
 
     let editorView: EditorView;
     let containerDOM: HTMLElement;
-    let dragHandleDOM: HTMLElement;
     let blockMenuMountDOM: HTMLElement;
     let activeNode: ActiveNode | null;
     let activeSelection: Selection | null;
@@ -64,17 +63,13 @@ export const Dragable = Extension.create<DragableStorage>({
       const container = document.createElement('div');
       container.className = 'drag-handle-container';
 
+      // Single React mount that renders the whole handle UI (the "+" add button
+      // and the draggable grip). Drag events are wired up in React via callbacks.
       const menuMount = document.createElement('div');
       menuMount.className = 'block-menu-mount';
       container.appendChild(menuMount);
 
-      const handle = document.createElement('div');
-      handle.className = 'dragable';
-      handle.draggable = true;
-      handle.setAttribute('data-drag-handle', 'true');
-      container.appendChild(handle);
-
-      return { container, menuMount, handle };
+      return { container, menuMount };
     };
 
     const showDragHandleDOM = () => {
@@ -104,10 +99,13 @@ export const Dragable = Extension.create<DragableStorage>({
       const currentItems = (editor.storage?.dragable as DragableStorage)?.blockMenuItems || []
 
       blockMenuRoot.render(
-        React.createElement(BlockMenu, {
+        React.createElement(DragHandle, {
           editor: editor as Editor,
           activeNode,
           items: currentItems,
+          onGripMouseDown: handleMouseDown,
+          onGripMouseUp: handleMouseUp,
+          onGripDragStart: handleDragStart,
         })
       )
     }
@@ -273,16 +271,12 @@ export const Dragable = Extension.create<DragableStorage>({
             const result = createDragHandleContainer();
             containerDOM = result.container;
             blockMenuMountDOM = result.menuMount;
-            dragHandleDOM = result.handle;
 
-            // Hover show/hide on container only (not individual children)
+            // Hover show/hide on container only (not individual children).
+            // The grip's drag/click events are wired up inside the React
+            // DragHandle component (see renderBlockMenu).
             containerDOM.addEventListener('mouseenter', handleMouseEnter);
             containerDOM.addEventListener('mouseleave', handleMouseLeave);
-
-            // Drag/click events stay on the drag handle
-            dragHandleDOM.addEventListener('mousedown', handleMouseDown);
-            dragHandleDOM.addEventListener('mouseup', handleMouseUp);
-            dragHandleDOM.addEventListener('dragstart', handleDragStart);
 
             view.dom.parentNode?.appendChild(containerDOM);
             view.dom.parentElement?.setAttribute('style', "position: relative;");
@@ -298,9 +292,6 @@ export const Dragable = Extension.create<DragableStorage>({
               clearTimeout(mouseleaveTimer);
               clearTimeout(columnDropTimer);
               unmountBlockMenu();
-              dragHandleDOM.removeEventListener('mousedown', handleMouseDown);
-              dragHandleDOM.removeEventListener('mouseup', handleMouseUp);
-              dragHandleDOM.removeEventListener('dragstart', handleDragStart);
               containerDOM.removeEventListener('mouseenter', handleMouseEnter);
               containerDOM.removeEventListener('mouseleave', handleMouseLeave);
               containerDOM.remove();
@@ -570,6 +561,9 @@ export const Dragable = Extension.create<DragableStorage>({
             },
             mousemove: (view, event) => {
               if (!view.editable || !containerDOM) return false;
+
+              // Keep the handle pinned to its block while the block menu is open.
+              if (containerDOM.getAttribute('data-menu-open') === 'true') return false;
 
               const coords = { left: event.clientX, top: event.clientY };
               const pos = view.posAtCoords(coords);

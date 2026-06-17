@@ -191,7 +191,7 @@ const MessageItem = memo<{
                             <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
                         )}
                     </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5 break-words">
                         {message.content}
                     </p>
                     <div className="flex items-center gap-2 mt-1.5">
@@ -434,7 +434,10 @@ export const MessageBox: React.FC<MessageBoxProps> = ({
                         ))}
                     </TabsList>
 
-                    <ScrollArea className="h-[320px]">
+                    {/* Force the Radix viewport's inner wrapper from display:table
+                        to block so long unbreakable URLs wrap within the panel
+                        width instead of overflowing horizontally. */}
+                    <ScrollArea className="h-[320px] [&_[data-radix-scroll-area-viewport]>div]:!block">
                         <TabsContent value={activeTab} className="m-0 p-2" forceMount>
                             {filteredMessages.length > 0 ? (
                                 <div className="space-y-1">

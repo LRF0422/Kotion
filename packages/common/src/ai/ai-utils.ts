@@ -8,7 +8,7 @@
  * path. Prefer {@link streamKnowledgeText} / {@link KnowledgeChatClient} in new code.
  */
 
-import { KnowledgeChatClient, createChatRequest } from "./chat-client"
+import { KnowledgeChatClient } from "./chat-client"
 import type { ChatMessage } from "./chat-client/types"
 
 export interface StreamTextOptions {
@@ -21,28 +21,23 @@ export interface StreamTextOptions {
 }
 
 /**
- * Stream plain text from the Knowledge Agent backend.
- *
- * Returns `{ textStream }` — an async iterable of text deltas — so it is a
- * drop-in for the old `generateText().textStream` consumption pattern. Only
- * `text-delta` events are surfaced; reasoning/tool/annotation events are
- * ignored and an `error` event rejects the stream.
+ * Stream plain text from the Knowledge Agent backend given a full message list
+ * (enables multi-turn / refine flows). Returns `{ textStream }` — an async
+ * iterable of text deltas. Only `text-delta` events are surfaced; an `error`
+ * event rejects the stream.
  */
-export function streamKnowledgeText(
-    prompt: string,
-    options: StreamTextOptions = {}
+export function streamKnowledgeChat(
+    messages: ChatMessage[],
+    options: Omit<StreamTextOptions, "system"> = {}
 ): { textStream: AsyncGenerator<string> } {
     const client = new KnowledgeChatClient()
 
-    const messages: ChatMessage[] | undefined = options.system
-        ? [{ role: "system", content: options.system }]
-        : undefined
-
-    const request = createChatRequest(prompt, {
+    const request = {
         model: options.model,
-        signal: options.signal,
         messages,
-    })
+        stream: true as const,
+        signal: options.signal,
+    }
 
     async function* textStream(): AsyncGenerator<string> {
         for await (const event of client.chat(request)) {
@@ -55,6 +50,22 @@ export function streamKnowledgeText(
     }
 
     return { textStream: textStream() }
+}
+
+/**
+ * Stream plain text from a single prompt (optionally with a system instruction).
+ * Thin wrapper over {@link streamKnowledgeChat}; drop-in for the old
+ * `generateText().textStream` consumption pattern.
+ */
+export function streamKnowledgeText(
+    prompt: string,
+    options: StreamTextOptions = {}
+): { textStream: AsyncGenerator<string> } {
+    const messages: ChatMessage[] = []
+    if (options.system) messages.push({ role: "system", content: options.system })
+    messages.push({ role: "user", content: prompt })
+
+    return streamKnowledgeChat(messages, { model: options.model, signal: options.signal })
 }
 
 /**

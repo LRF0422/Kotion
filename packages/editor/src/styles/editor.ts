@@ -646,7 +646,17 @@ export const StyledEditor = styled.div.attrs({
     }
   }
 
-  .block-menu-trigger {
+  /* React mount renders the "+" button and the grip; lay them out in a row
+     so they sit side by side instead of stacking. */
+  .block-menu-mount {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .block-menu-trigger,
+  .block-add-trigger {
     width: 18px;
     height: 18px;
     display: flex;
@@ -666,6 +676,23 @@ export const StyledEditor = styled.div.attrs({
       background: hsl(var(--muted));
       color: hsl(var(--foreground));
     }
+  }
+
+  /* Wrapper around the grip; hosts the invisible dropdown anchor so the block
+     menu positions next to the grip without intercepting drag/click events. */
+  .dragable-wrapper {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .dragable-anchor {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
   }
 
   [data-drag-handle] {

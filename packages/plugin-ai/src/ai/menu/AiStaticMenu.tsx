@@ -3,6 +3,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
@@ -10,15 +11,17 @@ import {
     toast,
 } from "@kn/ui";
 import { Editor } from "@kn/editor";
-import { ChevronDown, Sparkles } from "@kn/icon";
+import { ChevronDown, Sparkles, Wand2 } from "@kn/icon";
 import React, { useCallback } from "react";
 import { useTranslation } from "@kn/common";
 import {
-    AI_TOOL_ACTIONS,
+    AI_PRIMARY_ACTIONS,
+    AI_MORE_GROUP,
+    AI_MORE_ICONS,
     AI_TONE_GROUP,
     AI_TRANSLATE_GROUP,
     AI_TOOLS_EVENT,
-    type AiActionDef,
+    CUSTOM_ACTION_KEY,
     type AiToolsRunDetail,
 } from "../ai-actions";
 
@@ -26,15 +29,15 @@ import {
  * AI Tools bubble-menu dropdown.
  *
  * Pure UI: on selection it snapshots the current text range and dispatches an
- * `ai-tools-run` event. The streaming + preview + accept/discard flow lives in
- * the AiToolsPanel (a floatingUI), so this component never touches the network.
+ * `ai-tools-run` event (with a preset action key, or the custom sentinel). The
+ * streaming + preview + accept/discard flow lives in the AiToolsPanel.
  */
 export const AiStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
     const { t, i18n } = useTranslation();
     const lang = i18n.language?.startsWith("zh") ? "zh" : "en";
 
-    const runAction = useCallback(
-        (action: AiActionDef) => {
+    const dispatchRun = useCallback(
+        (actionKey: string) => {
             const { from, to } = editor.state.selection;
             const text = editor.state.doc.textBetween(from, to, " ");
 
@@ -51,7 +54,7 @@ export const AiStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
                 /* keep default */
             }
 
-            const detail: AiToolsRunDetail = { actionKey: action.key, from, to, text, rect };
+            const detail: AiToolsRunDetail = { actionKey, from, to, text, rect };
             editor.view.dom.dispatchEvent(new CustomEvent(AI_TOOLS_EVENT, { detail }));
         },
         [editor, t]
@@ -71,17 +74,51 @@ export const AiStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-[200px]" align="start">
-                {/* Top-level actions */}
-                {AI_TOOL_ACTIONS.map((item) => (
+                {/* Free-form instruction */}
+                <DropdownMenuItem
+                    className="flex flex-row gap-2 items-center text-purple-500 focus:text-purple-500"
+                    onSelect={() => dispatchRun(CUSTOM_ACTION_KEY)}
+                >
+                    <Wand2 className="h-4 w-4" />
+                    {t("ai.custom", { defaultValue: "自定义指令…" })}
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                {/* Primary actions */}
+                {AI_PRIMARY_ACTIONS.map((item) => (
                     <DropdownMenuItem
                         key={item.key}
                         className="flex flex-row gap-2 items-center"
-                        onSelect={() => runAction(item)}
+                        onSelect={() => dispatchRun(item.key)}
                     >
                         <item.icon className="h-4 w-4" />
                         {item.label[lang]}
                     </DropdownMenuItem>
                 ))}
+
+                {/* More actions submenu */}
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="flex flex-row gap-2 items-center">
+                        <AI_MORE_GROUP.icon className="h-4 w-4" />
+                        {AI_MORE_GROUP.label[lang]}
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-[180px]">
+                        {AI_MORE_GROUP.items.map((item) => {
+                            const Icon = AI_MORE_ICONS[item.key];
+                            return (
+                                <DropdownMenuItem
+                                    key={item.key}
+                                    className="flex flex-row gap-2 items-center"
+                                    onSelect={() => dispatchRun(item.key)}
+                                >
+                                    {Icon ? <Icon className="h-4 w-4" /> : null}
+                                    {item.label[lang]}
+                                </DropdownMenuItem>
+                            );
+                        })}
+                    </DropdownMenuSubContent>
+                </DropdownMenuSub>
 
                 {/* Tone submenu */}
                 <DropdownMenuSub>
@@ -91,7 +128,7 @@ export const AiStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="w-[180px]">
                         {AI_TONE_GROUP.items.map((item) => (
-                            <DropdownMenuItem key={item.key} onSelect={() => runAction(item)}>
+                            <DropdownMenuItem key={item.key} onSelect={() => dispatchRun(item.key)}>
                                 {item.label[lang]}
                             </DropdownMenuItem>
                         ))}
@@ -106,7 +143,7 @@ export const AiStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="w-[180px]">
                         {AI_TRANSLATE_GROUP.items.map((item) => (
-                            <DropdownMenuItem key={item.key} onSelect={() => runAction(item)}>
+                            <DropdownMenuItem key={item.key} onSelect={() => dispatchRun(item.key)}>
                                 {item.label[lang]}
                             </DropdownMenuItem>
                         ))}

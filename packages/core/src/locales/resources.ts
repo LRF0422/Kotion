@@ -42,7 +42,8 @@ export const resources = {
                 "actions": {
                     "markAsRead": "标记为已读",
                     "markAllRead": "全部已读",
-                    "delete": "删除"
+                    "delete": "删除",
+                    "clickToOpen": "点击打开"
                 },
                 "time": {
                     "justNow": "刚刚",
@@ -460,7 +461,8 @@ export const resources = {
                 "actions": {
                     "markAsRead": "Mark as read",
                     "markAllRead": "Mark all read",
-                    "delete": "Delete"
+                    "delete": "Delete",
+                    "clickToOpen": "Click to open"
                 },
                 "time": {
                     "justNow": "Just now",
