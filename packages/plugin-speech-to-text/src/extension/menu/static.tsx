@@ -1,25 +1,29 @@
 import { Toggle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
 import { Editor } from "@kn/editor";
+import { useTranslation } from "@kn/common";
 import React from "react";
 import { Mic, MicOff } from "@kn/icon";
 import { cn } from "@kn/ui";
-import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
-import { dispatchSpeechPanelOpen } from "./SpeechToTextPanel";
+import { useSpeechController } from "../../speech-controller";
+import { startSpeech } from "./RecordingToast";
+
+/** Map the app UI language to a speech-recognition locale (BCP-47). */
+function resolveLang(uiLang?: string): string {
+    if (uiLang && uiLang.toLowerCase().startsWith('zh')) return 'zh-CN';
+    return 'en-US';
+}
 
 export const SpeechToTextStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
-    const {
-        isRecording,
-        isSupported,
-        startRecording,
-        stopRecording,
-    } = useSpeechRecognition({ editor });
+    const { t, i18n } = useTranslation();
+    const { status, isSupported, stop } = useSpeechController();
+
+    const isActive = status !== 'idle';
 
     const handleToggle = () => {
-        if (isRecording) {
-            stopRecording();
+        if (isActive) {
+            stop();
         } else {
-            // Open the panel instead of directly starting recording
-            dispatchSpeechPanelOpen();
+            startSpeech(editor, resolveLang(i18n?.language));
         }
     };
 
@@ -33,20 +37,20 @@ export const SpeechToTextStaticMenu: React.FC<{ editor: Editor }> = ({ editor })
                 <TooltipTrigger asChild>
                     <Toggle
                         size="sm"
-                        pressed={isRecording}
+                        pressed={isActive}
                         onClick={handleToggle}
                         aria-label="Toggle speech to text"
-                        className={cn(isRecording && "text-destructive")}
+                        className={cn(isActive && "text-destructive")}
                         data-speech-to-text-trigger
                     >
-                        {isRecording
-                            ? <MicOff className={cn("h-4 w-4", isRecording && "animate-pulse")} />
+                        {isActive
+                            ? <MicOff className="h-4 w-4 animate-pulse" />
                             : <Mic className="h-4 w-4" />
                         }
                     </Toggle>
                 </TooltipTrigger>
                 <TooltipContent>
-                    <p>{isRecording ? 'Stop recording' : 'Speech to text'}</p>
+                    <p>{isActive ? t('speechToText.stop') : t('speechToText.start')}</p>
                 </TooltipContent>
             </Tooltip>
         </TooltipProvider>

@@ -1,7 +1,6 @@
 import React from "react";
 import { ExtensionWrapper } from "@kn/common";
 import { Extension } from "@kn/editor";
-import { SpeechToTextPanel } from "./menu/SpeechToTextPanel";
 import { SpeechToTextStaticMenu } from "./menu/static";
 import { MeetingMinutesNode, MeetingTabNotesNode, MeetingTabTranscriptNode } from "./meeting-minutes/meeting-minutes";
 import { FileAudio } from "@kn/icon";
@@ -17,7 +16,6 @@ export const SpeechToTextExtension: ExtensionWrapper = {
         group: 'block',
         menu: SpeechToTextStaticMenu,
     },
-    floatingUI: SpeechToTextPanel,
     slashConfig: [
         {
             icon: <FileAudio className="h-4 w-4" />,

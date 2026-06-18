@@ -13,8 +13,13 @@ export const speechToText = new SpeechToTextPlugin({
         zh: {
             translation: {
                 speechToText: {
-                    start: '开始录音',
-                    stop: '停止录音',
+                    title: '语音转文字',
+                    start: '语音输入',
+                    stop: '停止',
+                    pause: '暂停',
+                    resume: '继续',
+                    listening: '正在聆听…',
+                    paused: '已暂停',
                     notSupported: '此浏览器不支持语音识别，请使用 Chrome 或 Edge。',
                 },
                 meetingMinutes: {
@@ -89,8 +94,13 @@ export const speechToText = new SpeechToTextPlugin({
         en: {
             translation: {
                 speechToText: {
+                    title: 'Speech to text',
                     start: 'Speech to text',
-                    stop: 'Stop recording',
+                    stop: 'Stop',
+                    pause: 'Pause',
+                    resume: 'Resume',
+                    listening: 'Listening…',
+                    paused: 'Paused',
                     notSupported: 'Speech recognition is not supported in this browser. Please use Chrome or Edge.',
                 },
                 meetingMinutes: {
@@ -167,3 +177,5 @@ export const speechToText = new SpeechToTextPlugin({
 
 export { SpeechToTextExtension } from './extension';
 export { useSpeechRecognition } from './hooks/useSpeechRecognition';
+export { speechController, useSpeechController } from './speech-controller';
+export { startSpeech } from './extension/menu/RecordingToast';
