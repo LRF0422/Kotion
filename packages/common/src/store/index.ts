@@ -74,6 +74,7 @@ const store = createStore((state: GlobalState = {
         action.type === "PAGE_TAB_OPEN" ||
         action.type === "PAGE_TAB_ACTIVATE" ||
         action.type === "PAGE_TAB_CLOSE" ||
+        action.type === "PAGE_TAB_CLOSE_MANY" ||
         action.type === "PAGE_TAB_UPDATE_META"
     ) {
         const { spaceId } = action.payload
@@ -103,6 +104,21 @@ const store = createStore((state: GlobalState = {
             let activePageId = bucket.activePageId
             if (activePageId === pageId) {
                 // Closing the active tab: fall back to the most-recently-active remaining tab.
+                const next = openPages.reduce<{ pageId: string; lastActiveAt: number } | undefined>(
+                    (best, p) => (!best || p.lastActiveAt > best.lastActiveAt ? p : best),
+                    undefined
+                )
+                activePageId = next?.pageId
+            }
+            nextBucket = { ...bucket, openPages, activePageId }
+        } else if (action.type === "PAGE_TAB_CLOSE_MANY") {
+            const { pageIds } = action.payload
+            const closing = new Set<string>(pageIds ?? [])
+            const openPages = bucket.openPages.filter(p => !closing.has(p.pageId))
+            let activePageId = bucket.activePageId
+            if (activePageId && closing.has(activePageId)) {
+                // Closing the active tab among the batch: fall back to the
+                // most-recently-active remaining tab.
                 const next = openPages.reduce<{ pageId: string; lastActiveAt: number } | undefined>(
                     (best, p) => (!best || p.lastActiveAt > best.lastActiveAt ? p : best),
                     undefined

@@ -120,13 +120,18 @@ export function createFillHandler(
     fields: FieldConfig[],
     data: RecordData[]
 ): (event: { columnKey: string; sourceRow: RecordData; targetRow: RecordData }) => RecordData {
+    // Build lookups once per handler creation instead of scanning `fields` and
+    // `data` on every fill event.
+    const fieldMap = new Map(fields.map(f => [f.id, f]));
+    const indexById = new Map(data.map((r, i) => [r.id, i]));
+
     return (event) => {
         const { columnKey, sourceRow, targetRow } = event;
-        const field = fields.find(f => f.id === columnKey);
+        const field = fieldMap.get(columnKey);
         if (!field) return targetRow;
 
-        const sourceIdx = data.findIndex(r => r.id === sourceRow.id);
-        const targetIdx = data.findIndex(r => r.id === targetRow.id);
+        const sourceIdx = indexById.get(sourceRow.id) ?? -1;
+        const targetIdx = indexById.get(targetRow.id) ?? -1;
 
         if (sourceIdx === -1 || targetIdx === -1) return targetRow;
 

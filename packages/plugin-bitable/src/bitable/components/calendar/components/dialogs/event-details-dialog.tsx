@@ -1,14 +1,15 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { Calendar, Clock, Text, User } from "@kn/icon";
+import { Calendar, Clock, Text, User, Trash2 } from "@kn/icon";
 
 import { Button } from "@kn/ui";
 import { EditEventDialog } from "../../components/dialogs/edit-event-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@kn/ui";
+import { useCalendar } from "../../contexts/calendar-context";
 
 import type { IEvent } from "../../interfaces";
-import React from "react";
+import React, { useState } from "react";
 
 interface IProps {
   event: IEvent;
@@ -18,10 +19,17 @@ interface IProps {
 export function EventDetailsDialog({ event, children }: IProps) {
   const startDate = parseISO(event.startDate);
   const endDate = parseISO(event.endDate);
+  const { onEventDelete } = useCalendar();
+  const [open, setOpen] = useState(false);
+
+  const handleDelete = () => {
+    onEventDelete?.(event.id);
+    setOpen(false);
+  };
 
   return (
     <>
-      <Dialog>
+      <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>{children}</DialogTrigger>
 
         <DialogContent>
@@ -63,7 +71,13 @@ export function EventDetailsDialog({ event, children }: IProps) {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
+            {onEventDelete && (
+              <Button type="button" variant="ghost" className="mr-auto text-red-600 hover:text-red-700 dark:text-red-400" onClick={handleDelete}>
+                <Trash2 className="size-4 mr-1.5" />
+                Delete
+              </Button>
+            )}
             <EditEventDialog event={event}>
               <Button type="button" variant="outline">
                 Edit

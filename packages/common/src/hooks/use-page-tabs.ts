@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useEffect } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { GlobalState } from "../store/GlobalState"
 
@@ -16,6 +16,16 @@ interface PersistedTabs {
     openPages: { pageId: string; title?: string; icon?: string }[]
     activePageId?: string
 }
+
+/**
+ * Spaces hydrated from localStorage during this page-load, shared across all
+ * `usePageTabs` instances. Must NOT be per-instance: `usePageTabs` is mounted by
+ * several components (e.g. `PageRouteSync` remounts on every navigation), and a
+ * per-instance guard would let a freshly-mounted instance re-hydrate stale tabs
+ * from cache right after the user cleared them ("close all"). Module scope means
+ * we hydrate exactly once per space per page-load; a refresh resets it.
+ */
+const hydratedSpaces = new Set<string>()
 
 /**
  * Manages the set of open page tabs for a single space.
@@ -48,16 +58,22 @@ export const usePageTabs = (spaceId?: string) => {
         dispatch({ type: "PAGE_TAB_CLOSE", payload: { spaceId, pageId } })
     }, [dispatch, spaceId])
 
+    const closeTabs = useCallback((pageIds: string[]) => {
+        if (!spaceId || pageIds.length === 0) return
+        dispatch({ type: "PAGE_TAB_CLOSE_MANY", payload: { spaceId, pageIds } })
+    }, [dispatch, spaceId])
+
     const updateMeta = useCallback((pageId: string, meta: { title?: string; icon?: string }) => {
         if (!spaceId || !pageId) return
         dispatch({ type: "PAGE_TAB_UPDATE_META", payload: { spaceId, pageId, ...meta } })
     }, [dispatch, spaceId])
 
-    // Hydrate once per space from localStorage when Redux has no tabs yet.
-    const hydratedRef = useRef<string | undefined>(undefined)
+    // Hydrate once per space per page-load from localStorage when Redux has no
+    // tabs yet. The guard is module-level (see `hydratedSpaces`) so a remounting
+    // instance can't re-hydrate stale tabs after the user cleared them.
     useEffect(() => {
-        if (!spaceId || hydratedRef.current === spaceId) return
-        hydratedRef.current = spaceId
+        if (!spaceId || hydratedSpaces.has(spaceId)) return
+        hydratedSpaces.add(spaceId)
         if ((bucket?.openPages?.length ?? 0) > 0) return
         try {
             const raw = localStorage.getItem(storageKey(spaceId))
@@ -85,5 +101,5 @@ export const usePageTabs = (spaceId?: string) => {
         }
     }, [spaceId, openPages, activePageId])
 
-    return { openPages, activePageId, openTab, activateTab, closeTab, updateMeta }
+    return { openPages, activePageId, openTab, activateTab, closeTab, closeTabs, updateMeta }
 }

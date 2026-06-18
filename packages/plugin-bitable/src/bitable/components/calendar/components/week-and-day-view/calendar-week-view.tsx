@@ -102,7 +102,7 @@ export function CalendarWeekView({ singleDayEvents, multiDayEvents }: IProps) {
                               {/* <AddEventDialog startDate={day} startTime={{ hour, minute: 15 }}> */}
                               <div className="absolute inset-x-0 top-[24px] h-[24px] cursor-pointer transition-colors hover:bg-accent"
                                 onClick={() => {
-                                  setCurrentSelectedDate(selectedDate)
+                                  setCurrentSelectedDate(day)
                                   setCurrentSelectTime({ hour, minute: 15 })
                                   ref.current && ref.current.open()
                                 }}

@@ -67,9 +67,24 @@ export const LineChartComponent: React.FC<LineChartComponentProps> = ({
         ? ['count']
         : chartConfig.yAxisFields.map(y => y.fieldId);
 
+    // 趋势线：对第一条系列做线性回归，注入 __trend 字段
+    const primaryKey = dataKeys[0];
+    const plotData = React.useMemo(() => {
+        if (!chartConfig.showTrendLine || !primaryKey || chartData.length < 2) return chartData;
+        const ys = chartData.map(d => Number(d[primaryKey]) || 0);
+        const n = ys.length;
+        let sx = 0, sy = 0, sxy = 0, sxx = 0;
+        ys.forEach((y, x) => { sx += x; sy += y; sxy += x * y; sxx += x * x; });
+        const denom = n * sxx - sx * sx;
+        if (denom === 0) return chartData;
+        const b = (n * sxy - sx * sy) / denom;
+        const a = (sy - b * sx) / n;
+        return chartData.map((d, x) => ({ ...d, __trend: Math.round((a + b * x) * 100) / 100 }));
+    }, [chartData, chartConfig.showTrendLine, primaryKey]);
+
     return (
         <ChartContainer config={rechartsConfig} className={`h-[${height}px] w-full`} style={{ height }}>
-            <LineChart data={chartData} accessibilityLayer>
+            <LineChart data={plotData} accessibilityLayer>
                 {chartConfig.showGrid && <CartesianGrid strokeDasharray="3 3" />}
                 <XAxis
                     dataKey={chartConfig.xAxisField}
@@ -97,6 +112,18 @@ export const LineChartComponent: React.FC<LineChartComponentProps> = ({
                         )}
                     </Line>
                 ))}
+                {chartConfig.showTrendLine && primaryKey && (
+                    <Line
+                        type="linear"
+                        dataKey="__trend"
+                        stroke="#9ca3af"
+                        strokeWidth={2}
+                        strokeDasharray="6 4"
+                        dot={false}
+                        isAnimationActive={false}
+                        legendType="none"
+                    />
+                )}
                 {chartConfig.showLegend && (
                     <ChartLegend content={<ChartLegendContent />} />
                 )}

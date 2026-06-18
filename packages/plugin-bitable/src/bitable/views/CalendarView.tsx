@@ -232,6 +232,16 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
         onUpdateRecord(recordId, updates);
     };
 
+    // 处理删除事件
+    const handleEventDelete = (eventId: number) => {
+        const event = events.find(e => e.id === eventId);
+        if (!event || !event.recordId) {
+            console.error('Event not found or missing recordId:', eventId);
+            return;
+        }
+        onDeleteRecord([event.recordId]);
+    };
+
     // 处理配置变更
     const handleConfigChange = (key: keyof typeof config, value: string) => {
         const newConfig = {
@@ -361,6 +371,7 @@ export const CalendarView: React.FC<CalendarViewProps> = (props) => {
                 events={events}
                 onEventAdd={handleEventAdd}
                 onEventUpdate={handleEventUpdate}
+                onEventDelete={handleEventDelete}
                 editor={editor}
                 toggleSettings={() => setShowSettings(!showSettings)}
             >

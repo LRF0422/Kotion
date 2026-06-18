@@ -1,20 +1,39 @@
 import React, { useEffect, useRef } from "react"
-import { cn } from "@kn/ui"
+import {
+    cn,
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuSeparator,
+    ContextMenuTrigger,
+} from "@kn/ui"
 import { FileText, X } from "@kn/icon"
-import type { PageTab } from "@kn/common"
+import { useTranslation, type PageTab } from "@kn/common"
 
 export interface TabBarProps {
     tabs: PageTab[]
     activePageId?: string
     onActivate: (pageId: string) => void
     onClose: (pageId: string) => void
+    onCloseOthers?: (pageId: string) => void
+    onCloseRight?: (pageId: string) => void
+    onCloseAll?: () => void
 }
 
 /**
  * Presentational tab strip for open pages. Navigation/keep-alive logic lives in
  * the parent (`TabbedEditorArea`); this just renders and emits intent.
  */
-export const TabBar: React.FC<TabBarProps> = ({ tabs, activePageId, onActivate, onClose }) => {
+export const TabBar: React.FC<TabBarProps> = ({
+    tabs,
+    activePageId,
+    onActivate,
+    onClose,
+    onCloseOthers,
+    onCloseRight,
+    onCloseAll,
+}) => {
+    const { t } = useTranslation()
     const activeRef = useRef<HTMLDivElement>(null)
 
     // Keep the active tab in view when it changes (overflow scroll).
@@ -26,48 +45,81 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activePageId, onActivate, 
 
     return (
         <div className="relative z-40 flex h-9 w-full flex-shrink-0 items-stretch overflow-x-auto border-b bg-muted/30 no-scrollbar">
-            {tabs.map((tab) => {
+            {tabs.map((tab, index) => {
                 const isActive = tab.pageId === activePageId
+                const hasOthers = tabs.length > 1
+                const hasRight = index < tabs.length - 1
                 return (
-                    <div
-                        key={tab.pageId}
-                        ref={isActive ? activeRef : undefined}
-                        role="tab"
-                        aria-selected={isActive}
-                        onClick={() => onActivate(tab.pageId)}
-                        className={cn(
-                            "group flex max-w-[180px] flex-shrink-0 cursor-pointer select-none items-center gap-1.5 border-r px-3 text-sm transition-colors",
-                            isActive
-                                ? "bg-background text-foreground"
-                                : "bg-muted/30 text-muted-foreground hover:bg-muted/60"
-                        )}
-                        title={tab.title}
-                    >
-                        {tab.icon ? (
-                            <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center text-[13px] leading-none">
-                                {tab.icon}
-                            </span>
-                        ) : (
-                            <FileText className="h-3.5 w-3.5 flex-shrink-0 opacity-70" />
-                        )}
-                        <span className="truncate">
-                            {tab.title || "Untitled"}
-                        </span>
-                        <button
-                            type="button"
-                            aria-label="Close tab"
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                onClose(tab.pageId)
-                            }}
-                            className={cn(
-                                "ml-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded transition-opacity hover:bg-muted-foreground/20",
-                                isActive ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover:opacity-60 group-hover:hover:opacity-100"
-                            )}
-                        >
-                            <X className="h-3 w-3" />
-                        </button>
-                    </div>
+                    <ContextMenu key={tab.pageId}>
+                        <ContextMenuTrigger asChild>
+                            <div
+                                ref={isActive ? activeRef : undefined}
+                                role="tab"
+                                aria-selected={isActive}
+                                onClick={() => onActivate(tab.pageId)}
+                                onAuxClick={(e) => {
+                                    // Middle-click closes the tab (browser convention).
+                                    if (e.button === 1) {
+                                        e.preventDefault()
+                                        onClose(tab.pageId)
+                                    }
+                                }}
+                                className={cn(
+                                    "group flex max-w-[180px] flex-shrink-0 cursor-pointer select-none items-center gap-1.5 border-r px-3 text-sm transition-colors",
+                                    isActive
+                                        ? "bg-background text-foreground"
+                                        : "bg-muted/30 text-muted-foreground hover:bg-muted/60"
+                                )}
+                                title={tab.title}
+                            >
+                                {tab.icon ? (
+                                    <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center text-[13px] leading-none">
+                                        {tab.icon}
+                                    </span>
+                                ) : (
+                                    <FileText className="h-3.5 w-3.5 flex-shrink-0 opacity-70" />
+                                )}
+                                <span className="truncate">
+                                    {tab.title || t("pageEditor.tabBar.untitled")}
+                                </span>
+                                <button
+                                    type="button"
+                                    aria-label="Close tab"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        onClose(tab.pageId)
+                                    }}
+                                    className={cn(
+                                        "ml-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded transition-opacity hover:bg-muted-foreground/20",
+                                        isActive ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover:opacity-60 group-hover:hover:opacity-100"
+                                    )}
+                                >
+                                    <X className="h-3 w-3" />
+                                </button>
+                            </div>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent className="w-44">
+                            <ContextMenuItem onSelect={() => onClose(tab.pageId)}>
+                                {t("pageEditor.tabBar.close")}
+                            </ContextMenuItem>
+                            <ContextMenuItem
+                                disabled={!hasOthers}
+                                onSelect={() => onCloseOthers?.(tab.pageId)}
+                            >
+                                {t("pageEditor.tabBar.closeOthers")}
+                            </ContextMenuItem>
+                            <ContextMenuItem
+                                disabled={!hasRight}
+                                onSelect={() => onCloseRight?.(tab.pageId)}
+                            >
+                                {t("pageEditor.tabBar.closeRight")}
+                            </ContextMenuItem>
+                            <ContextMenuSeparator />
+                            <ContextMenuItem onSelect={() => onCloseAll?.()}>
+                                {t("pageEditor.tabBar.closeAll")}
+                            </ContextMenuItem>
+                        </ContextMenuContent>
+                    </ContextMenu>
                 )
             })}
         </div>

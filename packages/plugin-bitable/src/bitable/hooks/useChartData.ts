@@ -1,7 +1,27 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "@kn/common";
+import { parseISO, format, isValid } from "date-fns";
 import { FieldConfig, RecordData, ViewConfig, ChartType, FieldType, YAxisConfig } from "../../types";
 import { COLOR_SCHEMES } from "../../utils/chartColors";
+
+/** 把日期值归并到指定时间粒度的桶标签（可按字典序排序，且语义清晰）。 */
+function bucketDate(value: any, granularity: NonNullable<ViewConfig['chartConfig']>['dateAggregation']): string {
+    let d: Date;
+    try {
+        d = typeof value === 'string' ? parseISO(value) : new Date(value);
+    } catch {
+        return String(value);
+    }
+    if (!isValid(d)) return String(value);
+    switch (granularity) {
+        case 'day': return format(d, 'yyyy-MM-dd');
+        case 'week': return format(d, "yyyy-'W'II");
+        case 'month': return format(d, 'yyyy-MM');
+        case 'quarter': return format(d, "yyyy-'Q'Q");
+        case 'year': return format(d, 'yyyy');
+        default: return String(value);
+    }
+}
 
 interface ChartDataResult {
     chartData: Record<string, any>[];
@@ -20,6 +40,7 @@ interface ChartDataResult {
     currentColors: string[];
     formatYAxisTick: (value: number) => string;
     yAxisProps: any;
+    chartError: { type: 'missing-x' | 'missing-y'; fieldId?: string } | null;
 }
 
 export const useChartData = (
@@ -60,6 +81,37 @@ export const useChartData = (
             tickFormatter: 'number' as const,
         },
     };
+
+    // 字段 id → 字段的查找表，避免在数据/配置循环里反复 fields.find（O(字段数)）
+    const fieldMap = useMemo(() => new Map(fields.map(f => [f.id, f])), [fields]);
+
+    // X 轴取值：日期字段且配置了时间粒度时归并到桶，否则取原始字符串
+    const getXValue = useCallback((record: RecordData): string => {
+        const raw = record[chartConfig.xAxisField];
+        const xField = fieldMap.get(chartConfig.xAxisField);
+        if (xField?.type === FieldType.DATE && chartConfig.dateAggregation && raw) {
+            return bucketDate(raw, chartConfig.dateAggregation);
+        }
+        return String(raw ?? 'N/A');
+    }, [fieldMap, chartConfig.xAxisField, chartConfig.dateAggregation]);
+
+    // 日期粒度聚合时，默认按桶标签升序（时间顺序）
+    const isDateBucketed = useMemo(() => {
+        const xField = fieldMap.get(chartConfig.xAxisField);
+        return xField?.type === FieldType.DATE && !!chartConfig.dateAggregation;
+    }, [fieldMap, chartConfig.xAxisField, chartConfig.dateAggregation]);
+
+    // 配置引用的字段被删除时给出明确错误，避免图表静默空白
+    const chartError = useMemo<ChartDataResult['chartError']>(() => {
+        if (chartConfig.xAxisField && !fieldMap.has(chartConfig.xAxisField)) {
+            return { type: 'missing-x' };
+        }
+        const missingY = chartConfig.yAxisFields.find(y => !fieldMap.has(y.fieldId));
+        if (missingY) {
+            return { type: 'missing-y', fieldId: missingY.fieldId };
+        }
+        return null;
+    }, [chartConfig.xAxisField, chartConfig.yAxisFields, fieldMap]);
 
     // 获取当前配色方案的颜色
     const currentColors = useMemo(() => {
@@ -116,7 +168,7 @@ export const useChartData = (
             return [];
         }
 
-        const xField = fields.find(f => f.id === chartConfig.xAxisField);
+        const xField = fieldMap.get(chartConfig.xAxisField);
         if (!xField) return [];
 
         let processedData: Record<string, any>[] = [];
@@ -126,7 +178,7 @@ export const useChartData = (
             const groupedData: Record<string, Record<string, number[]>> = {};
 
             data.forEach(record => {
-                const xValue = String(record[chartConfig.xAxisField] || 'N/A');
+                const xValue = getXValue(record);
                 if (!groupedData[xValue]) {
                     groupedData[xValue] = {};
                 }
@@ -171,7 +223,7 @@ export const useChartData = (
             // 计数聚合
             const countMap: Record<string, number> = {};
             data.forEach(record => {
-                const xValue = String(record[chartConfig.xAxisField] || 'N/A');
+                const xValue = getXValue(record);
                 countMap[xValue] = (countMap[xValue] || 0) + 1;
             });
 
@@ -183,7 +235,7 @@ export const useChartData = (
             // 直接映射数据
             processedData = data.map(record => {
                 const result: Record<string, any> = {
-                    [chartConfig.xAxisField]: record[chartConfig.xAxisField] || 'N/A',
+                    [chartConfig.xAxisField]: getXValue(record),
                 };
                 chartConfig.yAxisFields.forEach(yConfig => {
                     result[yConfig.fieldId] = Number(record[yConfig.fieldId]) || 0;
@@ -202,6 +254,11 @@ export const useChartData = (
                     return chartConfig.sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
                 });
             }
+        } else if (isDateBucketed) {
+            // 未指定排序时，日期粒度按时间顺序（桶标签字典序即时间序）
+            processedData.sort((a, b) =>
+                String(a[chartConfig.xAxisField]).localeCompare(String(b[chartConfig.xAxisField]))
+            );
         }
 
         // 应用 Top N 筛选
@@ -210,7 +267,7 @@ export const useChartData = (
         }
 
         return processedData;
-    }, [data, chartConfig, fields]);
+    }, [data, chartConfig, fieldMap, getXValue, isDateBucketed]);
 
     // 饼图数据（需要特殊处理）
     const pieChartData = useMemo(() => {
@@ -256,7 +313,7 @@ export const useChartData = (
         }
 
         return result;
-    }, [data, chartConfig, currentColors]);
+    }, [data, chartConfig, currentColors, getXValue]);
 
     // 雷达图数据
     const radarChartData = useMemo(() => {
@@ -269,12 +326,12 @@ export const useChartData = (
                 subject: item[chartConfig.xAxisField],
             };
             chartConfig.yAxisFields.forEach(yConfig => {
-                const field = fields.find(f => f.id === yConfig.fieldId);
+                const field = fieldMap.get(yConfig.fieldId);
                 result[field?.title || yConfig.fieldId] = item[yConfig.fieldId];
             });
             return result;
         });
-    }, [chartData, chartConfig, fields]);
+    }, [chartData, chartConfig, fieldMap]);
 
     // 散点图数据
     const scatterChartData = useMemo(() => {
@@ -301,12 +358,23 @@ export const useChartData = (
             return [];
         }
 
-        return chartData.slice(0, 8).map((item, index) => ({
+        const limit = chartConfig.topN && chartConfig.topN > 0 ? chartConfig.topN : 8;
+        const items = chartData.map((item, index) => ({
             name: item[chartConfig.xAxisField],
             value: chartConfig.aggregation === 'count' ? item.count : item[yFieldId],
             fill: currentColors[index % currentColors.length],
         }));
-    }, [chartData, chartConfig, currentColors]);
+
+        if (items.length <= limit) return items;
+
+        // 超出上限的部分合并为“其他”，而不是直接丢弃
+        const top = items.slice(0, limit);
+        const othersValue = items.slice(limit).reduce((sum, it) => sum + (Number(it.value) || 0), 0);
+        if (othersValue > 0) {
+            top.push({ name: t('bitable.chartView.others'), value: othersValue, fill: '#9ca3af' });
+        }
+        return top;
+    }, [chartData, chartConfig, currentColors, t]);
 
     // 生成图表配置
     const rechartsConfig = useMemo(() => {
@@ -319,7 +387,7 @@ export const useChartData = (
             };
         } else {
             chartConfig.yAxisFields.forEach((yConfig, index) => {
-                const field = fields.find(f => f.id === yConfig.fieldId);
+                const field = fieldMap.get(yConfig.fieldId);
                 config[yConfig.fieldId] = {
                     label: yConfig.label || field?.title || yConfig.fieldId,
                     color: yConfig.color || currentColors[index % currentColors.length],
@@ -342,7 +410,7 @@ export const useChartData = (
         // 雷达图配置
         if (chartConfig.chartType === ChartType.RADAR) {
             chartConfig.yAxisFields.forEach((yConfig, index) => {
-                const field = fields.find(f => f.id === yConfig.fieldId);
+                const field = fieldMap.get(yConfig.fieldId);
                 const label = field?.title || yConfig.fieldId;
                 config[label] = {
                     label,
@@ -352,7 +420,7 @@ export const useChartData = (
         }
 
         return config;
-    }, [chartConfig, fields, pieChartData, currentColors]);
+    }, [chartConfig, fieldMap, pieChartData, currentColors]);
 
     // Y轴刻度格式化函数
     const formatYAxisTick = (value: number) => {
@@ -403,6 +471,7 @@ export const useChartData = (
         rechartsConfig,
         currentColors,
         formatYAxisTick,
-        yAxisProps
+        yAxisProps,
+        chartError
     };
 };

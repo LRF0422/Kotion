@@ -274,6 +274,15 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "link-copied": "链接已复制到剪贴板",
           "link-copy-error": "复制链接失败"
         },
+        "pageEditor": {
+          "tabBar": {
+            "close": "关闭",
+            "closeOthers": "关闭其他",
+            "closeRight": "关闭右侧标签",
+            "closeAll": "关闭全部",
+            "untitled": "无标题"
+          }
+        },
       }
     },
     "en": {
@@ -478,6 +487,15 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "private": "Private",
           "link-copied": "Link copied to clipboard",
           "link-copy-error": "Failed to copy link"
+        },
+        "pageEditor": {
+          "tabBar": {
+            "close": "Close",
+            "closeOthers": "Close Others",
+            "closeRight": "Close Tabs to the Right",
+            "closeAll": "Close All",
+            "untitled": "Untitled"
+          }
         },
       }
     },

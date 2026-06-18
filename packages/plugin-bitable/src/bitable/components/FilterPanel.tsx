@@ -93,7 +93,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ view, fields, onUpdate
                 <Button
                     size="icon"
                     variant="ghost"
-                    className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent relative"
+                    className="h-9 w-9 md:h-8 md:w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent relative"
                 >
                     <Filter className="h-4 w-4" />
                     {hasFilters && (
@@ -101,7 +101,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ view, fields, onUpdate
                     )}
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-96 p-3" align="start">
+            <PopoverContent className="w-[calc(100vw-1.5rem)] max-w-96 p-3" align="start">
                 <div className="space-y-2">
                     <div className="text-sm font-medium">Filter</div>
                     {filters.map(filter => {

@@ -15,11 +15,12 @@ interface IProps {
   cell: ICalendarCell;
   events: IEvent[];
   eventPositions: Record<string, number>;
+  onCreate?: (date: Date) => void;
 }
 
 const MAX_VISIBLE_EVENTS = 3;
 
-export function DayCell({ cell, events, eventPositions }: IProps) {
+export function DayCell({ cell, events, eventPositions, onCreate }: IProps) {
   const { day, currentMonth, date } = cell;
 
   const cellEvents = useMemo(() => getMonthCellEvents(date, events, eventPositions), [date, events, eventPositions]);
@@ -27,7 +28,10 @@ export function DayCell({ cell, events, eventPositions }: IProps) {
 
   return (
     <DroppableDayCell cell={cell}>
-      <div className={cn("flex h-full flex-col gap-1 border-l border-t py-1.5 lg:py-2", isSunday && "border-l-0")}>
+      <div
+        className={cn("flex h-full flex-col gap-1 border-l border-t py-1.5 lg:py-2", isSunday && "border-l-0", onCreate && "cursor-pointer hover:bg-accent/30 transition-colors")}
+        onClick={() => onCreate?.(date)}
+      >
         <span
           className={cn(
             "h-6 px-1 text-xs font-semibold lg:px-2",
@@ -38,7 +42,10 @@ export function DayCell({ cell, events, eventPositions }: IProps) {
           {day}
         </span>
 
-        <div className={cn("flex h-6 gap-1 px-2 lg:h-[94px] lg:flex-col lg:gap-2 lg:px-0", !currentMonth && "opacity-50")}>
+        <div
+          className={cn("flex h-6 gap-1 px-2 lg:h-[94px] lg:flex-col lg:gap-2 lg:px-0", !currentMonth && "opacity-50")}
+          onClick={(e) => e.stopPropagation()}
+        >
           {[0, 1, 2].map(position => {
             const event = cellEvents.find(e => e.position === position);
             const eventKey = event ? `event-${event.id}-${position}` : `empty-${position}`;

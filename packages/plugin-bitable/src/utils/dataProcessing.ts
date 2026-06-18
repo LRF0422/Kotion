@@ -10,15 +10,18 @@ export function applyFilters(
 ): RecordData[] {
     if (!filters || filters.length === 0) return data;
 
-    return data.filter(record => {
-        return filters.every(filter => {
-            const field = fields.find(f => f.id === filter.fieldId);
-            if (!field) return true;
+    // Resolve each filter's field once instead of scanning `fields` for every
+    // (record × filter). Filters whose field no longer exists are dropped, which
+    // matches the previous "field not found → ignore filter" behaviour.
+    const fieldIds = new Set(fields.map(f => f.id));
+    const activeFilters = filters.filter(filter => fieldIds.has(filter.fieldId));
+    if (activeFilters.length === 0) return data;
 
-            const value = record[filter.fieldId];
-            return evaluateFilter(value, filter.operator, filter.value);
-        });
-    });
+    return data.filter(record =>
+        activeFilters.every(filter =>
+            evaluateFilter(record[filter.fieldId], filter.operator, filter.value)
+        )
+    );
 }
 
 function evaluateFilter(value: any, operator: FilterOperator, filterValue: any): boolean {
@@ -85,6 +88,18 @@ export function applyGroups(
     const groupMap = new Map<string, RecordData[]>();
     const groupOrder: string[] = [];
 
+    // Pre-build an option lookup (id → option and label → option) once, so each
+    // record does an O(1) map lookup instead of scanning `field.options`.
+    // Insert in array order and keep the first occurrence so collisions resolve
+    // the same way Array.prototype.find did.
+    const optionMap = new Map<unknown, { id: string; label: string }>();
+    if (field.options) {
+        field.options.forEach(option => {
+            if (!optionMap.has(option.id)) optionMap.set(option.id, option);
+            if (!optionMap.has(option.label)) optionMap.set(option.label, option);
+        });
+    }
+
     // For select/multi_select fields, pre-populate groups from options
     if (field.type === 'select' && field.options) {
         field.options.forEach(option => {
@@ -104,13 +119,13 @@ export function applyGroups(
             key = '';
         } else if (field.type === 'select' && field.options) {
             // Match select value to option label
-            const option = field.options.find(o => o.id === value || o.label === value);
+            const option = optionMap.get(value);
             key = option ? option.label : String(value);
         } else if (field.type === 'multi_select' && Array.isArray(value)) {
             // Multi-select: use first value as group key
             if (value.length > 0) {
                 const firstVal = value[0];
-                const option = field.options?.find(o => o.id === firstVal || o.label === firstVal);
+                const option = optionMap.get(firstVal);
                 key = option ? option.label : String(firstVal);
             } else {
                 key = '';
@@ -180,11 +195,15 @@ export function applySorts(
 ): RecordData[] {
     if (!sorts || sorts.length === 0) return data;
 
-    return [...data].sort((a, b) => {
-        for (const sort of sorts) {
-            const field = fields.find(f => f.id === sort.fieldId);
-            if (!field) continue;
+    // Resolve valid sort fields once instead of scanning `fields` inside the
+    // comparator (which runs O(n log n) times). Sorts whose field no longer
+    // exists are dropped, matching the previous "field not found → skip" branch.
+    const fieldIds = new Set(fields.map(f => f.id));
+    const activeSorts = sorts.filter(sort => fieldIds.has(sort.fieldId));
+    if (activeSorts.length === 0) return data;
 
+    return [...data].sort((a, b) => {
+        for (const sort of activeSorts) {
             const aVal = a[sort.fieldId];
             const bVal = b[sort.fieldId];
             const multiplier = sort.direction === 'asc' ? 1 : -1;

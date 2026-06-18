@@ -1,10 +1,9 @@
 import { useDrop } from "react-dnd";
 import { parseISO, differenceInMilliseconds } from "date-fns";
 
-// import { useUpdateEvent } from "../../hooks/use-update-event";
-
 import { cn } from "@kn/ui";
 import { ItemTypes } from "../../components/dnd/draggable-event";
+import { useCalendar } from "../../contexts/calendar-context";
 
 import type { IEvent } from "../../interfaces";
 import React from "react";
@@ -17,6 +16,7 @@ interface DroppableTimeBlockProps {
 }
 
 export function DroppableTimeBlock({ date, hour, minute, children }: DroppableTimeBlockProps) {
+  const { onEventUpdate } = useCalendar();
 
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
@@ -33,6 +33,8 @@ export function DroppableTimeBlock({ date, hour, minute, children }: DroppableTi
         newStartDate.setHours(hour, minute, 0, 0);
         const newEndDate = new Date(newStartDate.getTime() + eventDurationMs);
 
+        // 把新时间写回 bitable
+        onEventUpdate?.(droppedEvent.id, { startDateTime: newStartDate, endDateTime: newEndDate });
 
         return { moved: true };
       },
@@ -41,7 +43,7 @@ export function DroppableTimeBlock({ date, hour, minute, children }: DroppableTi
         canDrop: monitor.canDrop(),
       }),
     }),
-    [date, hour, minute]
+    [date, hour, minute, onEventUpdate]
   );
 
   return (

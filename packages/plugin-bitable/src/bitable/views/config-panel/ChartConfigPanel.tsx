@@ -342,6 +342,29 @@ export const ChartConfigPanel: React.FC<ChartConfigPanelProps> = ({
                                 </Select>
                             </div>
 
+                            {/* 时间粒度（仅当 X 轴为日期字段时显示） */}
+                            {fields.find(f => f.id === chartConfig.xAxisField)?.type === FieldType.DATE && (
+                                <div className="space-y-2">
+                                    <Label>{t('bitable.chartView.dateAggregation')}</Label>
+                                    <Select
+                                        value={chartConfig.dateAggregation || 'none'}
+                                        onValueChange={(value: any) => updateChartConfig({ dateAggregation: value === 'none' ? undefined : value })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">{t('bitable.chartView.dateNone')}</SelectItem>
+                                            <SelectItem value="day">{t('bitable.chartView.dateDay')}</SelectItem>
+                                            <SelectItem value="week">{t('bitable.chartView.dateWeek')}</SelectItem>
+                                            <SelectItem value="month">{t('bitable.chartView.dateMonth')}</SelectItem>
+                                            <SelectItem value="quarter">{t('bitable.chartView.dateQuarter')}</SelectItem>
+                                            <SelectItem value="year">{t('bitable.chartView.dateYear')}</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
+
                             {/* 聚合方式 */}
                             <div className="space-y-2">
                                 <Label>{t('bitable.chartView.aggregation')}</Label>
@@ -690,6 +713,15 @@ export const ChartConfigPanel: React.FC<ChartConfigPanelProps> = ({
                                         onCheckedChange={(checked) => updateChartConfig({ smoothLine: checked })}
                                     />
                                 </div>
+                                {chartConfig.chartType !== ChartType.STACKED_AREA && (
+                                    <div className="flex items-center justify-between">
+                                        <Label>{t('bitable.chartView.showTrendLine')}</Label>
+                                        <Switch
+                                            checked={!!chartConfig.showTrendLine}
+                                            onCheckedChange={(checked) => updateChartConfig({ showTrendLine: checked })}
+                                        />
+                                    </div>
+                                )}
                             </>
                         )}
 

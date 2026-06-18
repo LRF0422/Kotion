@@ -63,7 +63,7 @@ export const GroupPanel: React.FC<GroupPanelProps> = ({ view, fields, onUpdateVi
                 <Button
                     size="icon"
                     variant="ghost"
-                    className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent relative"
+                    className="h-9 w-9 md:h-8 md:w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent relative"
                 >
                     <Rows3 className="h-4 w-4" />
                     {hasGroups && (
@@ -71,7 +71,7 @@ export const GroupPanel: React.FC<GroupPanelProps> = ({ view, fields, onUpdateVi
                     )}
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-80 p-3" align="start">
+            <PopoverContent className="w-[calc(100vw-1.5rem)] max-w-80 p-3" align="start">
                 <div className="space-y-2">
                     <div className="text-sm font-medium">{t('bitable.groupPanel.title')}</div>
                     {groups.map((group, index) => {

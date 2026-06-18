@@ -2,6 +2,7 @@ import React from "react";
 import {
     Area,
     AreaChart,
+    Line,
     XAxis,
     YAxis,
     CartesianGrid
@@ -66,9 +67,25 @@ export const AreaChartComponent: React.FC<AreaChartComponentProps> = ({
         ? ['count']
         : chartConfig.yAxisFields.map(y => y.fieldId);
 
+    // 趋势线：对第一条系列做线性回归（堆叠图不显示，避免误读）
+    const primaryKey = dataKeys[0];
+    const showTrend = chartConfig.showTrendLine && !isStacked && !!primaryKey;
+    const plotData = React.useMemo(() => {
+        if (!showTrend || chartData.length < 2) return chartData;
+        const ys = chartData.map(d => Number(d[primaryKey]) || 0);
+        const n = ys.length;
+        let sx = 0, sy = 0, sxy = 0, sxx = 0;
+        ys.forEach((y, x) => { sx += x; sy += y; sxy += x * y; sxx += x * x; });
+        const denom = n * sxx - sx * sx;
+        if (denom === 0) return chartData;
+        const b = (n * sxy - sx * sy) / denom;
+        const a = (sy - b * sx) / n;
+        return chartData.map((d, x) => ({ ...d, __trend: Math.round((a + b * x) * 100) / 100 }));
+    }, [chartData, showTrend, primaryKey]);
+
     return (
         <ChartContainer config={rechartsConfig} className={`h-[${height}px] w-full`} style={{ height }}>
-            <AreaChart data={chartData} accessibilityLayer>
+            <AreaChart data={plotData} accessibilityLayer>
                 {chartConfig.showGrid && <CartesianGrid vertical={false} strokeDasharray="3 3" />}
                 <XAxis
                     dataKey={chartConfig.xAxisField}
@@ -93,6 +110,18 @@ export const AreaChartComponent: React.FC<AreaChartComponentProps> = ({
                         isAnimationActive={chartConfig.enableAnimation !== false}
                     />
                 ))}
+                {showTrend && (
+                    <Line
+                        type="linear"
+                        dataKey="__trend"
+                        stroke="#9ca3af"
+                        strokeWidth={2}
+                        strokeDasharray="6 4"
+                        dot={false}
+                        isAnimationActive={false}
+                        legendType="none"
+                    />
+                )}
                 {chartConfig.showLegend && (
                     <ChartLegend content={<ChartLegendContent />} />
                 )}

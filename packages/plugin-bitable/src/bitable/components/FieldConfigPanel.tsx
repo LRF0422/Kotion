@@ -964,7 +964,7 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="right" className="w-[400px] sm:w-[540px] overflow-y-auto">
+            <SheetContent side="right" className="w-full md:w-[540px] overflow-y-auto">
                 <SheetHeader>
                     <SheetTitle>{t('bitable.fieldConfig.title')}</SheetTitle>
                     <SheetDescription>

@@ -58,6 +58,8 @@ export interface FieldConfig {
     type: FieldType;
     width?: number;
     isShow?: boolean;
+    frozen?: boolean;
+    summary?: 'none' | 'count' | 'sum' | 'avg' | 'min' | 'max';  // 表格汇总行的聚合方式
     options?: SelectOption[];
     formula?: string;
     relationTableId?: string;
@@ -104,12 +106,15 @@ export interface ViewConfig {
     kanbanConfig?: {
         groupByField: string;
         cardCoverField?: string;
+        displayFields?: string[];   // 卡片上显示的字段（缺省时取前 4 个）
+        showEmptyColumns?: boolean; // 是否显示空列（select 分组时）
     };
     // 画廊视图特有配置
     galleryConfig?: {
         coverField: string;
         fitType: 'cover' | 'contain';
         cardSize: 'small' | 'medium' | 'large';
+        displayFields?: string[];   // 卡片显示的字段（缺省时取前 3 个）
     };
     // 日历视图特有配置
     calendarConfig?: {
@@ -130,6 +135,7 @@ export interface ViewConfig {
         dependencyField?: string;         // Field to define task dependencies
         criticalPathEnabled?: boolean;    // Enable critical path highlighting
         customColorsEnabled?: boolean;    // Enable custom color options
+        colorField?: string;              // Field whose value is used as the bar color
     };
     // 图表视图特有配置
     chartConfig?: {
@@ -141,6 +147,7 @@ export interface ViewConfig {
         showLegend?: boolean;
         showGrid?: boolean;
         aggregation?: 'sum' | 'count' | 'avg' | 'min' | 'max';
+        dateAggregation?: 'day' | 'week' | 'month' | 'quarter' | 'year';  // 日期 X 轴的时间粒度
         groupByField?: string;
         // Advanced config
         chartHeight?: number;
@@ -221,6 +228,7 @@ export interface RecordData {
     updatedTime?: string;
     createdBy?: Person;
     updatedBy?: Person;
+    order?: number; // 看板/表格组内手动排序位置
 }
 
 // Bitable节点属性

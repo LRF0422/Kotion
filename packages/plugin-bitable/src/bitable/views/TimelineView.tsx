@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useCallback } from "react";
+import React, { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import {
     Button,
     Badge,
@@ -182,6 +182,20 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
         return groups;
     }, [validRecords, groupByField]);
 
+    // 记录 id → 记录 的查找表，供依赖关系/依赖连线复用，避免反复 data.find
+    const recordById = useMemo(() => {
+        const map = new Map<string, RecordData>();
+        data.forEach(r => map.set(r.id, r));
+        return map;
+    }, [data]);
+
+    // 分组选项 id → 选项 的查找表，供分组标签/颜色 O(1) 查询
+    const groupOptionById = useMemo(() => {
+        const map = new Map<string, SelectOption>();
+        (groupByField?.options || []).forEach((o: SelectOption) => map.set(o.id, o));
+        return map;
+    }, [groupByField]);
+
     // 计算任务条的位置和宽度
     const calculateBarPosition = (record: RecordData) => {
         try {
@@ -204,6 +218,20 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
         }
     };
 
+    // 预计算所有记录的任务条位置（包含 parseISO/differenceInDays），render 与依赖连线
+    // 直接查表，避免每条记录每次 render 重复解析日期。
+    const positionById = useMemo(() => {
+        const map = new Map<string, ReturnType<typeof calculateBarPosition>>();
+        Object.values(groupedRecords).forEach(records => {
+            records.forEach(record => {
+                map.set(record.id, calculateBarPosition(record));
+            });
+        });
+        return map;
+        // calculateBarPosition 闭包依赖以下值，列出真实依赖即可
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [groupedRecords, config.startDateField, endDateField, timeRange, columnWidth]);
+
     // 计算里程碑位置
     const calculateMilestonePosition = (record: RecordData) => {
         try {
@@ -225,21 +253,30 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
     const getGroupLabel = (groupId: string) => {
         if (groupId === 'default') return '所有任务';
         if (groupId === 'unassigned') return '未分组';
-        const option = (groupByField?.options || []).find((o: SelectOption) => o.id === groupId);
-        return option?.label || groupId;
+        return groupOptionById.get(groupId)?.label || groupId;
     };
 
     // 获取分组颜色
     const getGroupColor = (groupId: string) => {
         if (groupId === 'default' || groupId === 'unassigned') return '#6b7280';
-        const option = (groupByField?.options || []).find((o: SelectOption) => o.id === groupId);
-        return option?.color || '#6b7280';
+        return groupOptionById.get(groupId)?.color || '#6b7280';
     };
 
-    // 获取任务条颜色（支持自定义颜色）
+    // 获取任务条颜色：优先使用配置的颜色字段（select 取选项色，其它取原始值）
     const getTaskColor = (record: RecordData, groupId: string) => {
-        if (config.customColorsEnabled) {
-            // 如果启用了自定义颜色，尝试从记录中获取颜色字段
+        if (config.colorField) {
+            const cf = fields.find(f => f.id === config.colorField);
+            const val = cf ? record[cf.id] : undefined;
+            if (cf && val) {
+                if (cf.type === 'select') {
+                    const opt = (cf.options || []).find((o: SelectOption) => o.id === val);
+                    if (opt?.color) return opt.color;
+                } else {
+                    return val; // 约定为 hex/rgb 颜色字符串
+                }
+            }
+        } else if (config.customColorsEnabled) {
+            // 兼容旧逻辑：标题里含 "color" 的文本字段
             const colorField = fields.find(f => f.type === 'text' && f.title.toLowerCase().includes('color'));
             if (colorField && record[colorField.id]) {
                 return record[colorField.id];
@@ -250,11 +287,11 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
         return getGroupColor(record[groupByField?.id || 'default']);
     };
 
-    // 获取依赖关系
-    const getDependencies = () => {
-        if (!dependencyField) return [];
+    // 获取依赖关系（memo 化：原本在 render 与关键路径计算里被反复调用，每次都全量扫描分组）
+    const dependencies = useMemo(() => {
+        if (!dependencyField) return [] as { from: string; to: string }[];
 
-        const dependencies: any[] = [];
+        const deps: { from: string; to: string }[] = [];
 
         Object.values(groupedRecords).forEach(records => {
             records.forEach(record => {
@@ -264,31 +301,22 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                     const depIds = Array.isArray(dependencyValue) ? dependencyValue : [dependencyValue];
 
                     depIds.forEach(depId => {
-                        const dependentRecord = data.find(r => r.id === depId);
+                        const dependentRecord = recordById.get(depId);
                         if (dependentRecord) {
-                            dependencies.push({
-                                from: dependentRecord.id,
-                                to: record.id
-                            });
+                            deps.push({ from: dependentRecord.id, to: record.id });
                         }
                     });
                 }
             });
         });
 
-        return dependencies;
-    };
+        return deps;
+    }, [dependencyField, groupedRecords, recordById]);
 
     // 计算依赖线路径
     const calculateDependencyPath = (fromRecordId: string, toRecordId: string) => {
-        // Find positions of both tasks
-        const fromRecord = data.find(r => r.id === fromRecordId);
-        const toRecord = data.find(r => r.id === toRecordId);
-
-        if (!fromRecord || !toRecord) return null;
-
-        const fromPosition = calculateBarPosition(fromRecord);
-        const toPosition = calculateBarPosition(toRecord);
+        const fromPosition = positionById.get(fromRecordId);
+        const toPosition = positionById.get(toRecordId);
 
         if (!fromPosition || !toPosition) return null;
 
@@ -328,41 +356,23 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
         return `M ${fromX} ${fromY} C ${midX} ${fromY}, ${midX} ${toY}, ${toX} ${toY}`;
     };
 
-    // 计算关键路径
-    const calculateCriticalPath = (): string[] => {
-        if (!config.criticalPathEnabled || !dependencyField) return [];
-
-        // This is a simplified critical path algorithm
-        // In a real implementation, you would need to compute earliest start/end times and latest start/end times
-        // For now, we'll highlight tasks that have no successors (potential end tasks) and are late or have dependencies
-
-        // Get all tasks that have dependencies
-        const dependentTasks = new Set<string>();
-        const dependencies = getDependencies();
-
+    // 关键路径任务集合（memo 化为 Set，render 中 O(1) 判断）
+    // 简化算法：凡是参与依赖关系（作为前驱或后继）的任务都视为关键任务。
+    const criticalTaskIds = useMemo(() => {
+        const set = new Set<string>();
+        if (!config.criticalPathEnabled || !dependencyField) return set;
         dependencies.forEach(dep => {
-            dependentTasks.add(dep.to);
+            set.add(dep.from);
+            set.add(dep.to);
         });
-
-        // For simplicity, just return tasks that are dependencies of other tasks
-        // In a real critical path algorithm, we'd compute the longest path through the project
-        const criticalTasks = new Set<string>();
-
-        // Add all tasks that are dependencies of other tasks
-        dependencies.forEach(dep => {
-            criticalTasks.add(dep.from);
-            criticalTasks.add(dep.to);
-        });
-
-        return Array.from(criticalTasks);
-    };
+        return set;
+    }, [config.criticalPathEnabled, dependencyField, dependencies]);
 
     // Check if a task is on the critical path
-    const isCriticalPathTask = (taskId: string): boolean => {
-        if (!config.criticalPathEnabled) return false;
-        const criticalTasks = calculateCriticalPath();
-        return criticalTasks.includes(taskId);
-    };
+    const isCriticalPathTask = useCallback(
+        (taskId: string): boolean => criticalTaskIds.has(taskId),
+        [criticalTaskIds]
+    );
 
     // 导航函数
     const goToPrevious = () => {
@@ -373,8 +383,21 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
         setCurrentDate(prev => addMonths(prev, 1));
     };
 
+    // 滚动到今天：挂载时与点击“今天”时把时间轴横向滚到今天附近
+    const scrollToTodayRef = useRef(true);
+    useEffect(() => {
+        if (!scrollToTodayRef.current) return;
+        scrollToTodayRef.current = false;
+        const container = scrollRef.current;
+        if (container && isWithinInterval(new Date(), { start: timeRange.start, end: timeRange.end })) {
+            const offset = differenceInDays(new Date(), timeRange.start) * columnWidth;
+            container.scrollTo({ left: Math.max(0, offset - container.clientWidth / 2), behavior: 'smooth' });
+        }
+    }, [timeRange, columnWidth]);
+
     const goToToday = () => {
         setCurrentDate(new Date());
+        scrollToTodayRef.current = true;
     };
 
     // Snap to grid function
@@ -694,17 +717,21 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>启用自定义颜色</Label>
+                            <Label>颜色字段</Label>
                             <Select
-                                value={config.customColorsEnabled ? 'true' : 'false'}
-                                onValueChange={(value) => handleConfigChange('customColorsEnabled', value === 'true')}
+                                value={config.colorField || ''}
+                                onValueChange={(value) => handleConfigChange('colorField', value)}
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder="是否启用自定义颜色" />
+                                    <SelectValue placeholder="按字段着色（可选）" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="false">否</SelectItem>
-                                    <SelectItem value="true">是</SelectItem>
+                                    <SelectItem value="null">无（按分组着色）</SelectItem>
+                                    {selectFields.map(field => (
+                                        <SelectItem key={field.id} value={field.id}>
+                                            {field.title}
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -845,7 +872,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                                 {/* Dependency lines */}
                                 {config.dependencyField && (
                                     <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 5 }}>
-                                        {getDependencies().map((dep, idx) => {
+                                        {dependencies.map((dep, idx) => {
                                             const path = calculateDependencyPath(dep.from, dep.to);
                                             if (!path) return null;
 
@@ -881,7 +908,7 @@ export const TimelineView: React.FC<TimelineViewProps> = (props) => {
                                                 <div className="h-10 border-b" />
                                             )}
                                             {records.map((record) => {
-                                                const position = calculateBarPosition(record);
+                                                const position = positionById.get(record.id);
                                                 if (!position) return null;
 
                                                 const progress = progressField ? (record[progressField.id] || 0) : 0;

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { useNavigator, usePageTabs } from "@kn/common"
-import { useResponsive } from "@kn/ui"
+import { cn, useResponsive } from "@kn/ui"
 import { PageEditor } from "./index"
 import { TabBar } from "./TabBar"
 
@@ -18,7 +18,7 @@ export interface TabbedEditorAreaProps {
  * cleanup) and remounts on click. URL remains the source of truth for *active*.
  */
 export const TabbedEditorArea: React.FC<TabbedEditorAreaProps> = ({ spaceId }) => {
-    const { openPages, activePageId, activateTab, closeTab } = usePageTabs(spaceId)
+    const { openPages, activePageId, activateTab, closeTab, closeTabs } = usePageTabs(spaceId)
     const navigator = useNavigator()
     const { isMobile } = useResponsive()
     const cap = isMobile ? 1 : 2
@@ -66,6 +66,36 @@ export const TabbedEditorArea: React.FC<TabbedEditorAreaProps> = ({ spaceId }) =
         navigateTo(next.pageId)
     }
 
+    // Batch close (close others / to the right / all). Mirrors handleClose's
+    // navigation: only re-navigate when the active tab was among those closed.
+    const handleCloseMany = (pageIds: string[]) => {
+        if (pageIds.length === 0) return
+        const closing = new Set(pageIds)
+        const remaining = openPages.filter(p => !closing.has(p.pageId))
+        closeTabs(pageIds)
+        if (!activePageId || !closing.has(activePageId)) return
+        if (remaining.length === 0) {
+            navigator.go({ to: `/space-detail/${spaceId}` })
+            return
+        }
+        const next = [...remaining].sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0]
+        navigateTo(next.pageId)
+    }
+
+    const handleCloseOthers = (pageId: string) => {
+        handleCloseMany(openPages.filter(p => p.pageId !== pageId).map(p => p.pageId))
+    }
+
+    const handleCloseRight = (pageId: string) => {
+        const idx = openPages.findIndex(p => p.pageId === pageId)
+        if (idx < 0) return
+        handleCloseMany(openPages.slice(idx + 1).map(p => p.pageId))
+    }
+
+    const handleCloseAll = () => {
+        handleCloseMany(openPages.map(p => p.pageId))
+    }
+
     // Always render the active editor even if the LRU effect hasn't caught up
     // yet (avoids a blank frame on first navigation to a page).
     const visibleIds = useMemo(() => {
@@ -83,18 +113,38 @@ export const TabbedEditorArea: React.FC<TabbedEditorAreaProps> = ({ spaceId }) =
                     activePageId={activePageId}
                     onActivate={navigateTo}
                     onClose={handleClose}
+                    onCloseOthers={handleCloseOthers}
+                    onCloseRight={handleCloseRight}
+                    onCloseAll={handleCloseAll}
                 />
             )}
             <div className="relative flex-1 min-h-0">
-                {visibleIds.map(pid => (
-                    <div
-                        key={pid}
-                        className="absolute inset-0 h-full w-full"
-                        style={{ display: pid === activePageId ? "block" : "none" }}
-                    >
-                        <PageEditor pageId={pid} spaceId={spaceId} active={pid === activePageId} />
-                    </div>
-                ))}
+                {visibleIds.map(pid => {
+                    const isActive = pid === activePageId
+                    return (
+                        // Editors are kept mounted (LRU) and stacked; crossfade by
+                        // opacity instead of hard display toggle so switching is
+                        // smooth. Inactive layers sit behind and are non-interactive.
+                        // transform-gpu promotes each editor to its own compositor
+                        // layer so the opacity fade is GPU-only (no per-frame repaint
+                        // of the editor subtree) — key to staying smooth under rapid
+                        // switching.
+                        <div
+                            key={pid}
+                            aria-hidden={!isActive}
+                            className={cn(
+                                // animate-in fades freshly-mounted (uncached) tabs in;
+                                // transition-opacity crossfades switches between the two
+                                // kept-alive editors. fade-in-0 targets each layer's own
+                                // opacity, so inactive mounts stay invisible.
+                                "absolute inset-0 h-full w-full transform-gpu animate-in fade-in-0 transition-opacity duration-150 ease-out motion-reduce:animate-none motion-reduce:transition-none",
+                                isActive ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none"
+                            )}
+                        >
+                            <PageEditor pageId={pid} spaceId={spaceId} active={isActive} />
+                        </div>
+                    )
+                })}
             </div>
         </div>
     )

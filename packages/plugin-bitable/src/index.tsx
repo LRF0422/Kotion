@@ -38,6 +38,8 @@ export const bitable = new BitablePlugin({
                         "save": "Save",
                         "add": "Add",
                         "importExcel": "Import Excel",
+                        "fieldSettings": "Field Settings",
+                        "deleteTable": "Delete Table",
                         "new": "New",
                         "newPage": "New page",
                         "comingSoon": "Coming soon"
@@ -182,20 +184,44 @@ export const bitable = new BitablePlugin({
                         "noData": "No data",
                         "addRow": "Add Row",
                         "deleteSelected": "Delete ({{count}})",
-                        "selectedCount": "{{count}} selected"
+                        "selectedCount": "{{count}} selected",
+                        "freezeColumn": "Freeze column",
+                        "unfreezeColumn": "Unfreeze column",
+                        "hideColumn": "Hide column",
+                        "summary": "Summary",
+                        "summaryCycle": "Click to cycle summary"
                     },
                     // Kanban view
                     "kanbanView": {
                         "uncategorized": "Uncategorized",
                         "addCard": "Add Card",
                         "configureGroupField": "Please configure the group field for the Kanban view",
-                        "notSelectType": "The group field must be a Select type"
+                        "notSelectType": "The group field must be a Select type",
+                        "notGroupableType": "This field type cannot be used to group the Kanban view",
+                        "yes": "Yes",
+                        "no": "No",
+                        "renameGroup": "Rename group",
+                        "deleteGroup": "Delete group",
+                        "color": "Color",
+                        "groupBy": "Group by",
+                        "selectGroupField": "Select field"
                     },
                     // Gallery view
                     "galleryView": {
                         "noCover": "No Cover",
                         "noContent": "No content",
-                        "noData": "No data"
+                        "noData": "No data",
+                        "settings": "Settings",
+                        "coverField": "Cover field",
+                        "auto": "Auto",
+                        "fitType": "Image fit",
+                        "fitCover": "Cover",
+                        "fitContain": "Contain",
+                        "cardSize": "Card size",
+                        "sizeSmall": "Small",
+                        "sizeMedium": "Medium",
+                        "sizeLarge": "Large",
+                        "displayFields": "Display fields"
                     },
                     // Timeline view
                     "timelineView": {
@@ -279,6 +305,15 @@ export const bitable = new BitablePlugin({
                         "selectField": "Select field",
                         "selectXAxis": "Please select X-axis field",
                         "selectYAxis": "Please select Y-axis field",
+                        "missingXField": "The X-axis field was deleted. Please reconfigure the chart.",
+                        "missingYField": "A Y-axis field was deleted. Please reconfigure the chart.",
+                        "dateAggregation": "Time granularity",
+                        "dateNone": "None",
+                        "dateDay": "By day",
+                        "dateWeek": "By week",
+                        "dateMonth": "By month",
+                        "dateQuarter": "By quarter",
+                        "dateYear": "By year",
                         "valueField": "Value Field",
                         "aggregation": "Aggregation",
                         "sum": "Sum",
@@ -293,6 +328,7 @@ export const bitable = new BitablePlugin({
                         "enableAnimation": "Enable Animation",
                         "horizontalBar": "Horizontal Bars",
                         "smoothLine": "Smooth Line",
+                        "showTrendLine": "Trend line",
                         "innerRadius": "Inner Radius",
                         "outerRadius": "Outer Radius",
                         "chartHeight": "Chart Height",
@@ -387,6 +423,8 @@ export const bitable = new BitablePlugin({
                         "save": "保存",
                         "add": "添加",
                         "importExcel": "导入Excel",
+                        "fieldSettings": "字段设置",
+                        "deleteTable": "删除表格",
                         "new": "新建",
                         "newPage": "新建记录",
                         "comingSoon": "即将推出"
@@ -531,20 +569,44 @@ export const bitable = new BitablePlugin({
                         "noData": "暂无数据",
                         "addRow": "添加行",
                         "deleteSelected": "删除 ({{count}})",
-                        "selectedCount": "已选择 {{count}} 项"
+                        "selectedCount": "已选择 {{count}} 项",
+                        "freezeColumn": "冻结列",
+                        "unfreezeColumn": "取消冻结",
+                        "hideColumn": "隐藏列",
+                        "summary": "汇总",
+                        "summaryCycle": "点击切换汇总方式"
                     },
                     // Kanban view
                     "kanbanView": {
                         "uncategorized": "未分组",
                         "addCard": "添加卡片",
                         "configureGroupField": "请配置看板视图的分组字段",
-                        "notSelectType": "分组字段必须为单选类型"
+                        "notSelectType": "分组字段必须为单选类型",
+                        "notGroupableType": "该字段类型不支持作为看板分组",
+                        "yes": "是",
+                        "no": "否",
+                        "renameGroup": "重命名分组",
+                        "deleteGroup": "删除分组",
+                        "color": "颜色",
+                        "groupBy": "分组依据",
+                        "selectGroupField": "选择字段"
                     },
                     // Gallery view
                     "galleryView": {
                         "noCover": "无封面",
                         "noContent": "无内容",
-                        "noData": "暂无数据"
+                        "noData": "暂无数据",
+                        "settings": "设置",
+                        "coverField": "封面字段",
+                        "auto": "自动",
+                        "fitType": "图片填充",
+                        "fitCover": "裁剪填充",
+                        "fitContain": "完整显示",
+                        "cardSize": "卡片大小",
+                        "sizeSmall": "小",
+                        "sizeMedium": "中",
+                        "sizeLarge": "大",
+                        "displayFields": "显示字段"
                     },
                     // Timeline view
                     "timelineView": {
@@ -628,6 +690,15 @@ export const bitable = new BitablePlugin({
                         "selectField": "选择字段",
                         "selectXAxis": "请选择X轴字段",
                         "selectYAxis": "请选择Y轴字段",
+                        "missingXField": "X轴字段已被删除，请重新配置图表。",
+                        "missingYField": "某个Y轴字段已被删除，请重新配置图表。",
+                        "dateAggregation": "时间粒度",
+                        "dateNone": "不聚合",
+                        "dateDay": "按天",
+                        "dateWeek": "按周",
+                        "dateMonth": "按月",
+                        "dateQuarter": "按季度",
+                        "dateYear": "按年",
                         "valueField": "数值字段",
                         "aggregation": "聚合方式",
                         "sum": "求和",
@@ -642,6 +713,7 @@ export const bitable = new BitablePlugin({
                         "enableAnimation": "启用动画",
                         "horizontalBar": "横向条形",
                         "smoothLine": "平滑曲线",
+                        "showTrendLine": "趋势线",
                         "innerRadius": "内半径",
                         "outerRadius": "外半径",
                         "chartHeight": "图表高度",

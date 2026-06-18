@@ -38,7 +38,8 @@ import {
     EyeOff,
     Pencil,
     Check,
-    X
+    X,
+    MoreHorizontal
 } from "@kn/icon";
 import { BitableAttrs, ViewType, ViewConfig, FieldConfig, RecordData, ChartType, FieldType, SelectOption } from "../types";
 import { TableView } from "./views/TableView";
@@ -61,6 +62,13 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const { node, updateAttributes, deleteNode, editor } = props;
     const attrs = node.attrs as BitableAttrs;
     const { t } = useTranslation();
+
+    // Keep a ref to the latest attrs so update handlers can read current
+    // data/fields/views without listing `attrs` as a dependency. Depending on
+    // `attrs` would recreate every callback whenever any attribute changes and
+    // cascade re-renders through all child views.
+    const attrsRef = useRef(attrs);
+    attrsRef.current = attrs;
 
     const data: RecordData[] = attrs.data || [];
     const [currentViewId, setCurrentViewId] = useState(attrs.currentView);
@@ -135,8 +143,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
     // 添加记录
     const handleAddRecord = useCallback(() => {
-        // Use attrs.data directly to avoid stale closure issues
-        const currentData = attrs.data || [];
+        // Read the latest attrs from the ref to avoid stale closures.
+        const { data: currentData = [], fields } = attrsRef.current;
         const newRecord: RecordData = {
             id: generateRecordId(),
             createdTime: new Date().toISOString(),
@@ -144,7 +152,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         };
 
         // 为每个字段设置默认值
-        attrs.fields.forEach(field => {
+        fields.forEach(field => {
             switch (field.type) {
                 case 'checkbox':
                     newRecord[field.id] = false;
@@ -167,19 +175,19 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         });
 
         const newData = [...currentData, newRecord];
-        updateAttributes({ ...attrs, data: newData });
-    }, [attrs, updateAttributes]);
+        updateAttributes({ data: newData });
+    }, [updateAttributes]);
 
     // 更新记录
     const handleUpdateRecord = useCallback((recordId: string, updates: Partial<RecordData>) => {
-        // Use attrs.data directly to avoid stale closure issues
-        const currentData = attrs.data || [];
+        // Read the latest attrs from the ref to avoid stale closures.
+        const currentData = attrsRef.current.data || [];
         const newData = currentData.map((record: any) =>
             record.id === recordId
                 ? { ...record, ...updates, updatedTime: new Date().toISOString() }
                 : record
         );
-        updateAttributes({ ...attrs, data: newData });
+        updateAttributes({ data: newData });
 
         // Keep selectedRecord in sync with updated data
         if (selectedRecord?.id === recordId) {
@@ -188,11 +196,11 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 setSelectedRecord(updatedRecord);
             }
         }
-    }, [attrs, updateAttributes, selectedRecord?.id]);
+    }, [updateAttributes, selectedRecord?.id]);
 
     // 批量更新记录 - avoids race condition when multiple records are updated simultaneously
     const handleBatchUpdateRecords = useCallback((updatesMap: Map<string, Partial<RecordData>>) => {
-        const currentData = attrs.data || [];
+        const currentData = attrsRef.current.data || [];
         const now = new Date().toISOString();
         const newData = currentData.map((record: any) => {
             const recordUpdates = updatesMap.get(record.id);
@@ -201,54 +209,51 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             }
             return record;
         });
-        updateAttributes({ ...attrs, data: newData });
-    }, [attrs, updateAttributes]);
+        updateAttributes({ data: newData });
+    }, [updateAttributes]);
 
     // 删除记录
     const handleDeleteRecord = useCallback((recordIds: string[]) => {
-        // Use attrs.data directly to avoid stale closure issues
-        const currentData = attrs.data || [];
+        const currentData = attrsRef.current.data || [];
         const newData = currentData.filter((record: any) => !recordIds.includes(record.id));
-        updateAttributes({ ...attrs, data: newData });
-    }, [attrs, updateAttributes]);
+        updateAttributes({ data: newData });
+    }, [updateAttributes]);
 
     // 添加字段
     const handleAddField = useCallback((field: FieldConfig) => {
-        const newFields = [...attrs.fields, field];
-        updateAttributes({ ...attrs, fields: newFields });
-    }, [attrs, updateAttributes]);
+        const newFields = [...attrsRef.current.fields, field];
+        updateAttributes({ fields: newFields });
+    }, [updateAttributes]);
 
     // 更新字段
     const handleUpdateField = useCallback((fieldId: string, updates: Partial<FieldConfig>) => {
-        const newFields = attrs.fields.map(field =>
+        const newFields = attrsRef.current.fields.map(field =>
             field.id === fieldId ? { ...field, ...updates } : field
         );
-        updateAttributes({ ...attrs, fields: newFields });
-    }, [attrs, updateAttributes]);
+        updateAttributes({ fields: newFields });
+    }, [updateAttributes]);
 
     // 删除字段
     const handleDeleteField = useCallback((fieldId: string) => {
-        // Use attrs.data directly to avoid stale closure issues
-        const currentData = attrs.data || [];
-        const newFields = attrs.fields.filter(field => field.id !== fieldId);
+        const { data: currentData = [], fields } = attrsRef.current;
+        const newFields = fields.filter(field => field.id !== fieldId);
         // 同时从数据中删除该字段
         const newData: RecordData[] = currentData.map((record: any) => {
             const { [fieldId]: _, ...rest } = record;
             return rest;
         }) as RecordData[];
-        updateAttributes({ ...attrs, fields: newFields, data: newData });
-    }, [attrs, updateAttributes]);
+        updateAttributes({ fields: newFields, data: newData });
+    }, [updateAttributes]);
 
     // 重新排列字段
     const handleReorderFields = useCallback((newOrder: FieldConfig[]) => {
-        updateAttributes({ ...attrs, fields: newOrder });
-    }, [attrs, updateAttributes]);
+        updateAttributes({ fields: newOrder });
+    }, [updateAttributes]);
 
     // 转换字段类型
     const handleConvertFieldType = useCallback((fieldId: string, newType: FieldType, newOptions?: SelectOption[]) => {
-        // Use attrs.data directly to avoid stale closure issues
-        const currentData = attrs.data || [];
-        const field = attrs.fields.find(f => f.id === fieldId);
+        const { data: currentData = [], fields } = attrsRef.current;
+        const field = fields.find(f => f.id === fieldId);
         if (!field) return;
 
         const oldType = field.type;
@@ -275,7 +280,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         }
 
         // Update field in fields array
-        const newFields = attrs.fields.map(f =>
+        const newFields = fields.map(f =>
             f.id === fieldId ? updatedField : f
         );
 
@@ -289,18 +294,17 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             };
         });
 
-        updateAttributes({ ...attrs, fields: newFields, data: newData });
-    }, [attrs, updateAttributes]);
+        updateAttributes({ fields: newFields, data: newData });
+    }, [updateAttributes]);
 
     // 从 Excel 导入数据
     const handleExcelImport = useCallback((newFields: FieldConfig[], newRecords: RecordData[]) => {
-        // Use attrs.data directly to avoid stale closure issues
-        const currentData = attrs.data || [];
+        const { data: currentData = [], fields } = attrsRef.current;
         // 合并新字段
-        const mergedFields = [...attrs.fields, ...newFields];
+        const mergedFields = [...fields, ...newFields];
 
         // 为新记录添加ID字段
-        const idField = attrs.fields.find(f => f.type === 'id');
+        const idField = fields.find(f => f.type === 'id');
         const startId = currentData.length + 1;
         const recordsWithId = newRecords.map((record, index) => ({
             ...record,
@@ -311,14 +315,14 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         const mergedData = [...currentData, ...recordsWithId];
 
         updateAttributes({
-            ...attrs,
             fields: mergedFields,
             data: mergedData
         });
-    }, [attrs, updateAttributes]);
+    }, [updateAttributes]);
 
     // 添加视图
     const handleAddView = useCallback((viewType: ViewType) => {
+        const { fields, views } = attrsRef.current;
         const newView: ViewConfig = {
             id: generateViewId(),
             name: getViewTypeName(viewType, t),
@@ -332,7 +336,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
         if (viewType === ViewType.KANBAN) {
             newView.kanbanConfig = {
-                groupByField: attrs.fields.find(f => f.type === 'select')?.id || attrs.fields[0]!.id
+                groupByField: fields.find(f => f.type === 'select')?.id || fields[0]!.id
             };
         } else if (viewType === ViewType.GALLERY) {
             newView.galleryConfig = {
@@ -342,23 +346,23 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             };
         } else if (viewType === ViewType.TIMELINE) {
             newView.timelineConfig = {
-                startDateField: attrs.fields.find(f => f.type === 'date')?.id || 'dueDate',
+                startDateField: fields.find(f => f.type === 'date')?.id || 'dueDate',
                 endDateField: undefined,
-                titleField: attrs.fields.find(f => f.type === 'text')?.id,
-                progressField: attrs.fields.find(f => f.type === 'progress')?.id,
-                groupByField: attrs.fields.find(f => f.type === 'select')?.id,
+                titleField: fields.find(f => f.type === 'text')?.id,
+                progressField: fields.find(f => f.type === 'progress')?.id,
+                groupByField: fields.find(f => f.type === 'select')?.id,
                 scaleUnit: 'day'
             };
         } else if (viewType === ViewType.CALENDAR) {
             newView.calendarConfig = {
-                dateField: attrs.fields.find(f => f.type === 'date')?.id || '',
+                dateField: fields.find(f => f.type === 'date')?.id || '',
                 endDateField: undefined,
-                titleField: attrs.fields.find(f => f.type === 'text')?.id
+                titleField: fields.find(f => f.type === 'text')?.id
             };
         } else if (viewType === ViewType.CHART) {
             newView.chartConfig = {
                 chartType: ChartType.BAR,
-                xAxisField: attrs.fields.find(f => f.type === 'text' || f.type === 'select')?.id || '',
+                xAxisField: fields.find(f => f.type === 'text' || f.type === 'select')?.id || '',
                 yAxisFields: [],
                 title: '',
                 description: '',
@@ -368,22 +372,22 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             };
         }
 
-        const newViews = [...attrs.views, newView];
-        updateAttributes({ ...attrs, views: newViews, currentView: newView.id });
+        const newViews = [...views, newView];
+        updateAttributes({ views: newViews, currentView: newView.id });
         setCurrentViewId(newView.id);
-    }, [attrs, updateAttributes]);
+    }, [updateAttributes, t]);
 
     // 删除视图
     const handleDeleteView = useCallback((viewId: string) => {
-        const newViews = attrs.views.filter(v => v.id !== viewId);
+        const newViews = attrsRef.current.views.filter(v => v.id !== viewId);
         if (newViews.length === 0) {
             // 至少保留一个视图
             return;
         }
         const newCurrentView = currentViewId === viewId ? newViews[0]!.id : currentViewId;
         setCurrentViewId(newCurrentView);
-        updateAttributes({ ...attrs, views: newViews, currentView: newCurrentView });
-    }, [attrs, currentViewId, updateAttributes]);
+        updateAttributes({ views: newViews, currentView: newCurrentView });
+    }, [currentViewId, updateAttributes]);
 
     // 打开删除确认对话框
     const openDeleteDialog = useCallback((viewId: string) => {
@@ -409,14 +413,14 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     // 保存视图名称
     const saveViewName = useCallback(() => {
         if (editingViewId && editingViewName.trim()) {
-            const newViews = attrs.views.map(v =>
+            const newViews = attrsRef.current.views.map(v =>
                 v.id === editingViewId ? { ...v, name: editingViewName.trim() } : v
             );
-            updateAttributes({ ...attrs, views: newViews });
+            updateAttributes({ views: newViews });
         }
         setEditingViewId(null);
         setEditingViewName('');
-    }, [editingViewId, editingViewName, attrs, updateAttributes]);
+    }, [editingViewId, editingViewName, updateAttributes]);
 
     // 取消编辑视图名称
     const cancelEditingView = useCallback(() => {
@@ -426,11 +430,11 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
     // 更新视图
     const handleUpdateView = useCallback((viewId: string, updates: Partial<ViewConfig>) => {
-        const newViews = attrs.views.map(v =>
+        const newViews = attrsRef.current.views.map(v =>
             v.id === viewId ? { ...v, ...updates } : v
         );
-        updateAttributes({ ...attrs, views: newViews });
-    }, [attrs, updateAttributes]);
+        updateAttributes({ views: newViews });
+    }, [updateAttributes]);
 
     // Apply filters and sorts to data
     const processedData = useMemo(() => {
@@ -510,10 +514,10 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     return (
         <NodeViewWrapper className="node-bitable-wrapper">
             <div className="bitable-container min-h-[400px] w-full rounded-lg bg-transparent text-gray-900 dark:text-white">
-                {/* 视图标签页和工具栏 */}
-                <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-border">
+                {/* 视图标签页和工具栏（左内边距与表格单元格内容对齐：8px） */}
+                <div className="flex items-center justify-between gap-1 pl-2 pr-2 py-1.5 md:pr-4 md:py-2 border-b border-gray-200 dark:border-border">
                     {/* 左侧：视图标签 */}
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 min-w-0">
                         {/* 左滚动按钮 */}
                         {canScrollLeft && (
                             <Button
@@ -542,7 +546,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                                     onClick={() => {
                                         if (editingViewId !== view.id) {
                                             setCurrentViewId(view.id);
-                                            updateAttributes({ ...attrs, currentView: view.id });
+                                            updateAttributes({ currentView: view.id });
                                         }
                                     }}
                                     onDoubleClick={() => {
@@ -667,12 +671,12 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                     </div>
 
                     {/* 右侧：工具栏 */}
-                    <div className="flex items-center gap-1">
-                        {/* 隐藏字段 */}
+                    <div className="flex items-center gap-0.5 md:gap-1 flex-shrink-0">
+                        {/* 隐藏字段（移动端并入“更多”菜单，与设置重复） */}
                         <Button
                             size="icon"
                             variant="ghost"
-                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
+                            className="hidden md:inline-flex h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
                             onClick={() => setFieldConfigOpen(true)}
                         >
                             <EyeOff className="h-4 w-4" />
@@ -699,11 +703,11 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                             onUpdateView={handleUpdateView}
                         />
 
-                        {/* 闪电 */}
+                        {/* 闪电（暂未开放，移动端隐藏） */}
                         <Button
                             size="icon"
                             variant="ghost"
-                            className="h-8 w-8 text-gray-500 dark:text-gray-400 cursor-not-allowed opacity-50"
+                            className="hidden md:inline-flex h-8 w-8 text-gray-500 dark:text-gray-400 cursor-not-allowed opacity-50"
                             title={t('bitable.actions.comingSoon')}
                             disabled
                         >
@@ -714,44 +718,45 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                         <Button
                             size="icon"
                             variant="ghost"
-                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
+                            className="h-9 w-9 md:h-8 md:w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
                             onClick={() => setShowSearch(!showSearch)}
                         >
                             <Search className="h-4 w-4" />
                         </Button>
 
-                        {/* 设置 */}
+                        {/* 设置（移动端并入“更多”菜单） */}
                         <Button
                             size="icon"
                             variant="ghost"
-                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
+                            className="hidden md:inline-flex h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
                             onClick={() => setFieldConfigOpen(true)}
                         >
                             <Settings className="h-4 w-4" />
                         </Button>
 
-                        {/* 导入Excel */}
+                        {/* 导入Excel（移动端并入“更多”菜单） */}
                         {editor.isEditable && (
                             <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
+                                className="hidden md:inline-flex h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
                                 onClick={() => setExcelImportOpen(true)}
                             >
                                 <Upload className="h-4 w-4" />
                             </Button>
                         )}
 
-                        {/* New 按钮 */}
+                        {/* New 按钮（移动端仅图标） */}
                         {editor.isEditable && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button
                                         size="sm"
-                                        className="ml-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 h-8"
+                                        className="ml-1 md:ml-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-2.5 md:px-3 h-9 md:h-8"
                                     >
-                                        {t('bitable.actions.new')}
-                                        <ChevronDown className="h-4 w-4 ml-1" />
+                                        <Plus className="h-4 w-4 md:hidden" />
+                                        <span className="hidden md:inline">{t('bitable.actions.new')}</span>
+                                        <ChevronDown className="hidden md:inline-block h-4 w-4 ml-1" />
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent>
@@ -763,25 +768,62 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                             </DropdownMenu>
                         )}
 
-                        {/* 删除 */}
+                        {/* 删除（移动端并入“更多”菜单） */}
                         {editor.isEditable && (
                             <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-accent"
+                                className="hidden md:inline-flex h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-accent"
                                 onClick={deleteNode}
                             >
                                 <Trash2 className="h-4 w-4" />
                             </Button>
                         )}
+
+                        {/* 更多（仅移动端：聚合设置/导入/删除等次要操作） */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="md:hidden h-9 w-9 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
+                                >
+                                    <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setFieldConfigOpen(true)}>
+                                    <Settings className="h-4 w-4 mr-2" />
+                                    {t('bitable.actions.fieldSettings')}
+                                </DropdownMenuItem>
+                                {editor.isEditable && (
+                                    <DropdownMenuItem onClick={() => setExcelImportOpen(true)}>
+                                        <Upload className="h-4 w-4 mr-2" />
+                                        {t('bitable.actions.importExcel')}
+                                    </DropdownMenuItem>
+                                )}
+                                {editor.isEditable && (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            onClick={deleteNode}
+                                            className="text-red-600 dark:text-red-400"
+                                        >
+                                            <Trash2 className="h-4 w-4 mr-2" />
+                                            {t('bitable.actions.deleteTable')}
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
 
                 {/* 搜索框 */}
                 {showSearch && (
-                    <div className="px-4 py-2 border-b border-gray-200 dark:border-border">
+                    <div className="pl-2 pr-2 py-2 md:pr-4 border-b border-gray-200 dark:border-border">
                         <Input
-                            className="w-64 h-8"
+                            className="w-full md:w-64 h-9 md:h-8"
                             placeholder={t('bitable.search.placeholder') || 'Search...'}
                             value={searchText}
                             onChange={(e) => setSearchText(e.target.value)}
@@ -796,7 +838,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 </div>
 
                 {/* 底部统计 */}
-                <div className="px-4 py-3 text-xs text-gray-500 flex items-center justify-between border-t border-gray-200 dark:border-border">
+                <div className="pl-2 pr-3 md:pr-4 py-3 text-xs text-gray-500 flex items-center justify-between border-t border-gray-200 dark:border-border">
                     <span>{t('bitable.stats.totalRecords', { count: data.length })}</span>
                 </div>
             </div>

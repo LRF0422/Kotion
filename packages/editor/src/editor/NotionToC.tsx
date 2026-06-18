@@ -26,8 +26,31 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
 }) => {
     const [activeId, setActiveId] = useState<string | null>(null)
     const [mobileOpen, setMobileOpen] = useState(false)
+    const [tickGap, setTickGap] = useState(8)
     const rafRef = useRef<number>(0)
     const isMobile = useIsMobile()
+
+    // Keep the tick strip inside the viewport: compress the gap between ticks as
+    // the heading count grows so a long document never overflows off-screen.
+    // Short documents keep the comfortable default spacing.
+    useEffect(() => {
+        const TICK_HEIGHT = 2 // h-0.5
+        const STRIP_PADDING = 32 // py-4 (top + bottom)
+        const DEFAULT_GAP = 8 // gap-2
+        const compute = () => {
+            const n = items.length
+            if (n <= 1) {
+                setTickGap(DEFAULT_GAP)
+                return
+            }
+            const available = window.innerHeight - offsetTop - STRIP_PADDING
+            const gap = (available - n * TICK_HEIGHT) / (n - 1)
+            setTickGap(Math.max(0, Math.min(DEFAULT_GAP, gap)))
+        }
+        compute()
+        window.addEventListener('resize', compute)
+        return () => window.removeEventListener('resize', compute)
+    }, [items.length, offsetTop])
 
     // Track which heading is currently at the top of the viewport.
     useEffect(() => {
@@ -130,7 +153,10 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
             style={{ top: offsetTop, height: `calc(100vh - ${offsetTop}px)`, alignItems: 'center' }}
         >
             {/* Collapsed: tick marks. Fade out while the strip is hovered. */}
-            <div className="flex flex-col items-end gap-2 pr-3 pl-12 py-4 transition-opacity duration-200 group-hover:opacity-0 group-hover:pointer-events-none">
+            <div
+                className="flex flex-col items-end max-h-full overflow-hidden pr-3 pl-12 py-4 transition-opacity duration-200 group-hover:opacity-0 group-hover:pointer-events-none"
+                style={{ gap: tickGap }}
+            >
                 {items.map(item => (
                     <div
                         key={item.id}

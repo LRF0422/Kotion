@@ -2,6 +2,12 @@ import React, { useState, useMemo, useCallback } from "react";
 import { Editor } from "@kn/editor";
 import { Button, Input, Checkbox } from "@kn/ui";
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@kn/ui";
+import {
     Plus,
     Search,
     Settings,
@@ -26,6 +32,9 @@ import {
     Maximize2,
     ChevronRight,
     ChevronDown,
+    EyeOff,
+    Pin,
+    MoreVertical,
 } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 import { FieldConfig, RecordData, ViewConfig, FieldType, GroupConfig } from "../../types";
@@ -35,6 +44,8 @@ import { useTheme, cn } from "@kn/ui";
 import { getFieldRenderer, getFieldEditor } from "../fields/FieldRenderers";
 import { createFillHandler } from "../../utils/autoFill";
 import { applyGroups, getGroupLabel } from "../../utils/dataProcessing";
+import { computeSummary, nextSummaryMode, summaryPrefix } from "../../utils/summary";
+import { debounce } from "lodash";
 
 // 字段类型图标映射
 const getFieldTypeIcon = (type: FieldType) => {
@@ -110,6 +121,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         onUpdateRecord,
         onBatchUpdateRecords,
         onDeleteRecord,
+        onUpdateField,
         editable,
         editor,
         searchText: searchTextProp,
@@ -177,14 +189,38 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                 width: field.width || 180,
                 resizable: true,
                 sortable: true,
+                frozen: field.frozen || false,
                 editable: editable && field.type !== 'id',
                 renderHeaderCell: (headerProps: any) => {
                     return (
-                        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-normal text-sm">
+                        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-normal text-sm group/header w-full">
                             {getFieldTypeIcon(field.type)}
-                            <span>{field.title}</span>
+                            <span className="truncate">{field.title}</span>
                             {field.type === FieldType.TEXT && field.id.includes('ai') && (
                                 <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded">AI</span>
+                            )}
+                            {field.frozen && <Pin className="h-3 w-3 text-blue-500 fill-blue-500 flex-shrink-0" />}
+                            {editable && (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <button
+                                            className="ml-auto opacity-0 group-hover/header:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-200 dark:hover:bg-accent flex-shrink-0"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <MoreVertical className="h-3.5 w-3.5" />
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start">
+                                        <DropdownMenuItem onClick={() => onUpdateField(field.id, { frozen: !field.frozen })}>
+                                            <Pin className="h-4 w-4 mr-2" />
+                                            {field.frozen ? t('bitable.tableView.unfreezeColumn') : t('bitable.tableView.freezeColumn')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => onUpdateField(field.id, { isShow: false })}>
+                                            <EyeOff className="h-4 w-4 mr-2" />
+                                            {t('bitable.tableView.hideColumn')}
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             )}
                         </div>
                     );
@@ -231,11 +267,49 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                             } : undefined}
                         />
                     );
+                },
+                renderSummaryCell: ({ row }: any) => {
+                    const mode = field.summary || 'none';
+                    const text = row?.agg?.[field.id] ?? '';
+                    const content = mode !== 'none' && text !== ''
+                        ? <span><span className="text-muted-foreground mr-1">{summaryPrefix(mode)}</span>{text}</span>
+                        : <span className="opacity-0 group-hover/summary:opacity-60 transition-opacity">{t('bitable.tableView.summary')}</span>;
+                    if (!editable) return <div className="text-xs text-right tabular-nums px-1">{mode !== 'none' ? content : null}</div>;
+                    return (
+                        <button
+                            className="w-full h-full text-xs text-right tabular-nums px-1 group/summary hover:bg-gray-100 dark:hover:bg-accent"
+                            title={t('bitable.tableView.summaryCycle')}
+                            onClick={() => onUpdateField(field.id, { summary: nextSummaryMode(field.summary, field.type) })}
+                        >
+                            {content}
+                        </button>
+                    );
                 }
             }));
 
         return editable ? [SelectColumn, ...baseColumns] : baseColumns;
-    }, [fields, editable, editor]);
+    }, [fields, editable, editor, t, onUpdateField]);
+
+    // 汇总行：预计算各列的聚合显示值（基于当前过滤后的数据）
+    const hasSummary = useMemo(() => fields.some(f => f.summary && f.summary !== 'none'), [fields]);
+    const summaryRows = useMemo(() => {
+        const agg: Record<string, string> = {};
+        fields.forEach(f => {
+            const mode = f.summary || 'none';
+            agg[f.id] = mode === 'none' ? '' : computeSummary(mode, f, filteredData);
+        });
+        return [{ id: '__summary__', agg }];
+    }, [fields, filteredData]);
+
+    // Persist column width back to the field config. react-data-grid fires
+    // onColumnResize continuously while dragging, so debounce to emit a single
+    // update (and one undo step) per resize gesture.
+    const persistColumnWidth = useMemo(
+        () => debounce((fieldId: string, width: number) => {
+            onUpdateField(fieldId, { width });
+        }, 300),
+        [onUpdateField]
+    );
 
     // Drag-fill handler for react-data-grid (non-grouped)
     const handleFill = useMemo(() => {
@@ -366,6 +440,13 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                         }
                     }}
                     onFill={isGrouped ? groupedFill : handleFill}
+                    onColumnResize={(column: any, width: number) => {
+                        const w = Math.round(typeof width === 'number' ? width : parseFloat(width));
+                        if (editable && column?.key && !Number.isNaN(w)) {
+                            persistColumnWidth(column.key, w);
+                        }
+                    }}
+                    bottomSummaryRows={(hasSummary || editable) ? (summaryRows as any) : undefined}
                     renderers={isGrouped ? { renderRow: renderGroupRow as any } : undefined}
                     rowClass={isGrouped ? getRowClass as any : undefined}
                     className={cn(

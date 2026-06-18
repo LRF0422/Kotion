@@ -98,7 +98,8 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
         rechartsConfig,
         currentColors,
         formatYAxisTick,
-        yAxisProps
+        yAxisProps,
+        chartError
     } = useChartData(view, fields, data);
 
     // 获取图表类型图标
@@ -141,6 +142,26 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
 
     // 渲染图表
     const renderChart = () => {
+        // 配置引用的字段已被删除：给出明确提示而非空白
+        if (chartError) {
+            return (
+                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2">
+                    <Circle className="h-12 w-12 opacity-20" />
+                    <span className="text-sm">
+                        {chartError.type === 'missing-x'
+                            ? t('bitable.chartView.missingXField')
+                            : t('bitable.chartView.missingYField')}
+                    </span>
+                    {editable && (
+                        <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
+                            <Settings className="h-4 w-4 mr-1" />
+                            {t('bitable.chartView.configure')}
+                        </Button>
+                    )}
+                </div>
+            );
+        }
+
         if (!chartConfig.xAxisField) {
             return (
                 <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2">

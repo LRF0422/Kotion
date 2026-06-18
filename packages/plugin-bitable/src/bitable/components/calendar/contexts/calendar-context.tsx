@@ -23,6 +23,7 @@ interface ICalendarContext {
   setView: Dispatch<SetStateAction<TCalendarView>>;
   onEventAdd?: (event: any) => void;
   onEventUpdate?: (eventId: number, event: any) => void;
+  onEventDelete?: (eventId: number) => void;
   editor: Editor
   toggleSettings: () => void
 }
@@ -41,7 +42,7 @@ const WORKING_HOURS = {
 
 const VISIBLE_HOURS = { from: 7, to: 18 };
 
-export function CalendarProvider({ children, users, events, onEventAdd, onEventUpdate, editor, toggleSettings }: { children: React.ReactNode; users: IUser[]; events: IEvent[], onEventAdd?: (event: any) => void, onEventUpdate?: (eventId: number, event: any) => void, editor: Editor, toggleSettings: () => void }) {
+export function CalendarProvider({ children, users, events, onEventAdd, onEventUpdate, onEventDelete, editor, toggleSettings }: { children: React.ReactNode; users: IUser[]; events: IEvent[], onEventAdd?: (event: any) => void, onEventUpdate?: (eventId: number, event: any) => void, onEventDelete?: (eventId: number) => void, editor: Editor, toggleSettings: () => void }) {
   const [badgeVariant, setBadgeVariant] = useState<TBadgeVariant>("colored");
   const [visibleHours, setVisibleHours] = useState<TVisibleHours>(VISIBLE_HOURS);
   const [workingHours, setWorkingHours] = useState<TWorkingHours>(WORKING_HOURS);
@@ -81,6 +82,7 @@ export function CalendarProvider({ children, users, events, onEventAdd, onEventU
         setView,
         onEventAdd,
         onEventUpdate,
+        onEventDelete,
         editor,
         toggleSettings
       }}
