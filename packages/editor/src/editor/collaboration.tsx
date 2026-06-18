@@ -9,7 +9,7 @@ import { resolveBlockMenuItems } from "./kit";
 import { ThemeProvider } from "styled-components";
 import light, { dark } from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
-import { ExtensionWrapper } from "@kn/common";
+import { ExtensionWrapper, logger } from "@kn/common";
 import { useSafeState, useUnmount } from "ahooks";
 import { NotionToC } from "./NotionToC";
 import { cn, useIsMobile, useTheme } from "@kn/ui";
@@ -22,6 +22,8 @@ import { loadContentProgressive, isLargeDocument } from "./loadContentProgressiv
 import { TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-caret";
+import { TiptapTransformer } from "@hocuspocus/transformer";
+import * as Y from "yjs";
 import { Loader2 } from "@kn/icon";
 import "../styles/editor.css"
 
@@ -46,14 +48,66 @@ export interface CollaborationEditorProps extends EditorRenderProps {
   onContentReady?: () => void;
 }
 
+// The Yjs field the Collaboration extension binds to (its built-in default).
+// Must match the field used when seeding the Y.Doc below.
+const COLLAB_FIELD = "default";
 
-export const CollaborationEditor = forwardRef<
+/**
+ * A collaborative Y.Doc is "empty" when its bound XML fragment has no nodes
+ * at all. A brand-new page (content only ever lived in REST/DB) syncs down an
+ * empty fragment; an already-collaboratively-edited page syncs down a populated
+ * one. This is checked *after* sync so the fragment reflects the server state.
+ */
+const isYDocEmpty = (doc: Y.Doc): boolean => {
+  try {
+    return doc.getXmlFragment(COLLAB_FIELD).length === 0;
+  } catch {
+    return true;
+  }
+};
+
+/**
+ * Resolve once the provider has finished its initial sync (SyncStep2), or after
+ * a bounded timeout so an unreachable WS still lets us surface *something*.
+ */
+const waitForProviderSync = (provider: TiptapCollabProvider, timeoutMs = 5000): Promise<boolean> => {
+  if (provider.synced) return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const handler = () => {
+      if (settled) return;
+      settled = true;
+      provider.off("synced", handler);
+      clearTimeout(timeoutId);
+      resolve(true);
+    };
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      provider.off("synced", handler);
+      resolve(false);
+    }, timeoutMs);
+    provider.on("synced", handler);
+  });
+};
+
+
+/**
+ * Inner editor: owns the actual `useEditor` instance. By the time this mounts
+ * the collaborative Y.Doc (if any) has already been seeded with content, so the
+ * Collaboration extension initialises the editor straight from real content and
+ * never has to materialise the schema's placeholder `title` node.
+ */
+interface CollaborationEditorInnerProps extends CollaborationEditorProps {
+  extensions: AnyExtension[];
+  extensionWrappers: ExtensionWrapper[];
+}
+
+const CollaborationEditorInner = forwardRef<
   Editor | null,
-  React.PropsWithChildren<CollaborationEditorProps>
+  React.PropsWithChildren<CollaborationEditorInnerProps>
 >((props, ref) => {
-  const { content, user, provider, pageInfo, toc, withTitle, width = 'w-[calc(100vw-350px)]', externalExtensions, onContentReady } = props
-
-  const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle, externalExtensions)
+  const { content, user, provider, pageInfo, toc, width = 'w-[calc(100vw-350px)]', onContentReady, extensions, extensionWrappers } = props
   const blockMenuItems = React.useMemo(() => resolveBlockMenuItems(extensionWrappers as ExtensionWrapper[]), [extensionWrappers])
   const [items, setItems] = useSafeState<any[]>([])
   const [contentReady, setContentReady] = useSafeState(false)
@@ -150,26 +204,29 @@ export const CollaborationEditor = forwardRef<
 
   useImperativeHandle(ref, () => editor as Editor)
 
-  // Load content into the editor
+  // Load content into the editor.
   //
-  // When a Yjs collab provider is attached, the local Y.Doc is empty at
-  // mount time and only acquires the page's collaborative state once the
-  // server's SyncStep2 has been processed. Calling `setContent` BEFORE
-  // that point is what produced the duplicate-content bug: the local
-  // insert gets recorded by Yjs as fresh ops, then the server's own
-  // state is layered on top of it during sync, leaving two copies of
-  // every block in the merged document.
+  // With a collaboration provider, the content already lives in the Y.Doc by
+  // the time we get here — either synced down from the server, or seeded by the
+  // outer component *before* this editor was created. We must NOT call
+  // `setContent` in that case: it would record fresh Yjs ops on top of the
+  // existing state and duplicate every block (and, with the `title block*`
+  // schema, leave a stray empty "Untitled" title above the real content).
   //
-  // Strategy:
-  //   1. If there is no provider, behave as before — REST content is the
-  //      single source of truth.
-  //   2. If there is a provider, wait for `synced` to arrive (with a
-  //      bounded timeout). After sync, only seed from REST when the
-  //      collaborative doc is still empty (brand-new page, or never
-  //      collaboratively edited). Otherwise the Yjs state already carries
-  //      the latest content and we leave it alone.
+  // Without a provider, REST content is the single source of truth and is
+  // loaded directly (progressively for very large documents so the main thread
+  // stays responsive).
   React.useEffect(() => {
     if (!editor) return;
+
+    if (provider) {
+      // Y.Doc is the source of truth; the editor renders it on its own.
+      setLoadProgress(100);
+      setIsLargeDoc(false);
+      setContentReady(true);
+      onContentReady?.();
+      return;
+    }
 
     // New/empty pages have no content: mark ready immediately so the skeleton
     // does not remain visible forever.
@@ -185,65 +242,6 @@ export const CollaborationEditor = forwardRef<
     setLoadProgress(0);
     setIsLargeDoc(false);
 
-    const isCollabDocEmpty = (): boolean => {
-      const doc = editor.state.doc;
-      if (doc.childCount === 0) return true;
-      // Walk every descendant looking for *real* content. Structural size
-      // (e.g. an empty title containing an empty heading) is not enough:
-      // Tiptap's default initialisation is exactly that shape, and so is a
-      // Yjs sync that arrived with no payload yet, so relying on
-      // `firstChild.content.size === 0` would misclassify those cases as
-      // "non-empty" and skip the REST seed entirely (which is what made
-      // the page render blank after a refresh).
-      //
-      // A node counts as content when it is either:
-      //   - a text node with at least one non-whitespace character, or
-      //   - an atom node that isn't text (images, embeds, hard breaks,
-      //     custom inline atoms, etc.).
-      let hasContent = false;
-      doc.descendants((node) => {
-        if (hasContent) return false;
-        if (node.isText) {
-          if (node.text && node.text.trim() !== '') {
-            hasContent = true;
-            return false;
-          }
-          return false;
-        }
-        if (node.isAtom) {
-          hasContent = true;
-          return false;
-        }
-        return true;
-      });
-      return !hasContent;
-    };
-
-    const waitForSync = (): Promise<boolean> => {
-      if (!provider) return Promise.resolve(true);
-      if (provider.synced) return Promise.resolve(true);
-      return new Promise<boolean>((resolve) => {
-        let settled = false;
-        const handler = () => {
-          if (settled) return;
-          settled = true;
-          provider.off('synced', handler);
-          clearTimeout(timeoutId);
-          resolve(true);
-        };
-        // Bounded wait — if the WS is unreachable we still want to surface
-        // *something* rather than spin forever. 5s is generous for the
-        // SyncStep2 round-trip while still bounding the worst case.
-        const timeoutId = setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          provider.off('synced', handler);
-          resolve(false);
-        }, 5000);
-        provider.on('synced', handler);
-      });
-    };
-
     // Yield first so the skeleton UI can paint before heavy processing begins
     const timer = setTimeout(async () => {
       if (cancelled) return;
@@ -256,19 +254,6 @@ export const CollaborationEditor = forwardRef<
       ).json;
 
       if (!processedContent || cancelled) return;
-
-      const synced = await waitForSync();
-      if (cancelled) return;
-
-      // If sync succeeded and the collab doc already carries content,
-      // trust Yjs as the source of truth and skip the REST seed —
-      // calling setContent here would duplicate every block.
-      if (synced && provider && !isCollabDocEmpty()) {
-        setLoadProgress(100);
-        setContentReady(true);
-        onContentReady?.();
-        return;
-      }
 
       // For very large documents, load in chunks so the browser stays
       // responsive and we can show progress. Otherwise use the fast path.
@@ -294,7 +279,8 @@ export const CollaborationEditor = forwardRef<
   }, [editor, content, provider, extensions]);
 
 
-  // Cleanup provider on unmount
+  // Cleanup provider on unmount. Several callers (JournalEditor, PageRoom) rely
+  // on the editor to tear down the provider they handed in.
   useUnmount(() => {
     if (provider) {
       provider.awareness?.destroy();
@@ -369,6 +355,118 @@ export const CollaborationEditor = forwardRef<
   );
 });
 
+CollaborationEditorInner.displayName = "CollaborationEditorInner";
+
+
+/**
+ * Outer wrapper: resolves extensions and — crucially — seeds the collaborative
+ * Y.Doc from REST content *before* the inner editor (and its Collaboration
+ * extension) is created.
+ *
+ * Why this matters: the custom Doc schema requires `title block*`, so an editor
+ * bound to an empty Y.Doc has to materialise an empty `title` node ("Untitled").
+ * y-prosemirror can then write that placeholder into the Y.Doc; when the page's
+ * real content (which carries its own title) is layered on top, the two titles
+ * merge and the real title gets demoted into the body — the "extra Untitled on
+ * top" bug. Seeding the Y.Doc first means the editor initialises from real
+ * content and the placeholder is never created.
+ */
+export const CollaborationEditor = forwardRef<
+  Editor | null,
+  React.PropsWithChildren<CollaborationEditorProps>
+>((props, ref) => {
+  const { content, provider, withTitle, externalExtensions } = props
+
+  const [extensions, extensionWrappers] = useEditorExtension(undefined, withTitle, externalExtensions)
+
+  // `readyFor` tracks which provider has been prepared. The inner editor is
+  // only mounted once the *current* provider has been prepared, guaranteeing
+  // the seed runs before the editor binds. `null` => no-provider case (ready
+  // immediately, REST content is loaded by the inner editor itself).
+  const NO_PROVIDER = React.useRef(Symbol("no-provider")).current;
+  const [readyFor, setReadyFor] = useSafeState<TiptapCollabProvider | symbol | undefined>(undefined);
+
+  // Always read the latest content/extensions at seed time without retriggering
+  // the (provider-keyed) prepare effect when their identities churn.
+  const contentRef = React.useRef(content);
+  contentRef.current = content;
+  const extensionsRef = React.useRef(extensions);
+  extensionsRef.current = extensions;
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setReadyFor(undefined);
+
+    if (!provider) {
+      setReadyFor(NO_PROVIDER);
+      return;
+    }
+
+    (async () => {
+      // Reflect the server's state before deciding whether to seed.
+      await waitForProviderSync(provider);
+      if (cancelled) return;
+
+      const restContent = contentRef.current;
+      // Only seed when the collaborative doc has no content of its own yet.
+      if (restContent && isYDocEmpty(provider.document)) {
+        try {
+          const exts = extensionsRef.current as AnyExtension[];
+          const processed = rewriteUnknownContent(
+            restContent as JSONContent,
+            getSchema(exts),
+            { fallbackToParagraph: true },
+          ).json;
+          // Re-check emptiness right before writing in case sync landed during
+          // the await above.
+          if (processed && isYDocEmpty(provider.document)) {
+            const seededDoc = TiptapTransformer.toYdoc(processed, COLLAB_FIELD, exts);
+            Y.applyUpdate(provider.document, Y.encodeStateAsUpdate(seededDoc));
+          }
+        } catch (e) {
+          logger.error("[CollaborationEditor] failed to seed Y.Doc from REST content", e);
+        }
+      }
+
+      if (!cancelled) setReadyFor(provider);
+    })();
+
+    return () => { cancelled = true; };
+    // Keyed on provider only: seeding happens once per Y.Doc. Content/extension
+    // identity changes are picked up via refs without remounting the editor.
+  }, [provider]);
+
+  const ready = provider ? readyFor === provider : readyFor === NO_PROVIDER;
+
+  if (!ready) {
+    // Lightweight skeleton while we wait for sync / seed the Y.Doc. Mirrors the
+    // inner editor's own loading skeleton so there's no visual jump.
+    return (
+      <div className={cn("flex flex-col z-30 relative", props.width ?? 'w-[calc(100vw-350px)]', props.className)}>
+        <div className="flex-1 min-h-0 w-full overflow-y-auto p-4">
+          <div className="space-y-3 animate-pulse">
+            <div className="h-8 bg-muted rounded w-3/4" />
+            <div className="h-4 bg-muted rounded w-full" />
+            <div className="h-4 bg-muted rounded w-5/6" />
+            <div className="h-4 bg-muted rounded w-full" />
+            <div className="h-32 bg-muted rounded w-full" />
+            <div className="h-4 bg-muted rounded w-4/5" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <CollaborationEditorInner
+      key={provider ? `p:${props.id}` : `np:${props.id}`}
+      ref={ref}
+      {...props}
+      extensions={extensions as AnyExtension[]}
+      extensionWrappers={extensionWrappers as ExtensionWrapper[]}
+    />
+  );
+});
 
 
 CollaborationEditor.displayName = "CollaborationEditor";
