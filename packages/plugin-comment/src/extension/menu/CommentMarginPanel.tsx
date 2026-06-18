@@ -1,24 +1,24 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Editor } from "@kn/editor";
+import { createPortal } from "react-dom";
+import { Editor, useMarginCards } from "@kn/editor";
 import { useIsMobile } from "@kn/ui";
 import type { CommentItem as CommentItemType } from "../types";
 import { MarginCommentCard } from "./MarginCommentCard";
 import { CommentSheet } from "./CommentSheet";
 import { getCurrentUser } from "../comment";
 
-interface ThreadPosition {
-    threadId: string;
-    comments: CommentItemType[];
+interface ThreadItem {
+    id: string;
     from: number;
     to: number;
-    top: number; // viewport-relative Y
+    comments: CommentItemType[];
     isNew: boolean; // true if thread has no real comment content yet
 }
 
 /**
  * Walk the document to find all comment marks and extract thread data.
  */
-function getThreads(editor: Editor): Omit<ThreadPosition, 'top'>[] {
+function getThreads(editor: Editor): ThreadItem[] {
     const { doc } = editor.state;
     const markType = editor.schema.marks.comment;
     if (!markType) return [];
@@ -45,117 +45,52 @@ function getThreads(editor: Editor): Omit<ThreadPosition, 'top'>[] {
         }
     });
 
-    const threads: Omit<ThreadPosition, 'top'>[] = [];
-    threadsMap.forEach((data, threadId) => {
+    const threads: ThreadItem[] = [];
+    threadsMap.forEach((data, id) => {
         const isNew = data.comments.length === 0 || (data.comments.length === 1 && !data.comments[0].content);
-        threads.push({ threadId, comments: data.comments, from: data.from, to: data.to, isNew });
+        threads.push({ id, comments: data.comments, from: data.from, to: data.to, isNew });
     });
 
     threads.sort((a, b) => a.from - b.from);
     return threads;
 }
 
-/**
- * Calculate viewport-relative positions for each thread and resolve overlaps.
- */
-function calcPositions(editor: Editor, threads: Omit<ThreadPosition, 'top'>[]): ThreadPosition[] {
-    const positioned: ThreadPosition[] = [];
-
-    for (const thread of threads) {
-        try {
-            const coords = editor.view.coordsAtPos(thread.from);
-            positioned.push({ ...thread, top: coords.top });
-        } catch {
-            // Skip threads whose positions can't be calculated
-        }
-    }
-
-    // Resolve vertical overlaps (push down if cards collide)
-    const CARD_HEIGHT = 40;
-    const GAP = 6;
-    for (let i = 1; i < positioned.length; i++) {
-        const minTop = positioned[i - 1].top + CARD_HEIGHT + GAP;
-        if (positioned[i].top < minTop) {
-            positioned[i].top = minTop;
-        }
-    }
-
-    return positioned;
-}
-
 export const CommentMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
     const isMobile = useIsMobile();
-    const [threads, setThreads] = useState<ThreadPosition[]>([]);
     const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
-    const [panelLeft, setPanelLeft] = useState<number | null>(null);
-    const rawThreadsRef = useRef<Omit<ThreadPosition, 'top'>[]>([]);
     const prevActiveRef = useRef<string | null>(null);
 
     const currentUserId = useMemo(() => getCurrentUser().id, []);
 
-    // Update thread data on document changes
-    const updateThreadData = useCallback(() => {
-        if (!editor || editor.isDestroyed) return;
-        rawThreadsRef.current = getThreads(editor);
-        setActiveThreadId((editor.storage as any).comment?.activeThreadId || null);
-    }, [editor]);
+    const { panelLeft, panelWidth, anchors, registerCard } = useMarginCards<ThreadItem>(editor, {
+        side: "right",
+        cardWidth: 300,
+        minVisible: 160,
+        collect: getThreads,
+        disabled: isMobile,
+    });
 
-    // Update viewport positions (called on scroll + transaction)
-    const updatePositions = useCallback(() => {
-        if (!editor || editor.isDestroyed) return;
-
-        // Calculate the left edge of the margin panel, clamped to viewport
-        const proseMirrorEl = editor.view.dom;
-        if (proseMirrorEl) {
-            const rect = proseMirrorEl.getBoundingClientRect();
-            const CARD_WIDTH = 300;
-            const VIEWPORT_PADDING = 12;
-            const idealLeft = rect.right + 16;
-            const maxLeft = window.innerWidth - CARD_WIDTH - VIEWPORT_PADDING;
-            setPanelLeft(Math.min(idealLeft, maxLeft));
-        }
-
-        const positioned = calcPositions(editor, rawThreadsRef.current);
-        setThreads(positioned);
-    }, [editor]);
-
+    // Mirror the extension's active thread (set by onSelectionUpdate / addComment).
     useEffect(() => {
         if (!editor) return;
-
-        const handleUpdate = () => {
-            updateThreadData();
-            requestAnimationFrame(updatePositions);
-        };
-
-        handleUpdate();
-        editor.on("transaction", handleUpdate);
-
-        const editorContainer = document.getElementById("editor-container");
-        const handleScroll = () => requestAnimationFrame(updatePositions);
-        editorContainer?.addEventListener("scroll", handleScroll, { passive: true });
-
-        // Also listen to window resize for left recalculation
-        window.addEventListener("resize", handleScroll, { passive: true });
-
-        return () => {
-            editor.off("transaction", handleUpdate);
-            editorContainer?.removeEventListener("scroll", handleScroll);
-            window.removeEventListener("resize", handleScroll);
-        };
-    }, [editor, updateThreadData, updatePositions]);
+        const sync = () => setActiveThreadId((editor.storage as any).comment?.activeThreadId || null);
+        sync();
+        editor.on("transaction", sync);
+        return () => { editor.off("transaction", sync); };
+    }, [editor]);
 
     // Clean up orphaned empty threads: when the user leaves a thread that still
     // has no real comment content, remove its (empty) highlight mark.
     useEffect(() => {
         const prev = prevActiveRef.current;
         if (prev && prev !== activeThreadId && editor && !editor.isDestroyed) {
-            const outgoing = rawThreadsRef.current.find((t) => t.threadId === prev);
+            const outgoing = anchors.find((t) => t.id === prev);
             if (outgoing && outgoing.isNew) {
                 editor.commands.resolveThread(prev);
             }
         }
         prevActiveRef.current = activeThreadId;
-    }, [activeThreadId, editor]);
+    }, [activeThreadId, editor, anchors]);
 
     const setActive = useCallback((threadId: string | null) => {
         setActiveThreadId(threadId);
@@ -187,50 +122,56 @@ export const CommentMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) => 
         editor.commands.setFirstComment(threadId, content);
     }, [editor]);
 
-    if (!activeThreadId) return null;
-
-    // Only show the thread that's currently active (user clicked on its highlight)
-    const visibleThread = threads.find((t) => t.threadId === activeThreadId);
-    if (!visibleThread) return null;
-
+    // Mobile: present the active thread in a bottom sheet.
     if (isMobile) {
+        const active = activeThreadId ? anchors.find((t) => t.id === activeThreadId) : undefined;
+        if (!active) return null;
         return (
             <CommentSheet
-                key={visibleThread.threadId}
+                key={active.id}
                 open
                 onOpenChange={(open) => { if (!open) setActive(null); }}
-                comments={visibleThread.comments}
-                isNew={visibleThread.isNew}
+                comments={active.comments}
+                isNew={active.isNew}
                 isEditable={editor.isEditable}
                 currentUserId={currentUserId}
-                onReply={(content, parentId) => handleReply(visibleThread.threadId, content, parentId)}
-                onEdit={(commentId, content) => handleEdit(visibleThread.threadId, commentId, content)}
-                onDelete={(commentId) => handleDelete(visibleThread.threadId, commentId)}
-                onResolve={() => handleResolve(visibleThread.threadId)}
-                onSetFirstComment={(content) => handleSetFirstComment(visibleThread.threadId, content)}
+                onReply={(content, parentId) => handleReply(active.id, content, parentId)}
+                onEdit={(commentId, content) => handleEdit(active.id, commentId, content)}
+                onDelete={(commentId) => handleDelete(active.id, commentId)}
+                onResolve={() => handleResolve(active.id)}
+                onSetFirstComment={(content) => handleSetFirstComment(active.id, content)}
             />
         );
     }
 
-    if (panelLeft === null) return null;
+    if (panelLeft === null || anchors.length === 0) return null;
 
-    return (
-        <MarginCommentCard
-            key={visibleThread.threadId}
-            threadId={visibleThread.threadId}
-            comments={visibleThread.comments}
-            top={visibleThread.top}
-            left={panelLeft}
-            isNew={visibleThread.isNew}
-            isActive={true}
-            isEditable={editor.isEditable}
-            currentUserId={currentUserId}
-            onClick={() => setActive(visibleThread.threadId)}
-            onReply={(content, parentId) => handleReply(visibleThread.threadId, content, parentId)}
-            onEdit={(commentId, content) => handleEdit(visibleThread.threadId, commentId, content)}
-            onDelete={(commentId) => handleDelete(visibleThread.threadId, commentId)}
-            onResolve={() => handleResolve(visibleThread.threadId)}
-            onSetFirstComment={(content) => handleSetFirstComment(visibleThread.threadId, content)}
-        />
+    // Portal to <body> so the fixed cards escape any transformed ancestor
+    // (e.g. the tab/workspace switcher), keeping them viewport-relative.
+    return createPortal(
+        <>
+            {anchors.map((thread) => (
+                <MarginCommentCard
+                    key={thread.id}
+                    registerRef={registerCard(thread.id)}
+                    threadId={thread.id}
+                    comments={thread.comments}
+                    top={thread.top}
+                    left={panelLeft}
+                    width={panelWidth}
+                    isNew={thread.isNew}
+                    isActive={thread.id === activeThreadId}
+                    isEditable={editor.isEditable}
+                    currentUserId={currentUserId}
+                    onClick={() => setActive(thread.id)}
+                    onReply={(content, parentId) => handleReply(thread.id, content, parentId)}
+                    onEdit={(commentId, content) => handleEdit(thread.id, commentId, content)}
+                    onDelete={(commentId) => handleDelete(thread.id, commentId)}
+                    onResolve={() => handleResolve(thread.id)}
+                    onSetFirstComment={(content) => handleSetFirstComment(thread.id, content)}
+                />
+            ))}
+        </>,
+        document.body
     );
 };

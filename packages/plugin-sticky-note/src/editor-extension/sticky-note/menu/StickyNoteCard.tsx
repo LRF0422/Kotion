@@ -23,6 +23,8 @@ export interface StickyNoteCardProps {
     left: number;
     width: number;
     isEditable: boolean;
+    /** Ref callback so the margin panel can measure this card's height. */
+    registerRef?: (el: HTMLElement | null) => void;
     onContentChange: (content: string) => void;
     onColorChange: (color: string) => void;
     onDelete: () => void;
@@ -46,6 +48,7 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
     left,
     width,
     isEditable,
+    registerRef,
     onContentChange,
     onColorChange,
     onDelete,
@@ -133,6 +136,7 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
 
     return (
         <div
+            ref={variant === "sheet" ? undefined : registerRef}
             className={
                 variant === "sheet"
                     ? "group/card w-full"

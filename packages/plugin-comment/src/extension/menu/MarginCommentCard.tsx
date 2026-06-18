@@ -11,10 +11,14 @@ export interface MarginCommentCardProps {
     comments: CommentItemType[];
     top: number;
     left: number;
+    /** Card width (px), shrunk to fit the gutter by the positioning hook. */
+    width: number;
     isNew: boolean;
     isActive: boolean;
     isEditable: boolean;
     currentUserId?: string;
+    /** Ref callback so the margin panel can measure this card's height. */
+    registerRef?: (el: HTMLElement | null) => void;
     onClick: () => void;
     onReply: (content: string, parentId?: string) => void;
     onEdit: (commentId: string, content: string) => void;
@@ -48,10 +52,12 @@ export const MarginCommentCard: React.FC<MarginCommentCardProps> = ({
     comments,
     top,
     left,
+    width,
     isNew,
     isActive,
     isEditable,
     currentUserId,
+    registerRef,
     onClick,
     onReply,
     onEdit,
@@ -69,8 +75,9 @@ export const MarginCommentCard: React.FC<MarginCommentCardProps> = ({
         const place = placeVertically(top, 200);
         return (
             <div
-                className="comment-card-enter fixed z-50 w-[280px] max-w-[calc(100vw-24px)]"
-                style={{ top: `${place.top}px`, left: `${left}px` }}
+                ref={registerRef}
+                className="comment-card-enter fixed z-50 max-w-[calc(100vw-24px)]"
+                style={{ top: `${place.top}px`, left: `${left}px`, width: `${width}px` }}
             >
                 <div className={`${SURFACE} p-3 shadow-lg`}>
                     <CommentInput
@@ -90,8 +97,9 @@ export const MarginCommentCard: React.FC<MarginCommentCardProps> = ({
     if (!isActive) {
         return (
             <div
-                className="group fixed z-40 w-[260px] max-w-[calc(100vw-24px)] cursor-pointer"
-                style={{ top: `${top}px`, left: `${left}px` }}
+                ref={registerRef}
+                className="group fixed z-40 max-w-[calc(100vw-24px)] cursor-pointer"
+                style={{ top: `${top}px`, left: `${left}px`, width: `${width}px` }}
                 onClick={onClick}
             >
                 <div className={`${SURFACE} flex items-start gap-2.5 px-3 py-2 shadow-sm transition-shadow hover:shadow-md`}>
@@ -131,8 +139,9 @@ export const MarginCommentCard: React.FC<MarginCommentCardProps> = ({
     const place = placeVertically(top);
     return (
         <div
-            className="comment-card-enter fixed z-50 w-[300px] max-w-[calc(100vw-24px)]"
-            style={{ top: `${place.top}px`, left: `${left}px` }}
+            ref={registerRef}
+            className="comment-card-enter fixed z-50 max-w-[calc(100vw-24px)]"
+            style={{ top: `${place.top}px`, left: `${left}px`, width: `${width}px` }}
         >
             <div
                 className={`${SURFACE} flex flex-col overflow-hidden shadow-lg`}

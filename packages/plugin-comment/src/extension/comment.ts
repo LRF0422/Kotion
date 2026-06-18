@@ -113,7 +113,7 @@ const Comments = Mark.create<CommentOptions, CommentStorage>({
 
     addCommands() {
         return {
-            addComment: (content: string) => ({ commands }) => {
+            addComment: (content: string) => ({ commands, editor }) => {
                 const user = getCurrentUser();
 
                 const item: CommentItem = {
@@ -125,6 +125,12 @@ const Comments = Mark.create<CommentOptions, CommentStorage>({
                 };
 
                 const threadId = uuidv4();
+
+                // setMark keeps the current selection unchanged, so the extension's
+                // onSelectionUpdate hook won't fire and the margin panel would never
+                // learn about the new thread. Mark it active up-front so the panel
+                // opens on the setMark transaction.
+                ((editor.storage as any).comment as CommentStorage).activeThreadId = threadId;
 
                 return commands.setMark('comment', {
                     thread_id: threadId,
