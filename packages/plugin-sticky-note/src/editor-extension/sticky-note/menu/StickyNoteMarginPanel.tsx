@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Editor } from "@kn/editor";
+import { useIsMobile } from "@kn/ui";
 import { StickyNoteCard } from "./StickyNoteCard";
+import { StickyNoteSheet } from "./StickyNoteSheet";
 
 interface NotePosition {
     noteId: string;
@@ -54,6 +57,13 @@ const CARD_WIDTH = 280;
 const CARD_MIN_HEIGHT = 80;
 const GAP = 12;
 const VIEWPORT_PADDING = 12;
+// Horizontal gap kept between a card's right edge and where the editor text
+// starts. The card's right edge is hard-clamped to `textLeft - GUTTER` so a
+// card can never cover the text.
+const GUTTER = 16;
+// If the left margin can't fit a card at least this wide, hide the cards
+// entirely instead of letting them overlap the text.
+const CARD_MIN_VISIBLE = 140;
 
 /**
  * Compute viewport-relative `top` and resolve overlap by pushing
@@ -107,10 +117,20 @@ function resolveOverlapWithHeights(
 }
 
 export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
+    const isMobile = useIsMobile();
     const [notes, setNotes] = useState<NotePosition[]>([]);
     const [panelLeft, setPanelLeft] = useState<number | null>(null);
+    const [panelWidth, setPanelWidth] = useState<number>(CARD_WIDTH);
     const rawRef = useRef<Omit<NotePosition, "top">[]>([]);
     const [heightMap, setHeightMap] = useState<Record<string, number>>({});
+    // Mobile: which note's bottom-sheet is open (mirrors editor.storage.stickyNote.activeNoteId).
+    const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+
+    const closeActiveNote = useCallback(() => {
+        const storage = (editor?.storage as any)?.stickyNote;
+        if (storage) storage.activeNoteId = null;
+        setActiveNoteId(null);
+    }, [editor]);
 
     const refreshData = useCallback(() => {
         if (!editor || editor.isDestroyed) return;
@@ -119,14 +139,40 @@ export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) 
 
     const refreshPositions = useCallback(() => {
         if (!editor || editor.isDestroyed) return;
+        // Mobile uses a bottom sheet, not margin cards — no positioning needed.
+        if (isMobile) return;
 
         const proseMirrorEl = editor.view.dom;
-        if (proseMirrorEl) {
-            const rect = proseMirrorEl.getBoundingClientRect();
-            // Place cards in the LEFT margin of the editor.
-            const idealLeft = rect.left - CARD_WIDTH - 16;
-            const minLeft = VIEWPORT_PADDING;
-            setPanelLeft(Math.max(idealLeft, minLeft));
+        if (!proseMirrorEl) return;
+
+        const rect = proseMirrorEl.getBoundingClientRect();
+        // A background tab renders its editor with `display:none`, collapsing the
+        // editor DOM to 0×0. Because the cards are portaled to <body>, a hidden
+        // tab would otherwise leave them floating over whatever tab is now
+        // visible — so hide them whenever the editor isn't actually on screen.
+        if (rect.width === 0 && rect.height === 0) {
+            setPanelLeft(null);
+            return;
+        }
+
+        // Cards live in the LEFT margin of the editor and must never cover the
+        // text. `maxRight` is the hard boundary a card's right edge may not
+        // cross; `available` is the usable width between the viewport padding
+        // and that boundary.
+        const maxRight = rect.left - GUTTER;
+        const available = maxRight - VIEWPORT_PADDING;
+
+        if (available < CARD_MIN_VISIBLE) {
+            // Not enough room to show a card without overlapping the text
+            // (narrow window / wide sidebar). Hide rather than cover text.
+            setPanelLeft(null);
+        } else {
+            // Prefer the full width, shrink to fit the margin. Right-align
+            // against `maxRight` so the card hugs the text edge; since the width
+            // never exceeds `available`, the left stays >= padding.
+            const width = Math.min(CARD_WIDTH, available);
+            setPanelWidth(width);
+            setPanelLeft(maxRight - width);
         }
 
         // Visible vertical range of the editor's scroll container. Cards are
@@ -141,13 +187,14 @@ export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) 
             : { top: 0, bottom: window.innerHeight };
 
         setNotes(calcPositions(editor, rawRef.current, bounds));
-    }, [editor]);
+    }, [editor, isMobile]);
 
     useEffect(() => {
         if (!editor) return;
 
         const handleUpdate = () => {
             refreshData();
+            setActiveNoteId(((editor.storage as any).stickyNote?.activeNoteId ?? null));
             requestAnimationFrame(refreshPositions);
         };
 
@@ -159,10 +206,19 @@ export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) 
         editorContainer?.addEventListener("scroll", handleScroll, { passive: true });
         window.addEventListener("resize", handleScroll, { passive: true });
 
+        // Re-run positioning when the editor itself is shown/hidden — switching
+        // tabs toggles `display:none` on a background editor (no transaction /
+        // scroll fires), and the portaled cards must hide with their tab.
+        const visibilityObserver = new IntersectionObserver(() => {
+            requestAnimationFrame(refreshPositions);
+        });
+        visibilityObserver.observe(editor.view.dom);
+
         return () => {
             editor.off("transaction", handleUpdate);
             editorContainer?.removeEventListener("scroll", handleScroll);
             window.removeEventListener("resize", handleScroll);
+            visibilityObserver.disconnect();
         };
     }, [editor, refreshData, refreshPositions]);
 
@@ -242,9 +298,37 @@ export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) 
         });
     }, [heightMap]);
 
+    // Mobile: no room for margin cards. Each note shows an inline marker (a
+    // ProseMirror widget rendered by the extension); tapping it sets
+    // activeNoteId, and we present that note in a bottom sheet for editing.
+    if (isMobile) {
+        const active = activeNoteId
+            ? rawRef.current.find((n) => n.noteId === activeNoteId)
+            : undefined;
+        if (!active) return null;
+        return (
+            <StickyNoteSheet
+                open
+                onOpenChange={(open) => { if (!open) closeActiveNote(); }}
+                color={active.color}
+                content={active.content}
+                isEditable={editor.isEditable}
+                onContentChange={(c) => handleContentChange(active.noteId, c)}
+                onColorChange={(c) => handleColorChange(active.noteId, c)}
+                onDelete={() => { handleDelete(active.noteId); closeActiveNote(); }}
+            />
+        );
+    }
+
     if (panelLeft === null || notes.length === 0) return null;
 
-    return (
+    // Render into <body> so the cards escape any ancestor with a CSS `transform`
+    // (e.g. the tab/workspace switcher). A transformed ancestor turns
+    // `position: fixed` into "relative to that ancestor", which would offset the
+    // cards away from the viewport coordinates we computed and push them over
+    // the text. document.body has no such transform, so `fixed` stays
+    // viewport-relative and the computed left/top land correctly.
+    return createPortal(
         <>
             {notes.map((note) => (
                 <StickyNoteCard
@@ -254,13 +338,14 @@ export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) 
                     content={note.content}
                     top={note.top}
                     left={panelLeft}
-                    width={CARD_WIDTH}
+                    width={panelWidth}
                     isEditable={editor.isEditable}
                     onContentChange={(c) => handleContentChange(note.noteId, c)}
                     onColorChange={(c) => handleColorChange(note.noteId, c)}
                     onDelete={() => handleDelete(note.noteId)}
                 />
             ))}
-        </>
+        </>,
+        document.body
     );
 };

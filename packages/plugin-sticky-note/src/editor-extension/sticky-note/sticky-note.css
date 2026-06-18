@@ -67,6 +67,38 @@
     background-color: rgb(243 156 18 / 0.30);
 }
 
+/* Inline mobile marker: a small tappable colored dot at the end of a sticky
+   note's range. Hidden on tablet/desktop, where the margin cards are used. */
+.sticky-note-marker {
+    display: none;
+}
+
+@media (max-width: 767px) {
+    .sticky-note-marker {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 14px;
+        height: 14px;
+        margin: 0 2px;
+        padding: 0;
+        border: none;
+        border-radius: 9999px;
+        vertical-align: middle;
+        cursor: pointer;
+        background-color: #f5c518;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .sticky-note-marker[data-color="yellow"] { background-color: #f5c518; }
+    .sticky-note-marker[data-color="pink"] { background-color: #f06292; }
+    .sticky-note-marker[data-color="blue"] { background-color: #4a90e2; }
+    .sticky-note-marker[data-color="green"] { background-color: #7cb342; }
+    .sticky-note-marker[data-color="purple"] { background-color: #9c6ade; }
+    .sticky-note-marker[data-color="orange"] { background-color: #f39c12; }
+}
+
 /* Card enter animation */
 .sticky-note-card-enter {
     animation: sticky-note-slide-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -82,6 +114,20 @@
         opacity: 1;
         transform: translateX(0) scale(1);
     }
+}
+
+/* Sheet variant: the card fills a bottom sheet and looks like a post-it docked
+   to the bottom edge — rounded top only, square flush bottom, roomier editor,
+   and safe-area padding so content clears the home indicator. */
+.sticky-note-card-shell--sheet {
+    border-radius: 16px 16px 0 0;
+    border: none;
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+.sticky-note-card-shell--sheet .sticky-note-card-editor {
+    min-height: 120px;
+    max-height: 60vh;
 }
 
 /* The Post-it style shell: subtle border + soft layered shadow for depth */

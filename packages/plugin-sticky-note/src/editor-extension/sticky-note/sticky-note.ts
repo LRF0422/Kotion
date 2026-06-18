@@ -1,4 +1,4 @@
-import { Mark, mergeAttributes } from "@kn/editor";
+import { Mark, mergeAttributes, Plugin, PluginKey, Decoration, DecorationSet } from "@kn/editor";
 import { v4 as uuidv4 } from "uuid";
 import { DEFAULT_STICKY_NOTE_COLOR } from "./constants";
 import "./sticky-note.css";
@@ -59,6 +59,75 @@ export function findStickyNoteRange(
     });
 
     return result;
+}
+
+export interface StickyNoteRange {
+    noteId: string;
+    from: number;
+    to: number;
+    color: string;
+    content: string;
+}
+
+/**
+ * Collect every sticky-note mark in the document, grouped by note_id, with the
+ * contiguous span [from, to) it covers. Shared by the inline mobile markers and
+ * (conceptually) the margin panel.
+ */
+export function collectStickyNotes(doc: any, markType: any): StickyNoteRange[] {
+    const map = new Map<string, StickyNoteRange>();
+    if (!markType) return [];
+    doc.descendants((node: any, pos: number) => {
+        if (!node.isText) return;
+        const mark = node.marks.find((m: any) => m.type === markType);
+        if (!mark) return;
+        const noteId = mark.attrs.note_id;
+        if (!noteId) return;
+        const existing = map.get(noteId);
+        if (existing) {
+            existing.to = Math.max(existing.to, pos + node.nodeSize);
+        } else {
+            map.set(noteId, {
+                noteId,
+                from: pos,
+                to: pos + node.nodeSize,
+                color: mark.attrs.color || DEFAULT_STICKY_NOTE_COLOR,
+                content: mark.attrs.content || "",
+            });
+        }
+    });
+    return Array.from(map.values());
+}
+
+const stickyNoteMarkerKey = new PluginKey("stickyNoteMarker");
+
+/**
+ * Build widget decorations: a small tappable marker at the END of each note's
+ * range. The marker is hidden on tablet/desktop via CSS (the margin cards are
+ * used there) and only shown on mobile, where tapping it opens the note's
+ * bottom sheet. Being a widget keeps it inline with the text and scrolling
+ * naturally — no fragile fixed-positioning.
+ */
+function buildStickyNoteDecorations(doc: any, markType: any): DecorationSet {
+    if (!markType) return DecorationSet.empty;
+    const notes = collectStickyNotes(doc, markType);
+    const decorations = notes.map((n) =>
+        Decoration.widget(
+            n.to,
+            () => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "sticky-note-marker";
+                btn.setAttribute("data-note-id", n.noteId);
+                btn.setAttribute("data-color", n.color);
+                btn.setAttribute("contenteditable", "false");
+                btn.setAttribute("aria-label", "Open sticky note");
+                return btn;
+            },
+            { side: 1, key: `sticky-note-marker-${n.noteId}-${n.color}`, ignoreSelection: true }
+        )
+    );
+    return DecorationSet.create(doc, decorations);
 }
 
 const StickyNoteMark = Mark.create({
@@ -167,6 +236,62 @@ const StickyNoteMark = Mark.create({
                         return true;
                     },
         };
+    },
+
+    addStorage() {
+        // The note whose mobile bottom-sheet is open. Set by tapping an inline
+        // marker; read by the React margin panel to open the sheet.
+        return { activeNoteId: null as string | null };
+    },
+
+    addProseMirrorPlugins() {
+        const extension = this;
+        return [
+            new Plugin({
+                key: stickyNoteMarkerKey,
+                state: {
+                    init: (_config, state) =>
+                        buildStickyNoteDecorations(state.doc, state.schema.marks.stickyNote),
+                    apply(tr, old, _oldState, newState) {
+                        // Only re-walk the doc when it actually changed; otherwise
+                        // just map existing decorations through the transaction.
+                        if (!tr.docChanged) return old.map(tr.mapping, tr.doc);
+                        return buildStickyNoteDecorations(newState.doc, newState.schema.marks.stickyNote);
+                    },
+                },
+                props: {
+                    decorations(state) {
+                        return stickyNoteMarkerKey.getState(state);
+                    },
+                    handleDOMEvents: {
+                        // Prevent the caret from landing on the marker button.
+                        mousedown: (_view, event) => {
+                            const target = event.target as HTMLElement | null;
+                            if (target?.closest?.(".sticky-note-marker")) {
+                                event.preventDefault();
+                                return true;
+                            }
+                            return false;
+                        },
+                        // Tap a marker → open that note's bottom sheet. We store the
+                        // id and dispatch an empty meta transaction so the React
+                        // margin panel (which listens to "transaction") picks it up.
+                        click: (view, event) => {
+                            const target = event.target as HTMLElement | null;
+                            const marker = target?.closest?.(".sticky-note-marker") as HTMLElement | null;
+                            if (!marker) return false;
+                            const noteId = marker.getAttribute("data-note-id");
+                            if (noteId) {
+                                extension.storage.activeNoteId = noteId;
+                                view.dispatch(view.state.tr.setMeta("stickyNoteMarkerClick", true));
+                            }
+                            event.preventDefault();
+                            return true;
+                        },
+                    },
+                },
+            }),
+        ];
     },
 });
 

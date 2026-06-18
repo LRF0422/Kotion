@@ -26,6 +26,12 @@ export interface StickyNoteCardProps {
     onContentChange: (content: string) => void;
     onColorChange: (color: string) => void;
     onDelete: () => void;
+    /**
+     * "margin" (default): fixed-positioned card in the editor's left margin (desktop).
+     * "sheet": plain block that fills its container (mobile bottom sheet) — no
+     * fixed positioning, toolbar always visible.
+     */
+    variant?: "margin" | "sheet";
 }
 
 /**
@@ -43,6 +49,7 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
     onContentChange,
     onColorChange,
     onDelete,
+    variant = "margin",
 }) => {
     const { theme } = useTheme();
     const isDark = theme === "dark";
@@ -126,17 +133,25 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
 
     return (
         <div
-            className="fixed z-40 sticky-note-card-enter group/card"
-            style={{
-                top: `${top}px`,
-                left: `${left}px`,
-                width: `${width}px`,
-                maxWidth: "calc(100vw - 24px)"
-            }}
+            className={
+                variant === "sheet"
+                    ? "group/card w-full"
+                    : "fixed z-40 sticky-note-card-enter group/card"
+            }
+            style={
+                variant === "sheet"
+                    ? undefined
+                    : {
+                          top: `${top}px`,
+                          left: `${left}px`,
+                          width: `${width}px`,
+                          maxWidth: "calc(100vw - 24px)",
+                      }
+            }
             data-note-id={noteId}
         >
             <div
-                className="sticky-note-card-shell"
+                className={`sticky-note-card-shell${variant === "sheet" ? " sticky-note-card-shell--sheet" : ""}`}
                 style={{
                     background: `linear-gradient(180deg, ${tone.bg} 0%, ${tone.bg} 100%)`,
                     boxShadow: `inset 3px 0 0 0 ${tone.border}`,
@@ -156,7 +171,7 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
                 {/* Footer toolbar — fades in on hover/focus */}
                 {isEditable && (
                     <div
-                        className={`sticky-note-card-toolbar flex items-center gap-0.5 px-2 py-1.5 ${showColors ? "is-open" : ""
+                        className={`sticky-note-card-toolbar flex items-center gap-0.5 px-2 py-1.5 ${showColors || variant === "sheet" ? "is-open" : ""
                             }`}
                         style={{ borderTop: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}` }}
                     >
