@@ -301,6 +301,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "empty": "暂无页面关系",
           "emptyHint": "在页面中用 [[ ]] 或页面引用链接其他页面后，这里会显示它们之间的关系",
           "legend": "空间",
+          "clearFocus": "取消聚焦",
           "untitled": "未命名"
         },
       }
@@ -529,6 +530,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "empty": "No page relations yet",
           "emptyHint": "Link pages with [[ ]] or page references, and their relationships will show up here",
           "legend": "Spaces",
+          "clearFocus": "Clear focus",
           "untitled": "Untitled"
         },
       }

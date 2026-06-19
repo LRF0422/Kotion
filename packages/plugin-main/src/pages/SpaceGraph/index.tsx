@@ -7,9 +7,9 @@ import {
     forceSimulation,
     type Simulation,
 } from "d3-force";
-import { useApi, useNavigator, useParams, useTranslation } from "@kn/common";
+import { useApi, useNavigator, useParams, useSearchParams, useTranslation } from "@kn/common";
 import { useResponsive, Button, Input, cn } from "@kn/ui";
-import { Network, Loader2, RefreshCw, Maximize2 } from "@kn/icon";
+import { Network, Loader2, RefreshCw, Maximize2, X } from "@kn/icon";
 import { APIS } from "../../api";
 import type { GraphEdge, GraphNode, SimLink, SimNode, ViewTransform } from "./types";
 
@@ -29,8 +29,13 @@ const endId = (e: string | SimNode | number): string =>
 export const SpaceGraph: React.FC = () => {
     const { t } = useTranslation();
     const params = useParams();
+    const [searchParams] = useSearchParams();
     const navigator = useNavigator();
     const { isMobile } = useResponsive();
+
+    // Optional page to focus on (opened from a page's "···" menu → ?focus=<pageId>).
+    const focusParam = searchParams.get("focus");
+    const [focusId, setFocusId] = useState<string | null>(focusParam);
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -52,6 +57,13 @@ export const SpaceGraph: React.FC = () => {
     const dragNodeRef = useRef<SimNode | null>(null);
     const panRef = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
     const movedRef = useRef(false);
+    // Focus centering: read inside the tick loop; only auto-center once per focus.
+    const focusIdRef = useRef<string | null>(focusId);
+    const didCenterRef = useRef(false);
+    useEffect(() => {
+        focusIdRef.current = focusId;
+        didCenterRef.current = false;
+    }, [focusId]);
 
     // --- Fetch graph data ---
     useEffect(() => {
@@ -175,6 +187,17 @@ export const SpaceGraph: React.FC = () => {
                 rafRef.current = requestAnimationFrame(() => {
                     rafRef.current = null;
                     bumpTick();
+                    // Once the focused node has coordinates, recenter the view on it.
+                    const fid = focusIdRef.current;
+                    if (fid && !didCenterRef.current) {
+                        const node = nodes.find((n) => n.id === fid);
+                        if (node && node.x != null && node.y != null) {
+                            const { w, h } = sizeRef.current;
+                            const k = 1.3;
+                            setView({ x: w / 2 - node.x * k, y: h / 2 - node.y * k, k });
+                            didCenterRef.current = true;
+                        }
+                    }
                 });
             });
             simRef.current = sim;
@@ -299,6 +322,19 @@ export const SpaceGraph: React.FC = () => {
         [normalizedQuery],
     );
 
+    // Effective highlight target: live hover wins, else the sticky focused page.
+    const hl = hovered ?? focusId;
+    const focusedNode = useMemo(
+        () => (focusId ? nodes.find((n) => n.id === focusId) : undefined),
+        [focusId, nodes],
+    );
+
+    const clearFocus = useCallback(() => {
+        setFocusId(null);
+        setView({ x: 0, y: 0, k: 1 });
+        simRef.current?.alpha(0.4).restart();
+    }, []);
+
     // --- Render states ---
     if (loading) {
         return (
@@ -341,6 +377,23 @@ export const SpaceGraph: React.FC = () => {
                 <span className="text-xs text-muted-foreground">
                     {t("graph.stats", { nodes: nodes.length, edges: links.length })}
                 </span>
+                {focusId && (
+                    <span className="flex items-center gap-1 text-xs rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 pl-2 pr-1 py-0.5 max-w-[200px]">
+                        <Network className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">
+                            {focusedNode?.title || t("graph.untitled")}
+                        </span>
+                        <button
+                            type="button"
+                            className="rounded-full hover:bg-indigo-100 p-0.5"
+                            onClick={clearFocus}
+                            aria-label={t("graph.clearFocus")}
+                            title={t("graph.clearFocus")}
+                        >
+                            <X className="h-3 w-3" />
+                        </button>
+                    </span>
+                )}
                 <div className="flex-1" />
                 <Input
                     value={query}
@@ -374,7 +427,7 @@ export const SpaceGraph: React.FC = () => {
                             const tg = l.target as SimNode;
                             if (!s || !tg || s.x == null || tg.x == null) return null;
                             const active =
-                                !!hovered && (endId(l.source as any) === hovered || endId(l.target as any) === hovered);
+                                !!hl && (endId(l.source as any) === hl || endId(l.target as any) === hl);
                             return (
                                 <line
                                     key={i}
@@ -383,7 +436,7 @@ export const SpaceGraph: React.FC = () => {
                                     x2={tg.x}
                                     y2={tg.y!}
                                     stroke={active ? "#6366f1" : "#cbd5e1"}
-                                    strokeOpacity={hovered && !active ? 0.15 : 0.5}
+                                    strokeOpacity={hl && !active ? 0.15 : 0.5}
                                     strokeWidth={active ? 1.5 : 1}
                                 />
                             );
@@ -394,8 +447,9 @@ export const SpaceGraph: React.FC = () => {
                             if (n.x == null || n.y == null) return null;
                             const r = radiusOf(n);
                             const isCurrentSpace = n.spaceId === params.id;
+                            const isFocused = n.id === focusId;
                             const dimmed =
-                                (!!hovered && hovered !== n.id && !neighbors.get(hovered)?.has(n.id)) ||
+                                (!!hl && hl !== n.id && !neighbors.get(hl)?.has(n.id)) ||
                                 !matches(n);
                             const color = spaceColor.get(n.spaceId) || PALETTE[0];
                             return (
@@ -408,13 +462,22 @@ export const SpaceGraph: React.FC = () => {
                                     onPointerEnter={() => setHovered(n.id)}
                                     onPointerLeave={() => setHovered(null)}
                                 >
+                                    {isFocused && (
+                                        <circle
+                                            r={r + 5}
+                                            fill="none"
+                                            stroke="#6366f1"
+                                            strokeWidth={2}
+                                            strokeDasharray="3 2"
+                                        />
+                                    )}
                                     <circle
                                         r={r}
                                         fill={color}
-                                        stroke={isCurrentSpace ? "#111827" : "#fff"}
-                                        strokeWidth={isCurrentSpace ? 2.5 : 1.5}
+                                        stroke={isFocused ? "#6366f1" : isCurrentSpace ? "#111827" : "#fff"}
+                                        strokeWidth={isFocused ? 3 : isCurrentSpace ? 2.5 : 1.5}
                                     />
-                                    {(view.k > 0.6 || hovered === n.id) && (
+                                    {(view.k > 0.6 || hl === n.id || isFocused) && (
                                         <text
                                             y={r + 11}
                                             textAnchor="middle"

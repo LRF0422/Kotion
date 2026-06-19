@@ -18,7 +18,7 @@ import {
     Download, FileIcon, FileText,
     Link, LoaderCircle,
     MoreHorizontal, Trash2, Upload, List,
-    CloudOff, UserPlus, Star
+    CloudOff, UserPlus, Star, Network
 } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "@kn/common";
@@ -630,6 +630,15 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                 <div className="flex flex-row items-center gap-2">
                                     <Link className="h-4 w-4" />
                                     <span>{t('editor.copyLink', 'Copy link')}</span>
+                                </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => navigator.go({ to: `/space-detail/${spaceId}/graph?focus=${pageId}` })}
+                                disabled={!pageId || !spaceId}
+                            >
+                                <div className="flex flex-row items-center gap-2">
+                                    <Network className="h-4 w-4" />
+                                    <span>{t('editor.relationGraph', 'Relation graph')}</span>
                                 </div>
                             </DropdownMenuItem>
                             <DropdownMenuItem
