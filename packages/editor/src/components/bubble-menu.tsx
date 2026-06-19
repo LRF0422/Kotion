@@ -7,6 +7,7 @@ import { BubbleMenu as NodeBubbleMenu } from "./react-bubble-menu";
 import { Editor } from "@tiptap/core";
 import { EditorState } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
+import { cn } from "@kn/ui";
 import React, { useMemo } from "react";
 
 
@@ -25,7 +26,7 @@ export type BubbleMenuProps = BuiltInTiptapBubbleMenuProps & {
   }) => boolean;
   forNode?: boolean;
   getReferenceClientRect?: () => DOMRect
-} & { editor: Editor; children: any };
+} & { editor: Editor; children: any; className?: string };
 
 export const BubbleMenu: React.FC<BubbleMenuProps> = ({
   editor,
@@ -33,6 +34,7 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
   forNode,
   children,
   getReferenceClientRect,
+  className,
   ...rest
 }) => {
   const wrapTippyOptions = useMemo(() => {
@@ -48,11 +50,19 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
     return { ...defaultTippyOptions };
   }, [editor, options]);
 
+  // Notion 风格：圆角更柔和、阴影更轻盈有层次、边框淡、半透明毛玻璃背景
+  const surfaceClass = cn(
+    "flex items-center gap-0.5 p-1",
+    "bg-popover/95 text-popover-foreground backdrop-blur-md supports-[backdrop-filter]:bg-popover/80",
+    "rounded-xl border border-border/60 shadow-lg ring-1 ring-black/5",
+    className
+  );
+
   if (forNode) {
     return (
       // @ts-ignore
       <NodeBubbleMenu
-        className="bg-popover text-popover-foreground px-1 py-1 rounded-sm shadow-md border"
+        className={surfaceClass}
         editor={editor}
         options={wrapTippyOptions}
         {...rest}>
@@ -64,7 +74,7 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
   return (
     <>
       <BuiltInTiptapBubbleMenu
-        className="bg-popover text-popover-foreground px-1 py-1 rounded-sm shadow-md border"
+        className={surfaceClass}
         editor={editor}
         options={wrapTippyOptions}
         {...rest}>

@@ -62,6 +62,12 @@ import {
     LabelList,
     ZAxis,
     ComposedChart,
+    Funnel,
+    FunnelChart,
+    Treemap,
+    Sankey,
+    ReferenceLine,
+    Brush,
 } from "@kn/ui"
 import {
     BarChart3,
@@ -69,7 +75,7 @@ import {
     Settings2,
     AlertCircle,
 } from "@kn/icon"
-import type { ChartData, SeriesConfig } from "./chart"
+import type { ChartData, SeriesConfig, ScatterSeriesConfig, SankeyData } from "./chart"
 import { getThemeColorFromPalette, getPalette, COLOR_PALETTES } from "./chart-colors"
 
 /**
@@ -136,6 +142,131 @@ function buildChartConfig(chartData: ChartData): ChartConfig {
 }
 
 /**
+ * Whether a chart has enough data to render. Most types need a non-empty
+ * `data` array; sankey instead needs its `sankey` node/link graph.
+ */
+function hasRenderableData(chartData: ChartData | null): boolean {
+    if (!chartData) return false
+    if (chartData.type === "sankey") {
+        return !!(chartData.sankey?.nodes?.length && chartData.sankey?.links?.length)
+    }
+    return Array.isArray(chartData.data) && chartData.data.length > 0
+}
+
+/**
+ * Validate a sankey graph before handing it to recharts.
+ *
+ * recharts' Sankey layout (`updateDepthOfTargets`) walks the graph recursively
+ * with NO visited guard, so a self-loop or any cycle reachable from a source
+ * recurses until the call stack overflows — which crashes the whole editor via
+ * the plugin error boundary. We therefore reject self-loops, out-of-range
+ * indices, and cycles up front and render a friendly message instead.
+ */
+function validateSankeyGraph(sankey?: SankeyData): { ok: boolean; error?: string } {
+    if (!sankey || !sankey.nodes?.length || !sankey.links?.length) {
+        return { ok: false, error: "Provide `sankey.nodes` and `sankey.links` to render the flow" }
+    }
+    const n = sankey.nodes.length
+    const adj: number[][] = Array.from({ length: n }, () => [])
+    for (const link of sankey.links) {
+        const { source, target } = link
+        if (typeof source !== "number" || typeof target !== "number"
+            || !Number.isInteger(source) || !Number.isInteger(target)
+            || source < 0 || target < 0 || source >= n || target >= n) {
+            return { ok: false, error: "A sankey link references a node index out of range (links use 0-based node indices)" }
+        }
+        if (source === target) {
+            return { ok: false, error: "A sankey link connects a node to itself; self-loops are not allowed" }
+        }
+        adj[source].push(target)
+    }
+    // Cycle detection via 3-color DFS — bounded by node count, so it cannot
+    // overflow the way recharts' own traversal would.
+    const WHITE = 0, GRAY = 1, BLACK = 2
+    const color = new Array(n).fill(WHITE)
+    const hasCycle = (u: number): boolean => {
+        color[u] = GRAY
+        for (const v of adj[u]) {
+            if (color[v] === GRAY) return true
+            if (color[v] === WHITE && hasCycle(v)) return true
+        }
+        color[u] = BLACK
+        return false
+    }
+    for (let i = 0; i < n; i++) {
+        if (color[i] === WHITE && hasCycle(i)) {
+            return { ok: false, error: "Sankey data contains a cycle; flows must form a directed acyclic graph" }
+        }
+    }
+    return { ok: true }
+}
+
+/**
+ * Build the recharts `scale` prop for the value (Y) axis.
+ * When logScale is set we also need an explicit positive domain + allowDataOverflow
+ * so recharts doesn't fall back to a linear-looking auto domain.
+ */
+function valueAxisScaleProps(chartData: ChartData) {
+    if (!chartData.logScale) return {}
+    return { scale: "log" as const, domain: ["auto", "auto"] as [string, string], allowDataOverflow: true }
+}
+
+/**
+ * Render the configured reference / threshold lines for a cartesian chart.
+ * Returns an array of <ReferenceLine> elements (empty when none configured).
+ * `yAxisId` is passed through for compose charts that declare axes.
+ */
+function renderReferenceLines(chartData: ChartData, isDark: boolean, yAxisId?: string): React.ReactNode[] {
+    const lines = chartData.referenceLines
+    if (!lines || lines.length === 0) return []
+    return lines.map((ln, i) => {
+        const color = ln.color || getFallbackColor(i, isDark, chartData.colorScheme)
+        const axisProps = ln.axis === "x" ? { x: ln.value } : { y: ln.value }
+        return (
+            <ReferenceLine
+                key={`ref-${i}`}
+                {...axisProps}
+                {...(yAxisId ? { yAxisId } : {})}
+                stroke={color}
+                strokeDasharray={ln.dashed === false ? undefined : "6 4"}
+                strokeWidth={1.5}
+                label={ln.label ? { value: ln.label, position: "insideTopRight", fill: color, fontSize: 11 } : undefined}
+            />
+        )
+    })
+}
+
+/**
+ * Render a <Brush> control when enabled, for zooming/panning large datasets.
+ */
+function renderBrush(chartData: ChartData, categoryKey: string): React.ReactNode {
+    if (!chartData.enableBrush) return null
+    return <Brush dataKey={categoryKey} height={22} travellerWidth={8} stroke="hsl(var(--muted-foreground))" />
+}
+
+/**
+ * Render the SVG <defs> gradients used by area fills when gradientFill is set.
+ * One vertical gradient per series keyed by `gradient-<index>`.
+ */
+function renderAreaGradients(chartData: ChartData, isDark: boolean): React.ReactNode {
+    if (!chartData.gradientFill) return null
+    const dataKeys = chartData.dataKeys || []
+    return (
+        <defs>
+            {dataKeys.map((key, index) => {
+                const color = resolveSeriesColor(chartData, key, index, isDark)
+                return (
+                    <linearGradient key={key} id={`gradient-${index}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={color} stopOpacity={0.7} />
+                        <stop offset="95%" stopColor={color} stopOpacity={0.05} />
+                    </linearGradient>
+                )
+            })}
+        </defs>
+    )
+}
+
+/**
  * Render a Bar Chart
  */
 const BarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number; isDark: boolean }> = ({
@@ -144,23 +275,26 @@ const BarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; heig
     const dataKeys = chartData.dataKeys || []
     const categoryKey = chartData.categoryKey || "name"
 
+    const stackOffset = chartData.stacked && chartData.stackOffset === "expand" ? "expand" : undefined
+
     return (
         <ChartContainer config={config} className="w-full" style={{ height }}>
             <BarChart
                 data={chartData.data}
                 layout={chartData.horizontal ? "vertical" : "horizontal"}
+                stackOffset={stackOffset}
                 accessibilityLayer
             >
                 {chartData.showGrid !== false && <CartesianGrid vertical={false} strokeDasharray="3 3" />}
                 {chartData.horizontal ? (
                     <>
                         <YAxis dataKey={categoryKey} type="category" tickLine={false} axisLine={false} width={100} />
-                        <XAxis type="number" hide={false} />
+                        <XAxis type="number" hide={false} {...valueAxisScaleProps(chartData)} />
                     </>
                 ) : (
                     <>
                         <XAxis dataKey={categoryKey} tickLine={false} tickMargin={10} axisLine={false} />
-                        <YAxis tickLine={false} axisLine={false} />
+                        <YAxis tickLine={false} axisLine={false} {...valueAxisScaleProps(chartData)} />
                     </>
                 )}
                 <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
@@ -177,6 +311,8 @@ const BarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; heig
                         )}
                     </Bar>
                 ))}
+                {renderReferenceLines(chartData, isDark)}
+                {renderBrush(chartData, categoryKey)}
                 {chartData.showLegend !== false && <ChartLegend content={<ChartLegendContent />} />}
             </BarChart>
         </ChartContainer>
@@ -197,7 +333,7 @@ const LineChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; hei
             <LineChart data={chartData.data} accessibilityLayer>
                 {chartData.showGrid !== false && <CartesianGrid strokeDasharray="3 3" />}
                 <XAxis dataKey={categoryKey} tickLine={false} tickMargin={10} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} {...valueAxisScaleProps(chartData)} />
                 <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
                 {dataKeys.map((key, index) => (
                     <Line
@@ -213,6 +349,8 @@ const LineChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; hei
                         )}
                     </Line>
                 ))}
+                {renderReferenceLines(chartData, isDark)}
+                {renderBrush(chartData, categoryKey)}
                 {chartData.showLegend !== false && <ChartLegend content={<ChartLegendContent />} />}
             </LineChart>
         </ChartContainer>
@@ -228,24 +366,33 @@ const AreaChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; hei
     const dataKeys = chartData.dataKeys || []
     const categoryKey = chartData.categoryKey || "name"
 
+    const stackOffset = chartData.stacked && chartData.stackOffset === "expand" ? "expand" : undefined
+    const useGradient = chartData.gradientFill === true
+
     return (
         <ChartContainer config={config} className="w-full" style={{ height }}>
-            <AreaChart data={chartData.data} accessibilityLayer>
+            <AreaChart data={chartData.data} stackOffset={stackOffset} accessibilityLayer>
+                {renderAreaGradients(chartData, isDark)}
                 {chartData.showGrid !== false && <CartesianGrid vertical={false} strokeDasharray="3 3" />}
                 <XAxis dataKey={categoryKey} tickLine={false} tickMargin={10} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} {...valueAxisScaleProps(chartData)} />
                 <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
-                {dataKeys.map((key, index) => (
-                    <Area
-                        key={key}
-                        type={chartData.smoothLine !== false ? "monotone" : "linear"}
-                        dataKey={key}
-                        fill={resolveSeriesColor(chartData, key, index, isDark)}
-                        fillOpacity={0.4}
-                        stroke={resolveSeriesColor(chartData, key, index, isDark)}
-                        stackId={chartData.stacked ? "stack" : undefined}
-                    />
-                ))}
+                {dataKeys.map((key, index) => {
+                    const color = resolveSeriesColor(chartData, key, index, isDark)
+                    return (
+                        <Area
+                            key={key}
+                            type={chartData.smoothLine !== false ? "monotone" : "linear"}
+                            dataKey={key}
+                            fill={useGradient ? `url(#gradient-${index})` : color}
+                            fillOpacity={useGradient ? 1 : 0.4}
+                            stroke={color}
+                            stackId={chartData.stacked ? "stack" : undefined}
+                        />
+                    )
+                })}
+                {renderReferenceLines(chartData, isDark)}
+                {renderBrush(chartData, categoryKey)}
                 {chartData.showLegend !== false && <ChartLegend content={<ChartLegendContent />} />}
             </AreaChart>
         </ChartContainer>
@@ -363,16 +510,43 @@ const ScatterChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; 
     chartData, config, height, isDark
 }) => {
     const dataKeys = chartData.dataKeys || []
+    const multi = chartData.scatterSeries && chartData.scatterSeries.length > 0
+
+    // Resolve the axis field names. With explicit series we take them from the
+    // first series; otherwise we fall back to the single-series dataKeys layout.
+    const series: ScatterSeriesConfig[] = multi
+        ? chartData.scatterSeries!
+        : [{
+            name: dataKeys[0] || "series",
+            xKey: dataKeys[0] || "x",
+            yKey: dataKeys[1] || "y",
+            sizeKey: chartData.sizeKey || dataKeys[2],
+            data: chartData.data,
+        }]
+
+    const xKey = series[0].xKey
+    const yKey = series[0].yKey
+    // Bubble sizing is active if any series declares a size field.
+    const hasSize = series.some(s => s.sizeKey)
 
     return (
         <ChartContainer config={config} className="w-full" style={{ height }}>
             <ScatterChart>
                 {chartData.showGrid !== false && <CartesianGrid strokeDasharray="3 3" />}
-                <XAxis type="number" dataKey={dataKeys[0] || "x"} name={dataKeys[0] || "X"} tickLine={false} axisLine={false} />
-                <YAxis type="number" dataKey={dataKeys[1] || "y"} name={dataKeys[1] || "Y"} tickLine={false} axisLine={false} />
-                <ZAxis type="number" dataKey={dataKeys[2]} range={[50, 400]} />
+                <XAxis type="number" dataKey={xKey} name={xKey} tickLine={false} axisLine={false} {...valueAxisScaleProps(chartData)} />
+                <YAxis type="number" dataKey={yKey} name={yKey} tickLine={false} axisLine={false} />
+                {hasSize && <ZAxis type="number" dataKey={series[0].sizeKey} range={[60, 600]} />}
                 <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltipContent />} />
-                <Scatter data={chartData.data} fill={resolveSeriesColor(chartData, dataKeys[0] || "x", 0, isDark)} />
+                {series.map((s, index) => (
+                    <Scatter
+                        key={s.name || index}
+                        name={s.name}
+                        data={s.data || chartData.data}
+                        fill={resolveSeriesColor(chartData, s.name || `series-${index}`, index, isDark)}
+                        fillOpacity={hasSize ? 0.65 : 1}
+                    />
+                ))}
+                {renderReferenceLines(chartData, isDark)}
                 {chartData.showLegend !== false && <ChartLegend content={<ChartLegendContent />} />}
             </ScatterChart>
         </ChartContainer>
@@ -394,12 +568,15 @@ const ComposedChartRender: React.FC<{ chartData: ChartData; config: ChartConfig;
     // Check if any series uses the right Y-axis
     const hasRightSeries = dataKeys.some(key => seriesConfig[key]?.yAxisId === 'right')
 
+    const useGradient = chartData.gradientFill === true
+
     return (
         <ChartContainer config={config} className="w-full" style={{ height }}>
             <ComposedChart data={chartData.data} accessibilityLayer>
+                {renderAreaGradients(chartData, isDark)}
                 {chartData.showGrid !== false && <CartesianGrid vertical={false} strokeDasharray="3 3" />}
                 <XAxis dataKey={categoryKey} tickLine={false} tickMargin={10} axisLine={false} />
-                <YAxis yAxisId="left" tickLine={false} axisLine={false} />
+                <YAxis yAxisId="left" tickLine={false} axisLine={false} {...valueAxisScaleProps(chartData)} />
                 {(showRight || hasRightSeries) && (
                     <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} />
                 )}
@@ -433,8 +610,8 @@ const ComposedChartRender: React.FC<{ chartData: ChartData; config: ChartConfig;
                                     yAxisId={yAxisId}
                                     type={chartData.smoothLine !== false ? "monotone" : "linear"}
                                     dataKey={key}
-                                    fill={colorVar}
-                                    fillOpacity={0.4}
+                                    fill={useGradient ? `url(#gradient-${index})` : colorVar}
+                                    fillOpacity={useGradient ? 1 : 0.4}
                                     stroke={colorVar}
                                 />
                             )
@@ -455,8 +632,140 @@ const ComposedChartRender: React.FC<{ chartData: ChartData; config: ChartConfig;
                             )
                     }
                 })}
+                {renderReferenceLines(chartData, isDark, "left")}
+                {renderBrush(chartData, categoryKey)}
                 {chartData.showLegend !== false && <ChartLegend content={<ChartLegendContent />} />}
             </ComposedChart>
+        </ChartContainer>
+    )
+}
+
+/**
+ * Render a Funnel Chart
+ * Single value series; each stage is colored per-row like the pie chart.
+ */
+const FunnelChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number; isDark: boolean }> = ({
+    chartData, config, height, isDark
+}) => {
+    const dataKeys = chartData.dataKeys || []
+    const dataKey = dataKeys[0] || "value"
+    const categoryKey = chartData.categoryKey || "name"
+
+    return (
+        <ChartContainer config={config} className="w-full" style={{ height }}>
+            <FunnelChart>
+                <ChartTooltip content={<ChartTooltipContent nameKey={categoryKey} />} />
+                <Funnel dataKey={dataKey} nameKey={categoryKey} data={chartData.data} isAnimationActive>
+                    {chartData.data.map((row, index) => {
+                        const name = String(row?.[categoryKey] ?? "")
+                        const customColor = chartData.colors?.[name]
+                        const fill = customColor || getFallbackColor(index, isDark, chartData.colorScheme)
+                        return <Cell key={`cell-${index}`} fill={fill} />
+                    })}
+                    <LabelList position="right" dataKey={categoryKey} className="fill-foreground text-xs" stroke="none" />
+                    {chartData.showDataLabels && (
+                        <LabelList position="inside" dataKey={dataKey} className="fill-background text-xs" stroke="none" />
+                    )}
+                </Funnel>
+            </FunnelChart>
+        </ChartContainer>
+    )
+}
+
+/**
+ * Custom Treemap cell content — colors each top-level rectangle from the palette
+ * and renders the category label when the cell is large enough.
+ */
+const TreemapContent = (colorScheme: string | undefined, isDark: boolean) => (props: any) => {
+    const { x, y, width, height, index, name, depth } = props
+    const fill = getFallbackColor(index || 0, isDark, colorScheme)
+    return (
+        <g>
+            <rect
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                style={{ fill, stroke: "hsl(var(--background))", strokeWidth: 2, fillOpacity: depth < 2 ? 0.9 : 0.65 }}
+            />
+            {width > 50 && height > 22 && name && (
+                <text x={x + 6} y={y + 18} fill="hsl(var(--background))" fontSize={12} className="font-medium">
+                    {String(name)}
+                </text>
+            )}
+        </g>
+    )
+}
+
+/**
+ * Render a Treemap Chart
+ * Proportional nested rectangles; size from dataKeys[0], label from categoryKey.
+ */
+const TreemapChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number; isDark: boolean }> = ({
+    chartData, config, height, isDark
+}) => {
+    const dataKeys = chartData.dataKeys || []
+    const dataKey = dataKeys[0] || "value"
+    const categoryKey = chartData.categoryKey || "name"
+
+    return (
+        <ChartContainer config={config} className="w-full" style={{ height }}>
+            <Treemap
+                data={chartData.data}
+                dataKey={dataKey}
+                nameKey={categoryKey}
+                aspectRatio={4 / 3}
+                isAnimationActive={false}
+                content={TreemapContent(chartData.colorScheme, isDark) as any}
+            >
+                <ChartTooltip content={<ChartTooltipContent nameKey={categoryKey} />} />
+            </Treemap>
+        </ChartContainer>
+    )
+}
+
+/**
+ * Render a Sankey (flow) Chart
+ * Requires the dedicated `sankey` node/link graph rather than a flat data array.
+ */
+const SankeyChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; height: number; isDark: boolean }> = ({
+    chartData, config, height, isDark
+}) => {
+    const sankey = chartData.sankey
+    // Validate up front: an invalid graph (cycle / self-loop / bad index) would
+    // make recharts' Sankey recurse until the call stack overflows and crash the
+    // whole editor, so we render a message instead of attempting to draw it.
+    const validation = validateSankeyGraph(sankey)
+    if (!validation.ok) {
+        return (
+            <div className="flex items-center justify-center w-full" style={{ height }}>
+                <EmptyState
+                    className="border-none rounded-md"
+                    title="Sankey Chart"
+                    description={validation.error || "Invalid sankey data"}
+                    icons={[BarChart3]}
+                />
+            </div>
+        )
+    }
+
+    const nodeColor = getFallbackColor(0, isDark, chartData.colorScheme)
+    const linkColor = getFallbackColor(1, isDark, chartData.colorScheme)
+
+    return (
+        <ChartContainer config={config} className="w-full" style={{ height }}>
+            <Sankey
+                data={sankey!}
+                nodePadding={24}
+                nodeWidth={12}
+                linkCurvature={0.5}
+                iterations={32}
+                node={{ fill: nodeColor, stroke: nodeColor }}
+                link={{ stroke: linkColor, strokeOpacity: 0.25 }}
+                margin={{ top: 8, right: 80, bottom: 8, left: 8 }}
+            >
+                <ChartTooltip content={<ChartTooltipContent />} />
+            </Sankey>
         </ChartContainer>
     )
 }
@@ -471,8 +780,11 @@ const CHART_TYPE_OPTIONS = [
     { value: "pie", label: "Pie Chart" },
     { value: "radar", label: "Radar Chart" },
     { value: "radialBar", label: "Radial Bar Chart" },
-    { value: "scatter", label: "Scatter Chart" },
+    { value: "scatter", label: "Scatter / Bubble Chart" },
     { value: "compose", label: "Composite Chart" },
+    { value: "funnel", label: "Funnel Chart" },
+    { value: "treemap", label: "Treemap" },
+    { value: "sankey", label: "Sankey Chart" },
 ] as const
 
 /** Compact uppercase section header for the config panel */
@@ -584,6 +896,24 @@ const ConfigPanel: React.FC<{
     const showHorizontal = chartData.type === "bar"
     const showInnerRadius = chartData.type === "pie"
     const showComposeConfig = chartData.type === "compose"
+
+    // Advanced feature visibility
+    const isCartesian = ["bar", "line", "area", "compose", "scatter"].includes(chartData.type)
+    const showGradient = chartData.type === "area" || chartData.type === "compose"
+    const showPercentStack = (chartData.type === "bar" || chartData.type === "area") && chartData.stacked === true
+
+    // Reference line editing helpers
+    const refLines = chartData.referenceLines || []
+    const addReferenceLine = () => {
+        onUpdate({ referenceLines: [...refLines, { axis: "y", value: 0 }] })
+    }
+    const updateReferenceLine = (i: number, updates: Partial<typeof refLines[number]>) => {
+        const next = refLines.map((ln, idx) => (idx === i ? { ...ln, ...updates } : ln))
+        onUpdate({ referenceLines: next })
+    }
+    const removeReferenceLine = (i: number) => {
+        onUpdate({ referenceLines: refLines.filter((_, idx) => idx !== i) })
+    }
 
     // Helper to update a single series config
     const updateSeriesConfig = (key: string, updates: Partial<SeriesConfig>) => {
@@ -717,6 +1047,93 @@ const ConfigPanel: React.FC<{
                     )}
                 </div>
             </div>
+
+            {/* Advanced (cartesian charts only) */}
+            {isCartesian && (
+                <div className="space-y-1.5">
+                    <SectionLabel>Advanced</SectionLabel>
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 -mx-1.5">
+                        <ToggleRow
+                            label="Zoom (Brush)"
+                            checked={chartData.enableBrush === true}
+                            onChange={(c) => onUpdate({ enableBrush: c })}
+                        />
+                        <ToggleRow
+                            label="Log Scale"
+                            checked={chartData.logScale === true}
+                            onChange={(c) => onUpdate({ logScale: c })}
+                        />
+                        {showPercentStack && (
+                            <ToggleRow
+                                label="100% Stack"
+                                checked={chartData.stackOffset === "expand"}
+                                onChange={(c) => onUpdate({ stackOffset: c ? "expand" : "none" })}
+                            />
+                        )}
+                        {showGradient && (
+                            <ToggleRow
+                                label="Gradient Fill"
+                                checked={chartData.gradientFill === true}
+                                onChange={(c) => onUpdate({ gradientFill: c })}
+                            />
+                        )}
+                    </div>
+
+                    {/* Reference / threshold lines */}
+                    <div className="space-y-1 pt-1">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] text-muted-foreground">Reference Lines</span>
+                            <button
+                                type="button"
+                                onClick={addReferenceLine}
+                                className="text-[11px] text-primary hover:underline"
+                            >
+                                + Add
+                            </button>
+                        </div>
+                        {refLines.map((ln, i) => (
+                            <div key={i} className="flex items-center gap-1">
+                                <Select
+                                    value={ln.axis || "y"}
+                                    onValueChange={(v) => updateReferenceLine(i, { axis: v as "x" | "y" })}
+                                >
+                                    <SelectTrigger className="h-6 text-[11px] w-[52px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="y" className="text-xs">Y</SelectItem>
+                                        <SelectItem value="x" className="text-xs">X</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <Input
+                                    value={String(ln.value ?? "")}
+                                    onChange={(e) => {
+                                        const raw = e.target.value
+                                        const num = Number(raw)
+                                        updateReferenceLine(i, { value: raw !== "" && !Number.isNaN(num) ? num : raw })
+                                    }}
+                                    placeholder="value"
+                                    className="h-6 text-[11px] w-[64px]"
+                                />
+                                <Input
+                                    value={ln.label || ""}
+                                    onChange={(e) => updateReferenceLine(i, { label: e.target.value || undefined })}
+                                    placeholder="label"
+                                    className="h-6 text-[11px] flex-1 min-w-0"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => removeReferenceLine(i)}
+                                    className="text-[11px] text-muted-foreground hover:text-destructive px-1"
+                                    aria-label="Remove reference line"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Series Config for Compose Chart */}
             {showComposeConfig && chartData.dataKeys && chartData.dataKeys.length > 0 && (
@@ -977,7 +1394,7 @@ export const ChartView: React.FC<NodeViewProps> = (props) => {
     }, [chartData, persistToNode])
 
     const renderChart = () => {
-        if (!activeChartData || !activeChartData.data || activeChartData.data.length === 0) {
+        if (!hasRenderableData(activeChartData)) {
             return null
         }
 
@@ -998,6 +1415,12 @@ export const ChartView: React.FC<NodeViewProps> = (props) => {
                 return <ScatterChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
             case "compose":
                 return <ComposedChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
+            case "funnel":
+                return <FunnelChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
+            case "treemap":
+                return <TreemapChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
+            case "sankey":
+                return <SankeyChartRender chartData={activeChartData} config={chartConfig} height={height} isDark={isDark} />
             default:
                 // Default to bar chart for unknown types
                 return <BarChartRender chartData={{ ...activeChartData, type: "bar" }} config={chartConfig} height={height} isDark={isDark} />
@@ -1093,7 +1516,7 @@ export const ChartView: React.FC<NodeViewProps> = (props) => {
                                     {activeChartData.description && <div className="text-xs text-muted-foreground">{activeChartData.description}</div>}
                                 </div>
                             )}
-                            {activeChartData && activeChartData.data && activeChartData.data.length > 0 ? (
+                            {hasRenderableData(activeChartData) ? (
                                 renderChart()
                             ) : (
                                 <EmptyState
@@ -1121,7 +1544,7 @@ export const ChartView: React.FC<NodeViewProps> = (props) => {
                     </CardHeader>
                 )}
                 <CardContent className="p-2">
-                    {chartData && chartData.data && chartData.data.length > 0 ? (
+                    {hasRenderableData(chartData) ? (
                         renderChart()
                     ) : (
                         <EmptyState

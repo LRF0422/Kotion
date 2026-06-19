@@ -120,7 +120,7 @@ export const EditorMenu: React.FC<{
     return (
         <>
             {toolbar && (
-                <div className="flex items-center gap-0.5 w-full px-1 py-0.5 z-20 border-b bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80">
+                <div className="flex items-center gap-0.5 w-full px-1.5 py-1 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80">
                     {/* Undo / Redo group */}
                     <div className="flex items-center gap-0.5">
                         <TooltipProvider delayDuration={400}>
@@ -131,7 +131,7 @@ export const EditorMenu: React.FC<{
                                         size="sm"
                                         disabled={!canUndo}
                                         aria-label="Undo"
-                                        className="h-7 w-7 p-0 data-[disabled=true]:opacity-40"
+                                        className="h-7 w-7 p-0 rounded-md transition-colors hover:bg-muted data-[disabled=true]:opacity-40"
                                     >
                                         <Undo2 className="h-3.5 w-3.5" />
                                     </Toggle>
@@ -150,7 +150,7 @@ export const EditorMenu: React.FC<{
                                         size="sm"
                                         disabled={!canRedo}
                                         aria-label="Redo"
-                                        className="h-7 w-7 p-0 data-[disabled=true]:opacity-40"
+                                        className="h-7 w-7 p-0 rounded-md transition-colors hover:bg-muted data-[disabled=true]:opacity-40"
                                     >
                                         <Redo2 className="h-3.5 w-3.5" />
                                     </Toggle>
@@ -207,8 +207,11 @@ export const EditorMenu: React.FC<{
                     shouldShow={shouldShow}
                     pluginKey="editor-menu"
                     options={{ placement: 'top' }}
+                    // On narrow viewports the toolbar would overflow off-screen.
+                    // Cap it to the viewport and let it scroll horizontally instead.
+                    className="max-w-[calc(100vw-1rem)] overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 >
-                    <div className="flex items-center gap-0.5 bg-popover/95 backdrop-blur-sm">
+                    <div className="flex flex-nowrap items-center gap-0.5 [&>*]:shrink-0">
                         {flotMenu.map((Menu, index) => (
                             <Menu key={`float-menu-${index}`} editor={editor} />
                         ))}

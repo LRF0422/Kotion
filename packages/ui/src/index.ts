@@ -19,6 +19,8 @@ export {
     RadialBarChart, RadialBar,
     ComposedChart,
     LabelList,
+    Funnel, FunnelChart, Treemap, Sankey,
+    ReferenceLine, ReferenceArea, Brush, Rectangle,
 } from "recharts"
 export { zodResolver } from "@hookform/resolvers/zod"
 export * from "zod"

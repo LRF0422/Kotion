@@ -160,6 +160,82 @@ const CHART_TEMPLATES: Record<string, ChartData> = {
         smoothLine: true,
         height: 300,
     },
+    funnel: {
+        type: "funnel",
+        title: "Conversion Funnel",
+        data: [
+            { stage: "Visits", value: 12000 },
+            { stage: "Sign-ups", value: 7200 },
+            { stage: "Activated", value: 4100 },
+            { stage: "Paying", value: 1800 },
+            { stage: "Renewed", value: 950 },
+        ],
+        dataKeys: ["value"],
+        categoryKey: "stage",
+        colorScheme: "ocean",
+        showDataLabels: true,
+        height: 320,
+    },
+    treemap: {
+        type: "treemap",
+        title: "Storage by Category",
+        data: [
+            { name: "Documents", size: 4200 },
+            { name: "Images", size: 3100 },
+            { name: "Videos", size: 6800 },
+            { name: "Audio", size: 1400 },
+            { name: "Archives", size: 900 },
+            { name: "Other", size: 600 },
+        ],
+        dataKeys: ["size"],
+        categoryKey: "name",
+        colorScheme: "vivid",
+        height: 320,
+    },
+    sankey: {
+        type: "sankey",
+        title: "Budget Flow",
+        data: [],
+        dataKeys: [],
+        colorScheme: "default",
+        sankey: {
+            nodes: [
+                { name: "Revenue" },
+                { name: "Operations" },
+                { name: "Marketing" },
+                { name: "R&D" },
+                { name: "Salaries" },
+                { name: "Tools" },
+            ],
+            links: [
+                { source: 0, target: 1, value: 50 },
+                { source: 0, target: 2, value: 30 },
+                { source: 0, target: 3, value: 20 },
+                { source: 1, target: 4, value: 35 },
+                { source: 1, target: 5, value: 15 },
+                { source: 3, target: 4, value: 12 },
+            ],
+        },
+        height: 360,
+    },
+    bubble: {
+        type: "scatter",
+        title: "Market Segments (size = revenue)",
+        data: [
+            { reach: 25, engagement: 40, revenue: 120 },
+            { reach: 60, engagement: 55, revenue: 300 },
+            { reach: 45, engagement: 80, revenue: 220 },
+            { reach: 80, engagement: 30, revenue: 180 },
+            { reach: 35, engagement: 65, revenue: 90 },
+            { reach: 70, engagement: 75, revenue: 420 },
+        ],
+        dataKeys: ["reach", "engagement", "revenue"],
+        sizeKey: "revenue",
+        colorScheme: "warm",
+        showLegend: false,
+        showGrid: true,
+        height: 320,
+    },
 };
 
 /**
@@ -211,10 +287,20 @@ export const ChartExtension: ExtensionWrapper = {
 - pie: 饼图，用于展示比例分布
 - radar: 雷达图，用于多维度对比
 - radialBar: 径向柱图，用于展示进度/完成度
-- scatter: 散点图，用于展示两个变量的关系
+- scatter: 散点图/气泡图，用于展示两个变量的关系（设置 sizeKey 即为气泡图）
 - compose: 组合图表，在同一图表中混合柱状图、折线图、面积图，支持双 Y 轴
+- funnel: 漏斗图，用于转化分析（各阶段逐级递减）
+- treemap: 矩形树图，用于占比/层级面积展示
+- sankey: 桑基图，用于展示流量/资金/能量等流向（用 sankey.{nodes,links} 定义）
 
-必须提供 chartConfig 参数，包含 type、data、dataKeys 等信息。
+必须提供 chartConfig 参数。除 sankey 外需包含 type、data、dataKeys；sankey 改用 sankey 字段。
+
+高级特性（适用于 bar/line/area/compose/scatter 直角坐标系图表）：
+- referenceLines: 参考线/阈值线，用于标注目标、均值、上限
+- enableBrush: 大数据集启用缩放/平移
+- stacked + stackOffset:'expand': 100% 百分比堆叠
+- gradientFill: 面积图渐变填充
+- logScale: 数值轴对数刻度（数据跨越多个量级时）
 
 色彩方案（colorScheme）：请从预定义方案中选择，不要自行填写颜色值，以确保深浅模式适配：
 - default: 默认方案（蓝、绿、琥珀、玫瑰、紫等）
@@ -230,11 +316,11 @@ export const ChartExtension: ExtensionWrapper = {
 3. position：使用 ProseMirror 绝对位置，默认吸附到块边界`,
             inputSchema: z.object({
                 chartConfig: z.object({
-                    type: z.enum(['bar', 'line', 'area', 'pie', 'radar', 'radialBar', 'scatter', 'compose']).describe("图表类型"),
+                    type: z.enum(['bar', 'line', 'area', 'pie', 'radar', 'radialBar', 'scatter', 'compose', 'funnel', 'treemap', 'sankey']).describe("图表类型"),
                     title: z.string().describe("图表标题").optional(),
                     description: z.string().describe("图表描述").optional(),
-                    data: z.array(z.record(z.string(), z.any())).describe("数据数组，每个元素是一个数据点对象"),
-                    dataKeys: z.array(z.string()).describe("数据系列键名数组（对应 y 轴值）"),
+                    data: z.array(z.record(z.string(), z.any())).describe("数据数组，每个元素是一个数据点对象（sankey 类型改用 sankey 字段，可省略）").optional(),
+                    dataKeys: z.array(z.string()).describe("数据系列键名数组（对应 y 轴值；funnel/treemap 取第一个；sankey 不需要）").optional(),
                     categoryKey: z.string().describe("分类键名（对应 x 轴/标签）").optional(),
                     colorScheme: z.enum(COLOR_PALETTES.map(p => p.key) as [string, ...string[]]).describe(`色彩方案，自动适配深浅模式。可选值：${COLOR_PALETTES.map(p => p.key).join('、')}。推荐使用此参数而非手动指定颜色值`).optional(),
                     showLegend: z.boolean().describe("是否显示图例").optional(),
@@ -250,6 +336,36 @@ export const ChartExtension: ExtensionWrapper = {
                         yAxisId: z.enum(['left', 'right']).describe("使用哪个 Y 轴").optional(),
                     })).describe("组合图表的系列配置，key 为 dataKey，value 为该系列的渲染配置").optional(),
                     rightYAxis: z.boolean().describe("是否显示右侧 Y 轴（用于组合图表双 Y 轴）").optional(),
+                    // --- 高级特性（适用于 bar/line/area/compose/scatter 直角坐标系图表）---
+                    referenceLines: z.array(z.object({
+                        axis: z.enum(['x', 'y']).describe("参考线锚定的坐标轴，'y' 为水平线（默认）").optional(),
+                        value: z.union([z.number(), z.string()]).describe("参考线所在的值（x 轴可为分类值）"),
+                        label: z.string().describe("参考线标签").optional(),
+                        color: z.string().describe("参考线颜色，缺省自动取配色").optional(),
+                        dashed: z.boolean().describe("是否虚线，默认 true").optional(),
+                    })).describe("参考线/阈值线，用于目标、均值、上限等标注").optional(),
+                    enableBrush: z.boolean().describe("是否显示 Brush 缩放控件（适合大数据集）").optional(),
+                    stackOffset: z.enum(['none', 'expand']).describe("堆叠方式，'expand' 为 100% 百分比堆叠（需配合 stacked:true）").optional(),
+                    gradientFill: z.boolean().describe("面积图/组合图的面积系列是否使用渐变填充").optional(),
+                    logScale: z.boolean().describe("数值轴(Y)是否使用对数刻度").optional(),
+                    // --- 散点/气泡 ---
+                    sizeKey: z.string().describe("气泡大小对应的字段名（散点图第三维度，启用气泡图）").optional(),
+                    scatterSeries: z.array(z.object({
+                        name: z.string().describe("系列名称"),
+                        xKey: z.string().describe("X 轴字段名"),
+                        yKey: z.string().describe("Y 轴字段名"),
+                        sizeKey: z.string().describe("气泡大小字段名").optional(),
+                        data: z.array(z.record(z.string(), z.any())).describe("该系列数据，缺省使用顶层 data").optional(),
+                    })).describe("多组散点/气泡系列；设置后覆盖基于 dataKeys 的单系列行为").optional(),
+                    // --- 桑基图 ---
+                    sankey: z.object({
+                        nodes: z.array(z.object({ name: z.string() })).describe("节点列表，顺序决定 links 引用的索引"),
+                        links: z.array(z.object({
+                            source: z.number().describe("源节点索引"),
+                            target: z.number().describe("目标节点索引"),
+                            value: z.number().describe("流量/权重"),
+                        })).describe("节点之间的加权连接"),
+                    }).describe("桑基图的节点/连接图（type 为 'sankey' 时必填）").optional(),
                 }).describe("图表配置对象，包含类型、数据、样式等"),
                 nearText: z.string().describe("搜索文档中包含此文本的块，在该块附近插入图表（优先使用此参数定位，比 position 更精确）").optional(),
                 placement: z.enum(['before', 'after']).describe("插入位置：'before' 在匹配块之前，'after' 在匹配块之后。默认 'after'。仅与 nearText 或 position 一起使用时有效").optional(),
@@ -270,11 +386,20 @@ export const ChartExtension: ExtensionWrapper = {
                     if (!chartConfig.type) {
                         return { success: false, error: 'chartConfig.type is required' };
                     }
-                    if (!chartConfig.data || !Array.isArray(chartConfig.data) || chartConfig.data.length === 0) {
-                        return { success: false, error: 'chartConfig.data must be a non-empty array' };
-                    }
-                    if (!chartConfig.dataKeys || !Array.isArray(chartConfig.dataKeys) || chartConfig.dataKeys.length === 0) {
-                        return { success: false, error: 'chartConfig.dataKeys must be a non-empty array of series key names' };
+                    if (chartConfig.type === 'sankey') {
+                        // Sankey uses a node/link graph instead of a flat data array.
+                        if (!chartConfig.sankey?.nodes?.length || !chartConfig.sankey?.links?.length) {
+                            return { success: false, error: 'sankey charts require chartConfig.sankey with non-empty nodes and links' };
+                        }
+                    } else {
+                        if (!chartConfig.data || !Array.isArray(chartConfig.data) || chartConfig.data.length === 0) {
+                            return { success: false, error: 'chartConfig.data must be a non-empty array' };
+                        }
+                        // funnel/treemap need at least one dataKey; multi-series scatter may use scatterSeries instead.
+                        const hasScatterSeries = chartConfig.type === 'scatter' && Array.isArray(chartConfig.scatterSeries) && chartConfig.scatterSeries.length > 0;
+                        if (!hasScatterSeries && (!chartConfig.dataKeys || !Array.isArray(chartConfig.dataKeys) || chartConfig.dataKeys.length === 0)) {
+                            return { success: false, error: 'chartConfig.dataKeys must be a non-empty array of series key names' };
+                        }
                     }
 
                     // Strip deprecated `colors` field — it breaks light/dark mode adaptation
@@ -322,8 +447,8 @@ export const ChartExtension: ExtensionWrapper = {
                                 success: true,
                                 message: `Chart inserted via ${resolved.strategy}`,
                                 chartType: chartConfig.type,
-                                dataPoints: chartConfig.data.length,
-                                series: chartConfig.dataKeys.length
+                                dataPoints: chartConfig.data?.length ?? 0,
+                                series: chartConfig.dataKeys?.length ?? 0
                             }
                             : { success: false, error: 'Failed to insert chart at the specified position' };
                     }
@@ -349,8 +474,8 @@ export const ChartExtension: ExtensionWrapper = {
                         success: true,
                         message: `Chart inserted at cursor position`,
                         chartType: chartConfig.type,
-                        dataPoints: chartConfig.data.length,
-                        series: chartConfig.dataKeys.length
+                        dataPoints: chartConfig.data?.length ?? 0,
+                        series: chartConfig.dataKeys?.length ?? 0
                     };
                 } catch (error) {
                     return {
@@ -412,7 +537,7 @@ export const ChartExtension: ExtensionWrapper = {
             inputSchema: z.object({
                 position: z.number().describe("要更新的图表的位置（通过 listCharts 获取）"),
                 chartConfig: z.object({
-                    type: z.enum(['bar', 'line', 'area', 'pie', 'radar', 'radialBar', 'scatter', 'compose']).describe("图表类型").optional(),
+                    type: z.enum(['bar', 'line', 'area', 'pie', 'radar', 'radialBar', 'scatter', 'compose', 'funnel', 'treemap', 'sankey']).describe("图表类型").optional(),
                     title: z.string().describe("图表标题").optional(),
                     description: z.string().describe("图表描述").optional(),
                     data: z.array(z.record(z.string(), z.any())).describe("数据数组").optional(),
@@ -432,6 +557,33 @@ export const ChartExtension: ExtensionWrapper = {
                         yAxisId: z.enum(['left', 'right']).describe("使用哪个 Y 轴").optional(),
                     })).describe("组合图表的系列配置").optional(),
                     rightYAxis: z.boolean().describe("是否显示右侧 Y 轴").optional(),
+                    referenceLines: z.array(z.object({
+                        axis: z.enum(['x', 'y']).describe("参考线锚定的坐标轴").optional(),
+                        value: z.union([z.number(), z.string()]).describe("参考线所在的值"),
+                        label: z.string().describe("参考线标签").optional(),
+                        color: z.string().describe("参考线颜色").optional(),
+                        dashed: z.boolean().describe("是否虚线").optional(),
+                    })).describe("参考线/阈值线").optional(),
+                    enableBrush: z.boolean().describe("是否显示 Brush 缩放控件").optional(),
+                    stackOffset: z.enum(['none', 'expand']).describe("'expand' 为 100% 百分比堆叠").optional(),
+                    gradientFill: z.boolean().describe("面积系列是否渐变填充").optional(),
+                    logScale: z.boolean().describe("数值轴是否对数刻度").optional(),
+                    sizeKey: z.string().describe("气泡大小字段名").optional(),
+                    scatterSeries: z.array(z.object({
+                        name: z.string().describe("系列名称"),
+                        xKey: z.string().describe("X 轴字段名"),
+                        yKey: z.string().describe("Y 轴字段名"),
+                        sizeKey: z.string().describe("气泡大小字段名").optional(),
+                        data: z.array(z.record(z.string(), z.any())).describe("该系列数据").optional(),
+                    })).describe("多组散点/气泡系列").optional(),
+                    sankey: z.object({
+                        nodes: z.array(z.object({ name: z.string() })).describe("节点列表"),
+                        links: z.array(z.object({
+                            source: z.number().describe("源节点索引"),
+                            target: z.number().describe("目标节点索引"),
+                            value: z.number().describe("流量/权重"),
+                        })).describe("加权连接"),
+                    }).describe("桑基图节点/连接图").optional(),
                 }).describe("要更新的图表配置（仅包含需要更新的字段）")
             }),
             execute: (editor: Editor) => async (params: { position: number; chartConfig: Partial<ChartData> }) => {
@@ -529,7 +681,8 @@ export const ChartExtension: ExtensionWrapper = {
             description: '获取所有可用的图表类型模板和示例数据。用于了解支持的图表类型和数据结构格式。',
             inputSchema: z.object({
                 chartType: z.enum([
-                    'bar', 'line', 'area', 'pie', 'radar', 'radialBar', 'scatter', 'compose', 'all'
+                    'bar', 'line', 'area', 'pie', 'radar', 'radialBar', 'scatter', 'compose',
+                    'funnel', 'treemap', 'sankey', 'bubble', 'all'
                 ]).describe("要获取的图表类型模板，'all' 返回所有模板").optional()
             }),
             execute: (_editor: Editor) => async (params: { chartType?: keyof typeof CHART_TEMPLATES | 'all' }) => {
