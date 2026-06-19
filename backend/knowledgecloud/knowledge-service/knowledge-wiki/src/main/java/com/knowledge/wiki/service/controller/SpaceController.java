@@ -44,6 +44,7 @@ import com.knowledge.wiki.service.entity.vo.PageVO;
 import com.knowledge.wiki.service.entity.vo.SpaceVO;
 import com.knowledge.wiki.service.entity.vo.InvitedPageVO;
 import com.knowledge.wiki.service.entity.vo.BacklinkVO;
+import com.knowledge.wiki.service.entity.vo.SpaceGraphVO;
 import com.knowledge.wiki.service.entity.vo.BlockVersionVO;
 import com.knowledge.wiki.service.entity.PageContent;
 
@@ -241,6 +242,16 @@ public class SpaceController {
     @GetMapping("/block/{blockId}/backlinks")
     public R<List<BacklinkVO>> getBlockBacklinks(@PathVariable("blockId") String blockId) {
         return R.data(spaceApplication.getBlockBacklinks(blockId));
+    }
+
+    /**
+     * Page relation graph across every space the current user can see.
+     * Nodes are pages; edges are page-level references from wiki_link.
+     * GET /knowledge-wiki/space/graph
+     */
+    @GetMapping("/graph")
+    public R<SpaceGraphVO> spaceGraph() {
+        return R.data(spaceApplication.getSpaceGraph());
     }
 
     /**

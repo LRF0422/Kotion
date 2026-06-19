@@ -2,8 +2,10 @@ package com.knowledge.wiki.service.application;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -58,6 +60,9 @@ import com.knowledge.wiki.service.entity.vo.PageContentVO;
 import com.knowledge.wiki.service.entity.vo.PageVO;
 import com.knowledge.wiki.service.entity.vo.SpaceVO;
 import com.knowledge.wiki.service.entity.vo.BacklinkVO;
+import com.knowledge.wiki.service.entity.vo.GraphEdgeVO;
+import com.knowledge.wiki.service.entity.vo.GraphNodeVO;
+import com.knowledge.wiki.service.entity.vo.SpaceGraphVO;
 import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.entity.enums.CollaboratorRole;
 import com.knowledge.wiki.service.entity.PageCollaborator;
@@ -462,6 +467,121 @@ public class SpaceApplication {
         }
 
         return result;
+    }
+
+    /**
+     * Build the page relation graph for every space the current user can see.
+     *
+     * <p>Visible spaces = spaces the user owns (any non-template type) ∪ spaces
+     * the user has an explicit permission row for. Nodes are the live pages
+     * (not deleted / trashed / template) in those spaces; edges are page-level
+     * references from {@code wiki_link} whose both endpoints are visible nodes.
+     *
+     * <p>All ids are emitted as strings to preserve 19-digit snowflake precision
+     * on the JS frontend.
+     */
+    public SpaceGraphVO getSpaceGraph() {
+        SpaceGraphVO graph = new SpaceGraphVO();
+        Long uid = SecurityContextUtil.getUserId();
+        if (uid == null) {
+            return graph;
+        }
+
+        // 1) Collect visible space ids: owned (non-template) ∪ permitted.
+        Set<Long> spaceIds = new HashSet<>();
+        Map<Long, String> spaceNames = new HashMap<>();
+        List<Space> ownedSpaces = spaceService.lambdaQuery()
+                .eq(Space::getUserId, uid)
+                .ne(Space::getType, SpaceType.TEMPALTE)
+                .list();
+        for (Space s : ownedSpaces) {
+            spaceIds.add(s.getId());
+            spaceNames.put(s.getId(), s.getName());
+        }
+
+        List<SpacePermission> permissions = spaceService.getSpacePermissionService().lambdaQuery()
+                .eq(SpacePermission::getUserId, uid)
+                .list();
+        List<Long> permittedIds = permissions.stream()
+                .map(SpacePermission::getSpaceId)
+                .filter(id -> id != null && !spaceIds.contains(id))
+                .distinct()
+                .collect(Collectors.toList());
+        if (CollUtil.isNotEmpty(permittedIds)) {
+            spaceIds.addAll(permittedIds);
+            List<Space> permittedSpaces = spaceService.lambdaQuery()
+                    .in(Space::getId, permittedIds)
+                    .list();
+            for (Space s : permittedSpaces) {
+                spaceNames.put(s.getId(), s.getName());
+            }
+        }
+
+        if (CollUtil.isEmpty(spaceIds)) {
+            return graph;
+        }
+
+        // 2) Page nodes: live pages in the visible spaces.
+        List<Page> pages = spaceService.getPageService().lambdaQuery()
+                .in(Page::getSpaceId, spaceIds)
+                .ne(Page::getStatus, PageStatus.DELETED)
+                .ne(Page::getStatus, PageStatus.TRASH)
+                .eq(Page::getIsTemplate, false)
+                .list();
+
+        Set<Long> pageIdSet = new HashSet<>();
+        List<GraphNodeVO> nodes = new ArrayList<>();
+        for (Page page : pages) {
+            pageIdSet.add(page.getId());
+            GraphNodeVO node = new GraphNodeVO();
+            node.setId(String.valueOf(page.getId()));
+            node.setTitle(page.getTitle());
+            node.setSpaceId(page.getSpaceId() != null ? String.valueOf(page.getSpaceId()) : null);
+            node.setSpaceName(page.getSpaceId() != null ? spaceNames.get(page.getSpaceId()) : null);
+            node.setIcon(page.getIcon());
+            node.setStatus(page.getStatus() != null ? page.getStatus().getValue() : null);
+            nodes.add(node);
+        }
+        graph.setNodes(nodes);
+
+        if (pageIdSet.isEmpty()) {
+            return graph;
+        }
+
+        // 3) Edges: page-level links whose both endpoints are visible nodes.
+        List<Long> pageIds = new ArrayList<>(pageIdSet);
+        List<WikiLink> links = wikiLinkService.lambdaQuery()
+                .eq(WikiLink::getTargetType, "PAGE")
+                .in(WikiLink::getSourcePageId, pageIds)
+                .in(WikiLink::getTargetPageId, pageIds)
+                .list();
+
+        Set<String> seenEdges = new HashSet<>();
+        List<GraphEdgeVO> edges = new ArrayList<>();
+        for (WikiLink link : links) {
+            Long src = link.getSourcePageId();
+            Long tgt = link.getTargetPageId();
+            // Skip incomplete links, self-loops, and endpoints outside the node set.
+            if (src == null || tgt == null || src.equals(tgt)) {
+                continue;
+            }
+            if (!pageIdSet.contains(src) || !pageIdSet.contains(tgt)) {
+                continue;
+            }
+            // Collapse multiple links between the same ordered pair into one edge.
+            String key = src + "->" + tgt;
+            if (!seenEdges.add(key)) {
+                continue;
+            }
+            GraphEdgeVO edge = new GraphEdgeVO();
+            edge.setSource(String.valueOf(src));
+            edge.setTarget(String.valueOf(tgt));
+            edge.setLinkKind(link.getLinkKind());
+            edges.add(edge);
+        }
+        graph.setEdges(edges);
+
+        return graph;
     }
 
     public PageVO createPage(PageDTO dto) {

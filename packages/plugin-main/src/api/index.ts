@@ -239,4 +239,10 @@ export const APIS = {
         url: '/knowledge-wiki/space/page/:pageId/versions/count',
         method: 'GET'
     } as API,
+    /** Cross-space page relation graph (nodes = pages, edges = backlinks) */
+    GET_SPACE_GRAPH: {
+        url: '/knowledge-wiki/space/graph',
+        method: 'GET',
+        name: 'Get Space Graph'
+    } as API,
 }

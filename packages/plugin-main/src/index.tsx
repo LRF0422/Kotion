@@ -1,6 +1,7 @@
 import { Home } from './pages/Home'
 import { Spaces } from './pages/Spaces'
 import { SpaceDetail } from './pages/SpaceDetail'
+import { SpaceGraph } from './pages/SpaceGraph'
 import { PageRouteSync } from './pages/SpaceDetail/PageEditor/PageRouteSync'
 import { SpaceSettings } from './pages/SpaceDetail/Settings'
 import { InviteCollaboration } from './pages/InviteCollaboration'
@@ -52,6 +53,11 @@ export const DefaultPluginInstance = new DefaultPlugin({
           name: '/space-detail/:id/settings',
           path: '/space-detail/:id/settings',
           element: <SpaceSettings />
+        },
+        {
+          name: '/space-detail/:id/graph',
+          path: '/space-detail/:id/graph',
+          element: <SpaceGraph />
         }
       ]
     }
@@ -283,6 +289,20 @@ export const DefaultPluginInstance = new DefaultPlugin({
             "untitled": "无标题"
           }
         },
+        "graph": {
+          "title": "关系图谱",
+          "stats": "{{nodes}} 个页面 · {{edges}} 条引用",
+          "filter": "筛选页面...",
+          "reset": "重置视图",
+          "refresh": "刷新",
+          "retry": "重试",
+          "loading": "正在生成关系图谱...",
+          "error": "加载关系图谱失败",
+          "empty": "暂无页面关系",
+          "emptyHint": "在页面中用 [[ ]] 或页面引用链接其他页面后，这里会显示它们之间的关系",
+          "legend": "空间",
+          "untitled": "未命名"
+        },
       }
     },
     "en": {
@@ -496,6 +516,20 @@ export const DefaultPluginInstance = new DefaultPlugin({
             "closeAll": "Close All",
             "untitled": "Untitled"
           }
+        },
+        "graph": {
+          "title": "Relation Graph",
+          "stats": "{{nodes}} pages · {{edges}} links",
+          "filter": "Filter pages...",
+          "reset": "Reset view",
+          "refresh": "Refresh",
+          "retry": "Retry",
+          "loading": "Building relation graph...",
+          "error": "Failed to load relation graph",
+          "empty": "No page relations yet",
+          "emptyHint": "Link pages with [[ ]] or page references, and their relationships will show up here",
+          "legend": "Spaces",
+          "untitled": "Untitled"
         },
       }
     },

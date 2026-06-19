@@ -16,12 +16,14 @@
     "@kn/common": "workspace:*",
     "@kn/ui": "workspace:*",
     "@kn/icon": "workspace:*",
-    "@kn/editor": "workspace:*"
+    "@kn/editor": "workspace:*",
+    "d3-force": "^3.0.0"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@kn/rollup-config": "workspace:*"
+    "@kn/rollup-config": "workspace:*",
+    "@types/d3-force": "^3.0.0"
   }
 }

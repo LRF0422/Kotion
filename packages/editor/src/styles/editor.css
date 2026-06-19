@@ -28,7 +28,7 @@
 /* 标题（title 节点已退回为原生 ProseMirror，渲染为 div.page-title > h1）。 */
 .ProseMirror .page-title > h1 {
   margin-top: 0;
-  margin-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
   font-weight: 700;
 }
 

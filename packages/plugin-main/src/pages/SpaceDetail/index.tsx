@@ -1,6 +1,6 @@
 import { SiderMenuItemProps } from "../../pages/components/SiderMenu";
 import { IconButton, TreeView, useResponsive, Button, Sheet, SheetContent, SheetTitle } from "@kn/ui";
-import { CircleArrowUp, LayoutDashboard, LayoutTemplate, Menu, MoreHorizontal, Package, Plus, Settings, Star, StarIcon, Trash2, Undo2, AlertCircle, PanelLeftClose, PanelLeftOpen } from "@kn/icon";
+import { CircleArrowUp, LayoutDashboard, LayoutTemplate, Menu, MoreHorizontal, Network, Package, Plus, Settings, Star, StarIcon, Trash2, Undo2, AlertCircle, PanelLeftClose, PanelLeftOpen } from "@kn/icon";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useApi, useService, useUploadFile, useNavigator, useToggle, useMobilePageHeader, useTranslation } from "@kn/common";
 import { APIS } from "../../api";
@@ -466,6 +466,17 @@ export const SpaceDetail: React.FC = () => {
                 >
                     <LayoutTemplate className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="flex-1">Templates</span>
+                </div>
+                <div
+                    className="flex items-center gap-2 py-1 px-1 rounded-md cursor-pointer hover:bg-muted transition-colors text-xs sm:text-sm"
+                    onClick={() => {
+                        navigator.go({
+                            to: `/space-detail/${params.id}/graph`
+                        })
+                    }}
+                >
+                    <Network className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="flex-1">{t('graph.title')}</span>
                 </div>
                 <div
                     className="flex items-center gap-2 py-1 px-1 rounded-md cursor-pointer hover:bg-muted transition-colors text-xs sm:text-sm"

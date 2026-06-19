@@ -1,0 +1,458 @@
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+    forceCenter,
+    forceCollide,
+    forceLink,
+    forceManyBody,
+    forceSimulation,
+    type Simulation,
+} from "d3-force";
+import { useApi, useNavigator, useParams, useTranslation } from "@kn/common";
+import { useResponsive, Button, Input, cn } from "@kn/ui";
+import { Network, Loader2, RefreshCw, Maximize2 } from "@kn/icon";
+import { APIS } from "../../api";
+import type { GraphEdge, GraphNode, SimLink, SimNode, ViewTransform } from "./types";
+
+/** Distinct-enough palette; spaces are colored by stable index into this list. */
+const PALETTE = [
+    "#6366f1", "#06b6d4", "#10b981", "#f59e0b", "#ef4444",
+    "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#3b82f6",
+];
+
+const MIN_RADIUS = 6;
+const MAX_RADIUS = 18;
+
+/** Resolve a sim link endpoint (id string before layout, SimNode after). */
+const endId = (e: string | SimNode | number): string =>
+    typeof e === "object" ? (e as SimNode).id : String(e);
+
+export const SpaceGraph: React.FC = () => {
+    const { t } = useTranslation();
+    const params = useParams();
+    const navigator = useNavigator();
+    const { isMobile } = useResponsive();
+
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [nodes, setNodes] = useState<SimNode[]>([]);
+    const [links, setLinks] = useState<SimLink[]>([]);
+    const [query, setQuery] = useState("");
+    const [hovered, setHovered] = useState<string | null>(null);
+    const [view, setView] = useState<ViewTransform>({ x: 0, y: 0, k: 1 });
+    const [reloadFlag, setReloadFlag] = useState(0);
+
+    const containerRef = useRef<HTMLDivElement>(null);
+    const simRef = useRef<Simulation<SimNode, SimLink> | null>(null);
+    const sizeRef = useRef({ w: 0, h: 0 });
+    const rafRef = useRef<number | null>(null);
+    // Re-render on each throttled simulation tick without recreating state arrays.
+    const [, bumpTick] = useReducer((n: number) => n + 1, 0);
+
+    // Interaction refs (kept off React state to avoid re-render storms while dragging).
+    const dragNodeRef = useRef<SimNode | null>(null);
+    const panRef = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
+    const movedRef = useRef(false);
+
+    // --- Fetch graph data ---
+    useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        setError(null);
+        useApi(APIS.GET_SPACE_GRAPH)
+            .then((res) => {
+                if (cancelled) return;
+                const data = res.data || {};
+                const rawNodes: GraphNode[] = data.nodes || [];
+                const rawEdges: GraphEdge[] = data.edges || [];
+
+                // Degree (in+out) drives node radius.
+                const degree: Record<string, number> = {};
+                const validIds = new Set(rawNodes.map((n) => n.id));
+                const safeEdges = rawEdges.filter(
+                    (e) => validIds.has(e.source) && validIds.has(e.target),
+                );
+                safeEdges.forEach((e) => {
+                    degree[e.source] = (degree[e.source] || 0) + 1;
+                    degree[e.target] = (degree[e.target] || 0) + 1;
+                });
+
+                setNodes(
+                    rawNodes.map((n) => ({ ...n, degree: degree[n.id] || 0 })),
+                );
+                setLinks(
+                    safeEdges.map((e) => ({
+                        source: e.source,
+                        target: e.target,
+                        linkKind: e.linkKind,
+                    })),
+                );
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                console.error("Failed to load space graph:", err);
+                setError(t("graph.error"));
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [reloadFlag, t]);
+
+    // Stable color per space id.
+    const spaceColor = useMemo(() => {
+        const map = new Map<string, string>();
+        let i = 0;
+        nodes.forEach((n) => {
+            if (n.spaceId && !map.has(n.spaceId)) {
+                map.set(n.spaceId, PALETTE[i % PALETTE.length]);
+                i += 1;
+            }
+        });
+        return map;
+    }, [nodes]);
+
+    const legend = useMemo(() => {
+        const seen = new Map<string, string>();
+        nodes.forEach((n) => {
+            if (n.spaceId && !seen.has(n.spaceId)) {
+                seen.set(n.spaceId, n.spaceName || n.spaceId);
+            }
+        });
+        return Array.from(seen.entries()).map(([id, name]) => ({
+            id,
+            name,
+            color: spaceColor.get(id) || PALETTE[0],
+        }));
+    }, [nodes, spaceColor]);
+
+    // Adjacency for hover highlighting.
+    const neighbors = useMemo(() => {
+        const map = new Map<string, Set<string>>();
+        links.forEach((l) => {
+            const s = endId(l.source as any);
+            const tg = endId(l.target as any);
+            if (!map.has(s)) map.set(s, new Set());
+            if (!map.has(tg)) map.set(tg, new Set());
+            map.get(s)!.add(tg);
+            map.get(tg)!.add(s);
+        });
+        return map;
+    }, [links]);
+
+    const radiusOf = useCallback((n: SimNode) => {
+        return Math.min(MAX_RADIUS, MIN_RADIUS + Math.sqrt(n.degree) * 2.5);
+    }, []);
+
+    // --- Build / tear down the force simulation when data or size changes ---
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el || nodes.length === 0) return;
+
+        const start = () => {
+            const w = el.clientWidth || 800;
+            const h = el.clientHeight || 600;
+            sizeRef.current = { w, h };
+
+            simRef.current?.stop();
+            const sim = forceSimulation<SimNode>(nodes)
+                .force(
+                    "link",
+                    forceLink<SimNode, SimLink>(links)
+                        .id((d) => d.id)
+                        .distance(70)
+                        .strength(0.4),
+                )
+                .force("charge", forceManyBody().strength(-220))
+                .force("center", forceCenter(w / 2, h / 2))
+                .force("collide", forceCollide<SimNode>((d) => radiusOf(d) + 6))
+                .alpha(1)
+                .alphaDecay(0.045);
+
+            sim.on("tick", () => {
+                if (rafRef.current != null) return;
+                rafRef.current = requestAnimationFrame(() => {
+                    rafRef.current = null;
+                    bumpTick();
+                });
+            });
+            simRef.current = sim;
+        };
+
+        start();
+
+        const ro = new ResizeObserver(() => {
+            const sim = simRef.current;
+            if (!sim) return;
+            const w = el.clientWidth || 800;
+            const h = el.clientHeight || 600;
+            sizeRef.current = { w, h };
+            sim.force("center", forceCenter(w / 2, h / 2));
+            sim.alpha(0.3).restart();
+        });
+        ro.observe(el);
+
+        return () => {
+            ro.disconnect();
+            if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+            rafRef.current = null;
+            simRef.current?.stop();
+            simRef.current = null;
+        };
+    }, [nodes, links, radiusOf]);
+
+    // --- Pointer interactions: node drag, background pan ---
+    const screenToGraph = useCallback(
+        (clientX: number, clientY: number) => {
+            const rect = containerRef.current?.getBoundingClientRect();
+            const px = clientX - (rect?.left || 0);
+            const py = clientY - (rect?.top || 0);
+            return { x: (px - view.x) / view.k, y: (py - view.y) / view.k };
+        },
+        [view],
+    );
+
+    const onNodePointerDown = useCallback(
+        (e: React.PointerEvent, node: SimNode) => {
+            e.stopPropagation();
+            (e.target as Element).setPointerCapture?.(e.pointerId);
+            movedRef.current = false;
+            dragNodeRef.current = node;
+            simRef.current?.alphaTarget(0.3).restart();
+        },
+        [],
+    );
+
+    const onBackgroundPointerDown = useCallback(
+        (e: React.PointerEvent) => {
+            (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+            panRef.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+            movedRef.current = false;
+        },
+        [view],
+    );
+
+    const onPointerMove = useCallback(
+        (e: React.PointerEvent) => {
+            if (dragNodeRef.current) {
+                const p = screenToGraph(e.clientX, e.clientY);
+                dragNodeRef.current.fx = p.x;
+                dragNodeRef.current.fy = p.y;
+                movedRef.current = true;
+                bumpTick();
+                return;
+            }
+            if (panRef.current) {
+                const dx = e.clientX - panRef.current.x;
+                const dy = e.clientY - panRef.current.y;
+                if (Math.abs(dx) + Math.abs(dy) > 3) movedRef.current = true;
+                setView((v) => ({ ...v, x: panRef.current!.vx + dx, y: panRef.current!.vy + dy }));
+            }
+        },
+        [screenToGraph],
+    );
+
+    const endInteraction = useCallback(() => {
+        if (dragNodeRef.current) {
+            // Release the node so it rejoins the simulation.
+            dragNodeRef.current.fx = null;
+            dragNodeRef.current.fy = null;
+            dragNodeRef.current = null;
+            simRef.current?.alphaTarget(0);
+        }
+        panRef.current = null;
+    }, []);
+
+    // Wheel zoom centered on the cursor.
+    const onWheel = useCallback((e: React.WheelEvent) => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        const px = e.clientX - (rect?.left || 0);
+        const py = e.clientY - (rect?.top || 0);
+        setView((v) => {
+            const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+            const k = Math.min(4, Math.max(0.2, v.k * factor));
+            // Keep the point under the cursor fixed.
+            const x = px - ((px - v.x) * k) / v.k;
+            const y = py - ((py - v.y) * k) / v.k;
+            return { x, y, k };
+        });
+    }, []);
+
+    const resetView = useCallback(() => {
+        setView({ x: 0, y: 0, k: 1 });
+        simRef.current?.alpha(0.5).restart();
+    }, []);
+
+    const onNodeClick = useCallback(
+        (node: SimNode) => {
+            if (movedRef.current) return; // was a drag, not a click
+            if (!node.spaceId) return;
+            navigator.go({ to: `/space-detail/${node.spaceId}/page/edit/${node.id}` });
+        },
+        [navigator],
+    );
+
+    const normalizedQuery = query.trim().toLowerCase();
+    const matches = useCallback(
+        (n: SimNode) => !normalizedQuery || (n.title || "").toLowerCase().includes(normalizedQuery),
+        [normalizedQuery],
+    );
+
+    // --- Render states ---
+    if (loading) {
+        return (
+            <div className="h-full w-full flex items-center justify-center text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                {t("graph.loading")}
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="h-full w-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                <Network className="h-10 w-10 opacity-40" />
+                <p>{error}</p>
+                <Button size="sm" variant="outline" onClick={() => setReloadFlag((f) => f + 1)}>
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                    {t("graph.retry")}
+                </Button>
+            </div>
+        );
+    }
+
+    if (nodes.length === 0) {
+        return (
+            <div className="h-full w-full flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                <Network className="h-12 w-12 opacity-30" />
+                <p className="text-sm font-medium">{t("graph.empty")}</p>
+                <p className="text-xs">{t("graph.emptyHint")}</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="h-full w-full flex flex-col overflow-hidden bg-background">
+            {/* Toolbar */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b flex-shrink-0">
+                <Network className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">{t("graph.title")}</span>
+                <span className="text-xs text-muted-foreground">
+                    {t("graph.stats", { nodes: nodes.length, edges: links.length })}
+                </span>
+                <div className="flex-1" />
+                <Input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder={t("graph.filter")}
+                    className="h-7 w-40 text-xs"
+                />
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={resetView} title={t("graph.reset")}>
+                    <Maximize2 className="h-4 w-4" />
+                </Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setReloadFlag((f) => f + 1)} title={t("graph.refresh")}>
+                    <RefreshCw className="h-4 w-4" />
+                </Button>
+            </div>
+
+            {/* Canvas */}
+            <div
+                ref={containerRef}
+                className="relative flex-1 min-h-0 overflow-hidden cursor-grab active:cursor-grabbing touch-none"
+                onPointerDown={onBackgroundPointerDown}
+                onPointerMove={onPointerMove}
+                onPointerUp={endInteraction}
+                onPointerLeave={endInteraction}
+                onWheel={onWheel}
+            >
+                <svg width="100%" height="100%" className="block">
+                    <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
+                        {/* Edges */}
+                        {links.map((l, i) => {
+                            const s = l.source as SimNode;
+                            const tg = l.target as SimNode;
+                            if (!s || !tg || s.x == null || tg.x == null) return null;
+                            const active =
+                                !!hovered && (endId(l.source as any) === hovered || endId(l.target as any) === hovered);
+                            return (
+                                <line
+                                    key={i}
+                                    x1={s.x}
+                                    y1={s.y!}
+                                    x2={tg.x}
+                                    y2={tg.y!}
+                                    stroke={active ? "#6366f1" : "#cbd5e1"}
+                                    strokeOpacity={hovered && !active ? 0.15 : 0.5}
+                                    strokeWidth={active ? 1.5 : 1}
+                                />
+                            );
+                        })}
+
+                        {/* Nodes */}
+                        {nodes.map((n) => {
+                            if (n.x == null || n.y == null) return null;
+                            const r = radiusOf(n);
+                            const isCurrentSpace = n.spaceId === params.id;
+                            const dimmed =
+                                (!!hovered && hovered !== n.id && !neighbors.get(hovered)?.has(n.id)) ||
+                                !matches(n);
+                            const color = spaceColor.get(n.spaceId) || PALETTE[0];
+                            return (
+                                <g
+                                    key={n.id}
+                                    transform={`translate(${n.x},${n.y})`}
+                                    style={{ cursor: "pointer", opacity: dimmed ? 0.2 : 1 }}
+                                    onPointerDown={(e) => onNodePointerDown(e, n)}
+                                    onPointerUp={() => onNodeClick(n)}
+                                    onPointerEnter={() => setHovered(n.id)}
+                                    onPointerLeave={() => setHovered(null)}
+                                >
+                                    <circle
+                                        r={r}
+                                        fill={color}
+                                        stroke={isCurrentSpace ? "#111827" : "#fff"}
+                                        strokeWidth={isCurrentSpace ? 2.5 : 1.5}
+                                    />
+                                    {(view.k > 0.6 || hovered === n.id) && (
+                                        <text
+                                            y={r + 11}
+                                            textAnchor="middle"
+                                            fontSize={10}
+                                            fill="currentColor"
+                                            className="text-foreground pointer-events-none select-none"
+                                        >
+                                            {(n.title || t("graph.untitled")).slice(0, 18)}
+                                        </text>
+                                    )}
+                                </g>
+                            );
+                        })}
+                    </g>
+                </svg>
+
+                {/* Legend */}
+                {!isMobile && legend.length > 0 && (
+                    <div className="absolute top-2 right-2 max-w-[220px] max-h-[40%] overflow-auto rounded-md border bg-background/90 backdrop-blur px-2 py-1.5 shadow-sm">
+                        <div className="text-[11px] font-medium text-muted-foreground mb-1">
+                            {t("graph.legend")}
+                        </div>
+                        {legend.map((s) => (
+                            <div key={s.id} className="flex items-center gap-1.5 py-0.5">
+                                <span
+                                    className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                                    style={{ background: s.color }}
+                                />
+                                <span className={cn("text-xs truncate", s.id === params.id && "font-semibold")}>
+                                    {s.name}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+export default SpaceGraph;

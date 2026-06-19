@@ -1456,10 +1456,16 @@ importers:
       '@kn/ui':
         specifier: workspace:*
         version: link:../ui
+      d3-force:
+        specifier: ^3.0.0
+        version: 3.0.0
     devDependencies:
       '@kn/rollup-config':
         specifier: workspace:*
         version: link:../rollup-config
+      '@types/d3-force':
+        specifier: ^3.0.0
+        version: 3.0.10
 
   packages/plugin-mermaid:
     dependencies:
