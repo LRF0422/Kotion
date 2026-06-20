@@ -35,6 +35,15 @@ export function formatTime(ts: number): string {
     return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+/** Absolute date in Notion's style, e.g. "05/17/2024". */
+export function formatDate(ts: number): string {
+    return new Date(ts).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    });
+}
+
 /** Full, locale-aware timestamp for hover tooltips. */
 export function formatFullTime(ts: number): string {
     return new Date(ts).toLocaleString();

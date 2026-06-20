@@ -48,8 +48,9 @@ export const CommentSheet: React.FC<CommentSheetProps> = ({
                     <div className="px-4 py-3 pb-safe">
                         <CommentInput
                             autoFocus
+                            showAvatar
+                            showAttachments
                             placeholder="Write a comment…"
-                            submitLabel="Comment"
                             onSubmit={onSetFirstComment}
                             onCancel={onResolve}
                         />

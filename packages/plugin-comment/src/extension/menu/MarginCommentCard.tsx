@@ -27,7 +27,7 @@ export interface MarginCommentCardProps {
     onSetFirstComment: (content: string) => void;
 }
 
-const SURFACE = "rounded-md border bg-popover text-popover-foreground";
+const SURFACE = "rounded-xl border border-border/60 bg-popover text-popover-foreground ring-1 ring-black/5";
 
 const VIEWPORT_MARGIN = 16;
 
@@ -83,8 +83,9 @@ export const MarginCommentCard: React.FC<MarginCommentCardProps> = ({
                     <CommentInput
                         compact
                         autoFocus
+                        showAvatar
+                        showAttachments
                         placeholder="Write a comment…"
-                        submitLabel="Comment"
                         onSubmit={onSetFirstComment}
                         onCancel={onResolve}
                     />
@@ -102,7 +103,7 @@ export const MarginCommentCard: React.FC<MarginCommentCardProps> = ({
                 style={{ top: `${top}px`, left: `${left}px`, width: `${width}px` }}
                 onClick={onClick}
             >
-                <div className={`${SURFACE} flex items-start gap-2.5 px-3 py-2 shadow-sm transition-shadow hover:shadow-md`}>
+                <div className={`${SURFACE} flex items-start gap-2.5 px-3 py-2.5 shadow-sm transition-shadow hover:shadow-md`}>
                     <Avatar className="h-6 w-6 flex-shrink-0">
                         <AvatarImage src={firstComment.user.avatar} />
                         <AvatarFallback className={`text-[10px] font-medium ${getAvatarColor(firstComment.user.name)}`}>

@@ -3,7 +3,7 @@ import type { CommentItem as CommentItemType } from "../types";
 import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
 import { CornerDownRight, Pencil, Trash2 } from "@kn/icon";
 import { CommentInput } from "./CommentInput";
-import { formatFullTime, formatTime, getAvatarColor, getInitial } from "./utils";
+import { formatDate, formatFullTime, getAvatarColor, getInitial } from "./utils";
 
 export interface CommentItemProps {
     comment: CommentItemType;
@@ -44,6 +44,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                 <CommentInput
                     compact
                     autoFocus
+                    variant="edit"
                     initialValue={comment.content}
                     placeholder="Edit comment..."
                     submitLabel="Save"
@@ -78,7 +79,7 @@ export const CommentItem: React.FC<CommentItemProps> = ({
                             className="flex-shrink-0 text-xs tabular-nums text-muted-foreground"
                             title={formatFullTime(comment.createdAt)}
                         >
-                            {formatTime(comment.createdAt)}
+                            {formatDate(comment.createdAt)}
                         </span>
                         {comment.updatedAt && (
                             <span

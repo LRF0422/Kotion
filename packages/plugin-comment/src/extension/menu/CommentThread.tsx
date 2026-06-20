@@ -49,9 +49,9 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
     return (
         <>
             {/* Header */}
-            <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
-                <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                    <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+            <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-3 py-2">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <MessageSquare className="h-3.5 w-3.5" />
                     <span>
                         {comments.length} comment{comments.length > 1 ? "s" : ""}
                     </span>
@@ -110,11 +110,12 @@ export const CommentThread: React.FC<CommentThreadProps> = ({
 
             {/* Reply input */}
             {isEditable && (
-                <div className="shrink-0 border-t bg-muted/30 px-3 py-2.5 pb-safe">
+                <div className="shrink-0 border-t border-border/60 px-3 py-2.5 pb-safe">
                     <CommentInput
                         compact
+                        showAvatar
+                        showAttachments
                         placeholder="Reply…"
-                        submitLabel="Reply"
                         onSubmit={handleReplySubmit}
                         contextLabel={
                             replyTarget ? (
