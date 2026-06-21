@@ -1,0 +1,89 @@
+import React from "react";
+import { Button, cn, ScrollArea, TreeView, Skeleton } from "@kn/ui";
+import { HomeIcon, ClockIcon, StarIcon, Trash2 } from "@kn/icon";
+import type { FileView } from "./FileContext";
+
+export interface FileSidebarProps {
+    view: FileView;
+    currentFolderId: string;
+    /** 已构建好的 TreeView 元素 */
+    treeElements: any[];
+    loading: boolean;
+    /** 回到 Home(根目录) */
+    onHome: () => void;
+    /** 切换到 recent / favorites / trash */
+    onSelectView: (view: FileView) => void;
+    /** 选中树节点 / 点击导航后回调(移动端用于关闭抽屉) */
+    onAfterNavigate?: () => void;
+}
+
+const LIBRARY: Array<{ key: FileView; label: string; icon: React.ReactNode }> = [
+    { key: 'home', label: 'Home', icon: <HomeIcon className="h-4 w-4" /> },
+    { key: 'recent', label: 'Recent', icon: <ClockIcon className="h-4 w-4" /> },
+    { key: 'favorites', label: 'Favorites', icon: <StarIcon className="h-4 w-4" /> },
+    { key: 'trash', label: 'Trash', icon: <Trash2 className="h-4 w-4" /> },
+];
+
+const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <div className="px-3 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        {children}
+    </div>
+);
+
+export const FileSidebar: React.FC<FileSidebarProps> = ({
+    view, currentFolderId, treeElements, loading, onHome, onSelectView, onAfterNavigate,
+}) => {
+    return (
+        <div className="flex h-full flex-col bg-muted/20">
+            <SectionLabel>Library</SectionLabel>
+            <div className="px-2 space-y-0.5">
+                {LIBRARY.map((it) => {
+                    const active = view === it.key;
+                    return (
+                        <Button
+                            key={it.key}
+                            variant="ghost"
+                            size="sm"
+                            className={cn(
+                                "w-full justify-start gap-2 h-9 font-normal",
+                                active && "bg-accent text-accent-foreground font-medium",
+                            )}
+                            onClick={() => {
+                                if (it.key === 'home') onHome();
+                                else onSelectView(it.key);
+                                onAfterNavigate?.();
+                            }}
+                        >
+                            {it.icon}
+                            {it.label}
+                        </Button>
+                    );
+                })}
+            </div>
+
+            <SectionLabel>Folders</SectionLabel>
+            <ScrollArea className="flex-1 min-h-0 px-1">
+                {loading ? (
+                    <div className="space-y-1 p-2">
+                        <Skeleton className="h-7 w-full" />
+                        <div className="space-y-1 pl-4">
+                            <Skeleton className="h-6 w-[85%]" />
+                            <Skeleton className="h-6 w-[90%]" />
+                            <Skeleton className="h-6 w-[80%]" />
+                            <Skeleton className="h-6 w-[70%]" />
+                        </div>
+                    </div>
+                ) : (
+                    <TreeView
+                        initialSelectedId={currentFolderId}
+                        selectParent
+                        size="sm"
+                        className="m-0 w-full"
+                        elements={treeElements}
+                        onTreeSelected={() => onAfterNavigate?.()}
+                    />
+                )}
+            </ScrollArea>
+        </div>
+    );
+};

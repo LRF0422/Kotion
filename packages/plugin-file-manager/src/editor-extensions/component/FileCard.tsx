@@ -1,315 +1,121 @@
-import { Download, EyeIcon, FcFile, FcOpenedFolder, MoreVertical, Pencil, FolderInput, Copy, Files, Info, Trash2, StarIcon, ArrowLeft } from "@kn/icon";
-import {
-    Card, CardContent, CardFooter, CardHeader, CardTitle, Checkbox, cn,
-    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-    Button,
-} from "@kn/ui";
-import { useSafeState } from "@kn/common";
-import React, { useEffect, useMemo, useCallback, useState } from "react";
-import { FileItem, FileManagerState, useFileManagerState } from "./FileContext";
-import { RenameDialog, MoveDialog, FileDetailsDialog, FilePreviewDialog } from "./dialogs";
-import { isPreviewable } from "../../utils/fileUtils";
-
-
-export interface FileCardProps {
-    objectId: string,
-    isSelect?: boolean
-    name: string
-    suffix?: string
-    isFolder: boolean,
-    onSelect: (id: string, checked: boolean) => void
-    target?: 'folder' | 'file' | 'both'
-}
-
+import { StarIcon } from "@kn/icon";
+import { Checkbox, cn, Button } from "@kn/ui";
+import React, { useCallback } from "react";
+import { FileItem, useFileManagerState } from "./FileContext";
+import { FileThumb } from "./FileThumb";
+import { FileActionsMenu } from "./ActionMenu";
+import { getFileActions } from "./fileActions";
 
 export const FileCard: React.FC<FileItem> = React.memo((props) => {
-    const { isFolder, id, name } = props
+    const ctx = useFileManagerState();
     const {
-        selectedFiles,
-        setSelectFiles,
-        selectable,
-        navigateToFolder,
-        loading,
-        handleRename,
-        handleMove,
-        handleCopy,
-        handleDuplicate,
-        handleDelete,
-        currentFolderId,
-        view,
-        toggleFavorite,
-        restoreFiles,
-        purgeFiles,
-        downloadFile,
-    } = useFileManagerState() as FileManagerState
-    const isTrash = view === 'trash'
-    const isFavorite = props.favorite === 1
-    const canPreview = !isFolder && isPreviewable(name)
-    const [checked, setChecked] = useSafeState<boolean>(false)
+        sortedItems, selectItem, isSelected, openItem, loading, view, isTouch, toggleFavorite,
+    } = ctx;
+    const { id, name } = props;
+    const isTrash = view === 'trash';
+    const isFavorite = props.favorite === 1;
+    const checked = isSelected(id);
 
-    // Dialog states
-    const [renameDialogOpen, setRenameDialogOpen] = useState(false);
-    const [moveDialogOpen, setMoveDialogOpen] = useState(false);
-    const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-    const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
-
-    useEffect(() => {
-        setChecked(!!selectedFiles.find(it => it.id === id))
-    }, [selectedFiles, id])
-
-    const handleCheckChange = useCallback((value: boolean) => {
-        if (value) {
-            setSelectFiles([...selectedFiles, props])
-        } else {
-            setSelectFiles(selectedFiles.filter(it => it.id !== id))
+    const handleClick = useCallback((e: React.MouseEvent) => {
+        // 触屏:单击直接打开;桌面:单击选中(支持 ctrl/shift)
+        if (isTouch) {
+            openItem(props);
+            return;
         }
-    }, [selectedFiles, props, id, setSelectFiles])
+        selectItem(props, { ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey }, sortedItems);
+    }, [isTouch, openItem, props, selectItem, sortedItems]);
 
     const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-        if (isTrash) return
-        if (isFolder) {
-            navigateToFolder(id, name)
-        } else if (canPreview) {
-            setPreviewDialogOpen(true)
-        } else {
-            downloadFile(props)
-        }
-    }, [isTrash, isFolder, id, name, canPreview, navigateToFolder, downloadFile, props])
-
-    const handleContextMenu = useCallback(() => {
-        if (selectable) {
-            setChecked(true)
-        }
-    }, [selectable])
-
-    // Action handlers
-    const handleRenameClick = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
         e.stopPropagation();
-        setRenameDialogOpen(true);
-    }, [])
+        openItem(props);
+    }, [openItem, props]);
 
-    const handleMoveClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation();
-        setMoveDialogOpen(true);
-    }, [])
+    const handleCheck = useCallback(() => {
+        // 复选框 = 累加/移除(toggle),不清除其他选择
+        selectItem(props, { metaKey: true }, sortedItems);
+    }, [selectItem, props, sortedItems]);
 
-    const handleCopyClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation();
-        handleCopy([props]);
-    }, [handleCopy, props])
-
-    const handleDuplicateClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation();
-        handleDuplicate([props]);
-    }, [handleDuplicate, props])
-
-    const handleDeleteClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation();
-        handleDelete([id]);
-    }, [handleDelete, id])
-
-    const handleDetailsClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation();
-        setDetailsDialogOpen(true);
-    }, [])
-
-    const handleDownloadClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation();
-        downloadFile(props);
-    }, [downloadFile, props])
-
-    const handlePreviewClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation();
-        setPreviewDialogOpen(true);
-    }, [])
-
-    const handleFavoriteClick = useCallback((e: React.MouseEvent) => {
+    const handleFavorite = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
         toggleFavorite(props);
-    }, [toggleFavorite, props])
+    }, [toggleFavorite, props]);
 
-    const handleRestoreClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation();
-        restoreFiles([id]);
-    }, [restoreFiles, id])
+    if (!name) return null;
 
-    const handlePurgeClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation();
-        purgeFiles([id]);
-    }, [purgeFiles, id])
-
-    if (!name) return null
-
-    return <>
+    return (
         <div
-            onContextMenu={handleContextMenu}
+            onClick={handleClick}
             onDoubleClick={handleDoubleClick}
-            className="group"
+            onContextMenu={() => { if (!checked) selectItem(props, {}, sortedItems); }}
+            className={cn(
+                "group relative flex flex-col items-center rounded-xl border p-3 cursor-pointer select-none",
+                "transition-colors duration-150",
+                checked
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-transparent hover:border-border hover:bg-muted/50",
+                loading && "opacity-50 pointer-events-none",
+            )}
         >
-            <Card className={cn(
-                "w-[160px] border hover:border-primary/60 hover:bg-muted/40 transition-colors duration-150 cursor-pointer",
-                checked && "border-primary bg-primary/5",
-                loading && "opacity-50 pointer-events-none"
-            )}>
-                <CardHeader className="p-2">
-                    <div className="flex items-center justify-between">
-                        {
-                            selectable && <Checkbox
-                                checked={checked}
-                                onCheckedChange={handleCheckChange}
-                                disabled={loading}
-                            />
-                        }
-                        <div className="flex items-center gap-0.5 ml-auto">
-                            {!isTrash && canPreview && (
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    onClick={handlePreviewClick}
-                                    title="Preview"
-                                >
-                                    <EyeIcon className="h-3.5 w-3.5" />
-                                </Button>
-                            )}
-                            {!isTrash && (
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className={cn(
-                                        "h-6 w-6 transition-opacity",
-                                        isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                                    )}
-                                    onClick={handleFavoriteClick}
-                                    title={isFavorite ? "Remove from favorites" : "Add to favorites"}
-                                >
-                                    <StarIcon className={cn("h-3.5 w-3.5", isFavorite && "fill-yellow-400 text-yellow-400")} />
-                                </Button>
-                            )}
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <MoreVertical className="h-3.5 w-3.5" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-[180px]">
-                                    {isTrash ? (
-                                        <>
-                                            <DropdownMenuItem onClick={handleRestoreClick}>
-                                                <ArrowLeft className="h-4 w-4 mr-2" />
-                                                Restore
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem onClick={handlePurgeClick} className="text-destructive focus:text-destructive">
-                                                <Trash2 className="h-4 w-4 mr-2" />
-                                                Delete forever
-                                            </DropdownMenuItem>
-                                        </>
-                                    ) : (
-                                        <>
-                                            {canPreview && (
-                                                <>
-                                                    <DropdownMenuItem onClick={handlePreviewClick}>
-                                                        <EyeIcon className="h-4 w-4 mr-2" />
-                                                        Preview
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                </>
-                                            )}
-                                            <DropdownMenuItem onClick={handleRenameClick}>
-                                                <Pencil className="h-4 w-4 mr-2" />
-                                                Rename
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={handleMoveClick}>
-                                                <FolderInput className="h-4 w-4 mr-2" />
-                                                Move to...
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={handleCopyClick}>
-                                                <Copy className="h-4 w-4 mr-2" />
-                                                Copy
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={handleDuplicateClick}>
-                                                <Files className="h-4 w-4 mr-2" />
-                                                Duplicate
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            {!isFolder && (
-                                                <DropdownMenuItem onClick={handleDownloadClick}>
-                                                    <Download className="h-4 w-4 mr-2" />
-                                                    Download
-                                                </DropdownMenuItem>
-                                            )}
-                                            <DropdownMenuItem onClick={handleDetailsClick}>
-                                                <Info className="h-4 w-4 mr-2" />
-                                                Properties
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem onClick={handleDeleteClick} className="text-destructive focus:text-destructive">
-                                                <Trash2 className="h-4 w-4 mr-2" />
-                                                Delete
-                                            </DropdownMenuItem>
-                                        </>
-                                    )}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent className="flex items-center justify-center py-4">
-                    {
-                        isFolder ?
-                            <FcOpenedFolder className="h-20 w-20" /> :
-                            <FcFile className="h-20 w-20" />
-                    }
-                </CardContent>
-                <CardFooter className="px-2 pb-2 pt-0">
-                    <div className="w-full truncate text-xs text-center" title={name}>
-                        {name}
-                    </div>
-                </CardFooter>
-            </Card>
-        </div>
+            {/* 复选框 —— 触屏/已选常驻,桌面 hover 显示 */}
+            <div
+                className={cn(
+                    "absolute left-2 top-2 z-10 transition-opacity",
+                    checked || isTouch ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                )}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <Checkbox checked={checked} onCheckedChange={handleCheck} disabled={loading} />
+            </div>
 
-        {/* Dialogs */}
-        <RenameDialog
-            open={renameDialogOpen}
-            onOpenChange={setRenameDialogOpen}
-            file={props}
-            onConfirm={handleRename}
-        />
-        <MoveDialog
-            open={moveDialogOpen}
-            onOpenChange={setMoveDialogOpen}
-            files={[props]}
-            onConfirm={handleMove}
-            currentFolderId={currentFolderId}
-        />
-        <FileDetailsDialog
-            open={detailsDialogOpen}
-            onOpenChange={setDetailsDialogOpen}
-            file={props}
-        />
-        <FilePreviewDialog
-            open={previewDialogOpen}
-            onOpenChange={setPreviewDialogOpen}
-            file={props}
-            onDownload={downloadFile}
-        />
-    </>
-})
+            {/* 右上角操作区 */}
+            <div className="absolute right-1.5 top-1.5 z-10 flex items-center gap-0.5">
+                {!isTrash && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                            "h-7 w-7 transition-opacity",
+                            isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                        )}
+                        onClick={handleFavorite}
+                        title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                    >
+                        <StarIcon className={cn("h-4 w-4", isFavorite && "fill-yellow-400 text-yellow-400")} />
+                    </Button>
+                )}
+                <FileActionsMenu
+                    actions={getFileActions([props], ctx)}
+                    triggerClassName="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+                />
+            </div>
+
+            {/* 缩略图 */}
+            <div className="flex h-20 w-full items-center justify-center py-2">
+                <FileThumb file={props} size={64} />
+            </div>
+
+            {/* 文件名 */}
+            <div
+                className="mt-1 line-clamp-2 w-full break-words text-center text-xs leading-snug text-foreground/90"
+                title={name}
+            >
+                {name}
+            </div>
+        </div>
+    );
+});
 
 export const FileCardList: React.FC = React.memo(() => {
-    const { currentFolderItems } = useFileManagerState() as FileManagerState
+    const { sortedItems } = useFileManagerState();
 
-    return <div className="h-full w-full overflow-auto max-h-full">
-        <div className="flex flex-wrap w-full gap-2 p-6">
-            {
-                currentFolderItems.map((it) => (
+    return (
+        <div className="h-full w-full overflow-auto">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-2 p-4">
+                {sortedItems.map((it) => (
                     <FileCard key={it.id} {...it} />
-                ))
-            }
+                ))}
+            </div>
         </div>
-    </div>
-})
+    );
+});

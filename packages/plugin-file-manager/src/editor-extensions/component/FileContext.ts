@@ -2,8 +2,19 @@ import { createContext, useContext } from "react"
 
 export type ViewMode = 'grid' | 'list'
 
+/** 列表排序字段 */
+export type SortBy = 'name' | 'size' | 'date'
+export type SortOrder = 'asc' | 'desc'
+
 /** 侧栏视图 */
 export type FileView = 'home' | 'recent' | 'favorites' | 'trash' | 'search'
+
+/** 单击/多选时携带的修饰键 */
+export interface SelectionModifiers {
+    ctrlKey?: boolean
+    metaKey?: boolean
+    shiftKey?: boolean
+}
 
 export interface FileItem {
     name: string,
@@ -36,7 +47,13 @@ export interface BreadcrumbItem {
 
 export interface FileManagerState {
     selectable?: boolean,
+    /** selectable 模式下确认选择的回调(文件夹选择器) */
+    onConfirmSelectable?: (files: FileItem[]) => void,
+    /** 设备是否为触屏(mobile/tablet)—— 影响单击=打开 vs 单击=选中 */
+    isTouch: boolean,
     currentFolderItems: FileItem[],
+    /** 已按当前排序规则排好序的条目(网格/列表/范围选择共用此顺序) */
+    sortedItems: FileItem[],
     selectedFiles: FileItem[]
     setSelectFiles: React.Dispatch<React.SetStateAction<FileItem[]>>
     currentFolderId: string
@@ -60,11 +77,27 @@ export interface FileManagerState {
     handleMove: (files: FileItem[], targetFolderId: string) => void
     handleCopy: (files: FileItem[]) => void
     handleDuplicate: (files: FileItem[]) => void
+    // Selection (single click / ctrl / shift)
+    selectItem: (item: FileItem, modifiers: SelectionModifiers, orderedItems: FileItem[]) => void
+    isSelected: (id: string) => boolean
     selectAll: () => void
     clearSelection: () => void
+    /** 打开条目:文件夹进入 / 可预览文件预览 / 其余下载 */
+    openItem: (item: FileItem) => void
+    // 集中式对话框请求(由 FileManager 统一挂载对话框)
+    requestRename: (file: FileItem) => void
+    requestMove: (files: FileItem[]) => void
+    requestDetails: (file: FileItem) => void
+    requestPreview: (file: FileItem) => void
+    requestDelete: (files: FileItem[]) => void
+    requestPurge: (files: FileItem[]) => void
     // View mode
     viewMode: ViewMode
-    setViewMode: React.Dispatch<React.SetStateAction<ViewMode>>
+    setViewMode: (mode: ViewMode) => void
+    // Sorting
+    sortBy: SortBy
+    sortOrder: SortOrder
+    setSort: (by: SortBy) => void
     // Sidebar views + trash/favorite/recent/search operations
     view: FileView
     setView: (view: FileView) => void

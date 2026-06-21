@@ -1,373 +1,146 @@
-import React, { useCallback, useState, useEffect } from "react"
-import { FileItem, FileManagerState, useFileManagerState } from "./FileContext"
-import {
-    Checkbox,
-    cn,
-    Button,
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@kn/ui"
-import { useSafeState } from "@kn/common"
-import { Download, EyeIcon, FcFile, FcOpenedFolder, MoreVertical, Pencil, FolderInput, Copy, Files, Info, Trash2, StarIcon, ArrowLeft } from "@kn/icon"
-import { formatFileSize, isPreviewable } from "../../utils/fileUtils"
-import { RenameDialog, MoveDialog, FileDetailsDialog, FilePreviewDialog } from "./dialogs"
+import React, { useCallback } from "react"
+import { FileItem, SortBy, useFileManagerState } from "./FileContext"
+import { Checkbox, cn, Button } from "@kn/ui"
+import { StarIcon, ChevronUp, ChevronDown } from "@kn/icon"
+import { formatFileSize } from "../../utils/fileUtils"
+import { FileThumb } from "./FileThumb"
+import { FileActionsMenu } from "./ActionMenu"
+import { getFileActions } from "./fileActions"
 
-
-export interface FileListProps {
-    files: FileItem[],
-    selectedFiles: string[],
-    setSelectFiles: any
-}
-
-/**
- * Format date to readable string
- */
+/** Format date to readable string */
 const formatDate = (dateString?: string): string => {
     if (!dateString) return '-'
     const date = new Date(dateString)
+    if (Number.isNaN(date.getTime())) return '-'
     return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
     })
 }
 
-/**
- * Single row component for the file list
- */
 const FileListRow: React.FC<FileItem> = React.memo((props) => {
-    const { isFolder, id, name, size, updatedAt, createdAt } = props
+    const ctx = useFileManagerState()
     const {
-        selectedFiles,
-        setSelectFiles,
-        selectable,
-        navigateToFolder,
-        loading,
-        handleRename,
-        handleMove,
-        handleCopy,
-        handleDuplicate,
-        handleDelete,
-        currentFolderId,
-        view,
-        toggleFavorite,
-        restoreFiles,
-        purgeFiles,
-        downloadFile,
-    } = useFileManagerState() as FileManagerState
+        sortedItems, selectItem, isSelected, openItem, loading, view, isTouch, toggleFavorite,
+    } = ctx
+    const { isFolder, id, name, size, updatedAt, createdAt } = props
     const isTrash = view === 'trash'
     const isFavorite = props.favorite === 1
-    const canPreview = !isFolder && isPreviewable(name)
+    const checked = isSelected(id)
 
-    const [checked, setChecked] = useSafeState<boolean>(false)
-
-    // Dialog states
-    const [renameDialogOpen, setRenameDialogOpen] = useState(false)
-    const [moveDialogOpen, setMoveDialogOpen] = useState(false)
-    const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
-    const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
-
-    useEffect(() => {
-        setChecked(!!selectedFiles.find(it => it.id === id))
-    }, [selectedFiles, id])
-
-    const handleCheckChange = useCallback((value: boolean) => {
-        if (value) {
-            setSelectFiles([...selectedFiles, props])
-        } else {
-            setSelectFiles(selectedFiles.filter(it => it.id !== id))
-        }
-    }, [selectedFiles, props, id, setSelectFiles])
+    const handleClick = useCallback((e: React.MouseEvent) => {
+        if (isTouch) { openItem(props); return }
+        selectItem(props, { ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey }, sortedItems)
+    }, [isTouch, openItem, props, selectItem, sortedItems])
 
     const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-        if (isTrash) return
-        if (isFolder) {
-            navigateToFolder(id, name)
-        } else if (canPreview) {
-            setPreviewDialogOpen(true)
-        } else {
-            downloadFile(props)
-        }
-    }, [isTrash, isFolder, id, name, canPreview, navigateToFolder, downloadFile, props])
+        e.preventDefault(); e.stopPropagation()
+        openItem(props)
+    }, [openItem, props])
 
-    const handleRowClick = useCallback(() => {
-        handleCheckChange(!checked)
-    }, [handleCheckChange, checked])
+    const handleCheck = useCallback(() => {
+        selectItem(props, { metaKey: true }, sortedItems)
+    }, [selectItem, props, sortedItems])
 
-    // Action handlers
-    const handleRenameClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation()
-        setRenameDialogOpen(true)
-    }, [])
-
-    const handleMoveClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation()
-        setMoveDialogOpen(true)
-    }, [])
-
-    const handleCopyClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation()
-        handleCopy([props])
-    }, [handleCopy, props])
-
-    const handleDuplicateClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation()
-        handleDuplicate([props])
-    }, [handleDuplicate, props])
-
-    const handleDeleteClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation()
-        handleDelete([id])
-    }, [handleDelete, id])
-
-    const handleDetailsClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation()
-        setDetailsDialogOpen(true)
-    }, [])
-
-    const handleDownloadClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation()
-        downloadFile(props)
-    }, [downloadFile, props])
-
-    const handlePreviewClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation()
-        setPreviewDialogOpen(true)
-    }, [])
-
-    const handleFavoriteClick = useCallback((e: React.MouseEvent) => {
+    const handleFavorite = useCallback((e: React.MouseEvent) => {
         e.stopPropagation()
         toggleFavorite(props)
     }, [toggleFavorite, props])
 
-    const handleRestoreClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation()
-        restoreFiles([id])
-    }, [restoreFiles, id])
-
-    const handlePurgeClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation()
-        purgeFiles([id])
-    }, [purgeFiles, id])
-
     if (!name) return null
 
-    return <>
+    return (
         <div
             className={cn(
-                "flex items-center px-3 py-2 border-b cursor-pointer hover:bg-muted/50 transition-colors duration-150",
-                checked && "bg-primary/5",
-                loading && "opacity-50 pointer-events-none"
+                "group flex items-center px-2 h-11 border-b cursor-pointer select-none transition-colors duration-150",
+                checked ? "bg-primary/5" : "hover:bg-muted/50",
+                loading && "opacity-50 pointer-events-none",
             )}
-            onClick={handleRowClick}
+            onClick={handleClick}
             onDoubleClick={handleDoubleClick}
+            onContextMenu={() => { if (!checked) selectItem(props, {}, sortedItems) }}
         >
-            {/* Checkbox */}
-            <div className="w-[40px] flex-shrink-0">
-                {selectable && (
-                    <Checkbox
-                        checked={checked}
-                        onCheckedChange={handleCheckChange}
-                        onClick={(e) => e.stopPropagation()}
-                        disabled={loading}
-                    />
-                )}
+            <div className="w-[36px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                <div className={cn(checked || isTouch ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
+                    <Checkbox checked={checked} onCheckedChange={handleCheck} disabled={loading} />
+                </div>
             </div>
 
-            {/* Name */}
-            <div className="flex-1 min-w-0 font-medium">
-                <div className="flex items-center gap-2">
-                    {isFolder ? (
-                        <FcOpenedFolder className="h-5 w-5 flex-shrink-0" />
-                    ) : (
-                        <FcFile className="h-5 w-5 flex-shrink-0" />
-                    )}
-                    <span className="truncate" title={name}>{name}</span>
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2.5">
+                    <FileThumb file={props} size={22} />
+                    <span className="truncate text-sm" title={name}>{name}</span>
                     {isFavorite && !isTrash && (
                         <StarIcon className="h-3.5 w-3.5 flex-shrink-0 fill-yellow-400 text-yellow-400" />
                     )}
                 </div>
             </div>
 
-            {/* Size */}
-            <div className="w-[100px] flex-shrink-0 text-muted-foreground text-sm">
-                {isFolder ? '-' : formatFileSize(size || 0)}
+            <div className="w-[90px] flex-shrink-0 text-muted-foreground text-sm">
+                {isFolder ? '—' : formatFileSize(size || 0)}
             </div>
 
-            {/* Modified */}
-            <div className="w-[180px] flex-shrink-0 text-muted-foreground text-sm hidden md:block">
+            <div className="w-[170px] flex-shrink-0 text-muted-foreground text-sm hidden md:block">
                 {formatDate(updatedAt || createdAt)}
             </div>
 
-            {/* Actions */}
             <div className="w-[72px] flex-shrink-0 flex justify-end items-center gap-0.5">
                 {!isTrash && (
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8"
-                        onClick={handleFavoriteClick}
+                        className={cn(
+                            "h-7 w-7 transition-opacity",
+                            isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                        )}
+                        onClick={handleFavorite}
                         title={isFavorite ? "Remove from favorites" : "Add to favorites"}
                     >
                         <StarIcon className={cn("h-4 w-4", isFavorite && "fill-yellow-400 text-yellow-400")} />
                     </Button>
                 )}
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreVertical className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-[180px]">
-                        {isTrash ? (
-                            <>
-                                <DropdownMenuItem onClick={handleRestoreClick}>
-                                    <ArrowLeft className="h-4 w-4 mr-2" />
-                                    Restore
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={handlePurgeClick} className="text-destructive focus:text-destructive">
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete forever
-                                </DropdownMenuItem>
-                            </>
-                        ) : (
-                            <>
-                                {canPreview && (
-                                    <>
-                                        <DropdownMenuItem onClick={handlePreviewClick}>
-                                            <EyeIcon className="h-4 w-4 mr-2" />
-                                            Preview
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                    </>
-                                )}
-                                <DropdownMenuItem onClick={handleRenameClick}>
-                                    <Pencil className="h-4 w-4 mr-2" />
-                                    Rename
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={handleMoveClick}>
-                                    <FolderInput className="h-4 w-4 mr-2" />
-                                    Move to...
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={handleCopyClick}>
-                                    <Copy className="h-4 w-4 mr-2" />
-                                    Copy
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={handleDuplicateClick}>
-                                    <Files className="h-4 w-4 mr-2" />
-                                    Duplicate
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                {!isFolder && (
-                                    <DropdownMenuItem onClick={handleDownloadClick}>
-                                        <Download className="h-4 w-4 mr-2" />
-                                        Download
-                                    </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem onClick={handleDetailsClick}>
-                                    <Info className="h-4 w-4 mr-2" />
-                                    Properties
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={handleDeleteClick} className="text-destructive focus:text-destructive">
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete
-                                </DropdownMenuItem>
-                            </>
-                        )}
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <FileActionsMenu
+                    actions={getFileActions([props], ctx)}
+                    triggerClassName="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+                />
             </div>
         </div>
-
-        {/* Dialogs */}
-        <RenameDialog
-            open={renameDialogOpen}
-            onOpenChange={setRenameDialogOpen}
-            file={props}
-            onConfirm={handleRename}
-        />
-        <MoveDialog
-            open={moveDialogOpen}
-            onOpenChange={setMoveDialogOpen}
-            files={[props]}
-            onConfirm={handleMove}
-            currentFolderId={currentFolderId}
-        />
-        <FileDetailsDialog
-            open={detailsDialogOpen}
-            onOpenChange={setDetailsDialogOpen}
-            file={props}
-        />
-        <FilePreviewDialog
-            open={previewDialogOpen}
-            onOpenChange={setPreviewDialogOpen}
-            file={props}
-            onDownload={downloadFile}
-        />
-    </>
+    )
 })
 
-/**
- * Legacy FileList component (kept for backwards compatibility)
- */
-export const FileList: React.FC<FileListProps> = (props) => {
-    const { files } = props
+const SortHeader: React.FC<{ label: string; by: SortBy; className?: string }> = ({ label, by, className }) => {
+    const { sortBy, sortOrder, setSort } = useFileManagerState()
+    const active = sortBy === by
     return (
-        <div className="not-prose border-none">
-            {/* Header */}
-            <div className="flex items-center px-3 py-2 border-b bg-muted/50 text-sm font-medium text-muted-foreground">
-                <div className="w-[40px] flex-shrink-0"></div>
-                <div className="flex-1 min-w-0">Name</div>
-                <div className="w-[100px] flex-shrink-0">Size</div>
-                <div className="w-[180px] flex-shrink-0 hidden md:block">Modified</div>
-                <div className="w-[40px] flex-shrink-0"></div>
-            </div>
-            {/* Body */}
-            {files.map(file => (
-                <div key={file.id} className="flex items-center px-3 py-2 border-b">
-                    <div className="w-[40px] flex-shrink-0"><Checkbox /></div>
-                    <div className="flex-1 min-w-0">{file.name}</div>
-                    <div className="w-[100px] flex-shrink-0">{formatFileSize(file.size || 0)}</div>
-                    <div className="w-[180px] flex-shrink-0 hidden md:block">{formatDate(file.updatedAt || file.createdAt)}</div>
-                    <div className="w-[40px] flex-shrink-0"></div>
-                </div>
-            ))}
-        </div>
+        <button
+            className={cn("flex items-center gap-1 hover:text-foreground transition-colors", active && "text-foreground", className)}
+            onClick={() => setSort(by)}
+        >
+            {label}
+            {active && (sortOrder === 'asc'
+                ? <ChevronUp className="h-3.5 w-3.5" />
+                : <ChevronDown className="h-3.5 w-3.5" />)}
+        </button>
     )
 }
 
-/**
- * File list view component using context
- */
+/** File list view component using context */
 export const FileListView: React.FC = React.memo(() => {
-    const { currentFolderItems, selectable } = useFileManagerState() as FileManagerState
+    const { sortedItems } = useFileManagerState()
 
     return (
-        <div className="h-full w-full overflow-auto max-h-full">
+        <div className="h-full w-full overflow-auto">
             {/* Header */}
-            <div className="flex items-center px-3 py-2 border-b bg-muted/50 text-sm font-medium text-muted-foreground sticky top-0 z-10">
-                <div className="w-[40px] flex-shrink-0">
-                    {selectable && <span className="sr-only">Select</span>}
-                </div>
-                <div className="flex-1 min-w-0">Name</div>
-                <div className="w-[100px] flex-shrink-0">Size</div>
-                <div className="w-[180px] flex-shrink-0 hidden md:block">Modified</div>
-                <div className="w-[72px] flex-shrink-0">
-                    <span className="sr-only">Actions</span>
-                </div>
+            <div className="flex items-center px-2 h-9 border-b bg-muted/40 text-xs font-medium text-muted-foreground sticky top-0 z-10">
+                <div className="w-[36px] flex-shrink-0" />
+                <div className="flex-1 min-w-0"><SortHeader label="Name" by="name" /></div>
+                <div className="w-[90px] flex-shrink-0"><SortHeader label="Size" by="size" /></div>
+                <div className="w-[170px] flex-shrink-0 hidden md:block"><SortHeader label="Modified" by="date" /></div>
+                <div className="w-[72px] flex-shrink-0"><span className="sr-only">Actions</span></div>
             </div>
             {/* Body */}
             <div>
-                {currentFolderItems.map((item) => (
+                {sortedItems.map((item) => (
                     <FileListRow key={item.id} {...item} />
                 ))}
             </div>
