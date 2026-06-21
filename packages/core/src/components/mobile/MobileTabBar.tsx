@@ -19,6 +19,7 @@ import {
     clearTokens,
     event,
     TOGGLE_AI_ASSISTANT,
+    useTranslation,
 } from "@kn/common";
 import { SettingDlg } from "../settings/SeetingDlg";
 import { LanguageToggle } from "../../locales/LanguageToggle";
@@ -55,6 +56,7 @@ const TabButton: React.FC<{ item: TabItem; active: boolean }> = ({ item, active 
  * rail into a hamburger drawer. Rendered only on mobile by the Layout.
  */
 export const MobileTabBar: React.FC = () => {
+    const { t } = useTranslation();
     const navigator = useNavigator();
     const location = useLocation();
     const { userInfo } = useSelector((state: GlobalState) => state);
@@ -75,28 +77,28 @@ export const MobileTabBar: React.FC = () => {
         () => [
             {
                 key: "home",
-                label: "首页",
+                label: t("mobileTabBar.home"),
                 icon: <Home className="h-5 w-5" />,
                 match: ["/home", "/"],
                 onPress: () => go("/home"),
             },
             {
                 key: "spaces",
-                label: "空间",
+                label: t("mobileTabBar.spaces"),
                 icon: <LayoutGrid className="h-5 w-5" />,
                 match: ["/all-spaces", "/spaces", "/space-detail"],
                 onPress: () => go("/all-spaces"),
             },
             {
                 key: "ai",
-                label: "AI",
+                label: t("mobileTabBar.ai"),
                 icon: <Sparkles className="h-5 w-5" />,
                 match: [],
                 onPress: () => event.emit(TOGGLE_AI_ASSISTANT),
             },
             {
                 key: "me",
-                label: "我的",
+                label: t("mobileTabBar.me"),
                 icon: (
                     <Avatar className="h-6 w-6">
                         <AvatarImage src={usePath(userInfo?.avatar as string)} />
@@ -109,7 +111,7 @@ export const MobileTabBar: React.FC = () => {
                 onPress: () => setProfileOpen(true),
             },
         ],
-        [go, usePath, userInfo]
+        [go, usePath, userInfo, t]
     );
 
     const isActive = useCallback(
@@ -125,7 +127,7 @@ export const MobileTabBar: React.FC = () => {
     return (
         <>
             <nav
-                aria-label="底部导航"
+                aria-label={t("mobileTabBar.nav")}
                 className={cn(
                     "shrink-0 border-t bg-background/95 backdrop-blur",
                     "pb-safe"
@@ -141,7 +143,7 @@ export const MobileTabBar: React.FC = () => {
             {/* "我的" profile sheet */}
             <Sheet open={profileOpen} onOpenChange={setProfileOpen}>
                 <SheetContent side="bottom" className="rounded-t-2xl pb-safe">
-                    <SheetTitle className="sr-only">个人中心</SheetTitle>
+                    <SheetTitle className="sr-only">{t("mobileTabBar.profileCenter")}</SheetTitle>
                     <div className="flex items-center gap-3 py-2">
                         <Avatar className="h-12 w-12">
                             <AvatarImage src={usePath(userInfo?.avatar as string)} />
@@ -161,12 +163,12 @@ export const MobileTabBar: React.FC = () => {
                         <SettingDlg>
                             <button className="flex h-12 w-full items-center gap-3 rounded-lg px-2 text-sm hover:bg-muted">
                                 <Settings className="h-5 w-5" />
-                                <span>设置</span>
+                                <span>{t("mobileTabBar.settings")}</span>
                             </button>
                         </SettingDlg>
 
                         <div className="flex h-12 w-full items-center justify-between gap-3 rounded-lg px-2 text-sm">
-                            <span>外观 / 语言</span>
+                            <span>{t("mobileTabBar.appearanceLanguage")}</span>
                             <div className="flex items-center gap-2">
                                 <ModeToggle />
                                 <LanguageToggle />
@@ -178,7 +180,7 @@ export const MobileTabBar: React.FC = () => {
                             className="flex h-12 w-full items-center gap-3 rounded-lg px-2 text-sm text-destructive hover:bg-destructive/10"
                         >
                             <Power className="h-5 w-5" />
-                            <span>注销账号</span>
+                            <span>{t("mobileTabBar.logout")}</span>
                         </button>
                     </div>
                 </SheetContent>

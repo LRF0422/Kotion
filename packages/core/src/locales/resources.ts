@@ -16,6 +16,17 @@ export const resources = {
                 "helpCheckConnection": "检查您的网络连接",
                 "helpContactSupport": "如果问题仍然存在，请联系支持"
             },
+            "mobileTabBar": {
+                "home": "首页",
+                "spaces": "空间",
+                "ai": "AI",
+                "me": "我的",
+                "nav": "底部导航",
+                "profileCenter": "个人中心",
+                "settings": "设置",
+                "appearanceLanguage": "外观 / 语言",
+                "logout": "注销账号"
+            },
             "marketplace": {
                 "create-your-own-plugin": "创建你自己的插件",
                 "get-started": "马上开始",
@@ -434,6 +445,17 @@ export const resources = {
                 "helpClearCache": "Clear your browser cache and cookies",
                 "helpCheckConnection": "Check your internet connection",
                 "helpContactSupport": "Contact support if the issue continues"
+            },
+            "mobileTabBar": {
+                "home": "Home",
+                "spaces": "Spaces",
+                "ai": "AI",
+                "me": "Me",
+                "nav": "Bottom navigation",
+                "profileCenter": "Profile",
+                "settings": "Settings",
+                "appearanceLanguage": "Appearance / Language",
+                "logout": "Log out"
             },
             "marketplace": {
                 "create-your-own-plugin": "Build your own plugin",

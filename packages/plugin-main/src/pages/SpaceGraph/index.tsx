@@ -9,7 +9,7 @@ import {
 } from "d3-force";
 import { useApi, useNavigator, useParams, useSearchParams, useTranslation } from "@kn/common";
 import { useResponsive, Button, Input, cn } from "@kn/ui";
-import { Network, Loader2, RefreshCw, Maximize2, X } from "@kn/icon";
+import { Network, Loader2, RefreshCw, Maximize2, X, ZoomIn, ZoomOut, Layers } from "@kn/icon";
 import { APIS } from "../../api";
 import type { GraphEdge, GraphNode, SimLink, SimNode, ViewTransform } from "./types";
 
@@ -25,6 +25,12 @@ const MAX_RADIUS = 18;
 /** Resolve a sim link endpoint (id string before layout, SimNode after). */
 const endId = (e: string | SimNode | number): string =>
     typeof e === "object" ? (e as SimNode).id : String(e);
+
+const ZOOM_MIN = 0.2;
+const ZOOM_MAX = 4;
+const clampZoom = (k: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, k));
+const pointerDist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
 
 export const SpaceGraph: React.FC = () => {
     const { t } = useTranslation();
@@ -45,6 +51,8 @@ export const SpaceGraph: React.FC = () => {
     const [hovered, setHovered] = useState<string | null>(null);
     const [view, setView] = useState<ViewTransform>({ x: 0, y: 0, k: 1 });
     const [reloadFlag, setReloadFlag] = useState(0);
+    // On mobile the legend is hidden by default and toggled via a floating button.
+    const [showLegend, setShowLegend] = useState(false);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const simRef = useRef<Simulation<SimNode, SimLink> | null>(null);
@@ -57,6 +65,9 @@ export const SpaceGraph: React.FC = () => {
     const dragNodeRef = useRef<SimNode | null>(null);
     const panRef = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
     const movedRef = useRef(false);
+    // Active pointers on the background, keyed by pointerId, for two-finger pinch-zoom.
+    const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+    const pinchRef = useRef<{ dist: number; cx: number; cy: number; view: ViewTransform } | null>(null);
     // Focus centering: read inside the tick loop; only auto-center once per focus.
     const focusIdRef = useRef<string | null>(focusId);
     const didCenterRef = useRef(false);
@@ -250,8 +261,21 @@ export const SpaceGraph: React.FC = () => {
     const onBackgroundPointerDown = useCallback(
         (e: React.PointerEvent) => {
             (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-            panRef.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+            pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
             movedRef.current = false;
+            if (pointersRef.current.size >= 2) {
+                // Second finger down → enter pinch-zoom, cancel any single-finger pan.
+                const [a, b] = [...pointersRef.current.values()];
+                pinchRef.current = {
+                    dist: pointerDist(a, b) || 1,
+                    cx: (a.x + b.x) / 2,
+                    cy: (a.y + b.y) / 2,
+                    view,
+                };
+                panRef.current = null;
+            } else {
+                panRef.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+            }
         },
         [view],
     );
@@ -266,6 +290,24 @@ export const SpaceGraph: React.FC = () => {
                 bumpTick();
                 return;
             }
+            if (pointersRef.current.has(e.pointerId)) {
+                pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            }
+            if (pinchRef.current && pointersRef.current.size >= 2) {
+                // Scale around the gesture's start midpoint, keeping that point fixed.
+                const [a, b] = [...pointersRef.current.values()];
+                const factor = pointerDist(a, b) / pinchRef.current.dist;
+                const rect = containerRef.current?.getBoundingClientRect();
+                const px = pinchRef.current.cx - (rect?.left || 0);
+                const py = pinchRef.current.cy - (rect?.top || 0);
+                const k0 = pinchRef.current.view.k;
+                const k = clampZoom(k0 * factor);
+                const x = px - ((px - pinchRef.current.view.x) * k) / k0;
+                const y = py - ((py - pinchRef.current.view.y) * k) / k0;
+                movedRef.current = true;
+                setView({ x, y, k });
+                return;
+            }
             if (panRef.current) {
                 const dx = e.clientX - panRef.current.x;
                 const dy = e.clientY - panRef.current.y;
@@ -276,7 +318,9 @@ export const SpaceGraph: React.FC = () => {
         [screenToGraph],
     );
 
-    const endInteraction = useCallback(() => {
+    const endInteraction = useCallback((e?: React.PointerEvent) => {
+        if (e) pointersRef.current.delete(e.pointerId);
+        if (pointersRef.current.size < 2) pinchRef.current = null;
         if (dragNodeRef.current) {
             // Release the node so it rejoins the simulation.
             dragNodeRef.current.fx = null;
@@ -285,6 +329,19 @@ export const SpaceGraph: React.FC = () => {
             simRef.current?.alphaTarget(0);
         }
         panRef.current = null;
+    }, []);
+
+    // Zoom around the viewport center (used by the on-screen +/- controls).
+    const zoomBy = useCallback((factor: number) => {
+        const { w, h } = sizeRef.current;
+        const cx = (w || containerRef.current?.clientWidth || 0) / 2;
+        const cy = (h || containerRef.current?.clientHeight || 0) / 2;
+        setView((v) => {
+            const k = clampZoom(v.k * factor);
+            const x = cx - ((cx - v.x) * k) / v.k;
+            const y = cy - ((cy - v.y) * k) / v.k;
+            return { x, y, k };
+        });
     }, []);
 
     // Wheel zoom centered on the cursor.
@@ -372,20 +429,20 @@ export const SpaceGraph: React.FC = () => {
         <div className="h-full w-full flex flex-col overflow-hidden bg-background">
             {/* Toolbar */}
             <div className="flex items-center gap-2 px-3 py-2 border-b flex-shrink-0">
-                <Network className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">{t("graph.title")}</span>
-                <span className="text-xs text-muted-foreground">
+                <Network className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="hidden md:inline text-sm font-medium">{t("graph.title")}</span>
+                <span className="hidden md:inline text-xs text-muted-foreground">
                     {t("graph.stats", { nodes: nodes.length, edges: links.length })}
                 </span>
                 {focusId && (
-                    <span className="flex items-center gap-1 text-xs rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 pl-2 pr-1 py-0.5 max-w-[200px]">
+                    <span className="flex items-center gap-1 text-xs rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 pl-2 pr-1 py-0.5 max-w-[140px] md:max-w-[200px]">
                         <Network className="h-3 w-3 flex-shrink-0" />
                         <span className="truncate">
                             {focusedNode?.title || t("graph.untitled")}
                         </span>
                         <button
                             type="button"
-                            className="rounded-full hover:bg-indigo-100 p-0.5"
+                            className="rounded-full hover:bg-indigo-100 p-0.5 flex-shrink-0"
                             onClick={clearFocus}
                             aria-label={t("graph.clearFocus")}
                             title={t("graph.clearFocus")}
@@ -394,17 +451,29 @@ export const SpaceGraph: React.FC = () => {
                         </button>
                     </span>
                 )}
-                <div className="flex-1" />
+                <div className="hidden md:block flex-1" />
                 <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder={t("graph.filter")}
-                    className="h-7 w-40 text-xs"
+                    className="h-9 md:h-7 flex-1 md:flex-none md:w-40 min-w-0 text-xs"
                 />
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={resetView} title={t("graph.reset")}>
+                <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-9 w-9 md:h-7 md:w-7 flex-shrink-0"
+                    onClick={resetView}
+                    title={t("graph.reset")}
+                >
                     <Maximize2 className="h-4 w-4" />
                 </Button>
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setReloadFlag((f) => f + 1)} title={t("graph.refresh")}>
+                <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-9 w-9 md:h-7 md:w-7 flex-shrink-0"
+                    onClick={() => setReloadFlag((f) => f + 1)}
+                    title={t("graph.refresh")}
+                >
                     <RefreshCw className="h-4 w-4" />
                 </Button>
             </div>
@@ -417,6 +486,7 @@ export const SpaceGraph: React.FC = () => {
                 onPointerMove={onPointerMove}
                 onPointerUp={endInteraction}
                 onPointerLeave={endInteraction}
+                onPointerCancel={endInteraction}
                 onWheel={onWheel}
             >
                 <svg width="100%" height="100%" className="block">
@@ -494,9 +564,16 @@ export const SpaceGraph: React.FC = () => {
                     </g>
                 </svg>
 
-                {/* Legend */}
-                {!isMobile && legend.length > 0 && (
-                    <div className="absolute top-2 right-2 max-w-[220px] max-h-[40%] overflow-auto rounded-md border bg-background/90 backdrop-blur px-2 py-1.5 shadow-sm">
+                {/* Legend — always shown on desktop; toggled on mobile. */}
+                {legend.length > 0 && (!isMobile || showLegend) && (
+                    <div
+                        className={cn(
+                            "absolute overflow-auto rounded-md border bg-background/90 backdrop-blur px-2 py-1.5 shadow-sm",
+                            isMobile
+                                ? "bottom-2 left-2 right-14 max-h-[35%]"
+                                : "top-2 right-2 max-w-[220px] max-h-[40%]",
+                        )}
+                    >
                         <div className="text-[11px] font-medium text-muted-foreground mb-1">
                             {t("graph.legend")}
                         </div>
@@ -513,6 +590,43 @@ export const SpaceGraph: React.FC = () => {
                         ))}
                     </div>
                 )}
+
+                {/* Floating touch controls (mobile only): zoom + legend toggle.
+                    Wheel-zoom doesn't exist on touch, so these back up pinch-zoom. */}
+                <div className="absolute bottom-2 right-2 flex flex-col gap-1.5 md:hidden">
+                    <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-9 w-9 bg-background/90 backdrop-blur shadow-sm"
+                        onClick={() => zoomBy(1.3)}
+                        title={t("graph.zoomIn")}
+                        aria-label={t("graph.zoomIn")}
+                    >
+                        <ZoomIn className="h-4 w-4" />
+                    </Button>
+                    <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-9 w-9 bg-background/90 backdrop-blur shadow-sm"
+                        onClick={() => zoomBy(1 / 1.3)}
+                        title={t("graph.zoomOut")}
+                        aria-label={t("graph.zoomOut")}
+                    >
+                        <ZoomOut className="h-4 w-4" />
+                    </Button>
+                    {legend.length > 0 && (
+                        <Button
+                            size="icon"
+                            variant={showLegend ? "secondary" : "outline"}
+                            className="h-9 w-9 bg-background/90 backdrop-blur shadow-sm"
+                            onClick={() => setShowLegend((s) => !s)}
+                            title={t("graph.legend")}
+                            aria-label={t("graph.legend")}
+                        >
+                            <Layers className="h-4 w-4" />
+                        </Button>
+                    )}
+                </div>
             </div>
         </div>
     );
