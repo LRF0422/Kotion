@@ -20,11 +20,18 @@ export const APIS = {
         name: 'Get Block Backlinks'
     } as API,
 
-    /** Search pages for link picker (page tree) */
+    /** Search pages for link picker (page tree, single space) */
     GET_PAGE_TREE: {
         url: '/knowledge-wiki/space/:spaceId/page/tree',
         method: 'GET',
         name: 'Get Page Tree'
+    } as API,
+
+    /** Search pages across all spaces (spaceId omitted = cross-space) */
+    QUERY_PAGE: {
+        url: '/knowledge-wiki/space/page/list',
+        method: 'GET',
+        name: 'Query Pages'
     } as API,
 
     /** Search blocks for block picker */

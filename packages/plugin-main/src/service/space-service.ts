@@ -8,7 +8,7 @@ export interface SpaceService {
     getSpaceInfo: (spaceId: string) => Promise<Space>
     querySpaces: () => Promise<Page<Space>>
     getPageTree: (spaceId: string, searchValue?: string) => Promise<any>
-    queryPage: (params: { spaceId?: string, status?: string }) => Promise<Page<any>>,
+    queryPage: (params: { spaceId?: string, status?: string, searchValue?: string, pageSize?: number }) => Promise<Page<any>>,
     createPage: (page: any) => Promise<any>,
     getPage: (pageId: string) => Promise<any>,
     queryBlocks: (params: {
@@ -33,8 +33,14 @@ export const spaceService: SpaceService = {
         const res = await useApi(APIS.GET_PAGE_TREE, { id: spaceId, searchValue })
         return res.data
     },
-    queryPage: async (params: { spaceId?: string, status?: string }) => {
-        const res = await useApi(APIS.QUERY_PAGE, { spaceId: params.spaceId, status: params.status })
+    queryPage: async (params: { spaceId?: string, status?: string, searchValue?: string, pageSize?: number }) => {
+        // Omitting spaceId returns pages across all spaces (cross-space search).
+        const res = await useApi(APIS.QUERY_PAGE, {
+            spaceId: params.spaceId,
+            status: params.status,
+            searchValue: params.searchValue,
+            pageSize: params.pageSize,
+        })
         return res.data
     },
     createPage: async (page: any) => {

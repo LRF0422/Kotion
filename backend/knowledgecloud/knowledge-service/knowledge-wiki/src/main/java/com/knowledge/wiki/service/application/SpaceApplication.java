@@ -695,6 +695,10 @@ public class SpaceApplication {
                 this.spaceService.getPageService().lambdaQuery()
                         .eq(dto.getSpaceId() != null, Page::getSpaceId, dto.getSpaceId())
                         .eq(dto.getStatus() != null, Page::getStatus, dto.getStatus())
+                        // When no explicit status is requested (e.g. cross-space link
+                        // search with spaceId omitted), exclude trashed/deleted pages.
+                        .ne(dto.getStatus() == null, Page::getStatus, PageStatus.DELETED)
+                        .ne(dto.getStatus() == null, Page::getStatus, PageStatus.TRASH)
                         .like(StrUtil.isNotEmpty(dto.getSearchValue()), Page::getTitle, dto.getSearchValue())
                         .page(dto.page()));
     }

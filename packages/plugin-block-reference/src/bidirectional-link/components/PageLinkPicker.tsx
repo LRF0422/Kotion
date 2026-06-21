@@ -8,10 +8,9 @@
  * @module @kn/plugin-block-reference/bidirectional-link/components
  */
 
-import React, { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Input, ScrollArea, cn, Skeleton } from '@kn/ui';
 import { FileText, SearchIcon, Loader2 } from '@kn/icon';
-import { PageContext } from '@kn/editor';
 import { useClickAway } from '@kn/common';
 import { searchPages, PageTreeNode } from '../services/linkService';
 
@@ -95,8 +94,9 @@ export const PageLinkPicker: React.FC<PageLinkPickerProps> = ({
     onSelect,
     onCancel,
 }) => {
-    const pageInfo = useContext(PageContext);
-    const spaceId = propSpaceId || pageInfo?.spaceId;
+    // propSpaceId is accepted for backward compatibility but no longer used:
+    // the picker now searches across all spaces.
+    void propSpaceId;
 
     const [query, setQuery] = useState('');
     const [pages, setPages] = useState<PageTreeNode[]>([]);
@@ -116,12 +116,12 @@ export const PageLinkPicker: React.FC<PageLinkPickerProps> = ({
         return () => clearTimeout(timer);
     }, []);
 
-    // Fetch pages when visible or query changes (debounced).
+    // Fetch pages across all spaces when visible or query changes (debounced).
     useEffect(() => {
-        if (visible && spaceId) {
+        if (visible) {
             setLoading(true);
             const timer = setTimeout(() => {
-                searchPages(spaceId, query)
+                searchPages(query)
                     .then((data) => {
                         setPages(data);
                         setSelectedIndex(0);
@@ -130,7 +130,7 @@ export const PageLinkPicker: React.FC<PageLinkPickerProps> = ({
             }, 300);
             return () => clearTimeout(timer);
         }
-    }, [visible, spaceId, query]);
+    }, [visible, query]);
 
     const flatPages = useMemo(() => flattenPages(pages), [pages]);
 

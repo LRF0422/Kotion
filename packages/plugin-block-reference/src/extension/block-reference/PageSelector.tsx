@@ -16,9 +16,11 @@ interface PageSelectorProps {
 const PageItem = React.memo<{
     page: PageInfo;
     isSelected: boolean;
+    /** Show the owning space name (when results span multiple spaces) */
+    showSpace: boolean;
     onSelect: () => void;
     onHover: () => void;
-}>(({ page, isSelected, onSelect, onHover }) => (
+}>(({ page, isSelected, showSpace, onSelect, onHover }) => (
     <div
         className={cn(
             "flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-150",
@@ -37,7 +39,12 @@ const PageItem = React.memo<{
         )}>
             {page.icon?.icon || <FileText className="h-4 w-4" />}
         </span>
-        <span className="truncate text-sm">{page.title || '未命名'}</span>
+        <span className="flex min-w-0 flex-col">
+            <span className="truncate text-sm">{page.title || '未命名'}</span>
+            {showSpace && page.spaceName && (
+                <span className="truncate text-xs text-muted-foreground">{page.spaceName}</span>
+            )}
+        </span>
     </div>
 ));
 PageItem.displayName = 'PageItem';
@@ -67,6 +74,7 @@ LoadingSkeleton.displayName = 'LoadingSkeleton';
  */
 export const PageSelector: React.FC<PageSelectorProps> = React.memo(({ onCancel, editor }) => {
     const [pages, setPages] = useState<PageInfo[]>([]);
+    const [spaces, setSpaces] = useState<{ id: string; name: string }[]>([]);
     const [searchValue, setSearchValue] = useState<string>("");
     const [loading, setLoading] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
@@ -81,6 +89,9 @@ export const PageSelector: React.FC<PageSelectorProps> = React.memo(({ onCancel,
             type: "PageReference",
             attrs: {
                 pageId: page.id,
+                // Store the referenced page's own space so navigation lands in the
+                // right space even when it differs from the current one.
+                spaceId: page.spaceId,
                 type: "LINK"
             }
         });
@@ -108,27 +119,63 @@ export const PageSelector: React.FC<PageSelectorProps> = React.memo(({ onCancel,
         return () => clearTimeout(timer);
     }, []);
 
-    // Fetch pages when search value changes
+    // Load the space list once to resolve space names for display (best-effort).
     useEffect(() => {
         if (!spaceService) return;
+        let cancelled = false;
+        spaceService.querySpaces()
+            .then((res) => {
+                if (!cancelled) setSpaces(res.records ?? []);
+            })
+            .catch(() => {
+                if (!cancelled) setSpaces([]);
+            });
+        return () => { cancelled = true; };
+    }, [spaceService]);
+
+    // Resolve a spaceId -> spaceName map for the per-item subtitle.
+    const spaceNameById = useMemo(() => {
+        const map = new Map<string, string>();
+        spaces.forEach((s) => map.set(String(s.id), s.name));
+        return map;
+    }, [spaces]);
+
+    // Search pages across ALL spaces in one query (spaceId omitted = cross-space).
+    useEffect(() => {
+        if (!spaceService) return;
+        let cancelled = false;
 
         const fetchPages = async () => {
             setLoading(true);
             try {
                 const res = await spaceService.queryPage({
-                    spaceId: pageInfo.spaceId,
-                    searchValue: value
+                    searchValue: value,
+                    pageSize: 50,
                 });
-                setPages(res.records);
+                const records = (res.records ?? []).map((p) => ({
+                    ...p,
+                    spaceId: String(p.spaceId),
+                    spaceName: spaceNameById.get(String(p.spaceId)),
+                }));
+
+                // Surface the current space's pages first.
+                records.sort((a, b) => {
+                    const aCur = a.spaceId === pageInfo.spaceId ? 0 : 1;
+                    const bCur = b.spaceId === pageInfo.spaceId ? 0 : 1;
+                    return aCur - bCur;
+                });
+
+                if (!cancelled) setPages(records);
             } catch {
-                setPages([]);
+                if (!cancelled) setPages([]);
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
         };
 
         fetchPages();
-    }, [value, spaceService, pageInfo.spaceId]);
+        return () => { cancelled = true; };
+    }, [value, spaceService, spaceNameById, pageInfo.spaceId]);
 
     // Memoize page list
     const pageList = useMemo(() => {
@@ -143,11 +190,14 @@ export const PageSelector: React.FC<PageSelectorProps> = React.memo(({ onCancel,
             );
         }
 
+        const multiSpace = new Set(pages.map((p) => p.spaceId)).size > 1;
+
         return pages.map((page, index) => (
             <PageItem
-                key={page.id}
+                key={`${page.spaceId}:${page.id}`}
                 page={page}
                 isSelected={selectedIndex === index}
+                showSpace={multiSpace}
                 onSelect={() => handlePageSelect(page)}
                 onHover={() => setSelectedIndex(index)}
             />

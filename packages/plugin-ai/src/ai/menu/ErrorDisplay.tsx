@@ -22,11 +22,11 @@ export const ErrorDisplay = React.memo(function ErrorDisplay({ error, onRetry, o
     const Icon = ERROR_ICONS[error.type]
 
     return (
-        <div className="mx-2 my-1.5 p-2 rounded-md bg-red-50/80 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-[10px] animate-in fade-in-0 slide-in-from-bottom-2 max-w-full overflow-x-auto">
+        <div className="mx-2 my-1.5 p-2 rounded-md bg-destructive/10 border border-destructive/20 text-[10px] animate-in fade-in-0 slide-in-from-bottom-2 max-w-full overflow-x-auto">
             <div className="flex items-start gap-1.5">
-                <Icon className="h-3 w-3 text-red-500 mt-px shrink-0" />
+                <Icon className="h-3 w-3 text-destructive mt-px shrink-0" />
                 <div className="flex-1 min-w-0">
-                    <p className="font-medium text-red-600 dark:text-red-400">{error.message}</p>
+                    <p className="font-medium text-destructive">{error.message}</p>
                 </div>
             </div>
             <div className="flex items-center gap-1.5 mt-1.5 ml-4.5">
@@ -35,7 +35,7 @@ export const ErrorDisplay = React.memo(function ErrorDisplay({ error, onRetry, o
                         variant="outline"
                         size="sm"
                         onClick={onRetry}
-                        className="h-6 px-2 text-[10px] border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 gap-0.5"
+                        className="h-6 px-2 text-[10px] border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive gap-0.5"
                     >
                         <RefreshCw className="h-2.5 w-2.5" />
                         Retry

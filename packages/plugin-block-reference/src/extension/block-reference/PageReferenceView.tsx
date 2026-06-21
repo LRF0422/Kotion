@@ -21,7 +21,7 @@ import type { PageReferenceAttrs } from "../../types";
 export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => {
     const params = useParams();
     const pageInfo = useContext(PageContext);
-    const { pageId, type } = props.node.attrs as PageReferenceAttrs;
+    const { pageId, spaceId: attrsSpaceId, type } = props.node.attrs as PageReferenceAttrs;
     const [title, setTitle] = useState<string>();
     const [icon, setIcon] = useState<string | null>(null);
     const navigator = useNavigator();
@@ -71,15 +71,27 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
         }
     }, [fetchedPageInfo, error]);
 
+    // Backfill spaceId for legacy references created before cross-space support:
+    // once we resolve the page's real space, persist it onto the node so future
+    // navigation is correct. Runs once per ref (guarded by attrsSpaceId being null).
+    useEffect(() => {
+        if (!attrsSpaceId && fetchedPageInfo?.spaceId) {
+            props.updateAttributes({ spaceId: fetchedPageInfo.spaceId });
+        }
+    }, [attrsSpaceId, fetchedPageInfo?.spaceId, props]);
+
     const handleClick = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
         if (pageId) {
+            // Navigate into the referenced page's own space, not the current one.
+            // Fall back to the resolved page info, then the current space (legacy).
+            const targetSpaceId = attrsSpaceId || fetchedPageInfo?.spaceId || pageInfo.spaceId;
             navigator.go({
-                to: `/space-detail/${pageInfo.spaceId}/page/edit/${pageId}`
+                to: `/space-detail/${targetSpaceId}/page/edit/${pageId}`
             });
         }
-    }, [pageId, pageInfo.spaceId, navigator]);
+    }, [pageId, attrsSpaceId, fetchedPageInfo?.spaceId, pageInfo.spaceId, navigator]);
 
     const isLoading = creating || fetchLoading;
     const isDeleted = !isLoading && error;

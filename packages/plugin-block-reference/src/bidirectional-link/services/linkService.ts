@@ -18,6 +18,10 @@ export interface PageTreeNode {
     name: string;
     parentId: number;
     children?: PageTreeNode[];
+    /** Owning space id (present for cross-space search results) */
+    spaceId?: number | string;
+    /** Owning space name (for display) */
+    spaceName?: string;
 }
 
 /**
@@ -58,14 +62,23 @@ export async function getBlockBacklinks(blockId: string): Promise<BacklinkVO[]> 
 }
 
 /**
- * Search pages for link picker
- * @param spaceId Current space ID
+ * Search pages for the link picker, across ALL spaces.
+ *
+ * Uses the flat /page/list endpoint with no spaceId so results are not limited
+ * to the current space; the picker flattens trees anyway, so a flat list works.
+ *
  * @param query Search keyword
  */
-export async function searchPages(spaceId: number | string, query?: string): Promise<PageTreeNode[]> {
+export async function searchPages(query?: string): Promise<PageTreeNode[]> {
     try {
-        const res = await useApi(APIS.GET_PAGE_TREE, { spaceId, searchValue: query });
-        return res.data || [];
+        const res = await useApi(APIS.QUERY_PAGE, { searchValue: query, pageSize: 50 });
+        const records = res.data?.records ?? [];
+        return records.map((p: any): PageTreeNode => ({
+            id: p.id,
+            name: p.title,
+            parentId: 0,
+            spaceId: p.spaceId,
+        }));
     } catch {
         return [];
     }

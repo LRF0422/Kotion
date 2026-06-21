@@ -75,6 +75,8 @@ export interface PageInfo {
     };
     /** ID of the space containing this page */
     spaceId: string;
+    /** Name of the space containing this page (for display in cross-space search) */
+    spaceName?: string;
     /** ID of the parent page (for nested pages) */
     parentId?: string;
     /** JSON string of page content */
@@ -105,10 +107,12 @@ export interface QueryBlocksParams {
  * Parameters for querying pages
  */
 export interface QueryPageParams {
-    /** Filter by space ID */
+    /** Filter by space ID. Omit to search across all spaces (cross-space). */
     spaceId?: string;
     /** Search term for filtering pages */
     searchValue?: string;
+    /** Max number of records to return (backend default is 10) */
+    pageSize?: number;
 }
 
 /**

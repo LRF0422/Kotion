@@ -680,7 +680,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                     variant="ghost"
                                     size="sm"
                                     onClick={handleClearChat}
-                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-red-500 transition-colors"
+                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive transition-colors"
                                 >
                                     <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
@@ -697,7 +697,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                 </div>
             </ExpandableChatHeader>
 
-            <ExpandableChatBody className="bg-[#F8F9FA] dark:bg-background overflow-x-hidden">
+            <ExpandableChatBody className="bg-muted/30 dark:bg-background overflow-x-hidden">
                 <TeamStatusPanel teamState={teamState} />
                 <ChatMessageList>
                     {/* Empty state greeting */}
@@ -730,7 +730,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                     {/* Streaming reasoning (thinking) content */}
                     {isLoading && streamingReasoning && (
                         <ChatBubble variant="received">
-                            <ChatBubbleMessage className="bg-muted/30 dark:bg-muted/20 p-2.5 rounded-xl rounded-tl-sm">
+                            <ChatBubbleMessage className="bg-muted/40 dark:bg-muted/20 p-2.5 rounded-lg rounded-tl-sm">
                                 <details open className="group">
                                     <summary className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground cursor-pointer select-none">
                                         <Sparkles className="h-3 w-3 animate-pulse" />
@@ -747,7 +747,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                     {/* Streaming message (rAF buffered) */}
                     {buffer.displayText && (
                         <ChatBubble variant="received">
-                            <ChatBubbleMessage className="bg-white dark:bg-muted/40 p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tl-sm">
+                            <ChatBubbleMessage className="bg-card border border-border/60 dark:bg-muted/40 dark:border-transparent p-2.5 text-[13px] leading-relaxed rounded-lg rounded-tl-sm">
                                 <Streamdown isAnimating>{buffer.displayText}</Streamdown>
                             </ChatBubbleMessage>
                         </ChatBubble>
@@ -756,7 +756,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                     {/* Loading indicator */}
                     {isLoading && !buffer.displayText && currentSteps.length === 0 && (
                         <ChatBubble variant="received">
-                            <ChatBubbleMessage isLoading className="bg-white dark:bg-muted/40 p-2.5 rounded-xl rounded-tl-sm" />
+                            <ChatBubbleMessage isLoading className="bg-card border border-border/60 dark:bg-muted/40 dark:border-transparent p-2.5 rounded-lg rounded-tl-sm" />
                         </ChatBubble>
                     )}
 
@@ -830,7 +830,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                             size="sm"
                                             onClick={handleCustomSubmit}
                                             disabled={!customInput.trim()}
-                                            className="h-7 px-2 bg-foreground text-background hover:bg-foreground/90"
+                                            className="h-7 px-2 bg-primary text-primary-foreground hover:bg-primary/90"
                                         >
                                             <Send className="h-3 w-3" />
                                         </Button>
@@ -843,7 +843,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                     variant="outline"
                                     size="sm"
                                     onClick={handleCancelChoice}
-                                    className="h-6 px-2 border-red-200/60 text-red-500 hover:bg-red-50/80 dark:hover:bg-red-950/30 text-[10px]"
+                                    className="h-6 px-2 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive text-[10px]"
                                 >
                                     <XCircle className="h-3 w-3 mr-0.5" />
                                     Cancel
@@ -867,7 +867,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
             <ExpandableChatFooter className="bg-background/80 backdrop-blur-sm p-2 border-t">
                 <form
                     onSubmit={handleSubmit}
-                    className="relative rounded-xl border border-border/60 bg-background focus-within:ring-1 focus-within:ring-border transition-all"
+                    className="relative rounded-lg border border-border/60 bg-background focus-within:border-ring/40 focus-within:ring-1 focus-within:ring-ring/30 transition-all"
                 >
                     {/* Context tag */}
                     {showQuickPrompts && (
@@ -886,7 +886,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                         placeholder="Do anything with AI..."
                         disabled={isLoading}
                         rows={1}
-                        className="min-h-[40px] max-h-[120px] overflow-y-auto resize-none rounded-xl bg-transparent border-0 px-3 py-2 text-xs shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
+                        className="min-h-[40px] max-h-[120px] overflow-y-auto resize-none rounded-lg bg-transparent border-0 px-3 py-2 text-xs shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
                     />
                     <div className="flex items-center px-2 pb-2 pt-0 justify-between">
                         <div className="flex items-center gap-px">
@@ -946,7 +946,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                 type="submit"
                                 size="sm"
                                 aria-label="Send message"
-                                className="h-7 w-7 p-0 rounded-lg bg-foreground text-background hover:bg-foreground/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-foreground"
+                                className="h-7 w-7 p-0 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                                 disabled={!isInputValid}
                             >
                                 <Send className="h-3.5 w-3.5" />

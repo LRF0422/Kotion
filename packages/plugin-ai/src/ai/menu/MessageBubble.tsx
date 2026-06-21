@@ -38,9 +38,9 @@ export const MessageBubble = React.memo(function MessageBubble({
                         variant={isAI ? 'received' : 'sent'}
                         className={isAI
                             ? message.error
-                                ? 'bg-red-50 dark:bg-red-950/30 border border-red-200/60 dark:border-red-900/40 text-red-700 dark:text-red-300 p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tl-sm'
-                                : 'bg-white dark:bg-muted/40 text-foreground p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tl-sm'
-                            : 'bg-[#E6E6E6] dark:bg-muted/80 text-foreground p-2.5 text-[13px] leading-relaxed rounded-xl rounded-tr-sm'
+                                ? 'bg-destructive/10 border border-destructive/20 text-destructive p-2.5 text-[13px] leading-relaxed rounded-lg rounded-tl-sm'
+                                : 'bg-card border border-border/60 dark:bg-muted/40 dark:border-transparent text-foreground p-2.5 text-[13px] leading-relaxed rounded-lg rounded-tl-sm'
+                            : 'bg-secondary text-foreground dark:bg-muted/80 p-2.5 text-[13px] leading-relaxed rounded-lg rounded-tr-sm'
                         }
                     >
                         {message.error && (
