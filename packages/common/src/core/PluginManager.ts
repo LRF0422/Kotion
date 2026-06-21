@@ -1,6 +1,7 @@
 import { isFunction, merge } from "lodash";
 import { ExtensionWrapper } from "./editor";
 import { SiderMenuItemProps } from "./menu";
+import { TourConfig } from "./tour";
 import { RouteConfig } from "./route";
 import { Services } from "./types";
 import { ServiceRegistry } from "./ServiceRegistry";
@@ -46,6 +47,11 @@ export interface PluginConfig {
      * Plugin settings configuration
      */
     settings?: PluginSettingsConfig
+    /**
+     * Onboarding/feature tours contributed by this plugin.
+     * Aggregated by PluginManager.resolveTours().
+     */
+    tours?: TourConfig[]
 }
 
 export class KPlugin<T extends PluginConfig> {
@@ -59,6 +65,7 @@ export class KPlugin<T extends PluginConfig> {
     private _locales?: any
     private _services?: Services
     private _settings?: PluginSettingsConfig
+    private _tours?: TourConfig[]
 
     constructor(config: T) {
         this.name = config.name
@@ -69,6 +76,7 @@ export class KPlugin<T extends PluginConfig> {
         this._locales = config.locales
         this._services = config.services
         this._settings = config.settings
+        this._tours = config.tours
     }
 
     get routes(): RouteConfig[] {
@@ -95,6 +103,10 @@ export class KPlugin<T extends PluginConfig> {
         return this._settings
     }
 
+    get tours(): TourConfig[] {
+        return this._tours || []
+    }
+
 }
 
 export class PluginManager {
@@ -119,6 +131,7 @@ export class PluginManager {
     private _cacheMenus: SiderMenuItemProps[] | null = null
     private _cacheExtensions: ExtensionWrapper[] | null = null
     private _cacheLocales: any | null = null
+    private _cacheTours: TourConfig[] | null = null
     private _pluginMap: Map<string, KPlugin<any>> = new Map()
 
     constructor(pluginStore: (path: string) => string, initalPlugins: KPlugin<any>[]) {
@@ -161,6 +174,7 @@ export class PluginManager {
         this._cacheMenus = null
         this._cacheExtensions = null
         this._cacheLocales = null
+        this._cacheTours = null
         this._version++
         this._changeListeners.forEach(fn => fn())
     }
@@ -497,6 +511,36 @@ export class PluginManager {
             }
         }
         return settings
+    }
+
+    /**
+     * Resolve all tours contributed by plugins.
+     * De-duplicates by tour id (first occurrence wins).
+     */
+    resolveTours(): TourConfig[] {
+        if (this._cacheTours) {
+            return this._cacheTours
+        }
+
+        const tours: TourConfig[] = []
+        const seen = new Set<string>()
+        for (const plugin of this.plugins) {
+            for (const tour of plugin.tours) {
+                if (!tour || !tour.id) {
+                    logger.warn('Invalid tour detected, skipping')
+                    continue
+                }
+                if (seen.has(tour.id)) {
+                    logger.warn(`Tour ${tour.id} already registered, skipping duplicate`)
+                    continue
+                }
+                seen.add(tour.id)
+                tours.push(tour)
+            }
+        }
+
+        this._cacheTours = tours
+        return tours
     }
 
     /**

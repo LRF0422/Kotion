@@ -50,17 +50,11 @@ export function Login() {
             saveTokens(data.access_token, data.refresh_token)
             localStorage.setItem("isLogin", "false")
 
-            // Check if this is first login (no welcome completed)
-            const hasCompletedWelcome = localStorage.getItem('hasCompletedWelcome')
-            if (!hasCompletedWelcome) {
-                // First time user, redirect to welcome page
-                navigate('/welcome')
-            } else {
-                // Returning user — show transition overlay, then navigate without full reload
-                setLoginSuccess(true)
-                // Small delay so the overlay paints before React starts unmounting Login
-                setTimeout(() => navigate('/'), 150)
-            }
+            // Always enter the workspace. First-run onboarding is handled in-app by
+            // TourHost (auto-starts the welcome tour for users who haven't seen it).
+            setLoginSuccess(true)
+            // Small delay so the overlay paints before React starts unmounting Login
+            setTimeout(() => navigate('/'), 150)
         }).catch(e => {
             setLoading(false)
         })

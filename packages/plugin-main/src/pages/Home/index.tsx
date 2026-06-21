@@ -155,13 +155,15 @@ export const Home: React.FC = () => {
         hue: number
         onClick?: () => void
         loading?: boolean
-    }> = ({ icon, label, hue, onClick, loading: btnLoading }) => {
+        dataTour?: string
+    }> = ({ icon, label, hue, onClick, loading: btnLoading, dataTour }) => {
         const styles = hueStyles(hue)
         return (
             <button
                 type="button"
                 onClick={onClick}
                 disabled={btnLoading}
+                data-tour={dataTour}
                 className={cn(
                     "group flex items-center gap-2.5 rounded-md border border-border/60 bg-transparent px-3 py-2",
                     "text-left transition-colors duration-150 hover:bg-muted/60",
@@ -242,13 +244,14 @@ export const Home: React.FC = () => {
                             hue={245}
                             onClick={handleNewPage}
                             loading={creatingPage}
+                            dataTour="home-new-page"
                         />
                         <CreateSpaceDlg
                             trigger={
                                 // Wrapper must mirror the other direct flex children so all
                                 // four actions share width equally on mobile (flex-1 + flex
                                 // lets the inner button stretch to fill this item).
-                                <div className={cn(isMobile && "flex flex-1")}>
+                                <div className={cn(isMobile && "flex flex-1")} data-tour="home-new-space">
                                     <QuickAction
                                         icon={<FolderPlus className="h-4 w-4" />}
                                         label={t("home.create-space") || "New Space"}
@@ -263,12 +266,14 @@ export const Home: React.FC = () => {
                             label={t("home.all-spaces") || "All Spaces"}
                             hue={25}
                             onClick={() => navigator.go({ to: "/all-spaces" })}
+                            dataTour="home-all-spaces"
                         />
                         <QuickAction
                             icon={<Sparkles className="h-4 w-4" />}
                             label={t("home.ai-assistant") || "AI Assistant"}
                             hue={290}
                             onClick={() => event.emit(TOGGLE_AI_ASSISTANT)}
+                            dataTour="home-ai"
                         />
                     </div>
                 </div>

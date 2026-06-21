@@ -8,9 +8,9 @@ import { Separator } from "@kn/ui";
 import { cn } from "@kn/ui";
 import { GlobalState } from "@kn/common";
 import { useSafeState } from "ahooks";
-import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import, Puzzle, ChevronRight, Zap } from "@kn/icon";
+import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import, Puzzle, ChevronRight, Zap, Compass } from "@kn/icon";
 import React, { PropsWithChildren, useContext, useMemo, Suspense } from "react";
-import { useSelector, AppContext, PluginSettingsConfig } from "@kn/common";
+import { useSelector, AppContext, PluginSettingsConfig, getTourRegistry, event, START_TOUR, WELCOME_TOUR_ID } from "@kn/common";
 import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { Member } from "./components/Member";
@@ -52,8 +52,19 @@ const PluginSettingsLoader: React.FC<{ config: PluginSettingsWithMeta }> = ({ co
 export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
     const { userInfo } = useSelector((state: GlobalState) => state);
     const [currentKey, setCurrentKey] = useSafeState<string>('MyAccount');
+    const [open, setOpen] = useSafeState<boolean>(false);
     const { usePath } = useUploadFile();
     const { pluginManager } = useContext(AppContext);
+
+    // 重新查看新手引导:关闭设置弹窗后,重置并启动 welcome tour
+    const replayOnboarding = () => {
+        setOpen(false);
+        setTimeout(() => {
+            getTourRegistry().reset(WELCOME_TOUR_ID).finally(() => {
+                event.emit(START_TOUR, WELCOME_TOUR_ID);
+            });
+        }, 250);
+    };
 
     // Get all plugin settings dynamically
     const pluginSettings = useMemo(() => {
@@ -209,6 +220,12 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
                     name: "AI 技能",
                     icon: <Zap className="h-4 w-4" />,
                     onClick: () => setCurrentKey("MySkills")
+                },
+                {
+                    id: 'onboarding',
+                    name: "重新查看新手引导",
+                    icon: <Compass className="h-4 w-4" />,
+                    onClick: replayOnboarding
                 }
             ]
         },
@@ -245,7 +262,7 @@ export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
     ];
 
     return (
-        <Dialog>
+        <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
                 {children}
             </DialogTrigger>

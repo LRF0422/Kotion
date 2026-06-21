@@ -34,6 +34,24 @@ export const ai = new AiPlugin({
         icon: React.createElement(Sparkles, { className: "h-4 w-4" }),
         component: AISettings
     },
+    // 插件自定义引导:无需改核心,通过 START_TOUR 事件触发(id: 'ai-intro')
+    tours: [
+        {
+            id: 'ai-intro',
+            name: 'AI 助手上手',
+            trigger: 'manual',
+            steps: [
+                {
+                    id: 'open',
+                    target: '[data-tour="/ai-assistant"]',
+                    title: '试试 AI 助手',
+                    description: '点这里随时唤起 AI,或在文档里输入 /ai 直接调用。',
+                    placement: 'right',
+                    allowInteraction: true,
+                },
+            ],
+        },
+    ],
     locales: {
         en: {
             translation: {

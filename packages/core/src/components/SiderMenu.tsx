@@ -34,6 +34,7 @@ const MenuItem = memo<MenuItemProps>(({ item, isActive, onClick, isMobile }) => 
         return (
             <button
                 onClick={onClick}
+                data-tour={item.key}
                 className={cn(
                     "w-full rounded-lg flex items-center gap-3 px-4 py-3 cursor-pointer",
                     "hover:bg-muted transition-all duration-200 ease-in-out",
@@ -57,6 +58,7 @@ const MenuItem = memo<MenuItemProps>(({ item, isActive, onClick, isMobile }) => 
             <TooltipTrigger asChild>
                 <button
                     onClick={onClick}
+                    data-tour={item.key}
                     className={cn(
                         "rounded-md flex items-center justify-center p-2 cursor-pointer",
                         "hover:bg-muted transition-all duration-200 ease-in-out",
@@ -245,6 +247,7 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
         <>
             <TooltipProvider delayDuration={300}>
                 <nav
+                    data-tour="sidebar-nav"
                     className={cn(
                         "flex flex-col pt-2 pb-5 h-full",
                         isMobile ? "items-stretch px-2" : "items-center"

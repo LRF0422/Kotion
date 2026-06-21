@@ -72,6 +72,41 @@ export const DefaultPluginInstance = new DefaultPlugin({
     }
   ]
   ,
+  // 主页功能引导:在 welcome 引导(priority 100)之后自动接续播放
+  tours: [
+    {
+      id: 'home-intro',
+      name: '主页功能',
+      trigger: 'auto',
+      priority: 90,
+      version: 1,
+      steps: [
+        {
+          id: 'new-page',
+          target: '[data-tour="home-new-page"]',
+          title: '新建页面',
+          description: '一键在个人空间创建文档,马上开始记录想法。',
+          placement: 'bottom',
+          route: '/home',
+          allowInteraction: true,
+        },
+        {
+          id: 'new-space',
+          target: '[data-tour="home-new-space"]',
+          title: '创建空间',
+          description: '用「空间」把相关文档归类管理,像文件夹一样组织知识。',
+          placement: 'bottom',
+        },
+        {
+          id: 'all-spaces',
+          target: '[data-tour="home-all-spaces"]',
+          title: '全部空间',
+          description: '在这里查看和管理你的所有空间。',
+          placement: 'bottom',
+        },
+      ],
+    },
+  ],
   editorExtension: [BlockVersionsExtension],
   services: {
     spaceService: spaceService

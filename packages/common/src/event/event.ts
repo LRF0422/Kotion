@@ -10,6 +10,7 @@ export interface EventMap {
   ON_MESSAGE: any
   GO_TO_MARKETPLACE: undefined
   TOGGLE_AI_ASSISTANT: undefined
+  START_TOUR: string
 }
 
 type EventKey = keyof EventMap

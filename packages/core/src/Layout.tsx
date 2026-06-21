@@ -2,7 +2,8 @@
 import { Outlet } from "react-router-dom"
 import { SiderMenu } from "./components/SiderMenu"
 import { useContext, useEffect, useState } from "react"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Onboarding, OnboardingStep, Rate, SparklesText, cn, useIsMobile, useVirtualKeyboard, Button } from "@kn/ui"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogTrigger, Badge, Item, ItemContent, ItemDescription, ItemTitle, Rate, SparklesText, cn, useIsMobile, useVirtualKeyboard, Button } from "@kn/ui"
+import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
 import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, TOGGLE_AI_ASSISTANT, SystemAgentProvider } from "@kn/common"
@@ -213,6 +214,9 @@ export function Layout({ onPluginsReady }: LayoutProps) {
         <SystemAgentProvider>
             <MobilePageHeaderProvider>
                 <div>
+                    {/* Onboarding / feature tours */}
+                    <TourHost />
+
                     {/* AI Assistant Panel */}
                     <AIAssistantPanel
                         open={aiPanelOpen}

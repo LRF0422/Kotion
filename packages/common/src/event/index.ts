@@ -22,6 +22,9 @@ export const GO_TO_MARKETPLACE = "GO_TO_MARKETPLACE"
 
 export const TOGGLE_AI_ASSISTANT = "TOGGLE_AI_ASSISTANT"
 
+/** Imperatively start a tour by its id. Payload: the tour id string. */
+export const START_TOUR = "START_TOUR"
+
 export const BUSINESS_TOPIC = {
     PAGE_COOPERATION_INVITE: "space.page.cooperation.invite"
 }
