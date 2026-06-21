@@ -298,7 +298,12 @@ export const resources = {
                     "connectionLost": "连接已断开",
                     "moreCollaborators": "还有 {{count}} 位协作者",
                     "anonymous": "匿名用户",
-                    "exit": "退出"
+                    "exit": "退出",
+                    "live": "实时",
+                    "connecting": "连接中",
+                    "offline": "已离线",
+                    "host": "主持人",
+                    "collaborators": "协作者"
                 },
                 "sessionEnded": {
                     "title": "会话已结束",
@@ -443,6 +448,27 @@ export const resources = {
                 "linkCopyFailed": "复制链接失败",
                 "movedToTrash": "已移至回收站",
                 "moveToTrashFailed": "移至回收站失败"
+            },
+            "ai": {
+                "title": "AI 写作",
+                "delete": "删除",
+                "custom": "自定义指令",
+                "generating": "生成中…",
+                "generateFailed": "生成失败，请重试",
+                "copy": "复制",
+                "copied": "已复制",
+                "copyFailed": "复制失败",
+                "diff": "对比改动",
+                "regenerate": "重新生成",
+                "stop": "停止",
+                "discard": "丢弃",
+                "insert": "插入",
+                "insertBelow": "下方插入",
+                "replace": "替换",
+                "accept": "完成",
+                "refinePlaceholder": "继续修改，如：再短一点…",
+                "customPlaceholder": "告诉 AI 如何处理选中内容…",
+                "blockPlaceholder": "让 AI 帮你写点什么…"
             }
         }
     },
@@ -744,7 +770,12 @@ export const resources = {
                     "connectionLost": "Connection lost",
                     "moreCollaborators": "{{count}} more collaborators",
                     "anonymous": "Anonymous",
-                    "exit": "Exit"
+                    "exit": "Exit",
+                    "live": "Live",
+                    "connecting": "Connecting",
+                    "offline": "Offline",
+                    "host": "Host",
+                    "collaborators": "Collaborators"
                 },
                 "sessionEnded": {
                     "title": "Session Ended",
@@ -889,6 +920,27 @@ export const resources = {
                 "linkCopyFailed": "Failed to copy link",
                 "movedToTrash": "Moved to trash",
                 "moveToTrashFailed": "Failed to move to trash"
+            },
+            "ai": {
+                "title": "AI Writing",
+                "delete": "Delete",
+                "custom": "Custom Instruction",
+                "generating": "Generating…",
+                "generateFailed": "Generation failed, please try again",
+                "copy": "Copy",
+                "copied": "Copied",
+                "copyFailed": "Failed to copy",
+                "diff": "Compare changes",
+                "regenerate": "Regenerate",
+                "stop": "Stop",
+                "discard": "Discard",
+                "insert": "Insert",
+                "insertBelow": "Insert below",
+                "replace": "Replace",
+                "accept": "Done",
+                "refinePlaceholder": "Keep editing, e.g. make it shorter…",
+                "customPlaceholder": "Tell AI what to do with the selection…",
+                "blockPlaceholder": "Ask AI to write something for you…"
             }
         }
     }

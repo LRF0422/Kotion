@@ -1,7 +1,5 @@
 import { APIS } from "../../api";
-import { Badge } from "@kn/ui";
 import { Button } from "@kn/ui";
-import { Separator } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
 import { CollaborationEditor, TiptapCollabProvider } from "@kn/editor";
@@ -10,12 +8,14 @@ import { useApi, useUploadFile, useNavigator, GlobalState, deepEqual } from "@kn
 import {
     AlertCircle,
     CheckCircle2,
+    Crown,
     FileText,
     Loader2,
     LogOut,
     Users,
     X
 } from "@kn/icon";
+import { cn } from "@kn/ui";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector, AppContext } from "@kn/common";
 import { useParams, useSearchParams } from "@kn/common";
@@ -414,63 +414,79 @@ export const InviteCollaboration: React.FC = () => {
     return (
         <div className="w-full h-screen flex flex-col bg-background">
             {/* Header */}
-            <header className="h-12 w-full flex flex-row items-center justify-between px-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-                {/* Left: Page info */}
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <FileText className="h-4 w-4 text-primary" />
-                        </div>
-                        <div className="flex flex-col">
-                            <span className="font-medium text-sm truncate max-w-[180px] sm:max-w-[280px]">
-                                {page?.title || t('inviteCollaboration.header.untitled')}
-                            </span>
-                            {invitation?.spaceName && (
-                                <span className="text-[11px] text-muted-foreground/70 truncate">
-                                    {invitation.spaceName}
-                                </span>
-                            )}
-                        </div>
+            <header className="h-14 w-full flex items-center gap-3 px-3 sm:px-4 border-b border-border/60 bg-background/70 backdrop-blur-xl supports-[backdrop-filter]:bg-background/50 sticky top-0 z-50">
+                {/* Left: Document identity */}
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    {/* Document tile */}
+                    <div className="relative h-9 w-9 shrink-0 rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 ring-1 ring-inset ring-primary/10 flex items-center justify-center">
+                        {page?.icon ? (
+                            <span className="text-lg leading-none">{page.icon}</span>
+                        ) : (
+                            <FileText className="h-[18px] w-[18px] text-primary" />
+                        )}
                     </div>
-
-                    {/* Permission badge - more subtle */}
-                    <div className={`
-                        px-2 py-0.5 rounded-md text-[11px] font-medium
-                        ${invitation?.permission === 'ADMIN'
-                            ? 'bg-primary/10 text-primary'
-                            : invitation?.permission === 'WRITE'
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                : 'bg-muted text-muted-foreground'}
-                    `}>
-                        {getPermissionLabel(invitation?.permission || 'READ')}
+                    {/* Title + breadcrumb */}
+                    <div className="flex flex-col min-w-0">
+                        <span className="font-semibold text-[13px] leading-tight truncate max-w-[160px] sm:max-w-[340px]">
+                            {page?.title || t('inviteCollaboration.header.untitled')}
+                        </span>
+                        <div className="flex items-center gap-1.5 text-[11px] leading-tight mt-0.5 min-w-0">
+                            {invitation?.spaceName && (
+                                <>
+                                    <span className="text-muted-foreground/70 truncate max-w-[120px]">
+                                        {invitation.spaceName}
+                                    </span>
+                                    <span className="text-muted-foreground/30">·</span>
+                                </>
+                            )}
+                            <span className={cn(
+                                "font-medium shrink-0",
+                                invitation?.permission === 'ADMIN'
+                                    ? 'text-primary'
+                                    : invitation?.permission === 'WRITE'
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : 'text-muted-foreground'
+                            )}>
+                                {getPermissionLabel(invitation?.permission || 'READ')}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
-                {/* Center: Connection & Collaborators */}
-                <div className="flex items-center gap-3">
-                    {/* Invited by info - integrated into header */}
-                    {invitation?.inviterName && (
-                        <div className="text-xs text-muted-foreground hidden sm:block">
-                            {t('inviteCollaboration.header.invitedBy')} <span className="font-medium text-foreground/80">{invitation.inviterName}</span>
-                        </div>
-                    )}
-
-                    {/* Vertical divider */}
-                    {invitation?.inviterName && users.length > 0 && <div className="h-4 w-px bg-border hidden sm:block" />}
-
-                    {/* Connection Status - minimal dot indicator */}
+                {/* Right: presence, status & actions */}
+                <div className="flex items-center gap-2 shrink-0">
+                    {/* Live status pill */}
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1.5 px-1.5 py-1 rounded-md hover:bg-muted/50 transition-colors cursor-default">
-                                    <div className={`
-                                        h-2 w-2 rounded-full transition-colors
-                                        ${connectionStatus === 'connected'
-                                            ? 'bg-emerald-500'
+                                <div className={cn(
+                                    "flex items-center gap-1.5 h-7 pl-2 pr-2.5 rounded-full text-[11px] font-medium border transition-colors cursor-default",
+                                    connectionStatus === 'connected'
+                                        ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                        : connectionStatus === 'connecting'
+                                            ? 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                            : 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400'
+                                )}>
+                                    <span className="relative flex h-1.5 w-1.5">
+                                        {connectionStatus === 'connected' && (
+                                            <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75 animate-ping" />
+                                        )}
+                                        <span className={cn(
+                                            "relative inline-flex h-1.5 w-1.5 rounded-full",
+                                            connectionStatus === 'connected'
+                                                ? 'bg-emerald-500'
+                                                : connectionStatus === 'connecting'
+                                                    ? 'bg-amber-500 animate-pulse'
+                                                    : 'bg-red-500'
+                                        )} />
+                                    </span>
+                                    <span>
+                                        {connectionStatus === 'connected'
+                                            ? t('inviteCollaboration.header.live')
                                             : connectionStatus === 'connecting'
-                                                ? 'bg-amber-500 animate-pulse'
-                                                : 'bg-red-500'}
-                                    `} />
+                                                ? t('inviteCollaboration.header.connecting')
+                                                : t('inviteCollaboration.header.offline')}
+                                    </span>
                                 </div>
                             </TooltipTrigger>
                             <TooltipContent side="bottom">
@@ -485,57 +501,68 @@ export const InviteCollaboration: React.FC = () => {
                         </Tooltip>
                     </TooltipProvider>
 
-                    {/* Vertical divider */}
-                    {users.length > 0 && <div className="h-4 w-px bg-border" />}
-
-                    {/* Active Users - compact avatar group */}
+                    {/* Active collaborators - avatar stack */}
                     {users.length > 0 && (
                         <TooltipProvider>
-                            <div className="flex items-center">
-                                <div className="flex -space-x-1.5">
-                                    {users.slice(0, 4).map((u) => (
+                            <div className="flex items-center -space-x-2">
+                                {users.slice(0, 4).map((u) => {
+                                    const isHost = invitation?.inviterId !== undefined
+                                        && u.user?.id !== undefined
+                                        && String(u.user.id) === String(invitation.inviterId);
+                                    return (
                                         <Tooltip key={u.clientId}>
                                             <TooltipTrigger asChild>
                                                 <div
-                                                    className="h-6 w-6 rounded-full ring-2 ring-background flex items-center justify-center text-[10px] font-semibold text-white cursor-default transition-transform hover:scale-110 hover:z-10"
+                                                    className="relative h-7 w-7 rounded-full ring-2 ring-background flex items-center justify-center text-[10px] font-semibold text-white cursor-default transition-transform hover:scale-110 hover:z-10"
                                                     style={{ backgroundColor: u.user?.color || '#6366f1' }}
                                                 >
                                                     {getUserInitials(u.user?.name || 'A')}
+                                                    {isHost && (
+                                                        <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-amber-400 ring-2 ring-background flex items-center justify-center">
+                                                            <Crown className="h-2 w-2 text-amber-900" />
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </TooltipTrigger>
                                             <TooltipContent side="bottom">
-                                                <p className="font-medium">{u.user?.name || t('inviteCollaboration.header.anonymous')}</p>
+                                                <p className="font-medium flex items-center gap-1.5">
+                                                    {u.user?.name || t('inviteCollaboration.header.anonymous')}
+                                                    {isHost && (
+                                                        <span className="text-[10px] font-normal text-muted-foreground">· {t('inviteCollaboration.header.host')}</span>
+                                                    )}
+                                                </p>
                                             </TooltipContent>
                                         </Tooltip>
-                                    ))}
-                                    {users.length > 4 && (
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <div className="h-6 w-6 rounded-full ring-2 ring-background bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground cursor-default transition-transform hover:scale-110 hover:z-10">
-                                                    +{users.length - 4}
-                                                </div>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="bottom">
-                                                <p>{t('inviteCollaboration.header.moreCollaborators', { count: users.length - 4 })}</p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    )}
-                                </div>
+                                    );
+                                })}
+                                {users.length > 4 && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="h-7 w-7 rounded-full ring-2 ring-background bg-muted flex items-center justify-center text-[10px] font-semibold text-muted-foreground cursor-default transition-transform hover:scale-110 hover:z-10">
+                                                +{users.length - 4}
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="bottom">
+                                            <p>{t('inviteCollaboration.header.moreCollaborators', { count: users.length - 4 })}</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                )}
                             </div>
                         </TooltipProvider>
                     )}
-                </div>
 
-                {/* Right: Actions */}
-                <div className="flex items-center gap-1.5 flex-1 justify-end">
+                    {/* Divider */}
+                    <div className="h-5 w-px bg-border/70 mx-0.5" />
+
+                    {/* Exit */}
                     <Button
                         variant="ghost"
                         size="sm"
                         onClick={handleExit}
-                        className="h-8 px-2.5 gap-1.5 text-muted-foreground hover:text-foreground"
+                        className="h-8 px-2.5 gap-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60"
                     >
                         <LogOut className="h-4 w-4" />
-                        <span className="hidden sm:inline text-xs">{t('inviteCollaboration.header.exit')}</span>
+                        <span className="hidden sm:inline text-xs font-medium">{t('inviteCollaboration.header.exit')}</span>
                     </Button>
                 </div>
             </header>
