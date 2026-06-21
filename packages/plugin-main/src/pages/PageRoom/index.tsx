@@ -96,11 +96,12 @@ export const PageRoom: React.FC = () => {
                 </Button>
             </div>
         </header>
-        <main className=" w-full flex flex-row justify-center">
+        <main className="w-full flex flex-row">
             {
                 synceStatus && <CollaborationEditor
                     ref={editor}
                     provider={provider}
+                    width="w-full"
                     className="h-[calc(100vh-80px)]"
                     id={params.pageId as string}
                     user={userInfo}

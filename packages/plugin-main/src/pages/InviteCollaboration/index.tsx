@@ -596,7 +596,7 @@ export const InviteCollaboration: React.FC = () => {
                             isEditable={!isReadOnly}
                             toc={false}
                             withTitle={true}
-                            width="w-full max-w-[900px] mx-auto"
+                            width="w-full"
                             toolbar={!isReadOnly}
                             externalExtensions={inviterExtensions}
                         />
