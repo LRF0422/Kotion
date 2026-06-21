@@ -149,22 +149,18 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 	}
 
 	return (
-		<div className="page-header flex flex-col items-start w-full" style={{ overflowX: 'clip' }}>
-			{/* Cover Image Section - Full bleed design */}
+		<div className="page-header flex flex-col w-full">
+			{/* Cover Image Section - spans the full width of the editor pane (Notion-style),
+			    flush with the top. Rendered outside StyledEditor's centred 900px column so
+			    `w-full` resolves to the whole scroll container, not the text column. */}
 			{hasCover && (
 				<div
 					ref={coverRef}
 					className={cn(
-						"relative h-[30vh] min-h-[200px] max-h-[400px] overflow-hidden",
+						"relative w-full h-[30vh] min-h-[200px] max-h-[400px] overflow-hidden",
 						"bg-muted/30",
 						isDragging && "cursor-grabbing select-none"
 					)}
-					style={{
-						width: '100vw',
-						position: 'relative',
-						left: '50%',
-						transform: 'translateX(-50%)',
-					}}
 					onMouseEnter={() => setIsCoverHovered(true)}
 					onMouseLeave={() => setIsCoverHovered(false)}
 				>
@@ -226,10 +222,11 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 				</div>
 			)}
 
-			{/* Icon / Add buttons / metadata area */}
+			{/* Icon / Add buttons / metadata area — kept aligned with the centred
+			    text column below (mirrors StyledEditor: max-w 900px, 40px / 16px padding). */}
 			<div
 				className={cn(
-					"flex flex-col gap-4 w-full",
+					"flex flex-col gap-4 w-full mx-auto max-w-[900px] px-4 md:px-10",
 					hasCover ? "pt-6 pb-1" : "pt-12 pb-1"
 				)}
 				onMouseEnter={() => setIsTitleAreaHovered(true)}

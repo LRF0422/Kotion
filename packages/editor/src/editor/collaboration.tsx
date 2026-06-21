@@ -304,8 +304,10 @@ const CollaborationEditorInner = forwardRef<
             <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} toolbar={false} />
           )}
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
+            {/* Cover/header spans the full pane width; rendered outside the
+                centred StyledEditor column. */}
+            {contentReady && <PageHeader editor={editor} />}
             <StyledEditor>
-              {contentReady && <PageHeader editor={editor} />}
               <EditorContent editor={editor} />
               {contentReady && (extensionWrappers as ExtensionWrapper[])
                 .filter((w) => w.pageFooter)

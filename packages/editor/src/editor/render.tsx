@@ -173,8 +173,10 @@ export const EditorRender = forwardRef<
       <ThemeProvider theme={selectedTheme}>
         <div className={cn("flex flex-col z-30 relative", width, props.className)}>
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
+            {/* Cover/header spans the full pane width; rendered outside the
+                centred StyledEditor column. */}
+            {contentReady && <PageHeader editor={editor} />}
             <StyledEditor>
-              {contentReady && <PageHeader editor={editor} />}
               <EditorContent editor={editor} />
               {!contentReady && (
                 <div className="space-y-3 p-4">

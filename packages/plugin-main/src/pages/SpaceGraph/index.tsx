@@ -32,16 +32,37 @@ const clampZoom = (k: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, k));
 const pointerDist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
     Math.hypot(a.x - b.x, a.y - b.y);
 
-export const SpaceGraph: React.FC = () => {
+export interface SpaceGraphProps {
+    /** Page to focus on. Overrides the `?focus=` URL param (used when embedded in a sheet). */
+    focusId?: string | null;
+    /** Space whose nodes get the "current space" outline. Overrides the route `:id`. */
+    currentSpaceId?: string;
+    /** Called after navigating to a node (e.g. to close the embedding sheet). */
+    onNavigate?: () => void;
+}
+
+export const SpaceGraph: React.FC<SpaceGraphProps> = ({
+    focusId: focusIdProp,
+    currentSpaceId,
+    onNavigate,
+}) => {
     const { t } = useTranslation();
     const params = useParams();
     const [searchParams] = useSearchParams();
     const navigator = useNavigator();
     const { isMobile } = useResponsive();
 
+    // Current space for node highlighting: explicit prop wins over the route param.
+    const currentId = currentSpaceId ?? params.id;
+
     // Optional page to focus on (opened from a page's "···" menu → ?focus=<pageId>).
-    const focusParam = searchParams.get("focus");
+    const focusParam = focusIdProp ?? searchParams.get("focus");
     const [focusId, setFocusId] = useState<string | null>(focusParam);
+
+    // Keep focus in sync when the prop changes (sheet reopened on a different page).
+    useEffect(() => {
+        setFocusId(focusParam);
+    }, [focusParam]);
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -369,8 +390,9 @@ export const SpaceGraph: React.FC = () => {
             if (movedRef.current) return; // was a drag, not a click
             if (!node.spaceId) return;
             navigator.go({ to: `/space-detail/${node.spaceId}/page/edit/${node.id}` });
+            onNavigate?.();
         },
-        [navigator],
+        [navigator, onNavigate],
     );
 
     const normalizedQuery = query.trim().toLowerCase();
@@ -516,7 +538,7 @@ export const SpaceGraph: React.FC = () => {
                         {nodes.map((n) => {
                             if (n.x == null || n.y == null) return null;
                             const r = radiusOf(n);
-                            const isCurrentSpace = n.spaceId === params.id;
+                            const isCurrentSpace = n.spaceId === currentId;
                             const isFocused = n.id === focusId;
                             const dimmed =
                                 (!!hl && hl !== n.id && !neighbors.get(hl)?.has(n.id)) ||
@@ -583,7 +605,7 @@ export const SpaceGraph: React.FC = () => {
                                     className="h-2.5 w-2.5 rounded-full flex-shrink-0"
                                     style={{ background: s.color }}
                                 />
-                                <span className={cn("text-xs truncate", s.id === params.id && "font-semibold")}>
+                                <span className={cn("text-xs truncate", s.id === currentId && "font-semibold")}>
                                     {s.name}
                                 </span>
                             </div>

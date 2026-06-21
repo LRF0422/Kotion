@@ -1,10 +1,11 @@
-import { cn, useIsMobile, Button, Sheet, SheetContent, SheetTrigger, SheetTitle } from '@kn/ui'
-import { List } from '@kn/icon'
+import { useTranslation } from '@kn/common'
+import { cn, useIsMobile, Button, Input, Sheet, SheetContent, SheetTrigger, SheetTitle } from '@kn/ui'
+import { List, Search, X } from '@kn/icon'
 import { Editor } from '@tiptap/core'
 import { TextSelection } from '@tiptap/pm/state'
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import scrollIntoView from 'scroll-into-view-if-needed'
-import { ToC, type TocItem } from './ToC'
+import { ToC, highlightMatch, type TocItem } from './ToC'
 
 /**
  * Notion-style floating outline.
@@ -27,8 +28,18 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
     const [activeId, setActiveId] = useState<string | null>(null)
     const [mobileOpen, setMobileOpen] = useState(false)
     const [tickGap, setTickGap] = useState(8)
+    const [searchQuery, setSearchQuery] = useState('')
     const rafRef = useRef<number>(0)
     const isMobile = useIsMobile()
+    const { t } = useTranslation()
+
+    // Filter the expanded label panel by the search query. The tick strip keeps
+    // showing every heading so it stays a faithful overview of the document.
+    const filteredItems = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase()
+        if (!q) return items
+        return items.filter(item => item.textContent.toLowerCase().includes(q))
+    }, [items, searchQuery])
 
     // Keep the tick strip inside the viewport: compress the gap between ticks as
     // the heading count grows so a long document never overflows off-screen.
@@ -174,30 +185,59 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
             {/* Expanded: heading labels. Revealed on hover of the strip. */}
             <div
                 className={cn(
-                    'absolute right-2 top-1/2 -translate-y-1/2 max-h-[70vh] overflow-y-auto',
+                    'absolute right-2 top-1/2 -translate-y-1/2 flex flex-col max-h-[70vh]',
                     'min-w-[200px] max-w-[300px] rounded-lg border bg-background shadow-lg',
-                    'py-2 opacity-0 translate-x-2 pointer-events-none transition-all duration-200',
+                    'opacity-0 translate-x-2 pointer-events-none transition-all duration-200',
                     'group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto'
                 )}
             >
-                {items.map(item => (
-                    <a
-                        key={item.id}
-                        href={`#${item.id}`}
-                        onClick={e => onItemClick(e, item)}
-                        className={cn(
-                            'block truncate px-3 py-1 text-sm no-underline transition-colors cursor-pointer',
-                            'hover:bg-accent/60 hover:text-primary',
-                            activeId === item.id
-                                ? 'text-primary font-medium'
-                                : 'text-muted-foreground'
-                        )}
-                        style={{ paddingLeft: 12 + (Math.min(item.level, 6) - 1) * 12 }}
-                        title={item.textContent}
-                    >
-                        {item.textContent}
-                    </a>
-                ))}
+                <div className="relative shrink-0 p-2 border-b">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                        type="text"
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        placeholder={t('toc.search.placeholder', 'Search headings...')}
+                        aria-label={t('toc.search.placeholder', 'Search headings...')}
+                        className="h-8 pl-7 pr-7 text-xs"
+                    />
+                    {searchQuery && (
+                        <button
+                            type="button"
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors"
+                            aria-label={t('toc.search.clear', 'Clear search')}
+                        >
+                            <X className="h-3.5 w-3.5" />
+                        </button>
+                    )}
+                </div>
+                <div className="flex-1 overflow-y-auto py-2">
+                    {filteredItems.length === 0 ? (
+                        <div className="flex items-center justify-center py-6 px-3 text-xs text-muted-foreground">
+                            {t('toc.search.noResults', 'No matching headings')}
+                        </div>
+                    ) : (
+                        filteredItems.map(item => (
+                            <a
+                                key={item.id}
+                                href={`#${item.id}`}
+                                onClick={e => onItemClick(e, item)}
+                                className={cn(
+                                    'block truncate px-3 py-1 text-sm no-underline transition-colors cursor-pointer',
+                                    'hover:bg-accent/60 hover:text-primary',
+                                    activeId === item.id
+                                        ? 'text-primary font-medium'
+                                        : 'text-muted-foreground'
+                                )}
+                                style={{ paddingLeft: 12 + (Math.min(item.level, 6) - 1) * 12 }}
+                                title={item.textContent}
+                            >
+                                {searchQuery ? highlightMatch(item.textContent, searchQuery) : item.textContent}
+                            </a>
+                        ))
+                    )}
+                </div>
             </div>
         </div>
     )

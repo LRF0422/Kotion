@@ -7,10 +7,10 @@ import { List, Search, X } from '@kn/icon'
 import scrollIntoView from 'scroll-into-view-if-needed'
 
 // Escape regex special characters for safe use in RegExp construction
-const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+export const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // Highlight the matched substring inside the heading text
-const highlightMatch = (text: string, query: string) => {
+export const highlightMatch = (text: string, query: string) => {
     if (!query) return text
     const parts = text.split(new RegExp(`(${escapeRegExp(query)})`, 'gi'))
     return parts.map((part, i) =>

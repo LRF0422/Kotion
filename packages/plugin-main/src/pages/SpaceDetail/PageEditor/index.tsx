@@ -4,6 +4,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
 import { Separator } from "@kn/ui";
 import { Switch } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@kn/ui";
 import { CollaborationEditor, exportToPDF, useIncrementalSave, TiptapCollabProvider } from "@kn/editor";
 import type { IncrementalPayload } from "@kn/editor";
 import { event, ON_PAGE_REFRESH, ON_FAVORITE_CHANGE } from "../../../event";
@@ -27,6 +28,7 @@ import { toast } from "@kn/ui";
 import { CollaborationInvitationDlg } from "../../components/CollaborationInvitationDlg";
 import { PageBreadcrumb } from "../../../components/PageBreadcrumb";
 import { TemplateCreator } from "../TemplateCreator";
+import { SpaceGraph } from "../../SpaceGraph";
 
 // Status display configuration for save state
 const getStatusDisplay = (saving: boolean, dirty: boolean, error: Error | null, progress?: { done: number; total: number } | null) => {
@@ -179,6 +181,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const spaceService = useService("spaceService")
     const { usePath } = useUploadFile();
     const [editorContentReady, setEditorContentReady] = useState(false)
+    const [graphOpen, setGraphOpen] = useState(false)
 
     // Generate stable user color based on user ID
     const userColor = useMemo(() => {
@@ -633,7 +636,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                 </div>
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                                onClick={() => navigator.go({ to: `/space-detail/${spaceId}/graph?focus=${pageId}` })}
+                                onClick={() => setGraphOpen(true)}
                                 disabled={!pageId || !spaceId}
                             >
                                 <div className="flex flex-row items-center gap-2">
@@ -722,5 +725,24 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 />
             }
         </main>
+        <Sheet open={graphOpen} onOpenChange={setGraphOpen}>
+            <SheetContent
+                side="right"
+                className="w-full sm:max-w-[min(1100px,90vw)] p-0 flex flex-col gap-0"
+            >
+                <SheetHeader className="px-4 py-3 border-b text-left">
+                    <SheetTitle>{t('editor.relationGraph', 'Relation graph')}</SheetTitle>
+                </SheetHeader>
+                <div className="flex-1 min-h-0">
+                    {graphOpen && (
+                        <SpaceGraph
+                            focusId={pageId}
+                            currentSpaceId={spaceId}
+                            onNavigate={() => setGraphOpen(false)}
+                        />
+                    )}
+                </div>
+            </SheetContent>
+        </Sheet>
     </div>)
 }
