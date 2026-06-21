@@ -107,7 +107,7 @@ const CollaborationEditorInner = forwardRef<
   Editor | null,
   React.PropsWithChildren<CollaborationEditorInnerProps>
 >((props, ref) => {
-  const { content, user, provider, pageInfo, toc, width = 'w-[calc(100vw-350px)]', onContentReady, extensions, extensionWrappers } = props
+  const { content, user, provider, pageInfo, toc, width = 'w-[calc(100vw-350px)]', fullWidth, onContentReady, extensions, extensionWrappers } = props
   const blockMenuItems = React.useMemo(() => resolveBlockMenuItems(extensionWrappers as ExtensionWrapper[]), [extensionWrappers])
   const [items, setItems] = useSafeState<any[]>([])
   const [contentReady, setContentReady] = useSafeState(false)
@@ -307,7 +307,7 @@ const CollaborationEditorInner = forwardRef<
             {/* Cover/header spans the full pane width; rendered outside the
                 centred StyledEditor column. */}
             {contentReady && <PageHeader editor={editor} />}
-            <StyledEditor>
+            <StyledEditor $fullWidth={fullWidth}>
               <EditorContent editor={editor} />
               {contentReady && (extensionWrappers as ExtensionWrapper[])
                 .filter((w) => w.pageFooter)

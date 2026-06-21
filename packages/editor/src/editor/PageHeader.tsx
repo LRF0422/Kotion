@@ -223,10 +223,13 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 			)}
 
 			{/* Icon / Add buttons / metadata area — kept aligned with the centred
-			    text column below (mirrors StyledEditor: max-w 900px, 40px / 16px padding). */}
+			    text column below (mirrors StyledEditor: max-w 900px → 100% in full
+			    width, 40px / 16px padding, and the same width transition). */}
 			<div
 				className={cn(
-					"flex flex-col gap-4 w-full mx-auto max-w-[900px] px-4 md:px-10",
+					"flex flex-col gap-4 w-full mx-auto px-4 md:px-10",
+					"transition-[max-width] duration-[280ms] ease-in-out",
+					attrs?.fullWidth ? "max-w-full" : "max-w-[900px]",
 					hasCover ? "pt-6 pb-1" : "pt-12 pb-1"
 				)}
 				onMouseEnter={() => setIsTitleAreaHovered(true)}

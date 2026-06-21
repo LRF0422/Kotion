@@ -38,6 +38,8 @@ export interface EditorRenderProps extends EditorProvider, EditorKit {
   className?: string,
   toolbar?: boolean,
   width?: string,
+  /** 全宽（宽幅）模式：去掉正文的默认阅读宽度限制，铺满编辑区。 */
+  fullWidth?: boolean,
   user?: any
   toc?: boolean
   pageInfo?: PageContextProps
@@ -60,6 +62,7 @@ export const EditorRender = forwardRef<
     withTitle = true,
     onBlur,
     width = 'w-[calc(100vw-350px)]',
+    fullWidth,
     onContentReady,
   } = props;
 
@@ -176,7 +179,7 @@ export const EditorRender = forwardRef<
             {/* Cover/header spans the full pane width; rendered outside the
                 centred StyledEditor column. */}
             {contentReady && <PageHeader editor={editor} />}
-            <StyledEditor>
+            <StyledEditor $fullWidth={fullWidth}>
               <EditorContent editor={editor} />
               {!contentReady && (
                 <div className="space-y-3 p-4">

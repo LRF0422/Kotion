@@ -19,7 +19,7 @@ import {
     Download, FileIcon, FileText,
     Link, LoaderCircle,
     MoreHorizontal, Trash2, Upload, List,
-    CloudOff, UserPlus, Star, Network
+    CloudOff, UserPlus, Star, Network, MoveHorizontal
 } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "@kn/common";
@@ -156,6 +156,8 @@ export interface PageEditorProps {
 export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const { t } = useTranslation()
     const [showToc, setShowToc] = useState(true)
+    // 宽窄模式：持久化在 title 节点的 fullWidth attr 上（随 PATCH 入库、随 Yjs 协作同步）。
+    const [fullWidth, setFullWidth] = useState(false)
     const [page, setPage] = useState<any>()
     const params = useParams()
     // Prefer explicit props (rendered inside the tab container) and fall back to
@@ -366,6 +368,33 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             }
         }
         return null
+    }, [])
+
+    // Seed the wide/narrow toggle from the page's persisted state once the
+    // editor content is ready (the title node attr is the source of truth,
+    // synced from the Y.Doc / backend). Re-runs per page.
+    useEffect(() => {
+        if (!editorContentReady) return
+        const node = editor.current?.state.doc.firstChild
+        if (node && node.type.name === 'title') {
+            setFullWidth(!!node.attrs.fullWidth)
+        }
+    }, [editorContentReady, pageId])
+
+    // Toggle wide/narrow mode. Persists by writing the `fullWidth` attr onto the
+    // title node, which marks it dirty and rides the existing PATCH + Yjs sync
+    // chain (same path as cover/icon). Store `null` for the default narrow mode
+    // to match the attr's default and avoid persisting a redundant `false`.
+    const toggleFullWidth = useCallback((next: boolean) => {
+        setFullWidth(next)
+        const ed = editor.current
+        if (!ed) return
+        const node = ed.state.doc.firstChild
+        if (!node || node.type.name !== 'title') return
+        ed.chain().command(({ tr }) => {
+            tr.setNodeMarkup(0, undefined, { ...node.attrs, fullWidth: next || null })
+            return true
+        }).run()
     }, [])
 
 
@@ -622,6 +651,16 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                 </div>
                                 <Switch checked={showToc} onCheckedChange={setShowToc} />
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                                className="flex flex-row justify-between"
+                                onSelect={(e) => e.preventDefault()}
+                            >
+                                <div className="flex flex-row items-center gap-2">
+                                    <MoveHorizontal className="h-4 w-4" />
+                                    <span>{t('editor.fullWidth', '全宽模式')}</span>
+                                </div>
+                                <Switch checked={fullWidth} onCheckedChange={toggleFullWidth} />
+                            </DropdownMenuItem>
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
@@ -718,6 +757,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                     user={collaborationUser}
                     token={pageId as string}
                     toc={showToc}
+                    fullWidth={fullWidth}
                     withTitle={true}
                     width="w-full"
                     content={parsedContent}

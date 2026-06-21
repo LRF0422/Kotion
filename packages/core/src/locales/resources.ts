@@ -427,6 +427,22 @@ export const resources = {
                 "descPlaceholder": "输入模板描述",
                 "cancel": "取消",
                 "confirm": "确定"
+            },
+            "editor": {
+                "showToc": "显示目录",
+                "fullWidth": "全宽模式",
+                "saveAsTemplate": "保存为模板",
+                "copyLink": "复制链接",
+                "relationGraph": "关系图谱",
+                "moveToTrash": "移至回收站",
+                "import": "导入",
+                "fromMarkdown": "从 Markdown 导入",
+                "export": "导出",
+                "asPdf": "导出为 PDF",
+                "linkCopied": "链接已复制",
+                "linkCopyFailed": "复制链接失败",
+                "movedToTrash": "已移至回收站",
+                "moveToTrashFailed": "移至回收站失败"
             }
         }
     },
@@ -857,6 +873,22 @@ export const resources = {
                 "descPlaceholder": "Enter template description",
                 "cancel": "Cancel",
                 "confirm": "Confirm"
+            },
+            "editor": {
+                "showToc": "Show table of contents",
+                "fullWidth": "Full width",
+                "saveAsTemplate": "Save as template",
+                "copyLink": "Copy link",
+                "relationGraph": "Relation graph",
+                "moveToTrash": "Move to trash",
+                "import": "Import",
+                "fromMarkdown": "From Markdown",
+                "export": "Export",
+                "asPdf": "As PDF",
+                "linkCopied": "Link copied",
+                "linkCopyFailed": "Failed to copy link",
+                "movedToTrash": "Moved to trash",
+                "moveToTrashFailed": "Failed to move to trash"
             }
         }
     }

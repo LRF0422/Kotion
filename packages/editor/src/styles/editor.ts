@@ -2,15 +2,23 @@ import styled from "styled-components";
 
 export const StyledEditor = styled.div.attrs({
   className: 'prose dark:prose-invert prose-img:m-0 max-w-none prose-table:my-0'
-})`
+})<{ $fullWidth?: boolean }>`
   box-sizing: border-box;
   width: 100%;
-  max-width: 900px;
+  /* 全宽模式铺满编辑区，否则保持默认阅读宽度。用 100%（而非 none）才能与
+     900px 之间做平滑过渡。 */
+  max-width: ${props => (props.$fullWidth ? '100%' : '900px')};
+  /* 宽窄切换时让正文列平滑展开/收拢，避免生硬跳变。 */
+  transition: max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   margin-left: auto;
   margin-right: auto;
   padding-left: 40px;
   padding-right: 40px;
-  
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+
   @media (max-width: 768px) {
     padding-left: 16px;
     padding-right: 16px;
