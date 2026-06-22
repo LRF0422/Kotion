@@ -1,14 +1,15 @@
 import React, { useState, useRef } from "react";
 import { Editor } from "@kn/editor";
-import { FieldType, FieldConfig, SelectOption } from "../../types";
+import { FieldType, FieldConfig, SelectOption, Person, Attachment } from "../../types";
 import { Checkbox, Slider, Input, Button, Popover, PopoverTrigger, PopoverContent } from "@kn/ui";
-import { Link as LinkIcon, Mail, Phone, X, Folder, ImageIcon, Plus } from "@kn/icon";
+import { Link as LinkIcon, Mail, Phone, X, Folder, ImageIcon, Plus, Paperclip, FileText, User } from "@kn/icon";
 import { DateTimePicker, Rate } from "@kn/ui";
-import { useTranslation } from "@kn/common";
+import { useTranslation, useSelector, GlobalState } from "@kn/common";
 import { format } from "date-fns";
 import { zhCN, enUS } from "date-fns/locale";
 import { useFileService } from "@kn/common";
 import { getTagStyle } from "../../utils/colors";
+import { generateRecordId } from "../../utils/id";
 
 // 字段渲染器接口
 interface FieldRendererProps {
@@ -528,12 +529,28 @@ export const IDEditor: React.FC<FieldEditorProps> = ({ value }) => {
     return <div className="text-sm font-mono text-gray-500 dark:text-gray-400 p-2">{value}</div>;
 };
 
+// Inline placeholder shown when an image URL fails to load (instead of hiding
+// the cell, which looks like a blank field).
+const IMAGE_FALLBACK = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect fill="%23f0f0f0" width="40" height="40"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23999" font-size="8">?</text></svg>';
+
+// Normalize a stored image value to a list of URL strings. Values may be a
+// plain URL string, an array of strings, or objects ({ url } / { src } / { path })
+// produced by some import / file-manager paths.
+const toImageUrls = (value: any): string[] => {
+    const items = Array.isArray(value) ? value : [value];
+    return items
+        .map((item: any) => {
+            if (!item) return '';
+            if (typeof item === 'string') return item;
+            if (typeof item === 'object') return item.url || item.src || item.path || '';
+            return '';
+        })
+        .filter(Boolean);
+};
+
 // 图片字段
 export const ImageRenderer: React.FC<FieldRendererProps> = ({ value, field }) => {
-    if (!value) return <div className="text-sm text-gray-400 dark:text-gray-500">-</div>;
-
-    // 支持单个图片URL或图片数组
-    const images = Array.isArray(value) ? value : [value];
+    const images = toImageUrls(value);
     const firstImage = images[0];
 
     if (!firstImage) return <div className="text-sm text-gray-400 dark:text-gray-500">-</div>;
@@ -556,9 +573,11 @@ export const ImageRenderer: React.FC<FieldRendererProps> = ({ value, field }) =>
             <img
                 src={firstImage}
                 alt=""
-                className={`${getSizeClass()} object-cover rounded`}
+                className={`${getSizeClass()} object-cover rounded bg-gray-100 dark:bg-gray-700`}
                 onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
+                    const img = e.target as HTMLImageElement;
+                    // Show a placeholder rather than collapsing to a blank cell.
+                    if (img.src !== IMAGE_FALLBACK) img.src = IMAGE_FALLBACK;
                 }}
             />
             {images.length > 1 && (
@@ -591,26 +610,41 @@ export const ImageEditor: React.FC<FieldEditorProps> = ({ value, field, onChange
     };
 
     // 支持单个图片URL或图片数组
-    const images: string[] = Array.isArray(value) ? value : (value ? [value] : []);
+    const valueToImages = (v: any): string[] => (Array.isArray(v) ? v : (v ? [v] : []));
+    const images: string[] = valueToImages(value);
+
+    // Latest committed value, kept in a ref so an async file selection still
+    // persists even if react-data-grid exits edit mode (unmounting this editor)
+    // while the file dialog is open.
+    const workingRef = useRef<any>(value);
+    workingRef.current = value;
+
+    // Persist immediately: update the grid draft (onChange) AND write straight
+    // through to the record (onSave) so the value can't be dropped by the grid's
+    // edit-mode teardown when a file dialog steals focus.
+    const commit = (next: any) => {
+        workingRef.current = next;
+        onChange(next);
+        onSave?.(next);
+    };
 
     const addImage = (url: string) => {
         if (!url.trim()) return;
-
-        // 如果是单图模式，直接替换
         if (!allowMultiple) {
-            onChange(url.trim());
+            commit(url.trim());
             setInputUrl('');
             return;
         }
-
-        const newImages = [...images, url.trim()];
-        onChange(newImages.length === 1 ? newImages[0] : newImages);
+        const cur = valueToImages(workingRef.current);
+        const next = [...cur, url.trim()];
+        commit(next.length === 1 ? next[0] : next);
         setInputUrl('');
     };
 
     const removeImage = (index: number) => {
-        const newImages = images.filter((_, i) => i !== index);
-        onChange(newImages.length === 1 ? newImages[0] : (newImages.length === 0 ? null : newImages));
+        const cur = valueToImages(workingRef.current);
+        const next = cur.filter((_, i) => i !== index);
+        commit(next.length === 1 ? next[0] : (next.length === 0 ? null : next));
     };
 
     // 从文件管理器选择图片
@@ -647,11 +681,12 @@ export const ImageEditor: React.FC<FieldEditorProps> = ({ value, field, onChange
                 if (newImageUrls.length > 0) {
                     if (!allowMultiple) {
                         // 单图模式，只取第一个
-                        onChange(newImageUrls[0]);
+                        commit(newImageUrls[0]);
                     } else {
-                        // 多图模式，合并现有图片和新图片
-                        const allImages = [...images, ...newImageUrls];
-                        onChange(allImages.length === 1 ? allImages[0] : allImages);
+                        // 多图模式，合并现有图片和新图片（基于最新值，避免异步期间读到旧 prop）
+                        const cur = valueToImages(workingRef.current);
+                        const allImages = [...cur, ...newImageUrls];
+                        commit(allImages.length === 1 ? allImages[0] : allImages);
                     }
                 }
             }
@@ -787,13 +822,11 @@ export const ImageEditor: React.FC<FieldEditorProps> = ({ value, field, onChange
         </div>
     );
 
-    // 计算当前编辑后的值
-    const currentValue = images.length === 1 ? images[0] : (images.length === 0 ? null : images);
-
     const handleClose = () => {
+        // Each change already persisted via commit(); closing must NOT re-save a
+        // value recomputed from a possibly-stale prop, which previously could
+        // overwrite the just-added image with an empty value.
         setOpen(false);
-        // 直接通过 onSave 持久化，跳过 DataGrid 的 commit 机制
-        onSave?.(currentValue);
     };
 
     return (
@@ -820,6 +853,235 @@ export const ImageEditor: React.FC<FieldEditorProps> = ({ value, field, onChange
                 onOpenAutoFocus={(e) => e.preventDefault()}
             >
                 {editorContent}
+            </PopoverContent>
+        </Popover>
+    );
+};
+
+// --- 人员字段 (person / created_by / updated_by) ---
+
+const toPersonArray = (value: any): Person[] => {
+    if (!value) return [];
+    return (Array.isArray(value) ? value : [value]).filter(
+        (p: any): p is Person => p && typeof p === 'object' && (p.name || p.id)
+    );
+};
+
+const PersonChip: React.FC<{ person: Person; onRemove?: () => void }> = ({ person, onRemove }) => (
+    <span className="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs">
+        {person.avatar ? (
+            <img src={person.avatar} alt="" className="h-4 w-4 rounded-full object-cover" />
+        ) : (
+            <span className="h-4 w-4 rounded-full bg-blue-500 text-white flex items-center justify-center text-[9px]">
+                {(person.name || '?').slice(0, 1).toUpperCase()}
+            </span>
+        )}
+        <span className="text-gray-700 dark:text-gray-200 truncate max-w-[120px]">{person.name}</span>
+        {onRemove && (
+            <button onClick={onRemove} className="ml-0.5 text-gray-400 hover:text-red-500">
+                <X className="h-3 w-3" />
+            </button>
+        )}
+    </span>
+);
+
+export const PersonRenderer: React.FC<FieldRendererProps> = ({ value }) => {
+    const people = toPersonArray(value);
+    if (people.length === 0) return <div className="text-sm text-gray-400 dark:text-gray-500">-</div>;
+    return (
+        <div className="flex items-center gap-1 flex-wrap">
+            {people.map((p, i) => <PersonChip key={p.id || i} person={p} />)}
+        </div>
+    );
+};
+
+// 只读人员编辑器（用于 created_by / updated_by）
+export const PersonReadonlyEditor: React.FC<FieldEditorProps> = ({ value }) => (
+    <div className="p-2"><PersonRenderer value={value} field={{} as FieldConfig} /></div>
+);
+
+export const PersonEditor: React.FC<FieldEditorProps> = ({ value, field, onChange, onSave }) => {
+    const [open, setOpen] = useState(false);
+    const [name, setName] = useState('');
+    const userInfo = useSelector((s: GlobalState) => s.userInfo);
+    const allowMultiple = field.format === 'multiple';
+    const people = toPersonArray(value);
+
+    const workingRef = useRef<any>(value);
+    workingRef.current = value;
+
+    const commit = (next: Person[]) => {
+        const out: any = allowMultiple ? next : next.slice(-1);
+        const persisted = out.length === 0 ? null : (allowMultiple ? out : out[0]);
+        workingRef.current = persisted;
+        onChange(persisted);
+        onSave?.(persisted);
+    };
+
+    const addPerson = (p: Person) => {
+        if (!allowMultiple) { commit([p]); return; }
+        const cur = toPersonArray(workingRef.current);
+        if (cur.some(x => x.id === p.id)) return;
+        commit([...cur, p]);
+    };
+
+    const addByName = () => {
+        const n = name.trim();
+        if (!n) return;
+        addPerson({ id: generateRecordId(), name: n });
+        setName('');
+    };
+
+    const currentUserPerson: Person | undefined = userInfo && (userInfo.id || userInfo.account || userInfo.email)
+        ? {
+            id: (userInfo.id || userInfo.account || userInfo.email)!,
+            name: userInfo.name || userInfo.account || userInfo.email || 'Me',
+            avatar: userInfo.avatar,
+            email: userInfo.email,
+        }
+        : undefined;
+
+    return (
+        <Popover open={open} onOpenChange={(o) => setOpen(o)}>
+            <PopoverTrigger asChild>
+                <div className="w-full h-full flex items-center cursor-pointer px-1" onMouseDown={(e) => e.preventDefault()}>
+                    {people.length > 0
+                        ? <PersonRenderer value={value} field={field} />
+                        : <span className="text-gray-400 dark:text-gray-500 inline-flex items-center gap-1"><User className="h-4 w-4" /><Plus className="h-3 w-3" /></span>}
+                </div>
+            </PopoverTrigger>
+            <PopoverContent align="start" sideOffset={4} className="bg-white dark:bg-card p-3 w-72" onOpenAutoFocus={(e) => e.preventDefault()}>
+                <div className="space-y-2">
+                    {people.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                            {people.map((p, i) => (
+                                <PersonChip key={p.id || i} person={p} onRemove={() => commit(people.filter((_, idx) => idx !== i))} />
+                            ))}
+                        </div>
+                    )}
+                    {currentUserPerson && !people.some(p => p.id === currentUserPerson.id) && (
+                        <Button size="sm" variant="outline" className="w-full h-8 text-sm justify-start" onClick={() => addPerson(currentUserPerson)}>
+                            <User className="h-4 w-4 mr-1.5" /> {currentUserPerson.name}
+                        </Button>
+                    )}
+                    <div className="flex gap-2">
+                        <Input
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Add a person..."
+                            className="h-8 flex-1 text-sm"
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addByName(); } }}
+                        />
+                        <Button size="sm" variant="outline" className="h-8 px-2" disabled={!name.trim()} onClick={addByName}>
+                            <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                    </div>
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
+};
+
+// --- 附件字段 (attachment) ---
+
+const toAttachmentArray = (value: any): Attachment[] => {
+    if (!value) return [];
+    return (Array.isArray(value) ? value : [value]).filter((a: any): a is Attachment => a && typeof a === 'object' && a.url);
+};
+
+export const AttachmentRenderer: React.FC<FieldRendererProps> = ({ value }) => {
+    const files = toAttachmentArray(value);
+    if (files.length === 0) return <div className="text-sm text-gray-400 dark:text-gray-500">-</div>;
+    return (
+        <div className="flex items-center gap-1 flex-wrap">
+            {files.slice(0, 3).map((f, i) => (
+                <a
+                    key={f.id || i}
+                    href={f.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-xs text-gray-700 dark:text-gray-200 hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <FileText className="h-3 w-3" />
+                    <span className="truncate max-w-[120px]">{f.name || f.url}</span>
+                </a>
+            ))}
+            {files.length > 3 && <span className="text-xs text-gray-500 dark:text-gray-400">+{files.length - 3}</span>}
+        </div>
+    );
+};
+
+export const AttachmentEditor: React.FC<FieldEditorProps> = ({ value, field, onChange, onSave, editor }) => {
+    const [open, setOpen] = useState(false);
+    const fileService = useFileService();
+    const files = toAttachmentArray(value);
+    const allowMultiple = field.format !== 'single';
+
+    // Latest committed value (survives the grid unmounting while the file dialog
+    // is open), persisted via both onChange (grid draft) and onSave (record).
+    const workingRef = useRef<any>(value);
+    workingRef.current = value;
+    const commit = (next: Attachment[]) => {
+        const out = next.length === 0 ? null : next;
+        workingRef.current = out;
+        onChange(out);
+        onSave?.(out);
+    };
+
+    const toAttachment = (file: any): Attachment | null => {
+        const url = file.url || (file.path && fileService.getDownloadUrl(file.path)) || (file.id && fileService.getDownloadUrl(file.id));
+        if (!url) return null;
+        return {
+            id: file.id || generateRecordId(),
+            name: file.name || file.title || String(url).split('/').pop() || 'file',
+            url,
+            type: file.type || file.mimeType || '',
+            size: file.size || 0,
+            uploadTime: new Date().toISOString(),
+        };
+    };
+
+    const handleSelect = async () => {
+        if (!fileService.openFileSelector || !editor) return;
+        const selected = await fileService.openFileSelector(
+            { multiple: allowMultiple, target: 'file', title: 'Select Files' },
+            editor
+        );
+        if (!selected || selected.length === 0) return;
+        const added = selected.map(toAttachment).filter((a): a is Attachment => Boolean(a));
+        const cur = toAttachmentArray(workingRef.current);
+        commit(allowMultiple ? [...cur, ...added] : added.slice(0, 1));
+    };
+
+    return (
+        <Popover open={open} onOpenChange={(o) => setOpen(o)}>
+            <PopoverTrigger asChild>
+                <div className="w-full h-full flex items-center cursor-pointer px-1" onMouseDown={(e) => e.preventDefault()}>
+                    {files.length > 0
+                        ? <AttachmentRenderer value={value} field={field} />
+                        : <span className="text-gray-400 dark:text-gray-500 inline-flex items-center gap-1"><Paperclip className="h-4 w-4" /><Plus className="h-3 w-3" /></span>}
+                </div>
+            </PopoverTrigger>
+            <PopoverContent align="start" sideOffset={4} className="bg-white dark:bg-card p-3 w-72" onOpenAutoFocus={(e) => e.preventDefault()}>
+                <div className="space-y-2">
+                    {files.length > 0 && (
+                        <div className="space-y-1">
+                            {files.map((f, i) => (
+                                <div key={f.id || i} className="flex items-center gap-2 text-sm">
+                                    <FileText className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                                    <span className="flex-1 truncate">{f.name}</span>
+                                    <button onClick={() => commit(files.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-red-500">
+                                        <X className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <Button size="sm" variant="outline" onClick={handleSelect} className="w-full h-8 text-sm">
+                        <Folder className="h-4 w-4 mr-1.5" /> Select Files
+                    </Button>
+                </div>
             </PopoverContent>
         </Popover>
     );
@@ -852,6 +1114,12 @@ export function getFieldRenderer(fieldType: FieldType): React.FC<FieldRendererPr
             return PhoneRenderer;
         case FieldType.IMAGE:
             return ImageRenderer;
+        case FieldType.PERSON:
+        case FieldType.CREATED_BY:
+        case FieldType.UPDATED_BY:
+            return PersonRenderer;
+        case FieldType.ATTACHMENT:
+            return AttachmentRenderer;
         case FieldType.ID:
         case FieldType.AUTO_NUMBER:
             return IDRenderer;
@@ -890,6 +1158,13 @@ export function getFieldEditor(fieldType: FieldType): React.FC<FieldEditorProps>
             return PhoneEditor;
         case FieldType.IMAGE:
             return ImageEditor;
+        case FieldType.PERSON:
+            return PersonEditor;
+        case FieldType.ATTACHMENT:
+            return AttachmentEditor;
+        case FieldType.CREATED_BY:
+        case FieldType.UPDATED_BY:
+            return PersonReadonlyEditor; // Read-only person
         case FieldType.ID:
         case FieldType.AUTO_NUMBER:
         case FieldType.CREATED_TIME:

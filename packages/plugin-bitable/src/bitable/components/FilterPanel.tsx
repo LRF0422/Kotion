@@ -103,7 +103,23 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ view, fields, onUpdate
             </PopoverTrigger>
             <PopoverContent className="w-[calc(100vw-1.5rem)] max-w-96 p-3" align="start">
                 <div className="space-y-2">
-                    <div className="text-sm font-medium">Filter</div>
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="text-sm font-medium">Filter</div>
+                        {filters.length > 1 && (
+                            <Select
+                                value={view.filterLogic || 'and'}
+                                onValueChange={(v: 'and' | 'or') => onUpdateView(view.id, { filterLogic: v })}
+                            >
+                                <SelectTrigger className="h-7 w-36 text-xs">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="and">{t('bitable.filter.matchAll', 'Match all (AND)')}</SelectItem>
+                                    <SelectItem value="or">{t('bitable.filter.matchAny', 'Match any (OR)')}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        )}
+                    </div>
                     {filters.map(filter => {
                         const field = fields.find(f => f.id === filter.fieldId);
                         const operators = field ? getOperatorsForFieldType(field.type) : [];

@@ -23,6 +23,7 @@ import {
 } from "@kn/icon";
 import { FieldConfig, FieldType, SelectOption } from "../../types";
 import { getTagStyle } from "../../utils/colors";
+import { PersonRenderer, PersonEditor, AttachmentRenderer } from "../fields/FieldRenderers";
 import { format } from "date-fns";
 import { zhCN, enUS } from "date-fns/locale";
 
@@ -31,6 +32,8 @@ export const READONLY_TYPES = new Set([
     FieldType.AUTO_NUMBER,
     FieldType.CREATED_TIME,
     FieldType.UPDATED_TIME,
+    FieldType.CREATED_BY,
+    FieldType.UPDATED_BY,
 ]);
 
 // --- Density presets ---
@@ -380,6 +383,18 @@ export const DetailFieldValue: React.FC<{
             break;
         case FieldType.IMAGE:
             content = <DetailImage value={value} />;
+            break;
+        case FieldType.PERSON:
+            content = isReadonly
+                ? <PersonRenderer value={value} field={field} />
+                : <PersonEditor value={value} field={field} onChange={onChange} />;
+            break;
+        case FieldType.CREATED_BY:
+        case FieldType.UPDATED_BY:
+            content = <PersonRenderer value={value} field={field} />;
+            break;
+        case FieldType.ATTACHMENT:
+            content = <AttachmentRenderer value={value} field={field} />;
             break;
         default:
             content = <DetailText value={value} onChange={onChange} editable={!isReadonly} />;

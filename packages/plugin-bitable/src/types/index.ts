@@ -98,6 +98,7 @@ export interface ViewConfig {
     name: string;
     type: ViewType;
     filters?: FilterConfig[];
+    filterLogic?: 'and' | 'or';  // 多条筛选之间的组合方式，缺省 'and'
     sorts?: SortConfig[];
     groups?: GroupConfig[];
     hiddenFields?: string[];
@@ -136,6 +137,13 @@ export interface ViewConfig {
         criticalPathEnabled?: boolean;    // Enable critical path highlighting
         customColorsEnabled?: boolean;    // Enable custom color options
         colorField?: string;              // Field whose value is used as the bar color
+    };
+    // 表单视图特有配置
+    formConfig?: {
+        title?: string;
+        description?: string;
+        submitLabel?: string;
+        fieldIds?: string[];   // 表单包含的字段（缺省取全部可编辑字段）
     };
     // 图表视图特有配置
     chartConfig?: {

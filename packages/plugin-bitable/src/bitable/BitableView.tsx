@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
-import { useTranslation } from "@kn/common";
+import { useTranslation, useSelector, GlobalState } from "@kn/common";
 import { Button, Input } from "@kn/ui";
 import {
     DropdownMenu,
@@ -39,20 +39,25 @@ import {
     Pencil,
     Check,
     X,
-    MoreHorizontal
+    MoreHorizontal,
+    Download,
+    FileText
 } from "@kn/icon";
-import { BitableAttrs, ViewType, ViewConfig, FieldConfig, RecordData, ChartType, FieldType, SelectOption } from "../types";
+import { BitableAttrs, ViewType, ViewConfig, FieldConfig, RecordData, ChartType, FieldType, SelectOption, Person } from "../types";
 import { TableView } from "./views/TableView";
 import { KanbanView } from "./views/KanbanView";
 import { GalleryView } from "./views/GalleryView";
 import { TimelineView } from "./views/TimelineView";
 import { CalendarView } from "./views/CalendarView";
 import { ChartView } from "./views/ChartView";
+import { FormView } from "./views/FormView";
 import { FieldConfigPanel } from "./components/FieldConfigPanel";
 import { ExcelImportDialog } from "./components/ExcelImportDialog";
-import { generateRecordId, generateViewId } from "../utils/id";
+import { generateViewId } from "../utils/id";
+import { createEmptyRecord, updatedByPatch } from "../utils/record";
 import { convertFieldValue, generateSelectOptionsFromData } from "../utils/fieldConversion";
 import { applyFilters, applySorts, applyGroups } from "../utils/dataProcessing";
+import { exportToCSV, exportToExcel } from "../utils/exportData";
 import { SortPanel } from "./components/SortPanel";
 import { FilterPanel } from "./components/FilterPanel";
 import { GroupPanel } from "./components/GroupPanel";
@@ -69,6 +74,23 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     // cascade re-renders through all child views.
     const attrsRef = useRef(attrs);
     attrsRef.current = attrs;
+
+    // Current user, used to auto-fill created_by / updated_by fields.
+    const userInfo = useSelector((s: GlobalState) => s.userInfo);
+    const currentPerson = useMemo<Person | undefined>(() => {
+        if (!userInfo) return undefined;
+        const id = userInfo.id || userInfo.account || userInfo.email;
+        if (!id) return undefined;
+        return {
+            id,
+            name: userInfo.name || userInfo.account || userInfo.email || id,
+            avatar: userInfo.avatar,
+            email: userInfo.email,
+        };
+    }, [userInfo]);
+    // Keep a ref so update callbacks read the latest person without re-creating.
+    const currentPersonRef = useRef(currentPerson);
+    currentPersonRef.current = currentPerson;
 
     const data: RecordData[] = attrs.data || [];
     const [currentViewId, setCurrentViewId] = useState(attrs.currentView);
@@ -145,46 +167,25 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const handleAddRecord = useCallback(() => {
         // Read the latest attrs from the ref to avoid stale closures.
         const { data: currentData = [], fields } = attrsRef.current;
-        const newRecord: RecordData = {
-            id: generateRecordId(),
-            createdTime: new Date().toISOString(),
-            updatedTime: new Date().toISOString(),
-        };
+        const newRecord = createEmptyRecord(fields, currentData, currentPersonRef.current);
+        updateAttributes({ data: [...currentData, newRecord] });
+    }, [updateAttributes]);
 
-        // 为每个字段设置默认值
-        fields.forEach(field => {
-            switch (field.type) {
-                case 'checkbox':
-                    newRecord[field.id] = false;
-                    break;
-                case 'progress':
-                case 'number':
-                case 'rating':
-                    newRecord[field.id] = 0;
-                    break;
-                case 'multi_select':
-                    newRecord[field.id] = [];
-                    break;
-                case 'id':
-                    const existingIds = currentData.map((r: RecordData) => Number(r[field.id]) || 0);
-                    newRecord[field.id] = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
-                    break;
-                default:
-                    newRecord[field.id] = null;
-            }
-        });
-
-        const newData = [...currentData, newRecord];
-        updateAttributes({ data: newData });
+    // 创建带初始值的记录（供表单视图使用）
+    const handleCreateRecord = useCallback((values: Partial<RecordData>) => {
+        const { data: currentData = [], fields } = attrsRef.current;
+        const newRecord = { ...createEmptyRecord(fields, currentData, currentPersonRef.current), ...values };
+        updateAttributes({ data: [...currentData, newRecord] });
     }, [updateAttributes]);
 
     // 更新记录
     const handleUpdateRecord = useCallback((recordId: string, updates: Partial<RecordData>) => {
         // Read the latest attrs from the ref to avoid stale closures.
         const currentData = attrsRef.current.data || [];
+        const byUpdater = updatedByPatch(attrsRef.current.fields, currentPersonRef.current);
         const newData = currentData.map((record: any) =>
             record.id === recordId
-                ? { ...record, ...updates, updatedTime: new Date().toISOString() }
+                ? { ...record, ...updates, ...byUpdater, updatedTime: new Date().toISOString() }
                 : record
         );
         updateAttributes({ data: newData });
@@ -202,10 +203,11 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const handleBatchUpdateRecords = useCallback((updatesMap: Map<string, Partial<RecordData>>) => {
         const currentData = attrsRef.current.data || [];
         const now = new Date().toISOString();
+        const byUpdater = updatedByPatch(attrsRef.current.fields, currentPersonRef.current);
         const newData = currentData.map((record: any) => {
             const recordUpdates = updatesMap.get(record.id);
             if (recordUpdates) {
-                return { ...record, ...recordUpdates, updatedTime: now };
+                return { ...record, ...recordUpdates, ...byUpdater, updatedTime: now };
             }
             return record;
         });
@@ -440,19 +442,29 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const processedData = useMemo(() => {
         let result = data;
         if (currentView?.filters?.length) {
-            result = applyFilters(result, currentView.filters, attrs.fields);
+            result = applyFilters(result, currentView.filters, attrs.fields, currentView.filterLogic);
         }
         if (currentView?.sorts?.length) {
             result = applySorts(result, currentView.sorts, attrs.fields);
         }
         return result;
-    }, [data, currentView?.filters, currentView?.sorts, attrs.fields]);
+    }, [data, currentView?.filters, currentView?.filterLogic, currentView?.sorts, attrs.fields]);
 
     // Apply groups to processed data
     const groupedData = useMemo(() => {
         if (!currentView?.groups?.length) return undefined;
         return applyGroups(processedData, currentView.groups, attrs.fields);
     }, [processedData, currentView?.groups, attrs.fields]);
+
+    // Export the current view's (filtered/sorted) data as CSV or Excel.
+    const handleExport = useCallback((fmt: 'csv' | 'excel') => {
+        const base = (currentView?.name || 'bitable').replace(/[\\/:*?"<>|]/g, '_');
+        if (fmt === 'csv') {
+            exportToCSV(attrs.fields, processedData, currentView, `${base}.csv`);
+        } else {
+            exportToExcel(attrs.fields, processedData, currentView, `${base}.xlsx`);
+        }
+    }, [attrs.fields, processedData, currentView]);
 
     // 渲染视图内容
     const renderViewContent = () => {
@@ -461,6 +473,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             fields: attrs.fields,
             data: processedData,
             onAddRecord: handleAddRecord,
+            onCreateRecord: handleCreateRecord,
             onUpdateRecord: handleUpdateRecord,
             onBatchUpdateRecords: handleBatchUpdateRecords,
             onDeleteRecord: handleDeleteRecord,
@@ -486,6 +499,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 return <CalendarView {...viewProps} editor={editor} />;
             case ViewType.CHART:
                 return <ChartView {...viewProps} />;
+            case ViewType.FORM:
+                return <FormView view={currentView} fields={attrs.fields} editable={editor.isEditable} onCreateRecord={handleCreateRecord} />;
             default:
                 return <TableView {...viewProps} />;
         }
@@ -506,6 +521,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 return <GanttChartSquare className="h-4 w-4" />;
             case ViewType.CHART:
                 return <BarChart3 className="h-4 w-4" />;
+            case ViewType.FORM:
+                return <FileText className="h-4 w-4" />;
             default:
                 return <Table2 className="h-4 w-4" />;
         }
@@ -652,6 +669,10 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                                             <BarChart3 className="h-4 w-4 mr-2" />
                                             {t('bitable.views.chart')}
                                         </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleAddView(ViewType.FORM)}>
+                                            <FileText className="h-4 w-4 mr-2" />
+                                            {t('bitable.views.form', 'Form')}
+                                        </DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             )}
@@ -746,6 +767,27 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                             </Button>
                         )}
 
+                        {/* 导出（移动端并入“更多”菜单） */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="hidden md:inline-flex h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent"
+                                >
+                                    <Download className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleExport('csv')}>
+                                    {t('bitable.actions.exportCsv', 'Export as CSV')}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('excel')}>
+                                    {t('bitable.actions.exportExcel', 'Export as Excel')}
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+
                         {/* New 按钮（移动端仅图标） */}
                         {editor.isEditable && (
                             <DropdownMenu>
@@ -802,6 +844,14 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                                         {t('bitable.actions.importExcel')}
                                     </DropdownMenuItem>
                                 )}
+                                <DropdownMenuItem onClick={() => handleExport('csv')}>
+                                    <Download className="h-4 w-4 mr-2" />
+                                    {t('bitable.actions.exportCsv', 'Export as CSV')}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('excel')}>
+                                    <Download className="h-4 w-4 mr-2" />
+                                    {t('bitable.actions.exportExcel', 'Export as Excel')}
+                                </DropdownMenuItem>
                                 {editor.isEditable && (
                                     <>
                                         <DropdownMenuSeparator />
@@ -914,6 +964,8 @@ function getViewTypeName(type: ViewType, t: (key: string) => string): string {
             return t('bitable.views.timeline');
         case ViewType.CHART:
             return t('bitable.views.chart');
+        case ViewType.FORM:
+            return t('bitable.views.form') || 'Form';
         default:
             return t('bitable.views.default');
     }

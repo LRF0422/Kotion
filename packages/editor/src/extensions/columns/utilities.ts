@@ -208,34 +208,63 @@ export function gotoCol({
 }
 
 /**
- * Create a columns layout from two nodes (for drag-to-columns feature)
+ * Build the (schema-valid) block nodes that should live inside a single column
+ * from arbitrary dragged/target content JSON.
+ *
+ * A `column` only accepts `block+`. Some nodes the drag handle can grab are NOT
+ * in the `block` group (e.g. a bare `listItem` / `taskItem`), so dropping them
+ * straight into a column throws a schema error. We resolve each node and keep
+ * only valid block-group nodes; if any node can't be a column child we bail
+ * (return null) so the caller falls back to a normal drag-drop instead of
+ * silently throwing.
+ */
+function toColumnBlocks(schema: Schema, content: any): Node[] | null {
+  const json = Array.isArray(content) ? content : [content];
+
+  try {
+    const nodes = json.map(c => Node.fromJSON(schema, c));
+
+    // Every node must be a block-group node to be valid `block+` column content.
+    if (nodes.some(n => !n.type.isBlock || n.type.spec.group?.includes('block') === false)) {
+      return null;
+    }
+
+    return nodes;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Create a columns layout from two nodes (for drag-to-columns feature).
+ * Returns null when the content can't form a valid 2-column layout, so the
+ * caller can gracefully fall back to a normal drag-drop.
  * @param schema - Editor schema
  * @param leftContent - Content for the left column (JSON)
  * @param rightContent - Content for the right column (JSON)
- * @param position - 'left' | 'right' - which side the dragged block should go
  */
 export function createColumnsFromNodes(
   schema: Schema,
   leftContent: any,
   rightContent: any
-): Node {
+): Node | null {
   const types = getColumnsNodeTypes(schema);
 
-  // Create left column with content
-  const leftCol = types.column.create(
-    { index: 0, type: 'none', cols: 2 },
-    Array.isArray(leftContent)
-      ? leftContent.map(c => Node.fromJSON(schema, c))
-      : [Node.fromJSON(schema, leftContent)]
-  );
+  if (!types.column || !types.columns) return null;
 
-  // Create right column with content
-  const rightCol = types.column.create(
-    { index: 1, type: 'none', cols: 2 },
-    Array.isArray(rightContent)
-      ? rightContent.map(c => Node.fromJSON(schema, c))
-      : [Node.fromJSON(schema, rightContent)]
-  );
+  const leftBlocks = toColumnBlocks(schema, leftContent);
+  const rightBlocks = toColumnBlocks(schema, rightContent);
 
-  return types.columns.create({ cols: 2 }, [leftCol, rightCol]);
+  if (!leftBlocks || !rightBlocks || !leftBlocks.length || !rightBlocks.length) {
+    return null;
+  }
+
+  try {
+    const leftCol = types.column.createChecked({ index: 0, type: 'none', cols: 2 }, leftBlocks);
+    const rightCol = types.column.createChecked({ index: 1, type: 'none', cols: 2 }, rightBlocks);
+
+    return types.columns.createChecked({ cols: 2 }, [leftCol, rightCol]);
+  } catch {
+    return null;
+  }
 }

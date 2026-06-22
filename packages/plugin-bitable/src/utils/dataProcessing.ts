@@ -6,7 +6,8 @@ import { RecordData, FieldConfig, FilterConfig, SortConfig, GroupConfig, FilterO
 export function applyFilters(
     data: RecordData[],
     filters: FilterConfig[],
-    fields: FieldConfig[]
+    fields: FieldConfig[],
+    logic: 'and' | 'or' = 'and'
 ): RecordData[] {
     if (!filters || filters.length === 0) return data;
 
@@ -17,10 +18,14 @@ export function applyFilters(
     const activeFilters = filters.filter(filter => fieldIds.has(filter.fieldId));
     if (activeFilters.length === 0) return data;
 
+    // `and` → every filter must match; `or` → any filter matching keeps the record.
+    const matches = (record: RecordData, filter: FilterConfig) =>
+        evaluateFilter(record[filter.fieldId], filter.operator, filter.value);
+
     return data.filter(record =>
-        activeFilters.every(filter =>
-            evaluateFilter(record[filter.fieldId], filter.operator, filter.value)
-        )
+        logic === 'or'
+            ? activeFilters.some(filter => matches(record, filter))
+            : activeFilters.every(filter => matches(record, filter))
     );
 }
 

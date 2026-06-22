@@ -57,7 +57,7 @@ export const Dragable = Extension.create<DragableStorage>({
     let dropZoneIndicator: HTMLElement | null = null;
     let dropZoneTarget: { node: Node; pos: number; el: HTMLElement; side: 'left' | 'right' } | null = null;
     let columnDropTimer: any = null;
-    const COLUMN_DROP_DELAY = 800; // ms to wait before showing column indicator
+    const COLUMN_DROP_DELAY = 120; // ms to wait before showing column indicator
 
     const createDragHandleContainer = () => {
       const container = document.createElement('div');
@@ -203,39 +203,19 @@ export const Dragable = Extension.create<DragableStorage>({
       const rootRect = root.getBoundingClientRect();
       const scrollTop = root.scrollTop;
 
+      // A thin vertical insertion bar pinned to the target block's left or right
+      // edge — the bar's width / glow live in CSS. `left` / `top` / `height`
+      // animate via CSS transition, so left↔right switches slide smoothly.
       const top = targetRect.top - rootRect.top + scrollTop;
-      const left = targetRect.left - rootRect.left;
-      const halfWidth = targetRect.width / 2;
-
-      const isAlreadyVisible = dropZoneIndicator.style.display === 'block';
-      const currentSide = dropZoneIndicator.classList.contains('left') ? 'left' : 'right';
-      const isSwitchingSide = isAlreadyVisible && currentSide !== side;
+      const left = side === 'left'
+        ? targetRect.left - rootRect.left - 3
+        : targetRect.right - rootRect.left - 1;
 
       dropZoneIndicator.style.top = `${top}px`;
       dropZoneIndicator.style.height = `${targetRect.height}px`;
-      dropZoneIndicator.style.width = `${halfWidth}px`;
-
-      // Add transition class for smooth side switching
-      if (isSwitchingSide) {
-        dropZoneIndicator.classList.add('switching');
-      }
-
-      if (side === 'left') {
-        dropZoneIndicator.style.left = `${left}px`;
-        dropZoneIndicator.className = `column-drop-indicator left${isSwitchingSide ? ' switching' : ''}`;
-      } else {
-        dropZoneIndicator.style.left = `${left + halfWidth}px`;
-        dropZoneIndicator.className = `column-drop-indicator right${isSwitchingSide ? ' switching' : ''}`;
-      }
-
+      dropZoneIndicator.style.left = `${left}px`;
+      dropZoneIndicator.className = `column-drop-indicator ${side}`;
       dropZoneIndicator.style.display = 'block';
-
-      // Remove switching class after animation
-      if (isSwitchingSide) {
-        setTimeout(() => {
-          dropZoneIndicator?.classList.remove('switching');
-        }, 200);
-      }
     };
 
     const hideDropZoneIndicator = () => {
@@ -320,20 +300,13 @@ export const Dragable = Extension.create<DragableStorage>({
                 return false;
               }
 
-              // Get target DOM element
+              // Get target DOM element (skip text nodes)
               let targetDom: HTMLElement | null = event.target as HTMLElement;
-
-              if (!targetDom || targetDom === view.dom) {
-                hideDropZoneIndicator();
-                return false;
-              }
-
-              // Walk up to find element node (skip text nodes)
               while (targetDom && targetDom.nodeType === 3) {
                 targetDom = targetDom.parentElement;
               }
 
-              if (!targetDom) {
+              if (!targetDom || targetDom === view.dom) {
                 hideDropZoneIndicator();
                 return false;
               }
@@ -352,45 +325,44 @@ export const Dragable = Extension.create<DragableStorage>({
                 }
               }
 
-              // Find the nearest block-level element
-              // Priority: react-renderer > table > common block tags
-              let blockEl: HTMLElement | null = targetDom;
-              while (blockEl && blockEl !== view.dom) {
-                // Check for react-renderer (custom components like tables, images, etc.)
-                if (blockEl.classList?.contains('react-renderer')) {
-                  break;
-                }
-                // Check for table elements
-                if (blockEl.tagName === 'TABLE' || blockEl.closest('table')?.parentElement === blockEl) {
-                  break;
-                }
-                // Check for common block elements
-                if (['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'UL', 'OL', 'LI', 'DIV'].includes(blockEl.tagName)) {
-                  // Make sure it's a direct ProseMirror node, not a wrapper
-                  if (blockEl.parentElement === view.dom ||
-                    blockEl.parentElement?.classList?.contains('react-renderer') ||
-                    blockEl.classList?.contains('node-column')) {
-                    break;
-                  }
-                }
-                blockEl = blockEl.parentElement;
+              // Resolve the block node using the same robust path as the drag
+              // handle (mousemove): climb to the enclosing react-renderer for
+              // custom nodes (image/table/etc.), then defer to
+              // selectAncestorNodeByDom. The previous bespoke tag-whitelist walk
+              // failed for many blocks (code/quote/nested wrappers), so the
+              // indicator never appeared for them.
+              let blockDom: HTMLElement | null = targetDom;
+              let maybeReactRenderer: HTMLElement | null = targetDom;
+              while (maybeReactRenderer && !maybeReactRenderer.classList?.contains('react-renderer')) {
+                maybeReactRenderer = maybeReactRenderer.parentElement;
+              }
+              if (maybeReactRenderer && !maybeReactRenderer.classList?.contains('node-columns')) {
+                blockDom = maybeReactRenderer;
               }
 
-              if (!blockEl || blockEl === view.dom) {
-                hideDropZoneIndicator();
-                return false;
-              }
-
-              // Get the node info from DOM
-              const result = selectAncestorNodeByDom(blockEl, view);
+              const result = selectAncestorNodeByDom(blockDom, view);
               if (!result) {
                 hideDropZoneIndicator();
                 return false;
               }
 
-              // Skip doc and title only
+              // Skip containers that can't become a column
               const skipTypes = ['doc', 'title', 'tableOfContents'];
               if (skipTypes.includes(result.node.type.name)) {
+                hideDropZoneIndicator();
+                return false;
+              }
+
+              // Nodes that aren't valid standalone column content (bare list
+              // items aren't in the `block` group; nesting columns is confusing).
+              // Skip column-split for these on EITHER the dragged or target side,
+              // falling back to normal drag-drop.
+              const noColumnTypes = ['listItem', 'taskItem', 'columns', 'column'];
+              const draggedTypeName = activeSelection.content().content.firstChild?.type.name;
+              if (
+                noColumnTypes.includes(result.node.type.name) ||
+                (draggedTypeName && noColumnTypes.includes(draggedTypeName))
+              ) {
                 hideDropZoneIndicator();
                 return false;
               }
@@ -451,62 +423,58 @@ export const Dragable = Extension.create<DragableStorage>({
 
               // Check if we should create columns
               if (dropZoneTarget && dropZoneIndicator?.style.display === 'block') {
-                event.preventDefault();
-                event.stopPropagation();
+                const draggedNode = activeSelection.content().content.firstChild;
 
-                try {
-                  const draggedSlice = activeSelection.content();
-                  const draggedNode = draggedSlice.content.firstChild;
+                const columnsNode = draggedNode
+                  ? createColumnsFromNodes(
+                      view.state.schema,
+                      dropZoneTarget.side === 'left' ? draggedNode.toJSON() : dropZoneTarget.node.toJSON(),
+                      dropZoneTarget.side === 'left' ? dropZoneTarget.node.toJSON() : draggedNode.toJSON()
+                    )
+                  : null;
 
-                  if (!draggedNode) {
-                    console.warn('No dragged node found');
-                    hideDropZoneIndicator();
-                    return false;
-                  }
+                // Only intercept the drop when we can actually build the layout;
+                // otherwise let it fall through to the normal drag-drop below.
+                if (draggedNode && columnsNode) {
+                  event.preventDefault();
+                  event.stopPropagation();
 
-                  const draggedContent = draggedNode.toJSON();
-                  const targetContent = dropZoneTarget.node.toJSON();
+                  try {
+                    const tr = view.state.tr;
+                    const draggedPos = (activeSelection as NodeSelection).from;
+                    const targetPos = dropZoneTarget.pos;
 
-                  const leftContent = dropZoneTarget.side === 'left' ? draggedContent : targetContent;
-                  const rightContent = dropZoneTarget.side === 'left' ? targetContent : draggedContent;
-
-                  const columnsNode = createColumnsFromNodes(
-                    view.state.schema,
-                    leftContent,
-                    rightContent
-                  );
-
-                  const tr = view.state.tr;
-                  const draggedPos = (activeSelection as NodeSelection).from;
-                  const targetPos = dropZoneTarget.pos;
-
-                  // Delete dragged node first if it's before target
-                  if (draggedPos < targetPos) {
-                    tr.delete(draggedPos, draggedPos + draggedNode.nodeSize);
-                    // Adjust target position after deletion
-                    const adjustedTargetPos = tr.mapping.map(targetPos);
-                    const targetNode = tr.doc.nodeAt(adjustedTargetPos);
-                    if (targetNode) {
-                      tr.replaceWith(adjustedTargetPos, adjustedTargetPos + targetNode.nodeSize, columnsNode);
+                    // Delete dragged node first if it's before target
+                    if (draggedPos < targetPos) {
+                      tr.delete(draggedPos, draggedPos + draggedNode.nodeSize);
+                      // Adjust target position after deletion
+                      const adjustedTargetPos = tr.mapping.map(targetPos);
+                      const targetNode = tr.doc.nodeAt(adjustedTargetPos);
+                      if (targetNode) {
+                        tr.replaceWith(adjustedTargetPos, adjustedTargetPos + targetNode.nodeSize, columnsNode);
+                      }
+                    } else {
+                      // Replace target first, then delete dragged
+                      tr.replaceWith(targetPos, targetPos + dropZoneTarget.node.nodeSize, columnsNode);
+                      const adjustedDraggedPos = tr.mapping.map(draggedPos);
+                      tr.delete(adjustedDraggedPos, adjustedDraggedPos + draggedNode.nodeSize);
                     }
-                  } else {
-                    // Replace target first, then delete dragged
-                    tr.replaceWith(targetPos, targetPos + dropZoneTarget.node.nodeSize, columnsNode);
-                    const adjustedDraggedPos = tr.mapping.map(draggedPos);
-                    tr.delete(adjustedDraggedPos, adjustedDraggedPos + draggedNode.nodeSize);
+
+                    view.dispatch(tr);
+                  } catch (err) {
+                    console.error('Error creating columns:', err);
                   }
 
-                  view.dispatch(tr);
-                } catch (err) {
-                  console.error('Error creating columns:', err);
+                  hideDropZoneIndicator();
+                  activeSelection = null;
+                  activeNode = null;
+                  dragging = false;
+
+                  return true;
                 }
 
+                // Couldn't build columns — clear the indicator and continue.
                 hideDropZoneIndicator();
-                activeSelection = null;
-                activeNode = null;
-                dragging = false;
-
-                return true;
               }
 
               const eventPos = view.posAtCoords({

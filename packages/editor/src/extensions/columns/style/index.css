@@ -77,115 +77,37 @@ body.is-resizing-column * {
     cursor: col-resize !important;
 }
 
-/* Column drop zone indicator for drag-to-columns */
+/* Drag-to-columns drop indicator — a crisp vertical insertion bar pinned to the
+   target block's left/right edge. left/top/height animate so left↔right
+   switches glide. Width and glow are defined here; the JS only sets position. */
 .column-drop-indicator {
     position: absolute;
     pointer-events: none;
     z-index: 100;
     display: none;
-    border-radius: 8px;
-    overflow: hidden;
-    transition: left 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-        border-radius 0.2s ease;
+    width: 4px;
+    border-radius: 4px;
+    background: hsl(var(--primary));
+    box-shadow: 0 0 0 1px hsl(var(--background)),
+        0 0 8px 1px hsl(var(--primary) / 0.5);
+    transition: left 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+        top 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+        height 0.12s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Switching side animation */
-.column-drop-indicator.switching {
-    transition: left 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-        border-radius 0.2s ease;
-}
-
-.column-drop-indicator.switching::before {
-    animation: none;
-}
-
-.column-drop-indicator.switching::after {
-    animation: none;
-}
-
-/* Show state with animation */
+/* Subtle entrance when the bar first appears */
 .column-drop-indicator[style*="display: block"] {
-    animation: dropIndicatorFadeIn 0.2s ease-out forwards;
+    animation: dropBarIn 0.12s ease-out;
 }
 
-@keyframes dropIndicatorFadeIn {
+@keyframes dropBarIn {
     from {
         opacity: 0;
-        transform: scale(0.98);
+        transform: scaleY(0.85);
     }
 
     to {
         opacity: 1;
-        transform: scale(1);
+        transform: scaleY(1);
     }
-}
-
-/* Inner glow effect */
-.column-drop-indicator::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg,
-            hsl(var(--primary) / 0.08) 0%,
-            hsl(var(--primary) / 0.15) 50%,
-            hsl(var(--primary) / 0.08) 100%);
-    border-radius: inherit;
-}
-
-/* Border effect */
-.column-drop-indicator::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border: 2px dashed hsl(var(--primary) / 0.4);
-    border-radius: inherit;
-    animation: dropIndicatorPulse 1.5s ease-in-out infinite;
-}
-
-@keyframes dropIndicatorPulse {
-
-    0%,
-    100% {
-        border-color: hsl(var(--primary) / 0.3);
-    }
-
-    50% {
-        border-color: hsl(var(--primary) / 0.6);
-    }
-}
-
-/* Left indicator */
-.column-drop-indicator.left {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-}
-
-.column-drop-indicator.left::before {
-    background: linear-gradient(90deg,
-            hsl(var(--primary) / 0.15) 0%,
-            hsl(var(--primary) / 0.05) 100%);
-}
-
-.column-drop-indicator.left::after {
-    border-right: none;
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-}
-
-/* Right indicator */
-.column-drop-indicator.right {
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-}
-
-.column-drop-indicator.right::before {
-    background: linear-gradient(270deg,
-            hsl(var(--primary) / 0.15) 0%,
-            hsl(var(--primary) / 0.05) 100%);
-}
-
-.column-drop-indicator.right::after {
-    border-left: none;
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
 }

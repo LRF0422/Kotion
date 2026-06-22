@@ -131,23 +131,36 @@ interface FieldConfigPanelProps {
 }
 
 // Field type options - using translation keys
-const getFieldTypeOptions = (t: (key: string) => string) => [
-    { value: FieldType.TEXT, label: t('bitable.fieldTypes.text') },
-    { value: FieldType.NUMBER, label: t('bitable.fieldTypes.number') },
-    { value: FieldType.SELECT, label: t('bitable.fieldTypes.select') },
-    { value: FieldType.MULTI_SELECT, label: t('bitable.fieldTypes.multiSelect') },
-    { value: FieldType.DATE, label: t('bitable.fieldTypes.date') },
-    { value: FieldType.CHECKBOX, label: t('bitable.fieldTypes.checkbox') },
-    { value: FieldType.RATING, label: t('bitable.fieldTypes.rating') },
-    { value: FieldType.PROGRESS, label: t('bitable.fieldTypes.progress') },
-    { value: FieldType.IMAGE, label: t('bitable.fieldTypes.image') },
-    { value: FieldType.URL, label: t('bitable.fieldTypes.url') },
-    { value: FieldType.EMAIL, label: t('bitable.fieldTypes.email') },
-    { value: FieldType.PHONE, label: t('bitable.fieldTypes.phone') },
-    { value: FieldType.CREATED_TIME, label: t('bitable.fieldTypes.createdTime') },
-    { value: FieldType.UPDATED_TIME, label: t('bitable.fieldTypes.updatedTime') },
-    { value: FieldType.AUTO_NUMBER, label: t('bitable.fieldTypes.autoNumber') },
-];
+const getFieldTypeOptions = (t: (key: string) => string) => {
+    // Fall back to a readable label when a translation key is missing (t returns
+    // the key itself on miss). Used for newly-added types whose keys may not be
+    // present in every locale yet.
+    const tf = (key: string, fallback: string) => {
+        const v = t(key);
+        return v === key ? fallback : v;
+    };
+    return [
+        { value: FieldType.TEXT, label: t('bitable.fieldTypes.text') },
+        { value: FieldType.NUMBER, label: t('bitable.fieldTypes.number') },
+        { value: FieldType.SELECT, label: t('bitable.fieldTypes.select') },
+        { value: FieldType.MULTI_SELECT, label: t('bitable.fieldTypes.multiSelect') },
+        { value: FieldType.DATE, label: t('bitable.fieldTypes.date') },
+        { value: FieldType.CHECKBOX, label: t('bitable.fieldTypes.checkbox') },
+        { value: FieldType.RATING, label: t('bitable.fieldTypes.rating') },
+        { value: FieldType.PROGRESS, label: t('bitable.fieldTypes.progress') },
+        { value: FieldType.IMAGE, label: t('bitable.fieldTypes.image') },
+        { value: FieldType.URL, label: t('bitable.fieldTypes.url') },
+        { value: FieldType.EMAIL, label: t('bitable.fieldTypes.email') },
+        { value: FieldType.PHONE, label: t('bitable.fieldTypes.phone') },
+        { value: FieldType.PERSON, label: tf('bitable.fieldTypes.person', 'Person') },
+        { value: FieldType.ATTACHMENT, label: tf('bitable.fieldTypes.attachment', 'Attachment') },
+        { value: FieldType.CREATED_TIME, label: t('bitable.fieldTypes.createdTime') },
+        { value: FieldType.UPDATED_TIME, label: t('bitable.fieldTypes.updatedTime') },
+        { value: FieldType.CREATED_BY, label: tf('bitable.fieldTypes.createdBy', 'Created by') },
+        { value: FieldType.UPDATED_BY, label: tf('bitable.fieldTypes.updatedBy', 'Updated by') },
+        { value: FieldType.AUTO_NUMBER, label: t('bitable.fieldTypes.autoNumber') },
+    ];
+};
 
 // Single field configuration popover component
 interface FieldConfigPopoverProps {
@@ -417,6 +430,36 @@ const FieldConfigPopover: React.FC<FieldConfigPopoverProps> = ({
                                 </SelectContent>
                             </Select>
                         </div>
+                    </div>
+                );
+            case FieldType.PERSON:
+                return (
+                    <div>
+                        <Label className="text-xs">{t('bitable.formats.selectionCount', 'Selection')}</Label>
+                        <Select value={localFormat || "single"} onValueChange={setLocalFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="single">{t('bitable.formats.singlePerson', 'Single person')}</SelectItem>
+                                <SelectItem value="multiple">{t('bitable.formats.multiplePeople', 'Multiple people')}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            case FieldType.ATTACHMENT:
+                return (
+                    <div>
+                        <Label className="text-xs">{t('bitable.formats.selectionCount', 'Selection')}</Label>
+                        <Select value={localFormat || "multiple"} onValueChange={setLocalFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="single">{t('bitable.formats.singleFile', 'Single file')}</SelectItem>
+                                <SelectItem value="multiple">{t('bitable.formats.multipleFiles', 'Multiple files')}</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                 );
             default:
@@ -704,6 +747,10 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                 return "sameTab";
             case FieldType.IMAGE:
                 return "multiple:medium";
+            case FieldType.PERSON:
+                return "single";
+            case FieldType.ATTACHMENT:
+                return "multiple";
             default:
                 return "";
         }
@@ -955,6 +1002,36 @@ export const FieldConfigPanel: React.FC<FieldConfigPanelProps> = ({
                                 </SelectContent>
                             </Select>
                         </div>
+                    </div>
+                );
+            case FieldType.PERSON:
+                return (
+                    <div>
+                        <Label className="text-xs">{t('bitable.formats.selectionCount', 'Selection')}</Label>
+                        <Select value={newFieldFormat || "single"} onValueChange={setNewFieldFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="single">{t('bitable.formats.singlePerson', 'Single person')}</SelectItem>
+                                <SelectItem value="multiple">{t('bitable.formats.multiplePeople', 'Multiple people')}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                );
+            case FieldType.ATTACHMENT:
+                return (
+                    <div>
+                        <Label className="text-xs">{t('bitable.formats.selectionCount', 'Selection')}</Label>
+                        <Select value={newFieldFormat || "multiple"} onValueChange={setNewFieldFormat}>
+                            <SelectTrigger className="h-8 mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="single">{t('bitable.formats.singleFile', 'Single file')}</SelectItem>
+                                <SelectItem value="multiple">{t('bitable.formats.multipleFiles', 'Multiple files')}</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                 );
             default:
