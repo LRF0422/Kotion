@@ -122,13 +122,20 @@ export const Dragable = Extension.create<DragableStorage>({
 
       if (!root) return;
 
-      const targetNodeRect = referenceRectDOM.getBoundingClientRect();
+      // For a details block the resolved reference can be the inner summary/content,
+      // which flexbox insets to the right of the leading ▶ toggle. Anchoring the
+      // handle to that inset point drops it on top of the toggle (+ ▶ ⠿ ● overlap).
+      // Anchor to the outer `.details` box so the handle stays in the left gutter.
+      const detailsBox = referenceRectDOM.closest?.('.details') as HTMLElement | null;
+      const anchorDOM = detailsBox ?? referenceRectDOM;
+
+      const targetNodeRect = anchorDOM.getBoundingClientRect();
       const rootRect = root.getBoundingClientRect();
 
       let offsetX = -5;
 
-      if (referenceRectDOM.tagName === 'LI') {
-        offsetX = referenceRectDOM.getAttribute('data-checked') ? -3 : -16;
+      if (anchorDOM.tagName === 'LI') {
+        offsetX = anchorDOM.getAttribute('data-checked') ? -3 : -16;
       }
 
       const containerWidth = containerDOM.offsetWidth || 38; // 18px + 2px gap + 18px
