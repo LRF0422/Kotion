@@ -1,12 +1,51 @@
 .search-result {
     background: rgba(255, 213, 0, 0.35);
     border-radius: 2px;
+    transition: background 0.15s ease;
 }
 
 .search-result-current {
     background: rgba(255, 140, 0, 0.6);
     outline: 1px solid rgb(255, 140, 0);
     border-radius: 2px;
+    animation: search-current-pulse 0.3s ease;
+}
+
+/* Subtle pop when the active match changes during navigation. */
+@keyframes search-current-pulse {
+    0% {
+        background: rgba(255, 140, 0, 0.9);
+    }
+    100% {
+        background: rgba(255, 140, 0, 0.6);
+    }
+}
+
+/* Panel entrance: fade + slide in from the top-right. */
+@keyframes search-panel-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.search-panel {
+    animation: search-panel-in 0.18s ease-out;
+    transform-origin: top right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .search-panel,
+    .search-result-current {
+        animation: none;
+    }
+    .search-result {
+        transition: none;
+    }
 }
 
 .dark .search-result {

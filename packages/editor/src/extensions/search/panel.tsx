@@ -196,6 +196,7 @@ export const SearchPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
     return (
         <div
             className={cn(
+                "search-panel",
                 "fixed top-16 right-4 z-50 w-[360px]",
                 "bg-background border rounded-md shadow-lg p-2",
                 "flex flex-col gap-2"
