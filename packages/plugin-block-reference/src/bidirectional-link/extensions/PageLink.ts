@@ -73,7 +73,17 @@ export const PageLink = Mark.create({
                         const pageId = el?.getAttribute('data-page-id');
                         if (!pageId) return false;
                         e.preventDefault();
-                        event.emit(PAGE_LINK_CLICK as any, { pageId });
+                        // Don't navigate on click: hand the click target's position and
+                        // title to PageFooter, which shows a tooltip the user must click
+                        // to actually jump (avoids accidental navigation while editing).
+                        const rect = el!.getBoundingClientRect();
+                        const title = (el?.textContent || '').replace(/^\[\[/, '').replace(/\]\]$/, '');
+                        event.emit(PAGE_LINK_CLICK as any, {
+                            pageId,
+                            title,
+                            left: rect.left,
+                            top: rect.bottom + 4,
+                        });
                         return true;
                     },
                 },

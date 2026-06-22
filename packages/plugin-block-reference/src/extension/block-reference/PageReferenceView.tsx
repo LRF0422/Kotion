@@ -5,6 +5,7 @@ import { event, useParams } from "@kn/common";
 import { FileText, Loader2 } from "@kn/icon";
 import { cn, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
 import { usePageInfo, useSpaceService } from "../../hooks";
+import { useI18n } from "../../i18n/use-i18n";
 import type { PageReferenceAttrs } from "../../types";
 
 /**
@@ -26,7 +27,9 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
     const [icon, setIcon] = useState<string | null>(null);
     const navigator = useNavigator();
     const [creating, { toggle: toggleCreating }] = useToggle(false);
+    const [tooltipOpen, setTooltipOpen] = useState(false);
     const spaceService = useSpaceService();
+    const { t } = useI18n();
 
     // Create new page if pageId is null
     useEffect(() => {
@@ -38,7 +41,7 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
                 const res = await spaceService.createPage({
                     spaceId: params.id!,
                     parentId: type === "CHILD" ? pageInfo.id : pageInfo.parentId,
-                    title: '未命名'
+                    title: t('pageReference.untitled')
                 });
 
                 props.updateAttributes({
@@ -46,17 +49,17 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
                     spaceId: pageInfo.spaceId
                 });
                 event.emit("ON_PAGE_REFRESH");
-                setTitle("未命名");
+                setTitle(t('pageReference.untitled'));
                 setIcon(res.icon?.icon || null);
             } catch {
-                setTitle("创建失败");
+                setTitle(t('pageReference.createFailed'));
             } finally {
                 toggleCreating();
             }
         };
 
         createNewPage();
-    }, [pageId, params.id, type, pageInfo, spaceService, props, toggleCreating]);
+    }, [pageId, params.id, type, pageInfo, spaceService, props, toggleCreating, t]);
 
     // Fetch existing page info
     const { pageInfo: fetchedPageInfo, loading: fetchLoading, error } = usePageInfo(pageId);
@@ -66,10 +69,10 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
             setTitle(fetchedPageInfo.title);
             setIcon(fetchedPageInfo.icon?.icon || null);
         } else if (error) {
-            setTitle("页面已删除");
+            setTitle(t('pageReference.deleted'));
             setIcon(null);
         }
-    }, [fetchedPageInfo, error]);
+    }, [fetchedPageInfo, error, t]);
 
     // Backfill spaceId for legacy references created before cross-space support:
     // once we resolve the page's real space, persist it onto the node so future
@@ -80,7 +83,18 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
         }
     }, [attrsSpaceId, fetchedPageInfo?.spaceId, props]);
 
-    const handleClick = useCallback((e: React.MouseEvent) => {
+    // Clicking the reference no longer navigates immediately; it just opens the
+    // tooltip. Navigation happens only when the user clicks the tooltip's jump
+    // action, preventing accidental jumps while editing.
+    const handleRefClick = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (pageId) {
+            setTooltipOpen(true);
+        }
+    }, [pageId]);
+
+    const handleJump = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
         if (pageId) {
@@ -90,12 +104,13 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
             navigator.go({
                 to: `/space-detail/${targetSpaceId}/page/edit/${pageId}`
             });
+            setTooltipOpen(false);
         }
     }, [pageId, attrsSpaceId, fetchedPageInfo?.spaceId, pageInfo.spaceId, navigator]);
 
     const isLoading = creating || fetchLoading;
     const isDeleted = !isLoading && error;
-    const displayTitle = title || '未命名';
+    const displayTitle = title || t('pageReference.untitled');
 
     // Render icon - use page's own icon or fallback to FileText
     const renderIcon = useMemo(() => {
@@ -128,8 +143,8 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
     }, [isLoading, isDeleted, displayTitle, renderIcon]);
 
     return (
-        <TooltipProvider>
-            <Tooltip>
+        <TooltipProvider delayDuration={150}>
+            <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
                 <TooltipTrigger asChild>
                     <NodeViewWrapper
                         as="span"
@@ -139,22 +154,33 @@ export const PageReferenceView: React.FC<NodeViewProps> = React.memo((props) => 
                             "hover:bg-muted cursor-pointer",
                             isDeleted && "opacity-60"
                         )}
-                        onClick={handleClick}
+                        onClick={handleRefClick}
                         role="link"
-                        aria-label={`页面引用: ${displayTitle}`}
+                        aria-label={`${t('pageReference.referenceLabel')}: ${displayTitle}`}
                         tabIndex={0}
                         onKeyDown={(e: React.KeyboardEvent) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();
-                                handleClick(e as unknown as React.MouseEvent);
+                                handleJump(e as unknown as React.MouseEvent);
                             }
                         }}
                     >
                         {content}
                     </NodeViewWrapper>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                    {isDeleted ? '页面已删除' : `点击跳转到: ${displayTitle}`}
+                <TooltipContent side="top" className="p-0">
+                    {isDeleted ? (
+                        <span className="block px-3 py-1.5 text-xs">{t('pageReference.deleted')}</span>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={handleJump}
+                            className="flex items-center gap-1 px-3 py-1.5 text-xs hover:underline cursor-pointer"
+                        >
+                            <FileText className="h-3 w-3 flex-shrink-0" />
+                            {t('pageReference.jumpTo')}: {displayTitle}
+                        </button>
+                    )}
                 </TooltipContent>
             </Tooltip>
         </TooltipProvider>

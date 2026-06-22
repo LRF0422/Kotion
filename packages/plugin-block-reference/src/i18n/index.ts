@@ -20,6 +20,9 @@ export const translations = {
             deleted: 'This page has been deleted',
             createFailed: 'Failed to create page',
             loading: 'Loading...',
+            jumpTo: 'Jump to',
+            referenceLabel: 'Page reference',
+            page: 'Page',
         },
         blockSelector: {
             title: 'Select Block',
@@ -60,6 +63,9 @@ export const translations = {
             deleted: '该页面已被删除',
             createFailed: '创建页面失败',
             loading: '加载中...',
+            jumpTo: '跳转到',
+            referenceLabel: '页面引用',
+            page: '页面',
         },
         blockSelector: {
             title: '选择块',
