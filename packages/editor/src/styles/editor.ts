@@ -337,6 +337,11 @@ export const StyledEditor = styled.div.attrs({
       height: 12px;
       font-size: 0;
       z-index: 20;
+      cursor: grab;
+
+      &:active {
+        cursor: grabbing;
+      }
 
       > span {
         position: absolute;
@@ -423,6 +428,11 @@ export const StyledEditor = styled.div.attrs({
       height: 100%;
       font-size: 0;
       z-index: 20;
+      cursor: grab;
+
+      &:active {
+        cursor: grabbing;
+      }
 
       > span {
         position: absolute;

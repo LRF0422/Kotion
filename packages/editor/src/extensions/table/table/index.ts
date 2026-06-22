@@ -4,6 +4,8 @@ import { TableCellMenuPlugin } from "../cell-menu-plugin";
 import { TableView } from "./table-view";
 import { Editor } from "@tiptap/core";
 import { triggerExcelImport } from "../utilities/excel-import";
+import { tableReorderCommands } from "../commands/table-commands";
+import { tableReorderPlugin } from "../reorder-plugin";
 
 
 export const Table = BuiltInTable.extend({
@@ -23,13 +25,22 @@ export const Table = BuiltInTable.extend({
     };
   },
 
+  addCommands() {
+    return {
+      // @ts-ignore
+      ...this.parent?.(),
+      ...tableReorderCommands
+    };
+  },
+
   addProseMirrorPlugins() {
     const { isEditable } = this.editor;
 
     return [
       // @ts-ignore
       ...this.parent?.(),
-      TableCellMenuPlugin(this.editor)
+      TableCellMenuPlugin(this.editor),
+      tableReorderPlugin(this.editor)
     ];
   }
 });

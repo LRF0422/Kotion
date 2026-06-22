@@ -78,6 +78,18 @@
   background-color: var(--bg-color-dark) !important;
 }
 
+/* Theme-adaptive table cell text colors */
+.dark .theme-adaptive-cell {
+  color: var(--text-color-dark, inherit) !important;
+}
+
+/* Drop indicator shown while dragging a table row/column to reorder */
+.table-drop-indicator {
+  background-color: hsl(var(--primary));
+  border-radius: 1px;
+  box-shadow: 0 0 4px hsl(var(--primary) / 0.6);
+}
+
 /* TOC highlight flash animation */
 @keyframes toc-flash {
   0% {

@@ -15,6 +15,7 @@ export * from "./table-row";
 export * from "./table-kit";
 export * from "./menu";
 export * from "./utilities/excel-import";
+export * from "./utilities/export";
 
 
 export const TableExtension: ExtensionWrapper = {

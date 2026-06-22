@@ -10,8 +10,9 @@ import { copyNode, deleteNodeInner } from "../../../utilities";
 import { triggerExcelImport } from "../utilities/excel-import";
 
 import { Table } from "../table";
-import { IconAddColumnAfter, IconAddColumnBefore, IconAddRowAfter, IconAddRowBefore, IconCopy, IconDeleteColumn, IconDeleteRow, IconDeleteTable, IconMergeCell, IconSplitCell, IconTableHeaderCell, IconTableHeaderColumn, IconTableHeaderRow, IconImport } from "../../../icons";
-import { Toggle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, ColorPicker, useTheme, createThemeAwareColor, getColorForTheme, Separator } from "@kn/ui";
+import { IconAddColumnAfter, IconAddColumnBefore, IconAddRowAfter, IconAddRowBefore, IconCopy, IconDeleteColumn, IconDeleteRow, IconDeleteTable, IconMergeCell, IconSplitCell, IconTableHeaderCell, IconTableHeaderColumn, IconTableHeaderRow, IconImport, IconAlignLeft, IconAlignCenter, IconAlignRight, IconFontColor, IconMore } from "../../../icons";
+import { Toggle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, ColorPicker, useTheme, createThemeAwareColor, getColorForTheme, Separator, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel } from "@kn/ui";
+import { exportTableToCSV, exportTableToExcel, copyTableAsMarkdown } from "../utilities/export";
 
 export const TableBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ editor }) => {
   const { theme } = useTheme();
@@ -83,24 +84,42 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ edito
     return editor.can().splitCell();
   }, [editor]);
 
-  // Get current cell background color
-  const currentCellBackgroundColor = useMemo(() => {
+  // Current cell node (table cell or header) at the selection
+  const currentCellNode = useMemo(() => {
     const { selection } = editor.state;
     const cellNode = editor.state.doc.nodeAt(selection.from - 1);
     if (cellNode && (cellNode.type.name === 'tableCell' || cellNode.type.name === 'tableHeader')) {
-      const bgColor = cellNode.attrs.backgroundColor;
-      if (!bgColor) return '';
-
-      // If it's a theme-aware color object, get the color for current theme
-      if (typeof bgColor === 'object' && bgColor.base) {
-        return getColorForTheme(bgColor, theme);
-      }
-
-      // Legacy format - return as is
-      return bgColor;
+      return cellNode;
     }
-    return '';
-  }, [editor.state, theme]);
+    return null;
+  }, [editor.state]);
+
+  // Resolve a stored color attribute (theme-aware object or legacy string) to a display string
+  const resolveColor = useCallback((value: any): string => {
+    if (!value) return '';
+    if (typeof value === 'object' && value.base) {
+      return getColorForTheme(value, theme);
+    }
+    return value;
+  }, [theme]);
+
+  // Get current cell background color
+  const currentCellBackgroundColor = useMemo(
+    () => resolveColor(currentCellNode?.attrs.backgroundColor),
+    [currentCellNode, resolveColor]
+  );
+
+  // Get current cell text color
+  const currentCellColor = useMemo(
+    () => resolveColor(currentCellNode?.attrs.color),
+    [currentCellNode, resolveColor]
+  );
+
+  // Get current cell text alignment
+  const currentTextAlign = useMemo(
+    () => (currentCellNode?.attrs.textAlign as string) || 'left',
+    [currentCellNode]
+  );
 
   // Cell background color handlers
   const handleCellBackgroundColor = useCallback((color: string) => {
@@ -112,6 +131,37 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ edito
   const handleUnsetCellBackgroundColor = useCallback(() => {
     editor.chain().focus().setCellAttribute('backgroundColor', null).run();
   }, [editor]);
+
+  // Cell text color handlers
+  const handleCellColor = useCallback((color: string) => {
+    const themeAwareColor = createThemeAwareColor(color);
+    editor.chain().focus().setCellAttribute('color', themeAwareColor).run();
+  }, [editor]);
+
+  const handleUnsetCellColor = useCallback(() => {
+    editor.chain().focus().setCellAttribute('color', null).run();
+  }, [editor]);
+
+  // Text alignment handler - toggles back to default when re-selecting the active alignment
+  const setTextAlign = useCallback((align: 'left' | 'center' | 'right') => {
+    const next = currentTextAlign === align ? null : align;
+    editor.chain().focus().setCellAttribute('textAlign', next).run();
+  }, [editor, currentTextAlign]);
+
+  // "More" dropdown actions
+  const moreActions = useMemo(() => ({
+    moveRowUp: () => editor.chain().focus().moveTableRow('up').run(),
+    moveRowDown: () => editor.chain().focus().moveTableRow('down').run(),
+    moveColLeft: () => editor.chain().focus().moveTableColumn('left').run(),
+    moveColRight: () => editor.chain().focus().moveTableColumn('right').run(),
+    duplicateRow: () => editor.chain().focus().duplicateTableRow().run(),
+    duplicateColumn: () => editor.chain().focus().duplicateTableColumn().run(),
+    sortAsc: () => editor.chain().focus().sortTableByColumn('asc').run(),
+    sortDesc: () => editor.chain().focus().sortTableByColumn('desc').run(),
+    exportCsv: () => exportTableToCSV(editor),
+    exportExcel: () => exportTableToExcel(editor),
+    copyMarkdown: () => { void copyTableAsMarkdown(editor); },
+  }), [editor]);
 
   return (
     <BubbleMenu
@@ -257,6 +307,50 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ edito
 
             <Separator orientation="vertical" className="h-5 mx-0.5" />
 
+            {/* Text Alignment */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Toggle size="sm" pressed={currentTextAlign === 'left'} onClick={() => setTextAlign('left')} aria-label="Align left">
+                  <IconAlignLeft />
+                </Toggle>
+              </TooltipTrigger>
+              <TooltipContent>Align Left</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Toggle size="sm" pressed={currentTextAlign === 'center'} onClick={() => setTextAlign('center')} aria-label="Align center">
+                  <IconAlignCenter />
+                </Toggle>
+              </TooltipTrigger>
+              <TooltipContent>Align Center</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Toggle size="sm" pressed={currentTextAlign === 'right'} onClick={() => setTextAlign('right')} aria-label="Align right">
+                  <IconAlignRight />
+                </Toggle>
+              </TooltipTrigger>
+              <TooltipContent>Align Right</TooltipContent>
+            </Tooltip>
+
+            <Separator orientation="vertical" className="h-5 mx-0.5" />
+
+            {/* Cell Text Color */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <ColorPicker
+                    simple
+                    icon={<IconFontColor />}
+                    background={currentCellColor}
+                    setBackground={handleCellColor}
+                    handleUnSet={handleUnsetCellColor}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>Text Color</TooltipContent>
+            </Tooltip>
+
             {/* Cell Background Color */}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -271,6 +365,42 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ edito
               </TooltipTrigger>
               <TooltipContent>Cell Background Color</TooltipContent>
             </Tooltip>
+
+            <Separator orientation="vertical" className="h-5 mx-0.5" />
+
+            {/* More: move / duplicate / sort / export */}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Toggle size="sm" aria-label="More table actions">
+                      <IconMore />
+                    </Toggle>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>More</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>Move</DropdownMenuLabel>
+                <DropdownMenuItem onClick={moreActions.moveRowUp}>Move Row Up</DropdownMenuItem>
+                <DropdownMenuItem onClick={moreActions.moveRowDown}>Move Row Down</DropdownMenuItem>
+                <DropdownMenuItem onClick={moreActions.moveColLeft}>Move Column Left</DropdownMenuItem>
+                <DropdownMenuItem onClick={moreActions.moveColRight}>Move Column Right</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Duplicate</DropdownMenuLabel>
+                <DropdownMenuItem onClick={moreActions.duplicateRow}>Duplicate Row</DropdownMenuItem>
+                <DropdownMenuItem onClick={moreActions.duplicateColumn}>Duplicate Column</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Sort by Column</DropdownMenuLabel>
+                <DropdownMenuItem onClick={moreActions.sortAsc}>Sort Ascending</DropdownMenuItem>
+                <DropdownMenuItem onClick={moreActions.sortDesc}>Sort Descending</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Export</DropdownMenuLabel>
+                <DropdownMenuItem onClick={moreActions.exportCsv}>Export as CSV</DropdownMenuItem>
+                <DropdownMenuItem onClick={moreActions.exportExcel}>Export as Excel</DropdownMenuItem>
+                <DropdownMenuItem onClick={moreActions.copyMarkdown}>Copy as Markdown</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Separator orientation="vertical" className="h-5 mx-0.5" />
 
