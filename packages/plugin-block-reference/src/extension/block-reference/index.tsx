@@ -2,7 +2,7 @@ import { ExtensionWrapper } from "@kn/common";
 import { PageReference } from "./page-reference";
 import { FilePlus2, Link2, SquareDashedBottom } from "@kn/icon";
 import React from "react";
-import { computePosition, flip, posToDOMRect, ReactRenderer } from "@kn/editor";
+import { computePosition, flip, shift, posToDOMRect, ReactRenderer } from "@kn/editor";
 import { PageSelector } from "./PageSelector";
 import { BlockSelector } from "./BlockSelector";
 import { BlockReference } from "./block-references";
@@ -76,6 +76,10 @@ export const BlockReferenceExtension: ExtensionWrapper = {
 
                 computePosition(virtualElement, component.element as HTMLElement, {
                     placement: "bottom-start",
+                    // Flip above the caret when there isn't room below, and shift
+                    // horizontally to keep the dropdown within the viewport — without
+                    // this the panel gets clipped when the caret sits near an edge.
+                    middleware: [flip(), shift({ padding: 8 })],
                 }).then(({ x, y, strategy }) => {
                     (component.element as HTMLElement).style.zIndex = '1000';
                     (component.element as HTMLElement).style.position = strategy;
@@ -113,7 +117,7 @@ export const BlockReferenceExtension: ExtensionWrapper = {
 
                 computePosition(virtualElement, component.element as HTMLElement, {
                     placement: "bottom-start",
-                    middleware: [flip()],
+                    middleware: [flip(), shift({ padding: 8 })],
                 }).then(({ x, y, strategy }) => {
                     (component.element as HTMLElement).style.zIndex = '1000';
                     (component.element as HTMLElement).style.position = strategy;
