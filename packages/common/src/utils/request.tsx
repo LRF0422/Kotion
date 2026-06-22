@@ -18,7 +18,13 @@ export function setRequestToast(toastError: ToastFn) {
 // Constants
 // ---------------------------------------------------------------------------
 
-const BASE_URL = '/api'
+// Desktop (Electron) renderer loads from the `app://` custom protocol in
+// production, so a relative `/api` cannot be resolved — it must hit the cloud
+// API via an absolute URL. The web app keeps `/api` (same-origin / dev proxy)
+// to avoid browser CORS.
+const isDesktop = typeof window !== 'undefined' && typeof (window as any).api !== 'undefined'
+const CLOUD_API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'https://kotion.top:888/api'
+const BASE_URL = isDesktop ? CLOUD_API_BASE_URL : '/api'
 const TIMEOUT = 50_000
 const REFRESH_ENDPOINT = '/knowledge-auth/token/refresh'
 

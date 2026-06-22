@@ -5,134 +5,12 @@ export interface API {
     name: string,
     url: string,
     method: 'POST' | 'GET' | 'DELETE' | 'PUT' | 'PATCH',
-    ipcChannel?: string, // Optional IPC channel for Electron
 }
 
 // Check if running in Electron environment
 export const isElectron = (): boolean => {
     return typeof window !== 'undefined' &&
         typeof (window as any).api !== 'undefined'
-}
-
-// URL to IPC channel mapping
-const urlToIpcChannel: Record<string, string> = {
-    // Auth - removed, use HTTP for login/register
-    // User
-    '/knowledge-system/user/info': 'user:getInfo',
-    '/knowledge-system/user/search': 'user:search',
-    // Space
-    '/knowledge-wiki/space/list': 'space:list',
-    '/knowledge-wiki/space/personal': 'space:getPersonal',
-    '/knowledge-wiki/space': 'space:create',
-    // Plugin
-    '/knowledge-wiki/plugin': 'plugin:list',
-    '/knowledge-wiki/plugin/install': 'plugin:install',
-    '/knowledge-wiki/plugin/install/list': 'plugin:getInstalled',
-    '/knowledge-wiki/plugin/uninstall': 'plugin:uninstall',
-    '/knowledge-wiki/plugin/update': 'plugin:update',
-    // Plugin Config
-    '/knowledge-wiki/plugin-config': 'pluginConfig:getAll',
-    // File
-    '/knowledge-resource/oss/endpoint/put-file': 'file:upload',
-    '/knowledge-file-center/folder/root': 'file:getRootFolder',
-    '/knowledge-file-center/folder/children': 'file:getChildren',
-    '/knowledge-file-center/file': 'file:createFolder',
-    '/knowledge-file-center/file/download': 'file:download',
-    // Page
-    '/knowledge-wiki/space/page': 'page:save',
-    '/knowledge-wiki/space/page/list': 'page:list',
-    '/knowledge-wiki/space/page/favorites': 'page:getFavorites',
-    '/knowledge-wiki/space/page/recent': 'page:getRecent',
-    '/knowledge-wiki/space/page/templates': 'page:getTemplates',
-    '/knowledge-wiki/space/page/blocks': 'page:getBlocks',
-    '/knowledge-wiki/space/page/block': 'page:getBlockInfo',
-    '/knowledge-wiki/space/page/block/versions': 'page:getBlockVersions',
-    // IM - removed, use HTTP for WebSocket operations
-}
-
-// URLs that should always use HTTP (remote API) even in Electron
-const httpOnlyUrls = [
-    '/knowledge-auth/token',           // Login
-    '/knowledge-system/user/register', // Register
-    '/instant-message/',               // All IM/WebSocket operations
-    '/publish',                         // Page publish - always use HTTP (needs backend)
-    '/rollback',                        // Page rollback - always use HTTP (needs backend)
-    '/versions',                        // Page version history - always use HTTP
-    '/blocks',                          // Block-level PATCH operations - always use HTTP (needs backend)
-]
-
-// URLs that require exact match for HTTP-only check (no substring matching)
-const httpOnlyExactPrefixes = [
-    '/knowledge-wiki/plugin',          // Plugin marketplace - always fetch from server (NOT plugin-config)
-]
-
-// Get IPC channel from URL
-const getIpcChannel = (url: string, method: string): string | null => {
-    // Handle dynamic URL patterns
-    const patterns: Array<{ pattern: RegExp; channel: string }> = [
-        { pattern: /\/knowledge-wiki\/space\/([^/]+)\/detail/, channel: 'space:getDetail' },
-        { pattern: /\/knowledge-wiki\/space\/([^/]+)\/page\/tree/, channel: 'page:getTree' },
-        { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/content/, channel: 'page:getContent' },
-        { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/trash/, channel: 'page:moveToTrash' },
-        { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/restore/, channel: 'page:restore' },
-        { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/template/, channel: 'page:saveAsTemplate' },
-        { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/favorite/, channel: 'page:addFavorite' },
-        { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/collaborators/, channel: 'page:getCollaborators' },
-        { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/move/, channel: 'page:move' },
-        { pattern: /\/knowledge-wiki\/space\/([^/]+)\/favorite/, channel: 'space:addFavorite' },
-        { pattern: /\/knowledge-wiki\/space\/([^/]+)\/members/, channel: 'space:getMembers' },
-        { pattern: /\/knowledge-wiki\/plugin-config\/([^/]+)/, channel: 'pluginConfig:getOrSave' },
-        { pattern: /\/knowledge-wiki\/plugin\/([^/]+)/, channel: 'plugin:get' },
-        { pattern: /\/knowledge-wiki\/favorite\/([^/]+)/, channel: 'page:removeFavorite' },
-        { pattern: /\/knowledge-wiki\/space\/page\/block\/([^/]+)\/versions/, channel: 'page:getBlockVersions' },
-        { pattern: /\/knowledge-wiki\/space\/page\/([^/]+)\/blocks/, channel: 'page:patchBlocks' },
-        // IM patterns removed - use HTTP for WebSocket operations
-    ]
-
-    // Check static mappings first
-    if (urlToIpcChannel[url]) {
-        return urlToIpcChannel[url]
-    }
-
-    // Check dynamic patterns
-    for (const { pattern, channel } of patterns) {
-        if (pattern.test(url)) {
-            return channel
-        }
-    }
-
-    return null
-}
-
-// Extract ID from dynamic URL
-const extractIdFromUrl = (url: string): string | null => {
-    const patterns = [
-        /\/([^/]+)\/detail$/,
-        /\/([^/]+)\/page\/tree$/,
-        /\/page\/([^/]+)\/content$/,
-        /\/page\/([^/]+)\/trash$/,
-        /\/page\/([^/]+)\/restore$/,
-        /\/page\/([^/]+)\/template$/,
-        /\/page\/([^/]+)\/favorite$/,
-        /\/page\/([^/]+)\/collaborators$/,
-        /\/space\/([^/]+)\/favorite$/,
-        /\/space\/([^/]+)\/members$/,
-        /\/plugin-config\/([^/]+)$/,
-        /\/plugin\/([^/]+)$/,
-        /\/favorite\/([^/]+)$/,
-        /\/block\/([^/]+)\/versions$/,
-        /\/page\/([^/]+)\/blocks$/,
-        // IM patterns removed - use HTTP for WebSocket operations
-    ]
-
-    for (const pattern of patterns) {
-        const match = url.match(pattern)
-        if (match && match[1]) {
-            return match[1]
-        }
-    }
-
-    return null
 }
 
 const fillPathParam = (url: string, param: any): string => {
@@ -148,46 +26,7 @@ const fillPathParam = (url: string, param: any): string => {
     return url;
 }
 
-// Handle Electron IPC request
-const handleElectronRequest = async (api: API, param?: any, body?: any): Promise<any> => {
-    const electronApi = (window as any).api
-    const filledUrl = fillPathParam(api.url, param)
-    const ipcChannel = getIpcChannel(filledUrl, api.method)
-
-    if (!ipcChannel) {
-        console.warn(`No IPC channel mapping for URL: ${filledUrl}, falling back to HTTP`)
-        return handleHttpRequest(api, param, body)
-    }
-
-    // Extract ID for dynamic routes
-    const id = extractIdFromUrl(filledUrl)
-
-    // Prepare data for IPC
-    let ipcData: any = body || param || {}
-    if (id && !ipcData.id) {
-        if (body && typeof body === 'object' && Object.keys(body).length > 0) {
-            // POST with path param + body: combine both so IPC handler gets full context
-            ipcData = { ...body, _id: id }
-        } else {
-            ipcData = id
-        }
-    }
-
-    // Special handling for specific channels
-    if (ipcChannel === 'page:getTree' && param) {
-        ipcData = { spaceId: param.id, searchValue: param.searchValue }
-    }
-
-    try {
-        const result = await electronApi.invoke(ipcChannel, ipcData)
-        return result
-    } catch (error) {
-        console.error(`IPC error for ${ipcChannel}:`, error)
-        throw error
-    }
-}
-
-// Handle HTTP request (original implementation)
+// Handle HTTP request — desktop and web both talk to the cloud API directly.
 const handleHttpRequest = (api: API, param?: any, body?: any, header?: Record<string, string>) => {
     switch (api.method) {
         case "POST":
@@ -223,25 +62,6 @@ const handleHttpRequest = (api: API, param?: any, body?: any, header?: Record<st
 }
 
 export const handleRequest = (api: API, param?: any, body?: any, header?: Record<string, string>) => {
-    const filledUrl = fillPathParam(api.url, param)
-
-    // Check if this URL should always use HTTP (e.g., login, register)
-    const shouldUseHttp = httpOnlyUrls.some(url => filledUrl.includes(url))
-        || httpOnlyExactPrefixes.some(prefix => {
-            // Match exact path or path with trailing slash/query, but NOT longer path segments
-            // e.g., '/knowledge-wiki/plugin' matches '/knowledge-wiki/plugin' and '/knowledge-wiki/plugin/install'
-            // but NOT '/knowledge-wiki/plugin-config/xxx'
-            if (!filledUrl.startsWith(prefix)) return false
-            const rest = filledUrl.slice(prefix.length)
-            return rest === '' || rest.startsWith('/') || rest.startsWith('?')
-        })
-
-    // Use Electron IPC if available and URL is not HTTP-only
-    if (isElectron() && !shouldUseHttp) {
-        return handleElectronRequest(api, param, body)
-    }
-
-    // Fall back to HTTP
     return handleHttpRequest(api, param, body, header)
 }
 

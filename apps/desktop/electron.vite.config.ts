@@ -12,6 +12,11 @@ export default defineConfig({
   },
   renderer: {
     root: './src/renderer',
+    // Desktop loads the renderer from the `app://` protocol in production, so the
+    // HTTP client must hit the cloud API via an absolute URL (see request.tsx).
+    define: {
+      'import.meta.env.VITE_API_BASE_URL': JSON.stringify('https://kotion.top:888/api')
+    },
     server: {
       proxy: {
         '/api': {

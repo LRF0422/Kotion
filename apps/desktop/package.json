@@ -19,7 +19,6 @@
         "@electron-toolkit/preload": "^3.0.1",
         "@electron-toolkit/utils": "^3.0.0",
         "@kn/core": "workspace:*",
-        "@kn/electron-adapter": "workspace:*",
         "@kn/file-manager": "workspace:*",
         "@kn/mermaid-plugin": "workspace:*",
         "@kn/plugin-ai": "workspace:*",

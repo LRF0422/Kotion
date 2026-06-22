@@ -1,9 +1,37 @@
-import { app, shell, BrowserWindow, ipcMain, protocol, net } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, protocol, net, session } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { pathToFileURL } from 'url'
 import { setupIpcHandlers } from './ipc'
-import { initializeServices } from './services'
+
+// Cloud API origin the renderer talks to directly (no local data layer).
+// The renderer runs on the `app://` origin in production, so responses from the
+// cloud are cross-origin — inject permissive CORS headers in the main process.
+const CLOUD_API_ORIGIN = 'https://kotion.top:888'
+
+function setupCorsBypass(): void {
+  const filter = { urls: [`${CLOUD_API_ORIGIN}/*`] }
+
+  // Drop the `app://` Origin so the backend doesn't reject it by origin.
+  session.defaultSession.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
+    const requestHeaders = { ...details.requestHeaders }
+    delete requestHeaders['Origin']
+    delete requestHeaders['origin']
+    callback({ requestHeaders })
+  })
+
+  // Allow the renderer to read cross-origin responses and pass CORS preflight.
+  session.defaultSession.webRequest.onHeadersReceived(filter, (details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Access-Control-Allow-Origin': ['*'],
+        'Access-Control-Allow-Methods': ['GET,POST,PUT,DELETE,PATCH,OPTIONS'],
+        'Access-Control-Allow-Headers': ['*, Authorization, Content-Type']
+      }
+    })
+  })
+}
 
 // Register custom scheme before app is ready
 protocol.registerSchemesAsPrivileged([
@@ -65,10 +93,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
-  // Initialize services first
-  await initializeServices(app)
+  // Allow the renderer to call the cloud API directly across origins.
+  setupCorsBypass()
 
-  // Setup IPC handlers after services are ready
+  // Setup IPC handlers (desktop-native capabilities only: fs/dialog/system)
   setupIpcHandlers()
 
   // Register custom protocol handler for SPA routing
