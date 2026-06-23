@@ -7,6 +7,33 @@ import "@univerjs/preset-sheets-core/lib/index.css"
 import { SAVE_THROTTLE_MS, LARGE_DATA_CONFIG } from "./constants"
 import { CustomMenuPlugin, type ICustomMenuPluginConfig } from "./univer-custom-menu-plugin"
 
+/** Build a minimal-but-valid empty workbook so the grid never renders blank. */
+function createEmptyWorkbookData(): Record<string, any> {
+    const sheetId = 'sheet-0'
+    return {
+        id: `workbook-${Date.now()}`,
+        sheetOrder: [sheetId],
+        sheets: {
+            [sheetId]: {
+                id: sheetId,
+                name: 'Sheet1',
+                rowCount: 100,
+                columnCount: 26,
+                cellData: {},
+                defaultColumnWidth: 88,
+                defaultRowHeight: 24,
+            },
+        },
+        appVersion: '1.0.0',
+    }
+}
+
+/** Ensure workbook data has at least one sheet; otherwise fall back to a default. */
+function ensureValidWorkbookData(data: Record<string, any> | null | undefined): Record<string, any> {
+    if (data && data.sheets && Object.keys(data.sheets).length > 0) return data
+    return createEmptyWorkbookData()
+}
+
 // 计算工作簿数据中的单元格数量
 function countCells(data: Record<string, any> | null): number {
     if (!data || !data.sheets) return 0
@@ -30,23 +57,34 @@ interface UseUniverOptions {
     darkMode: boolean
     onSave: (data: Record<string, any>) => void
     onImportExcel?: () => void
+    onExportExcel?: () => void
     onToggleFullscreen?: () => void
 }
 
 interface UseUniverReturn {
     importWorkbookData: (data: Record<string, any>) => void
+    /** Apply externally-changed workbook data (e.g. AI tool edits) into the live Univer instance. */
+    applyWorkbookData: (data: Record<string, any>) => void
+    /** Read the current live snapshot from the active workbook (post-edit). */
+    getCurrentSnapshot: () => Record<string, any> | null
 }
 
-export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSave, onImportExcel, onToggleFullscreen }: UseUniverOptions): UseUniverReturn {
+export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSave, onImportExcel, onExportExcel, onToggleFullscreen }: UseUniverOptions): UseUniverReturn {
     const univerRef = useRef<any>(null)
     const univerAPIRef = useRef<any>(null)
     const disposeRef = useRef<(() => void) | null>(null)
     const initializedRef = useRef(false)
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    // Tracks the last snapshot this hook itself produced (saved out or applied in),
+    // so the view can tell whether an incoming attr change is our own echo or a
+    // genuine external edit (e.g. from an AI tool) that must be applied.
+    const lastSyncedDataRef = useRef<Record<string, any> | null>(workbookData)
     const onSaveRef = useRef(onSave)
     onSaveRef.current = onSave
     const onImportExcelRef = useRef(onImportExcel)
     onImportExcelRef.current = onImportExcel
+    const onExportExcelRef = useRef(onExportExcel)
+    onExportExcelRef.current = onExportExcel
     const onToggleFullscreenRef = useRef(onToggleFullscreen)
     onToggleFullscreenRef.current = onToggleFullscreen
 
@@ -66,6 +104,7 @@ export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSa
             if (!workbook) return
             const snapshot = workbook.getSnapshot()
             if (snapshot) {
+                lastSyncedDataRef.current = snapshot
                 onSaveRef.current(snapshot)
             }
         }, saveThrottleMs)
@@ -79,6 +118,7 @@ export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSa
         const isZhCN = navigator.language.startsWith('zh')
         const pluginConfig: ICustomMenuPluginConfig = {
             onImportExcel: () => onImportExcelRef.current?.(),
+            onExportExcel: () => onExportExcelRef.current?.(),
             onToggleFullscreen: () => onToggleFullscreenRef.current?.(),
         }
 
@@ -103,8 +143,11 @@ export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSa
         univerRef.current = univer
         univerAPIRef.current = univerAPI
 
-        // Create workbook with saved data or empty
-        univerAPI.createWorkbook(workbookData ?? {})
+        // Create workbook with saved data, or a valid empty workbook (a bare {}
+        // can render a blank grid with no usable sheet in some Univer builds).
+        const initialData = ensureValidWorkbookData(workbookData)
+        univerAPI.createWorkbook(initialData)
+        lastSyncedDataRef.current = initialData
 
         // Set read-only if needed
         if (readOnly) {
@@ -170,7 +213,10 @@ export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSa
         }
     }, [darkMode])
 
-    const importWorkbookData = useCallback((data: Record<string, any>) => {
+    // Rebuild the active workbook from a full data snapshot. Used both for
+    // explicit imports (triggerSave=true → persist back to the node) and for
+    // applying external/AI edits (triggerSave=false → just reflect the data).
+    const rebuildWorkbook = useCallback((data: Record<string, any>, triggerSave: boolean) => {
         const api = univerAPIRef.current
         if (!api) return
 
@@ -180,8 +226,9 @@ export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSa
             currentWorkbook.dispose()
         }
 
-        // Create new workbook with imported data
+        // Create new workbook with the supplied data
         api.createWorkbook(data)
+        lastSyncedDataRef.current = data
 
         // Re-attach change listener for auto-save
         if (!readOnly) {
@@ -204,15 +251,38 @@ export function useUniver({ containerRef, workbookData, readOnly, darkMode, onSa
             }
         }
 
-        // Trigger immediate save of imported data
-        const workbook = api.getActiveWorkbook()
-        if (workbook) {
-            const snapshot = workbook.getSnapshot()
-            if (snapshot) {
-                onSaveRef.current(snapshot)
+        if (triggerSave) {
+            const workbook = api.getActiveWorkbook()
+            if (workbook) {
+                const snapshot = workbook.getSnapshot()
+                if (snapshot) {
+                    onSaveRef.current(snapshot)
+                }
             }
         }
     }, [readOnly, throttledSave])
 
-    return { importWorkbookData }
+    const importWorkbookData = useCallback((data: Record<string, any>) => {
+        rebuildWorkbook(data, true)
+    }, [rebuildWorkbook])
+
+    const applyWorkbookData = useCallback((data: Record<string, any>) => {
+        // Skip if this is just an echo of what we already have live.
+        if (data === lastSyncedDataRef.current) return
+        rebuildWorkbook(data, false)
+    }, [rebuildWorkbook])
+
+    const getCurrentSnapshot = useCallback((): Record<string, any> | null => {
+        const api = univerAPIRef.current
+        if (!api) return null
+        const workbook = api.getActiveWorkbook()
+        if (!workbook) return null
+        try {
+            return workbook.getSnapshot() ?? null
+        } catch {
+            return null
+        }
+    }, [])
+
+    return { importWorkbookData, applyWorkbookData, getCurrentSnapshot }
 }

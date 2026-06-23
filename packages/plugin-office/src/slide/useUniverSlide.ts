@@ -23,6 +23,10 @@ interface UseUniverSlideOptions {
 
 interface UseUniverSlideReturn {
     importSlideData: (data: Record<string, any>) => void
+    /** Apply externally-changed data (e.g. AI tool edits) into the live instance. */
+    applySlideData: (data: Record<string, any>) => void
+    /** Read the current live snapshot. */
+    getCurrentSnapshot: () => Record<string, any> | null
 }
 
 export function useUniverSlide({ containerRef, slideData, readOnly, darkMode, onSave, onToggleFullscreen }: UseUniverSlideOptions): UseUniverSlideReturn {
@@ -32,6 +36,9 @@ export function useUniverSlide({ containerRef, slideData, readOnly, darkMode, on
     const disposeRef = useRef<(() => void) | null>(null)
     const initializedRef = useRef(false)
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    // Last snapshot this hook produced; lets the view distinguish our own save
+    // echoes from genuine external (AI) edits that must be applied.
+    const lastSyncedDataRef = useRef<Record<string, any> | null>(slideData)
     const onSaveRef = useRef(onSave)
     onSaveRef.current = onSave
     const onToggleFullscreenRef = useRef(onToggleFullscreen)
@@ -46,6 +53,7 @@ export function useUniverSlide({ containerRef, slideData, readOnly, darkMode, on
             try {
                 const snapshot = unit.getSnapshot?.()
                 if (snapshot) {
+                    lastSyncedDataRef.current = snapshot
                     onSaveRef.current(snapshot)
                 }
             } catch (error) {
@@ -92,6 +100,7 @@ export function useUniverSlide({ containerRef, slideData, readOnly, darkMode, on
         const slideUnitData = slideData || {}
         try {
             unitModelRef.current = univerInstance.univer.createUnit(UniverInstanceType.UNIVER_SLIDE, slideUnitData)
+            lastSyncedDataRef.current = slideData ?? null
         } catch (error) {
             console.error('Failed to create slide unit:', error)
             try {
@@ -157,32 +166,49 @@ export function useUniverSlide({ containerRef, slideData, readOnly, darkMode, on
         }
     }, [darkMode])
 
-    const importSlideData = useCallback((data: Record<string, any>) => {
+    const rebuildUnit = useCallback((data: Record<string, any>, triggerSave: boolean) => {
         const univer = univerRef.current
         const api = univerAPIRef.current
         if (!univer || !api) return
 
         try {
-            // Dispose current unit and create new one with imported data
+            // Dispose current unit and create new one with the supplied data
             const currentUnit = unitModelRef.current
             if (currentUnit && typeof currentUnit.getUnitId === 'function') {
                 api.disposeUnit(currentUnit.getUnitId())
             }
 
             unitModelRef.current = univer.createUnit(UniverInstanceType.UNIVER_SLIDE, data)
+            lastSyncedDataRef.current = data
 
-            // Trigger immediate save of imported data
-            const unit = unitModelRef.current
-            if (unit) {
-                const snapshot = unit.getSnapshot?.()
+            if (triggerSave) {
+                const unit = unitModelRef.current
+                const snapshot = unit?.getSnapshot?.()
                 if (snapshot) {
                     onSaveRef.current(snapshot)
                 }
             }
         } catch (error) {
-            console.error('Error importing slide data:', error)
+            console.error('Error rebuilding slide unit:', error)
         }
     }, [])
 
-    return { importSlideData }
+    const importSlideData = useCallback((data: Record<string, any>) => {
+        rebuildUnit(data, true)
+    }, [rebuildUnit])
+
+    const applySlideData = useCallback((data: Record<string, any>) => {
+        if (data === lastSyncedDataRef.current) return
+        rebuildUnit(data, false)
+    }, [rebuildUnit])
+
+    const getCurrentSnapshot = useCallback((): Record<string, any> | null => {
+        try {
+            return unitModelRef.current?.getSnapshot?.() ?? null
+        } catch {
+            return null
+        }
+    }, [])
+
+    return { importSlideData, applySlideData, getCurrentSnapshot }
 }

@@ -7,6 +7,7 @@
 
 import { Editor } from '@kn/editor'
 import { z } from '@kn/ui'
+import { downloadWorkbookAsExcel } from './univer-to-excel'
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -440,6 +441,32 @@ export const resizeSpreadsheetTool = {
 }
 
 /**
+ * Tool: Export a spreadsheet block to a downloadable .xlsx file
+ */
+export const exportSpreadsheetTool = {
+    name: 'exportSpreadsheet',
+    description: '将文档中指定序号的电子表格导出为 .xlsx 文件并触发浏览器下载。保留值、公式、合并单元格与行列宽高。',
+    inputSchema: z.object({
+        index: z.number().describe('电子表格序号（从 0 开始）'),
+        filename: z.string().optional().describe('下载文件名，默认 "spreadsheet.xlsx"'),
+    }),
+    execute: (editor: Editor) => async (params: { index: number; filename?: string }) => {
+        try {
+            const node = findSpreadsheetByIndex(editor, params.index)
+            if (!node) return { success: false, error: `未找到序号 ${params.index} 的电子表格` }
+            if (!node.workbookData) return { success: false, error: '该电子表格暂无数据可导出' }
+
+            const filename = params.filename?.trim() || 'spreadsheet.xlsx'
+            downloadWorkbookAsExcel(node.workbookData, filename)
+
+            return { success: true, message: `已导出电子表格为 ${filename.endsWith('.xlsx') ? filename : filename + '.xlsx'}` }
+        } catch (error) {
+            return { success: false, error: error instanceof Error ? error.message : '导出电子表格失败' }
+        }
+    },
+}
+
+/**
  * All spreadsheet plugin tools
  */
 export const spreadsheetTools = [
@@ -449,4 +476,5 @@ export const spreadsheetTools = [
     updateSpreadsheetDataTool,
     deleteSpreadsheetTool,
     resizeSpreadsheetTool,
+    exportSpreadsheetTool,
 ]

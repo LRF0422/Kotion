@@ -6,6 +6,26 @@ import docsLocaleZhCN from "@univerjs/preset-docs-core/locales/zh-CN"
 import "@univerjs/preset-docs-core/lib/index.css"
 import { SAVE_THROTTLE_MS } from "./constants"
 
+/** Minimal valid empty Univer document ("\r\n" = one empty paragraph + section). */
+function createEmptyDocumentData(): Record<string, any> {
+    return {
+        id: `doc-${Date.now()}`,
+        body: {
+            dataStream: '\r\n',
+            textRuns: [],
+            paragraphs: [{ startIndex: 0 }],
+            sectionBreaks: [{ startIndex: 1 }],
+        },
+        documentStyle: {},
+    }
+}
+
+/** Ensure document data has a usable body; otherwise fall back to an empty doc. */
+function ensureValidDocumentData(data: Record<string, any> | null | undefined): Record<string, any> {
+    if (data && data.body && typeof data.body.dataStream === 'string') return data
+    return createEmptyDocumentData()
+}
+
 interface UseUniverDocumentOptions {
     containerRef: RefObject<HTMLDivElement | null>
     documentData: Record<string, any> | null
@@ -17,6 +37,10 @@ interface UseUniverDocumentOptions {
 
 interface UseUniverDocumentReturn {
     importDocumentData: (data: Record<string, any>) => void
+    /** Apply externally-changed data (e.g. AI tool edits) into the live instance. */
+    applyDocumentData: (data: Record<string, any>) => void
+    /** Read the current live snapshot. */
+    getCurrentSnapshot: () => Record<string, any> | null
 }
 
 export function useUniverDocument({ containerRef, documentData, readOnly, darkMode, onSave, onToggleFullscreen }: UseUniverDocumentOptions): UseUniverDocumentReturn {
@@ -26,6 +50,9 @@ export function useUniverDocument({ containerRef, documentData, readOnly, darkMo
     const disposeRef = useRef<(() => void) | null>(null)
     const initializedRef = useRef(false)
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    // Last snapshot this hook produced; lets the view distinguish our own save
+    // echoes from genuine external (AI) edits that must be applied.
+    const lastSyncedDataRef = useRef<Record<string, any> | null>(documentData)
     const onSaveRef = useRef(onSave)
     onSaveRef.current = onSave
     const onToggleFullscreenRef = useRef(onToggleFullscreen)
@@ -40,6 +67,7 @@ export function useUniverDocument({ containerRef, documentData, readOnly, darkMo
             try {
                 const snapshot = unit.getSnapshot?.()
                 if (snapshot) {
+                    lastSyncedDataRef.current = snapshot
                     onSaveRef.current(snapshot)
                 }
             } catch (error) {
@@ -73,14 +101,17 @@ export function useUniverDocument({ containerRef, documentData, readOnly, darkMo
         univerRef.current = univer
         univerAPIRef.current = univerAPI
 
-        // Create document with saved data or empty
-        const docData = documentData || {}
+        // Create document with saved data or a valid empty document.
+        const docData = ensureValidDocumentData(documentData)
         try {
             unitModelRef.current = univer.createUnit(UniverInstanceType.UNIVER_DOC, docData)
+            lastSyncedDataRef.current = docData
         } catch (error) {
             console.error('Failed to load document data:', error)
             try {
-                unitModelRef.current = univer.createUnit(UniverInstanceType.UNIVER_DOC, {})
+                const empty = createEmptyDocumentData()
+                unitModelRef.current = univer.createUnit(UniverInstanceType.UNIVER_DOC, empty)
+                lastSyncedDataRef.current = empty
             } catch (e) {
                 console.error('Failed to create empty document:', e)
             }
@@ -141,10 +172,12 @@ export function useUniverDocument({ containerRef, documentData, readOnly, darkMo
         }
     }, [darkMode])
 
-    const importDocumentData = useCallback((data: Record<string, any>) => {
+    const rebuildUnit = useCallback((data: Record<string, any>, triggerSave: boolean) => {
         const univer = univerRef.current
         const api = univerAPIRef.current
         if (!univer || !api) return
+
+        const docData = ensureValidDocumentData(data)
 
         // Dispose current document unit
         try {
@@ -156,11 +189,12 @@ export function useUniverDocument({ containerRef, documentData, readOnly, darkMo
             console.error('Error disposing current document:', error)
         }
 
-        // Create new document with imported data
+        // Create new document with the supplied data
         try {
-            unitModelRef.current = univer.createUnit(UniverInstanceType.UNIVER_DOC, data)
+            unitModelRef.current = univer.createUnit(UniverInstanceType.UNIVER_DOC, docData)
+            lastSyncedDataRef.current = docData
         } catch (error) {
-            console.error('Error creating document with imported data:', error)
+            console.error('Error creating document with new data:', error)
         }
 
         // Re-attach change listener for auto-save
@@ -181,19 +215,35 @@ export function useUniverDocument({ containerRef, documentData, readOnly, darkMo
             }
         }
 
-        // Trigger immediate save of imported data
-        try {
-            const unit = unitModelRef.current
-            if (unit) {
-                const snapshot = unit.getSnapshot?.()
+        if (triggerSave) {
+            try {
+                const unit = unitModelRef.current
+                const snapshot = unit?.getSnapshot?.()
                 if (snapshot) {
                     onSaveRef.current(snapshot)
                 }
+            } catch (error) {
+                console.error('Error saving new data:', error)
             }
-        } catch (error) {
-            console.error('Error saving imported data:', error)
         }
     }, [readOnly, throttledSave])
 
-    return { importDocumentData }
+    const importDocumentData = useCallback((data: Record<string, any>) => {
+        rebuildUnit(data, true)
+    }, [rebuildUnit])
+
+    const applyDocumentData = useCallback((data: Record<string, any>) => {
+        if (data === lastSyncedDataRef.current) return
+        rebuildUnit(data, false)
+    }, [rebuildUnit])
+
+    const getCurrentSnapshot = useCallback((): Record<string, any> | null => {
+        try {
+            return unitModelRef.current?.getSnapshot?.() ?? null
+        } catch {
+            return null
+        }
+    }, [])
+
+    return { importDocumentData, applyDocumentData, getCurrentSnapshot }
 }

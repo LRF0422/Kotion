@@ -37,14 +37,25 @@ const FullscreenIcon: React.FC = () =>
         React.createElement('line', { x1: 3, y1: 21, x2: 10, y2: 14 }),
     )
 
+const ExportIcon: React.FC = () =>
+    React.createElement(
+        'svg',
+        { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' },
+        React.createElement('path', { d: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4' }),
+        React.createElement('polyline', { points: '17 8 12 3 7 8' }),
+        React.createElement('line', { x1: 12, y1: 3, x2: 12, y2: 15 }),
+    )
+
 // ── Plugin config ────────────────────────────────────────────────────
 export interface ICustomMenuPluginConfig {
     onImportExcel?: () => void
+    onExportExcel?: () => void
     onToggleFullscreen?: () => void
 }
 
 // ── Command IDs ──────────────────────────────────────────────────────
 const IMPORT_EXCEL_COMMAND_ID = 'custom.operation.import-excel'
+const EXPORT_EXCEL_COMMAND_ID = 'custom.operation.export-excel'
 const FULLSCREEN_COMMAND_ID = 'custom.operation.toggle-fullscreen'
 
 // ── Plugin ───────────────────────────────────────────────────────────
@@ -67,6 +78,7 @@ export class CustomMenuPlugin extends Plugin {
     override onStarting(): void {
         // Register icon components
         this.disposeWithMe(this._componentManager.register('ImportExcelIcon', ImportIcon))
+        this.disposeWithMe(this._componentManager.register('ExportExcelIcon', ExportIcon))
         this.disposeWithMe(this._componentManager.register('FullscreenIcon', FullscreenIcon))
 
         // ── Import Excel command ─────────────────────────────────────
@@ -79,6 +91,17 @@ export class CustomMenuPlugin extends Plugin {
             },
         }
         this._commandService.registerCommand(importCommand)
+
+        // ── Export Excel command ─────────────────────────────────────
+        const exportCommand: ICommand = {
+            type: CommandType.OPERATION,
+            id: EXPORT_EXCEL_COMMAND_ID,
+            handler: () => {
+                this._config.onExportExcel?.()
+                return true
+            },
+        }
+        this._commandService.registerCommand(exportCommand)
 
         // ── Fullscreen command ───────────────────────────────────────
         const fullscreenCommand: ICommand = {
@@ -104,8 +127,18 @@ export class CustomMenuPlugin extends Plugin {
                         type: MenuItemType.BUTTON,
                     }),
                 },
-                [FULLSCREEN_COMMAND_ID]: {
+                [EXPORT_EXCEL_COMMAND_ID]: {
                     order: 1,
+                    menuItemFactory: () => ({
+                        id: EXPORT_EXCEL_COMMAND_ID,
+                        title: 'Export Excel',
+                        tooltip: 'Export to .xlsx',
+                        icon: 'ExportExcelIcon',
+                        type: MenuItemType.BUTTON,
+                    }),
+                },
+                [FULLSCREEN_COMMAND_ID]: {
+                    order: 2,
                     menuItemFactory: () => ({
                         id: FULLSCREEN_COMMAND_ID,
                         title: 'Fullscreen',

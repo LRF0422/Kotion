@@ -34,6 +34,6 @@ export const DocumentExtension: ExtensionWrapper = {
             },
         },
     ],
-    // tools: documentTools,
+    tools: documentTools,
     skills: [documentExpertSkill],
 }

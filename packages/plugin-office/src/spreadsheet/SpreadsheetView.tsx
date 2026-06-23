@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useUniver } from "./useUniver"
 import { triggerExcelFileImport, parseExcelToUniverData } from "./excel-to-univer"
+import { downloadWorkbookAsExcel } from "./univer-to-excel"
 
 export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
     const { node, updateAttributes, editor } = props
@@ -47,18 +48,38 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
         }
     }, [])
 
-    const { importWorkbookData } = useUniver({
+    // Export uses the live snapshot so unsaved edits are included.
+    const getCurrentSnapshotRef = useRef<() => Record<string, any> | null>(() => null)
+    const handleExportExcel = useCallback(() => {
+        try {
+            const snapshot = getCurrentSnapshotRef.current() ?? node.attrs.workbookData
+            downloadWorkbookAsExcel(snapshot, 'spreadsheet.xlsx')
+        } catch (e) {
+            console.error('Failed to export Excel:', e)
+        }
+    }, [node.attrs.workbookData])
+
+    const { importWorkbookData, applyWorkbookData, getCurrentSnapshot } = useUniver({
         containerRef,
         workbookData: initialDataRef.current,
         readOnly: !editor.isEditable,
         darkMode: theme === 'dark',
         onSave: handleSave,
         onImportExcel: handleImportExcel,
+        onExportExcel: handleExportExcel,
         onToggleFullscreen: () => setIsFullscreen((prev) => !prev),
     })
 
-    // Keep ref in sync
+    // Keep refs in sync
     importWorkbookDataRef.current = importWorkbookData
+    getCurrentSnapshotRef.current = getCurrentSnapshot
+
+    // Reflect external edits (e.g. AI tools writing to node attrs) into the live
+    // Univer instance. The hook ignores echoes of its own saves via reference check.
+    useEffect(() => {
+        const data = node.attrs.workbookData
+        if (data) applyWorkbookData(data)
+    }, [node.attrs.workbookData, applyWorkbookData])
 
     // Toolbar for fullscreen mode only (close button)
     const fullscreenToolbar = (
@@ -103,6 +124,7 @@ export const SpreadsheetView: React.FC<NodeViewProps> = React.memo((props) => {
     )
 }, (prevProps, nextProps) => {
     return prevProps.node.attrs.height === nextProps.node.attrs.height
+        && prevProps.node.attrs.workbookData === nextProps.node.attrs.workbookData
         && prevProps.editor.isEditable === nextProps.editor.isEditable
 })
 

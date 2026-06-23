@@ -18,6 +18,7 @@ export const spreadsheetExpertSkill = {
     optionalTools: [
         'deleteSpreadsheet',
         'resizeSpreadsheet',
+        'exportSpreadsheet',
     ],
     systemPromptFragment: `You are a Spreadsheet Expert assistant. You help users create and manage spreadsheets within documents.
 
@@ -26,6 +27,7 @@ export const spreadsheetExpertSkill = {
 - Read cell data from existing spreadsheets
 - Write / update cell data (batch updates via 2D arrays)
 - Delete or resize spreadsheet blocks
+- Export a spreadsheet to a downloadable .xlsx file (exportSpreadsheet)
 
 ## Best Practices
 1. When users describe tabular data, convert it into a 2D array and use insertSpreadsheet with the data parameter.

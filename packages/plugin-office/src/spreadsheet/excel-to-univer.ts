@@ -30,10 +30,24 @@ const CellValueType = {
  */
 export async function parseExcelToUniverData(file: File): Promise<Record<string, any>> {
     const arrayBuffer = await file.arrayBuffer()
-    const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+    // cellFormula: keep formulas (cell.f); cellStyles: expose number formats (cell.z);
+    // cellNF: ensure number-format strings are populated.
+    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellFormula: true, cellStyles: true, cellNF: true })
 
     const sheets: Record<string, any> = {}
     const sheetOrder: string[] = []
+
+    // Workbook-level style table: maps a number-format pattern to a style id,
+    // referenced from each cell via its `s` field (Univer IStyleData scheme).
+    const styles: Record<string, any> = {}
+    const numFmtToStyleId: Record<string, string> = {}
+    const getNumberFormatStyleId = (pattern: string): string => {
+        if (numFmtToStyleId[pattern]) return numFmtToStyleId[pattern]
+        const id = `nf-${Object.keys(numFmtToStyleId).length}`
+        numFmtToStyleId[pattern] = id
+        styles[id] = { n: { pattern } }
+        return id
+    }
 
     workbook.SheetNames.forEach((sheetName, sheetIndex) => {
         const ws = workbook.Sheets[sheetName]
@@ -63,6 +77,12 @@ export async function parseExcelToUniverData(file: File): Promise<Record<string,
 
                 if (typeof cell.v === 'number') {
                     cellInfo.t = CellValueType.NUMBER
+                    // Preserve number/date/currency format via a workbook style.
+                    // Keep the numeric value (not cell.w) so Univer formats it itself.
+                    const fmt = cell.z
+                    if (typeof fmt === 'string' && fmt && fmt !== 'General') {
+                        cellInfo.s = getNumberFormatStyleId(fmt)
+                    }
                 } else if (typeof cell.v === 'boolean') {
                     cellInfo.t = CellValueType.BOOLEAN
                 } else {
@@ -73,6 +93,12 @@ export async function parseExcelToUniverData(file: File): Promise<Record<string,
                     } else if (cell.v !== undefined) {
                         cellInfo.v = String(cell.v)
                     }
+                }
+
+                // Preserve formulas. SheetJS stores them without a leading '=';
+                // Univer expects the '=' prefix. The cached value above stays as `v`.
+                if (typeof cell.f === 'string' && cell.f.length > 0) {
+                    cellInfo.f = cell.f.startsWith('=') ? cell.f : `=${cell.f}`
                 }
 
                 cellData[r][c] = cellInfo
@@ -136,6 +162,7 @@ export async function parseExcelToUniverData(file: File): Promise<Record<string,
         id: `workbook-${Date.now()}`,
         sheetOrder,
         sheets,
+        styles: Object.keys(styles).length > 0 ? styles : undefined,
         appVersion: '1.0.0',
     }
 }

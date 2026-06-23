@@ -35,7 +35,7 @@ export const DocumentView: React.FC<NodeViewProps> = React.memo((props) => {
     // Use a ref so the Univer plugin callback always calls the latest version
     const importDocumentDataRef = useRef<(data: Record<string, any>) => void>(() => {})
 
-    const { importDocumentData } = useUniverDocument({
+    const { importDocumentData, applyDocumentData } = useUniverDocument({
         containerRef,
         documentData: initialDataRef.current,
         readOnly: !editor.isEditable,
@@ -46,6 +46,13 @@ export const DocumentView: React.FC<NodeViewProps> = React.memo((props) => {
 
     // Keep ref in sync
     importDocumentDataRef.current = importDocumentData
+
+    // Reflect external edits (e.g. AI tools writing to node attrs) into the live
+    // Univer instance. The hook ignores echoes of its own saves via reference check.
+    useEffect(() => {
+        const data = node.attrs.documentData
+        if (data) applyDocumentData(data)
+    }, [node.attrs.documentData, applyDocumentData])
 
     // Toolbar for fullscreen mode only (close button)
     const fullscreenToolbar = (
@@ -93,6 +100,7 @@ export const DocumentView: React.FC<NodeViewProps> = React.memo((props) => {
     )
 }, (prevProps, nextProps) => {
     return prevProps.node.attrs.height === nextProps.node.attrs.height
+        && prevProps.node.attrs.documentData === nextProps.node.attrs.documentData
         && prevProps.editor.isEditable === nextProps.editor.isEditable
 })
 

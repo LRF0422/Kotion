@@ -35,7 +35,7 @@ export const SlideView: React.FC<NodeViewProps> = React.memo((props) => {
     // Use a ref so the Univer plugin callback always calls the latest version
     const importSlideDataRef = useRef<(data: Record<string, any>) => void>(() => {})
 
-    const { importSlideData } = useUniverSlide({
+    const { importSlideData, applySlideData } = useUniverSlide({
         containerRef,
         slideData: initialDataRef.current,
         readOnly: !editor.isEditable,
@@ -46,6 +46,13 @@ export const SlideView: React.FC<NodeViewProps> = React.memo((props) => {
 
     // Keep ref in sync
     importSlideDataRef.current = importSlideData
+
+    // Reflect external edits (e.g. AI tools writing to node attrs) into the live
+    // Univer instance. The hook ignores echoes of its own saves via reference check.
+    useEffect(() => {
+        const data = node.attrs.slideData
+        if (data) applySlideData(data)
+    }, [node.attrs.slideData, applySlideData])
 
     // Toolbar for fullscreen mode only (close button)
     const fullscreenToolbar = (
@@ -93,6 +100,7 @@ export const SlideView: React.FC<NodeViewProps> = React.memo((props) => {
     )
 }, (prevProps, nextProps) => {
     return prevProps.node.attrs.height === nextProps.node.attrs.height
+        && prevProps.node.attrs.slideData === nextProps.node.attrs.slideData
         && prevProps.editor.isEditable === nextProps.editor.isEditable
 })
 
