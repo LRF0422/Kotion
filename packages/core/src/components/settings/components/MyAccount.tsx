@@ -1,226 +1,178 @@
-import { Separator } from "@kn/ui";
 import { GlobalState } from "@kn/common";
 import React from "react";
-import { useSelector } from "@kn/common";
+import { useSelector, useTranslation } from "@kn/common";
 import { UserAvatar } from "../../UserAvatar";
 import { Input } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { Label } from "@kn/ui";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@kn/ui";
 import { Badge } from "@kn/ui";
-import { Camera, Mail, Lock, Shield, Trash2, MapPin, Briefcase, Building2, AlertTriangle } from "@kn/icon";
+import { Camera, Mail, Lock, Shield, Trash2, MapPin, Briefcase, Building2 } from "@kn/icon";
 import { useSafeState } from "ahooks";
+import { SettingsPanel, SettingsSection, SettingsRow } from "./primitives";
 
 export const MyAccount: React.FC = () => {
     const { userInfo } = useSelector((state: GlobalState) => state);
+    const { t } = useTranslation();
     const [isEditing, setIsEditing] = useSafeState(false);
     const [formData, setFormData] = useSafeState({
-        name: userInfo?.name || '',
-        job: userInfo?.job || '',
-        organization: userInfo?.organization || '',
-        location: userInfo?.location || ''
+        name: userInfo?.name || "",
+        job: userInfo?.job || "",
+        organization: userInfo?.organization || "",
+        location: userInfo?.location || "",
     });
 
     const handleInputChange = (field: string, value: string) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+        setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
     return (
-        <div className="space-y-4">
-            {/* Profile Card */}
-            <Card>
-                <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle className="text-sm">个人资料</CardTitle>
-                            <CardDescription className="text-xs">管理您的公开个人信息</CardDescription>
-                        </div>
-                        <Button
-                            variant={isEditing ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setIsEditing(!isEditing)}
-                            className="h-7 text-xs"
-                        >
-                            {isEditing ? '保存更改' : '编辑资料'}
-                        </Button>
-                    </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    {/* Avatar Section */}
+        <SettingsPanel>
+            {/* 个人资料 */}
+            <SettingsSection
+                title={t("settings.account.profileTitle")}
+                description={t("settings.account.profileDesc")}
+                action={
+                    <Button
+                        variant={isEditing ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setIsEditing(!isEditing)}
+                    >
+                        {isEditing ? t("settings.account.save") : t("settings.account.edit")}
+                    </Button>
+                }
+                bare
+            >
+                <div className="space-y-5 rounded-xl border border-border/60 bg-card p-5">
+                    {/* 头像 */}
                     <div className="flex items-center gap-4">
-                        <div className="relative group">
-                            <UserAvatar
-                                userInfo={userInfo}
-                                className="h-16 w-16 ring-2 ring-muted"
-                            />
-                            <button
-                                className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
+                        <div className="group relative">
+                            <UserAvatar userInfo={userInfo} className="h-16 w-16" />
+                            <button className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
                                 <Camera className="h-5 w-5 text-white" />
                             </button>
                         </div>
-                        <div className="flex-1 space-y-0.5">
+                        <div className="min-w-0 flex-1 space-y-1">
                             <div className="flex items-center gap-2">
-                                <h3 className="text-base font-semibold">{userInfo?.name}</h3>
-                                <Badge variant="secondary" className="text-[10px] h-4 px-1.5">Free</Badge>
+                                <h3 className="truncate text-base font-semibold text-foreground">
+                                    {userInfo?.name}
+                                </h3>
+                                <Badge variant="secondary" className="shrink-0 px-1.5 text-[10px] font-normal">
+                                    {t("settings.planFree")}
+                                </Badge>
                             </div>
                             <p className="text-xs text-muted-foreground">@{userInfo?.account}</p>
-                            <p className="text-[10px] text-muted-foreground">点击头像更换图片</p>
                         </div>
                     </div>
 
-                    <Separator className="my-3" />
+                    {/* 资料字段 */}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label={t("settings.account.fieldName")}>
+                            <Input
+                                value={formData.name}
+                                onChange={(e) => handleInputChange("name", e.target.value)}
+                                disabled={!isEditing}
+                                className="h-9"
+                            />
+                        </Field>
+                        <Field label={t("settings.account.fieldJob")} icon={<Briefcase className="h-3.5 w-3.5" />}>
+                            <Input
+                                placeholder={t("settings.account.fieldJobPlaceholder")}
+                                value={formData.job}
+                                onChange={(e) => handleInputChange("job", e.target.value)}
+                                disabled={!isEditing}
+                                className="h-9"
+                            />
+                        </Field>
+                        <Field label={t("settings.account.fieldOrg")} icon={<Building2 className="h-3.5 w-3.5" />}>
+                            <Input
+                                placeholder={t("settings.account.fieldOrgPlaceholder")}
+                                value={formData.organization}
+                                onChange={(e) => handleInputChange("organization", e.target.value)}
+                                disabled={!isEditing}
+                                className="h-9"
+                            />
+                        </Field>
+                        <Field label={t("settings.account.fieldLocation")} icon={<MapPin className="h-3.5 w-3.5" />}>
+                            <Input
+                                placeholder={t("settings.account.fieldLocationPlaceholder")}
+                                value={formData.location}
+                                onChange={(e) => handleInputChange("location", e.target.value)}
+                                disabled={!isEditing}
+                                className="h-9"
+                            />
+                        </Field>
+                    </div>
+                </div>
+            </SettingsSection>
 
-                    {/* Profile Fields */}
-                    <div className="grid gap-3">
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                                <Label htmlFor="name" className="text-xs font-medium flex items-center gap-2">
-                                    显示名称
-                                </Label>
-                                <Input
-                                    id="name"
-                                    value={formData.name}
-                                    onChange={(e) => handleInputChange('name', e.target.value)}
-                                    disabled={!isEditing}
-                                    className="h-8 text-xs"
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="job" className="text-xs font-medium flex items-center gap-1.5">
-                                    <Briefcase className="h-3 w-3 text-muted-foreground" />
-                                    职位
-                                </Label>
-                                <Input
-                                    id="job"
-                                    placeholder="例如：产品经理"
-                                    value={formData.job}
-                                    onChange={(e) => handleInputChange('job', e.target.value)}
-                                    disabled={!isEditing}
-                                    className="h-8 text-xs"
-                                />
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                                <Label htmlFor="organization" className="text-xs font-medium flex items-center gap-1.5">
-                                    <Building2 className="h-3 w-3 text-muted-foreground" />
-                                    组织/公司
-                                </Label>
-                                <Input
-                                    id="organization"
-                                    placeholder="您的公司或组织"
-                                    value={formData.organization}
-                                    onChange={(e) => handleInputChange('organization', e.target.value)}
-                                    disabled={!isEditing}
-                                    className="h-8 text-xs"
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="location" className="text-xs font-medium flex items-center gap-1.5">
-                                    <MapPin className="h-3 w-3 text-muted-foreground" />
-                                    位置
-                                </Label>
-                                <Input
-                                    id="location"
-                                    placeholder="您的城市"
-                                    value={formData.location}
-                                    onChange={(e) => handleInputChange('location', e.target.value)}
-                                    disabled={!isEditing}
-                                    className="h-8 text-xs"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+            {/* 账号安全 */}
+            <SettingsSection
+                title={t("settings.account.securityTitle")}
+                description={t("settings.account.securityDesc")}
+            >
+                <SettingsRow
+                    icon={<Mail />}
+                    label={t("settings.account.email")}
+                    description={userInfo?.email || t("settings.account.emailUnset")}
+                    control={
+                        <Button variant="outline" size="sm">
+                            {t("settings.account.change")}
+                        </Button>
+                    }
+                />
+                <SettingsRow
+                    icon={<Lock />}
+                    label={t("settings.account.password")}
+                    description={t("settings.account.passwordHint")}
+                    control={
+                        <Button variant="outline" size="sm">
+                            {t("settings.account.change")}
+                        </Button>
+                    }
+                />
+                <SettingsRow
+                    icon={<Shield />}
+                    label={t("settings.account.twoFactor")}
+                    description={t("settings.account.twoFactorDesc")}
+                    control={
+                        <Badge variant="outline" className="font-normal text-muted-foreground">
+                            {t("settings.account.twoFactorDisabled")}
+                        </Badge>
+                    }
+                />
+            </SettingsSection>
 
-            {/* Security Card */}
-            <Card>
-                <CardHeader className="pb-3">
-                    <div className="flex items-center gap-2">
-                        <div className="p-1.5 rounded-lg bg-blue-500/10">
-                            <Shield className="h-3.5 w-3.5 text-blue-500" />
-                        </div>
-                        <div>
-                            <CardTitle className="text-sm">账号安全</CardTitle>
-                            <CardDescription className="text-xs">管理您的登录凭证和安全设置</CardDescription>
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent className="space-y-2.5">
-                    {/* Email */}
-                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                        <div className="flex items-center gap-2.5">
-                            <div className="p-1.5 rounded-lg bg-background">
-                                <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                            </div>
-                            <div>
-                                <div className="text-xs font-medium">邮箱地址</div>
-                                <div className="text-xs text-muted-foreground">{userInfo?.email || '未设置'}</div>
-                            </div>
-                        </div>
-                        <Button variant="outline" size="sm" className="h-7 text-xs">更改邮箱</Button>
-                    </div>
-
-                    {/* Password */}
-                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                        <div className="flex items-center gap-2.5">
-                            <div className="p-1.5 rounded-lg bg-background">
-                                <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                            </div>
-                            <div>
-                                <div className="text-xs font-medium">登录密码</div>
-                                <div className="text-xs text-muted-foreground">上次修改: 从未修改</div>
-                            </div>
-                        </div>
-                        <Button variant="outline" size="sm" className="h-7 text-xs">更改密码</Button>
-                    </div>
-
-                    {/* Two-Factor Auth */}
-                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                        <div className="flex items-center gap-2.5">
-                            <div className="p-1.5 rounded-lg bg-background">
-                                <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-                            </div>
-                            <div>
-                                <div className="text-xs font-medium">两步验证</div>
-                                <div className="text-xs text-muted-foreground">为您的账号增加额外的安全保护</div>
-                            </div>
-                        </div>
-                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">未启用</Badge>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Danger Zone */}
-            <Card className="border-destructive/50">
-                <CardHeader className="pb-3">
-                    <div className="flex items-center gap-2">
-                        <div className="p-1.5 rounded-lg bg-destructive/10">
-                            <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-                        </div>
-                        <div>
-                            <CardTitle className="text-sm text-destructive">危险区域</CardTitle>
-                            <CardDescription className="text-xs">以下操作不可撤销，请谨慎操作</CardDescription>
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex items-center justify-between p-3 rounded-lg border border-destructive/30 bg-destructive/5">
-                        <div className="flex items-center gap-2.5">
-                            <div className="p-1.5 rounded-lg bg-destructive/10">
-                                <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                            </div>
-                            <div>
-                                <div className="text-xs font-medium text-destructive">删除账号</div>
-                                <div className="text-xs text-muted-foreground">永久删除您的账号和所有关联数据</div>
-                            </div>
-                        </div>
-                        <Button variant="destructive" size="sm" className="h-7 text-xs">删除账号</Button>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
+            {/* 危险区域 */}
+            <SettingsSection
+                title={t("settings.account.dangerTitle")}
+                description={t("settings.account.dangerDesc")}
+                tone="destructive"
+            >
+                <SettingsRow
+                    icon={<Trash2 className="text-destructive" />}
+                    label={<span className="text-destructive">{t("settings.account.deleteAccount")}</span>}
+                    description={t("settings.account.deleteAccountDesc")}
+                    control={
+                        <Button variant="destructive" size="sm">
+                            {t("settings.account.deleteAccount")}
+                        </Button>
+                    }
+                />
+            </SettingsSection>
+        </SettingsPanel>
     );
-}
+};
+
+const Field: React.FC<React.PropsWithChildren<{ label: string; icon?: React.ReactNode }>> = ({
+    label,
+    icon,
+    children,
+}) => (
+    <div className="space-y-1.5">
+        <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            {icon}
+            {label}
+        </Label>
+        {children}
+    </div>
+);

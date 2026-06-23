@@ -1,313 +1,334 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@kn/ui";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@kn/ui";
-import { TreeView } from "@kn/ui";
-import { TreeViewElement } from "@kn/ui";
-import { Badge } from "@kn/ui";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@kn/ui";
+import { DialogTrigger } from "@kn/ui";
 import { ScrollArea } from "@kn/ui";
-import { Separator } from "@kn/ui";
+import { Badge } from "@kn/ui";
 import { cn } from "@kn/ui";
+import { useResponsive } from "@kn/ui";
 import { GlobalState } from "@kn/common";
 import { useSafeState } from "ahooks";
-import { UserCircle, Settings, Bell, Globe, ArrowUpCircle, UserCog, Group, Import, Puzzle, ChevronRight, Zap, Compass } from "@kn/icon";
-import React, { PropsWithChildren, useContext, useMemo, Suspense } from "react";
-import { useSelector, AppContext, PluginSettingsConfig, getTourRegistry, event, START_TOUR, WELCOME_TOUR_ID } from "@kn/common";
+import {
+    UserCircle,
+    Settings,
+    UserCog,
+    Puzzle,
+    Zap,
+    Compass,
+    ChevronLeft,
+} from "@kn/icon";
+import React, { PropsWithChildren, useContext, useMemo, Suspense, useEffect } from "react";
+import {
+    useSelector,
+    AppContext,
+    PluginSettingsConfig,
+    getTourRegistry,
+    event,
+    START_TOUR,
+    WELCOME_TOUR_ID,
+} from "@kn/common";
+import { useUploadFile, useTranslation } from "@kn/common";
 import { MyAccount } from "./components/MyAccount";
 import { MySetting } from "./components/MySetting";
 import { Member } from "./components/Member";
-import { useUploadFile } from "@kn/common";
 import { SkillManager } from "../Skills";
 
 interface PluginSettingsWithMeta extends PluginSettingsConfig {
     pluginName: string;
 }
 
-// Settings section header component
-const SectionHeader: React.FC<{ title: string; description?: string }> = ({ title, description }) => (
-    <div className="mb-4">
-        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+type NavItem = {
+    id: string;
+    label: string;
+    icon: React.ReactNode;
+    /** 选中后切换到的内容 key（与 onClick 二选一）。 */
+    contentKey?: string;
+    /** 直接执行的动作（如重新引导）。 */
+    onClick?: () => void;
+};
+
+type NavGroup = {
+    id: string;
+    label?: string;
+    items: NavItem[];
+};
+
+const LoadingSpinner: React.FC = () => (
+    <div className="flex h-32 items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-primary" />
     </div>
 );
 
-// Plugin settings wrapper with loading state
-const PluginSettingsLoader: React.FC<{ config: PluginSettingsWithMeta }> = ({ config }) => {
-    const Component = config.component;
-    return (
-        <Suspense fallback={
-            <div className="flex items-center justify-center h-32">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-            </div>
-        }>
-            <div className="space-y-3">
-                <SectionHeader
-                    title={config.label}
-                    description={config.description}
-                />
-                <Component pluginKey={config.key} />
-            </div>
-        </Suspense>
-    );
-};
-
 export const SettingDlg: React.FC<PropsWithChildren> = ({ children }) => {
     const { userInfo } = useSelector((state: GlobalState) => state);
-    const [currentKey, setCurrentKey] = useSafeState<string>('MyAccount');
+    const [currentKey, setCurrentKey] = useSafeState<string>("MyAccount");
     const [open, setOpen] = useSafeState<boolean>(false);
+    // 移动端：是否处于「详情」视图（false 时显示导航列表）。
+    const [mobileDetail, setMobileDetail] = useSafeState<boolean>(false);
     const { usePath } = useUploadFile();
     const { pluginManager } = useContext(AppContext);
+    const { isMobile } = useResponsive();
+    const { t } = useTranslation();
 
-    // 重新查看新手引导:关闭设置弹窗后,重置并启动 welcome tour
+    // 弹窗每次打开都回到默认页 + 列表视图。
+    useEffect(() => {
+        if (open) {
+            setCurrentKey("MyAccount");
+            setMobileDetail(false);
+        }
+    }, [open]);
+
+    // 重新查看新手引导：关闭设置弹窗后，重置并启动 welcome tour。
     const replayOnboarding = () => {
         setOpen(false);
         setTimeout(() => {
-            getTourRegistry().reset(WELCOME_TOUR_ID).finally(() => {
-                event.emit(START_TOUR, WELCOME_TOUR_ID);
-            });
+            getTourRegistry()
+                .reset(WELCOME_TOUR_ID)
+                .finally(() => {
+                    event.emit(START_TOUR, WELCOME_TOUR_ID);
+                });
         }, 250);
     };
 
-    // Get all plugin settings dynamically
-    const pluginSettings = useMemo(() => {
-        return pluginManager?.resolvePluginSettings() || [];
+    const pluginSettings: PluginSettingsWithMeta[] = useMemo(() => {
+        return (pluginManager?.resolvePluginSettings() as PluginSettingsWithMeta[]) || [];
     }, [pluginManager?.plugins]);
 
-    const render = () => {
-        // Check if it's a plugin settings key
-        const pluginSetting = pluginSettings.find(p => p.key === currentKey);
-        if (pluginSetting) {
-            return <PluginSettingsLoader config={pluginSetting} />;
+    // 导航分组（已清理死链接、去重账号入口；通知/语言并入「偏好设置」）。
+    const navGroups: NavGroup[] = useMemo(() => {
+        const groups: NavGroup[] = [
+            {
+                id: "account",
+                label: t("settings.nav.account"),
+                items: [
+                    { id: "MyAccount", label: t("settings.nav.myAccount"), icon: <UserCircle />, contentKey: "MyAccount" },
+                    { id: "MySetting", label: t("settings.nav.preferences"), icon: <Settings />, contentKey: "MySetting" },
+                    { id: "MySkills", label: t("settings.nav.skills"), icon: <Zap />, contentKey: "MySkills" },
+                ],
+            },
+            {
+                id: "workspace",
+                label: t("settings.nav.workspace"),
+                items: [{ id: "Member", label: t("settings.nav.members"), icon: <UserCog />, contentKey: "Member" }],
+            },
+        ];
+
+        if (pluginSettings.length > 0) {
+            groups.push({
+                id: "plugins",
+                label: t("settings.nav.plugins"),
+                items: pluginSettings.map((p) => ({
+                    id: p.key,
+                    label: p.label,
+                    icon: p.icon || <Puzzle />,
+                    contentKey: p.key,
+                })),
+            });
         }
 
-        // Built-in settings
+        groups.push({
+            id: "other",
+            items: [{ id: "onboarding", label: t("settings.nav.replayOnboarding"), icon: <Compass />, onClick: replayOnboarding }],
+        });
+
+        return groups;
+    }, [pluginSettings, t]);
+
+    // 当前内容的标题/描述（用于内容区头部与移动端详情头）。
+    const meta = useMemo(() => {
+        const plugin = pluginSettings.find((p) => p.key === currentKey);
+        if (plugin) return { title: plugin.label, description: plugin.description };
         switch (currentKey) {
-            case 'MyAccount':
-                return (
-                    <div className="space-y-3">
-                        <SectionHeader title="我的账号" description="管理您的个人信息和账号设置" />
-                        <MyAccount />
-                    </div>
-                );
-            case 'MySetting':
-                return (
-                    <div className="space-y-3">
-                        <SectionHeader title="我的设置" description="自定义您的偏好设置" />
-                        <MySetting />
-                    </div>
-                );
-            case 'Member':
-                return (
-                    <div className="space-y-3">
-                        <SectionHeader title="人员管理" description="管理工作空间成员和权限" />
-                        <Member />
-                    </div>
-                );
-            case 'MySkills':
-                return (
-                    <div className="-m-6 h-[calc(680px-65px)]">
-                        <SkillManager />
-                    </div>
-                );
+            case "MyAccount":
+                return { title: t("settings.account.title"), description: t("settings.account.desc") };
+            case "MySetting":
+                return { title: t("settings.preferences.title"), description: t("settings.preferences.desc") };
+            case "Member":
+                return { title: t("settings.members.title"), description: t("settings.members.desc") };
+            case "MySkills":
+                return { title: t("settings.skills.title"), description: t("settings.skills.desc") };
             default:
-                return (
-                    <div className="space-y-3">
-                        <SectionHeader title="我的账号" description="管理您的个人信息和账号设置" />
-                        <MyAccount />
-                    </div>
-                );
+                return { title: t("settings.title"), description: "" };
+        }
+    }, [currentKey, pluginSettings, t]);
+
+    const isSkills = currentKey === "MySkills";
+
+    const renderContentBody = () => {
+        const plugin = pluginSettings.find((p) => p.key === currentKey);
+        if (plugin) {
+            const Component = plugin.component;
+            return (
+                <Suspense fallback={<LoadingSpinner />}>
+                    <Component pluginKey={plugin.key} />
+                </Suspense>
+            );
+        }
+        switch (currentKey) {
+            case "MySetting":
+                return <MySetting />;
+            case "Member":
+                return <Member />;
+            case "MySkills":
+                return <SkillManager />;
+            case "MyAccount":
+            default:
+                return <MyAccount />;
         }
     };
 
-    // Navigation item component
-    const NavItem: React.FC<{
-        id: string;
-        label: string;
-        icon: React.ReactNode;
-        isActive: boolean;
-        onClick: () => void;
-        className?: string;
-    }> = ({ id, label, icon, isActive, onClick, className }) => (
-        <button
-            onClick={onClick}
-            className={cn(
-                "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-sm transition-all duration-200",
-                "hover:bg-accent/50",
-                isActive
-                    ? "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:text-foreground",
-                className
-            )}
-        >
-            <span className="flex-shrink-0">{icon}</span>
-            <span className="flex-1 text-left truncate">{label}</span>
-            {isActive && <ChevronRight className="h-4 w-4 flex-shrink-0" />}
-        </button>
+    const selectItem = (item: NavItem) => {
+        if (item.onClick) {
+            item.onClick();
+            return;
+        }
+        if (item.contentKey) {
+            setCurrentKey(item.contentKey);
+            setMobileDetail(true);
+        }
+    };
+
+    // —— 侧边栏导航 ——（用 JSX 值而非内部组件，避免每次 render 重挂导致输入框失焦）
+    const sidebarNav = (
+        <nav className="space-y-5">
+            {/* 账号迷你卡片 */}
+            <button
+                onClick={() => selectItem({ id: "MyAccount", label: "", icon: null, contentKey: "MyAccount" })}
+                className={cn(
+                    "flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors",
+                    currentKey === "MyAccount" && !isMobile ? "bg-accent" : "hover:bg-accent/60",
+                )}
+            >
+                <Avatar className="h-8 w-8">
+                    <AvatarImage src={usePath(userInfo?.avatar as string)} />
+                    <AvatarFallback className="bg-muted text-xs font-medium">
+                        {userInfo?.account?.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-foreground">{userInfo?.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">{userInfo?.account}</div>
+                </div>
+                <Badge variant="secondary" className="shrink-0 px-1.5 text-[10px] font-normal">
+                    {t("settings.planFree")}
+                </Badge>
+            </button>
+
+            {navGroups.map((group) => (
+                <div key={group.id} className="space-y-0.5">
+                    {group.label && (
+                        <div className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                            {group.label}
+                        </div>
+                    )}
+                    {group.items.map((item) => {
+                        const active = !isMobile && item.contentKey === currentKey;
+                        return (
+                            <button
+                                key={item.id}
+                                onClick={() => selectItem(item)}
+                                className={cn(
+                                    "group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors",
+                                    active
+                                        ? "bg-accent font-medium text-foreground"
+                                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                                )}
+                            >
+                                <span className="flex h-4 w-4 shrink-0 items-center justify-center [&_svg]:h-4 [&_svg]:w-4">
+                                    {item.icon}
+                                </span>
+                                <span className="flex-1 truncate text-left">{item.label}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+            ))}
+        </nav>
     );
 
-    // Build plugin settings tree items
-    const pluginSettingsItems: TreeViewElement[] = useMemo(() => {
-        if (pluginSettings.length === 0) return [];
-
-        return [{
-            id: 'plugins',
-            name: '插件设置',
-            isGroup: true,
-            children: pluginSettings.map(plugin => ({
-                id: plugin.key,
-                name: plugin.label,
-                icon: plugin.icon || <Puzzle className="h-4 w-4" />,
-                onClick: () => setCurrentKey(plugin.key)
-            }))
-        }];
-    }, [pluginSettings]);
-
-    const settingItems: TreeViewElement[] = [
-        {
-            id: 'account',
-            name: '账号',
-            isGroup: true,
-            children: [
-                {
-                    id: 'MyAccount',
-                    name: "我的账号",
-                    customerRender: (
-                        <div
-                            onClick={() => setCurrentKey('MyAccount')}
-                            className={cn(
-                                "flex items-center gap-2.5 p-2.5 mx-1 mb-1.5 rounded-lg border transition-all duration-200 cursor-pointer",
-                                currentKey === 'MyAccount'
-                                    ? "bg-primary/5 border-primary/30 shadow-sm"
-                                    : "bg-card border-border hover:bg-accent/50 hover:border-accent"
+    // —— 内容区 ——（函数返回 JSX，避免内部组件每次 render 重挂）
+    const renderContent = (showHeader = true) => {
+        if (isSkills) {
+            // 技能管理自带完整布局，铺满内容区。
+            return <div className="min-h-0 flex-1">{renderContentBody()}</div>;
+        }
+        return (
+            <ScrollArea className="min-h-0 flex-1">
+                <div className="px-5 py-6 sm:px-8">
+                    {showHeader && (
+                        <div className="mx-auto mb-6 w-full max-w-2xl space-y-0.5">
+                            <h2 className="text-lg font-semibold text-foreground">{meta.title}</h2>
+                            {meta.description && (
+                                <p className="text-sm text-muted-foreground">{meta.description}</p>
                             )}
-                        >
-                            <Avatar className="h-8 w-8 ring-2 ring-primary/20 ring-offset-1 ring-offset-background">
-                                <AvatarImage src={usePath(userInfo?.avatar as string)} />
-                                <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
-                                    {userInfo?.account?.slice(0, 2).toUpperCase()}
-                                </AvatarFallback>
-                            </Avatar>
-                            <div className="flex flex-col flex-1 min-w-0">
-                                <div className="font-semibold text-xs truncate text-foreground">{userInfo?.name}</div>
-                                <div className="text-[10px] text-muted-foreground truncate">{userInfo?.account}</div>
-                            </div>
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">Free</Badge>
                         </div>
-                    )
-                },
-                {
-                    id: 'accounrDetail',
-                    name: "账号信息",
-                    icon: <UserCircle className="h-4 w-4" />,
-                    onClick: () => setCurrentKey("MyAccount")
-                },
-                {
-                    id: 'settings',
-                    name: "偏好设置",
-                    icon: <Settings className="h-4 w-4" />,
-                    onClick: () => setCurrentKey("MySetting")
-                },
-                {
-                    id: 'notifaction',
-                    name: "通知设置",
-                    icon: <Bell className="h-4 w-4" />
-                },
-                {
-                    id: 'language',
-                    name: "语言设置",
-                    icon: <Globe className="h-4 w-4" />
-                },
-                {
-                    id: 'skills',
-                    name: "AI 技能",
-                    icon: <Zap className="h-4 w-4" />,
-                    onClick: () => setCurrentKey("MySkills")
-                },
-                {
-                    id: 'onboarding',
-                    name: "重新查看新手引导",
-                    icon: <Compass className="h-4 w-4" />,
-                    onClick: replayOnboarding
-                }
-            ]
-        },
-        {
-            id: 'workspaces',
-            name: '工作空间',
-            isGroup: true,
-            children: [
-                {
-                    id: 'upgrade',
-                    name: '升级方案',
-                    icon: <ArrowUpCircle className="h-4 w-4" />,
-                    className: 'text-primary font-medium hover:text-primary'
-                },
-                {
-                    id: 'member',
-                    name: '人员管理',
-                    icon: <UserCog className="h-4 w-4" />,
-                    onClick: () => setCurrentKey("Member")
-                },
-                {
-                    id: 'spaces',
-                    name: "空间设置",
-                    icon: <Group className="h-4 w-4" />
-                },
-                {
-                    id: 'import',
-                    name: '数据导入',
-                    icon: <Import className="h-4 w-4" />
-                }
-            ]
-        },
-        ...pluginSettingsItems
-    ];
+                    )}
+                    {renderContentBody()}
+                </div>
+            </ScrollArea>
+        );
+    };
+
+    // —— 移动端布局：列表 ↔ 详情 ——
+    const MobileBody = (
+        <div className="flex h-full flex-col">
+            {!mobileDetail ? (
+                <>
+                    <DialogHeader className="border-b px-4 py-3 text-left">
+                        <DialogTitle className="text-base font-semibold">{t("settings.title")}</DialogTitle>
+                    </DialogHeader>
+                    <ScrollArea className="flex-1">
+                        <div className="p-3">{sidebarNav}</div>
+                    </ScrollArea>
+                </>
+            ) : (
+                <>
+                    <DialogHeader className="flex-row items-center gap-1 space-y-0 border-b px-2 py-2.5 text-left">
+                        <button
+                            onClick={() => setMobileDetail(false)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent"
+                            aria-label={t("settings.back")}
+                        >
+                            <ChevronLeft className="h-5 w-5" />
+                        </button>
+                        <DialogTitle className="text-base font-semibold">{meta.title}</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex min-h-0 flex-1 flex-col">{renderContent(!isSkills)}</div>
+                </>
+            )}
+        </div>
+    );
+
+    // —— 桌面/平板布局：左右分栏 ——
+    // 用 flex（交叉轴 stretch 给到确定高度），grid 单行会被内容撑高导致 ScrollArea 失效。
+    const DesktopBody = (
+        <div className="flex h-full">
+            <div className="flex w-[232px] min-h-0 shrink-0 flex-col border-r bg-muted/30">
+                <DialogHeader className="px-4 pb-2 pt-4 text-left">
+                    <DialogTitle className="px-2 text-base font-semibold">{t("settings.title")}</DialogTitle>
+                </DialogHeader>
+                <ScrollArea className="flex-1">
+                    <div className="p-3 pt-2">{sidebarNav}</div>
+                </ScrollArea>
+            </div>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{renderContent()}</div>
+        </div>
+    );
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                {children}
-            </DialogTrigger>
-            <DialogContent className="p-0 max-w-[1000px] h-[680px] gap-0 overflow-hidden">
-                <DialogHeader className="px-6 py-3 border-b bg-muted/30">
-                    <div className="flex items-center gap-3">
-                        <div className="p-1.5 rounded-lg bg-primary/10">
-                            <Settings className="h-4 w-4 text-primary" />
-                        </div>
-                        <div>
-                            <DialogTitle className="text-base font-semibold">设置</DialogTitle>
-                            <DialogDescription className="text-xs text-muted-foreground">
-                                管理您的账号、工作空间和插件设置
-                            </DialogDescription>
-                        </div>
-                    </div>
-                </DialogHeader>
-                <div className="grid grid-cols-[260px_1fr] h-[calc(100%-65px)]">
-                    <div className="border-r bg-muted/20">
-                        <ScrollArea className="h-full">
-                            <div className="p-3">
-                                <TreeView
-                                    size="sm"
-                                    elements={settingItems}
-                                />
-                                {pluginSettings.length > 0 && (
-                                    <>
-                                        <Separator className="my-2" />
-                                        <div className="px-2 py-1">
-                                            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                                                已安装插件 ({pluginSettings.length})
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        </ScrollArea>
-                    </div>
-                    <ScrollArea className="h-full">
-                        <div className="p-6">
-                            {render()}
-                        </div>
-                    </ScrollArea>
-                </div>
+            <DialogTrigger asChild>{children}</DialogTrigger>
+            <DialogContent
+                aria-describedby={undefined}
+                className={cn(
+                    // 覆盖 DialogContent 默认的 grid/gap/padding，改为 flex 列布局，
+                    // 让内部 body 拿到确定高度（否则 grid auto 行会按内容撑高，ScrollArea 失效）。
+                    "flex flex-col gap-0 overflow-hidden p-0",
+                    "h-[100dvh] max-w-full rounded-none border-0",
+                    "sm:h-[660px] sm:max-w-[920px] sm:rounded-xl sm:border",
+                )}
+            >
+                {isMobile ? MobileBody : DesktopBody}
             </DialogContent>
         </Dialog>
     );
-}
+};
