@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
     Dialog,
     DialogContent,
@@ -30,18 +30,27 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
     onUpdateRecord,
     editable = true,
 }) => {
-    if (!record) return null;
-
     const { t } = useTranslation();
-    const titleField = fields.find(f => f.type === FieldType.TEXT && f.isShow !== false);
-    const title = titleField ? String(record[titleField.id] || '') : '';
-    const idField = fields.find(f => f.type === FieldType.ID);
+
+    // Keep the last non-null record so its content stays mounted while the
+    // close animation plays out — the parent clears `record` together with
+    // `open` on close, and unmounting early would skip the exit transition.
+    const [activeRecord, setActiveRecord] = useState(record);
+    useEffect(() => {
+        if (record) setActiveRecord(record);
+    }, [record]);
 
     const handleContentUpdate = useCallback((content: any) => {
-        if (record) {
-            onUpdateRecord(record.id, { content });
+        if (activeRecord) {
+            onUpdateRecord(activeRecord.id, { content });
         }
-    }, [record, onUpdateRecord]);
+    }, [activeRecord, onUpdateRecord]);
+
+    if (!activeRecord) return null;
+
+    const titleField = fields.find(f => f.type === FieldType.TEXT && f.isShow !== false);
+    const title = titleField ? String(activeRecord[titleField.id] || '') : '';
+    const idField = fields.find(f => f.type === FieldType.ID);
 
     return (
         <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
@@ -50,7 +59,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                 <DialogHeader className="px-6 pt-5 pb-4 border-b border-border space-y-1 flex-shrink-0">
                     {idField && (
                         <span className="text-xs font-mono text-muted-foreground">
-                            #{record[idField.id]}
+                            #{activeRecord[idField.id]}
                         </span>
                     )}
                     <DialogTitle className="text-lg leading-tight">
@@ -81,9 +90,9 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                                         <div className="min-h-[28px] flex items-start pt-0.5">
                                             <DetailFieldValue
                                                 field={field}
-                                                value={record[field.id]}
+                                                value={activeRecord[field.id]}
                                                 editable={editable}
-                                                onChange={(v) => onUpdateRecord(record.id, { [field.id]: v })}
+                                                onChange={(v) => onUpdateRecord(activeRecord.id, { [field.id]: v })}
                                                 density="compact"
                                             />
                                         </div>
@@ -97,7 +106,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                         {/* Editor section */}
                         <div className="px-6 py-4 min-h-[300px]">
                             <RecordEditor
-                                content={record.content}
+                                content={activeRecord.content}
                                 onUpdate={handleContentUpdate}
                                 editable={editable}
                                 className="min-h-[300px]"
@@ -107,10 +116,10 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                 </ScrollArea>
 
                 {/* Footer */}
-                {record.createdTime && (
+                {activeRecord.createdTime && (
                     <div className="px-6 py-2.5 border-t border-border flex-shrink-0">
                         <span className="text-xs text-muted-foreground">
-                            {t('bitable.fieldTypes.createdTime')}: {format(new Date(record.createdTime), 'PPP p')}
+                            {t('bitable.fieldTypes.createdTime')}: {format(new Date(activeRecord.createdTime), 'PPP p')}
                         </span>
                     </div>
                 )}

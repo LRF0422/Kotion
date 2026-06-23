@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
     Sheet,
     SheetContent,
@@ -31,11 +31,20 @@ export const RecordDetailSheet: React.FC<RecordDetailSheetProps> = ({
     editable,
     editor,
 }) => {
-    if (!record) return null;
-
     const { t } = useTranslation();
+
+    // Keep the last non-null record so its content stays mounted while the
+    // close animation plays out — the parent clears `record` together with
+    // `open` on close, and unmounting early would skip the exit transition.
+    const [activeRecord, setActiveRecord] = useState(record);
+    useEffect(() => {
+        if (record) setActiveRecord(record);
+    }, [record]);
+
+    if (!activeRecord) return null;
+
     const titleField = fields.find(f => f.type === FieldType.TEXT && f.isShow !== false);
-    const title = titleField ? String(record[titleField.id] || '') : '';
+    const title = titleField ? String(activeRecord[titleField.id] || '') : '';
     const idField = fields.find(f => f.type === FieldType.ID);
 
     return (
@@ -46,7 +55,7 @@ export const RecordDetailSheet: React.FC<RecordDetailSheetProps> = ({
                     <SheetHeader className="space-y-1">
                         {idField && (
                             <span className="text-xs font-mono text-muted-foreground">
-                                #{record[idField.id]}
+                                #{activeRecord[idField.id]}
                             </span>
                         )}
                         <SheetTitle className="text-lg leading-tight">
@@ -76,9 +85,9 @@ export const RecordDetailSheet: React.FC<RecordDetailSheetProps> = ({
                                     <div className="min-h-[32px] flex items-start pt-0.5">
                                         <DetailFieldValue
                                             field={field}
-                                            value={record[field.id]}
+                                            value={activeRecord[field.id]}
                                             editable={editable}
-                                            onChange={(v) => onUpdateRecord(record.id, { [field.id]: v })}
+                                            onChange={(v) => onUpdateRecord(activeRecord.id, { [field.id]: v })}
                                             density="comfortable"
                                         />
                                     </div>
@@ -88,10 +97,10 @@ export const RecordDetailSheet: React.FC<RecordDetailSheetProps> = ({
                 </ScrollArea>
 
                 {/* Footer */}
-                {record.createdTime && (
+                {activeRecord.createdTime && (
                     <div className="px-6 py-3 border-t border-border">
                         <span className="text-xs text-muted-foreground">
-                            {t('bitable.fieldTypes.createdTime')}: {format(new Date(record.createdTime), 'PPP p')}
+                            {t('bitable.fieldTypes.createdTime')}: {format(new Date(activeRecord.createdTime), 'PPP p')}
                         </span>
                     </div>
                 )}

@@ -186,12 +186,59 @@ module.exports = {
             transform: "translate(-50%, -50%) scale(0.95)",
           },
         },
+        // Sheet / Drawer slide animations (self-contained — do not rely on the
+        // tailwindcss-animate plugin, which the Sheet's data-[state] variants
+        // were silently losing). Mirrors the dialog-in/out approach above.
+        "overlay-in": { from: { opacity: "0" }, to: { opacity: "1" } },
+        "overlay-out": { from: { opacity: "1" }, to: { opacity: "0" } },
+        "sheet-in-right": {
+          from: { transform: "translateX(100%)" },
+          to: { transform: "translateX(0)" },
+        },
+        "sheet-out-right": {
+          from: { transform: "translateX(0)" },
+          to: { transform: "translateX(100%)" },
+        },
+        "sheet-in-left": {
+          from: { transform: "translateX(-100%)" },
+          to: { transform: "translateX(0)" },
+        },
+        "sheet-out-left": {
+          from: { transform: "translateX(0)" },
+          to: { transform: "translateX(-100%)" },
+        },
+        "sheet-in-top": {
+          from: { transform: "translateY(-100%)" },
+          to: { transform: "translateY(0)" },
+        },
+        "sheet-out-top": {
+          from: { transform: "translateY(0)" },
+          to: { transform: "translateY(-100%)" },
+        },
+        "sheet-in-bottom": {
+          from: { transform: "translateY(100%)" },
+          to: { transform: "translateY(0)" },
+        },
+        "sheet-out-bottom": {
+          from: { transform: "translateY(0)" },
+          to: { transform: "translateY(100%)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "dialog-in": "dialog-in 0.2s ease-out",
         "dialog-out": "dialog-out 0.15s ease-in",
+        "overlay-in": "overlay-in 0.3s ease-out",
+        "overlay-out": "overlay-out 0.2s ease-in",
+        "sheet-in-right": "sheet-in-right 0.5s cubic-bezier(0.32, 0.72, 0, 1)",
+        "sheet-out-right": "sheet-out-right 0.3s ease-in",
+        "sheet-in-left": "sheet-in-left 0.5s cubic-bezier(0.32, 0.72, 0, 1)",
+        "sheet-out-left": "sheet-out-left 0.3s ease-in",
+        "sheet-in-top": "sheet-in-top 0.5s cubic-bezier(0.32, 0.72, 0, 1)",
+        "sheet-out-top": "sheet-out-top 0.3s ease-in",
+        "sheet-in-bottom": "sheet-in-bottom 0.5s cubic-bezier(0.32, 0.72, 0, 1)",
+        "sheet-out-bottom": "sheet-out-bottom 0.3s ease-in",
       },
       typography: {
         // Notion-like reading experience for `prose` content
