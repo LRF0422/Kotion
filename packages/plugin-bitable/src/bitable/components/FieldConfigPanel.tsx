@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { generateFieldId, generateOptionId } from "../../utils/id";
-import { getRandomOptionColor } from "../../utils/colors";
+import { getRandomOptionColor, PRESET_COLORS } from "../../utils/colors";
 import { useTranslation } from "@kn/common";
 import { getConversionWarning } from "../../utils/fieldConversion";
 import {
@@ -29,21 +29,6 @@ import {
     AlertDescription,
 } from "@kn/ui";
 
-// 预设颜色 - 适配深浅色模式
-const PRESET_COLORS = [
-    { value: '#3b82f6', name: 'Blue', light: '#eff6ff', dark: '#1e3a8a' },
-    { value: '#10b981', name: 'Green', light: '#d1fae5', dark: '#064e3b' },
-    { value: '#f59e0b', name: 'Amber', light: '#fef3c7', dark: '#78350f' },
-    { value: '#ef4444', name: 'Red', light: '#fee2e2', dark: '#7f1d1d' },
-    { value: '#8b5cf6', name: 'Purple', light: '#ede9fe', dark: '#4c1d95' },
-    { value: '#ec4899', name: 'Pink', light: '#fce7f3', dark: '#831843' },
-    { value: '#14b8a6', name: 'Teal', light: '#ccfbf1', dark: '#134e4a' },
-    { value: '#f97316', name: 'Orange', light: '#ffedd5', dark: '#7c2d12' },
-    { value: '#6366f1', name: 'Indigo', light: '#e0e7ff', dark: '#312e81' },
-    { value: '#06b6d4', name: 'Cyan', light: '#cffafe', dark: '#164e63' },
-    { value: '#84cc16', name: 'Lime', light: '#ecfccb', dark: '#365314' },
-    { value: '#a855f7', name: 'Violet', light: '#f3e8ff', dark: '#581c87' },
-];
 
 // 颜色选择器组件
 const ColorPicker: React.FC<{

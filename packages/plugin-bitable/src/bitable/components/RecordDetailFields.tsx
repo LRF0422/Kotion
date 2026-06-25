@@ -23,7 +23,7 @@ import {
 } from "@kn/icon";
 import { FieldConfig, FieldType, SelectOption } from "../../types";
 import { getTagStyle } from "../../utils/colors";
-import { PersonRenderer, PersonEditor, AttachmentRenderer } from "../fields/FieldRenderers";
+import { PersonRenderer, PersonEditor, AttachmentRenderer } from "../fields";
 import { format } from "date-fns";
 import { zhCN, enUS } from "date-fns/locale";
 

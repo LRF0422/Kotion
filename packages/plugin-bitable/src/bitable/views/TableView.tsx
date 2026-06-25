@@ -41,7 +41,7 @@ import { FieldConfig, RecordData, ViewConfig, FieldType, GroupConfig } from "../
 import DataGrid, { SelectColumn, Row as DataGridRow, RenderRowProps } from 'react-data-grid';
 import 'react-data-grid/lib/styles.css';
 import { useTheme, cn } from "@kn/ui";
-import { getFieldRenderer, getFieldEditor } from "../fields/FieldRenderers";
+import { getFieldRenderer, getFieldEditor } from "../fields";
 import { createFillHandler } from "../../utils/autoFill";
 import { applyGroups, getGroupLabel } from "../../utils/dataProcessing";
 import { computeSummary, nextSummaryMode, summaryPrefix } from "../../utils/summary";

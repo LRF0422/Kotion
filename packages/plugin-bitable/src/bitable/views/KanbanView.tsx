@@ -11,7 +11,7 @@ import {
 import { Plus, MoreHorizontal, Pencil, Trash2, Check, X } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 import { FieldConfig, RecordData, ViewConfig, SelectOption } from "../../types";
-import { getFieldRenderer } from "../fields/FieldRenderers";
+import { getFieldRenderer } from "../fields";
 import { buildKanbanColumns, isKanbanGroupable, valueForColumnKey, KANBAN_UNASSIGNED } from "../../utils/kanbanGroups";
 import { OPTION_COLORS } from "../../utils/colors";
 import { DropdownMenuTrigger } from "@kn/ui";
