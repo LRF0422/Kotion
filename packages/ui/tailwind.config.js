@@ -166,24 +166,31 @@ module.exports = {
             height: "0",
           },
         },
+        // Use the individual CSS `scale` property (not `transform: scale()`)
+        // so the element's static `transform: translate(-50%, -50%)` (set via
+        // Tailwind's translate utilities for centering) is never overridden by
+        // the keyframe.  Safari cannot pre-compute percentage-based translates
+        // inside an animated `transform`, so keeping the translate static and
+        // animating only `scale` + `opacity` (both GPU-composited) eliminates
+        // per-frame layout recalculation.
         "dialog-in": {
           from: {
             opacity: "0",
-            transform: "translate(-50%, -50%) scale(0.95)",
+            scale: "0.95",
           },
           to: {
             opacity: "1",
-            transform: "translate(-50%, -50%) scale(1)",
+            scale: "1",
           },
         },
         "dialog-out": {
           from: {
             opacity: "1",
-            transform: "translate(-50%, -50%) scale(1)",
+            scale: "1",
           },
           to: {
             opacity: "0",
-            transform: "translate(-50%, -50%) scale(0.95)",
+            scale: "0.95",
           },
         },
         // Sheet / Drawer slide animations (self-contained — do not rely on the

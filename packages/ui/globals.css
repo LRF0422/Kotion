@@ -81,19 +81,6 @@
   }
 }
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-
-  body {
-    @apply bg-background text-foreground font-sans;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    text-rendering: optimizeLegibility;
-  }
-}
-
 /* Custom Scrollbar - Modern thin design with auto-hide effect */
 ::-webkit-scrollbar {
   width: 8px;
@@ -196,5 +183,64 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+  }
+}
+
+/* ------------------------------------------------------------------
+ * Safari / WebKit performance: GPU layer promotion for animated
+ * overlays and modals.  Without these hints Safari keeps the element
+ * on the main thread, recalculating paint on every animation frame.
+ * ------------------------------------------------------------------ */
+@layer utilities {
+  /* Promote element to its own compositor layer for transform + opacity
+     animations (Dialog/Sheet content, popover, etc.). */
+  .gpu-promote {
+    will-change: transform, opacity;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  /* Lighter variant — only opacity is animated (overlays). */
+  .gpu-promote-opacity {
+    will-change: opacity;
+  }
+}
+
+/* ------------------------------------------------------------------
+ * Global GPU promotion for ALL Radix popper-based overlays.
+ *
+ * The tailwindcss-animate plugin's @keyframes enter/exit use
+ *   transform: translate3d(var(--tw-enter-translate-x, 0), …)
+ * Safari cannot cache var() resolutions inside animated transforms and
+ * re-evaluates the entire matrix on every frame.  Pre-promoting the
+ * element with will-change forces Safari to create the compositor layer
+ * *before* the first animation frame, so the var() is resolved once.
+ *
+ * This single rule covers: DropdownMenu, Select, Popover, Tooltip,
+ * HoverCard, ContextMenu — every component rendered inside a
+ * [data-radix-popper-content-wrapper].
+ * ------------------------------------------------------------------ */
+[data-radix-popper-content-wrapper] {
+  /* Isolate layout & style recalculation from the rest of the page so
+     opening a dropdown doesn't trigger a full-document style invalidation. */
+  contain: layout style;
+}
+
+[data-radix-popper-content-wrapper] > * {
+  will-change: transform, opacity;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Respect user motion preferences.  Also improves perceived performance
+   on Safari by skipping animation frames entirely. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
