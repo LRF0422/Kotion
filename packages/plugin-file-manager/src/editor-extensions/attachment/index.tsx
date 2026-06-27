@@ -5,6 +5,7 @@ import { FileIcon, FileTextIcon } from "@kn/icon";
 import { Editor, ReactRenderer } from "@kn/editor";
 import { FolderDlg } from "../component/FolderDlg";
 import { FileItem } from "../component/FileContext";
+import { createT } from "../../i18n";
 
 // Helper function to show file manager dialog for attachments
 const showAttachmentDlg = (editor: Editor, onConfirm?: (files: FileItem[]) => void) => {
@@ -33,7 +34,7 @@ export const AttachmentExtension: ExtensionWrapper = {
     extendsion: [Attachment, AttachmentInline],
     slashConfig: [
         {
-            text: 'Attachment (Block)',
+            text: createT()('slashCommands.attachmentBlock'),
             slash: '/attachment',
             icon: <FileIcon className="h-4 w-4" />,
             action: (editor) => {
@@ -52,7 +53,7 @@ export const AttachmentExtension: ExtensionWrapper = {
             }
         },
         {
-            text: 'Attachment (Inline)',
+            text: createT()('slashCommands.attachmentInline'),
             slash: '/attachment-inline',
             icon: <FileTextIcon className="h-4 w-4" />,
             action: (editor) => {

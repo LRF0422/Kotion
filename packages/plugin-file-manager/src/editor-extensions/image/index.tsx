@@ -5,6 +5,7 @@ import { ImageBubbleMenu, ImageStaticMenu } from "./menu";
 import { ImageIcon } from "@kn/icon";
 import { ImageGallery } from "./image-gallery/image-gallery";
 import { showFolderDlg } from "../utils/showFolderDlg";
+import { createT } from "../../i18n";
 
 export * from "./image";
 export * from "./menu";
@@ -19,7 +20,7 @@ export const ImageExtension: ExtensionWrapper = {
 	},
 	slashConfig: [
 		{
-			text: '图片',
+			text: createT()('slashCommands.image'),
 			slash: '/image',
 			icon: <ImageIcon className="h-4 w-4" />,
 			action: (editor) => {

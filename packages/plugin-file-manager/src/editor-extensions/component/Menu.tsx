@@ -20,12 +20,12 @@ export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
             </ContextMenuTrigger>
             <ContextMenuContent className="w-[220px]">
                 <ContextMenuItem onClick={selectAll} disabled={loading}>
-                    <CheckSquare className="mr-2 h-4 w-4" /> Select All
+                    <CheckSquare className="mr-2 h-4 w-4" /> {ctx.t('contextMenu.selectAll')}
                     <ContextMenuShortcut>⌘A</ContextMenuShortcut>
                 </ContextMenuItem>
                 {selectedFiles.length > 0 && (
                     <ContextMenuItem onClick={clearSelection} disabled={loading}>
-                        <Square className="mr-2 h-4 w-4" /> Clear ({selectedFiles.length})
+                        <Square className="mr-2 h-4 w-4" /> {ctx.t('contextMenu.clear', { count: selectedFiles.length })}
                     </ContextMenuItem>
                 )}
 
@@ -33,10 +33,10 @@ export const Menu: React.FC<PropsWithChildren> = React.memo((props) => {
                     <>
                         <ContextMenuSeparator />
                         <ContextMenuItem onClick={() => handleUpload('FOLDER')} disabled={loading}>
-                            <FolderPlusIcon className="mr-2 h-4 w-4" /> New Folder
+                            <FolderPlusIcon className="mr-2 h-4 w-4" /> {ctx.t('contextMenu.newFolder')}
                         </ContextMenuItem>
                         <ContextMenuItem onClick={() => handleUpload('FILE')} disabled={loading}>
-                            <UploadIcon className="mr-2 h-4 w-4" /> Upload File
+                            <UploadIcon className="mr-2 h-4 w-4" /> {ctx.t('contextMenu.uploadFile')}
                         </ContextMenuItem>
                     </>
                 )}

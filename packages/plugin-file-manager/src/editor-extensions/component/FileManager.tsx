@@ -26,6 +26,7 @@ import { useFileManager } from "../../hooks/useFileManager";
 import { useFileSelection } from "../../hooks/useFileSelection";
 import { isPreviewable } from "../../utils/fileUtils";
 import { RenameDialog, MoveDialog, FileDetailsDialog, CreateFolderDialog, FilePreviewDialog } from "./dialogs";
+import { useI18n } from "../../i18n/use-i18n";
 
 export interface FileManagerProps {
     folderId?: string
@@ -39,15 +40,22 @@ export interface FileManagerProps {
     onViewModeChange?: (mode: ViewMode) => void
 }
 
-const VIEW_META: Record<Exclude<FileView, 'home' | 'search'>, { label: string; icon: React.ReactNode }> = {
-    recent: { label: 'Recent', icon: <ClockIcon className="h-4 w-4" /> },
-    favorites: { label: 'Favorites', icon: <StarIcon className="h-4 w-4" /> },
-    trash: { label: 'Trash', icon: <Trash2 className="h-4 w-4" /> },
+const VIEW_META: Record<Exclude<FileView, 'home' | 'search'>, { icon: React.ReactNode }> = {
+    recent: { icon: <ClockIcon className="h-4 w-4" /> },
+    favorites: { icon: <StarIcon className="h-4 w-4" /> },
+    trash: { icon: <Trash2 className="h-4 w-4" /> },
+};
+
+const VIEW_LABEL_KEY: Record<Exclude<FileView, 'home' | 'search'>, string> = {
+    recent: 'views.recent',
+    favorites: 'views.favorites',
+    trash: 'views.trash',
 };
 
 export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const { isMobileOrTablet: isTouch } = useResponsive();
     const { selectable = false, onCancel, onConfirm, onViewModeChange } = props;
+    const { t } = useI18n();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [viewMode, setViewModeState] = useState<ViewMode>(props.defaultViewMode || 'grid');
@@ -118,7 +126,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
     const goBack = useCallback(() => { clearSelection(); goBackRaw(); }, [clearSelection, goBackRaw]);
     const goForward = useCallback(() => { clearSelection(); goForwardRaw(); }, [clearSelection, goForwardRaw]);
-    const goHome = useCallback(() => navigateToFolder(props.folderId || "", "Home"), [navigateToFolder, props.folderId]);
+    const goHome = useCallback(() => navigateToFolder(props.folderId || "", t('sidebar.home')), [navigateToFolder, props.folderId, t]);
 
     // ---- centralized dialogs ----
     const [renameTarget, setRenameTarget] = useState<FileItem | null>(null);
@@ -142,21 +150,21 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const requestDelete = useCallback((files: FileItem[]) => {
         const n = files.length;
         askConfirm({
-            title: `Delete ${n} item${n > 1 ? 's' : ''}?`,
-            description: "The selected item(s) will be moved to the trash. You can restore them later.",
+            title: t('confirm.deleteTitle', { count: n }),
+            description: t('confirm.deleteDescription'),
             destructive: true,
             onConfirm: () => { deleteFiles(files.map(f => f.id)); clearSelection(); },
         });
-    }, [askConfirm, deleteFiles, clearSelection]);
+    }, [askConfirm, deleteFiles, clearSelection, t]);
 
     const requestPurge = useCallback((files: FileItem[]) => {
         askConfirm({
-            title: "Delete forever?",
-            description: "This will permanently delete the selected item(s). This action cannot be undone.",
+            title: t('confirm.purgeTitle'),
+            description: t('confirm.purgeDescription'),
             destructive: true,
             onConfirm: () => { purgeFiles(files.map(f => f.id)); clearSelection(); },
         });
-    }, [askConfirm, purgeFiles, clearSelection]);
+    }, [askConfirm, purgeFiles, clearSelection, t]);
 
     // ---- open (double-click / touch tap) ----
     const openItem = useCallback((item: FileItem) => {
@@ -213,9 +221,9 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
             const kw = value.trim();
             clearSelection();
             if (kw) searchFiles(kw);
-            else navigateRaw(props.folderId || "", "Home");
+            else navigateRaw(props.folderId || "", t('sidebar.home'));
         }, 350);
-    }, [searchFiles, navigateRaw, props.folderId, clearSelection]);
+    }, [searchFiles, navigateRaw, props.folderId, clearSelection, t]);
 
     // ---- build sidebar folder tree ----
     const resolveTree = useCallback((file: any): any => {
@@ -253,6 +261,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const contextValue = useMemo(() => ({
         selectable,
         onConfirmSelectable: onConfirm,
+        t,
         isTouch,
         currentFolderItems, sortedItems,
         selectedFiles, setSelectFiles,
@@ -267,7 +276,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
         viewMode, setViewMode, sortBy, sortOrder, setSort,
         view, setView, toggleFavorite, restoreFiles, purgeFiles, emptyTrash, searchFiles, downloadFile,
     }), [
-        selectable, onConfirm, isTouch, currentFolderItems, sortedItems, selectedFiles, setSelectFiles,
+        selectable, onConfirm, t, isTouch, currentFolderItems, sortedItems, selectedFiles, setSelectFiles,
         currentFolderId, setCurrentFolderId, currentItem, setCurrentItem, repoKey, handleCreateFile, handleDelete,
         loading, error, breadcrumbPath, canGoBack, canGoForward, goBack, goForward, navigateToFolder,
         handleRename, handleMove, handleCopy, handleDuplicate, selectItem, isSelected, selectAll, clearSelection,
@@ -303,16 +312,16 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                     </Button>
                                 </SheetTrigger>
                                 <SheetContent side="left" className="w-[280px] p-0">
-                                    <SheetTitle className="sr-only">File navigation</SheetTitle>
+                                    <SheetTitle className="sr-only">{t('toolbar.fileNavigation')}</SheetTitle>
                                     {sidebar}
                                 </SheetContent>
                             </Sheet>
                         )}
                         <div className="flex flex-shrink-0 items-center">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goBack} disabled={!canGoBack || loading} title="Back">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goBack} disabled={!canGoBack || loading} title={t('toolbar.back')}>
                                 <ArrowLeft className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goForward} disabled={!canGoForward || loading} title="Forward">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goForward} disabled={!canGoForward || loading} title={t('toolbar.forward')}>
                                 <ArrowRight className="h-4 w-4" />
                             </Button>
                         </div>
@@ -324,7 +333,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                 <div className="flex items-center gap-2 px-1 text-sm font-medium">
                                     {view === 'search'
                                         ? <><Search className="h-4 w-4" /><span className="truncate">“{searchKeyword}”</span></>
-                                        : <>{VIEW_META[view as keyof typeof VIEW_META]?.icon}<span>{VIEW_META[view as keyof typeof VIEW_META]?.label}</span></>}
+                                        : <>{VIEW_META[view as keyof typeof VIEW_META]?.icon}<span>{t(VIEW_LABEL_KEY[view as keyof typeof VIEW_LABEL_KEY])}</span></>}
                                 </div>
                             )}
                         </div>
@@ -338,7 +347,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                 defaultValue={view === 'search' ? searchKeyword : ''}
                                 onChange={(e) => handleSearchInput(e.target.value)}
                                 className="h-8 w-[150px] pl-8 lg:w-[200px]"
-                                placeholder="Search files…"
+                                placeholder={t('toolbar.searchPlaceholder')}
                             />
                         </div>
 
@@ -348,7 +357,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                 size="icon"
                                 className={cn("h-8 w-8 rounded-none", viewMode === 'grid' && "bg-accent text-accent-foreground")}
                                 onClick={() => setViewMode('grid')}
-                                title="Grid view"
+                                title={t('toolbar.gridView')}
                             >
                                 <LayoutGridIcon className="h-4 w-4" />
                             </Button>
@@ -357,7 +366,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                 size="icon"
                                 className={cn("h-8 w-8 rounded-none", viewMode === 'list' && "bg-accent text-accent-foreground")}
                                 onClick={() => setViewMode('list')}
-                                title="List view"
+                                title={t('toolbar.listView')}
                             >
                                 <ListIcon className="h-4 w-4" />
                             </Button>
@@ -367,15 +376,15 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             <Button
                                 size="sm" variant="outline" className="h-8 gap-1.5"
                                 onClick={() => askConfirm({
-                                    title: "Empty trash?",
-                                    description: "All items in the trash will be permanently deleted. This cannot be undone.",
+                                    title: t('confirm.emptyTrashTitle'),
+                                    description: t('confirm.emptyTrashDescription'),
                                     destructive: true,
                                     onConfirm: () => emptyTrash(),
                                 })}
                                 disabled={loading || currentFolderItems.length === 0}
                             >
                                 <Trash2 className="h-4 w-4 text-destructive" />
-                                <span className="hidden md:inline">Empty Trash</span>
+                                <span className="hidden md:inline">{t('toolbar.emptyTrash')}</span>
                             </Button>
                         ) : (
                             <>
@@ -385,7 +394,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                     disabled={loading}
                                 >
                                     <UploadIcon className="h-4 w-4" />
-                                    <span className="hidden md:inline">Upload</span>
+                                    <span className="hidden md:inline">{t('toolbar.upload')}</span>
                                 </Button>
                                 <Button
                                     size="sm" className="h-8 gap-1.5"
@@ -393,14 +402,14 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                     disabled={loading}
                                 >
                                     <FolderPlusIcon className="h-4 w-4" />
-                                    <span className="hidden md:inline">New Folder</span>
+                                    <span className="hidden md:inline">{t('toolbar.newFolder')}</span>
                                 </Button>
                             </>
                         )}
 
                         {selectable && (
                             <Button size="sm" variant="ghost" className="h-8" onClick={() => onCancel?.()}>
-                                Cancel
+                                {t('toolbar.cancel')}
                             </Button>
                         )}
                     </div>
@@ -425,7 +434,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             <div className="absolute inset-0 z-40 m-2 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 pointer-events-none">
                                 <div className="flex flex-col items-center gap-2 text-primary">
                                     <UploadIcon className="h-8 w-8" />
-                                    <span className="text-sm font-medium">Drop files to upload</span>
+                                    <span className="text-sm font-medium">{t('toolbar.dropFiles')}</span>
                                 </div>
                             </div>
                         )}
@@ -450,10 +459,10 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             ) : error ? (
                                 <EmptyState
                                     icons={[FolderOpenIcon]}
-                                    title="Error loading files"
+                                    title={t('emptyState.errorLoading')}
                                     description={error}
                                     className="h-full w-full max-w-none rounded-none border-none"
-                                    action={{ label: 'Retry', onClick: refreshFolder }}
+                                    action={{ label: t('emptyState.retry'), onClick: refreshFolder }}
                                 />
                             ) : sortedItems.length > 0 ? (
                                 <Menu>
@@ -464,10 +473,10 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             ) : (
                                 <EmptyState
                                     icons={[FolderOpenIcon]}
-                                    title={isTrash ? "Trash is empty" : "No files yet"}
-                                    description={isTrash ? "" : "Upload files or create a folder to get started."}
+                                    title={isTrash ? t('emptyState.trashEmpty') : t('emptyState.noFiles')}
+                                    description={isTrash ? "" : t('emptyState.noFilesDescription')}
                                     className="h-full w-full max-w-none rounded-none border-none"
-                                    action={!isTrash ? { label: 'Upload Files', onClick: () => handleCreateFile('FILE') } : undefined}
+                                    action={!isTrash ? { label: t('emptyState.uploadFiles'), onClick: () => handleCreateFile('FILE') } : undefined}
                                 />
                             )}
                         </div>
@@ -515,12 +524,12 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                         <AlertDialogDescription>{confirmState.description}</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel>{t('confirm.cancel')}</AlertDialogCancel>
                         <AlertDialogAction
                             className={confirmState.destructive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
                             onClick={() => { confirmState.onConfirm(); setConfirmState((p) => ({ ...p, open: false })); }}
                         >
-                            Confirm
+                            {t('confirm.confirm')}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

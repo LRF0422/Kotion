@@ -11,6 +11,7 @@ import { useFileService } from "@kn/common";
 import { Download, ExternalLink, FileQuestion, Loader2 } from "@kn/icon";
 import { FileItem } from "../FileContext";
 import { getPreviewKind, formatFileSize, type PreviewKind } from "../../../utils/fileUtils";
+import { useI18n } from "../../../i18n/use-i18n";
 
 export interface FilePreviewDialogProps {
     open: boolean;
@@ -34,6 +35,7 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     const fileService = useFileService();
     const [loading, setLoading] = useState(true);
     const [errored, setErrored] = useState(false);
+    const { t } = useI18n();
 
     const kind: PreviewKind = file && !file.isFolder ? getPreviewKind(file.name) : "none";
 
@@ -66,7 +68,7 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
             return (
                 <FallbackBody
                     file={file}
-                    message="No preview available — this file has no source location."
+                    message={t('preview.noPreview')}
                     onDownload={handleDownload}
                 />
             );
@@ -93,7 +95,7 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
                         {errored && (
                             <FallbackBody
                                 file={file}
-                                message="Failed to load image preview."
+                                message={t('preview.failedImage')}
                                 onDownload={handleDownload}
                             />
                         )}
@@ -107,14 +109,14 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
                         autoPlay={false}
                         className="max-w-full max-h-[70vh] rounded bg-black"
                     >
-                        Your browser does not support video playback.
+                        {t('preview.videoNotSupported')}
                     </video>
                 );
             case "audio":
                 return (
                     <div className="w-full py-10 px-4 flex items-center justify-center">
                         <audio src={url} controls className="w-full max-w-[480px]">
-                            Your browser does not support audio playback.
+                            {t('preview.audioNotSupported')}
                         </audio>
                     </div>
                 );
@@ -135,7 +137,7 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
                 return (
                     <FallbackBody
                         file={file}
-                        message="This file type can't be previewed."
+                        message={t('preview.cannotPreview')}
                         onDownload={handleDownload}
                     />
                 );
@@ -163,11 +165,11 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
                 <div className="flex justify-end gap-2 pt-2">
                     <Button variant="outline" size="sm" onClick={openInNewTab} disabled={!url}>
                         <ExternalLink className="h-4 w-4 mr-2" />
-                        Open in new tab
+                        {t('preview.openInNewTab')}
                     </Button>
                     <Button size="sm" onClick={handleDownload}>
                         <Download className="h-4 w-4 mr-2" />
-                        Download
+                        {t('preview.download')}
                     </Button>
                 </div>
             </DialogContent>
@@ -185,13 +187,16 @@ const FallbackBody: React.FC<{
     file: FileItem;
     message: string;
     onDownload: () => void;
-}> = ({ message, onDownload }) => (
-    <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-        <FileQuestion className="h-14 w-14 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground max-w-[320px]">{message}</p>
-        <Button size="sm" onClick={onDownload}>
-            <Download className="h-4 w-4 mr-2" />
-            Download
-        </Button>
-    </div>
-);
+}> = ({ message, onDownload }) => {
+    const { t } = useI18n();
+    return (
+        <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+            <FileQuestion className="h-14 w-14 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground max-w-[320px]">{message}</p>
+            <Button size="sm" onClick={onDownload}>
+                <Download className="h-4 w-4 mr-2" />
+                {t('preview.download')}
+            </Button>
+        </div>
+    );
+};

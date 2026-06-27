@@ -45,10 +45,15 @@ export interface BreadcrumbItem {
     path: string
 }
 
+/** i18n 翻译函数 */
+export type TranslateFn = (key: string, params?: Record<string, string | number>) => string
+
 export interface FileManagerState {
     selectable?: boolean,
     /** selectable 模式下确认选择的回调(文件夹选择器) */
     onConfirmSelectable?: (files: FileItem[]) => void,
+    /** i18n 翻译函数 */
+    t: TranslateFn,
     /** 设备是否为触屏(mobile/tablet)—— 影响单击=打开 vs 单击=选中 */
     isTouch: boolean,
     currentFolderItems: FileItem[],

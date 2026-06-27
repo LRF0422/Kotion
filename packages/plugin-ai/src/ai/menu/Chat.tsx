@@ -1,5 +1,5 @@
 import { useState, FormEvent, useCallback, useMemo, useRef, useEffect } from "react"
-import { Sparkles, Send, Trash2, HelpCircle, Square, XCircle, Settings, Plus, ChevronDown, Globe, X, Check } from "@kn/icon"
+import { Sparkles, Send, Trash2, HelpCircle, Square, XCircle, Settings, Plus, ChevronDown, Globe, X, Check, MessageCircle, Bot } from "@kn/icon"
 import {
     Button, Streamdown,
     Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Input,
@@ -26,6 +26,7 @@ import {
 import React from "react"
 import { Editor } from "@kn/editor"
 import { useEditorAgentOptimized, ToolExecutionEvent, UserChoiceRequest, fetchModels, applySubAgentAnnotations } from "@kn/common"
+import type { ChatMode } from "@kn/common"
 import type { ModelInfo } from "@kn/common"
 import { SubAgentTree } from "./SubAgentTree"
 import { PlanApprovalCard } from "./PlanApprovalCard"
@@ -64,6 +65,7 @@ const ChatCloseButton: React.FC = () => {
 // ─── Model Selector ────────────────────────────────────────────────
 
 const MODEL_STORAGE_KEY = 'kn_chat_model'
+const MODE_STORAGE_KEY = 'kn_chat_mode'
 
 /** Compact model selector dropdown that fetches available models from the backend API. */
 const ModelSelector: React.FC<{
@@ -137,6 +139,45 @@ const ModelSelector: React.FC<{
 }
 
 // ─── Session Tabs ──────────────────────────────────────────────────
+
+/**
+ * Compact segmented toggle for switching between Ask and Agent modes.
+ * Ask mode: read-only Q&A (no document editing).
+ * Agent mode: can operate the page (insert/edit/delete content).
+ */
+const ChatModeToggle: React.FC<{
+    mode: ChatMode
+    onModeChange: (mode: ChatMode) => void
+}> = ({ mode, onModeChange }) => {
+    const modes: { id: ChatMode; label: string; icon: React.ReactNode }[] = [
+        { id: 'ask', label: 'Ask', icon: <MessageCircle className="h-3 w-3" /> },
+        { id: 'agent', label: 'Agent', icon: <Bot className="h-3 w-3" /> },
+    ]
+    return (
+        <div className="flex items-center p-0.5 rounded-md bg-muted/60 text-[10px] font-medium">
+            {modes.map((m) => (
+                <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => onModeChange(m.id)}
+                    title={m.id === 'ask'
+                        ? 'Ask mode — answer questions only (read-only)'
+                        : 'Agent mode — can edit and operate the page'}
+                    className={
+                        'flex items-center gap-1 px-1.5 py-0.5 rounded-sm transition-colors ' +
+                        (mode === m.id
+                            ? 'bg-background text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground')
+                    }
+                >
+                    {m.icon}
+                    <span>{m.label}</span>
+                </button>
+            ))}
+        </div>
+    )
+}
+
 
 interface SessionTabsProps {
     sessions: ChatSessionMeta[]
@@ -245,6 +286,19 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         try { localStorage.setItem(MODEL_STORAGE_KEY, model) } catch { /* ignore */ }
     }, [])
 
+    // Chat mode state — "ask" (read-only Q&A) or "agent" (can operate page)
+    const [chatMode, setChatMode] = useState<ChatMode>(() => {
+        try {
+            const stored = localStorage.getItem(MODE_STORAGE_KEY)
+            return stored === 'ask' || stored === 'agent' ? stored : 'agent'
+        } catch { return 'agent' }
+    })
+
+    const handleModeChange = useCallback((mode: ChatMode) => {
+        setChatMode(mode)
+        try { localStorage.setItem(MODE_STORAGE_KEY, mode) } catch { /* ignore */ }
+    }, [])
+
     // User choice state
     const [pendingChoice, setPendingChoice] = useState<PendingUserChoice | null>(null)
     const [customInput, setCustomInput] = useState("")
@@ -318,6 +372,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
 
     const { stream, stop } = useEditorAgentOptimized(editor, handleToolExecution, handleUserChoiceRequest, {
         model: selectedModel || undefined,
+        mode: chatMode,
     })
 
     // Multi-session management (messages + backend session ids per chat).
@@ -672,28 +727,31 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                     onNewSession={handleNewSession}
                     onDelete={handleDeleteSession}
                 />
-                <div className="flex items-center gap-px shrink-0 pl-1">
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleClearChat}
-                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive transition-colors"
-                                >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">Clear current chat</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <ChatCloseButton />
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">Close</TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                <div className="flex items-center gap-1.5 shrink-0 pl-1">
+                    <ChatModeToggle mode={chatMode} onModeChange={handleModeChange} />
+                    <div className="flex items-center gap-px">
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={handleClearChat}
+                                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive transition-colors"
+                                    >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="text-xs">Clear current chat</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <ChatCloseButton />
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="text-xs">Close</TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
                 </div>
             </ExpandableChatHeader>
 
@@ -703,9 +761,13 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                     {/* Empty state greeting */}
                     {showQuickPrompts && (
                         <div className="flex flex-col items-center justify-center py-4 px-3">
-                            <h2 className="text-sm font-semibold text-foreground mb-0.5">How can I help you today?</h2>
+                            <h2 className="text-sm font-semibold text-foreground mb-0.5">
+                                {chatMode === 'ask' ? 'Ask me anything' : 'How can I help you today?'}
+                            </h2>
                             <p className="text-xs text-muted-foreground mb-4 text-center max-w-[240px]">
-                                Ask about your documents or try an action below.
+                                {chatMode === 'ask'
+                                    ? 'I can answer questions about your documents.'
+                                    : 'Ask about your documents or try an action below.'}
                             </p>
                         </div>
                     )}
@@ -883,7 +945,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                         value={input}
                         onChange={handleInputChange}
                         onKeyDown={handleKeyDown}
-                        placeholder="Do anything with AI..."
+                        placeholder={chatMode === 'ask' ? "Ask a question..." : "Do anything with AI..."}
                         disabled={isLoading}
                         rows={1}
                         className="min-h-[40px] max-h-[120px] overflow-y-auto resize-none rounded-lg bg-transparent border-0 px-3 py-2 text-xs shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"

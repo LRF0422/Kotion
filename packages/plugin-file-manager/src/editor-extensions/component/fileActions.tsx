@@ -30,14 +30,14 @@ export const getFileActions = (files: FileItem[], ctx: FileManagerState): FileAc
         return [
             {
                 key: 'restore',
-                label: 'Restore',
+                label: ctx.t('actions.restore'),
                 icon: <ArrowLeft className="h-4 w-4" />,
                 primary: true,
                 run: () => ctx.restoreFiles(ids),
             },
             {
                 key: 'purge',
-                label: 'Delete forever',
+                label: ctx.t('actions.deleteForever'),
                 icon: <Trash2 className="h-4 w-4" />,
                 destructive: true,
                 separatorBefore: true,
@@ -54,7 +54,7 @@ export const getFileActions = (files: FileItem[], ctx: FileManagerState): FileAc
     if (canPreview && single) {
         actions.push({
             key: 'preview',
-            label: 'Preview',
+            label: ctx.t('actions.preview'),
             icon: <EyeIcon className="h-4 w-4" />,
             primary: true,
             run: () => ctx.requestPreview(single),
@@ -64,7 +64,7 @@ export const getFileActions = (files: FileItem[], ctx: FileManagerState): FileAc
     if (single) {
         actions.push({
             key: 'rename',
-            label: 'Rename',
+            label: ctx.t('actions.rename'),
             icon: <Pencil className="h-4 w-4" />,
             separatorBefore: canPreview,
             run: () => ctx.requestRename(single),
@@ -74,7 +74,7 @@ export const getFileActions = (files: FileItem[], ctx: FileManagerState): FileAc
     actions.push(
         {
             key: 'move',
-            label: 'Move to…',
+            label: ctx.t('actions.moveTo'),
             icon: <FolderInput className="h-4 w-4" />,
             primary: true,
             separatorBefore: !single,
@@ -82,13 +82,13 @@ export const getFileActions = (files: FileItem[], ctx: FileManagerState): FileAc
         },
         {
             key: 'copy',
-            label: 'Copy',
+            label: ctx.t('actions.copy'),
             icon: <Copy className="h-4 w-4" />,
             run: () => ctx.handleCopy(files),
         },
         {
             key: 'duplicate',
-            label: 'Duplicate',
+            label: ctx.t('actions.duplicate'),
             icon: <Files className="h-4 w-4" />,
             run: () => ctx.handleDuplicate(files),
         },
@@ -96,7 +96,7 @@ export const getFileActions = (files: FileItem[], ctx: FileManagerState): FileAc
 
     actions.push({
         key: 'favorite',
-        label: allFavorited ? 'Remove from favorites' : 'Add to favorites',
+        label: allFavorited ? ctx.t('actions.removeFromFavorites') : ctx.t('actions.addToFavorites'),
         icon: <StarIcon className={allFavorited ? "h-4 w-4 fill-yellow-400 text-yellow-400" : "h-4 w-4"} />,
         separatorBefore: true,
         run: () => files.forEach((f) => ctx.toggleFavorite(f)),
@@ -105,7 +105,7 @@ export const getFileActions = (files: FileItem[], ctx: FileManagerState): FileAc
     if (hasFile) {
         actions.push({
             key: 'download',
-            label: 'Download',
+            label: ctx.t('actions.download'),
             icon: <Download className="h-4 w-4" />,
             primary: true,
             run: () => files.filter((f) => !f.isFolder).forEach((f) => ctx.downloadFile(f)),
@@ -115,7 +115,7 @@ export const getFileActions = (files: FileItem[], ctx: FileManagerState): FileAc
     if (single) {
         actions.push({
             key: 'details',
-            label: 'Properties',
+            label: ctx.t('actions.properties'),
             icon: <Info className="h-4 w-4" />,
             run: () => ctx.requestDetails(single),
         });
@@ -123,7 +123,7 @@ export const getFileActions = (files: FileItem[], ctx: FileManagerState): FileAc
 
     actions.push({
         key: 'delete',
-        label: 'Delete',
+        label: ctx.t('actions.delete'),
         icon: <Trash2 className="h-4 w-4" />,
         destructive: true,
         primary: true,

@@ -11,6 +11,7 @@ import {
     Label,
 } from "@kn/ui";
 import { FileItem } from "../FileContext";
+import { useI18n } from "../../../i18n/use-i18n";
 
 export interface RenameDialogProps {
     open: boolean;
@@ -27,6 +28,7 @@ export const RenameDialog: React.FC<RenameDialogProps> = ({
 }) => {
     const [newName, setNewName] = useState("");
     const [error, setError] = useState<string | null>(null);
+    const { t } = useI18n();
 
     useEffect(() => {
         if (file && open) {
@@ -41,7 +43,7 @@ export const RenameDialog: React.FC<RenameDialogProps> = ({
         const trimmedName = newName.trim();
 
         if (!trimmedName) {
-            setError("Name cannot be empty");
+            setError(t('rename.emptyError'));
             return;
         }
 
@@ -53,7 +55,7 @@ export const RenameDialog: React.FC<RenameDialogProps> = ({
         // Basic validation for file/folder names
         const invalidChars = /[<>:"/\\|?*]/;
         if (invalidChars.test(trimmedName)) {
-            setError("Name contains invalid characters");
+            setError(t('rename.invalidError'));
             return;
         }
 
@@ -75,15 +77,15 @@ export const RenameDialog: React.FC<RenameDialogProps> = ({
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                     <DialogTitle>
-                        Rename {file.isFolder ? "Folder" : "File"}
+                        {file.isFolder ? t('rename.titleFolder') : t('rename.titleFile')}
                     </DialogTitle>
                     <DialogDescription>
-                        Enter a new name for "{file.name}"
+                        {t('rename.description', { name: file.name })}
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="name">New name</Label>
+                        <Label htmlFor="name">{t('rename.label')}</Label>
                         <Input
                             id="name"
                             value={newName}
@@ -92,7 +94,7 @@ export const RenameDialog: React.FC<RenameDialogProps> = ({
                                 setError(null);
                             }}
                             onKeyDown={handleKeyDown}
-                            placeholder="Enter new name"
+                            placeholder={t('rename.placeholder')}
                             autoFocus
                             className={error ? "border-destructive" : ""}
                         />
@@ -103,10 +105,10 @@ export const RenameDialog: React.FC<RenameDialogProps> = ({
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        Cancel
+                        {t('rename.cancel')}
                     </Button>
                     <Button onClick={handleConfirm}>
-                        Rename
+                        {t('rename.confirm')}
                     </Button>
                 </DialogFooter>
             </DialogContent>

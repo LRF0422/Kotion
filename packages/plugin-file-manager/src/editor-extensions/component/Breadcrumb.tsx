@@ -5,6 +5,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@kn/ui';
 import { BreadcrumbItem } from './FileContext';
+import { useI18n } from '../../i18n/use-i18n';
 
 export interface BreadcrumbProps {
     items: BreadcrumbItem[];
@@ -19,24 +20,28 @@ const Crumb: React.FC<{
     isFirst: boolean;
     isLast: boolean;
     onNavigate: (id: string, name: string) => void;
-}> = ({ item, isFirst, isLast, onNavigate }) => (
-    <button
-        onClick={() => !isLast && onNavigate(item.id, item.name)}
-        disabled={isLast}
-        className={cn(
-            "flex items-center gap-1 rounded-md px-1.5 py-1 transition-colors",
-            isLast
-                ? "text-foreground font-medium cursor-default"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer",
-        )}
-        title={item.name}
-    >
-        {isFirst && <HomeIcon className="h-4 w-4 flex-shrink-0" />}
-        <span className="max-w-[140px] truncate">{isFirst ? 'Home' : item.name}</span>
-    </button>
-);
+}> = ({ item, isFirst, isLast, onNavigate }) => {
+    const { t } = useI18n();
+    return (
+        <button
+            onClick={() => !isLast && onNavigate(item.id, item.name)}
+            disabled={isLast}
+            className={cn(
+                "flex items-center gap-1 rounded-md px-1.5 py-1 transition-colors",
+                isLast
+                    ? "text-foreground font-medium cursor-default"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer",
+            )}
+            title={item.name}
+        >
+            {isFirst && <HomeIcon className="h-4 w-4 flex-shrink-0" />}
+            <span className="max-w-[140px] truncate">{isFirst ? t('breadcrumb.home') : item.name}</span>
+        </button>
+    );
+};
 
 export const Breadcrumb: React.FC<BreadcrumbProps> = ({ items, onNavigate, className, maxItems = 4 }) => {
+    const { t } = useI18n();
     if (items.length === 0) return null;
 
     const collapsed = items.length > maxItems;
@@ -58,7 +63,7 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({ items, onNavigate, class
     );
 
     return (
-        <nav className={cn("flex items-center text-sm min-w-0", className)} aria-label="Breadcrumb">
+        <nav className={cn("flex items-center text-sm min-w-0", className)} aria-label={t('breadcrumb.label')}>
             <ol className="flex items-center min-w-0">
                 {head.map((item, i) => renderCrumb(item, i, items.length, 0))}
 

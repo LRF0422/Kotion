@@ -12,6 +12,7 @@ import {
 import { FolderIcon, FileIcon, CalendarIcon, HardDriveIcon, MapPinIcon } from "@kn/icon";
 import { FileItem } from "../FileContext";
 import { formatFileSize } from "../../../utils/fileUtils";
+import { useI18n } from "../../../i18n/use-i18n";
 
 export interface FileDetailsDialogProps {
     open: boolean;
@@ -40,14 +41,16 @@ export const FileDetailsDialog: React.FC<FileDetailsDialogProps> = ({
     onOpenChange,
     file,
 }) => {
+    const { t } = useI18n();
+
     if (!file) return null;
 
     const formatDate = (dateString?: string) => {
-        if (!dateString) return "Unknown";
+        if (!dateString) return t('details.unknown');
         try {
             return new Date(dateString).toLocaleString();
         } catch {
-            return "Unknown";
+            return t('details.unknown');
         }
     };
 
@@ -64,28 +67,28 @@ export const FileDetailsDialog: React.FC<FileDetailsDialogProps> = ({
                         <span className="truncate">{file.name}</span>
                     </DialogTitle>
                     <DialogDescription>
-                        {file.isFolder ? "Folder" : "File"} properties
+                        {file.isFolder ? t('details.propertiesFolder') : t('details.propertiesFile')}
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-1">
                     {/* Basic Info Section */}
                     <div className="bg-muted/50 rounded-lg p-4 space-y-1">
-                        <h4 className="text-sm font-semibold mb-2">Basic Information</h4>
+                        <h4 className="text-sm font-semibold mb-2">{t('details.basicInfo')}</h4>
 
                         <DetailRow
-                            label="Name"
+                            label={t('details.name')}
                             value={file.name}
                         />
 
                         <DetailRow
-                            label="Type"
-                            value={file.isFolder ? "Folder" : "File"}
+                            label={t('details.type')}
+                            value={file.isFolder ? t('details.folder') : t('details.file')}
                         />
 
                         {file.path && (
                             <DetailRow
-                                label="Location"
+                                label={t('details.location')}
                                 value={file.path}
                                 icon={<MapPinIcon className="h-4 w-4" />}
                             />
@@ -96,24 +99,24 @@ export const FileDetailsDialog: React.FC<FileDetailsDialogProps> = ({
 
                     {/* Size & Dates Section */}
                     <div className="bg-muted/50 rounded-lg p-4 space-y-1">
-                        <h4 className="text-sm font-semibold mb-2">Details</h4>
+                        <h4 className="text-sm font-semibold mb-2">{t('details.details')}</h4>
 
                         {!file.isFolder && file.size !== undefined && (
                             <DetailRow
-                                label="Size"
+                                label={t('details.size')}
                                 value={formatFileSize(file.size)}
                                 icon={<HardDriveIcon className="h-4 w-4" />}
                             />
                         )}
 
                         <DetailRow
-                            label="Created"
+                            label={t('details.created')}
                             value={formatDate(file.createdAt)}
                             icon={<CalendarIcon className="h-4 w-4" />}
                         />
 
                         <DetailRow
-                            label="Modified"
+                            label={t('details.modified')}
                             value={formatDate(file.updatedAt)}
                             icon={<CalendarIcon className="h-4 w-4" />}
                         />
@@ -121,9 +124,9 @@ export const FileDetailsDialog: React.FC<FileDetailsDialogProps> = ({
 
                     {/* ID Section (for debugging/reference) */}
                     <div className="bg-muted/50 rounded-lg p-4">
-                        <h4 className="text-sm font-semibold mb-2">Technical Details</h4>
+                        <h4 className="text-sm font-semibold mb-2">{t('details.technicalDetails')}</h4>
                         <DetailRow
-                            label="ID"
+                            label={t('details.id')}
                             value={
                                 <code className="text-xs bg-muted px-1 py-0.5 rounded break-all">
                                     {file.id}
@@ -135,7 +138,7 @@ export const FileDetailsDialog: React.FC<FileDetailsDialogProps> = ({
 
                 <DialogFooter>
                     <Button onClick={() => onOpenChange(false)}>
-                        Close
+                        {t('details.close')}
                     </Button>
                 </DialogFooter>
             </DialogContent>

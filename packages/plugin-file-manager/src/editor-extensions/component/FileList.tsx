@@ -12,7 +12,7 @@ const formatDate = (dateString?: string): string => {
     if (!dateString) return '-'
     const date = new Date(dateString)
     if (Number.isNaN(date.getTime())) return '-'
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString(undefined, {
         year: 'numeric', month: 'short', day: 'numeric',
         hour: '2-digit', minute: '2-digit',
     })
@@ -94,7 +94,7 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
                             isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100",
                         )}
                         onClick={handleFavorite}
-                        title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                        title={isFavorite ? ctx.t('actions.removeFromFavorites') : ctx.t('actions.addToFavorites')}
                     >
                         <StarIcon className={cn("h-4 w-4", isFavorite && "fill-yellow-400 text-yellow-400")} />
                     </Button>
@@ -126,17 +126,17 @@ const SortHeader: React.FC<{ label: string; by: SortBy; className?: string }> = 
 
 /** File list view component using context */
 export const FileListView: React.FC = React.memo(() => {
-    const { sortedItems } = useFileManagerState()
+    const { sortedItems, t } = useFileManagerState()
 
     return (
         <div className="h-full w-full overflow-auto">
             {/* Header */}
             <div className="flex items-center px-2 h-9 border-b bg-muted/40 text-xs font-medium text-muted-foreground sticky top-0 z-10">
                 <div className="w-[36px] flex-shrink-0" />
-                <div className="flex-1 min-w-0"><SortHeader label="Name" by="name" /></div>
-                <div className="w-[90px] flex-shrink-0"><SortHeader label="Size" by="size" /></div>
-                <div className="w-[170px] flex-shrink-0 hidden md:block"><SortHeader label="Modified" by="date" /></div>
-                <div className="w-[72px] flex-shrink-0"><span className="sr-only">Actions</span></div>
+                <div className="flex-1 min-w-0"><SortHeader label={t('listHeader.name')} by="name" /></div>
+                <div className="w-[90px] flex-shrink-0"><SortHeader label={t('listHeader.size')} by="size" /></div>
+                <div className="w-[170px] flex-shrink-0 hidden md:block"><SortHeader label={t('listHeader.modified')} by="date" /></div>
+                <div className="w-[72px] flex-shrink-0"><span className="sr-only">{t('listHeader.actions')}</span></div>
             </div>
             {/* Body */}
             <div>

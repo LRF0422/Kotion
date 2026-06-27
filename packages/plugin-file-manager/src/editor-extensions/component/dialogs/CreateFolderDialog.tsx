@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@kn/ui";
 import { Label } from "@kn/ui";
 import React, { useState, useCallback, useEffect } from "react";
+import { useI18n } from "../../../i18n/use-i18n";
 
 export interface CreateFolderDialogProps {
     open: boolean;
@@ -17,6 +18,7 @@ export const CreateFolderDialog: React.FC<CreateFolderDialogProps> = ({
 }) => {
     const [folderName, setFolderName] = useState("");
     const [error, setError] = useState<string | null>(null);
+    const { t } = useI18n();
 
     useEffect(() => {
         if (open) {
@@ -29,14 +31,14 @@ export const CreateFolderDialog: React.FC<CreateFolderDialogProps> = ({
         const trimmedName = folderName.trim();
 
         if (!trimmedName) {
-            setError("Folder name cannot be empty");
+            setError(t('createFolder.emptyError'));
             return;
         }
 
         // Basic validation for folder names
         const invalidChars = /[<>:"/\\|?*]/;
         if (invalidChars.test(trimmedName)) {
-            setError("Folder name contains invalid characters");
+            setError(t('createFolder.invalidError'));
             return;
         }
 
@@ -55,14 +57,14 @@ export const CreateFolderDialog: React.FC<CreateFolderDialogProps> = ({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                    <DialogTitle>Create New Folder</DialogTitle>
+                    <DialogTitle>{t('createFolder.title')}</DialogTitle>
                     <DialogDescription>
-                        Enter a name for the new folder
+                        {t('createFolder.description')}
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
-                        <Label htmlFor="folder-name">Folder name</Label>
+                        <Label htmlFor="folder-name">{t('createFolder.label')}</Label>
                         <Input
                             id="folder-name"
                             value={folderName}
@@ -71,7 +73,7 @@ export const CreateFolderDialog: React.FC<CreateFolderDialogProps> = ({
                                 setError(null);
                             }}
                             onKeyDown={handleKeyDown}
-                            placeholder="Enter folder name"
+                            placeholder={t('createFolder.placeholder')}
                             autoFocus
                             className={error ? "border-destructive" : ""}
                         />
@@ -82,10 +84,10 @@ export const CreateFolderDialog: React.FC<CreateFolderDialogProps> = ({
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        Cancel
+                        {t('createFolder.cancel')}
                     </Button>
                     <Button onClick={handleCreate}>
-                        Create
+                        {t('createFolder.create')}
                     </Button>
                 </DialogFooter>
             </DialogContent>

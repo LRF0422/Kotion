@@ -14,6 +14,7 @@ import { FolderIcon, ChevronRight, HomeIcon } from "@kn/icon";
 import { FileItem, BreadcrumbItem } from "../FileContext";
 import { useApi } from "@kn/common";
 import { APIS } from "../../../api";
+import { useI18n } from "../../../i18n/use-i18n";
 
 export interface MoveDialogProps {
     open: boolean;
@@ -40,18 +41,17 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({
     const [selectedFolderId, setSelectedFolderId] = useState<string>("");
     const [folders, setFolders] = useState<FolderTreeItem[]>([]);
     const [loading, setLoading] = useState(false);
+    const { t } = useI18n();
     const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([
-        { id: "", name: "Home", path: "" }
+        { id: "", name: t('move.home'), path: "" }
     ]);
-
-    // Fetch folders on open
     useEffect(() => {
         if (open) {
             fetchFolders("");
             setSelectedFolderId("");
-            setBreadcrumb([{ id: "", name: "Home", path: "" }]);
+            setBreadcrumb([{ id: "", name: t('move.home'), path: "" }]);
         }
-    }, [open]);
+    }, [open, t]);
 
     const fetchFolders = async (folderId: string) => {
         setLoading(true);
@@ -118,9 +118,9 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
-                    <DialogTitle>Move {files.length} item{files.length > 1 ? 's' : ''}</DialogTitle>
+                    <DialogTitle>{t('move.title', { count: files.length })}</DialogTitle>
                     <DialogDescription>
-                        Select a destination folder
+                        {t('move.description')}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -151,7 +151,7 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({
                         </div>
                     ) : folders.length === 0 ? (
                         <div className="flex items-center justify-center h-full text-muted-foreground">
-                            No folders available
+                            {t('move.noFolders')}
                         </div>
                     ) : (
                         <div className="p-2 space-y-1">
@@ -176,18 +176,18 @@ export const MoveDialog: React.FC<MoveDialogProps> = ({
 
                 <div className="text-sm text-muted-foreground">
                     {selectedFolderId ? (
-                        <span>Move to: <strong>{folders.find(f => f.id === selectedFolderId)?.name}</strong></span>
+                        <span>{t('move.moveTo')} <strong>{folders.find(f => f.id === selectedFolderId)?.name}</strong></span>
                     ) : (
-                        <span>Move to current folder: <strong>{breadcrumb[breadcrumb.length - 1].name}</strong></span>
+                        <span>{t('move.moveToCurrent')} <strong>{breadcrumb[breadcrumb.length - 1].name}</strong></span>
                     )}
                 </div>
 
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        Cancel
+                        {t('move.cancel')}
                     </Button>
                     <Button onClick={handleConfirm} disabled={!canMove || loading}>
-                        Move Here
+                        {t('move.confirm')}
                     </Button>
                 </DialogFooter>
             </DialogContent>

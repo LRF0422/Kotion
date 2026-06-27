@@ -5,8 +5,10 @@ import { useModal } from "@kn/common"
 import { EmptyState } from "@kn/ui"
 import { FolderOpenIcon } from "@kn/icon"
 import { ViewMode } from "../component/FileContext"
+import { useI18n } from "../../i18n/use-i18n"
 
 export const FolderView: React.FC<NodeViewProps> = (props) => {
+    const { t } = useI18n()
 
     const { node: { attrs }, editor, updateAttributes } = props
 
@@ -32,7 +34,7 @@ export const FolderView: React.FC<NodeViewProps> = (props) => {
                     }
                 }}
             />,
-            title: 'Select a folder'
+            title: t('folderView.selectFolder')
         })
     }
 
@@ -45,12 +47,12 @@ export const FolderView: React.FC<NodeViewProps> = (props) => {
                     defaultViewMode={attrs.viewMode as ViewMode}
                     onViewModeChange={handleViewModeChange}
                 /> : <EmptyState
-                    title="No folder selected"
+                    title={t('folderView.noFolderSelected')}
                     className="w-full max-w-none"
-                    description="Select a folder to view its contents"
+                    description={t('folderView.selectFolderDescription')}
                     icons={[FolderOpenIcon]}
                     action={editor.isEditable ? {
-                        label: 'Select a folder',
+                        label: t('folderView.selectFolder'),
                         onClick: () => open()
                     } : undefined}
                 />

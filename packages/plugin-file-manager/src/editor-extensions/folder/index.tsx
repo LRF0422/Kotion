@@ -4,6 +4,7 @@ import { FolderIcon } from "@kn/icon"
 import React from "react"
 import { fileManagerTools } from "./tools"
 import { fileManagerSkill } from "./skills/file-manager-skill"
+import { createT } from "../../i18n"
 
 
 declare module '@kn/editor' {
@@ -19,7 +20,7 @@ export const FolderExtension: ExtensionWrapper = {
     extendsion: Folder,
     slashConfig: [
         {
-            text: '文件夹',
+            text: createT()('slashCommands.folder'),
             slash: '/folder',
             icon: <FolderIcon className="h-4 w-4" />,
             action: (editor) => {

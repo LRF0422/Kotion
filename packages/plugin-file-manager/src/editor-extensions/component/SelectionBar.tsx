@@ -27,7 +27,7 @@ export const SelectionBar: React.FC = () => {
                 "animate-in fade-in slide-in-from-bottom-2 duration-200",
             )}>
                 <span className="px-2 text-sm font-medium tabular-nums">
-                    {selectedFiles.length} selected
+                    {ctx.t('selection.selected', { count: selectedFiles.length })}
                 </span>
                 <Separator orientation="vertical" className="h-5" />
 
@@ -57,7 +57,7 @@ export const SelectionBar: React.FC = () => {
                         onClick={() => onConfirmSelectable(selectedFiles)}
                     >
                         <Check className="mr-1 h-4 w-4" />
-                        Confirm
+                        {ctx.t('selection.confirm')}
                     </Button>
                 )}
 
@@ -65,7 +65,7 @@ export const SelectionBar: React.FC = () => {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 rounded-full"
-                    title="Clear selection"
+                    title={ctx.t('selection.clearSelection')}
                     onClick={clearSelection}
                 >
                     <XIcon className="h-4 w-4" />

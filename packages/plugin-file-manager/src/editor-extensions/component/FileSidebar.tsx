@@ -2,6 +2,7 @@ import React from "react";
 import { Button, cn, ScrollArea, TreeView, Skeleton } from "@kn/ui";
 import { HomeIcon, ClockIcon, StarIcon, Trash2 } from "@kn/icon";
 import type { FileView } from "./FileContext";
+import { useI18n } from "../../i18n/use-i18n";
 
 export interface FileSidebarProps {
     view: FileView;
@@ -17,12 +18,21 @@ export interface FileSidebarProps {
     onAfterNavigate?: () => void;
 }
 
-const LIBRARY: Array<{ key: FileView; label: string; icon: React.ReactNode }> = [
-    { key: 'home', label: 'Home', icon: <HomeIcon className="h-4 w-4" /> },
-    { key: 'recent', label: 'Recent', icon: <ClockIcon className="h-4 w-4" /> },
-    { key: 'favorites', label: 'Favorites', icon: <StarIcon className="h-4 w-4" /> },
-    { key: 'trash', label: 'Trash', icon: <Trash2 className="h-4 w-4" /> },
-];
+type LibraryView = 'home' | 'recent' | 'favorites' | 'trash';
+
+const LIBRARY_ICONS: Record<LibraryView, React.ReactNode> = {
+    home: <HomeIcon className="h-4 w-4" />,
+    recent: <ClockIcon className="h-4 w-4" />,
+    favorites: <StarIcon className="h-4 w-4" />,
+    trash: <Trash2 className="h-4 w-4" />,
+};
+
+const LIBRARY_KEYS: Record<LibraryView, string> = {
+    home: 'sidebar.home',
+    recent: 'sidebar.recent',
+    favorites: 'sidebar.favorites',
+    trash: 'sidebar.trash',
+};
 
 const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div className="px-3 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -33,15 +43,18 @@ const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 export const FileSidebar: React.FC<FileSidebarProps> = ({
     view, currentFolderId, treeElements, loading, onHome, onSelectView, onAfterNavigate,
 }) => {
+    const { t } = useI18n();
+    const libraryItems: LibraryView[] = ['home', 'recent', 'favorites', 'trash'];
+
     return (
         <div className="flex h-full flex-col bg-muted/20">
-            <SectionLabel>Library</SectionLabel>
+            <SectionLabel>{t('sidebar.library')}</SectionLabel>
             <div className="px-2 space-y-0.5">
-                {LIBRARY.map((it) => {
-                    const active = view === it.key;
+                {libraryItems.map((key) => {
+                    const active = view === key;
                     return (
                         <Button
-                            key={it.key}
+                            key={key}
                             variant="ghost"
                             size="sm"
                             className={cn(
@@ -49,19 +62,19 @@ export const FileSidebar: React.FC<FileSidebarProps> = ({
                                 active && "bg-accent text-accent-foreground font-medium",
                             )}
                             onClick={() => {
-                                if (it.key === 'home') onHome();
-                                else onSelectView(it.key);
+                                if (key === 'home') onHome();
+                                else onSelectView(key);
                                 onAfterNavigate?.();
                             }}
                         >
-                            {it.icon}
-                            {it.label}
+                            {LIBRARY_ICONS[key]}
+                            {t(LIBRARY_KEYS[key])}
                         </Button>
                     );
                 })}
             </div>
 
-            <SectionLabel>Folders</SectionLabel>
+            <SectionLabel>{t('sidebar.folders')}</SectionLabel>
             <ScrollArea className="flex-1 min-h-0 px-1">
                 {loading ? (
                     <div className="space-y-1 p-2">

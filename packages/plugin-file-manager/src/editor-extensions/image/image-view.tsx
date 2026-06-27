@@ -3,6 +3,7 @@ import { NodeViewWrapper, NodeViewProps } from "@kn/editor";
 
 import { Resizable } from "@kn/editor";
 import { useFileService } from "@kn/common";
+import { useI18n } from "../../i18n/use-i18n";
 
 /** 初始展示时的最大宽度回退值(容器宽度不可测时使用) */
 const FALLBACK_MAX_WIDTH = 640;
@@ -21,6 +22,7 @@ export const ImageView: React.FC<NodeViewProps> = ({
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const fileService = useFileService();
+  const { t } = useI18n();
 
   const flexJustifyContent = useMemo(() => {
     if (align === "center") return "center";
@@ -138,7 +140,7 @@ export const ImageView: React.FC<NodeViewProps> = ({
                 borderRadius: "4px",
                 zIndex: 1
               }}>
-              <span style={{ color: "#888" }}>Loading...</span>
+              <span style={{ color: "#888" }}>{t('image.loading')}</span>
             </div>
           )}
           {error ? (
@@ -169,13 +171,13 @@ export const ImageView: React.FC<NodeViewProps> = ({
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <polyline points="21 15 16 10 5 21" />
               </svg>
-              <span>Failed to load image</span>
+              <span>{t('image.failedToLoad')}</span>
               {src && <small style={{ marginTop: "4px", wordBreak: "break-all" }}>{src}</small>}
             </div>
           ) : (
             <img
               src={imageSrc}
-              alt={alt || "Image"}
+              alt={alt || t('image.alt')}
               title={title}
               loading="lazy"
               onLoad={handleImageLoad}

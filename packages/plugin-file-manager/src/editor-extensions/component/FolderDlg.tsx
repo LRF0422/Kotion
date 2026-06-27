@@ -1,6 +1,7 @@
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@kn/ui";
 import { FileManagerProps, FileManagerView } from "./FileManager";
 import React from "react";
+import { useI18n } from "../../i18n/use-i18n";
 
 
 export interface FolderDlgProps extends FileManagerProps {
@@ -9,6 +10,7 @@ export interface FolderDlgProps extends FileManagerProps {
 }
 
 export const FolderDlg: React.FC<FolderDlgProps> = (props) => {
+    const { t } = useI18n();
 
     return <Dialog open={props.open} onOpenChange={(open) => {
         if (!open && props.onCancel) {
@@ -18,7 +20,7 @@ export const FolderDlg: React.FC<FolderDlgProps> = (props) => {
         <DialogTrigger></DialogTrigger>
         <DialogContent className=" max-w-none w-[80%]">
             <DialogHeader className="">
-                <DialogTitle>{props.target === 'file' ? '请选择图片' : '请选择文件'}</DialogTitle>
+                <DialogTitle>{props.target === 'file' ? t('folderDialog.selectFile') : t('folderDialog.selectImage')}</DialogTitle>
                 <DialogDescription></DialogDescription>
             </DialogHeader>
             <FileManagerView {...props} className="w-full h-[calc(100vh*0.8)]" />

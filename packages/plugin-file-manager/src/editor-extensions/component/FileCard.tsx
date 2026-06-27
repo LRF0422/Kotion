@@ -79,7 +79,7 @@ export const FileCard: React.FC<FileItem> = React.memo((props) => {
                             isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100",
                         )}
                         onClick={handleFavorite}
-                        title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                        title={isFavorite ? ctx.t('actions.removeFromFavorites') : ctx.t('actions.addToFavorites')}
                     >
                         <StarIcon className={cn("h-4 w-4", isFavorite && "fill-yellow-400 text-yellow-400")} />
                     </Button>

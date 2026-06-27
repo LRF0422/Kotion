@@ -2,6 +2,7 @@ import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import React, { useMemo } from "react";
 import { useFileService } from "@kn/common";
 import { cn } from "@kn/ui";
+import { useI18n } from "../../i18n/use-i18n";
 import {
     DownloadIcon,
     BsFileEarmark,
@@ -96,6 +97,7 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
     const { node, editor } = props;
     const { name, path, size, fileType } = node.attrs;
     const fileService = useFileService();
+    const { t } = useI18n();
 
     // Determine if this is an inline attachment
     const isInline = node.type.name === "attachmentInline";
@@ -124,7 +126,7 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
             <NodeViewWrapper className="inline-block">
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 py-1 text-sm italic text-muted-foreground">
                     <BsFileEarmark className="h-3.5 w-3.5" />
-                    Empty attachment
+                    {t('attachment.empty')}
                 </span>
             </NodeViewWrapper>
         );
@@ -178,7 +180,7 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
                 )}
                 onClick={handleDownload}
                 role="button"
-                title={`Download ${name}`}
+                title={t('attachment.downloadTitle', { name })}
             >
                 {/* File type icon */}
                 <span

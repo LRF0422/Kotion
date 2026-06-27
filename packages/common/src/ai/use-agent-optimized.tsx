@@ -21,7 +21,10 @@ import { useCapabilityProviders } from "./use-capability-providers"
 import { AgentHarnessImpl } from "./harness"
 
 // Shared constants
-import { EDITOR_AGENT_PROMPT } from "./constants"
+import { EDITOR_AGENT_PROMPT, ASK_MODE_PROMPT } from "./constants"
+
+/** Chat mode: "ask" = Q&A only (read-only), "agent" = can operate the page. */
+export type ChatMode = 'ask' | 'agent'
 
 /**
  * Optimized editor agent hook with backend-driven architecture.
@@ -38,6 +41,8 @@ export const useEditorAgentOptimized = (
     agentOptions?: {
         /** Model ID to use for chat requests (e.g. 'deepseek-chat', 'gpt-4o') */
         model?: string
+        /** Chat mode: "ask" = Q&A only, "agent" = can operate the page (default). */
+        mode?: ChatMode
     }
 ) => {
     // AbortController ref for stopping generation
@@ -51,11 +56,18 @@ export const useEditorAgentOptimized = (
 
     // Ref for latest model (avoids stale closure in stream callback)
     const modelRef = useRef<string | undefined>(agentOptions?.model)
+    // Ref for latest chat mode (avoids stale closure in stream callback)
+    const modeRef = useRef<ChatMode>(agentOptions?.mode || 'agent')
 
     // Keep model ref in sync with agentOptions
     useEffect(() => {
         modelRef.current = agentOptions?.model
     }, [agentOptions?.model])
+
+    // Keep mode ref in sync with agentOptions
+    useEffect(() => {
+        modeRef.current = agentOptions?.mode || 'agent'
+    }, [agentOptions?.mode])
 
     // Shared capability catalog wiring (providers, plugins, skills).
     const {
@@ -83,11 +95,17 @@ export const useEditorAgentOptimized = (
         }
         abortControllerRef.current = new AbortController()
 
+        // In "ask" mode the agent receives no tools and a read-only system
+        // prompt so it can only answer questions. In "agent" mode the full
+        // capability catalog + editing prompt are used (default behaviour).
+        const isAskMode = modeRef.current === 'ask'
+        const systemPrompt = isAskMode ? ASK_MODE_PROMPT : EDITOR_AGENT_PROMPT
+
         // Build messages array for the backend. The system prompt is static now —
         // skill-specific instructions are assembled server-side from the catalog.
         const chatMessages: ChatMessage[] = [{
             role: 'system',
-            content: EDITOR_AGENT_PROMPT,
+            content: systemPrompt,
         }]
 
         if (options.messages && options.messages.length > 0) {
@@ -115,7 +133,10 @@ export const useEditorAgentOptimized = (
         try {
             // Capability catalog is sent inline with every request; the backend
             // may cache by `capabilitiesVersion` and skip reprocessing unchanged catalogs.
-            const catalog = getCatalog()
+            // In ask mode we ship an empty catalog so the agent has no tools.
+            const catalog = isAskMode
+                ? { skills: [], tools: [], version: 'ask-mode' }
+                : getCatalog()
             const signal = abortControllerRef.current.signal
 
             // Drive the unified harness; map its typed events back onto this
@@ -168,7 +189,7 @@ export const useEditorAgentOptimized = (
         } finally {
             isStreamingRef.current = false
         }
-    }, [resolveTool, getCatalog, onToolExecution])
+    }, [resolveTool, getCatalog, onToolExecution, modeRef])
 
     // Stop current generation
     const stop = useCallback(() => {
