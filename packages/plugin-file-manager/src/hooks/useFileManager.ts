@@ -40,7 +40,9 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
             name: file.name,
             isFolder: file.type?.value === 'FOLDER' || file.type === 'FOLDER',
             type: file.type,
-            path: file.path,
+            // path may be null when OSS link is unavailable; fall back to fileKey
+            // so the frontend can still construct a download URL via the backend.
+            path: file.path || file.fileKey,
             size: file.size,
             mediaType: file.mediaType,
             favorite: file.favorite,

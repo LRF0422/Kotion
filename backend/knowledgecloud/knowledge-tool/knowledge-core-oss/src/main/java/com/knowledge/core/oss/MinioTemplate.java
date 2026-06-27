@@ -5,6 +5,7 @@ import com.knowledge.core.oss.model.OssFile;
 import com.knowledge.core.oss.props.OssProperties;
 import com.knowledge.core.oss.rule.OssRule;
 import com.knowledge.core.tool.utils.DateUtil;
+import com.knowledge.core.tool.utils.StringPool;
 import io.minio.*;
 import io.minio.messages.DeleteObject;
 import io.minio.messages.Item;
@@ -84,17 +85,24 @@ public class MinioTemplate implements OssClient {
 		ossFile.setLength(response.size());
 		ossFile.setPutTime(DateUtil.toDate(response.lastModified().toLocalDate()));
 		ossFile.setContentType(response.contentType());
-		return null;
+		return ossFile;
 	}
 
 	@Override
 	public String filePath(String fileName) {
-		return null;
+		return ossProperties.getBucketName().concat(StringPool.SLASH).concat(fileName);
 	}
 
 	@Override
 	public String fileLink(String fileName) {
-		return null;
+		String endpoint = ossProperties.getEndpoint();
+		if (endpoint == null) {
+			return null;
+		}
+		if (endpoint.endsWith(StringPool.SLASH)) {
+			endpoint = endpoint.substring(0, endpoint.length() - 1);
+		}
+		return endpoint + StringPool.SLASH + ossProperties.getBucketName() + StringPool.SLASH + fileName;
 	}
 
 	@Override
@@ -127,6 +135,7 @@ public class MinioTemplate implements OssClient {
 				.bucket(bucketName).build();
 		ObjectWriteResponse res = minioClient.putObject(putObjectArgs);
 		knowledgeFile.setMd5Code(res.versionId());
+		knowledgeFile.setLink(fileLink(knowledgeFile.getName()));
 		return knowledgeFile;
 	}
 

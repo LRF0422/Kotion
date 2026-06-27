@@ -26,10 +26,11 @@ const resolveFileItem = (file: any): FileItemInfo => ({
     id: file.id,
     name: file.name,
     type: file.type?.value || file.type,
-    path: file.path,
+    // path may be null when OSS link is unavailable; fall back to fileKey
+    path: file.path || file.fileKey,
     size: file.size,
-    createdAt: file.createdAt,
-    updatedAt: file.updatedAt,
+    createdAt: file.createdAt || file.createTime,
+    updatedAt: file.updatedAt || file.updateTime,
 })
 
 
