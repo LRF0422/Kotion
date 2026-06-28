@@ -11,7 +11,8 @@ export const BlockquoteExtension: ExtensionWrapper = {
     name: Blockquote.name,
     menuConfig: {
         group: 'mark',
-        menu: BlockquoteStaticMenu
+        menu: BlockquoteStaticMenu,
+        tooltip: 'editor.tooltip.blockquote',
     },
     flotMenuConfig: [BlockquoteStaticMenu]
 }

@@ -9,6 +9,7 @@ export const FormatPainterExtension: ExtensionWrapper = {
     extendsion: FormatPainter,
     menuConfig: {
         group: 'block',
-        menu: FormatPainerStaticMenu
+        menu: FormatPainerStaticMenu,
+        tooltip: 'editor.tooltip.formatPainter',
     }
 }

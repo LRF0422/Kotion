@@ -15,7 +15,8 @@ export const ColumnsExtension: ExtensionWrapper = {
 	bubbleMenu: ColumnsBubbleMenu,
 	menuConfig: {
 		group: 'block',
-		menu: ColumnsStaticMenu
+		menu: ColumnsStaticMenu,
+		tooltip: 'editor.tooltip.columns',
 	},
 	slashConfig: [
 		{

@@ -12,8 +12,10 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@kn/ui";
+import { useTranslation } from "@kn/common";
 
 export const LinkStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
+  const { t } = useTranslation();
   const isLinkActive = useActive(editor, LinkExtension.name);
 
   const toggleLink = useCallback(() => {
@@ -41,10 +43,10 @@ export const LinkStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
         </TooltipTrigger>
         <TooltipContent side="top">
           <p className="text-xs">
-            {isLinkActive ? "Remove link" : "Insert link"}
+            {isLinkActive ? t('editor.tooltip.removeLink') : t('editor.tooltip.insertLink')}
           </p>
           <p className="text-xs text-muted-foreground">
-            {isLinkActive ? "Click to unlink" : "Ctrl+K"}
+            {isLinkActive ? t('editor.tooltip.clickToUnlink') : "Ctrl+K"}
           </p>
         </TooltipContent>
       </Tooltip>

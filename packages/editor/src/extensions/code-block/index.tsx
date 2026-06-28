@@ -16,7 +16,8 @@ export const CodeblockExtension: ExtensionWrapper = {
     name: CodeBlock.name,
     menuConfig: {
         group: 'block',
-        menu: CodeBlockStaticMenu
+        menu: CodeBlockStaticMenu,
+        tooltip: 'editor.tooltip.codeBlock',
     },
     slashConfig: [
         {

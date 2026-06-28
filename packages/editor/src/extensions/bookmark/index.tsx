@@ -8,6 +8,7 @@ export const BookmarkExtension: ExtensionWrapper = {
     menuConfig: {
         group: 'block',
         menu: BookmarkStaticMenu,
+        tooltip: 'editor.tooltip.bookmark',
     },
 };
 

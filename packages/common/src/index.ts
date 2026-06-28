@@ -35,7 +35,7 @@ import deepEqual from "deep-equal"
 import moment from "moment"
 import { isArray, isObject } from "lodash";
 export { smoothScrollIntoViewIfNeeded, axios, deepEqual, moment, isArray, isObject }
-export { default as request, setRequestToast } from "./utils/request"
+export { default as request, setRequestToast, setSessionExpiredHandler } from "./utils/request"
 export { createRoot } from "react-dom/client"
 export * from "browser-fs-access"
 

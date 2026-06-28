@@ -14,7 +14,8 @@ export const ImageExtension: ExtensionWrapper = {
 	bubbleMenu: ImageBubbleMenu,
 	menuConfig: {
 		group: 'block',
-		menu: ImageStaticMenu
+		menu: ImageStaticMenu,
+		tooltip: 'editor.tooltip.image',
 	},
 	slashConfig: [
 		{

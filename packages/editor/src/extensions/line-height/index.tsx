@@ -8,7 +8,8 @@ export const LineHeightExtension: ExtensionWrapper = {
     extendsion: LineHeight,
     menuConfig: {
         group: 'mark',
-        menu: LineHeightStaticMenu
+        menu: LineHeightStaticMenu,
+        tooltip: 'editor.tooltip.lineHeight',
     },
     flotMenuConfig: [LineHeightStaticMenu]
 }

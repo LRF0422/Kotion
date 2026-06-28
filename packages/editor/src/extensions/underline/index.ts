@@ -11,7 +11,8 @@ export const UnderlineExtension: ExtensionWrapper = {
     name: Underline.name,
     menuConfig: {
         group: 'mark',
-        menu: UnderlineStaticMenu
+        menu: UnderlineStaticMenu,
+        tooltip: 'editor.tooltip.underline',
     },
     flotMenuConfig: [UnderlineStaticMenu]
 }

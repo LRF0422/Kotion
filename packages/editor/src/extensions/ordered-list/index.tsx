@@ -13,7 +13,8 @@ export const OrderListExtension: ExtensionWrapper = {
 	extendsion: [OrderedList, ListItem],
 	menuConfig: {
 		group: 'mark',
-		menu: OrderListStaticMenu
+		menu: OrderListStaticMenu,
+		tooltip: 'editor.tooltip.orderedList',
 	},
 	slashConfig: [
 		{

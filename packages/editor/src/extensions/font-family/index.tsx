@@ -10,7 +10,8 @@ export const FontFamilyExtension: ExtensionWrapper = {
     extendsion: FontFamily,
     menuConfig: {
         group: 'mark',
-        menu: FontFamilyStaticMenu
+        menu: FontFamilyStaticMenu,
+        tooltip: 'editor.tooltip.fontFamily',
     },
     flotMenuConfig: [FontFamilyStaticMenu]
 }

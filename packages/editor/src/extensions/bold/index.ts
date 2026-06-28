@@ -13,6 +13,7 @@ export const BoldExtension: ExtensionWrapper = {
     menuConfig: {
         group: 'mark',
         menu: BoldStaticMenu,
+        tooltip: 'editor.tooltip.bold',
     },
     flotMenuConfig: [BoldStaticMenu]
 }

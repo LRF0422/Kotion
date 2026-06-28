@@ -1,5 +1,5 @@
-import React, { ElementType, useCallback, useEffect, useMemo } from "react";
-import { ExtensionWrapper, Group } from "@kn/common";
+import React, { ElementType, useCallback, useEffect } from "react";
+import { ExtensionWrapper, MenuConfigItem, useTranslation } from "@kn/common";
 import { Editor } from "@tiptap/core";
 import { Toggle } from "@kn/ui";
 import { Separator } from "@kn/ui";
@@ -10,16 +10,16 @@ import { BubbleMenu as ReactBubble } from "../components";
 import { useSafeState } from "ahooks";
 import { TextSelection } from "@tiptap/pm/state";
 
-interface MenuRecord {
-    block: ElementType[];
-    inline: ElementType[];
-    custom: ElementType[];
-    mark: ElementType[];
+interface MenuItem {
+    menu: ElementType;
+    tooltip?: string;
 }
 
-interface MenuConfigItem {
-    group: Group;
-    menu: ElementType;
+interface MenuRecord {
+    block: MenuItem[];
+    inline: MenuItem[];
+    custom: MenuItem[];
+    mark: MenuItem[];
 }
 
 export const EditorMenu: React.FC<{
@@ -28,6 +28,7 @@ export const EditorMenu: React.FC<{
     toolbar?: boolean;
 }> = ({ editor, extensionWrappers, toolbar = true }) => {
 
+    const { t } = useTranslation();
     const [bubbleMenu, setBubbleMenu] = useSafeState<ElementType[]>([]);
     const [flotMenu, setFloatMenu] = useSafeState<ElementType[]>([]);
     const [floatingUI, setFloatingUI] = useSafeState<ElementType[]>([]);
@@ -59,10 +60,10 @@ export const EditorMenu: React.FC<{
             if (wrapper.menuConfig) {
                 if (isArray(wrapper.menuConfig)) {
                     wrapper.menuConfig.forEach((config: MenuConfigItem) => {
-                        newRecord[config.group].push(config.menu);
+                        newRecord[config.group].push({ menu: config.menu, tooltip: config.tooltip });
                     });
                 } else {
-                    newRecord[wrapper.menuConfig.group].push(wrapper.menuConfig.menu);
+                    newRecord[wrapper.menuConfig.group].push({ menu: wrapper.menuConfig.menu, tooltip: wrapper.menuConfig.tooltip });
                 }
             }
 
@@ -92,10 +93,25 @@ export const EditorMenu: React.FC<{
         setFloatingUI(newFloatingUI);
     }, [extensionWrappers, setRecord, setBubbleMenu, setFloatMenu, setFloatingUI]);
 
-    // Memoized render function for menu items
-    const renderItem = useCallback((items: ElementType[], level: number) => (
-        items.length > 0 && items.map((Com, index) => <Com key={`${level}-${index}`} editor={editor} />)
-    ), [editor]);
+    // Memoized render function for menu items — wraps in Tooltip when tooltip text is provided
+    const renderItem = useCallback((items: MenuItem[], level: number) => (
+        items.length > 0 && items.map(({ menu: Com, tooltip }, index) => {
+            const node = <Com key={`${level}-${index}`} editor={editor} />;
+            if (!tooltip) return node;
+            return (
+                <TooltipProvider key={`${level}-${index}`} delayDuration={400}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            {node}
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">
+                            {t(tooltip)}
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            );
+        })
+    ), [editor, t]);
 
     // Memoized shouldShow function for bubble menu
     const shouldShow = useCallback(() => {
@@ -137,7 +153,7 @@ export const EditorMenu: React.FC<{
                                     </Toggle>
                                 </TooltipTrigger>
                                 <TooltipContent side="bottom" className="text-xs">
-                                    Undo
+                                    {t('editor.tooltip.undo')}
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
@@ -156,7 +172,7 @@ export const EditorMenu: React.FC<{
                                     </Toggle>
                                 </TooltipTrigger>
                                 <TooltipContent side="bottom" className="text-xs">
-                                    Redo
+                                    {t('editor.tooltip.redo')}
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
@@ -199,7 +215,7 @@ export const EditorMenu: React.FC<{
                     )}
                 </div>
             )}
-            {renderItem(bubbleMenu, 4)}
+            {bubbleMenu.length > 0 && bubbleMenu.map((Com, index) => <Com key={`bubble-${index}`} editor={editor} />)}
             {flotMenu.length > 0 && (
                 <ReactBubble
                     forNode

@@ -12,7 +12,8 @@ export const BulletListExtension: ExtensionWrapper = {
 	extendsion: [BulletList],
 	menuConfig: {
 		group: 'mark',
-		menu: BulletListStaticMenu
+		menu: BulletListStaticMenu,
+		tooltip: 'editor.tooltip.bulletList',
 	},
 	slashConfig: [
 		{

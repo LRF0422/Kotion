@@ -11,7 +11,8 @@ export const TextAlignExtension: ExtensionWrapper = {
     name: TextAlign.name,
     menuConfig: {
         group: 'mark',
-        menu: TextAlignStaticMenu
+        menu: TextAlignStaticMenu,
+        tooltip: 'editor.tooltip.textAlign',
     },
     flotMenuConfig: [TextAlignStaticMenu]
 }

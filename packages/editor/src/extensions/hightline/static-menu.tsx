@@ -15,6 +15,7 @@ import {
 import { Editor } from "@tiptap/core"
 import React, { useCallback, useState, useMemo } from "react"
 import { HIGHLIGHT_COLORS, HighlightColorName, HighlightColor } from "./index"
+import { useTranslation } from "@kn/common"
 
 interface HighlightColorItemProps {
     name: HighlightColorName
@@ -72,6 +73,7 @@ const findColorByBg = (bgColor: string | null): HighlightColor | undefined => {
 }
 
 export const HighlightStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
+    const { t } = useTranslation()
     const [open, setOpen] = useState(false)
     const { theme } = useTheme()
 
@@ -104,25 +106,35 @@ export const HighlightStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) =>
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Toggle
-                    size="sm"
-                    pressed={isHighlightActive}
-                    className="relative"
-                >
-                    <Highlighter className="h-4 w-4" />
-                    {currentColorConfig && (
-                        <span
-                            className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-1 rounded-full"
-                            style={{
-                                backgroundColor: isDark
-                                    ? currentColorConfig.dark.bg
-                                    : currentColorConfig.light.bg
-                            }}
-                        />
-                    )}
-                </Toggle>
-            </PopoverTrigger>
+            <TooltipProvider delayDuration={400}>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <PopoverTrigger asChild>
+                            <Toggle
+                                size="sm"
+                                pressed={isHighlightActive}
+                                className="relative"
+                                aria-label={t('editor.tooltip.highlightColor')}
+                            >
+                                <Highlighter className="h-4 w-4" />
+                                {currentColorConfig && (
+                                    <span
+                                        className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-1 rounded-full"
+                                        style={{
+                                            backgroundColor: isDark
+                                                ? currentColorConfig.dark.bg
+                                                : currentColorConfig.light.bg
+                                        }}
+                                    />
+                                )}
+                            </Toggle>
+                        </PopoverTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                        {t('editor.tooltip.highlightColor')}
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
             <PopoverContent
                 className="w-auto p-3"
                 align="start"

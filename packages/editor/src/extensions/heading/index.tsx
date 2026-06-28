@@ -12,7 +12,8 @@ export const HeadingExtension: ExtensionWrapper = {
 	extendsion: Heading,
 	menuConfig: {
 		group: 'mark',
-		menu: HeadingStaticMenu
+		menu: HeadingStaticMenu,
+		tooltip: 'editor.tooltip.textStyle',
 	},
 	slashConfig: [
 		{

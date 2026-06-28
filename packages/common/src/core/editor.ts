@@ -2,17 +2,16 @@ import { AnyExtension, Editor } from "@tiptap/core";
 import { ElementType, ReactNode } from "react";
 
 export type Group = 'block' | 'inline' | 'mark' | 'custom'
+export interface MenuConfigItem {
+    group: Group
+    menu: ElementType
+    tooltip?: string
+}
 export interface ExtensionWrapper {
     extendsion: AnyExtension | AnyExtension[] | any
     name: string
     bubbleMenu?: ElementType | ElementType[]
-    menuConfig?: {
-        group: Group
-        menu: ElementType
-    } | {
-        group: Group
-        menu: ElementType
-    }
+    menuConfig?: MenuConfigItem | MenuConfigItem[]
     slashConfig?: ({
         icon?: ReactNode,
         text?: string,

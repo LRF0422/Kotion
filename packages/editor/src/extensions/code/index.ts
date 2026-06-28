@@ -11,7 +11,8 @@ export const CodeExtension: ExtensionWrapper = {
     name: "code",
     menuConfig: {
         group: 'mark',
-        menu: CodeStaticMenu
+        menu: CodeStaticMenu,
+        tooltip: 'editor.tooltip.inlineCode',
     },
     flotMenuConfig: [CodeStaticMenu]
 }

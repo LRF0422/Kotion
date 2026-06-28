@@ -65,7 +65,8 @@ export const ColorExtension: ExtensionWrapper = {
 	extendsion: [Color, TextStyle],
 	menuConfig: {
 		group: 'mark',
-		menu: ColorStaticMenu
+		menu: ColorStaticMenu,
+		tooltip: 'editor.tooltip.textColor',
 	},
 	flotMenuConfig: [ColorStaticMenu]
 }

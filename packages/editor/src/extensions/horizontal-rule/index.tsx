@@ -12,7 +12,8 @@ export const HorizontalRuleExtension: ExtensionWrapper = {
 	extendsion: HorizontalRule,
 	menuConfig: {
 		group: 'block',
-		menu: HorizontalRuleStaticMenu
+		menu: HorizontalRuleStaticMenu,
+		tooltip: 'editor.tooltip.horizontalRule',
 	},
 	slashConfig: [
 		{

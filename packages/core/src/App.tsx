@@ -18,16 +18,16 @@ import { Marketplace } from "./components/Shop/Marketplace";
 
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
-import { setRequestToast } from "@kn/common"
+import { setRequestToast, setSessionExpiredHandler } from "@kn/common"
 import { registerCoreToolFactories } from "./ai/tools/register"
-import { toast } from "@kn/ui"
+import { toast, AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "@kn/ui"
 import { ErrorPage } from "./components/ErrorPage";
 import { PluginErrorBoundary } from "./components/PluginErrorBoundary";
 import ReactDOM from "react-dom";
 
 const { createBrowserRouter,
     createRoutesFromElements, Route, RouterProvider, Provider,
-    AppContext, i18n, initReactI18next, LanguageDetector, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS } = common;
+    AppContext, i18n, initReactI18next, LanguageDetector, event, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, createRoot } = common;
 
 const reslove = (config: common.RouteConfig) => {
     // Wrap each plugin route element with PluginErrorBoundary to isolate plugin errors
@@ -57,7 +57,72 @@ window.editor = editor
 window.React = React
 window.ReactDOM = ReactDOM
 
+// ---------------------------------------------------------------------------
+// Session-expired dialog (rendered imperatively when token expires)
+// ---------------------------------------------------------------------------
 
+const SessionExpiredDialog: React.FC<{ onLoginAgain: () => void; onStay: () => void }> = ({ onLoginAgain, onStay }) => {
+    const [open, setOpen] = React.useState(true)
+    const handled = React.useRef(false)
+
+    const handleAction = () => {
+        if (handled.current) return
+        handled.current = true
+        onLoginAgain()
+    }
+
+    const handleCancel = () => {
+        if (handled.current) return
+        handled.current = true
+        onStay()
+    }
+
+    return (
+        <AlertDialog open={open} onOpenChange={(v) => {
+            if (!v) handleCancel()
+            setOpen(v)
+        }}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>登录已过期</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        您的登录状态已过期，请重新登录。您也可以继续留在当前页面查看内容。
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogAction onClick={handleAction}>
+                        重新登录
+                    </AlertDialogAction>
+                    <AlertDialogCancel onClick={handleCancel}>
+                        留在当前页面
+                    </AlertDialogCancel>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    )
+}
+
+function showSessionExpiredDialog() {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    const unmount = () => {
+        setTimeout(() => {
+            root.unmount()
+            container.remove()
+        }, 300)
+    }
+
+    root.render(
+        <SessionExpiredDialog
+            onLoginAgain={() => {
+                window.location.href = '/login'
+            }}
+            onStay={unmount}
+        />
+    )
+}
 
 export type Plugins = common.KPlugin<any>[]
 
@@ -76,6 +141,10 @@ export const App: React.FC<AppProps> = (props) => {
 
     // Wire up toast for the request module
     setRequestToast((msg, opts) => toast.error(msg))
+
+    // Wire up session-expired dialog — shows a prompt instead of silently
+    // redirecting to /login when the token expires
+    setSessionExpiredHandler(showSessionExpiredDialog)
 
     // Register core AI tool factories so plugins can use them via @kn/common
     registerCoreToolFactories()

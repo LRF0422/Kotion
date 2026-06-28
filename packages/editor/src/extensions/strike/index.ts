@@ -10,6 +10,7 @@ export const StrikeExtension: ExtensionWrapper = {
     name: Strike.name,
     menuConfig: {
         group: 'mark',
-        menu: StrikeStaticMenu
+        menu: StrikeStaticMenu,
+        tooltip: 'editor.tooltip.strikethrough',
     }
 }

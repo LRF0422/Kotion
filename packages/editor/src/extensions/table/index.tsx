@@ -26,7 +26,8 @@ export const TableExtension: ExtensionWrapper = {
     bubbleMenu: TableBubbleMenu,
     menuConfig: {
         group: 'block',
-        menu: TableStaticMenu
+        menu: TableStaticMenu,
+        tooltip: 'editor.tooltip.insertTable',
     },
     slashConfig: [
         {

@@ -15,6 +15,20 @@ export function setRequestToast(toastError: ToastFn) {
 }
 
 // ---------------------------------------------------------------------------
+// Configurable session-expired handler (injected by the app to show a
+// confirmation dialog instead of silently redirecting to /login)
+// ---------------------------------------------------------------------------
+
+type SessionExpiredFn = () => void
+
+let _sessionExpiredHandler: SessionExpiredFn | null = null
+
+/** Call once at app startup to wire up the session-expired dialog */
+export function setSessionExpiredHandler(handler: SessionExpiredFn) {
+    _sessionExpiredHandler = handler
+}
+
+// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
@@ -68,10 +82,23 @@ function flushRefreshSubscribers(token: string): void {
 // ---------------------------------------------------------------------------
 
 function redirectToLogin(): void {
+    clearTokens()
+    window.location.href = '/login'
+}
+
+/** Called when the session is definitively expired (refresh failed or
+ *  no refresh token available).  Shows the injected prompt if available,
+ *  otherwise falls back to an immediate redirect.  Guarded by `isRedirecting`
+ *  so only one prompt appears even when many 401s arrive simultaneously. */
+function handleSessionExpired(): void {
     if (isRedirecting) return
     isRedirecting = true
     clearTokens()
-    window.location.href = '/login'
+    if (_sessionExpiredHandler) {
+        _sessionExpiredHandler()
+    } else {
+        redirectToLogin()
+    }
 }
 
 function normalizeErrorMessage(message: string): string {
@@ -120,7 +147,7 @@ axiosInstance.interceptors.response.use(
         console.log('[Response Interceptor]', res.config.url, '| HTTP:', res.status, '| code:', code, '| data:', JSON.stringify(res.data)?.slice(0, 200))
 
         if (code === 401) {
-            redirectToLogin()
+            handleSessionExpired()
             return Promise.reject(new Error('无效的会话，或者会话已过期，请重新登录。'))
         }
 
@@ -174,14 +201,14 @@ axiosInstance.interceptors.response.use(
                     config.headers['Authorization'] = `Bearer ${accessToken}`
                     return axiosInstance(config)
                 } catch {
-                    redirectToLogin()
+                    handleSessionExpired()
                     return Promise.reject(new Error('登录已过期，请重新登录。'))
                 } finally {
                     isRefreshing = false
                 }
             }
 
-            redirectToLogin()
+            handleSessionExpired()
             return Promise.reject(error)
         }
 

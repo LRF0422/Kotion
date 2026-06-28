@@ -11,7 +11,8 @@ export const ItalicExtension: ExtensionWrapper = {
     name: Italic.name,
     menuConfig: {
         group: 'mark',
-        menu: ItalicStaticMenu
+        menu: ItalicStaticMenu,
+        tooltip: 'editor.tooltip.italic',
     },
     flotMenuConfig: [ItalicStaticMenu]
 }

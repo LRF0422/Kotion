@@ -16,7 +16,8 @@ export const InfoPanelExtension: ExtensionWrapper = {
 	extendsion: InfoPanel,
 	menuConfig: {
 		group: 'block',
-		menu: InfoPanelStaticMenu
+		menu: InfoPanelStaticMenu,
+		tooltip: 'editor.tooltip.callout',
 	},
 	bubbleMenu: InfoPanelBubbleMenu,
 	slashConfig: [
