@@ -3,6 +3,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuPortal,
     DropdownMenuSeparator,
     DropdownMenuSub,
     DropdownMenuSubContent,
@@ -103,6 +104,7 @@ export const AiStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
                         <AI_MORE_GROUP.icon className="h-4 w-4" />
                         {AI_MORE_GROUP.label[lang]}
                     </DropdownMenuSubTrigger>
+                    <DropdownMenuPortal>
                     <DropdownMenuSubContent className="w-[180px]">
                         {AI_MORE_GROUP.items.map((item) => {
                             const Icon = AI_MORE_ICONS[item.key];
@@ -118,6 +120,7 @@ export const AiStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
                             );
                         })}
                     </DropdownMenuSubContent>
+                    </DropdownMenuPortal>
                 </DropdownMenuSub>
 
                 {/* Tone submenu */}
@@ -126,6 +129,7 @@ export const AiStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
                         <AI_TONE_GROUP.icon className="h-4 w-4" />
                         {AI_TONE_GROUP.label[lang]}
                     </DropdownMenuSubTrigger>
+                    <DropdownMenuPortal>
                     <DropdownMenuSubContent className="w-[180px]">
                         {AI_TONE_GROUP.items.map((item) => (
                             <DropdownMenuItem key={item.key} onSelect={() => dispatchRun(item.key)}>
@@ -133,6 +137,7 @@ export const AiStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
                             </DropdownMenuItem>
                         ))}
                     </DropdownMenuSubContent>
+                    </DropdownMenuPortal>
                 </DropdownMenuSub>
 
                 {/* Translate submenu */}
@@ -141,6 +146,7 @@ export const AiStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
                         <AI_TRANSLATE_GROUP.icon className="h-4 w-4" />
                         {AI_TRANSLATE_GROUP.label[lang]}
                     </DropdownMenuSubTrigger>
+                    <DropdownMenuPortal>
                     <DropdownMenuSubContent className="w-[180px]">
                         {AI_TRANSLATE_GROUP.items.map((item) => (
                             <DropdownMenuItem key={item.key} onSelect={() => dispatchRun(item.key)}>
@@ -148,6 +154,7 @@ export const AiStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
                             </DropdownMenuItem>
                         ))}
                     </DropdownMenuSubContent>
+                    </DropdownMenuPortal>
                 </DropdownMenuSub>
             </DropdownMenuContent>
         </DropdownMenu>
