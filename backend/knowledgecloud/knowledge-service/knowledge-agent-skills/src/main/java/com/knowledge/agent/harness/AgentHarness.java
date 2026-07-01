@@ -1,10 +1,14 @@
 package com.knowledge.agent.harness;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.api.dto.ChatTool;
 import com.knowledge.agent.api.dto.SkillPayload;
 import com.knowledge.agent.core.engine.StreamEvent;
 import com.knowledge.agent.llm.LlmClientFactory;
+import com.knowledge.agent.orchestrator.AgentTeamPlan;
+import com.knowledge.agent.orchestrator.OrchestratorAgent;
+import com.knowledge.agent.orchestrator.TeamExecutor;
 import com.knowledge.agent.tool.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -18,6 +22,12 @@ import java.util.*;
  *
  * The agent autonomously decides whether to work solo or spawn sub-agents
  * via the `delegate` tool — no upfront mode decision needed.
+ *
+ * <p>
+ * Per-request mutable objects ({@link SkillCatalog}, {@link DynamicSkillRegistry},
+ * {@link ContextManager}) are created fresh inside {@link #run} on every call
+ * and placed onto the {@link ToolContext}. This ensures concurrent requests
+ * never share mutable state.
  */
 @Slf4j
 @Component
@@ -29,8 +39,10 @@ public class AgentHarness {
     private final SystemPromptBuilder promptBuilder;
     private final ProgressiveDiscovery progressiveDiscovery;
     private final SkillSelector skillSelector;
-    private final SkillCatalog skillCatalog;
-    private final DynamicSkillRegistry dynamicSkillRegistry;
+    private final ContextManagerConfig contextManagerConfig;
+    private final OrchestratorAgent orchestratorAgent;
+    private final TeamExecutor teamExecutor;
+    private final ObjectMapper objectMapper;
 
     public AgentHarness(HarnessLoop harnessLoop,
             LlmClientFactory llmClientFactory,
@@ -38,16 +50,20 @@ public class AgentHarness {
             SystemPromptBuilder promptBuilder,
             ProgressiveDiscovery progressiveDiscovery,
             SkillSelector skillSelector,
-            SkillCatalog skillCatalog,
-            DynamicSkillRegistry dynamicSkillRegistry) {
+            ContextManagerConfig contextManagerConfig,
+            OrchestratorAgent orchestratorAgent,
+            TeamExecutor teamExecutor,
+            ObjectMapper objectMapper) {
         this.harnessLoop = harnessLoop;
         this.llmClientFactory = llmClientFactory;
         this.toolRegistry = toolRegistry;
         this.promptBuilder = promptBuilder;
         this.progressiveDiscovery = progressiveDiscovery;
         this.skillSelector = skillSelector;
-        this.skillCatalog = skillCatalog;
-        this.dynamicSkillRegistry = dynamicSkillRegistry;
+        this.contextManagerConfig = contextManagerConfig;
+        this.orchestratorAgent = orchestratorAgent;
+        this.teamExecutor = teamExecutor;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -91,16 +107,24 @@ public class AgentHarness {
                 frontendTools != null ? frontendTools.size() : 0,
                 skills != null ? skills.size() : 0);
 
-        // --- Reset per-request state ---
-        // Clear dynamic skill registry from previous requests
-        dynamicSkillRegistry.clear();
+        // --- Create per-request state (fresh instances, no shared mutation) ---
+        DynamicSkillRegistry dynamicSkillRegistry = new DynamicSkillRegistry();
+        SkillCatalog skillCatalog = new SkillCatalog();
+        ContextManager contextManager = new ContextManager(contextManagerConfig);
+
         // Seed the skill catalog with ALL frontend skills (not just selected ones)
         // so that search_skills can discover them on demand
         skillCatalog.seed(skills);
 
+        // Attach per-request instances to the ToolContext so they flow through
+        // the entire call chain (HarnessLoop, tools, sub-agents, etc.)
+        context.setSkillCatalog(skillCatalog);
+        context.setDynamicSkillRegistry(dynamicSkillRegistry);
+        context.setContextManager(contextManager);
+
         // --- Progressive skill discovery ---
         // 1. LLM-based skill pre-filter: keep only skills relevant to the
-        // user's latest request. Falls back to the full list on failure.
+        // user's latest request. Falls back to always-on + keyword-matched skills on failure.
         //
         // When search_skills is available, we can be more aggressive with
         // filtering: only pre-activate clearly relevant skills, and let the
@@ -122,14 +146,83 @@ public class AgentHarness {
         String systemPrompt = promptBuilder.build(
                 toolRegistry.getAll(), mergedFrontendTools, context, resolution.getPromptFragment());
 
-        // All registered backend tools remain available to the LLM; skill tools
-        // are injected via mergedFrontendTools rather than toolIds.
-        Set<String> allToolIds = new LinkedHashSet<>(toolRegistry.getToolIds());
+        // Filter backend tool IDs to only those required by selected skills,
+        // plus essential tools that should always be available. This prevents
+        // tool bloat where every agent task receives all registered backend
+        // tools regardless of skill selection.
+        Set<String> filteredToolIds = resolveToolIdsFromSkills(selectedSkills);
+        // Essential backend tools always available
+        filteredToolIds.add("delegate");
+        filteredToolIds.add("search_skills");
+        // Note: "undo" is a frontend-executed tool delivered via the document-read
+        // skill's requiredTools → mergedFrontendTools, not a backend ToolRegistry entry.
+
+        // Intersect with registered tool IDs so we only keep tools that exist
+        Set<String> allToolIds = new LinkedHashSet<>();
+        for (String id : toolRegistry.getToolIds()) {
+            if (filteredToolIds.contains(id)) {
+                allToolIds.add(id);
+            }
+        }
+
+        // Safety net: if nothing matched (e.g., no skills selected, all lookups
+        // failed), fall back to the full tool set so the agent is never left
+        // with zero backend tools.
+        if (allToolIds.isEmpty()) {
+            log.info("AgentHarness.run: no tools matched skill requirements, falling back to all backend tools");
+            allToolIds = new LinkedHashSet<>(toolRegistry.getToolIds());
+        }
 
         log.info("AgentHarness.run: active backend tools={}, skill-resolved frontend tools={}",
                 allToolIds.size(), resolution.getTools().size());
 
+        // --- Auto-orchestration: plan multi-agent team if enabled ---
+        // The orchestrator decides whether to decompose the task into
+        // specialized agents. When disabled or fast-pathed, it returns a
+        // single-agent plan and the normal HarnessLoop path is used.
+        AgentTeamPlan plan = orchestratorAgent.plan(messages, selectedSkills, model).block();
+        if (plan != null && !plan.isSingleAgent()) {
+            log.info("AgentHarness.run: orchestrator planned {} agents with {} strategy",
+                    plan.getAgents().size(), plan.getStrategy());
+            try {
+                context.setOrchestrationPlan(objectMapper.writeValueAsString(plan));
+            } catch (Exception e) {
+                log.warn("AgentHarness.run: failed to serialize orchestration plan: {}",
+                        e.getMessage());
+            }
+            return teamExecutor.execute(plan, messages, context);
+        }
+
+        // Single-agent path (existing behavior)
         return harnessLoop.run(messages, model, allToolIds, systemPrompt, context, 20, mergedFrontendTools);
+    }
+
+    /**
+     * Collect all tool names declared by the given skills via
+     * {@code requiredTools} and {@code optionalTools}.
+     *
+     * <p>
+     * Tool names in {@link SkillPayload} correspond directly to tool IDs in
+     * the {@link ToolRegistry} (the tool ID is used as the function name sent
+     * to the LLM).
+     *
+     * @param skills selected skills (may be null or empty)
+     * @return set of tool name strings (never null)
+     */
+    private Set<String> resolveToolIdsFromSkills(List<SkillPayload> skills) {
+        Set<String> names = new HashSet<>();
+        if (skills == null) {
+            return names;
+        }
+        for (SkillPayload skill : skills) {
+            if (skill.getRequiredTools() != null) {
+                names.addAll(skill.getRequiredTools());
+            }
+            if (skill.getOptionalTools() != null) {
+                names.addAll(skill.getOptionalTools());
+            }
+        }
+        return names;
     }
 
     /**

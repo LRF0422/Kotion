@@ -1,10 +1,13 @@
 package com.knowledge.agent.harness;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.api.dto.AgentMode;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.api.dto.ChatTool;
 import com.knowledge.agent.core.engine.StreamEvent;
 import com.knowledge.agent.llm.LlmClient;
+import com.knowledge.agent.store.AgentStateSnapshot;
+import com.knowledge.agent.store.AgentStateStore;
 import com.knowledge.agent.llm.LlmClientFactory;
 import com.knowledge.agent.llm.LlmRequest;
 import com.knowledge.agent.llm.LlmResilience;
@@ -12,7 +15,9 @@ import com.knowledge.agent.llm.LlmResponse;
 import com.knowledge.agent.llm.StreamChunk;
 import com.knowledge.agent.tool.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -44,9 +49,34 @@ public class HarnessLoop {
 
     private final LlmClientFactory llmClientFactory;
     private final ToolRegistry toolRegistry;
-    private final ContextManager contextManager;
-    private final DynamicSkillRegistry dynamicSkillRegistry;
     private final LlmResilience llmResilience;
+
+    /**
+     * State store for crash-recovery snapshots. Injected by Spring for the root
+     * agent bean; {@code null} for hand-constructed sub-agent instances (which
+     * are short-lived and do not need persistence). When {@code agent.state.backend}
+     * is not set (or set to a value other than {@code file}/{@code jdbc}), no
+     * {@link AgentStateStore} bean exists and Spring injects {@code null} here
+     * (parameter is {@link Nullable}).
+     */
+    private final AgentStateStore stateStore;
+
+    /**
+     * JSON serializer used for synchronous snapshot serialization in
+     * {@link #saveSnapshot}. Field-injected by Spring so that hand-constructed
+     * (non-Spring) instances (e.g. {@link SubAgent}) are unaffected — they never
+     * save snapshots because {@code stateStore} is {@code null}.
+     */
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    /**
+     * Snapshot every N iterations (in addition to always snapshotting at
+     * tool-call boundaries). Field initializer is the default for
+     * hand-constructed (non-Spring) instances.
+     */
+    @Value("${agent.state.snapshot-interval:5}")
+    private int snapshotInterval = 5;
 
     /**
      * When true (default), use the token-level streaming loop that forwards LLM
@@ -84,16 +114,23 @@ public class HarnessLoop {
     @Value("${agent.plan-mode.read-only-tools:}")
     private String planReadOnlyToolsCsv;
 
+    /**
+     * Constructor — used by Spring for the root agent bean (single constructor,
+     * so Spring auto-detects it for constructor injection) and by {@link SubAgent}
+     * (which passes {@code null} for {@code stateStore} since sub-agents are
+     * short-lived and do not need crash-recovery persistence).
+     *
+     * @param stateStore state store for crash-recovery snapshots (nullable;
+     *                   when null, all persistence is silently skipped)
+     */
     public HarnessLoop(LlmClientFactory llmClientFactory,
             ToolRegistry toolRegistry,
-            ContextManager contextManager,
-            DynamicSkillRegistry dynamicSkillRegistry,
-            LlmResilience llmResilience) {
+            LlmResilience llmResilience,
+            @Nullable AgentStateStore stateStore) {
         this.llmClientFactory = llmClientFactory;
         this.toolRegistry = toolRegistry;
-        this.contextManager = contextManager;
-        this.dynamicSkillRegistry = dynamicSkillRegistry;
         this.llmResilience = llmResilience;
+        this.stateStore = stateStore;
     }
 
     /**
@@ -161,29 +198,52 @@ public class HarnessLoop {
         LoopState state = new LoopState(workingMessages, iteration, maxIterations,
                 client, toolIds, frontendTools, frontendToolNames, context);
 
+        // Restore from checkpoint ONLY when this is an explicit resume (e.g.
+        // crash recovery). The frontend reuses the same sessionId across turns,
+        // so loading a stale snapshot unconditionally would clobber the new
+        // user message with mid-execution state from the previous turn.
+        if (state.context != null && state.context.isResume()) {
+            restoreFromSnapshot(state);
+        }
+
+        // Build the appropriate Flux for the streaming or legacy loop.
+        Flux<StreamEvent> loopFlux;
         if (streamingEnabled) {
             // Token-level streaming loop: each iteration is itself a Flux that
             // forwards LLM deltas live, then recurses via concatWith(defer).
             // Flux.defer ensures the first iteration's side effects (iteration
             // increment, context compression) run at subscribe time.
-            return Flux.defer(() -> runTurn(state));
+            loopFlux = Flux.defer(() -> runTurn(state));
+        } else {
+            // Legacy buffer-then-emit loop (expand over collected IterationResults).
+            // 1. Seed: a Mono<IterationResult> representing the first iteration
+            // 2. expand(): if the result needs to continue, run the next iteration
+            // 3. Take up to maxIterations
+            // 4. Flatten all events from each iteration
+            loopFlux = Mono.fromCallable(() -> state)
+                    .flatMapMany(s -> runIteration(s)
+                            .expand(result -> {
+                                if (result.shouldContinue()) {
+                                    return runIteration(result.getState());
+                                }
+                                return Flux.empty();
+                            })
+                            .take(maxIterations)
+                            .flatMapIterable(IterationResult::getEvents));
         }
 
-        // Legacy buffer-then-emit loop (expand over collected IterationResults).
-        // 1. Seed: a Mono<IterationResult> representing the first iteration
-        // 2. expand(): if the result needs to continue, run the next iteration
-        // 3. Take up to maxIterations
-        // 4. Flatten all events from each iteration
-        return Mono.fromCallable(() -> state)
-                .flatMapMany(s -> runIteration(s)
-                        .expand(result -> {
-                            if (result.shouldContinue()) {
-                                return runIteration(result.getState());
-                            }
-                            return Flux.empty();
-                        })
-                        .take(maxIterations)
-                        .flatMapIterable(IterationResult::getEvents));
+        // Clean up the persisted snapshot when the loop terminates — whether
+        // it completed normally, errored, or was cancelled. This prevents a
+        // stale mid-execution snapshot from clobbering the next turn (which
+        // reuses the same sessionId) with old messages.
+        return loopFlux.doFinally(signal -> {
+            if (stateStore != null && state.context != null) {
+                String sid = state.context.getSessionId();
+                if (sid != null && !sid.isEmpty()) {
+                    stateStore.delete(sid);
+                }
+            }
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -208,12 +268,18 @@ public class HarnessLoop {
                     .build());
         }
 
+        // Interval-based snapshot: save every N iterations as a safety net
+        // (tool-call boundaries are always saved in continueOrFinish)
+        if (snapshotInterval > 0 && iter % snapshotInterval == 0) {
+            saveSnapshot(state);
+        }
+
         // Context window management
-        contextManager.compressIfNeeded(state.workingMessages);
+        state.context.getContextManager().compressIfNeeded(state.workingMessages);
 
         // Rebuild tools each iteration to pick up dynamically activated skills
         List<ChatTool> mergedFrontend = mergeFrontendAndDynamicTools(
-                state.initialFrontendTools, dynamicSkillRegistry.getActiveTools());
+                state.initialFrontendTools, state.context.getDynamicSkillRegistry().getActiveTools());
 
         // PLAN mode (P7), layer 1: only advertise read-only tools to the LLM so
         // it cannot even see mutating tools.
@@ -241,7 +307,7 @@ public class HarnessLoop {
             }
         }
 
-        String dynamicPrompt = dynamicSkillRegistry.getPromptFragment();
+        String dynamicPrompt = state.context.getDynamicSkillRegistry().getPromptFragment();
         if (dynamicPrompt != null && !dynamicPrompt.isEmpty()) {
             updateSystemPromptWithDynamicFragment(state.workingMessages, dynamicPrompt);
         }
@@ -368,7 +434,12 @@ public class HarnessLoop {
         assistantMsgBuilder.toolCalls(tcInfos);
         state.workingMessages.add(assistantMsgBuilder.build());
 
+        // Save snapshot at the tool-call boundary (natural commit point),
+        // before recursing into the next LLM turn. Fire-and-forget: the
+        // stateStore.save() submits to a bounded async executor and returns
+        // immediately, so the reactive stream is never blocked.
         return executeBackendToolsStreaming(backendCalls, state)
+                .doOnComplete(() -> saveSnapshot(state))
                 .concatWith(Flux.defer(() -> runTurn(state)));
     }
 
@@ -477,6 +548,142 @@ public class HarnessLoop {
                 .build());
     }
 
+    // ---- State snapshot / crash recovery (Task 3) ----
+
+    /**
+     * Persist a snapshot of the current loop state to disk asynchronously.
+     * Fire-and-forget: {@code stateStore.save()} submits to a bounded executor
+     * and returns immediately, so the reactive stream is never blocked.
+     *
+     * <p>Skipped silently when {@code stateStore} is null (sub-agents) or when
+     * the session ID is unavailable.
+     */
+    private void saveSnapshot(LoopState state) {
+        if (stateStore == null) {
+            return;
+        }
+        try {
+            String sessionId = state.context != null ? state.context.getSessionId() : null;
+            if (sessionId == null || sessionId.isEmpty()) {
+                return;
+            }
+
+            Set<String> activatedSkills = Collections.emptySet();
+            if (state.context.getSkillCatalog() != null) {
+                activatedSkills = state.context.getSkillCatalog().getActivatedSkillNames();
+            }
+
+            AgentStateSnapshot snapshot = AgentStateSnapshot.builder()
+                    .conversationId(state.context.getConversationId())
+                    .sessionId(sessionId)
+                    .agentId(state.context.getAgentId())
+                    .parentAgentId(null)
+                    .depth(state.context.getDelegateDepth())
+                    .iteration(state.iteration.get())
+                    .workingMessages(new ArrayList<>(state.workingMessages))
+                    .activatedSkillNames(activatedSkills)
+                    .toolCallHistory(buildToolCallHistory(state.workingMessages))
+                    .orchestrationPlan(state.context != null ? state.context.getOrchestrationPlan() : null)
+                    .timestamp(System.currentTimeMillis())
+                    .build();
+
+            // Serialize synchronously on the reactive thread to avoid the
+            // shallow-copy race: ChatMessage objects are shared references,
+            // and the async executor may see them mutated in-place (e.g. by
+            // updateSystemPromptWithDynamicFragment) before serialization
+            // completes. By serializing to bytes here, the snapshot is a
+            // stable immutable copy before the async file write.
+            byte[] json = objectMapper.writeValueAsBytes(snapshot);
+            stateStore.saveBytes(sessionId, json);
+        } catch (Exception e) {
+            log.warn("Failed to save agent state snapshot: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Restore the loop state from a persisted snapshot. Replaces working
+     * messages, restores the iteration counter, and re-activates skills
+     * that were active when the snapshot was taken.
+     *
+     * <p>Called once at the start of {@code run()}, before the first LLM
+     * call. If no snapshot exists or loading fails, the loop starts fresh.
+     */
+    private void restoreFromSnapshot(LoopState state) {
+        if (stateStore == null) {
+            return;
+        }
+        String sessionId = state.context != null ? state.context.getSessionId() : null;
+        if (sessionId == null || sessionId.isEmpty()) {
+            return;
+        }
+        try {
+            AgentStateSnapshot snapshot = stateStore.load(sessionId);
+            if (snapshot == null) {
+                return;
+            }
+            log.info("Restoring agent state for sessionId={}, iteration={}, messages={}",
+                    sessionId, snapshot.getIteration(),
+                    snapshot.getWorkingMessages() != null ? snapshot.getWorkingMessages().size() : 0);
+
+            // Replace working messages with the snapshot's
+            state.workingMessages.clear();
+            if (snapshot.getWorkingMessages() != null) {
+                state.workingMessages.addAll(snapshot.getWorkingMessages());
+            }
+
+            // Restore iteration count (next increment will be snapshot + 1)
+            state.iteration.set(snapshot.getIteration());
+
+            // Re-activate skills that were active at snapshot time
+            if (snapshot.getActivatedSkillNames() != null && state.context.getSkillCatalog() != null) {
+                for (String skillName : snapshot.getActivatedSkillNames()) {
+                    state.context.getSkillCatalog().activate(skillName);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to restore agent state for sessionId={}: {}",
+                    sessionId, e.getMessage());
+        }
+    }
+
+    /**
+     * Build a list of recent tool call records from the working messages.
+     * Scans for assistant messages carrying {@code tool_calls} and pairs
+     * each with its corresponding {@code tool} result message.
+     */
+    private List<AgentStateSnapshot.ToolCallRecord> buildToolCallHistory(
+            List<ChatMessage> messages) {
+        List<AgentStateSnapshot.ToolCallRecord> history = new ArrayList<>();
+        // Pending tool calls (id → builder) awaiting their result message
+        Map<String, AgentStateSnapshot.ToolCallRecord.ToolCallRecordBuilder> pending =
+                new LinkedHashMap<>();
+
+        for (ChatMessage msg : messages) {
+            if ("assistant".equals(msg.getRole()) && msg.getToolCalls() != null) {
+                for (ChatMessage.ToolCallInfo tc : msg.getToolCalls()) {
+                    if (tc.getFunction() != null) {
+                        AgentStateSnapshot.ToolCallRecord.ToolCallRecordBuilder b =
+                                AgentStateSnapshot.ToolCallRecord.builder()
+                                        .toolCallId(tc.getId())
+                                        .toolName(tc.getFunction().getName())
+                                        .arguments(tc.getFunction().getArguments());
+                        pending.put(tc.getId(), b);
+                    }
+                }
+            } else if ("tool".equals(msg.getRole()) && msg.getToolCallId() != null) {
+                AgentStateSnapshot.ToolCallRecord.ToolCallRecordBuilder b =
+                        pending.get(msg.getToolCallId());
+                if (b != null) {
+                    b.result(msg.getContent())
+                     .success(true);
+                    history.add(b.build());
+                    pending.remove(msg.getToolCallId());
+                }
+            }
+        }
+        return history;
+    }
+
     // ---- Plan mode helpers (P7) ----
 
     private boolean isPlanMode(LoopState state) {
@@ -560,12 +767,12 @@ public class HarnessLoop {
         int iter = state.iteration.incrementAndGet();
 
         // Context window management
-        contextManager.compressIfNeeded(state.workingMessages);
+        state.context.getContextManager().compressIfNeeded(state.workingMessages);
 
         // Rebuild toolsJson on each iteration to pick up dynamically
         // activated skills (from search_skills tool)
         List<ChatTool> mergedFrontend = mergeFrontendAndDynamicTools(
-                state.initialFrontendTools, dynamicSkillRegistry.getActiveTools());
+                state.initialFrontendTools, state.context.getDynamicSkillRegistry().getActiveTools());
         String toolsJson = toolRegistry.buildToolsJson(state.toolIds, mergedFrontend);
 
         // Also update frontendToolNames with dynamic tools
@@ -579,7 +786,7 @@ public class HarnessLoop {
 
         // If dynamic skills added prompt fragments, inject into working
         // messages by updating the system message
-        String dynamicPrompt = dynamicSkillRegistry.getPromptFragment();
+        String dynamicPrompt = state.context.getDynamicSkillRegistry().getPromptFragment();
         if (dynamicPrompt != null && !dynamicPrompt.isEmpty()) {
             updateSystemPromptWithDynamicFragment(state.workingMessages, dynamicPrompt);
         }
@@ -725,7 +932,8 @@ public class HarnessLoop {
             LoopState state) {
 
         if (index >= toolCalls.size()) {
-            // All tools executed — continue the loop
+            // All tools executed — save checkpoint, then continue the loop
+            saveSnapshot(state);
             return Mono.just(new IterationResult(events, true, state));
         }
 

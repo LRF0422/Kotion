@@ -935,6 +935,111 @@ For backend developers wiring up this contract, the authoritative client is:
 - Catalog collector: `packages/common/src/ai/capabilities/CapabilityCatalog.ts` → `collectCapabilityCatalog`
 - Types: `packages/common/src/ai/chat-client/types.ts` (`ChatRequest`, `SkillPayload`, `ToolPayload`)
 
+### 8.7 Skills-only contract (feature flag `KN_SKILLS_ONLY_CATALOG`)
+
+When the `KN_SKILLS_ONLY_CATALOG` feature flag is enabled, the frontend sends **only** `skills[]` and omits the top-level `tools[]` array. All tool schemas — including built-in tools — travel inside `SkillPayload.tools`. This simplifies the backend: it reads every tool definition from the skill envelope, eliminating the dual-source ambiguity between `tools[]` and `skill.tools[]`.
+
+Key points:
+
+- The old `document-editing` catch-all skill has been replaced by **9 granular skills**. Only `document-read` is tagged `always-on` (includes: `getDocumentStructure`, `readChunk`, `searchInDocument`, `getSelection`, `undo`). The other 8 skills (`document-write`, `document-delete`, `document-format`, `document-table`, `document-layout`, `document-callout`, `document-color`, `document-interaction`) are **selectable** — the `SkillSelector` decides whether to activate them based on the user's intent.
+- The `tools[]` field in `ChatRequest` is **deprecated** under this flag and should be ignored by the backend when `skills[]` is non-empty.
+- `capabilitiesVersion` still hashes over the full `(skills, tools)` catalog for cache invalidation.
+
+#### Always-on skills
+
+Skills tagged `always-on` in their `tags[]` array bypass the `SkillSelector` LLM filtering step. They are **always** included in the active skill set for every turn, regardless of the user's message content. In the current architecture, only `document-read` carries this tag, ensuring the agent can always read the document structure, search content, and undo changes.
+
+```ts
+// SkillPayload with always-on tag
+{
+    name: 'document-read',
+    description: 'Read and navigate document structure, search content, and undo changes.',
+    requiredTools: ['getDocumentStructure', 'readChunk', 'searchInDocument', 'getSelection', 'undo'],
+    systemPromptFragment: 'You have access to document reading tools: ...',
+    tags: ['always-on', 'read', 'document'],
+    source: 'builtin',
+}
+```
+
+The backend should check `skill.tags?.includes('always-on')` and unconditionally activate such skills before running the `SkillSelector` for the remaining catalog.
+
+#### Mid-loop skill discovery
+
+The `search_skills` tool is **always available** to the agent (added as an essential backend tool in `AgentHarness`). When the `SkillSelector` fallback returns only always-on + keyword-matched skills (not the full unfiltered list), the agent can use `search_skills` mid-conversation to discover and activate additional capabilities on demand.
+
+### 8.8 Auto-orchestration (`agent.orchestrator.enabled`)
+
+When the backend configuration `agent.orchestrator.enabled` is `true`, an `OrchestratorAgent` runs **before** the main agent loop to decompose complex tasks into a team of specialized sub-agents.
+
+Flow:
+
+1. **Plan**: The `OrchestratorAgent` receives the user's task and produces an `AgentTeamPlan` — a list of `AgentSpec` entries, each with a custom `name`, `systemPrompt`, `description`, and `requiredSkills`.
+2. **Persist**: Agent definitions are stored via `AgentDefinitionStore` so they survive across sessions and can be inspected/reused.
+3. **Execute**: The `TeamExecutor` runs the plan using `SubAgentFactory` with `Flux.flatMap` for parallel execution of independent agents. Dependencies between agents are respected (an agent waits for its dependencies to finish before starting).
+4. **Synthesize**: Results from all team members are collected and synthesized into the final response.
+
+```jsonc
+// AgentTeamPlan (server-internal)
+{
+    "agents": [
+        {
+            "name": "Document Reader",
+            "description": "Read and analyze the document structure",
+            "systemPrompt": "You are a document analysis specialist...",
+            "requiredSkills": ["document-reading"],
+            "dependencies": []
+        },
+        {
+            "name": "Translator",
+            "description": "Translate the extracted content to English",
+            "systemPrompt": "You are a professional translator...",
+            "requiredSkills": ["translation"],
+            "dependencies": ["Document Reader"]
+        }
+    ]
+}
+```
+
+#### New tool: `orchestrate`
+
+The LLM may call the `orchestrate` tool mid-loop to re-plan the remaining task into multiple specialized agents. This is an `AsyncTool` available to the main agent when orchestration is enabled. Its arguments include the task description and an optional list of desired agent roles; the backend invokes the `OrchestratorAgent` to produce a fresh `AgentTeamPlan` and the `TeamExecutor` runs it.
+
+### 8.9 New SSE annotations for orchestrated agents
+
+The `subagent_spawned` annotation now includes two optional fields when emitted by the `TeamExecutor`:
+
+```jsonc
+{
+    "type": "subagent_spawned",
+    "agentId": "agent-2",
+    "parentAgentId": null,
+    "depth": 1,
+    "task": "Read and analyze the document",
+    "agentName": "Document Reader",       // NEW — from AgentSpec.name
+    "description": "Read and analyze the document structure"  // NEW — from AgentSpec.description
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `agentName` | `string?` | Custom name from `AgentSpec.name`. Absent for `DelegateTool`-spawned agents that don't have custom names. |
+| `description` | `string?` | Task description from `AgentSpec.description`. |
+
+The frontend `SubAgentTree` component displays `agentName` (bold) as the primary label, `description` (muted, smaller) as a subtitle, and falls back to the task ID when `agentName` is absent.
+
+The `delegate_start` annotation's `subTasks[]` items also carry an optional `agentName` field for the same purpose.
+
+### 8.10 Agent state persistence
+
+Agent state snapshots are saved to disk for crash recovery and session resumption.
+
+- **Storage path**: `{agent.state.dir}/sessions/{sessionId}.json`
+- **Save cadence**: Every N iterations (default `5`, configurable via `agent.state.snapshotInterval`) and on tool-call boundaries.
+- **Snapshot contents**: Full conversation history, accumulated tool results, active skill set, and sub-agent tree state.
+- **Recovery endpoint**: `POST /api/v1/agent/resume/{sessionId}` — resumes the agent loop from the last saved snapshot.
+
+The `FileAgentStateStore` handles serialization. The `HarnessLoop` triggers saves via `AgentStateController` at the configured boundaries. On resume, the backend reloads the snapshot, reconstructs the `ContextManager` / `SkillCatalog`, and continues the loop from the next iteration.
+
 ---
 
 ## 附录: API 响应格式

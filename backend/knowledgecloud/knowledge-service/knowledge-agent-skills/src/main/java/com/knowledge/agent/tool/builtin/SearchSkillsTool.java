@@ -36,23 +36,22 @@ import java.util.*;
  * <li>Activated skills' tools are stored in {@link DynamicSkillRegistry}
  *     which HarnessLoop reads before each iteration</li>
  * </ul>
+ *
+ * <p>
+ * This tool remains a Spring {@code @Component} singleton — it is stateless.
+ * The per-request {@link SkillCatalog} and {@link DynamicSkillRegistry}
+ * instances are obtained from the {@link ToolContext} at execution time.
  */
 @Slf4j
 @Component
 public class SearchSkillsTool implements Tool {
 
-    private final SkillCatalog skillCatalog;
-    private final DynamicSkillRegistry dynamicSkillRegistry;
     private final ObjectMapper objectMapper;
 
     /** Maximum skills to return from a search. */
     private static final int MAX_SEARCH_RESULTS = 5;
 
-    public SearchSkillsTool(SkillCatalog skillCatalog,
-            DynamicSkillRegistry dynamicSkillRegistry,
-            ObjectMapper objectMapper) {
-        this.skillCatalog = skillCatalog;
-        this.dynamicSkillRegistry = dynamicSkillRegistry;
+    public SearchSkillsTool(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
@@ -87,15 +86,23 @@ public class SearchSkillsTool implements Tool {
                 return ToolResult.error("query is required");
             }
 
-            // 1. Search the catalog
+            // 1. Get per-request instances from context
+            SkillCatalog skillCatalog = context.getSkillCatalog();
+            DynamicSkillRegistry dynamicSkillRegistry = context.getDynamicSkillRegistry();
+
+            if (skillCatalog == null || dynamicSkillRegistry == null) {
+                return ToolResult.error("Skill catalog or dynamic registry not available in this context");
+            }
+
+            // 2. Search the catalog
             List<SkillPayload> matches = skillCatalog.search(query);
 
             if (matches.isEmpty()) {
                 return ToolResult.success("No skills found matching '" + query + "'. "
-                        + "Available domains: " + getAvailableDomains());
+                        + "Available domains: " + getAvailableDomains(skillCatalog));
             }
 
-            // 2. Build search result summary
+            // 3. Build search result summary
             StringBuilder result = new StringBuilder();
             result.append("Found ").append(matches.size()).append(" skill(s) matching '")
                     .append(query).append("':\n\n");
@@ -122,7 +129,7 @@ public class SearchSkillsTool implements Tool {
                 skillNamesForActivation.add(skill.getName());
             }
 
-            // 3. Auto-activate if requested
+            // 4. Auto-activate if requested
             if (activate != null && !activate.isEmpty()) {
                 SkillPayload activated = skillCatalog.activate(activate);
                 if (activated != null) {
@@ -156,7 +163,7 @@ public class SearchSkillsTool implements Tool {
     /**
      * Get a summary of available domains for the help message.
      */
-    private String getAvailableDomains() {
+    private String getAvailableDomains(SkillCatalog skillCatalog) {
         Set<String> domains = new LinkedHashSet<>();
         for (String name : skillCatalog.getAllSkillNames()) {
             SkillPayload skill = skillCatalog.get(name);

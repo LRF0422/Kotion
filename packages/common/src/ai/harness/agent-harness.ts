@@ -62,6 +62,9 @@ export class AgentHarnessImpl implements AgentHarness {
                 stream: true,
                 mode,
                 skills: catalog.skills.length > 0 ? catalog.skills : undefined,
+                // When skills-only mode is active, catalog.tools is empty
+                // and tools[] is omitted from the wire payload entirely —
+                // all tool schemas travel inside SkillPayload.tools.
                 tools: catalog.tools.length > 0 ? catalog.tools : undefined,
                 capabilitiesVersion: catalog.version,
             }

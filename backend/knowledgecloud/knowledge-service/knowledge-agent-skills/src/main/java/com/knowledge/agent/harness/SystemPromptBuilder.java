@@ -116,6 +116,10 @@ public class SystemPromptBuilder {
             }
         }
 
+        // --- Tool discovery hint ---
+        sb.append("\nIf you need a capability that isn't available in your current tool set, ");
+        sb.append("use the `search_skills` tool to discover and activate additional skills.\n");
+
         // --- Skill prompt fragments (from progressive skill discovery) ---
         if (skillPromptFragment != null && !skillPromptFragment.isEmpty()) {
             sb.append("\nActive skill instructions:\n");

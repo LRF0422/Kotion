@@ -3,7 +3,6 @@ package com.knowledge.agent.tool;
 import com.knowledge.agent.api.dto.ChatTool;
 import com.knowledge.agent.api.dto.SkillPayload;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,26 +20,32 @@ import java.util.concurrent.ConcurrentHashMap;
  * This is the bridge between the skill-discovery layer (SearchSkillsTool +
  * SkillCatalog) and the execution layer (HarnessLoop).
  *
+ * <p>
+ * <b>Per-request lifecycle:</b> This class is NOT a Spring bean. A fresh
+ * instance is created at the start of each request by {@code AgentHarness.run()}
+ * and passed through {@code ToolContext} to all components that need it.
+ * This eliminates the race condition where concurrent requests would corrupt
+ * each other's state on a shared singleton.
+ *
  * <h3>Lifecycle</h3>
  * <ol>
- * <li>{@link #clear()} is called at the start of each request</li>
+ * <li>A new instance is created at the start of each request</li>
  * <li>{@link #registerSkill(SkillPayload)} is called by SearchSkillsTool</li>
  * <li>{@link #getActiveTools()} / {@link #getPromptFragment()} are called by
  *     HarnessLoop before each iteration</li>
  * </ol>
  */
 @Slf4j
-@Component
 public class DynamicSkillRegistry {
 
     /** Tools from dynamically activated skills, keyed by function name. */
     private final Map<String, ChatTool> activeTools = new ConcurrentHashMap<>();
 
     /** Accumulated system prompt fragments from activated skills. */
-    private final StringBuilder promptFragment = new StringBuilder();
+    private StringJoiner promptFragment = new StringJoiner("\n\n");
 
     /** Names of skills that have been activated. */
-    private final Set<String> activatedSkillNames = new LinkedHashSet<>();
+    private final Set<String> activatedSkillNames = ConcurrentHashMap.newKeySet();
 
     // ---- Lifecycle ----
 
@@ -49,7 +54,7 @@ public class DynamicSkillRegistry {
      */
     public void clear() {
         activeTools.clear();
-        promptFragment.setLength(0);
+        promptFragment = new StringJoiner("\n\n");
         activatedSkillNames.clear();
     }
 
@@ -85,7 +90,7 @@ public class DynamicSkillRegistry {
 
         // Accumulate prompt fragment
         if (skill.getSystemPromptFragment() != null && !skill.getSystemPromptFragment().isEmpty()) {
-            promptFragment.append(skill.getSystemPromptFragment()).append("\n\n");
+            promptFragment.add(skill.getSystemPromptFragment());
         }
 
         activatedSkillNames.add(skill.getName());

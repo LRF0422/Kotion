@@ -104,3 +104,21 @@ CREATE TABLE IF NOT EXISTS agent_session (
     end_time        DATETIME     COMMENT 'When the session finished',
     INDEX idx_conversation (conversation_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Agent execution sessions (solo + team)';
+
+-- Agent state snapshot table (persists full agent state for crash recovery)
+CREATE TABLE IF NOT EXISTS agent_state_snapshot (
+    id              BIGINT       PRIMARY KEY AUTO_INCREMENT COMMENT 'Primary key',
+    session_id      VARCHAR(128) NOT NULL COMMENT 'Agent session ID',
+    conversation_id VARCHAR(128) COMMENT 'Conversation ID',
+    agent_id        VARCHAR(128) COMMENT 'Agent ID (null for root agent)',
+    parent_agent_id VARCHAR(128) COMMENT 'Parent agent ID',
+    depth           INT          NOT NULL DEFAULT 0 COMMENT 'Delegate depth (0 for root)',
+    iteration       INT          NOT NULL DEFAULT 0 COMMENT 'Loop iteration when snapshot was taken',
+    snapshot        LONGTEXT     COMMENT 'Full JSON snapshot of AgentStateSnapshot',
+    timestamp       BIGINT       NOT NULL DEFAULT 0 COMMENT 'Epoch millis when snapshot was taken',
+    create_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Record creation time',
+    update_time     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Record update time',
+    UNIQUE KEY uk_session_id (session_id),
+    INDEX idx_conversation_id (conversation_id),
+    INDEX idx_timestamp (timestamp)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Agent state snapshots for crash recovery';

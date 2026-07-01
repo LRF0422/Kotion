@@ -571,22 +571,45 @@ export class PluginManager {
         const extensions = this.resolveEditorExtensions()
 
         for (const ext of extensions) {
-            if (!ext.skills) continue
+            // Process explicitly defined skills
+            if (ext.skills) {
+                const extSkills = Array.isArray(ext.skills) ? ext.skills : [ext.skills]
 
-            const extSkills = Array.isArray(ext.skills) ? ext.skills : [ext.skills]
+                for (const skill of extSkills) {
+                    if (!skill || !skill.name) {
+                        logger.warn('Invalid skill detected, skipping')
+                        continue
+                    }
 
-            for (const skill of extSkills) {
-                if (!skill || !skill.name) {
-                    logger.warn('Invalid skill detected, skipping')
-                    continue
+                    skills.push({
+                        ...skill,
+                        source: 'plugin',
+                        pluginName: ext.name
+                    })
+                    logger.debug('Resolved skill:', skill.name, 'from plugin:', ext.name)
                 }
+            }
 
-                skills.push({
-                    ...skill,
-                    source: 'plugin',
-                    pluginName: ext.name
-                })
-                logger.debug('Resolved skill:', skill.name, 'from plugin:', ext.name)
+            // Auto-generate a default skill for extensions that define tools
+            // but no skills — ensures no plugin is left behind when tools[] is
+            // removed from the wire payload (skills-only transmission).
+            if (!ext.skills && ext.tools) {
+                const extTools = Array.isArray(ext.tools) ? ext.tools : [ext.tools]
+                const toolNames = extTools
+                    .filter((t: any) => t && t.name)
+                    .map((t: any) => t.name)
+
+                if (toolNames.length > 0) {
+                    const extName = ext.name || 'unknown'
+                    skills.push({
+                        name: `${extName}-default`,
+                        description: `Default skill for ${extName} plugin`,
+                        requiredTools: toolNames,
+                        source: 'plugin',
+                        pluginName: extName,
+                    })
+                    logger.debug('Auto-generated default skill for plugin:', extName, 'with tools:', toolNames)
+                }
             }
         }
 

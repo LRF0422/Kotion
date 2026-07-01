@@ -137,6 +137,8 @@ export interface DelegateStartAnnotation {
     subTasks: Array<{
         agentId: string
         description: string
+        /** Custom agent name from AgentSpec.name (orchestrator-spawned agents). */
+        agentName?: string
     }>
     /** Spawner agent id (null = root). */
     parentAgentId?: string | null
@@ -161,6 +163,11 @@ export interface SubagentSpawnedAnnotation extends SubagentHeader {
     type: 'subagent_spawned'
     task?: string
     capabilities?: string[]
+    /** Custom agent name from AgentSpec.name (e.g. "Document Reader", "Translator").
+     *  Present when the sub-agent was spawned by the OrchestratorAgent / TeamExecutor. */
+    agentName?: string
+    /** The agent's task description from AgentSpec.description. */
+    description?: string
 }
 
 export interface SubagentStatusAnnotation extends SubagentHeader {

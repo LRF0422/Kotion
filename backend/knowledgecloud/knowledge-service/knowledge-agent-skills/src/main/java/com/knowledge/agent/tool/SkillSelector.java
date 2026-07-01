@@ -42,8 +42,9 @@ import java.util.Set;
  *
  * <p>
  * Fallback: on any error (LLM failure, timeout, parse error, empty
- * selection) the original, un-filtered skill list is returned so the
- * downstream exact-match resolver still runs.
+ * selection) only always-on skills (plus any keyword-matched skills
+ * when available) are returned — never the full unfiltered list. The
+ * agent can discover more capabilities mid-loop via {@code search_skills}.
  */
 @Slf4j
 @Component
@@ -71,7 +72,7 @@ public class SkillSelector {
      * @param messages conversation so far (uses the last user message as intent)
      * @param skills   skills the frontend declared as available
      * @param model    model name to use (same as the main chat)
-     * @return the relevant subset, or all {@code skills} on failure
+     * @return the relevant subset, or always-on skills on failure
      */
     public List<SkillPayload> select(List<ChatMessage> messages,
             List<SkillPayload> skills,
@@ -79,47 +80,69 @@ public class SkillSelector {
         if (skills == null || skills.isEmpty()) {
             return skills;
         }
-        // Single skill is always selected — no point paying for a discovery call.
-        if (skills.size() == 1) {
+
+        // Partition: always-on skills bypass selection entirely.
+        // They are always included in the final result regardless of
+        // keyword/LLM filtering.
+        List<SkillPayload> alwaysOn = new ArrayList<>();
+        List<SkillPayload> selectable = new ArrayList<>();
+        for (SkillPayload skill : skills) {
+            if (skill.getTags() != null && skill.getTags().contains("always-on")) {
+                alwaysOn.add(skill);
+            } else {
+                selectable.add(skill);
+            }
+        }
+        // If only always-on skills exist (no selectable), return all
+        if (selectable.isEmpty()) {
+            return skills;
+        }
+
+        // Single selectable skill is always selected — no point paying for a discovery call.
+        if (selectable.size() == 1) {
             return skills;
         }
 
         // Fast path: for small skill sets, skip the LLM call entirely.
         // The latency and cost of an extra LLM call outweighs the benefit
         // when there are only a few skills to choose from.
-        if (skills.size() <= fastPathThreshold) {
+        if (selectable.size() <= fastPathThreshold) {
             // Try keyword matching first — it's free
-            List<SkillPayload> keywordMatched = keywordMatch(messages, skills);
+            List<SkillPayload> keywordMatched = keywordMatch(messages, selectable);
             if (!keywordMatched.isEmpty()) {
-                log.info("SkillSelector: keyword fast-path selected {} of {} skill(s)",
-                        keywordMatched.size(), skills.size());
-                return keywordMatched;
+                log.info("SkillSelector: keyword fast-path selected {} of {} selectable skill(s) ({} always-on)",
+                        keywordMatched.size(), selectable.size(), alwaysOn.size());
+                return unionAlwaysOn(keywordMatched, alwaysOn);
             }
-            // If keyword matching returns nothing, just keep all — with
-            // only a few skills, the system prompt overhead is minimal.
-            log.debug("SkillSelector: skill count {} ≤ threshold {}, keeping all (no keyword match)",
-                    skills.size(), fastPathThreshold);
-            return skills;
+            // If keyword matching returns nothing, return only always-on
+            // skills rather than the full unfiltered list. The agent can
+            // discover more capabilities mid-loop via search_skills.
+            log.debug("SkillSelector: selectable skill count {} ≤ threshold {}, no keyword match — returning always-on only",
+                    selectable.size(), fastPathThreshold);
+            return unionAlwaysOn(Collections.emptyList(), alwaysOn);
         }
 
         // Full LLM-based selection for larger skill sets
         List<ChatMessage> conversation = collectConversation(messages);
         if (conversation.isEmpty()) {
-            log.debug("SkillSelector: no user message found, keeping all {} skill(s)", skills.size());
-            return skills;
+            log.debug("SkillSelector: no user message found, returning always-on skills only");
+            return unionAlwaysOn(Collections.emptyList(), alwaysOn);
+        }
+
+        // Try keyword matching first (free optimization, no LLM call).
+        // Declared before the try block so it is available as a fallback
+        // in the catch handler.
+        List<SkillPayload> keywordMatched = keywordMatch(messages, selectable);
+        if (keywordMatched.size() == selectable.size()
+                || (keywordMatched.size() > 0 && keywordMatched.size() <= fastPathThreshold)) {
+            // Keyword matching covered everything or narrowed it enough
+            log.info("SkillSelector: keyword pre-filter selected {} of {} selectable skill(s), skipping LLM call",
+                    keywordMatched.size(), selectable.size());
+            return unionAlwaysOn(keywordMatched, alwaysOn);
         }
 
         try {
-            // Try keyword matching first even for large sets (free optimization)
-            List<SkillPayload> keywordMatched = keywordMatch(messages, skills);
-            if (keywordMatched.size() == skills.size() || keywordMatched.size() <= fastPathThreshold) {
-                // Keyword matching covered everything or narrowed it enough
-                log.info("SkillSelector: keyword pre-filter selected {} of {} skill(s), skipping LLM call",
-                        keywordMatched.size(), skills.size());
-                return keywordMatched.isEmpty() ? skills : keywordMatched;
-            }
-
-            String catalog = buildSkillCatalog(skills);
+            String catalog = buildSkillCatalog(selectable);
             String systemPrompt = "You are a skill router. Given the conversation so far and a catalog of\n"
                     + "available skills, return a JSON object with a single field `selected` whose value is\n"
                     + "an array of skill names that are relevant to the user's overall intent across the\n"
@@ -149,37 +172,51 @@ public class SkillSelector {
             LlmClient client = llmClientFactory.getClientForModel(model);
             LlmResponse resp = client.chat(req);
             if (resp == null || resp.getContent() == null || resp.getContent().isEmpty()) {
-                log.warn("SkillSelector: empty LLM response, keeping all skills");
-                return skills;
+                log.warn("SkillSelector: empty LLM response, falling back to keyword-matched + always-on skills");
+                return unionAlwaysOn(keywordMatched, alwaysOn);
             }
 
             Set<String> selectedNames = parseSelectedNames(resp.getContent());
             if (selectedNames == null) {
-                log.warn("SkillSelector: could not parse LLM response, keeping all skills. raw={}",
+                log.warn("SkillSelector: could not parse LLM response, falling back to keyword-matched + always-on skills. raw={}",
                         truncate(resp.getContent(), 200));
-                return skills;
+                return unionAlwaysOn(keywordMatched, alwaysOn);
             }
 
             List<SkillPayload> filtered = new ArrayList<>();
-            for (SkillPayload s : skills) {
+            for (SkillPayload s : selectable) {
                 if (s.getName() != null && selectedNames.contains(s.getName())) {
                     filtered.add(s);
                 }
             }
-            log.info("SkillSelector: LLM selected {} of {} skill(s): {}",
-                    filtered.size(), skills.size(), selectedNames);
+            log.info("SkillSelector: LLM selected {} of {} selectable skill(s): {}",
+                    filtered.size(), selectable.size(), selectedNames);
 
-            // If nothing selected, fall back to the original list so the agent
-            // is not left with zero capability when the router is wrong.
+            // If nothing selected, fall back to keyword-matched + always-on
+            // skills rather than the full unfiltered list. The agent can
+            // discover more capabilities mid-loop via search_skills.
             if (filtered.isEmpty()) {
-                log.info("SkillSelector: LLM returned empty selection, keeping all skills as fallback");
-                return skills;
+                log.info("SkillSelector: LLM returned empty selection, falling back to keyword-matched + always-on skills");
+                return unionAlwaysOn(keywordMatched, alwaysOn);
             }
-            return filtered;
+            return unionAlwaysOn(filtered, alwaysOn);
         } catch (Exception e) {
-            log.warn("SkillSelector: LLM call failed, falling back to all skills — {}", e.toString());
-            return skills;
+            log.warn("SkillSelector: LLM call failed, falling back to keyword-matched + always-on skills — {}", e.toString());
+            return unionAlwaysOn(keywordMatched, alwaysOn);
         }
+    }
+
+    /**
+     * Union always-on skills into a selection result.
+     * Always-on skills are appended to whatever the selector chose.
+     */
+    private List<SkillPayload> unionAlwaysOn(List<SkillPayload> selected, List<SkillPayload> alwaysOn) {
+        if (alwaysOn == null || alwaysOn.isEmpty()) {
+            return selected;
+        }
+        List<SkillPayload> result = new ArrayList<>(selected);
+        result.addAll(alwaysOn);
+        return result;
     }
 
     // ---- Keyword-based fast path ----
@@ -199,7 +236,7 @@ public class SkillSelector {
      * </ul>
      *
      * @return matching skills, or empty list if no keyword matches found
-     *         (caller should fall back to all skills)
+     *         (caller falls back to always-on skills only)
      */
     private List<SkillPayload> keywordMatch(List<ChatMessage> messages,
             List<SkillPayload> skills) {
@@ -264,6 +301,9 @@ public class SkillSelector {
         }
         for (int i = messages.size() - 1; i >= 0; i--) {
             ChatMessage m = messages.get(i);
+            if (m == null || m.getRole() == null) {
+                continue;
+            }
             if ("user".equalsIgnoreCase(m.getRole()) && m.getContent() != null
                     && !m.getContent().isEmpty()) {
                 return m.getContent();

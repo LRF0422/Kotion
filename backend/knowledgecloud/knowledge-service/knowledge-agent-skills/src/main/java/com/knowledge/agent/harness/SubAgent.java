@@ -17,9 +17,12 @@ import java.util.*;
  * Used by DelegateTool to run sub-tasks in parallel.
  *
  * <p>
- * Dependencies ({@link LlmClientFactory}, {@link ContextManager}) are
+ * Dependencies ({@link LlmClientFactory}, {@link LlmResilience}) are
  * injected via the constructor by {@link SubAgentFactory} — no static
- * holders needed.
+ * holders needed. Per-request mutable objects ({@link ContextManager},
+ * {@link SkillCatalog}, {@link DynamicSkillRegistry}) are created by the
+ * factory and attached to the {@link ToolContext} before the SubAgent is
+ * constructed.
  *
  * <p>
  * The {@link #run()} method returns a Flux that emits a
@@ -37,14 +40,25 @@ public class SubAgent {
     private final AgentChannel channel;
     private final ToolContext context;
     private final LlmClientFactory llmClientFactory;
-    private final ContextManager contextManager;
     private final LlmResilience llmResilience;
+
+    /**
+     * Optional custom system prompt. When non-null, this is used instead
+     * of the default sub-agent prompt, allowing the orchestrator to give
+     * each agent a distinct persona.
+     */
+    private final String customSystemPrompt;
 
     // Collects the final text output produced by this sub-agent
     private final StringBuilder finalOutput = new StringBuilder();
 
     /**
      * Full constructor — called by {@link SubAgentFactory}.
+     *
+     * <p>
+     * The {@code context} must already have per-request instances of
+     * {@link ContextManager}, {@link SkillCatalog}, and
+     * {@link DynamicSkillRegistry} attached to it (done by the factory).
      */
     public SubAgent(String agentId,
             String description,
@@ -53,8 +67,28 @@ public class SubAgent {
             AgentChannel channel,
             ToolContext context,
             LlmClientFactory llmClientFactory,
-            ContextManager contextManager,
             LlmResilience llmResilience) {
+        this(agentId, description, toolRegistry, toolIds, channel, context,
+                llmClientFactory, llmResilience, null);
+    }
+
+    /**
+     * Full constructor with custom system prompt — called by
+     * {@link SubAgentFactory#create} when the orchestrator provides a
+     * per-agent system prompt.
+     *
+     * @param customSystemPrompt when non-null, replaces the default
+     *                           sub-agent system prompt in {@link #run()}
+     */
+    public SubAgent(String agentId,
+            String description,
+            ToolRegistry toolRegistry,
+            Set<String> toolIds,
+            AgentChannel channel,
+            ToolContext context,
+            LlmClientFactory llmClientFactory,
+            LlmResilience llmResilience,
+            String customSystemPrompt) {
         this.agentId = agentId;
         this.description = description;
         this.toolRegistry = toolRegistry;
@@ -62,8 +96,8 @@ public class SubAgent {
         this.channel = channel;
         this.context = context;
         this.llmClientFactory = llmClientFactory;
-        this.contextManager = contextManager;
         this.llmResilience = llmResilience;
+        this.customSystemPrompt = customSystemPrompt;
     }
 
     /**
@@ -82,11 +116,16 @@ public class SubAgent {
                 .content(description)
                 .build());
 
-        // Build system prompt for the sub-agent
-        // Include current time and user context so sub-agents also produce
-        // up-to-date, user-aware responses.
+        // Build system prompt for the sub-agent.
+        // If a custom system prompt was provided (by the orchestrator),
+        // use it as the base and append time/user context. Otherwise,
+        // use the default sub-agent prompt.
         StringBuilder subPrompt = new StringBuilder();
-        subPrompt.append("You are a specialized sub-agent working on a specific task. ");
+        if (customSystemPrompt != null && !customSystemPrompt.isEmpty()) {
+            subPrompt.append(customSystemPrompt).append("\n\n");
+        } else {
+            subPrompt.append("You are a specialized sub-agent working on a specific task. ");
+        }
         // Add current time
         java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.systemDefault());
         java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z");
@@ -116,17 +155,19 @@ public class SubAgent {
                 subPrompt.append("\n");
             }
         }
-        subPrompt.append("Focus on completing the task described by the user. ");
-        subPrompt.append("If you need help or encounter a blocker, use the available tools to resolve it. ");
-        subPrompt.append("Report your progress through the tools available to you.");
+        if (customSystemPrompt == null || customSystemPrompt.isEmpty()) {
+            subPrompt.append("Focus on completing the task described by the user. ");
+            subPrompt.append("If you need help or encounter a blocker, use the available tools to resolve it. ");
+            subPrompt.append("Report your progress through the tools available to you.");
+        }
 
-        // Create a harness loop with injected dependencies
+        // Create a harness loop — per-request ContextManager, SkillCatalog,
+        // and DynamicSkillRegistry are already on the context (set by the factory)
         HarnessLoop loop = new HarnessLoop(
                 llmClientFactory,
                 toolRegistry,
-                contextManager,
-                new DynamicSkillRegistry(),  // sub-agents get a fresh, empty registry
-                llmResilience);
+                llmResilience,
+                null); // no state persistence for sub-agents
 
         return loop.run(messages, null, toolIds, subPrompt.toString(), context, 10)
                 .doOnSubscribe(s -> {

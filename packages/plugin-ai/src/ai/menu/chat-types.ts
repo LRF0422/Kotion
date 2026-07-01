@@ -98,6 +98,8 @@ export interface TeamMember {
     dependencyLevel: number
     status: TeamMemberStatus
     detail?: string
+    /** Agent task description from AgentSpec.description. */
+    description?: string
 }
 
 export interface TeamState {
@@ -121,7 +123,21 @@ export interface AgentStatusEvent {
 export interface DelegateStartEvent {
     type: 'delegate_start'
     subTaskCount: number
-    subTasks: Array<{ agentId: string; description: string }>
+    subTasks: Array<{ agentId: string; description: string; agentName?: string }>
+}
+
+/** Sub-agent spawned (created). Carries custom name/description when spawned by the orchestrator. */
+export interface SubagentSpawnedEvent {
+    type: 'subagent_spawned'
+    agentId: string
+    parentAgentId?: string | null
+    depth?: number
+    task?: string
+    capabilities?: string[]
+    /** Custom agent name from AgentSpec.name (e.g. "Document Reader"). */
+    agentName?: string
+    /** Agent task description from AgentSpec.description. */
+    description?: string
 }
 
 /** Sub-agent status change */
@@ -130,6 +146,8 @@ export interface SubagentStatusEvent {
     agentId: string
     status: 'spawned' | 'working' | 'completed' | 'error'
     detail?: string
+    /** Custom agent name (echoed for display continuity). */
+    agentName?: string
 }
 
 /** Sub-agent text output */
@@ -171,6 +189,7 @@ export interface ContextCompressedEvent {
 export type SpecAnnotationEvent =
     | AgentStatusEvent
     | DelegateStartEvent
+    | SubagentSpawnedEvent
     | SubagentStatusEvent
     | SubagentOutputEvent
     | SubagentToolCallEvent

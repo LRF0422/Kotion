@@ -3,7 +3,6 @@ package com.knowledge.agent.tool;
 import com.knowledge.agent.api.dto.ChatTool;
 import com.knowledge.agent.api.dto.SkillPayload;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,24 +23,29 @@ import java.util.concurrent.ConcurrentHashMap;
  * is activated mid-loop, its tool definitions can be injected into the
  * next LLM iteration's {@code toolsJson}.
  *
+ * <p>
+ * <b>Per-request lifecycle:</b> This class is NOT a Spring bean. A fresh
+ * instance is created at the start of each request by {@code AgentHarness.run()}
+ * and passed through {@code ToolContext} to all components that need it.
+ * This eliminates the race condition where concurrent requests would corrupt
+ * each other's state on a shared singleton.
+ *
  * <h3>Lifecycle</h3>
  * <ol>
  * <li>At the start of each request, {@link #seed(List)} is called with
  *     the frontend's skill list</li>
  * <li>During the agentic loop, {@link SearchSkillsTool} calls
  *     {@link #search(String)} and {@link #activate(String)}</li>
- * <li>At the end of the request, the catalog is cleared</li>
  * </ol>
  */
 @Slf4j
-@Component
 public class SkillCatalog {
 
     /** All skills, keyed by name. */
     private final Map<String, SkillPayload> skills = new ConcurrentHashMap<>();
 
     /** Skills that have been activated (their tools injected into the loop). */
-    private final Set<String> activatedSkills = new LinkedHashSet<>();
+    private final Set<String> activatedSkills = ConcurrentHashMap.newKeySet();
 
     // ---- Lifecycle ----
 

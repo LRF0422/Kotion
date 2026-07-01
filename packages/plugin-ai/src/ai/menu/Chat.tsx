@@ -36,8 +36,6 @@ import {
     classifyError,
 } from "./chat-types"
 import type { AnnotationData, Message } from "./chat-types"
-import { useTeamStatus, createInitialTeamState } from "./useTeamStatus"
-import { TeamStatusPanel } from "./TeamStatusPanel"
 import { getHistoryForAI } from "./chat-persistence"
 import { useChatSessions } from "./useChatSessions"
 import type { ChatSessionMeta } from "./chat-sessions"
@@ -390,9 +388,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         parseAnnotations,
     } = useChatSessions()
 
-    // Team status tracking
     const [annotations, setAnnotations] = useState<AnnotationData[]>([])
-    const teamState = useTeamStatus(annotations)
 
     // Sub-agent tree (P6) + pending plan (P7), derived from the annotation
     // stream. applySubAgentAnnotations folds the full annotation list from
@@ -756,7 +752,6 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
             </ExpandableChatHeader>
 
             <ExpandableChatBody className="bg-muted/30 dark:bg-background overflow-x-hidden">
-                <TeamStatusPanel teamState={teamState} />
                 <ChatMessageList>
                     {/* Empty state greeting */}
                     {showQuickPrompts && (

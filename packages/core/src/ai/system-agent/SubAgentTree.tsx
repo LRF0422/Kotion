@@ -36,6 +36,10 @@ interface SubAgentNodeView {
     steps: SubAgentStepView[]
     usage?: { promptTokens: number; completionTokens: number }
     error?: string
+    /** Custom agent name from AgentSpec.name (orchestrator-spawned agents). */
+    agentName?: string
+    /** The agent's task description from AgentSpec.description. */
+    description?: string
 }
 
 export interface SubAgentTreeProps {
@@ -108,8 +112,8 @@ function SubAgentCard({ node, indent, parentLabel }: { node: SubAgentNodeView; i
                     </span>
                     <Sparkles className="h-3 w-3 text-indigo-400 shrink-0" />
                     <StatusIcon status={node.status} />
-                    <span className="font-medium truncate max-w-[160px]" title={node.task}>
-                        {node.task || node.agentId}
+                    <span className="font-medium truncate max-w-[160px]" title={node.agentName || node.task || node.agentId}>
+                        {node.agentName || node.task || node.agentId}
                     </span>
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
                         {statusLabel(node.status)}
@@ -121,6 +125,12 @@ function SubAgentCard({ node, indent, parentLabel }: { node: SubAgentNodeView; i
                     )}
                 </button>
 
+                {/* Agent description subtitle (from AgentSpec.description). */}
+                {node.description && (
+                    <div className="ml-5 text-[10px] text-muted-foreground truncate" title={node.description}>
+                        {node.description}
+                    </div>
+                )}
                 {/* Inline progress + reporting target — always visible, no expand needed. */}
                 {activity && (
                     <div className="ml-5 text-[10px] text-muted-foreground truncate" title={activity}>
@@ -175,7 +185,7 @@ function parentLabelFor(node: SubAgentNodeView, subAgents: Record<string, SubAge
     const pid = node.parentAgentId
     const parent = pid ? subAgents[pid] : undefined
     if (!parent) return '主 Agent'
-    const t = (parent.task || parent.agentId || '').trim()
+    const t = (parent.agentName || parent.task || parent.agentId || '').trim()
     if (!t) return '主 Agent'
     return t.length > 20 ? `${t.slice(0, 20)}…` : t
 }

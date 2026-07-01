@@ -39,6 +39,10 @@ export interface SubAgentNode {
     startedAt: number
     endedAt?: number
     error?: string
+    /** Custom agent name from AgentSpec.name (orchestrator-spawned agents). */
+    agentName?: string
+    /** The agent's task description from AgentSpec.description. */
+    description?: string
 }
 
 function ensureNode(
@@ -66,6 +70,8 @@ function ensureNode(
         streamingContent: '',
         steps: [],
         startedAt: Date.now(),
+        agentName: undefined,
+        description: undefined,
     }
     map[agentId] = node
     return node
@@ -100,6 +106,7 @@ export function applySubAgentAnnotations(
                         if (st?.agentId) {
                             const n = touch(st.agentId, ann.parentAgentId, ann.depth)
                             if (st.description && !n.task) n.task = st.description
+                            if (st.agentName && !n.agentName) n.agentName = st.agentName
                         }
                     }
                 }
@@ -107,6 +114,8 @@ export function applySubAgentAnnotations(
             case 'subagent_spawned': {
                 const n = touch(ann.agentId, ann.parentAgentId, ann.depth)
                 if (ann.task) n.task = ann.task
+                if (ann.agentName) n.agentName = ann.agentName
+                if (ann.description) n.description = ann.description
                 n.status = 'spawned'
                 break
             }

@@ -12,6 +12,10 @@ import type { SkillProvider } from '../providers/SkillProvider'
 import type { ToolProvider } from '../providers/ToolProvider'
 import { resolveInputSchema } from '../utils/tool-wrapper'
 
+/** Feature flag: when true, tools[] is omitted from the catalog (skills-only mode).
+ *  All tool schemas travel exclusively inside each SkillPayload.tools field. */
+const SKILLS_ONLY_DEFAULT = process.env.KN_SKILLS_ONLY_CATALOG === 'true'
+
 export interface CapabilityCatalog {
     skills: SkillPayload[]
     tools: ToolPayload[]
@@ -36,14 +40,21 @@ export interface CapabilityCatalog {
  */
 export function collectCapabilityCatalog(
     skillProvider: SkillProvider,
-    toolProvider: ToolProvider
+    toolProvider: ToolProvider,
+    /** When true, skip populating the top-level tools[] array — all tool
+     *  schemas travel inside SkillPayload.tools. Defaults to the
+     *  KN_SKILLS_ONLY_CATALOG env var. */
+    skillsOnly: boolean = SKILLS_ONLY_DEFAULT
 ): CapabilityCatalog {
     const executableTools = toolProvider.getAllTools()
 
     // Only built-in tools are sent to the backend, in the standard OpenAI
     // function-call shape. Plugin tools are executed on the frontend and
     // reached via skill `requiredTools` references.
-    const tools: ToolPayload[] = toolProvider.getAllMetadata()
+    //
+    // When skillsOnly is enabled, tools[] is left empty — every tool schema
+    // is embedded in the skills that reference it (SkillPayload.tools).
+    const tools: ToolPayload[] = skillsOnly ? [] : toolProvider.getAllMetadata()
         .filter(meta => meta.source === 'builtin')
         .map(meta => {
             const executable = executableTools[meta.name]

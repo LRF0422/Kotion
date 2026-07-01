@@ -6,8 +6,6 @@ import com.knowledge.agent.llm.LlmClientFactory;
 import com.knowledge.agent.llm.LlmRequest;
 import com.knowledge.agent.llm.LlmResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +14,20 @@ import java.util.Set;
 /**
  * Tracks estimated token usage across the conversation and applies
  * compression when nearing limits.
+ *
+ * <p>
+ * <b>Per-request lifecycle:</b> This class is NOT a Spring bean. A fresh
+ * instance is created at the start of each request by {@code AgentHarness.run()}
+ * and passed through {@code ToolContext} to all components that need it.
+ * This eliminates the race condition where concurrent requests would corrupt
+ * each other's cached token count on a shared singleton.
+ *
+ * <p>
+ * Configuration values (max tokens, compression threshold, strategy) are
+ * supplied by the shared {@link ContextManagerConfig} singleton, which reads
+ * them from {@code application.yml} via {@code @Value}. The
+ * {@link LlmClientFactory} is also obtained from the config (set lazily at
+ * startup to avoid circular dependency issues).
  *
  * <p>
  * <b>Improvements:</b>
@@ -27,34 +39,16 @@ import java.util.Set;
  * </ul>
  */
 @Slf4j
-@Component
 public class ContextManager {
 
-    @Value("${agent.context.max-tokens:32768}")
-    private int maxTokens;
+    private final ContextManagerConfig config;
 
-    @Value("${agent.context.compression-threshold:0.75}")
-    private double compressionThreshold;
-
-    @Value("${agent.context.strategy:truncate}")
-    private String strategy;
-
-    /**
-     * The LLM client factory used by the summarize strategy.
-     * Injected lazily to avoid circular dependency issues.
-     */
-    private volatile LlmClientFactory llmClientFactory;
-
-    // Incremental token tracking
+    // Incremental token tracking (per-request mutable state)
     private int cachedTokenCount = 0;
     private int lastKnownMessageCount = 0;
 
-    /**
-     * Set the LLM client factory for the summarize strategy.
-     * Called by the framework after construction to avoid circular deps.
-     */
-    public void setLlmClientFactory(LlmClientFactory factory) {
-        this.llmClientFactory = factory;
+    public ContextManager(ContextManagerConfig config) {
+        this.config = config;
     }
 
     /**
@@ -112,7 +106,7 @@ public class ContextManager {
      */
     public boolean compressIfNeeded(List<ChatMessage> messages) {
         int estimated = getEstimatedTokens(messages);
-        int threshold = (int) (maxTokens * compressionThreshold);
+        int threshold = (int) (config.getMaxTokens() * config.getCompressionThreshold());
 
         if (estimated < threshold) {
             return false;
@@ -120,9 +114,9 @@ public class ContextManager {
 
         log.info("Context compression triggered: estimated={} tokens, threshold={}", estimated, threshold);
 
-        if ("truncate".equals(strategy)) {
+        if ("truncate".equals(config.getStrategy())) {
             return truncate(messages);
-        } else if ("summarize".equals(strategy)) {
+        } else if ("summarize".equals(config.getStrategy())) {
             return summarize(messages);
         }
 
@@ -182,7 +176,7 @@ public class ContextManager {
             return false;
         }
 
-        LlmClientFactory factory = this.llmClientFactory;
+        LlmClientFactory factory = config.getLlmClientFactory();
         if (factory == null) {
             log.warn("Summarize strategy: LlmClientFactory not set, falling back to truncate");
             return truncate(messages);
@@ -344,14 +338,14 @@ public class ContextManager {
     }
 
     public int getMaxTokens() {
-        return maxTokens;
+        return config.getMaxTokens();
     }
 
     public double getCompressionThreshold() {
-        return compressionThreshold;
+        return config.getCompressionThreshold();
     }
 
     public String getStrategy() {
-        return strategy;
+        return config.getStrategy();
     }
 }

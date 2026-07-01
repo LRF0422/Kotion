@@ -36,7 +36,15 @@ public class ChatCompletionRequest {
     @ApiModelProperty(value = "Max tokens", example = "4096")
     private Integer maxTokens;
 
-    @ApiModelProperty("Tools to enable (OpenAI-compatible format)")
+    /**
+     * @deprecated Tool schemas should travel inside {@link SkillPayload#getTools()}.
+     * The top-level {@code tools[]} array is retained for backward compatibility
+     * but will be empty when the frontend operates in skills-only mode
+     * (KN_SKILLS_ONLY_CATALOG). The backend's {@code AgentHarness.mergeFrontendTools()}
+     * already handles null/empty gracefully.
+     */
+    @Deprecated
+    @ApiModelProperty("Tools to enable (OpenAI-compatible format). Deprecated — use SkillPayload.tools instead.")
     private List<ChatTool> tools;
 
     @ApiModelProperty(value = "Tool choice: 'auto', 'none', 'required', or specific function", example = "auto")
