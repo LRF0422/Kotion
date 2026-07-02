@@ -36,6 +36,7 @@
     background-color: rgba(243, 244, 246, 0.8);
     border-radius: 8px;
     padding: 0.125rem;
+    -webkit-backdrop-filter: blur(4px);
     backdrop-filter: blur(4px);
 }
 
@@ -198,6 +199,7 @@
     color: #374151;
     min-width: 3rem;
     text-align: center;
+    -webkit-user-select: none;
     user-select: none;
 }
 

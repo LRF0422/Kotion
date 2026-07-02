@@ -30,7 +30,7 @@ export const DrawioV2 = Node.create<ImageOptions>({
             drawIoLink: url,
             baseImage: baseImage,
             width: "100vw",
-            height: "100vh",
+            height: "100dvh",
             openDialog: "dblclick",
             HTMLAttributes: {},
         };

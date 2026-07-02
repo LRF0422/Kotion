@@ -90,10 +90,20 @@ module.exports = {
         "safe-right": "env(safe-area-inset-right)",
       },
       minHeight: {
+        // Override the built-in `min-h-screen` so it also respects the
+        // dynamic viewport unit on iOS Safari (where 100vh includes the
+        // address bar). The array syntax emits two declarations — 100vh as
+        // the fallback, 100dvh as the progressive enhancement.
+        screen: ["100vh", "100dvh"],
         "screen-dvh": "100dvh",
       },
       height: {
+        // Same override for `h-screen`.
+        screen: ["100vh", "100dvh"],
         "screen-dvh": "100dvh",
+      },
+      maxHeight: {
+        screen: ["100vh", "100dvh"],
       },
       colors: {
         border: "hsl(var(--border))",

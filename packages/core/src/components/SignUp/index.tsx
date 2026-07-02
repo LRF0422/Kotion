@@ -55,7 +55,7 @@ export function SignUpForm() {
     }
 
     return (
-        <div className="w-full lg:grid h-[100vh] lg:grid-cols-[1fr_460px] bg-background">
+        <div className="w-full lg:grid h-screen lg:grid-cols-[1fr_460px] bg-background">
             {/* Theme & Language Toggle */}
             <div className="absolute top-4 right-4 flex items-center gap-2 z-50">
                 <ModeToggle />

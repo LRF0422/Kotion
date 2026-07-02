@@ -11,7 +11,7 @@ export const Layout: React.FC = () => {
         <header>
             <Header />
         </header>
-        <ScrollArea className="h-[calc(100vh-65px)]">
+        <ScrollArea className="h-[calc(100dvh-65px)]">
             <main>
                 <Outlet />
             </main>

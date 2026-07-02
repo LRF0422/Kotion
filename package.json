@@ -119,7 +119,10 @@
   },
   "browserslist": [
     "last 2 versions",
-    "android 4",
-    "opera 12"
+    ">= 0.5%",
+    "Safari >= 14",
+    "iOS >= 14",
+    "not dead",
+    "not op_mini all"
   ]
 }

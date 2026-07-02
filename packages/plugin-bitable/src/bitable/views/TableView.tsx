@@ -418,7 +418,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
             )}
 
             {/* Data grid - single grid for both grouped and non-grouped */}
-            <div className="bitable-grid-container" style={{ height: enableVirtualization ? 'calc(100vh - 300px)' : 'auto', minHeight: enableVirtualization ? 400 : 'auto' }}>
+            <div className="bitable-grid-container" style={{ height: enableVirtualization ? 'calc(100dvh - 300px)' : 'auto', minHeight: enableVirtualization ? 400 : 'auto' }}>
                 <DataGrid
                     columns={columns}
                     rows={isGrouped ? flatRows : filteredData}

@@ -113,7 +113,7 @@ export const PluginManager: React.FC<PropsWithChildren> = ({ children }) => {
                     {t('pluginManager.description')}
                 </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-[240px_1fr] h-[calc(100vh*0.75)] w-full gap-0">
+            <div className="grid grid-cols-[240px_1fr] h-[calc(100dvh*0.75)] w-full gap-0">
                 {/* Sidebar */}
                 <div className="h-full w-full border-r flex flex-col">
                     {/* Stats Overview */}

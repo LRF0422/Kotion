@@ -850,7 +850,7 @@ export const GanttFeatureItem: FC<GanttFeatureItemProps> = ({
   const [scrollX] = useGanttScrollX();
   const gantt = useContext(GanttContext);
   const timelineStartDate = useMemo(
-    () => new Date(gantt.timelineData.at(0)?.year ?? 0, 0, 1),
+    () => new Date(gantt.timelineData[0]?.year ?? 0, 0, 1),
     [gantt.timelineData]
   );
   const [startAt, setStartAt] = useState<Date>(feature.startAt);
@@ -1098,7 +1098,7 @@ export const GanttMarker: FC<
     [gantt.range]
   );
   const timelineStartDate = useMemo(
-    () => new Date(gantt.timelineData.at(0)?.year ?? 0, 0, 1),
+    () => new Date(gantt.timelineData[0]?.year ?? 0, 0, 1),
     [gantt.timelineData]
   );
 
@@ -1279,7 +1279,7 @@ export const GanttProvider: FC<GanttProviderProps> = ({
         setScrollX(scrollElement.scrollLeft);
       } else if (scrollLeft + clientWidth >= scrollWidth) {
         // Extend timelineData to the future
-        const lastYear = timelineData.at(-1)?.year;
+        const lastYear = timelineData[timelineData.length - 1]?.year;
 
         if (!lastYear) {
           return;
@@ -1421,7 +1421,7 @@ export const GanttToday: FC<GanttTodayProps> = ({ className }) => {
     [gantt.range]
   );
   const timelineStartDate = useMemo(
-    () => new Date(gantt.timelineData.at(0)?.year ?? 0, 0, 1),
+    () => new Date(gantt.timelineData[0]?.year ?? 0, 0, 1),
     [gantt.timelineData]
   );
 

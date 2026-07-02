@@ -63,7 +63,7 @@ export function Login() {
 
 
     return (
-        <div className="w-full lg:grid h-[100vh] lg:grid-cols-[1fr_460px] bg-background">
+        <div className="w-full lg:grid h-screen lg:grid-cols-[1fr_460px] bg-background">
             {/* Login success transition overlay */}
             {loginSuccess && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background">

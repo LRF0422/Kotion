@@ -423,7 +423,7 @@ export const SpaceDetail: React.FC = () => {
             key: 'page',
             id: 'page',
             className: 'mt-2 flex-1 flex flex-col min-h-0',
-            height: 'calc(100vh - 500px)',
+            height: 'calc(100dvh - 500px)',
             icon: <Package className="h-4 w-4" />,
             actions: [
                 <div key="search-actions" className="flex items-center gap-0.5">

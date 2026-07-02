@@ -1032,7 +1032,7 @@ export const Docs: React.FC = () => {
                     <aside className={`
                         fixed lg:sticky top-0 lg:top-4 left-0 z-30
                         w-72 lg:w-64 xl:w-72 flex-shrink-0
-                        h-screen lg:h-[calc(100vh-65px)]
+                        h-screen lg:h-[calc(100dvh-65px)]
                         bg-white dark:bg-gray-950 lg:bg-transparent
                         border-r lg:border-r-0 border-gray-200 dark:border-gray-800
                         transition-transform duration-300

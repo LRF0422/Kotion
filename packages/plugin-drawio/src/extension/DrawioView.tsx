@@ -83,7 +83,7 @@ export const DrawioView: React.FC<NodeViewProps> = (props) => {
                         <DialogTitle>Drawio</DialogTitle>
                         <DialogDescription></DialogDescription>
                     </DialogHeader>
-                    <iframe ref={iframe} src={extension.options.drawIoLink + (theme === 'light' ? '&ui=kennedy' : '&ui=dark')} className="w-full h-[calc(100vh-80px)]" />
+                    <iframe ref={iframe} src={extension.options.drawIoLink + (theme === 'light' ? '&ui=kennedy' : '&ui=dark')} className="w-full h-[calc(100dvh-80px)]" />
                 </DialogContent>
             </Dialog>
     </NodeViewWrapper>

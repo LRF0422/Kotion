@@ -186,7 +186,7 @@ export function Onboarding({
     { top: targetRect.top + targetRect.height, left: 0, width: '100vw', height: Math.max(0, window.innerHeight - (targetRect.top + targetRect.height)) }, // 下
     { top: targetRect.top, left: 0, width: Math.max(0, targetRect.left), height: targetRect.height }, // 左
     { top: targetRect.top, left: targetRect.left + targetRect.width, width: Math.max(0, window.innerWidth - (targetRect.left + targetRect.width)), height: targetRect.height }, // 右
-  ] : [{ top: 0, left: 0, width: '100vw', height: '100vh' }];
+  ] : [{ top: 0, left: 0, width: '100vw', height: '100dvh' }];
 
   return (
     <div className="fixed inset-0" style={{ zIndex: highLightZIndex }}>

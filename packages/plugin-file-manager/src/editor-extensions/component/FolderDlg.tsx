@@ -23,7 +23,7 @@ export const FolderDlg: React.FC<FolderDlgProps> = (props) => {
                 <DialogTitle>{props.target === 'file' ? t('folderDialog.selectFile') : t('folderDialog.selectImage')}</DialogTitle>
                 <DialogDescription></DialogDescription>
             </DialogHeader>
-            <FileManagerView {...props} className="w-full h-[calc(100vh*0.8)]" />
+            <FileManagerView {...props} className="w-full h-[calc(100dvh*0.8)]" />
         </DialogContent>
     </Dialog>
 }

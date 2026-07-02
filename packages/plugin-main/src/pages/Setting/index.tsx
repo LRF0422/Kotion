@@ -8,7 +8,7 @@ const UserProfile: React.FC = () => {
 
 export const Setting: React.FC = () => {
     return <div className="flex">
-        <div className="flex-none h-[calc(100vh-40px)] bg-muted/40 w-[200px] border-r py-2">
+        <div className="flex-none h-[calc(100dvh-40px)] bg-muted/40 w-[200px] border-r py-2">
             <UserProfile />
             <SiderMenu size="mini" />
         </div>

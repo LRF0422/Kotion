@@ -102,7 +102,7 @@ export const PageRoom: React.FC = () => {
                     ref={editor}
                     provider={provider}
                     width="w-full"
-                    className="h-[calc(100vh-80px)]"
+                    className="h-[calc(100dvh-80px)]"
                     id={params.pageId as string}
                     user={userInfo}
                     token={params.pageId as string}

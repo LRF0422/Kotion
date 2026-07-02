@@ -161,7 +161,7 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
     return (
         <div
             className="group fixed right-0 z-40 flex justify-end"
-            style={{ top: offsetTop, height: `calc(100vh - ${offsetTop}px)`, alignItems: 'center' }}
+            style={{ top: offsetTop, height: `calc(100dvh - ${offsetTop}px)`, alignItems: 'center' }}
         >
             {/* Collapsed: tick marks. Fade out while the strip is hovered. */}
             <div
