@@ -139,6 +139,7 @@ export const createSlash = (name: string, options?: SlashOptions) => {
 
               computePosition(virtualElement, component.element as HTMLElement, {
                 placement: 'right-start',
+                strategy: 'fixed',
                 middleware: [flip()],
               }).then(({ x, y, strategy }) => {
                 if (!component) return;
@@ -168,7 +169,7 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                     editor: props.editor
                   });
                   component.render();
-                  this.editor.view.dom.parentNode?.appendChild(component.element);
+                  document.body.appendChild(component.element);
 
                   // Apply entrance animation
                   applyShowAnimation(component.element as HTMLElement);
@@ -215,9 +216,8 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                     hideTimer = undefined;
                   }
 
-                  const parentNode = props.view.dom.parentNode;
-                  if (parentNode?.contains(component.element)) {
-                    parentNode.removeChild(component.element);
+                  if (document.body.contains(component.element)) {
+                    document.body.removeChild(component.element);
                   }
                   return true;
                 }
@@ -236,11 +236,10 @@ export const createSlash = (name: string, options?: SlashOptions) => {
                 }
 
                 const element = component.element as HTMLElement;
-                const parentNode = props.editor.view.dom.parentNode;
 
                 applyHideAnimation(element, () => {
-                  if (parentNode?.contains(element)) {
-                    parentNode.removeChild(element);
+                  if (document.body.contains(element)) {
+                    document.body.removeChild(element);
                   }
                   component?.destroy();
                   component = null;

@@ -174,7 +174,7 @@ export const EditorRender = forwardRef<
   return (editor &&
     <PageContext.Provider value={pageInfo as PageContextProps}>
       <ThemeProvider theme={selectedTheme}>
-        <div className={cn("flex flex-col z-30 relative", width, props.className)}>
+        <div className={cn("flex flex-col relative", width, props.className)}>
           <div className="flex-1 min-h-0 w-full overflow-y-auto" id="editor-container">
             {/* Cover/header spans the full pane width; rendered outside the
                 centred StyledEditor column. */}

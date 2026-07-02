@@ -52,23 +52,9 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
     // Throttle ON_PAGE_REFRESH emissions caused by rapid title typing
     const titleRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-    const handleSave = useCallback(async (payload: IncrementalPayload) => {
-        if (!pageId) throw new Error('No pageId')
-        const hasTitleChange = payload.changes.some(c => c.type === 'title')
-        const res = await useApi(APIS.PATCH_PAGE_BLOCKS, { id: pageId }, {
-            pageId,
-            changes: payload.changes.map(c => ({
-                blockId: c.blockId,
-                action: c.action,
-                type: c.type,
-                content: c.action === 'upsert'
-                    ? JSON.stringify({ type: c.type, attrs: c.attrs, content: c.content })
-                    : undefined,
-                prevVersion: c.prevVersion,
-            })),
-        })
-        // Apply server-returned version info so subsequent patches
-        // carry the correct prevVersion
+    // Shared post-save logic: apply server-returned version info and throttle
+    // title-refresh notifications. Used by both handleSave and handleBulkSave.
+    const applySaveResult = useCallback((res: any, hasTitleChange: boolean) => {
         const data = res?.data
         if (data?.blockVersions) {
             const tracker = (editor?.storage as any)?.dirtyTracker
@@ -76,10 +62,6 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
                 tracker.applyServerVersions(data.blockVersions)
             }
         }
-        // After a successful save that touches the title block, notify the
-        // left sidebar (page tree + favorites) to re-fetch so the renamed
-        // title shows up immediately. Throttle to avoid spamming requests
-        // during continuous typing.
         if (hasTitleChange) {
             if (titleRefreshTimerRef.current) {
                 clearTimeout(titleRefreshTimerRef.current)
@@ -89,7 +71,28 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
                 titleRefreshTimerRef.current = null
             }, 400)
         }
-    }, [pageId, editor])
+    }, [editor])
+
+    const mapChanges = useCallback((payload: IncrementalPayload) =>
+        payload.changes.map(c => ({
+            blockId: c.blockId,
+            action: c.action,
+            type: c.type,
+            content: c.action === 'upsert'
+                ? JSON.stringify({ type: c.type, attrs: c.attrs, content: c.content })
+                : undefined,
+            prevVersion: c.prevVersion,
+        })), [])
+
+    const handleSave = useCallback(async (payload: IncrementalPayload) => {
+        if (!pageId) throw new Error('No pageId')
+        const hasTitleChange = payload.changes.some(c => c.type === 'title')
+        const res = await useApi(APIS.PATCH_PAGE_BLOCKS, { id: pageId }, {
+            pageId,
+            changes: mapChanges(payload),
+        })
+        applySaveResult(res, hasTitleChange)
+    }, [pageId, mapChanges, applySaveResult])
 
     // Bulk fast path for a first import/paste of a huge document: one POST that
     // the backend persists in chunked transactions and seals as a single page
@@ -99,33 +102,10 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
         const hasTitleChange = payload.changes.some(c => c.type === 'title')
         const res = await useApi(APIS.BULK_PATCH_PAGE_BLOCKS, { id: pageId }, {
             pageId,
-            changes: payload.changes.map(c => ({
-                blockId: c.blockId,
-                action: c.action,
-                type: c.type,
-                content: c.action === 'upsert'
-                    ? JSON.stringify({ type: c.type, attrs: c.attrs, content: c.content })
-                    : undefined,
-                prevVersion: c.prevVersion,
-            })),
+            changes: mapChanges(payload),
         })
-        const data = res?.data
-        if (data?.blockVersions) {
-            const tracker = (editor?.storage as any)?.dirtyTracker
-            if (tracker?.applyServerVersions) {
-                tracker.applyServerVersions(data.blockVersions)
-            }
-        }
-        if (hasTitleChange) {
-            if (titleRefreshTimerRef.current) {
-                clearTimeout(titleRefreshTimerRef.current)
-            }
-            titleRefreshTimerRef.current = setTimeout(() => {
-                event.emit(ON_PAGE_REFRESH)
-                titleRefreshTimerRef.current = null
-            }, 400)
-        }
-    }, [pageId, editor])
+        applySaveResult(res, hasTitleChange)
+    }, [pageId, mapChanges, applySaveResult])
 
     useEffect(() => {
         return () => {
@@ -169,7 +149,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const { updateMeta } = usePageTabs(spaceId)
     const { userInfo } = useSelector((state: GlobalState) => state)
     const [pageLoading, { toggle: toggleLoading }] = useToggle(false)
-    const [synceStatus, setSyncStatus] = useState(false)
+    const [syncStatus, setSyncStatus] = useState(false)
     // Fallback so the editor still renders if the collab server never syncs
     // (offline / WS unreachable). CollaborationEditor waits for sync internally
     // before seeding, so rendering on timeout is safe and avoids a blank page.
@@ -179,7 +159,6 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
     const editor = useRef<Editor>(null)
     const navigator = useNavigator()
-    const ref = useRef<any>()
     const spaceService = useService("spaceService")
     const { usePath } = useUploadFile();
     const [editorContentReady, setEditorContentReady] = useState(false)
@@ -204,10 +183,6 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         avatar: userInfo?.avatar ? usePath(userInfo.avatar) : undefined,
     }), [userInfo?.name, userInfo?.id, userColor, userInfo?.avatar, usePath]);
 
-    // Track previous pageId and provider for cleanup
-    const prevPageIdRef = useRef<string | undefined>(undefined);
-    const prevProviderRef = useRef<TiptapCollabProvider | undefined>(undefined);
-
     // Create collaboration provider - deferred to avoid blocking on page switch
     const [deferredPageId, setDeferredPageId] = useState<string | undefined>(undefined);
 
@@ -219,25 +194,22 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         return () => clearTimeout(timer);
     }, [pageId]);
 
-    const provider = React.useMemo(() => {
-        const pageId = deferredPageId;
-        if (!pageId) return undefined;
+    // Provider is created in an effect (not useMemo) because it has side effects
+    // (WebSocket connection, awareness setup). The effect cleanup tears down the
+    // previous provider when deferredPageId changes or the component unmounts.
+    const [provider, setProvider] = useState<TiptapCollabProvider | undefined>(undefined);
 
-        // Cleanup previous provider asynchronously
-        const prevProvider = prevProviderRef.current;
-        if (prevProvider) {
-            setTimeout(() => {
-                prevProvider.awareness?.destroy();
-                prevProvider.disconnect();
-                prevProvider.destroy();
-            }, 0);
+    React.useEffect(() => {
+        if (!deferredPageId) {
+            setProvider(undefined);
+            return;
         }
 
         const doc = new Y.Doc();
         const collabProvider = new TiptapCollabProvider({
             baseUrl: 'wss://kotion.top:8877/ws',
-            name: `page:${pageId}`,
-            token: pageId as string,
+            name: `page:${deferredPageId}`,
+            token: deferredPageId as string,
             document: doc,
             onAwarenessUpdate: ({ states }) => {
                 const updatedUsers = states
@@ -267,21 +239,14 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             }
         });
 
-        prevPageIdRef.current = pageId;
-        prevProviderRef.current = collabProvider;
-        return collabProvider;
-    }, [deferredPageId]);
+        setProvider(collabProvider);
 
-    // Cleanup provider on unmount
-    React.useEffect(() => {
         return () => {
-            if (provider) {
-                provider.awareness?.destroy();
-                provider.disconnect();
-                provider.destroy();
-            }
+            collabProvider.awareness?.destroy();
+            collabProvider.disconnect();
+            collabProvider.destroy();
         };
-    }, [provider]);
+    }, [deferredPageId]);
 
     useEffect(() => {
         setSyncTimedOut(false)
@@ -359,16 +324,6 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             setFavoriteToggling(false)
         }
     }, [pageId, isFavorited, favoriteToggling])
-
-    const getTitleContent = useCallback((value: any) => {
-        if (value) {
-            const content = value.content[0]
-            if (content?.content) {
-                return content.content[0]?.content?.[0]?.text
-            }
-        }
-        return null
-    }, [])
 
     // Seed the wide/narrow toggle from the page's persisted state once the
     // editor content is ready (the title node attr is the source of truth,
@@ -517,7 +472,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         }
     }, [page?.content]);
 
-    return pageLoading ? <div className="w-full h-full" ref={ref}>
+    return pageLoading ? <div className="w-full h-full">
         <header className="h-11 w-full flex flex-row justify-between px-1 border-b relative">
             <div className="flex flex-row items-center gap-2 px-1">
                 <Skeleton className="h-5 w-48" />
@@ -552,7 +507,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 </div>
             </div>
         </main>
-    </div> : (page && <div className="w-full h-full flex flex-col" ref={ref}>
+    </div> : (page && <div className="w-full h-full flex flex-col">
         <header className="h-11 flex-shrink-0 w-full flex flex-row justify-between px-1 border-b relative">
             <div className="flex flex-row items-center gap-2 px-1 text-sm flex-1 min-w-0 overflow-hidden">
                 <PageBreadcrumb
@@ -747,10 +702,10 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         </header>
         <main className="w-full flex-1 min-h-0">
             {
-                page && (synceStatus || syncTimedOut) && <CollaborationEditor
+                page && (syncStatus || syncTimedOut) && <CollaborationEditor
                     pageInfo={page}
                     ref={editor}
-                    synced={synceStatus}
+                    synced={syncStatus}
                     provider={provider}
                     className="h-full"
                     id={pageId as string}

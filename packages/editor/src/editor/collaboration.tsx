@@ -296,7 +296,7 @@ const CollaborationEditorInner = forwardRef<
   return (editor &&
     <PageContext.Provider value={pageInfo as PageContextProps}>
       <ThemeProvider theme={selectedTheme}>
-        <div className={cn("flex flex-col z-30 relative", width, props.className)}>
+        <div className={cn("flex flex-col relative", width, props.className)}>
           {!isMobile && <EditorMenu editor={editor} extensionWrappers={extensionWrappers as ExtensionWrapper[]} />}
           {/* Mobile: keep bubble/floating menus (toolbar={false}) and add a
               keyboard-docked formatting toolbar in place of the hidden top bar. */}
@@ -444,7 +444,7 @@ export const CollaborationEditor = forwardRef<
     // Lightweight skeleton while we wait for sync / seed the Y.Doc. Mirrors the
     // inner editor's own loading skeleton so there's no visual jump.
     return (
-      <div className={cn("flex flex-col z-30 relative", props.width ?? 'w-[calc(100vw-350px)]', props.className)}>
+      <div className={cn("flex flex-col relative", props.width ?? 'w-[calc(100vw-350px)]', props.className)}>
         <div className="flex-1 min-h-0 w-full overflow-y-auto p-4">
           <div className="space-y-3 animate-pulse">
             <div className="h-8 bg-muted rounded w-3/4" />
