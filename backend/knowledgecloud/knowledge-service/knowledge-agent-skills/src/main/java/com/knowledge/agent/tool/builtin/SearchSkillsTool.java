@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.api.dto.ChatTool;
 import com.knowledge.agent.api.dto.SkillPayload;
 import com.knowledge.agent.tool.*;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONArray;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -116,14 +118,13 @@ public class SearchSkillsTool implements Tool {
                 }
                 result.append("\n   ").append(skill.getDescription() != null ? skill.getDescription() : "");
                 if (skill.getTools() != null && !skill.getTools().isEmpty()) {
-                    result.append("\n   Tools: ");
-                    List<String> toolNames = new ArrayList<>();
+                    result.append("\n   Tools:\n");
                     for (ChatTool t : skill.getTools()) {
                         if (t.getFunction() != null && t.getFunction().getName() != null) {
-                            toolNames.add(t.getFunction().getName());
+                            result.append("     - ").append(formatToolSummary(t));
+                            result.append("\n");
                         }
                     }
-                    result.append(String.join(", ", toolNames));
                 }
                 result.append("\n\n");
                 skillNamesForActivation.add(skill.getName());
@@ -136,7 +137,8 @@ public class SearchSkillsTool implements Tool {
                     dynamicSkillRegistry.registerSkill(activated);
                     result.append("---\nActivated skill '").append(activate).append("'. ");
                     result.append(dynamicSkillRegistry.getActiveToolCount()).append(" total active tools now.\n");
-                    result.append("You can now use the skill's tools in your next response.");
+                    result.append("The tool schemas (with full parameter definitions) are now loaded. ");
+                    result.append("Call the tools in your NEXT response to ensure correct parameters.");
                 } else {
                     result.append("---\nCould not activate '").append(activate).append("' — ");
                     if (!skillCatalog.getAllSkillNames().contains(activate)) {
@@ -175,5 +177,62 @@ public class SearchSkillsTool implements Tool {
             return "(none defined)";
         }
         return String.join(", ", domains);
+    }
+
+    /**
+     * Format a tool definition as a compact one-liner with parameter
+     * signatures so the LLM knows the correct parameter names and types
+     * before the skill is activated.
+     *
+     * <p>Example output:
+     * <pre>
+     * addBitableRecord(bitableId: string, record: object): Add a record to a table
+     * </pre>
+     *
+     * <p>Required parameters are listed first (marked with *), optional ones
+     * follow. If the JSON Schema is missing or malformed, falls back to just
+     * the tool name.
+     */
+    private String formatToolSummary(ChatTool tool) {
+        if (tool.getFunction() == null) {
+            return "";
+        }
+        var fn = tool.getFunction();
+        StringBuilder sb = new StringBuilder();
+        sb.append(fn.getName()).append("(");
+
+        JSONObject params = fn.getParameters();
+        if (params != null) {
+            JSONObject properties = params.getJSONObject("properties");
+            JSONArray required = params.getJSONArray("required");
+            Set<String> requiredSet = new LinkedHashSet<>();
+            if (required != null) {
+                for (Object r : required) {
+                    if (r != null) requiredSet.add(r.toString());
+                }
+            }
+            if (properties != null) {
+                List<String> parts = new ArrayList<>();
+                for (String paramName : properties.keySet()) {
+                    JSONObject propSchema = properties.getJSONObject(paramName);
+                    String type = "any";
+                    if (propSchema != null && propSchema.getStr("type") != null) {
+                        type = propSchema.getStr("type");
+                    }
+                    String marker = requiredSet.contains(paramName) ? "" : "?";
+                    parts.add(paramName + marker + ": " + type);
+                }
+                sb.append(String.join(", ", parts));
+            }
+        }
+        sb.append(")");
+
+        String desc = fn.getDescription();
+        if (desc != null && !desc.isEmpty()) {
+            // Truncate long descriptions
+            String shortDesc = desc.length() > 80 ? desc.substring(0, 77) + "..." : desc;
+            sb.append(": ").append(shortDesc);
+        }
+        return sb.toString();
     }
 }

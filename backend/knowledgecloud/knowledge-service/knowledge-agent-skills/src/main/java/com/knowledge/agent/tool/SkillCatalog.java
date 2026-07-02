@@ -212,6 +212,59 @@ public class SkillCatalog {
     }
 
     /**
+     * Check if any skill in the catalog (activated or not) references the
+     * given tool name via its embedded {@code tools} list.
+     *
+     * <p>Used by {@link HarnessLoop#buildSkillToolHint} to produce a helpful
+     * error message when the LLM calls a skill tool that hasn't been loaded
+     * into {@code frontendToolNames} yet (e.g. same-response as
+     * {@code search_skills(activate: ...)}).
+     *
+     * @param toolName function name of the tool
+     * @return {@code true} if any skill's {@code tools} list contains the tool
+     */
+    public boolean containsTool(String toolName) {
+        if (toolName == null || toolName.isEmpty()) {
+            return false;
+        }
+        for (SkillPayload skill : skills.values()) {
+            if (skill.getTools() != null) {
+                for (ChatTool t : skill.getTools()) {
+                    if (t != null && t.getFunction() != null
+                            && toolName.equals(t.getFunction().getName())) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Find the name of the first skill that references the given tool.
+     *
+     * @param toolName function name of the tool
+     * @return skill name, or {@code null} if no skill references the tool
+     */
+    public String findSkillNameForTool(String toolName) {
+        if (toolName == null || toolName.isEmpty()) {
+            return null;
+        }
+        for (Map.Entry<String, SkillPayload> entry : skills.entrySet()) {
+            SkillPayload skill = entry.getValue();
+            if (skill.getTools() != null) {
+                for (ChatTool t : skill.getTools()) {
+                    if (t != null && t.getFunction() != null
+                            && toolName.equals(t.getFunction().getName())) {
+                        return entry.getKey();
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Get all skill names in the catalog (activated or not).
      */
     public Set<String> getAllSkillNames() {

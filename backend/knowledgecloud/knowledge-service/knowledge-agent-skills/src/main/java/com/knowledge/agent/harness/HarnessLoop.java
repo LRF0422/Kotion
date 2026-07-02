@@ -476,7 +476,12 @@ public class HarnessLoop {
 
         Tool tool = toolRegistry.get(tc.getName());
         if (tool == null) {
-            ToolResult errorResult = ToolResult.error("Unknown tool: " + tc.getName());
+            // Check if the tool is from a skill that hasn't been loaded yet
+            // (e.g. LLM called search_skills(activate: ...) and this tool in
+            // the same response — the skill may have just been activated but
+            // the tool schema isn't in frontendToolNames yet).
+            String hint = buildSkillToolHint(tc.getName(), state);
+            ToolResult errorResult = ToolResult.error(hint);
             appendToolMessage(state, tc,
                     errorResult.getOutput() != null ? errorResult.getOutput() : errorResult.getError());
             return Flux.just(toolCallEvent,
@@ -705,6 +710,49 @@ public class HarnessLoop {
             return false;
         }
         return state.frontendToolNames.contains(toolName);
+    }
+
+    /**
+     * Build a helpful error message for a tool that is not in the backend
+     * {@link ToolRegistry} but may be available via a skill in the
+     * {@link SkillCatalog}.
+     *
+     * <p>When the LLM calls {@code search_skills(activate: "bitable-skill")} and
+     * {@code addBitableRecord(...)} in the same response, both are classified as
+     * backend calls (because the skill's tools are not yet in
+     * {@code frontendToolNames}). {@code search_skills} executes first and
+     * activates the skill, but {@code addBitableRecord} is still not in the
+     * backend {@code ToolRegistry}. Instead of returning a bare "Unknown tool",
+     * this method produces a context-aware hint that tells the LLM:
+     * <ul>
+     * <li>Which skill provides the tool</li>
+     * <li>Whether the skill was just activated (so the schema will be available
+     *     next iteration) or still needs activation</li>
+     * </ul>
+     *
+     * @param toolName function name that was not found in the ToolRegistry
+     * @param state    current loop state
+     * @return descriptive error message for the tool result
+     */
+    private String buildSkillToolHint(String toolName, LoopState state) {
+        SkillCatalog catalog = state.context != null ? state.context.getSkillCatalog() : null;
+        if (catalog == null || !catalog.containsTool(toolName)) {
+            return "Unknown tool: " + toolName;
+        }
+        String skillName = catalog.findSkillNameForTool(toolName);
+        DynamicSkillRegistry dynamicReg = state.context != null
+                ? state.context.getDynamicSkillRegistry() : null;
+        boolean justActivated = dynamicReg != null
+                && dynamicReg.getActivatedSkillNames().contains(skillName);
+        if (justActivated) {
+            return "Tool '" + toolName + "' is provided by skill '" + skillName
+                    + "', which was just activated. Its parameter schema is now loaded. "
+                    + "Please call this tool again in your next response with the correct parameters.";
+        }
+        return "Tool '" + toolName + "' is provided by skill '" + skillName
+                + "', which has not been activated yet. "
+                + "Use search_skills with activate: \"" + skillName + "\" first, "
+                + "then call this tool in the next response.";
     }
 
     /**
@@ -946,8 +994,9 @@ public class HarnessLoop {
 
         Tool tool = toolRegistry.get(tc.getName());
         if (tool == null) {
-            // Unknown tool
-            ToolResult errorResult = ToolResult.error("Unknown tool: " + tc.getName());
+            // Check if the tool is from a skill that hasn't been loaded yet
+            String hint = buildSkillToolHint(tc.getName(), state);
+            ToolResult errorResult = ToolResult.error(hint);
             events.add(StreamEvent.ToolResultEvent.builder()
                     .toolCallId(tc.getId())
                     .result(errorResult)
