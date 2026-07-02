@@ -151,9 +151,18 @@ public class AgentHarness {
         // tool bloat where every agent task receives all registered backend
         // tools regardless of skill selection.
         Set<String> filteredToolIds = resolveToolIdsFromSkills(selectedSkills);
-        // Essential backend tools always available
+        // Essential backend tools always available — these are general-purpose
+        // tools not owned by any single skill, so they must be explicitly listed
+        // to survive the skill-based filtering.
         filteredToolIds.add("delegate");
         filteredToolIds.add("search_skills");
+        filteredToolIds.add("present_plan");
+        // Web research tools (web_search, web_fetch, dataset_search) are standalone
+        // backend tools not referenced by any skill's requiredTools/optionalTools.
+        // Without this they are silently dropped from the LLM tool list.
+        filteredToolIds.add("web_search");
+        filteredToolIds.add("web_fetch");
+        filteredToolIds.add("dataset_search");
         // Note: "undo" is a frontend-executed tool delivered via the document-read
         // skill's requiredTools → mergedFrontendTools, not a backend ToolRegistry entry.
 
