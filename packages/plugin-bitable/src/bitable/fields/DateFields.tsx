@@ -6,19 +6,19 @@ import { FieldRendererProps, FieldEditorProps } from "./types";
 
 export const DateRenderer: React.FC<FieldRendererProps> = ({ value, field }) => {
     const locale = useDateLocale();
-    if (!value) return <div></div>;
+    if (!value) return <div className="bitable-field-empty" />;
     try {
         const dateFormat = field.format || "yyyy-MM-dd";
         const formatStr = dateFormat.includes("HH")
-            ? "MMMM d, yyyy h:mm a"
-            : "MMMM d, yyyy";
+            ? "MMM d, yyyy h:mm a"
+            : "MMM d, yyyy";
         return (
-            <div className="text-sm text-gray-600 dark:text-gray-400">
+            <div className="bitable-field-date">
                 {format(new Date(value), formatStr, { locale })}
             </div>
         );
     } catch {
-        return <div></div>;
+        return <div className="bitable-field-empty" />;
     }
 };
 

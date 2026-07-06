@@ -56,5 +56,8 @@ export { ImageRenderer, ImageEditor, AttachmentRenderer, AttachmentEditor } from
 // Person / ReadonlyPerson
 export { PersonRenderer, PersonEditor, PersonReadonlyEditor } from "./PersonFields";
 
+// Icons & view utilities (consolidated)
+export { getFieldTypeIcon, getViewIcon, getViewTypeName } from "./fieldIcons";
+
 // Registry
 export { getFieldRenderer, getFieldEditor } from "./registry";

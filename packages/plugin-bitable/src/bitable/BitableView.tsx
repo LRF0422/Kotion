@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import { useSelector, GlobalState, useTranslation } from "@kn/common";
+import { useTheme, cn } from "@kn/ui";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -22,13 +23,15 @@ import { FormView } from "./views/FormView";
 import { FieldConfigPanel } from "./components/FieldConfigPanel";
 import { ExcelImportDialog } from "./components/ExcelImportDialog";
 import { BitableToolbar } from "./components/BitableToolbar";
-import { RecordDetailModal } from "./components/RecordDetailModal";
+import { ViewConfigChips } from "./components/toolbar";
+import { RecordDetailDrawer } from "./components/RecordDetailDrawer";
 import { useBitableActions } from "./hooks/useBitableActions";
 
 export const BitableView: React.FC<NodeViewProps> = (props) => {
     const { node, updateAttributes, deleteNode, editor } = props;
     const attrs = node.attrs as BitableAttrs;
     const { t } = useTranslation();
+    const { theme } = useTheme();
 
     // Current user (for created_by / updated_by)
     const userInfo = useSelector((s: GlobalState) => s.userInfo);
@@ -81,6 +84,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         fields: attrs.fields,
         data: actions.processedData,
         onAddRecord: actions.handleAddRecord,
+        onDuplicateRecord: actions.handleDuplicateRecord,
         onCreateRecord: actions.handleCreateRecord,
         onUpdateRecord: actions.handleUpdateRecord,
         onBatchUpdateRecords: actions.handleBatchUpdateRecords,
@@ -105,7 +109,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
             case ViewType.TIMELINE:
                 return <TimelineView {...viewProps} />;
             case ViewType.CALENDAR:
-                return <CalendarView {...viewProps} editor={editor} />;
+                return <CalendarView {...viewProps} />;
             case ViewType.CHART:
                 return <ChartView {...viewProps} />;
             case ViewType.FORM:
@@ -124,7 +128,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
     return (
         <NodeViewWrapper className="node-bitable-wrapper">
-            <div className="bitable-container min-h-[400px] w-full rounded-lg bg-transparent text-gray-900 dark:text-white">
+            <div className={cn("bitable bitable-container", theme === "dark" && "bitable--dark")}>
                 <BitableToolbar
                     views={attrs.views}
                     currentViewId={currentViewId}
@@ -138,6 +142,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                     onEditingViewNameChange={actions.setEditingViewName}
                     onOpenDeleteDialog={actions.openDeleteDialog}
                     onAddView={actions.handleAddView}
+                    onReorderViews={actions.handleReorderViews}
+                    onDuplicateView={actions.handleDuplicateView}
                     onAddRecord={actions.handleAddRecord}
                     onExport={actions.handleExport}
                     onOpenFieldConfig={() => setFieldConfigOpen(true)}
@@ -150,11 +156,18 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                     onSearchChange={setSearchText}
                 />
 
+                {/* View config chips (filters/sorts/groups) */}
+                <ViewConfigChips
+                    view={actions.currentView}
+                    fields={attrs.fields}
+                    onUpdateView={actions.handleUpdateView}
+                />
+
                 {/* View content */}
                 <div className="bitable-content">{renderViewContent()}</div>
 
                 {/* Bottom stats */}
-                <div className="pl-2 pr-3 md:pr-4 py-3 text-xs text-gray-500 flex items-center justify-between border-t border-gray-200 dark:border-border">
+                <div className="bitable-footer">
                     <span>{t("bitable.stats.totalRecords", { count: actions.data.length })}</span>
                 </div>
             </div>
@@ -200,12 +213,19 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* Record detail modal */}
-            <RecordDetailModal
+            {/* Record detail drawer */}
+            <RecordDetailDrawer
                 open={selectedRecord !== null}
                 record={selectedRecord}
                 fields={attrs.fields}
+                recordIds={actions.processedData.map((r) => r.id)}
                 onClose={() => setSelectedRecord(null)}
+                onNavigate={(recordId) => {
+                    const rec = actions.processedData.find(
+                        (r) => r.id === recordId
+                    );
+                    if (rec) setSelectedRecord(rec);
+                }}
                 onUpdateRecord={actions.handleUpdateRecord}
                 editable={editor.isEditable}
             />

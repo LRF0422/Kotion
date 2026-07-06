@@ -7,11 +7,19 @@ import { FieldRendererProps, FieldEditorProps } from "./types";
 // ---------------------------------------------------------------------------
 
 export const CheckboxRenderer: React.FC<FieldRendererProps> = ({ value }) => {
-    return <Checkbox checked={Boolean(value)} disabled className="border-gray-400 dark:border-gray-500" />;
+    return (
+        <div className="bitable-checkbox">
+            <Checkbox checked={Boolean(value)} disabled />
+        </div>
+    );
 };
 
 export const CheckboxEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
-    return <Checkbox checked={Boolean(value)} onCheckedChange={onChange} />;
+    return (
+        <div className="bitable-checkbox">
+            <Checkbox checked={Boolean(value)} onCheckedChange={onChange} />
+        </div>
+    );
 };
 
 // ---------------------------------------------------------------------------
@@ -26,15 +34,15 @@ export const ProgressRenderer: React.FC<FieldRendererProps> = ({ value, field })
         const circumference = 2 * Math.PI * radius;
         const offset = circumference - (progress / 100) * circumference;
         return (
-            <div className="flex items-center gap-1.5">
+            <div className="bitable-progress-ring">
                 <svg width="30" height="30" viewBox="0 0 30 30">
-                    <circle cx="15" cy="15" r={radius} fill="none" stroke="currentColor" className="text-gray-200 dark:text-gray-700" strokeWidth="3" />
+                    <circle cx="15" cy="15" r={radius} fill="none" stroke="var(--bt-border)" strokeWidth="3" />
                     <circle
                         cx="15"
                         cy="15"
                         r={radius}
                         fill="none"
-                        stroke="#3b82f6"
+                        stroke="var(--bt-accent)"
                         strokeWidth="3"
                         strokeDasharray={circumference}
                         strokeDashoffset={offset}
@@ -42,21 +50,21 @@ export const ProgressRenderer: React.FC<FieldRendererProps> = ({ value, field })
                         transform="rotate(-90 15 15)"
                     />
                 </svg>
-                <span className="text-xs text-gray-600 dark:text-gray-400">{progress}%</span>
+                <span className="bitable-progress-ring__text">{progress}%</span>
             </div>
         );
     }
 
     if (field.format === "number") {
-        return <div className="text-sm text-gray-900 dark:text-white tabular-nums">{progress}%</div>;
+        return <div className="bitable-progress-number">{progress}%</div>;
     }
 
     return (
-        <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
+        <div className="bitable-progress">
+            <div className="bitable-progress__track">
+                <div className="bitable-progress__fill" style={{ width: `${progress}%` }} />
             </div>
-            <span className="text-xs text-gray-600 dark:text-gray-400 w-10">{progress}%</span>
+            <span className="bitable-progress__text">{progress}%</span>
         </div>
     );
 };
@@ -65,7 +73,7 @@ export const ProgressEditor: React.FC<FieldEditorProps> = ({ value, onChange }) 
     const progress = typeof value === "number" ? value : 0;
 
     return (
-        <div className="flex items-center gap-3 px-2 py-1">
+        <div className="bitable-progress" style={{ padding: "4px 8px" }}>
             <Slider
                 value={[progress]}
                 onValueChange={(values) => onChange(values[0])}
@@ -74,7 +82,7 @@ export const ProgressEditor: React.FC<FieldEditorProps> = ({ value, onChange }) 
                 step={1}
                 className="flex-1"
             />
-            <span className="text-sm font-medium text-gray-900 dark:text-white w-12 text-right">{progress}%</span>
+            <span className="bitable-progress__text" style={{ minWidth: 36 }}>{progress}%</span>
         </div>
     );
 };
@@ -84,9 +92,17 @@ export const ProgressEditor: React.FC<FieldEditorProps> = ({ value, onChange }) 
 // ---------------------------------------------------------------------------
 
 export const RatingRenderer: React.FC<FieldRendererProps> = ({ value }) => {
-    return <Rate rating={typeof value === "number" ? value : 0} totalStars={5} variant="yellow" size={16} disabled />;
+    return (
+        <div className="bitable-rating">
+            <Rate rating={typeof value === "number" ? value : 0} totalStars={5} variant="yellow" size={16} disabled />
+        </div>
+    );
 };
 
 export const RatingEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
-    return <Rate rating={typeof value === "number" ? value : 0} totalStars={5} variant="yellow" onRatingChange={onChange} size={20} />;
+    return (
+        <div className="bitable-rating">
+            <Rate rating={typeof value === "number" ? value : 0} totalStars={5} variant="yellow" onRatingChange={onChange} size={20} />
+        </div>
+    );
 };

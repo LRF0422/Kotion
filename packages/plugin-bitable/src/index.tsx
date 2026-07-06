@@ -1,5 +1,6 @@
 import { KPlugin, PluginConfig } from "@kn/common";
 import { BitableExtension } from "./bitable";
+import "./bitable/styles/bitable.css";
 
 interface BitablePluginConfig extends PluginConfig {
     // Plugin-specific configuration
@@ -221,7 +222,8 @@ export const bitable = new BitablePlugin({
                         "sizeSmall": "Small",
                         "sizeMedium": "Medium",
                         "sizeLarge": "Large",
-                        "displayFields": "Display fields"
+                        "displayFields": "Display fields",
+                        "addRecord": "Add record"
                     },
                     // Timeline view
                     "timelineView": {
@@ -279,7 +281,9 @@ export const bitable = new BitablePlugin({
                         "selectEndDateField": "Select end date field (optional)",
                         "selectTitleField": "Select title field (optional)",
                         "auto": "Auto",
-                        "noneField": "None"
+                        "noneField": "None",
+                        "year": "Year",
+                        "agenda": "Agenda"
                     },
                     // Chart view
                     "chartView": {
@@ -606,7 +610,8 @@ export const bitable = new BitablePlugin({
                         "sizeSmall": "小",
                         "sizeMedium": "中",
                         "sizeLarge": "大",
-                        "displayFields": "显示字段"
+                        "displayFields": "显示字段",
+                        "addRecord": "添加记录"
                     },
                     // Timeline view
                     "timelineView": {
@@ -664,7 +669,9 @@ export const bitable = new BitablePlugin({
                         "selectEndDateField": "选择结束日期字段（可选）",
                         "selectTitleField": "选择标题字段（可选）",
                         "auto": "自动",
-                        "noneField": "无"
+                        "noneField": "无",
+                        "year": "年",
+                        "agenda": "日程"
                     },
                     // Chart view
                     "chartView": {

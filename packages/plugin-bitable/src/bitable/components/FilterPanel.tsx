@@ -90,16 +90,12 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ view, fields, onUpdate
     return (
         <Popover>
             <PopoverTrigger asChild>
-                <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-9 w-9 md:h-8 md:w-8 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-accent relative"
+                <button
+                    className="bitable-toolbar__action"
+                    title={t('bitable.filter.title', 'Filter')}
                 >
                     <Filter className="h-4 w-4" />
-                    {hasFilters && (
-                        <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-blue-500 rounded-full" />
-                    )}
-                </Button>
+                </button>
             </PopoverTrigger>
             <PopoverContent className="w-[calc(100vw-1.5rem)] max-w-96 p-3" align="start">
                 <div className="space-y-2">

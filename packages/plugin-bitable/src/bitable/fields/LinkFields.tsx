@@ -3,24 +3,23 @@ import { Input } from "@kn/ui";
 import { Link as LinkIcon, Mail, Phone } from "@kn/icon";
 import { FieldRendererProps, FieldEditorProps } from "./types";
 
-const INPUT_CLASS =
-    "h-full border-0 bg-white dark:bg-card text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500";
+const EDITOR_CLASS = "bitable-text-editor";
 
 // ---------------------------------------------------------------------------
 // URL field
 // ---------------------------------------------------------------------------
 
 export const URLRenderer: React.FC<FieldRendererProps> = ({ value }) => {
-    if (!value) return <div></div>;
+    if (!value) return <div className="bitable-field-empty" />;
     return (
         <a
             href={value}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline flex items-center gap-1 text-sm"
+            className="bitable-field-link"
         >
-            <LinkIcon className="h-3 w-3" />
-            <span className="truncate max-w-[200px]">{value}</span>
+            <LinkIcon />
+            <span>{value}</span>
         </a>
     );
 };
@@ -33,7 +32,7 @@ export const URLEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
             value={value || ""}
             onChange={(e) => onChange(e.target.value)}
             placeholder="https://"
-            className={INPUT_CLASS}
+            className={EDITOR_CLASS}
         />
     );
 };
@@ -43,21 +42,21 @@ export const URLEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
 // ---------------------------------------------------------------------------
 
 export const EmailRenderer: React.FC<FieldRendererProps> = ({ value }) => {
-    if (!value) return <div></div>;
+    if (!value) return <div className="bitable-field-empty" />;
     return (
         <a
             href={`mailto:${value}`}
-            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline flex items-center gap-1 text-sm"
+            className="bitable-field-link"
         >
-            <Mail className="h-3 w-3" />
-            {value}
+            <Mail />
+            <span>{value}</span>
         </a>
     );
 };
 
 export const EmailEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
     return (
-        <Input autoFocus type="email" value={value || ""} onChange={(e) => onChange(e.target.value)} className={INPUT_CLASS} />
+        <Input autoFocus type="email" value={value || ""} onChange={(e) => onChange(e.target.value)} className={EDITOR_CLASS} />
     );
 };
 
@@ -66,20 +65,20 @@ export const EmailEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => 
 // ---------------------------------------------------------------------------
 
 export const PhoneRenderer: React.FC<FieldRendererProps> = ({ value }) => {
-    if (!value) return <div></div>;
+    if (!value) return <div className="bitable-field-empty" />;
     return (
         <a
             href={`tel:${value}`}
-            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline flex items-center gap-1 text-sm"
+            className="bitable-field-link"
         >
-            <Phone className="h-3 w-3" />
-            {value}
+            <Phone />
+            <span>{value}</span>
         </a>
     );
 };
 
 export const PhoneEditor: React.FC<FieldEditorProps> = ({ value, onChange }) => {
     return (
-        <Input autoFocus type="tel" value={value || ""} onChange={(e) => onChange(e.target.value)} className={INPUT_CLASS} />
+        <Input autoFocus type="tel" value={value || ""} onChange={(e) => onChange(e.target.value)} className={EDITOR_CLASS} />
     );
 };

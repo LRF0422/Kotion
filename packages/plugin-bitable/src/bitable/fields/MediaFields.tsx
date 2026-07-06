@@ -21,7 +21,7 @@ export const ImageRenderer: React.FC<FieldRendererProps> = ({ value, field }) =>
     const images = toImageUrls(value);
     const firstImage = images[0];
 
-    if (!firstImage) return <div className="text-sm text-gray-400 dark:text-gray-500">-</div>;
+    if (!firstImage) return <div className="bitable-field-empty" />;
 
     const formatParts = field.format?.split(":") || ["multiple", "medium"];
     const sizeFormat = formatParts[1] || "medium";
@@ -29,27 +29,27 @@ export const ImageRenderer: React.FC<FieldRendererProps> = ({ value, field }) =>
     const getSizeClass = () => {
         switch (sizeFormat) {
             case "small":
-                return "h-8 w-8";
+                return "bitable-image-thumb--small";
             case "large":
-                return "h-16 w-16";
+                return "bitable-image-thumb--large";
             default:
-                return "h-10 w-10";
+                return "bitable-image-thumb--medium";
         }
     };
 
     return (
-        <div className="flex items-center gap-1">
+        <div className="bitable-image-group">
             <img
                 src={firstImage}
                 alt=""
-                className={`${getSizeClass()} object-cover rounded bg-gray-100 dark:bg-gray-700`}
+                className={`bitable-image-thumb ${getSizeClass()}`}
                 onError={(e) => {
                     const img = e.target as HTMLImageElement;
                     if (img.src !== IMAGE_FALLBACK) img.src = IMAGE_FALLBACK;
                 }}
             />
             {images.length > 1 && (
-                <span className="text-xs text-gray-500 dark:text-gray-400">+{images.length - 1}</span>
+                <span className="bitable-attachment-count">+{images.length - 1}</span>
             )}
         </div>
     );
@@ -298,23 +298,23 @@ export const ImageEditor: React.FC<FieldEditorProps> = ({ value, field, onChange
 
 export const AttachmentRenderer: React.FC<FieldRendererProps> = ({ value }) => {
     const files = toAttachmentArray(value);
-    if (files.length === 0) return <div className="text-sm text-gray-400 dark:text-gray-500">-</div>;
+    if (files.length === 0) return <div className="bitable-field-empty" />;
     return (
-        <div className="flex items-center gap-1 flex-wrap">
+        <div className="bitable-attachment-group">
             {files.slice(0, 3).map((f, i) => (
                 <a
                     key={f.id || i}
                     href={f.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-xs text-gray-700 dark:text-gray-200 hover:underline"
+                    className="bitable-attachment-item"
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <FileText className="h-3 w-3" />
-                    <span className="truncate max-w-[120px]">{f.name || f.url}</span>
+                    <FileText />
+                    <span>{f.name || f.url}</span>
                 </a>
             ))}
-            {files.length > 3 && <span className="text-xs text-gray-500 dark:text-gray-400">+{files.length - 3}</span>}
+            {files.length > 3 && <span className="bitable-attachment-count">+{files.length - 3}</span>}
         </div>
     );
 };

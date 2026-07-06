@@ -18,7 +18,6 @@
     "@kn/ui": "workspace:*",
     "@kn/icon": "workspace:*",
     "react-data-grid": "^7.0.0-beta.46",
-    "react-beautiful-dnd": "^13.1.1",
     "lodash": "^4.17.21",
     "ahooks": "^3.8.1",
     "date-fns": "^4.1.0",
@@ -32,7 +31,6 @@
     "@kn/typescript-config": "workspace:*",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@types/lodash": "^4.17.13",
-    "@types/react-beautiful-dnd": "^13.1.8"
+    "@types/lodash": "^4.17.13"
   }
 }

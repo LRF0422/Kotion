@@ -9,9 +9,9 @@ import { FieldRendererProps, FieldEditorProps } from "./types";
 
 export const PersonRenderer: React.FC<FieldRendererProps> = ({ value }) => {
     const people = toPersonArray(value);
-    if (people.length === 0) return <div className="text-sm text-gray-400 dark:text-gray-500">-</div>;
+    if (people.length === 0) return <div className="bitable-field-empty" />;
     return (
-        <div className="flex items-center gap-1 flex-wrap">
+        <div className="bitable-person-group">
             {people.map((p, i) => (
                 <PersonChip key={p.id || i} person={p} />
             ))}

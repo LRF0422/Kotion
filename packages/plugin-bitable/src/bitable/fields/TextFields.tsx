@@ -6,25 +6,34 @@ import { FieldRendererProps, FieldEditorProps } from "./types";
 // Text field
 // ---------------------------------------------------------------------------
 
-export const TextRenderer: React.FC<FieldRendererProps> = ({ value }) => {
-    // Handle object-type data (possibly converted from another field type)
-    if (value && typeof value === "object") {
-        if (typeof value.content === "string") {
-            return <div className="text-sm text-gray-900 dark:text-white truncate">{value.content}</div>;
-        }
-        if (typeof value.text === "string") {
-            return <div className="text-sm text-gray-900 dark:text-white truncate">{value.text}</div>;
-        }
-        if (typeof value.label === "string") {
-            return <div className="text-sm text-gray-900 dark:text-white truncate">{value.label}</div>;
-        }
-        return <div className="text-sm text-gray-900 dark:text-white truncate">{JSON.stringify(value)}</div>;
+/**
+ * Extract a displayable string from any value type.
+ * Handles objects that may have been stored from field-type conversions.
+ */
+function toText(value: any): string {
+    if (value === null || value === undefined) return "";
+    if (typeof value === "string") return value;
+    if (typeof value === "number") return String(value);
+    if (typeof value === "boolean") return value ? "✓" : "";
+    if (typeof value === "object") {
+        // Try common property names before giving up
+        const text = value.content || value.text || value.label || value.name || value.title || value.value;
+        if (typeof text === "string") return text;
+        if (typeof text === "number") return String(text);
+        // Last resort — don't show [object Object], just empty
+        return "";
     }
-    return <div className="text-sm text-gray-900 dark:text-white truncate">{value || ""}</div>;
+    return String(value);
+}
+
+export const TextRenderer: React.FC<FieldRendererProps> = ({ value }) => {
+    const text = toText(value);
+    if (!text) return <div className="bitable-field-empty" />;
+    return <div className="bitable-field-text">{text}</div>;
 };
 
 export const TextEditor: React.FC<FieldEditorProps> = ({ value, onChange, onCommit }) => {
-    const displayValue = typeof value === "string" ? value : value?.content || value?.text || value?.label || "";
+    const displayValue = toText(value);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === "Enter") {
@@ -42,7 +51,7 @@ export const TextEditor: React.FC<FieldEditorProps> = ({ value, onChange, onComm
             value={displayValue}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="w-full h-full px-2 bg-transparent text-sm text-gray-900 dark:text-white outline-none caret-blue-500 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+            className="bitable-text-editor"
             placeholder="..."
         />
     );
@@ -53,7 +62,7 @@ export const TextEditor: React.FC<FieldEditorProps> = ({ value, onChange, onComm
 // ---------------------------------------------------------------------------
 
 export const NumberRenderer: React.FC<FieldRendererProps> = ({ value, field }) => {
-    if (typeof value !== "number") return <div></div>;
+    if (typeof value !== "number") return <div className="bitable-field-empty" />;
     let formatted: string;
     switch (field.format) {
         case "currency":
@@ -68,7 +77,7 @@ export const NumberRenderer: React.FC<FieldRendererProps> = ({ value, field }) =
         default:
             formatted = value.toLocaleString();
     }
-    return <div className="text-sm text-gray-900 dark:text-white text-right tabular-nums">{formatted}</div>;
+    return <div className="bitable-field-number">{formatted}</div>;
 };
 
 export const NumberEditor: React.FC<FieldEditorProps> = ({ value, onChange, onCommit }) => {
@@ -95,7 +104,7 @@ export const NumberEditor: React.FC<FieldEditorProps> = ({ value, onChange, onCo
             value={value || 0}
             onChange={(e) => onChange(Number(e.target.value))}
             onKeyDown={handleKeyDown}
-            className="h-full border-0 bg-white dark:bg-card text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
+            className="bitable-text-editor"
         />
     );
 };
@@ -105,9 +114,10 @@ export const NumberEditor: React.FC<FieldEditorProps> = ({ value, onChange, onCo
 // ---------------------------------------------------------------------------
 
 export const IDRenderer: React.FC<FieldRendererProps> = ({ value }) => {
-    return <div className="text-sm font-mono text-gray-500 dark:text-gray-400">{value}</div>;
+    if (!value && value !== 0) return <div className="bitable-field-empty" />;
+    return <div className="bitable-field-id">{value}</div>;
 };
 
 export const IDEditor: React.FC<FieldEditorProps> = ({ value }) => {
-    return <div className="text-sm font-mono text-gray-500 dark:text-gray-400 p-2">{value}</div>;
+    return <div className="bitable-field-id" style={{ padding: "4px 8px" }}>{value}</div>;
 };

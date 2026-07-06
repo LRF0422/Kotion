@@ -1,245 +1,58 @@
-import { ReactElement } from 'react';
+/**
+ * Barrel re-export of all bitable type definitions.
+ * Consumers should import from `../../types` or `../types`.
+ */
 
-// 字段类型枚举
-export enum FieldType {
-    TEXT = 'text',
-    NUMBER = 'number',
-    SELECT = 'select',
-    MULTI_SELECT = 'multi_select',
-    DATE = 'date',
-    CHECKBOX = 'checkbox',
-    PERSON = 'person',
-    ATTACHMENT = 'attachment',
-    IMAGE = 'image',
-    URL = 'url',
-    EMAIL = 'email',
-    PHONE = 'phone',
-    RATING = 'rating',
-    PROGRESS = 'progress',
-    FORMULA = 'formula',
-    RELATION = 'relation',
-    CREATED_TIME = 'created_time',
-    UPDATED_TIME = 'updated_time',
-    CREATED_BY = 'created_by',
-    UPDATED_BY = 'updated_by',
-    AUTO_NUMBER = 'auto_number',
-    ID = 'id',
-}
+// Fields — values (enum, const, function)
+export {
+    FieldType,
+    READONLY_FIELD_TYPES,
+    isReadonlyField,
+} from "./fields";
 
-// 视图类型枚举
-export enum ViewType {
-    TABLE = 'table',
-    KANBAN = 'kanban',
-    GALLERY = 'gallery',
-    CALENDAR = 'calendar',
-    TIMELINE = 'timeline',
-    FORM = 'form',
-    CHART = 'chart',
-}
+// Fields — types
+export type {
+    SelectOption,
+    SummaryMode,
+    FieldConfig,
+    FieldValue,
+} from "./fields";
 
-// 图表类型枚举
-export enum ChartType {
-    BAR = 'bar',
-    LINE = 'line',
-    PIE = 'pie',
-    AREA = 'area',
-    RADAR = 'radar',
-    SCATTER = 'scatter',
-    RADIAL_BAR = 'radial_bar',
-    DONUT = 'donut',
-    STACKED_BAR = 'stacked_bar',
-    STACKED_AREA = 'stacked_area',
-}
+// Records — types
+export type { Person, Attachment, RecordData } from "./records";
 
-// 字段配置
-export interface FieldConfig {
-    id: string;
-    title: string;
-    type: FieldType;
-    width?: number;
-    isShow?: boolean;
-    frozen?: boolean;
-    summary?: 'none' | 'count' | 'sum' | 'avg' | 'min' | 'max';  // 表格汇总行的聚合方式
-    options?: SelectOption[];
-    formula?: string;
-    relationTableId?: string;
-    format?: string;
-    description?: string;
-}
+// Views — values (enums)
+export {
+    ViewType,
+    ChartType,
+    FilterOperator,
+} from "./views";
 
-// 选项配置（用于单选和多选字段）
-export interface SelectOption {
-    id: string;
-    label: string;
-    color: string;
-}
+// Views — types
+export type {
+    FilterConfig,
+    SortConfig,
+    GroupConfig,
+    YAxisConfig,
+    KanbanConfig,
+    GalleryConfig,
+    CalendarConfig,
+    TimelineConfig,
+    FormConfig,
+    ChartConfig,
+    ViewConfig,
+    CellPosition,
+    SelectionRange,
+    EditMode,
+    BitableInteractionConfig,
+} from "./views";
 
-// 人员信息
-export interface Person {
-    id: string;
-    name: string;
-    avatar?: string;
-    email?: string;
-}
+// Bitable node attributes
+import type { FieldConfig } from "./fields";
+import type { ViewConfig } from "./views";
+import type { RecordData } from "./records";
 
-// 附件信息
-export interface Attachment {
-    id: string;
-    name: string;
-    url: string;
-    type: string;
-    size: number;
-    uploadTime: string;
-}
-
-// 视图配置
-export interface ViewConfig {
-    id: string;
-    name: string;
-    type: ViewType;
-    filters?: FilterConfig[];
-    filterLogic?: 'and' | 'or';  // 多条筛选之间的组合方式，缺省 'and'
-    sorts?: SortConfig[];
-    groups?: GroupConfig[];
-    hiddenFields?: string[];
-    fieldOrder?: string[];
-    // 看板视图特有配置
-    kanbanConfig?: {
-        groupByField: string;
-        cardCoverField?: string;
-        displayFields?: string[];   // 卡片上显示的字段（缺省时取前 4 个）
-        showEmptyColumns?: boolean; // 是否显示空列（select 分组时）
-    };
-    // 画廊视图特有配置
-    galleryConfig?: {
-        coverField: string;
-        fitType: 'cover' | 'contain';
-        cardSize: 'small' | 'medium' | 'large';
-        displayFields?: string[];   // 卡片显示的字段（缺省时取前 3 个）
-    };
-    // 日历视图特有配置
-    calendarConfig?: {
-        dateField: string;
-        endDateField?: string;
-        titleField?: string;
-    };
-    // 时间线/甘特图视图特有配置
-    timelineConfig?: {
-        startDateField: string;
-        endDateField?: string;
-        titleField?: string;
-        progressField?: string;
-        groupByField?: string;
-        scaleUnit?: 'day' | 'week' | 'month';
-        // Enhanced features
-        milestoneField?: string;          // Field to identify milestones
-        dependencyField?: string;         // Field to define task dependencies
-        criticalPathEnabled?: boolean;    // Enable critical path highlighting
-        customColorsEnabled?: boolean;    // Enable custom color options
-        colorField?: string;              // Field whose value is used as the bar color
-    };
-    // 表单视图特有配置
-    formConfig?: {
-        title?: string;
-        description?: string;
-        submitLabel?: string;
-        fieldIds?: string[];   // 表单包含的字段（缺省取全部可编辑字段）
-    };
-    // 图表视图特有配置
-    chartConfig?: {
-        chartType: ChartType;
-        xAxisField: string;
-        yAxisFields: YAxisConfig[];
-        title?: string;
-        description?: string;
-        showLegend?: boolean;
-        showGrid?: boolean;
-        aggregation?: 'sum' | 'count' | 'avg' | 'min' | 'max';
-        dateAggregation?: 'day' | 'week' | 'month' | 'quarter' | 'year';  // 日期 X 轴的时间粒度
-        groupByField?: string;
-        // Advanced config
-        chartHeight?: number;
-        isHorizontal?: boolean;
-        showDataLabels?: boolean;
-        showYAxis?: boolean;
-        enableAnimation?: boolean;
-        sortOrder?: 'asc' | 'desc' | 'none';
-        topN?: number;
-        innerRadius?: number;
-        outerRadius?: number;
-        colorScheme?: 'default' | 'warm' | 'cool' | 'monochrome';
-        showTrendLine?: boolean;
-        smoothLine?: boolean;
-        // Y-axis configuration
-        yAxisConfig?: {
-            label?: string;
-            min?: number;
-            max?: number;
-            tickCount?: number;
-            showAxisLine?: boolean;
-            tickFormatter?: 'number' | 'percent' | 'currency' | 'compact';
-        };
-    };
-}
-
-// Y轴配置
-export interface YAxisConfig {
-    fieldId: string;
-    color: string;
-    label?: string;
-    stackId?: string;  // For stacked charts
-}
-
-// 筛选配置
-export interface FilterConfig {
-    id: string;
-    fieldId: string;
-    operator: FilterOperator;
-    value: any;
-    conjunction?: 'and' | 'or';
-}
-
-export enum FilterOperator {
-    EQUALS = 'equals',
-    NOT_EQUALS = 'not_equals',
-    CONTAINS = 'contains',
-    NOT_CONTAINS = 'not_contains',
-    IS_EMPTY = 'is_empty',
-    IS_NOT_EMPTY = 'is_not_empty',
-    GREATER_THAN = 'greater_than',
-    LESS_THAN = 'less_than',
-    GREATER_THAN_OR_EQUAL = 'greater_than_or_equal',
-    LESS_THAN_OR_EQUAL = 'less_than_or_equal',
-    IS_ANY_OF = 'is_any_of',
-    IS_NONE_OF = 'is_none_of',
-}
-
-// 排序配置
-export interface SortConfig {
-    id: string;
-    fieldId: string;
-    direction: 'asc' | 'desc';
-}
-
-// 分组配置
-export interface GroupConfig {
-    fieldId: string;
-    order?: 'asc' | 'desc';
-}
-
-// 记录数据
-export interface RecordData {
-    id: string;
-    [key: string]: any;
-    content?: any; // Tiptap JSON document content for record body/page
-    createdTime?: string;
-    updatedTime?: string;
-    createdBy?: Person;
-    updatedBy?: Person;
-    order?: number; // 看板/表格组内手动排序位置
-}
-
-// Bitable节点属性
+/** Bitable node attributes — stored in the ProseMirror node. */
 export interface BitableAttrs {
     fields: FieldConfig[];
     views: ViewConfig[];

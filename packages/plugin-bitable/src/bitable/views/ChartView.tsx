@@ -1,14 +1,8 @@
 import React, { useState, useEffect } from "react";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardDescription,
     Button,
     ChartContainer,
     cn,
-    Badge,
-    Separator,
 } from "@kn/ui";
 import {
     Settings, BarChart3,
@@ -145,9 +139,9 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
         // 配置引用的字段已被删除：给出明确提示而非空白
         if (chartError) {
             return (
-                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2">
-                    <Circle className="h-12 w-12 opacity-20" />
-                    <span className="text-sm">
+                <div className="bitable-chart-empty">
+                    <Circle className="bitable-chart-empty__icon" />
+                    <span className="bitable-chart-empty__text">
                         {chartError.type === 'missing-x'
                             ? t('bitable.chartView.missingXField')
                             : t('bitable.chartView.missingYField')}
@@ -164,9 +158,9 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
 
         if (!chartConfig.xAxisField) {
             return (
-                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2">
-                    <BarChart3 className="h-12 w-12 opacity-20" />
-                    <span>{t('bitable.chartView.selectXAxis')}</span>
+                <div className="bitable-chart-empty">
+                    <BarChart3 className="bitable-chart-empty__icon" />
+                    <span className="bitable-chart-empty__text">{t('bitable.chartView.selectXAxis')}</span>
                 </div>
             );
         }
@@ -178,9 +172,9 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
             chartConfig.yAxisFields.length === 0 &&
             chartConfig.aggregation !== 'count') {
             return (
-                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2">
-                    <BarChart3 className="h-12 w-12 opacity-20" />
-                    <span>{t('bitable.chartView.selectYAxis')}</span>
+                <div className="bitable-chart-empty">
+                    <BarChart3 className="bitable-chart-empty__icon" />
+                    <span className="bitable-chart-empty__text">{t('bitable.chartView.selectYAxis')}</span>
                 </div>
             );
         }
@@ -271,9 +265,9 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
             case ChartType.SCATTER:
                 if (chartConfig.yAxisFields.length < 2) {
                     return (
-                        <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2">
-                            <CircleDot className="h-12 w-12 opacity-20" />
-                            <span>{t('bitable.chartView.scatterNeedsTwoFields')}</span>
+                        <div className="bitable-chart-empty">
+                            <CircleDot className="bitable-chart-empty__icon" />
+                            <span className="bitable-chart-empty__text">{t('bitable.chartView.scatterNeedsTwoFields')}</span>
                         </div>
                     );
                 }
@@ -305,64 +299,58 @@ export const ChartView: React.FC<ChartViewProps> = (props) => {
     };
 
     return (
-        <div className={cn("relative", isFullscreen && "fixed inset-0 z-50 bg-background p-4")}>
-            <Card className={cn("border-none shadow-none", isFullscreen && "h-full flex flex-col")}>
-                <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                            {chartConfig.title ? (
-                                <h3 className="text-lg font-semibold">{chartConfig.title}</h3>
-                            ) : (
-                                <div className="flex items-center gap-2">
-                                    {getChartTypeIcon(chartConfig.chartType)}
-                                    <span className="text-sm text-muted-foreground">
-                                        {t(`bitable.chartView.${chartConfig.chartType}Chart`)}
-                                    </span>
-                                </div>
-                            )}
-                            {chartConfig.description && (
-                                <CardDescription>{chartConfig.description}</CardDescription>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                            {/* 数据统计徽章 */}
-                            {dataStats.total > 0 && (
-                                <div className="hidden sm:flex items-center gap-2 mr-2">
-                                    <Badge variant="secondary" className="text-xs">
-                                        {dataStats.total} {t('bitable.chartView.records')}
-                                    </Badge>
-                                    <Badge variant="secondary" className="text-xs">
-                                        {dataStats.categories} {t('bitable.chartView.categories')}
-                                    </Badge>
-                                </div>
-                            )}
-                            {/* 全屏按钮 */}
-                            <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => setIsFullscreen(!isFullscreen)}
-                            >
-                                {isFullscreen ? <X className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                            </Button>
-                            {editable && (
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setConfigOpen(!configOpen)}
-                                >
-                                    <Settings className="h-4 w-4 mr-1" />
-                                    {t('bitable.chartView.configure')}
-                                </Button>
-                            )}
-                        </div>
+        <div className={cn("bitable-chart", isFullscreen && "bitable-chart--fullscreen")}>
+            <div className="bitable-chart__card">
+                <div className="bitable-chart__header">
+                    <div className="flex-1">
+                        {chartConfig.title ? (
+                            <h3 className="bitable-chart__title">{chartConfig.title}</h3>
+                        ) : (
+                            <div className="bitable-chart__type-label">
+                                {getChartTypeIcon(chartConfig.chartType)}
+                                <span>{t(`bitable.chartView.${chartConfig.chartType}Chart`)}</span>
+                            </div>
+                        )}
+                        {chartConfig.description && (
+                            <p className="bitable-chart__desc">{chartConfig.description}</p>
+                        )}
                     </div>
-                </CardHeader>
-                <CardContent className={cn(isFullscreen && "flex-1")}>
+                    <div className="bitable-chart__actions">
+                        {dataStats.total > 0 && (
+                            <div className="bitable-chart__stats">
+                                <span className="bitable-chart__stat">
+                                    {dataStats.total} {t('bitable.chartView.records')}
+                                </span>
+                                <span className="bitable-chart__stat">
+                                    {dataStats.categories} {t('bitable.chartView.categories')}
+                                </span>
+                            </div>
+                        )}
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => setIsFullscreen(!isFullscreen)}
+                        >
+                            {isFullscreen ? <X className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                        </Button>
+                        {editable && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setConfigOpen(!configOpen)}
+                            >
+                                <Settings className="h-4 w-4 mr-1" />
+                                {t('bitable.chartView.configure')}
+                            </Button>
+                        )}
+                    </div>
+                </div>
+                <div className="bitable-chart__body">
                     {renderChart()}
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
-            {/* 配置面板 */}
+            {/* Inline config panel */}
             {configOpen && editable && (
                 <ChartConfigPanel
                     view={view}

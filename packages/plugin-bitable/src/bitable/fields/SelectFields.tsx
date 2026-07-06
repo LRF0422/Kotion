@@ -9,14 +9,15 @@ import { FieldRendererProps, FieldEditorProps } from "./types";
 // ---------------------------------------------------------------------------
 
 export const SelectRenderer: React.FC<FieldRendererProps> = ({ value, field }) => {
+    if (!value) return <div className="bitable-field-empty" />;
     const option = field.options?.find((opt: SelectOption) => opt.id === value);
-    if (!option) return <div></div>;
+    if (!option) return <div className="bitable-field-empty" />;
 
     const style = getTagStyle(option.color);
 
     return (
         <span
-            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+            className="bitable-tag"
             style={{ backgroundColor: style.bg, color: style.text }}
         >
             {option.label}
@@ -66,7 +67,7 @@ export const SelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChang
     return (
         <div
             ref={containerRef}
-            className="absolute left-0 top-full z-50 w-max min-w-full bg-popover border border-border rounded-md shadow-md p-1 space-y-0.5 overflow-auto max-h-[200px]"
+            className="bitable-select-editor"
             onKeyDown={handleKeyDown}
             tabIndex={0}
         >
@@ -76,19 +77,19 @@ export const SelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChang
                 return (
                     <div
                         key={opt.id}
-                        className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${index === highlightedIndex ? "bg-accent" : "hover:bg-accent/50"}`}
+                        className={`bitable-select-editor__option${index === highlightedIndex ? " bitable-select-editor__option--active" : ""}`}
                         onClick={() => onChange(opt.id)}
                         onMouseEnter={() => setHighlightedIndex(index)}
                     >
                         <span
-                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                            className="bitable-tag"
                             style={{ backgroundColor: style.bg, color: style.text }}
                         >
                             {opt.label}
                         </span>
                         {isSelected && (
                             <svg
-                                className="ml-auto h-3.5 w-3.5 text-blue-500"
+                                className="bitable-select-editor__check"
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
@@ -111,10 +112,10 @@ export const SelectEditor: React.FC<FieldEditorProps> = ({ value, field, onChang
 // ---------------------------------------------------------------------------
 
 export const MultiSelectRenderer: React.FC<FieldRendererProps> = ({ value, field }) => {
-    if (!Array.isArray(value) || value.length === 0) return <div></div>;
+    if (!Array.isArray(value) || value.length === 0) return <div className="bitable-field-empty" />;
 
     return (
-        <div className="flex flex-wrap gap-1">
+        <div className="bitable-tag-group">
             {value.map((id) => {
                 const option = field.options?.find((opt: SelectOption) => opt.id === id);
                 if (!option) return null;
@@ -122,7 +123,7 @@ export const MultiSelectRenderer: React.FC<FieldRendererProps> = ({ value, field
                 return (
                     <span
                         key={id}
-                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                        className="bitable-tag"
                         style={{ backgroundColor: style.bg, color: style.text }}
                     >
                         {option.label}
@@ -178,7 +179,7 @@ export const MultiSelectEditor: React.FC<FieldEditorProps> = ({ value, field, on
     return (
         <div
             ref={containerRef}
-            className="absolute left-0 top-full z-50 w-max min-w-full bg-popover border border-border rounded-md shadow-md p-1 space-y-0.5 overflow-auto max-h-[200px]"
+            className="bitable-select-editor"
             onKeyDown={handleKeyDown}
             tabIndex={0}
         >
@@ -188,13 +189,13 @@ export const MultiSelectEditor: React.FC<FieldEditorProps> = ({ value, field, on
                 return (
                     <div
                         key={opt.id}
-                        className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${index === focusedIndex ? "bg-accent" : "hover:bg-accent/50"}`}
+                        className={`bitable-select-editor__option${index === focusedIndex ? " bitable-select-editor__option--active" : ""}`}
                         onClick={() => toggleOption(opt.id)}
                         onMouseEnter={() => setFocusedIndex(index)}
                     >
                         <Checkbox checked={isChecked} className="pointer-events-none" />
                         <span
-                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                            className="bitable-tag"
                             style={{ backgroundColor: style.bg, color: style.text }}
                         >
                             {opt.label}

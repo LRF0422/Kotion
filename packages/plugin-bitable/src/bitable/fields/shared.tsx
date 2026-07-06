@@ -59,18 +59,18 @@ export const PersonChip: React.FC<{ person: Person; onRemove?: () => void }> = (
     person,
     onRemove,
 }) => (
-    <span className="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs">
+    <span className="bitable-person-chip">
         {person.avatar ? (
-            <img src={person.avatar} alt="" className="h-4 w-4 rounded-full object-cover" />
+            <img src={person.avatar} alt="" className="bitable-person-chip__avatar" />
         ) : (
-            <span className="h-4 w-4 rounded-full bg-blue-500 text-white flex items-center justify-center text-[9px]">
+            <span className="bitable-person-chip__avatar-fallback">
                 {(person.name || "?").slice(0, 1).toUpperCase()}
             </span>
         )}
-        <span className="text-gray-700 dark:text-gray-200 truncate max-w-[120px]">{person.name}</span>
+        <span className="bitable-person-chip__name">{person.name}</span>
         {onRemove && (
-            <button onClick={onRemove} className="ml-0.5 text-gray-400 hover:text-red-500">
-                <X className="h-3 w-3" />
+            <button onClick={onRemove} className="bitable-person-chip__remove">
+                <X />
             </button>
         )}
     </span>

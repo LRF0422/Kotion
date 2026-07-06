@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Button } from "@kn/ui";
+import { cn } from "@kn/ui";
 import { useTranslation } from "@kn/common";
 import { Check } from "@kn/icon";
 import { FieldConfig, FieldType, RecordData, ViewConfig } from "../../types";
@@ -52,32 +52,35 @@ export const FormView: React.FC<FormViewProps> = ({ view, fields, editable, onCr
     };
 
     return (
-        <div className="h-full overflow-auto bg-gray-50 dark:bg-background py-6 px-3 md:py-10">
-            <div className="mx-auto w-full max-w-xl rounded-lg border border-gray-200 dark:border-border bg-white dark:bg-card shadow-sm">
+        <div className="bitable-form">
+            <div className="bitable-form__card">
                 {/* Header */}
-                <div className="border-b border-gray-200 dark:border-border px-5 py-4">
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <div className="bitable-form__header">
+                    <h2 className="bitable-form__title">
                         {formConfig?.title || view.name}
                     </h2>
                     {formConfig?.description && (
-                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        <p className="bitable-form__desc">
                             {formConfig.description}
                         </p>
                     )}
                 </div>
 
                 {/* Fields */}
-                <div className="space-y-4 px-5 py-5">
+                <div className="bitable-form__body">
                     {formFields.length === 0 && (
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                        <div className="bitable-form__empty">
                             {t('bitable.form.noFields', 'No fillable fields')}
                         </div>
                     )}
                     {formFields.map(field => (
-                        <div key={field.id} className="space-y-1.5">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        <div key={field.id} className="bitable-form__field">
+                            <label className="bitable-form__field-label">
                                 {field.title}
                             </label>
+                            {field.description && (
+                                <p className="bitable-form__field-desc">{field.description}</p>
+                            )}
                             <DetailFieldValue
                                 field={field}
                                 value={draft[field.id]}
@@ -91,16 +94,13 @@ export const FormView: React.FC<FormViewProps> = ({ view, fields, editable, onCr
 
                 {/* Footer */}
                 {editable && formFields.length > 0 && (
-                    <div className="flex items-center gap-3 border-t border-gray-200 dark:border-border px-5 py-4">
-                        <Button
-                            onClick={handleSubmit}
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
-                        >
+                    <div className="bitable-form__footer">
+                        <button className="bitable-form__submit" onClick={handleSubmit}>
                             {formConfig?.submitLabel || t('bitable.form.submit', 'Submit')}
-                        </Button>
+                        </button>
                         {justSubmitted && (
-                            <span className="inline-flex items-center text-sm text-green-600 dark:text-green-400">
-                                <Check className="h-3.5 w-3.5 mr-1" />
+                            <span className="bitable-form__success">
+                                <Check className="bitable-form__success-icon" />
                                 {t('bitable.form.submitted', 'Submitted')}
                             </span>
                         )}
