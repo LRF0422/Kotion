@@ -29,6 +29,7 @@ export function convertFieldValue(
     // Convert based on target type
     switch (toType) {
         case FieldType.TEXT:
+        case FieldType.LONG_TEXT:
             return convertToText(value, fromType);
 
         case FieldType.NUMBER:
@@ -98,7 +99,7 @@ function convertToNumber(value: any, fromType: FieldType): number {
         return value ? 1 : 0;
     }
 
-    if (fromType === FieldType.TEXT) {
+    if (fromType === FieldType.TEXT || fromType === FieldType.LONG_TEXT) {
         const parsed = parseFloat(value);
         return isNaN(parsed) ? 0 : parsed;
     }
@@ -119,7 +120,7 @@ function convertToNumber(value: any, fromType: FieldType): number {
  * Convert value to date
  */
 function convertToDate(value: any, fromType: FieldType): string | null {
-    if (fromType === FieldType.TEXT) {
+    if (fromType === FieldType.TEXT || fromType === FieldType.LONG_TEXT) {
         const date = new Date(value);
         return isNaN(date.getTime()) ? null : date.toISOString();
     }
@@ -149,7 +150,7 @@ function convertToCheckbox(value: any, fromType: FieldType): boolean {
         return Number(value) > 0;
     }
 
-    if (fromType === FieldType.TEXT) {
+    if (fromType === FieldType.TEXT || fromType === FieldType.LONG_TEXT) {
         const lowerValue = String(value).toLowerCase().trim();
         return ['true', 'yes', '1', 'checked', 'on', '是', '对', '真'].includes(lowerValue);
     }
@@ -235,7 +236,7 @@ function convertToRating(value: any, fromType: FieldType, fieldConfig?: FieldCon
         return value ? maxRating : 0;
     }
 
-    if (fromType === FieldType.TEXT) {
+    if (fromType === FieldType.TEXT || fromType === FieldType.LONG_TEXT) {
         const num = parseFloat(value);
         if (!isNaN(num)) {
             return Math.max(0, Math.min(maxRating, Math.round(num)));
@@ -273,7 +274,7 @@ function convertToProgress(value: any, fromType: FieldType): number {
         return value ? 100 : 0;
     }
 
-    if (fromType === FieldType.TEXT) {
+    if (fromType === FieldType.TEXT || fromType === FieldType.LONG_TEXT) {
         const num = parseFloat(value);
         if (!isNaN(num)) {
             return Math.max(0, Math.min(100, Math.round(num)));
@@ -289,6 +290,7 @@ function convertToProgress(value: any, fromType: FieldType): number {
 function getDefaultValueForType(type: FieldType): any {
     switch (type) {
         case FieldType.TEXT:
+        case FieldType.LONG_TEXT:
         case FieldType.URL:
         case FieldType.EMAIL:
         case FieldType.PHONE:
@@ -360,7 +362,7 @@ export function getConversionWarning(fromType: FieldType, toType: FieldType): st
 
     // Converting from complex types to text
     if ([FieldType.MULTI_SELECT, FieldType.SELECT].includes(fromType) &&
-        [FieldType.TEXT, FieldType.URL, FieldType.EMAIL, FieldType.PHONE].includes(toType)) {
+        [FieldType.TEXT, FieldType.LONG_TEXT, FieldType.URL, FieldType.EMAIL, FieldType.PHONE].includes(toType)) {
         return 'Converting to text will lose the structured option data.';
     }
 

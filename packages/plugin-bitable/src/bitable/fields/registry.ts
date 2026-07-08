@@ -1,7 +1,7 @@
 import React from "react";
 import { FieldType } from "../../types";
 import { FieldRendererProps, FieldEditorProps } from "./types";
-import { TextRenderer, TextEditor, NumberRenderer, NumberEditor, IDRenderer, IDEditor } from "./TextFields";
+import { TextRenderer, TextEditor, LongTextRenderer, LongTextEditor, NumberRenderer, NumberEditor, IDRenderer, IDEditor } from "./TextFields";
 import { SelectRenderer, SelectEditor, MultiSelectRenderer, MultiSelectEditor } from "./SelectFields";
 import { DateRenderer, DateEditor } from "./DateFields";
 import { CheckboxRenderer, CheckboxEditor, ProgressRenderer, ProgressEditor, RatingRenderer, RatingEditor } from "./ToggleFields";
@@ -18,6 +18,7 @@ type EditorComponent = React.FC<FieldEditorProps>;
  */
 const rendererRegistry: Partial<Record<FieldType, RendererComponent>> = {
     [FieldType.TEXT]: TextRenderer,
+    [FieldType.LONG_TEXT]: LongTextRenderer,
     [FieldType.NUMBER]: NumberRenderer,
     [FieldType.SELECT]: SelectRenderer,
     [FieldType.MULTI_SELECT]: MultiSelectRenderer,
@@ -44,6 +45,7 @@ const rendererRegistry: Partial<Record<FieldType, RendererComponent>> = {
  */
 const editorRegistry: Partial<Record<FieldType, EditorComponent>> = {
     [FieldType.TEXT]: TextEditor,
+    [FieldType.LONG_TEXT]: LongTextEditor,
     [FieldType.NUMBER]: NumberEditor,
     [FieldType.SELECT]: SelectEditor,
     [FieldType.MULTI_SELECT]: MultiSelectEditor,

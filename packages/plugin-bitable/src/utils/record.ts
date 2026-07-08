@@ -35,6 +35,10 @@ export function createEmptyRecord(
             case FieldType.MULTI_SELECT:
                 record[field.id] = [];
                 break;
+            case FieldType.TEXT:
+            case FieldType.LONG_TEXT:
+                record[field.id] = '';
+                break;
             case FieldType.CREATED_BY:
             case FieldType.UPDATED_BY:
                 record[field.id] = currentUser ?? null;

@@ -51,7 +51,7 @@ export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
         if (titleRef.current && activeRecord) {
             const titleField = fields.find(
                 (f) =>
-                    f.type === FieldType.TEXT && f.isShow !== false
+                    (f.type === FieldType.TEXT || f.type === FieldType.LONG_TEXT) && f.isShow !== false
             );
             const title = titleField
                 ? String(activeRecord[titleField.id] || "")
@@ -72,7 +72,7 @@ export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
     if (!activeRecord) return null;
 
     const titleField = fields.find(
-        (f) => f.type === FieldType.TEXT && f.isShow !== false
+        (f) => (f.type === FieldType.TEXT || f.type === FieldType.LONG_TEXT) && f.isShow !== false
     );
     const idField = fields.find((f) => f.type === FieldType.ID);
 

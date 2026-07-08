@@ -8,7 +8,6 @@ import {
     KANBAN_UNASSIGNED,
     type KanbanColumn as KanbanColumnData,
 } from "../../../utils/kanbanGroups";
-import { generateRecordId } from "../../../utils/id";
 import { KanbanDndProvider } from "./dnd";
 import { KanbanToolbar } from "./KanbanToolbar";
 import { KanbanColumn } from "./KanbanColumn";
@@ -18,6 +17,7 @@ interface KanbanViewProps {
     fields: FieldConfig[];
     data: RecordData[];
     onAddRecord: () => void;
+    onCreateRecord: (values: Partial<RecordData>) => void;
     onUpdateRecord: (recordId: string, updates: Partial<RecordData>) => void;
     onDeleteRecord: (recordIds: string[]) => void;
     onUpdateField: (fieldId: string, updates: Partial<FieldConfig>) => void;
@@ -32,6 +32,7 @@ export const KanbanView: React.FC<KanbanViewProps> = (props) => {
         fields,
         data,
         onAddRecord,
+        onCreateRecord,
         onUpdateRecord,
         onUpdateField,
         onUpdateView,
@@ -161,16 +162,11 @@ export const KanbanView: React.FC<KanbanViewProps> = (props) => {
                 onAddRecord();
                 return;
             }
-            const now = new Date().toISOString();
-            const newRecord: RecordData = {
-                id: generateRecordId(),
+            onCreateRecord({
                 [groupByField.id]: valueForColumnKey(groupByField, columnKey),
-                createdTime: now,
-                updatedTime: now,
-            };
-            onUpdateRecord(newRecord.id, newRecord);
+            });
         },
-        [groupByField, onAddRecord, onUpdateRecord]
+        [groupByField, onAddRecord, onCreateRecord]
     );
 
     // --- No group field configured ---

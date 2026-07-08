@@ -41,6 +41,7 @@ function getDefaultFormat(type: FieldType): string {
         case FieldType.NUMBER: return "number";
         case FieldType.DATE: return "yyyy-MM-dd";
         case FieldType.TEXT: return "single";
+        case FieldType.LONG_TEXT: return "";
         case FieldType.RATING: return "5";
         case FieldType.PROGRESS: return "bar";
         case FieldType.URL:

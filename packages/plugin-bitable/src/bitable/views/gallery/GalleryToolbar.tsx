@@ -71,7 +71,7 @@ export const GalleryToolbar: React.FC<GalleryToolbarProps> = ({
 
     const titleField = fields.find(
         (f) =>
-            f.type === FieldType.TEXT &&
+            (f.type === FieldType.TEXT || f.type === FieldType.LONG_TEXT) &&
             f.id !== coverField?.id &&
             f.isShow !== false
     );

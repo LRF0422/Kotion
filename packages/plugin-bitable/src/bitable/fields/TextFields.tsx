@@ -58,6 +58,46 @@ export const TextEditor: React.FC<FieldEditorProps> = ({ value, onChange, onComm
 };
 
 // ---------------------------------------------------------------------------
+// Long text (multi-line) field
+// ---------------------------------------------------------------------------
+
+export const LongTextRenderer: React.FC<FieldRendererProps> = ({ value }) => {
+    const text = toText(value);
+    if (!text) return <div className="bitable-field-empty" />;
+    return (
+        <div className="bitable-field-long-text">
+            {text}
+        </div>
+    );
+};
+
+export const LongTextEditor: React.FC<FieldEditorProps> = ({ value, onChange, onCommit }) => {
+    const displayValue = toText(value);
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            onCommit?.();
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            e.currentTarget.blur();
+        }
+    };
+
+    return (
+        <textarea
+            autoFocus
+            value={displayValue}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="bitable-long-text-editor"
+            placeholder="..."
+            rows={3}
+        />
+    );
+};
+
+// ---------------------------------------------------------------------------
 // Number field
 // ---------------------------------------------------------------------------
 

@@ -6,6 +6,7 @@
 import React from "react";
 import {
     Type,
+    AlignLeft,
     Hash,
     Calendar,
     CheckSquare,
@@ -40,6 +41,8 @@ export function getFieldTypeIcon(type: FieldType, className?: string): React.Rea
     switch (type) {
         case FieldType.TEXT:
             return <Type className={cls} />;
+        case FieldType.LONG_TEXT:
+            return <AlignLeft className={cls} />;
         case FieldType.NUMBER:
             return <Hash className={cls} />;
         case FieldType.DATE:

@@ -130,13 +130,18 @@ export const FieldConfigItem: React.FC<FieldConfigItemProps> = ({
                     )}
                 </Button>
 
-                {/* Field info — click to open property form */}
+                {/* Field info — unified layout for locked and non-locked items */}
                 {isLocked ? (
                     <div className="bitable-field-config__item-info bitable-field-config__item-info--locked">
-                        <div>
-                            <div className="font-medium text-sm truncate">{field.title}</div>
-                            <div className="text-xs text-muted-foreground">
-                                {t(`bitable.fieldTypes.${field.type}`) || field.type}
+                        <div className="bitable-field-config__item-content">
+                            <span className="bitable-field-config__field-icon text-muted-foreground">
+                                {getFieldTypeIcon(field.type)}
+                            </span>
+                            <div className="bitable-field-config__field-text">
+                                <div className="bitable-field-config__field-title">{field.title}</div>
+                                <div className="bitable-field-config__field-type">
+                                    {t(`bitable.fieldTypes.${field.type}`) || field.type}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -153,20 +158,20 @@ export const FieldConfigItem: React.FC<FieldConfigItemProps> = ({
                         }
                     >
                         <div className="bitable-field-config__item-info">
-                            <div className="flex items-center gap-2">
-                                <span className="text-muted-foreground">
+                            <div className="bitable-field-config__item-content">
+                                <span className="bitable-field-config__field-icon text-muted-foreground">
                                     {getFieldTypeIcon(field.type)}
                                 </span>
-                                <div>
-                                    <div className="font-medium text-sm truncate">
+                                <div className="bitable-field-config__field-text">
+                                    <div className="bitable-field-config__field-title">
                                         {field.title}
                                     </div>
-                                    <div className="text-xs text-muted-foreground">
+                                    <div className="bitable-field-config__field-type">
                                         {t(`bitable.fieldTypes.${field.type}`) || field.type}
                                     </div>
                                 </div>
                             </div>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <ChevronRight className="bitable-field-config__chevron h-4 w-4 text-muted-foreground" />
                         </div>
                     </FieldPropertyForm>
                 )}

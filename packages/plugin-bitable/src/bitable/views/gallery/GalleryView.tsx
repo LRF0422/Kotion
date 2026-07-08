@@ -42,7 +42,7 @@ export const GalleryView: React.FC<GalleryViewProps> = (props) => {
     // Find title field (first text field that's not the cover)
     const titleField = fields.find(
         (f) =>
-            f.type === FieldType.TEXT &&
+            (f.type === FieldType.TEXT || f.type === FieldType.LONG_TEXT) &&
             f.id !== coverField?.id &&
             f.isShow !== false
     );

@@ -1,6 +1,7 @@
 import React from "react";
 import {
     Input,
+    Textarea,
     Checkbox,
     Slider,
 } from "@kn/ui";
@@ -8,6 +9,7 @@ import { DateTimePicker, Rate } from "@kn/ui";
 import { useTranslation } from "@kn/common";
 import {
     Type,
+    AlignLeft,
     Hash,
     Calendar,
     CheckSquare,
@@ -76,6 +78,7 @@ export const getFieldIcon = (type: FieldType) => {
     const cls = "h-3.5 w-3.5 shrink-0 text-muted-foreground";
     switch (type) {
         case FieldType.TEXT: return <Type className={cls} />;
+        case FieldType.LONG_TEXT: return <AlignLeft className={cls} />;
         case FieldType.NUMBER: return <Hash className={cls} />;
         case FieldType.DATE: return <Calendar className={cls} />;
         case FieldType.CHECKBOX: return <CheckSquare className={cls} />;
@@ -105,6 +108,23 @@ const DetailText: React.FC<{ value: any; onChange: (v: string) => void; editable
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
             className={inputClass}
+        />
+    );
+};
+
+const DetailLongText: React.FC<{ value: any; onChange: (v: string) => void; editable: boolean }> = ({ value, onChange, editable }) => {
+    if (!editable) {
+        if (!value) return <span className="text-sm text-muted-foreground">-</span>;
+        return (
+            <div className="text-sm whitespace-pre-wrap break-words">{value}</div>
+        );
+    }
+    return (
+        <Textarea
+            value={value || ''}
+            onChange={(e) => onChange(e.target.value)}
+            className="min-h-[80px] text-sm resize-y"
+            placeholder="..."
         />
     );
 };
@@ -354,6 +374,9 @@ export const DetailFieldValue: React.FC<{
             break;
         case FieldType.TEXT:
             content = <DetailText value={value} onChange={onChange} editable={!isReadonly} />;
+            break;
+        case FieldType.LONG_TEXT:
+            content = <DetailLongText value={value} onChange={onChange} editable={!isReadonly} />;
             break;
         case FieldType.NUMBER:
             content = <DetailNumber value={value} field={field} onChange={onChange} editable={!isReadonly} />;

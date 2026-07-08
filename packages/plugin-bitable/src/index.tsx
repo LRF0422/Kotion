@@ -63,6 +63,7 @@ export const bitable = new BitablePlugin({
                     // Field types
                     "fieldTypes": {
                         "text": "Text",
+                        "longText": "Long Text",
                         "number": "Number",
                         "select": "Select",
                         "multiSelect": "Multi-Select",
@@ -196,6 +197,7 @@ export const bitable = new BitablePlugin({
                     "kanbanView": {
                         "uncategorized": "Uncategorized",
                         "addCard": "Add Card",
+                        "noRecords": "No records",
                         "configureGroupField": "Please configure the group field for the Kanban view",
                         "notSelectType": "The group field must be a Select type",
                         "notGroupableType": "This field type cannot be used to group the Kanban view",
@@ -451,6 +453,7 @@ export const bitable = new BitablePlugin({
                     // Field types
                     "fieldTypes": {
                         "text": "文本",
+                        "longText": "多行文本",
                         "number": "数字",
                         "select": "单选",
                         "multiSelect": "多选",
@@ -584,6 +587,7 @@ export const bitable = new BitablePlugin({
                     "kanbanView": {
                         "uncategorized": "未分组",
                         "addCard": "添加卡片",
+                        "noRecords": "暂无记录",
                         "configureGroupField": "请配置看板视图的分组字段",
                         "notSelectType": "分组字段必须为单选类型",
                         "notGroupableType": "该字段类型不支持作为看板分组",

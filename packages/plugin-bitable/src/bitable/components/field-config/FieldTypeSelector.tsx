@@ -27,6 +27,7 @@ export const FieldTypeSelector: React.FC<FieldTypeSelectorProps> = ({
 
     const allTypes: { value: FieldType; label: string }[] = [
         { value: FieldType.TEXT, label: t("bitable.fieldTypes.text") },
+        { value: FieldType.LONG_TEXT, label: tf("bitable.fieldTypes.longText", "Long Text") },
         { value: FieldType.NUMBER, label: t("bitable.fieldTypes.number") },
         { value: FieldType.SELECT, label: t("bitable.fieldTypes.select") },
         { value: FieldType.MULTI_SELECT, label: t("bitable.fieldTypes.multiSelect") },

@@ -6,6 +6,7 @@ import { Person, Attachment } from "./records";
 /** Field type enumeration — all supported field types. */
 export enum FieldType {
     TEXT = 'text',
+    LONG_TEXT = 'long_text',
     NUMBER = 'number',
     SELECT = 'select',
     MULTI_SELECT = 'multi_select',

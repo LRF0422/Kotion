@@ -19,6 +19,7 @@ const GROUPABLE_FIELD_TYPES: FieldType[] = [
     FieldType.MULTI_SELECT,
     FieldType.CHECKBOX,
     FieldType.TEXT,
+    FieldType.LONG_TEXT,
     FieldType.NUMBER,
     FieldType.DATE,
     FieldType.PERSON,

@@ -17,7 +17,7 @@ export {
 } from "./shared";
 
 // Text / Number / ID
-export { TextRenderer, TextEditor, NumberRenderer, NumberEditor, IDRenderer, IDEditor } from "./TextFields";
+export { TextRenderer, TextEditor, LongTextRenderer, LongTextEditor, NumberRenderer, NumberEditor, IDRenderer, IDEditor } from "./TextFields";
 
 // Select / MultiSelect
 export {
