@@ -2,6 +2,7 @@ package com.knowledge.agent.tool.builtin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.knowledge.agent.api.dto.ChatFunction;
 import com.knowledge.agent.api.dto.ChatTool;
 import com.knowledge.agent.api.dto.SkillPayload;
 import com.knowledge.agent.tool.*;
@@ -197,7 +198,7 @@ public class SearchSkillsTool implements Tool {
         if (tool.getFunction() == null) {
             return "";
         }
-        var fn = tool.getFunction();
+        ChatFunction fn = tool.getFunction();
         StringBuilder sb = new StringBuilder();
         sb.append(fn.getName()).append("(");
 

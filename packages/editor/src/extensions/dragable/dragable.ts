@@ -14,7 +14,7 @@ import {
 import { findParentNodeClosestToPos } from 'prosemirror-utils';
 import { Decoration, DecorationSet, EditorView } from '@tiptap/pm/view';
 import { createColumnsFromNodes } from '../columns/utilities';
-import { Node } from '@tiptap/pm/model';
+import { Node, Slice, Fragment } from '@tiptap/pm/model';
 import React from 'react';
 import { DragHandle, BlockMenuItem } from './block-menu';
 import { Editor } from '@tiptap/core';
@@ -50,6 +50,7 @@ export const Dragable = Extension.create<DragableStorage>({
     let activeNode: ActiveNode | null;
     let activeSelection: Selection | null;
     let dragging = false;
+    let draggedNodeInfo: { node: Node; pos: number } | null = null;
     let mouseleaveTimer: any = null;
     let blockMenuRoot: Root | null = null;
 
@@ -165,14 +166,19 @@ export const Dragable = Extension.create<DragableStorage>({
     const handleMouseDown = () => {
       if (!activeNode) return null;
 
+      const nodePos = activeNode.$pos.pos - activeNode.offset;
+      draggedNodeInfo = { node: activeNode.node, pos: nodePos };
+
       if (NodeSelection.isSelectable(activeNode.node)) {
-        const nodeSelection = NodeSelection.create(editorView.state.doc, activeNode.$pos.pos - activeNode.offset);
+        const nodeSelection = NodeSelection.create(editorView.state.doc, nodePos);
         editorView.dispatch(editorView.state.tr.setSelection(nodeSelection));
         editorView.focus();
         activeSelection = nodeSelection;
         return nodeSelection;
       }
 
+      // For non-selectable nodes (paragraphs, headings, etc.) we still
+      // track the node via draggedNodeInfo so the column drop logic works.
       return null;
     };
 
@@ -182,6 +188,7 @@ export const Dragable = Extension.create<DragableStorage>({
       dragging = false;
       activeSelection = null;
       activeNode = null;
+      draggedNodeInfo = null;
       hideDropZoneIndicator();
     };
 
@@ -234,20 +241,28 @@ export const Dragable = Extension.create<DragableStorage>({
 
     const handleDragStart = (event: DragEvent) => {
       dragging = true;
-      if (event.dataTransfer && activeSelection) {
-        const slice = activeSelection.content();
-        event.dataTransfer.effectAllowed = 'copyMove';
-        const { dom, text } = editorView.serializeForClipboard(slice);
-        event.dataTransfer.clearData();
-        event.dataTransfer.setData('text/html', dom.innerHTML);
-        event.dataTransfer.setData('text/plain', text);
-        event.dataTransfer.setDragImage(activeNode?.el as any, 0, 0);
+      if (!event.dataTransfer || !draggedNodeInfo) return;
 
-        editorView.dragging = {
-          slice,
-          move: true,
-        };
+      // Build the drag slice from the dragged node so that non-selectable
+      // blocks (paragraphs, headings) work the same as selectable ones.
+      let slice: Slice;
+      if (activeSelection && NodeSelection.isSelectable(draggedNodeInfo.node)) {
+        slice = activeSelection.content();
+      } else {
+        slice = new Slice(Fragment.from(draggedNodeInfo.node), 0, 0);
       }
+
+      event.dataTransfer.effectAllowed = 'copyMove';
+      const { dom, text } = editorView.serializeForClipboard(slice);
+      event.dataTransfer.clearData();
+      event.dataTransfer.setData('text/html', dom.innerHTML);
+      event.dataTransfer.setData('text/plain', text);
+      event.dataTransfer.setDragImage(activeNode?.el as any, 0, 0);
+
+      editorView.dragging = {
+        slice,
+        move: true,
+      };
     };
 
     return [
@@ -290,7 +305,7 @@ export const Dragable = Extension.create<DragableStorage>({
         props: {
           handleDOMEvents: {
             dragover: (view, event: DragEvent) => {
-              if (!view.editable || !dragging || !activeSelection) return false;
+              if (!view.editable || !dragging || !draggedNodeInfo) return false;
 
               const coords = { left: event.clientX, top: event.clientY };
               const pos = view.posAtCoords(coords);
@@ -358,7 +373,7 @@ export const Dragable = Extension.create<DragableStorage>({
               // Skip column-split for these on EITHER the dragged or target side,
               // falling back to normal drag-drop.
               const noColumnTypes = ['listItem', 'taskItem', 'columns', 'column'];
-              const draggedTypeName = activeSelection.content().content.firstChild?.type.name;
+              const draggedTypeName = draggedNodeInfo.node.type.name;
               if (
                 noColumnTypes.includes(result.node.type.name) ||
                 (draggedTypeName && noColumnTypes.includes(draggedTypeName))
@@ -368,7 +383,7 @@ export const Dragable = Extension.create<DragableStorage>({
               }
 
               // Don't drop on itself
-              const draggedPos = (activeSelection as NodeSelection).from;
+              const draggedPos = draggedNodeInfo.pos;
               const targetPos = result.$pos.pos - result.offset;
               if (targetPos === draggedPos) {
                 hideDropZoneIndicator();
@@ -376,7 +391,7 @@ export const Dragable = Extension.create<DragableStorage>({
               }
 
               // Don't drop on parent or child of dragged node
-              const draggedNode = activeSelection.content().content.firstChild;
+              const draggedNode = draggedNodeInfo.node;
               if (draggedNode) {
                 const draggedEnd = draggedPos + draggedNode.nodeSize;
                 // Target is inside dragged node
@@ -416,14 +431,14 @@ export const Dragable = Extension.create<DragableStorage>({
             },
             drop: (view, event: DragEvent) => {
               if (!view.editable || !containerDOM) return false;
-              if (!activeSelection) return false;
+              if (!draggedNodeInfo) return false;
 
               // Always clear the column drop timer on any drop
               clearTimeout(columnDropTimer);
 
               // Check if we should create columns
-              if (dropZoneTarget && dropZoneIndicator?.style.display === 'block') {
-                const draggedNode = activeSelection.content().content.firstChild;
+              if (dropZoneTarget) {
+                const draggedNode = draggedNodeInfo.node;
 
                 const columnsNode = draggedNode
                   ? createColumnsFromNodes(
@@ -441,7 +456,7 @@ export const Dragable = Extension.create<DragableStorage>({
 
                   try {
                     const tr = view.state.tr;
-                    const draggedPos = (activeSelection as NodeSelection).from;
+                    const draggedPos = draggedNodeInfo.pos;
                     const targetPos = dropZoneTarget.pos;
 
                     // Delete dragged node first if it's before target
@@ -468,6 +483,7 @@ export const Dragable = Extension.create<DragableStorage>({
                   hideDropZoneIndicator();
                   activeSelection = null;
                   activeNode = null;
+                  draggedNodeInfo = null;
                   dragging = false;
 
                   return true;
@@ -500,6 +516,7 @@ export const Dragable = Extension.create<DragableStorage>({
                   activeSelection = null;
                   activeNode = null;
                 }
+                draggedNodeInfo = null;
               }, 100);
 
               if (!eventPos) {
@@ -639,6 +656,8 @@ export const Dragable = Extension.create<DragableStorage>({
             dragend: () => {
               hideDropZoneIndicator();
               dragging = false;
+              activeSelection = null;
+              draggedNodeInfo = null;
               return false;
             },
           },
