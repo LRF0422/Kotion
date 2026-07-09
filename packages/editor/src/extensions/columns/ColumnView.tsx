@@ -12,12 +12,10 @@ interface ResizeState {
 
 export const ColumnView: React.FC<NodeViewProps> = React.memo((props) => {
 
-    const { editor, getPos, node, updateAttributes } = props
+    const { editor, getPos, node } = props
     const ref = useRef<HTMLDivElement>(null)
-    const resizeHandleRef = useRef<HTMLDivElement>(null)
     const [resizeState, setResizeState] = useState<ResizeState | null>(null)
 
-    const currentWidth = node.attrs.width || 100 / node.attrs.cols;
     const isLastColumn = node.attrs.index === node.attrs.cols - 1;
 
     const handleDelete = useCallback(() => {
@@ -41,7 +39,6 @@ export const ColumnView: React.FC<NodeViewProps> = React.memo((props) => {
         const nextColumnView = currentColumnView?.nextElementSibling as HTMLElement;
 
         if (!currentColumnView || !nextColumnView) {
-            console.log('Could not find column views');
             return;
         }
 
@@ -105,22 +102,28 @@ export const ColumnView: React.FC<NodeViewProps> = React.memo((props) => {
             const nextFinalWidth = nextColumnView.offsetWidth;
             const nextFinalWidthPercent = (nextFinalWidth / containerWidth) * 100;
 
-            // Update attributes to persist the new widths
+            // Persist new widths in a single transaction
             const pos = getPos();
-            if (pos !== undefined && updateAttributes) {
-                updateAttributes({ width: finalWidthPercent });
+            if (pos !== undefined) {
+                const tr = editor.state.tr;
 
-                // Update next sibling's width
+                // Update current column width
+                tr.setNodeMarkup(pos, undefined, {
+                    ...node.attrs,
+                    width: finalWidthPercent
+                });
+
+                // Update next sibling's width in the same transaction
                 const nextPos = pos + node.nodeSize;
                 const nextNode = editor.state.doc.nodeAt(nextPos);
                 if (nextNode) {
-                    editor.view.dispatch(
-                        editor.state.tr.setNodeMarkup(nextPos, undefined, {
-                            ...nextNode.attrs,
-                            width: nextFinalWidthPercent
-                        })
-                    );
+                    tr.setNodeMarkup(nextPos, undefined, {
+                        ...nextNode.attrs,
+                        width: nextFinalWidthPercent
+                    });
                 }
+
+                editor.view.dispatch(tr);
             }
 
             setResizeState(null);
@@ -134,7 +137,7 @@ export const ColumnView: React.FC<NodeViewProps> = React.memo((props) => {
             document.removeEventListener('mouseup', handleMouseUp);
             document.body.classList.remove('is-resizing-column');
         };
-    }, [resizeState, editor, getPos, node.nodeSize, updateAttributes]);
+    }, [resizeState, editor, getPos, node]);
 
     const wrapperClassName = useMemo(() =>
         cn(
@@ -159,7 +162,6 @@ export const ColumnView: React.FC<NodeViewProps> = React.memo((props) => {
         <NodeViewContent className="h-full w-auto" />
         {editor.isEditable && !isLastColumn && (
             <div
-                ref={resizeHandleRef}
                 className={cn(
                     "resize-handle",
                     resizeState?.isResizing && "resizing"

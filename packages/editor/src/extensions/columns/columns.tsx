@@ -1,9 +1,8 @@
-import { Node, mergeAttributes } from "@tiptap/core";
+import { Node, mergeAttributes, findParentNode } from "@tiptap/core";
 
+import { Column } from "./column";
 import { createColumns, addOrDeleteCol, gotoCol } from "./utilities";
 import { TextSelection } from "@tiptap/pm/state";
-import { ReactNodeViewRenderer } from "@tiptap/react";
-import { ColumnsView } from "./ColumnsView";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -62,10 +61,6 @@ export const Columns = Node.create({
     ];
   },
 
-  // addNodeView() {
-  //   return ReactNodeViewRenderer(ColumnsView)
-  // },
-
   addCommands() {
     return {
       insertColumns: attrs => ({ tr, dispatch, editor }) => {
@@ -91,15 +86,36 @@ export const Columns = Node.create({
         return addOrDeleteCol({ dispatch, state, type: "delete" });
       },
       setColumnsType: type => ({ dispatch, state }) => {
-        const { selection } = state;
-        const node = state.doc.nodeAt(selection.from);
-        if (dispatch && node) {
-          dispatch(
-            state.tr.setNodeMarkup(selection.from, undefined, {
-              ...node.attrs,
-              type
-            })
-          );
+        const maybeColumns = findParentNode(
+          (node) => node.type.name === Columns.name
+        )(state.selection);
+
+        if (!maybeColumns) return false;
+
+        if (dispatch) {
+          const { node: columnsNode, pos: columnsPos } = maybeColumns;
+          const tr = state.tr.setTime(Date.now());
+
+          // Update the columns node type
+          tr.setNodeMarkup(columnsPos, undefined, {
+            ...columnsNode.attrs,
+            type
+          });
+
+          // Propagate type to all child columns and clear custom width
+          let offset = columnsPos + 1;
+          columnsNode.forEach((child) => {
+            if (child.type.name === Column.name) {
+              tr.setNodeMarkup(offset, undefined, {
+                ...child.attrs,
+                type,
+                width: null
+              });
+              offset += child.nodeSize;
+            }
+          });
+
+          dispatch(tr);
         }
 
         return true;

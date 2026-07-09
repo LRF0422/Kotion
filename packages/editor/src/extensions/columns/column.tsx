@@ -1,40 +1,24 @@
-import { Node, getAttributes, mergeAttributes } from "@tiptap/core";
+import { Node, mergeAttributes } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import { ColumnView } from "./ColumnView";
 
-// Memoize getFlex function to avoid recalculation
-const getFlexCache = new Map<string, string>();
-
 const getFlex = (type: 'left' | 'none' | 'right' | 'center', index: number, cols: number): string => {
-  const cacheKey = `${type}-${index}-${cols}`;
-
-  if (getFlexCache.has(cacheKey)) {
-    return getFlexCache.get(cacheKey)!;
-  }
-
-  let result: string;
   const threeQuarters = Math.floor(100 / 4) * 3;
   const oneQuarter = Math.floor(100 / 4) * 1;
   const equalShare = Math.floor(100 / cols) * 1;
 
   switch (type) {
     case 'left':
-      result = index === 0 ? `flex-basis : ${threeQuarters}%` : `flex-basis : ${oneQuarter}%`;
-      break;
+      return index === 0 ? `flex-basis: ${threeQuarters}%` : `flex-basis: ${oneQuarter}%`;
     case 'right':
-      result = index === cols - 1 ? `flex-basis : ${threeQuarters}%` : `flex-basis : ${oneQuarter}%`;
-      break;
+      return index === cols - 1 ? `flex-basis: ${threeQuarters}%` : `flex-basis: ${oneQuarter}%`;
     case 'center':
-      result = index === cols - 2 ? `flex-basis : ${threeQuarters}%` : `flex-basis : ${oneQuarter}%`;
-      break;
+      return index === cols - 2 ? `flex-basis: ${threeQuarters}%` : `flex-basis: ${oneQuarter}%`;
     default:
-      result = `flex-basis : ${equalShare}%`;
+      return `flex-basis: ${equalShare}%`;
   }
-
-  getFlexCache.set(cacheKey, result);
-  return result;
 };
 
 export const Column = Node.create({
@@ -103,7 +87,6 @@ export const Column = Node.create({
       key: new PluginKey("column-border"),
       props: {
         decorations: ({ doc, selection }) => {
-          const { isEditable } = this.editor;
           const decorations: Decoration[] = [];
 
           doc.descendants((node, pos) => {
@@ -116,9 +99,12 @@ export const Column = Node.create({
                 flexStyle = getFlex(node.attrs.type, node.attrs.index, node.attrs.cols);
               }
 
+              // Highlight the column containing the cursor
+              const isActive = selection.from >= pos && selection.from <= pos + node.nodeSize;
+
               decorations.push(
                 Decoration.node(pos, pos + node.nodeSize, {
-                  class: 'column-view',
+                  class: isActive ? 'column-view column-active' : 'column-view',
                   style: flexStyle + ";height: auto;"
                 })
               )

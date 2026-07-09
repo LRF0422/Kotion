@@ -14,18 +14,9 @@ export function createColumn(colType: NodeType, index: number, colContent = null
   return colType.createAndFill({ index, type, cols });
 }
 
-// Cache for columns node types to improve performance
-let cachedColumnsNodeTypes: { columns: NodeType; column: NodeType } | null = null;
-
 export function getColumnsNodeTypes(schema: Schema): { columns: NodeType; column: NodeType } {
-  // Use in-memory cache for better performance
-  if (cachedColumnsNodeTypes && schema.cached.columnsNodeTypes === cachedColumnsNodeTypes) {
-    return cachedColumnsNodeTypes;
-  }
-
   if (schema.cached.columnsNodeTypes) {
-    cachedColumnsNodeTypes = schema.cached.columnsNodeTypes;
-    return cachedColumnsNodeTypes!;
+    return schema.cached.columnsNodeTypes;
   }
 
   const roles = {
@@ -34,7 +25,6 @@ export function getColumnsNodeTypes(schema: Schema): { columns: NodeType; column
   };
 
   schema.cached.columnsNodeTypes = roles;
-  cachedColumnsNodeTypes = roles;
 
   return roles;
 }
@@ -153,11 +143,55 @@ export function toOtherColumns({
     (node: Node) => node.type.name === Columns.name
   )(state.selection);
 
-  if (dispatch && maybeColumns) {
-    const newNode = createColumns(state.schema, cols, null, type)
+  if (!maybeColumns) {
+    return false;
+  }
+
+  if (dispatch) {
+    const { node: columnsNode, pos: columnsPos } = maybeColumns;
+    const columnType = state.schema.nodes[Column.name];
+    const tr = state.tr.setTime(Date.now());
+
+    // Collect existing columns to preserve their content
+    const existingColumns: Node[] = [];
+    columnsNode.forEach((child) => {
+      if (child.type.name === Column.name) {
+        existingColumns.push(child);
+      }
+    });
+
+    // Build new column nodes, preserving content from existing columns
+    const newColumns: Node[] = [];
+    for (let i = 0; i < cols; i++) {
+      if (i < existingColumns.length) {
+        newColumns.push(
+          columnType.createChecked(
+            { index: i, type, cols, width: null },
+            existingColumns[i].content
+          )
+        );
+      } else {
+        const newCol = createColumn(columnType, i, null, type, cols);
+        if (newCol) {
+          newColumns.push(newCol);
+        }
+      }
+    }
+
+    const newColumnsNode = state.schema.nodes[Columns.name].createChecked(
+      { cols, type },
+      newColumns
+    );
+
+    tr.replaceWith(columnsPos, columnsPos + columnsNode.nodeSize, newColumnsNode);
+    tr.setSelection(TextSelection.near(tr.doc.resolve(columnsPos + 1)));
+
     dispatch(
-      state.tr.replaceRangeWith(maybeColumns.pos, maybeColumns.pos + maybeColumns.node.nodeSize, newNode)
-    )
+      addAnalytics(tr, {
+        subject: "columns",
+        action: `change layout to ${type} ${cols} cols`
+      })
+    );
   }
 
   return true;

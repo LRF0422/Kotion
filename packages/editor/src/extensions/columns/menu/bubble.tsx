@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo } from "react";
-import { Editor, findParentNode, getAttributes, posToDOMRect } from "@tiptap/core";
+import React, { useCallback } from "react";
+import { Editor, findParentNode, posToDOMRect } from "@tiptap/core";
 import { Node as PMNode } from "@tiptap/pm/model";
 
 import {
@@ -7,9 +7,6 @@ import {
   IconAddColumnBefore,
   IconAddColumnAfter,
   IconDeleteColumn,
-  IconDelete,
-  RiLayoutRightFill,
-  RiLayoutLeftFill,
   IconThreeColumns,
   IconThreeColumnsMiddle,
   IconThreeColumnsLeft,
@@ -157,30 +154,22 @@ export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ edi
       getReferenceClientRect={getReferenceClientRect}
       options={{}}>
       <div className="flex flex-row items-center gap-1">
-        <IconButton onClick={copyMe} icon={<IconCopy />} />
-        {/* <IconButton
-          onClick={addColBefore}
-          icon={<IconAddColumnBefore />}
-        />
-        <IconButton
-          onClick={addColAfter}
-          icon={<IconAddColumnAfter />}
-        />
-        <IconButton
-          onClick={deleteCol}
-          icon={<IconDeleteColumn />}
-        /> */}
+        <IconButton onClick={copyMe} icon={<IconCopy />} title="Copy" />
         <Divider />
-        <IconButton icon={<IconThreeColumnsMiddle className="h-4 w-4" />} onClick={handleThreeColumnsMiddle} />
-        <IconButton icon={<IconThreeColumns className="h-4 w-4" />} onClick={handleThreeColumns} />
-        <IconButton icon={<IconThreeColumnsLeft className="h-4 w-4" />} onClick={handleThreeColumnsLeft} />
-        <IconButton icon={<IconThreeColumnsRight className="h-4 w-4" />} onClick={handleThreeColumnsRight} />
+        <IconButton onClick={addColBefore} icon={<IconAddColumnBefore />} title="Add column before" />
+        <IconButton onClick={addColAfter} icon={<IconAddColumnAfter />} title="Add column after" />
+        <IconButton onClick={deleteCol} icon={<IconDeleteColumn />} title="Delete column" />
         <Divider />
-        <IconButton icon={<IconTwoColumns className="h-4 w-4" />} onClick={handleTwoColumns} />
-        <IconButton icon={<IconTwoColumnsLeft className="h-4 w-4" />} onClick={handleTwoColumnsLeft} />
-        <IconButton icon={<IconTwoColumnsRight className="h-4 w-4" />} onClick={handleTwoColumnsRight} />
+        <IconButton icon={<IconThreeColumnsMiddle className="h-4 w-4" />} onClick={handleThreeColumnsMiddle} title="3 columns: center wide" />
+        <IconButton icon={<IconThreeColumns className="h-4 w-4" />} onClick={handleThreeColumns} title="3 columns: equal" />
+        <IconButton icon={<IconThreeColumnsLeft className="h-4 w-4" />} onClick={handleThreeColumnsLeft} title="3 columns: left wide" />
+        <IconButton icon={<IconThreeColumnsRight className="h-4 w-4" />} onClick={handleThreeColumnsRight} title="3 columns: right wide" />
         <Divider />
-        <IconButton icon={<Trash2 className="h-4 w-4" />} onClick={deleteMe} />
+        <IconButton icon={<IconTwoColumns className="h-4 w-4" />} onClick={handleTwoColumns} title="2 columns: equal" />
+        <IconButton icon={<IconTwoColumnsLeft className="h-4 w-4" />} onClick={handleTwoColumnsLeft} title="2 columns: left wide" />
+        <IconButton icon={<IconTwoColumnsRight className="h-4 w-4" />} onClick={handleTwoColumnsRight} title="2 columns: right wide" />
+        <Divider />
+        <IconButton icon={<Trash2 className="h-4 w-4" />} onClick={deleteMe} title="Delete columns block" />
       </div>
     </BubbleMenu>
   );

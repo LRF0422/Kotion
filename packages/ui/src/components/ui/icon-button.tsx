@@ -7,6 +7,7 @@ export interface IconButtonProps {
     onClick?: (e?: any) => void;
     className?: string;
     disabled?: boolean;
+    title?: string;
 }
 export const IconButton: React.FC<IconButtonProps> = (props) => {
     return <div
@@ -20,7 +21,8 @@ export const IconButton: React.FC<IconButtonProps> = (props) => {
             if (!props.disabled) {
                 props.onClick?.(e)
             }
-        }} >
+        }}
+        title={props.title} >
         {props.icon}
     </div>
 }

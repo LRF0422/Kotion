@@ -23,6 +23,17 @@
     transition: flex-basis 0.15s ease-out;
 }
 
+/* Highlight the column containing the cursor */
+.column-active {
+    background: hsl(var(--muted) / 0.35);
+    border-radius: 4px;
+}
+
+/* Disable transition during active resize to prevent jank */
+body.is-resizing-column .column-view {
+    transition: none !important;
+}
+
 /* Resize handle - minimal style */
 .resize-handle {
     position: absolute;
@@ -42,14 +53,20 @@
     left: 50%;
     transform: translate(-50%, -50%);
     width: 3px;
-    height: 24px;
+    height: 32px;
     background: hsl(var(--border));
     border-radius: 2px;
     opacity: 0;
     transition: opacity 0.15s ease, height 0.15s ease;
 }
 
-.resize-handle:hover::before {
+/* Faint visibility on column hover */
+.node-column:hover .resize-handle::before {
+    opacity: 0.35;
+}
+
+/* Full visibility on handle hover */
+.node-column .resize-handle:hover::before {
     opacity: 1;
 }
 
@@ -98,6 +115,20 @@ body.is-resizing-column * {
 /* Subtle entrance when the bar first appears */
 .column-drop-indicator[style*="display: block"] {
     animation: dropBarIn 0.12s ease-out;
+}
+
+/* Stack columns vertically on narrow screens */
+@media (max-width: 640px) {
+    .columns {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .columns .node-column {
+        flex-basis: 100% !important;
+    }
+    .resize-handle {
+        display: none;
+    }
 }
 
 @keyframes dropBarIn {
