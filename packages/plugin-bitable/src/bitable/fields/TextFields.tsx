@@ -74,8 +74,8 @@ export const LongTextRenderer: React.FC<FieldRendererProps> = ({ value }) => {
 export const LongTextEditor: React.FC<FieldEditorProps> = ({ value, onChange, onCommit }) => {
     const displayValue = toText(value);
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === "Enter") {
             e.preventDefault();
             onCommit?.();
         } else if (e.key === "Escape") {
@@ -85,14 +85,13 @@ export const LongTextEditor: React.FC<FieldEditorProps> = ({ value, onChange, on
     };
 
     return (
-        <textarea
+        <input
             autoFocus
             value={displayValue}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="bitable-long-text-editor"
+            className="bitable-text-editor"
             placeholder="..."
-            rows={3}
         />
     );
 };

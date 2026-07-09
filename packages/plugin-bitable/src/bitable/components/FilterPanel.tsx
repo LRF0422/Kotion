@@ -91,7 +91,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ view, fields, onUpdate
         <Popover>
             <PopoverTrigger asChild>
                 <button
-                    className="bitable-toolbar__action"
+                    className={`bitable-toolbar__action${hasFilters ? ' bitable-toolbar__action--active' : ''}`}
                     title={t('bitable.filter.title', 'Filter')}
                 >
                     <Filter className="h-4 w-4" />

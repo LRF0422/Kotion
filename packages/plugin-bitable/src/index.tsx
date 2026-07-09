@@ -43,7 +43,10 @@ export const bitable = new BitablePlugin({
                         "deleteTable": "Delete Table",
                         "new": "New",
                         "newPage": "New page",
-                        "comingSoon": "Coming soon"
+                        "comingSoon": "Coming soon",
+                        "duplicateView": "Duplicate",
+                        "exportCsv": "Export as CSV",
+                        "exportExcel": "Export as Excel"
                     },
                     // Dialog
                     "dialog": {
@@ -84,7 +87,13 @@ export const bitable = new BitablePlugin({
                         "createdBy": "Created By",
                         "updatedBy": "Updated By",
                         "autoNumber": "Auto Number",
-                        "id": "ID"
+                        "id": "ID",
+                        "categories": {
+                            "basic": "Basic",
+                            "advanced": "Advanced",
+                            "system": "System"
+                        },
+                        "noResults": "No matching field types"
                     },
                     // Field configuration
                     "fieldConfig": {
@@ -141,7 +150,12 @@ export const bitable = new BitablePlugin({
                         "sizeMedium": "Medium (64px)",
                         "sizeLarge": "Large (128px)",
                         "optionsList": "Options List",
-                        "newTabOpen": "Open in New Tab"
+                        "newTabOpen": "Open in New Tab",
+                        "selectionCount": "Selection",
+                        "singlePerson": "Single person",
+                        "multiplePeople": "Multiple people",
+                        "singleFile": "Single file",
+                        "multipleFiles": "Multiple files"
                     },
                     // Image editor
                     "imageEditor": {
@@ -181,15 +195,28 @@ export const bitable = new BitablePlugin({
                         "option2": "Option 2",
                         "option3": "Option 3"
                     },
+                    // Field
+                    "field": {
+                        "newField": "New Field"
+                    },
+                    // Filter
+                    "filter": {
+                        "title": "Filter",
+                        "matchAll": "Match all (AND)",
+                        "matchAny": "Match any (OR)"
+                    },
                     // Table view
                     "tableView": {
                         "noData": "No data",
                         "addRow": "Add Row",
+                        "addRecord": "Add Record",
                         "deleteSelected": "Delete ({{count}})",
                         "selectedCount": "{{count}} selected",
                         "freezeColumn": "Freeze column",
                         "unfreezeColumn": "Unfreeze column",
                         "hideColumn": "Hide column",
+                        "deleteColumn": "Delete column",
+                        "duplicate": "Duplicate",
                         "summary": "Summary",
                         "summaryCycle": "Click to cycle summary"
                     },
@@ -370,6 +397,12 @@ export const bitable = new BitablePlugin({
                         "showAxisLine": "Show Axis Line",
                         "noYAxisField": "Click 'Add' to select a statistics field"
                     },
+                    // Record detail
+                    "record": {
+                        "previous": "Previous",
+                        "next": "Next",
+                        "close": "Close"
+                    },
                     // Excel import
                     "excelImport": {
                         "title": "Import from Excel",
@@ -433,7 +466,10 @@ export const bitable = new BitablePlugin({
                         "deleteTable": "删除表格",
                         "new": "新建",
                         "newPage": "新建记录",
-                        "comingSoon": "即将推出"
+                        "comingSoon": "即将推出",
+                        "duplicateView": "复制视图",
+                        "exportCsv": "导出 CSV",
+                        "exportExcel": "导出 Excel"
                     },
                     // Dialog
                     "dialog": {
@@ -474,7 +510,13 @@ export const bitable = new BitablePlugin({
                         "createdBy": "创建人",
                         "updatedBy": "更新人",
                         "autoNumber": "自动编号",
-                        "id": "ID"
+                        "id": "ID",
+                        "categories": {
+                            "basic": "基础",
+                            "advanced": "高级",
+                            "system": "系统"
+                        },
+                        "noResults": "没有匹配的字段类型"
                     },
                     // Field configuration
                     "fieldConfig": {
@@ -531,7 +573,12 @@ export const bitable = new BitablePlugin({
                         "sizeMedium": "中 (64px)",
                         "sizeLarge": "大 (128px)",
                         "optionsList": "选项列表",
-                        "newTabOpen": "新标签页打开"
+                        "newTabOpen": "新标签页打开",
+                        "selectionCount": "选择数量",
+                        "singlePerson": "单人",
+                        "multiplePeople": "多人",
+                        "singleFile": "单个文件",
+                        "multipleFiles": "多个文件"
                     },
                     // Image editor
                     "imageEditor": {
@@ -571,15 +618,28 @@ export const bitable = new BitablePlugin({
                         "option2": "选项2",
                         "option3": "选项3"
                     },
+                    // Field
+                    "field": {
+                        "newField": "新字段"
+                    },
+                    // Filter
+                    "filter": {
+                        "title": "筛选",
+                        "matchAll": "满足全部 (AND)",
+                        "matchAny": "满足任一 (OR)"
+                    },
                     // Table view
                     "tableView": {
                         "noData": "暂无数据",
                         "addRow": "添加行",
+                        "addRecord": "添加记录",
                         "deleteSelected": "删除 ({{count}})",
                         "selectedCount": "已选择 {{count}} 项",
                         "freezeColumn": "冻结列",
                         "unfreezeColumn": "取消冻结",
                         "hideColumn": "隐藏列",
+                        "deleteColumn": "删除列",
+                        "duplicate": "复制",
                         "summary": "汇总",
                         "summaryCycle": "点击切换汇总方式"
                     },
@@ -759,6 +819,12 @@ export const bitable = new BitablePlugin({
                         "formatCompact": "紧凑 (K/M)",
                         "showAxisLine": "显示轴线",
                         "noYAxisField": "点击'添加'选择统计字段"
+                    },
+                    // Record detail
+                    "record": {
+                        "previous": "上一条",
+                        "next": "下一条",
+                        "close": "关闭"
                     },
                     // Excel import
                     "excelImport": {

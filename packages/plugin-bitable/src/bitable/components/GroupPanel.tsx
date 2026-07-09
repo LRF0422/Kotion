@@ -62,7 +62,7 @@ export const GroupPanel: React.FC<GroupPanelProps> = ({ view, fields, onUpdateVi
         <Popover>
             <PopoverTrigger asChild>
                 <button
-                    className="bitable-toolbar__action"
+                    className={`bitable-toolbar__action${hasGroups ? ' bitable-toolbar__action--active' : ''}`}
                     title={t('bitable.groupPanel.title', 'Group')}
                 >
                     <Rows3 className="h-4 w-4" />

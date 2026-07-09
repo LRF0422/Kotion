@@ -241,25 +241,40 @@ const DetailMultiSelect: React.FC<{ value: any; field: FieldConfig; onChange: (v
 const DetailDate: React.FC<{ value: any; field: FieldConfig; onChange: (v: string) => void; editable: boolean }> = ({ value, field, onChange, editable }) => {
     const { i18n } = useTranslation();
     const locale = i18n.language?.startsWith('zh') ? zhCN : enUS;
+    const dateFormat = field.format || 'yyyy-MM-dd';
+    const hasTime = dateFormat.includes('HH');
 
     if (!editable) {
         if (!value) return <span className="text-sm text-muted-foreground">-</span>;
         try {
-            const fmt = field.format?.includes('HH') ? 'PPP p' : 'PPP';
-            return <span className="text-sm">{format(new Date(value), fmt, { locale })}</span>;
+            return <span className="text-sm">{format(new Date(value), dateFormat, { locale })}</span>;
         } catch {
             return <span className="text-sm">{String(value)}</span>;
         }
     }
 
+    const handleChange = (date: Date | undefined) => {
+        if (!date) {
+            onChange('');
+            return;
+        }
+        if (!hasTime) {
+            onChange(format(date, 'yyyy-MM-dd'));
+        } else {
+            onChange(date.toISOString());
+        }
+    };
+
     return (
         <DateTimePicker
             value={value ? new Date(value) : undefined}
-            onChange={(date) => onChange(date?.toISOString() || '')}
+            onChange={handleChange}
             locale={locale}
             weekStartsOn={1}
             showOutsideDays
             showWeekNumber={undefined}
+            granularity={hasTime ? 'second' : 'day'}
+            displayFormat={{ hour24: dateFormat, hour12: dateFormat }}
         />
     );
 };

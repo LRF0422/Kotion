@@ -43,7 +43,7 @@ export const SortPanel: React.FC<SortPanelProps> = ({ view, fields, onUpdateView
         <Popover>
             <PopoverTrigger asChild>
                 <button
-                    className="bitable-toolbar__action"
+                    className={`bitable-toolbar__action${hasSorts ? ' bitable-toolbar__action--active' : ''}`}
                     title={t('bitable.chartView.sortOrder', 'Sort')}
                 >
                     <ArrowUpDown className="h-4 w-4" />
