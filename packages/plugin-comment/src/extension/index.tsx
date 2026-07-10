@@ -1,16 +1,34 @@
+import React from "react";
 import { ExtensionWrapper } from "@kn/common";
 import { z } from "@kn/ui";
 import type { Editor } from "@kn/editor";
+import { MessageCircleMore } from "@kn/icon";
 import CommentExt from "./comment";
+import { BlockCommentExt } from "./block-comment";
 import { CommentStaticMenu } from "./menu/static";
 import { CommentMarginPanel } from "./menu/CommentMarginPanel";
 import { commentReviewerSkill } from "./skills/comment-reviewer";
 
 export const CommentExtension: ExtensionWrapper = {
     name: CommentExt.name,
-    extendsion: [CommentExt],
+    extendsion: [CommentExt, BlockCommentExt],
     flotMenuConfig: [CommentStaticMenu],
     floatingUI: CommentMarginPanel,
+    blockMenuConfig: [
+        {
+            icon: <MessageCircleMore className="h-4 w-4" />,
+            label: 'Comment',
+            action: (editor: Editor, node: any, _pos: number) => {
+                // Use block-level commenting: associate the thread with the
+                // block's stable id rather than a text selection. This works
+                // for ALL block types — including atom nodes (images, charts)
+                // that have no text content to mark.
+                const blockId = node.attrs?.id ?? node.attrs?.blockId;
+                if (!blockId) return;
+                editor.commands.addBlockComment(blockId);
+            },
+        },
+    ],
     tools: [
         {
             name: 'addComment',

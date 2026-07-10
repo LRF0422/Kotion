@@ -19,7 +19,10 @@ declare module "@kn/editor" {
 }
 
 /**
- * Locate the contiguous range of a sticky-note mark with a given note_id.
+ * Locate the FIRST contiguous range of a sticky-note mark with a given note_id.
+ * Used by static.tsx for caret placement after adding a note.
+ * For update/remove commands that need to cover ALL fragments, use
+ * findAllStickyNoteRanges instead.
  */
 export function findStickyNoteRange(
     doc: any,
@@ -59,6 +62,54 @@ export function findStickyNoteRange(
     });
 
     return result;
+}
+
+/**
+ * Collect ALL disjoint ranges for a sticky-note mark with the given note_id.
+ * Unlike findStickyNoteRange (which only returns the first contiguous span),
+ * this returns every fragment so update/remove commands can operate on the
+ * complete note even if it was split by intermediate edits.
+ */
+export function findAllStickyNoteRanges(
+    doc: any,
+    markType: any,
+    noteId: string
+): { from: number; to: number; mark: any }[] {
+    const ranges: { from: number; to: number; mark: any }[] = [];
+
+    doc.descendants((node: any, pos: number) => {
+        if (!node.isText) return;
+        const mark = node.marks.find(
+            (m: any) => m.type === markType && m.attrs.note_id === noteId
+        );
+        if (!mark) return;
+
+        // Skip if this node is already covered by the last range (the forward
+        // extension from a previous node included it).
+        if (ranges.length > 0 && ranges[ranges.length - 1].to > pos) return;
+
+        let from = pos;
+        let to = pos + node.nodeSize;
+
+        // Extend forward across contiguous text nodes carrying the same note_id.
+        while (to < doc.content.size) {
+            const $pos = doc.resolve(to);
+            const nextIndex = $pos.index($pos.depth);
+            const parentNode = $pos.parent;
+            if (nextIndex >= parentNode.childCount) break;
+
+            const child = parentNode.child(nextIndex);
+            const childMark = child.marks.find(
+                (m: any) => m.type === markType && m.attrs.note_id === noteId
+            );
+            if (!childMark) break;
+            to += child.nodeSize;
+        }
+
+        ranges.push({ from, to, mark });
+    });
+
+    return ranges;
 }
 
 export interface StickyNoteRange {
@@ -196,15 +247,17 @@ const StickyNoteMark = Mark.create({
                 (noteId, content) =>
                     ({ tr, state }) => {
                         const markType = state.schema.marks.stickyNote;
-                        const range = findStickyNoteRange(state.doc, markType, noteId);
-                        if (!range) return false;
+                        const ranges = findAllStickyNoteRanges(state.doc, markType, noteId);
+                        if (ranges.length === 0) return false;
 
-                        const newMark = markType.create({
-                            ...range.mark.attrs,
-                            content,
-                        });
-                        tr.removeMark(range.from, range.to, markType);
-                        tr.addMark(range.from, range.to, newMark);
+                        for (const range of ranges) {
+                            const newMark = markType.create({
+                                ...range.mark.attrs,
+                                content,
+                            });
+                            tr.removeMark(range.from, range.to, markType);
+                            tr.addMark(range.from, range.to, newMark);
+                        }
                         tr.setMeta("addToHistory", false);
                         return true;
                     },
@@ -213,16 +266,18 @@ const StickyNoteMark = Mark.create({
                 (noteId, color) =>
                     ({ tr, state }) => {
                         const markType = state.schema.marks.stickyNote;
-                        const range = findStickyNoteRange(state.doc, markType, noteId);
-                        if (!range) return false;
+                        const ranges = findAllStickyNoteRanges(state.doc, markType, noteId);
+                        if (ranges.length === 0) return false;
 
-                        const newMark = markType.create({
-                            ...range.mark.attrs,
-                            color,
-                        });
-                        tr.removeMark(range.from, range.to, markType);
-                        tr.addMark(range.from, range.to, newMark);
-                        tr.setMeta("addToHistory", false);
+                        for (const range of ranges) {
+                            const newMark = markType.create({
+                                ...range.mark.attrs,
+                                color,
+                            });
+                            tr.removeMark(range.from, range.to, markType);
+                            tr.addMark(range.from, range.to, newMark);
+                        }
+                        // Color is a discrete user action — allow undo/redo.
                         return true;
                     },
 
@@ -230,18 +285,43 @@ const StickyNoteMark = Mark.create({
                 (noteId) =>
                     ({ tr, state }) => {
                         const markType = state.schema.marks.stickyNote;
-                        const range = findStickyNoteRange(state.doc, markType, noteId);
-                        if (!range) return false;
-                        tr.removeMark(range.from, range.to, markType);
+                        const ranges = findAllStickyNoteRanges(state.doc, markType, noteId);
+                        if (ranges.length === 0) return false;
+                        for (const range of ranges) {
+                            tr.removeMark(range.from, range.to, markType);
+                        }
                         return true;
                     },
         };
     },
 
     addStorage() {
-        // The note whose mobile bottom-sheet is open. Set by tapping an inline
-        // marker; read by the React margin panel to open the sheet.
-        return { activeNoteId: null as string | null };
+        // The note whose mobile bottom-sheet is open (set by tapping an inline
+        // marker or clicking a highlight). Also tracked by the desktop margin
+        // panel to emphasize / scroll the active card into view.
+        // hoveredNoteId powers the bidirectional hover-sync between a highlight
+        // in the document and its margin card.
+        return {
+            activeNoteId: null as string | null,
+            hoveredNoteId: null as string | null,
+        };
+    },
+
+    addKeyboardShortcuts() {
+        return {
+            "Mod-Alt-s": () => {
+                const editor = this.editor;
+                if (editor.isActive("stickyNote")) {
+                    const attrs = editor.getAttributes("stickyNote");
+                    const noteId = attrs.note_id;
+                    if (noteId) return editor.commands.removeStickyNote(noteId);
+                    return false;
+                }
+                const { selection } = editor.state;
+                if (selection.empty) return false;
+                return editor.commands.addStickyNote();
+            },
+        };
     },
 
     addProseMirrorPlugins() {
@@ -276,17 +356,48 @@ const StickyNoteMark = Mark.create({
                         // Tap a marker → open that note's bottom sheet. We store the
                         // id and dispatch an empty meta transaction so the React
                         // margin panel (which listens to "transaction") picks it up.
+                        // Clicking a highlight (desktop) also sets activeNoteId so
+                        // the margin panel can scroll to / emphasize the card.
                         click: (view, event) => {
                             const target = event.target as HTMLElement | null;
+
+                            // Marker click (mobile) — open bottom sheet.
                             const marker = target?.closest?.(".sticky-note-marker") as HTMLElement | null;
-                            if (!marker) return false;
-                            const noteId = marker.getAttribute("data-note-id");
-                            if (noteId) {
-                                extension.storage.activeNoteId = noteId;
-                                view.dispatch(view.state.tr.setMeta("stickyNoteMarkerClick", true));
+                            if (marker) {
+                                const noteId = marker.getAttribute("data-note-id");
+                                if (noteId) {
+                                    extension.storage.activeNoteId = noteId;
+                                    view.dispatch(view.state.tr.setMeta("stickyNoteMarkerClick", true));
+                                }
+                                event.preventDefault();
+                                return true;
                             }
-                            event.preventDefault();
-                            return true;
+
+                            // Highlight click — set active note so the margin
+                            // panel can scroll to / emphasize the card. Don't
+                            // preventDefault so the caret is still placed.
+                            const highlight = target?.closest?.(".sticky-note-highlight") as HTMLElement | null;
+                            if (highlight) {
+                                const noteId = highlight.getAttribute("data-note-id");
+                                if (noteId) {
+                                    extension.storage.activeNoteId = noteId;
+                                    view.dispatch(view.state.tr.setMeta("stickyNoteHighlightClick", true));
+                                }
+                            }
+                            return false;
+                        },
+                        // Hover sync: when the pointer enters / leaves a
+                        // highlight, update hoveredNoteId so the margin panel
+                        // can emphasize the corresponding card.
+                        mouseover: (view, event) => {
+                            const target = event.target as HTMLElement | null;
+                            const highlight = target?.closest?.(".sticky-note-highlight") as HTMLElement | null;
+                            const noteId = highlight?.getAttribute("data-note-id") ?? null;
+                            if (extension.storage.hoveredNoteId !== noteId) {
+                                extension.storage.hoveredNoteId = noteId;
+                                view.dispatch(view.state.tr.setMeta("stickyNoteHover", true));
+                            }
+                            return false;
                         },
                     },
                 },

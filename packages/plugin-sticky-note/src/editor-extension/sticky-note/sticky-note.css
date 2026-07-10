@@ -7,42 +7,67 @@
     transition: background-color 0.15s ease;
 }
 
+/* Hovering the highlight intensifies the tint (was: opacity dim). */
 .sticky-note-highlight:hover {
-    opacity: 0.85;
+    background-color: rgb(255 212 0 / 0.32);
 }
 
-/* Light theme color variants */
-.sticky-note-highlight[data-color="yellow"] {
-    background-color: rgb(255 212 0 / 0.18);
-    border-bottom-color: rgb(245 197 24 / 0.55);
+/* When the corresponding margin card is hovered, emphasize the highlight. */
+.sticky-note-highlight.is-hovered {
+    background-color: rgb(255 212 0 / 0.35);
+    border-bottom-width: 3px;
 }
 
-.sticky-note-highlight[data-color="pink"] {
-    background-color: rgb(240 98 146 / 0.18);
-    border-bottom-color: rgb(240 98 146 / 0.55);
+/* Hovering the highlight intensifies the tint (was: opacity dim). */
+.sticky-note-highlight[data-color="yellow"]:hover {
+    background-color: rgb(255 212 0 / 0.32);
 }
 
-.sticky-note-highlight[data-color="blue"] {
-    background-color: rgb(74 144 226 / 0.18);
-    border-bottom-color: rgb(74 144 226 / 0.55);
+.sticky-note-highlight[data-color="pink"]:hover {
+    background-color: rgb(240 98 146 / 0.32);
 }
 
-.sticky-note-highlight[data-color="green"] {
-    background-color: rgb(124 179 66 / 0.20);
-    border-bottom-color: rgb(124 179 66 / 0.55);
+.sticky-note-highlight[data-color="blue"]:hover {
+    background-color: rgb(74 144 226 / 0.32);
 }
 
-.sticky-note-highlight[data-color="purple"] {
-    background-color: rgb(156 106 222 / 0.18);
-    border-bottom-color: rgb(156 106 222 / 0.55);
+.sticky-note-highlight[data-color="green"]:hover {
+    background-color: rgb(124 179 66 / 0.35);
 }
 
-.sticky-note-highlight[data-color="orange"] {
-    background-color: rgb(243 156 18 / 0.20);
-    border-bottom-color: rgb(243 156 18 / 0.55);
+.sticky-note-highlight[data-color="purple"]:hover {
+    background-color: rgb(156 106 222 / 0.32);
 }
 
-/* Dark theme adjustments */
+.sticky-note-highlight[data-color="orange"]:hover {
+    background-color: rgb(243 156 18 / 0.35);
+}
+
+/* Card-hovered highlight emphasis (stronger than :hover) */
+.sticky-note-highlight.is-hovered[data-color="yellow"] {
+    background-color: rgb(255 212 0 / 0.38);
+}
+
+.sticky-note-highlight.is-hovered[data-color="pink"] {
+    background-color: rgb(240 98 146 / 0.38);
+}
+
+.sticky-note-highlight.is-hovered[data-color="blue"] {
+    background-color: rgb(74 144 226 / 0.38);
+}
+
+.sticky-note-highlight.is-hovered[data-color="green"] {
+    background-color: rgb(124 179 66 / 0.42);
+}
+
+.sticky-note-highlight.is-hovered[data-color="purple"] {
+    background-color: rgb(156 106 222 / 0.38);
+}
+
+.sticky-note-highlight.is-hovered[data-color="orange"] {
+    background-color: rgb(243 156 18 / 0.42);
+}
+
 .dark .sticky-note-highlight[data-color="yellow"] {
     background-color: rgb(255 212 0 / 0.22);
 }
@@ -65,6 +90,56 @@
 
 .dark .sticky-note-highlight[data-color="orange"] {
     background-color: rgb(243 156 18 / 0.30);
+}
+
+/* Dark theme hover intensification */
+.dark .sticky-note-highlight[data-color="yellow"]:hover {
+    background-color: rgb(255 212 0 / 0.38);
+}
+
+.dark .sticky-note-highlight[data-color="pink"]:hover {
+    background-color: rgb(240 98 146 / 0.42);
+}
+
+.dark .sticky-note-highlight[data-color="blue"]:hover {
+    background-color: rgb(74 144 226 / 0.42);
+}
+
+.dark .sticky-note-highlight[data-color="green"]:hover {
+    background-color: rgb(124 179 66 / 0.45);
+}
+
+.dark .sticky-note-highlight[data-color="purple"]:hover {
+    background-color: rgb(156 106 222 / 0.42);
+}
+
+.dark .sticky-note-highlight[data-color="orange"]:hover {
+    background-color: rgb(243 156 18 / 0.45);
+}
+
+/* Dark theme card-hovered emphasis */
+.dark .sticky-note-highlight.is-hovered[data-color="yellow"] {
+    background-color: rgb(255 212 0 / 0.44);
+}
+
+.dark .sticky-note-highlight.is-hovered[data-color="pink"] {
+    background-color: rgb(240 98 146 / 0.48);
+}
+
+.dark .sticky-note-highlight.is-hovered[data-color="blue"] {
+    background-color: rgb(74 144 226 / 0.48);
+}
+
+.dark .sticky-note-highlight.is-hovered[data-color="green"] {
+    background-color: rgb(124 179 66 / 0.52);
+}
+
+.dark .sticky-note-highlight.is-hovered[data-color="purple"] {
+    background-color: rgb(156 106 222 / 0.48);
+}
+
+.dark .sticky-note-highlight.is-hovered[data-color="orange"] {
+    background-color: rgb(243 156 18 / 0.52);
 }
 
 /* Inline mobile marker: a small tappable colored dot at the end of a sticky
@@ -161,6 +236,23 @@
     box-shadow:
         0 1px 2px rgba(0, 0, 0, 0.55),
         0 8px 22px rgba(0, 0, 0, 0.55);
+}
+
+/* Active card (clicked highlight) — ring emphasis */
+.sticky-note-card-enter.is-active .sticky-note-card-shell {
+    box-shadow:
+        0 0 0 2px var(--primary, rgb(59 130 246)),
+        0 1px 2px rgba(0, 0, 0, 0.05),
+        0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+/* Hovered card (highlight hovered) — subtle ring + lift */
+.sticky-note-card-enter.is-hovered .sticky-note-card-shell {
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.12),
+        0 1px 2px rgba(0, 0, 0, 0.05),
+        0 8px 24px rgba(0, 0, 0, 0.14);
+    transform: translateY(-2px);
 }
 
 /* Toolbar fades in on hover/focus / when popovers are open */

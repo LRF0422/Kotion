@@ -1,5 +1,6 @@
 import React from "react";
 import { Sheet, SheetContent, SheetTitle } from "@kn/ui";
+import { useTranslation } from "@kn/common";
 import { StickyNoteCard } from "./StickyNoteCard";
 
 export interface StickyNoteSheetProps {
@@ -30,6 +31,7 @@ export const StickyNoteSheet: React.FC<StickyNoteSheetProps> = ({
     onColorChange,
     onDelete,
 }) => {
+    const { t } = useTranslation();
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
@@ -40,7 +42,7 @@ export const StickyNoteSheet: React.FC<StickyNoteSheetProps> = ({
                 className="border-0 bg-transparent p-0 shadow-none [&>button]:hidden"
             >
                 {/* Required for dialog a11y, but visually hidden. */}
-                <SheetTitle className="sr-only">便签</SheetTitle>
+                <SheetTitle className="sr-only">{t("stickyNote.sheetTitle")}</SheetTitle>
                 <StickyNoteCard
                     variant="sheet"
                     noteId=""

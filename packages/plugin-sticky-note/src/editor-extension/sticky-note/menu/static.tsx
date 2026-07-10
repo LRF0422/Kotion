@@ -2,6 +2,7 @@ import React, { useCallback } from "react";
 import { useActive, Editor } from "@kn/editor";
 import { Toggle, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@kn/ui";
 import { StickyNote as StickyNoteIcon } from "@kn/icon";
+import { useTranslation } from "@kn/common";
 import { findStickyNoteRange } from "../sticky-note";
 
 /**
@@ -11,6 +12,7 @@ import { findStickyNoteRange } from "../sticky-note";
  */
 export const StickyNoteStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
     const isActive = useActive(editor, "stickyNote");
+    const { t } = useTranslation();
 
     const handleToggle = useCallback(() => {
         const { selection } = editor.state;
@@ -54,7 +56,7 @@ export const StickyNoteStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) =
                     </Toggle>
                 </TooltipTrigger>
                 <TooltipContent>
-                    <p>{isActive ? "Remove sticky note" : "Add sticky note"}</p>
+                    <p>{isActive ? t("stickyNote.remove") : t("stickyNote.add")}</p>
                 </TooltipContent>
             </Tooltip>
         </TooltipProvider>

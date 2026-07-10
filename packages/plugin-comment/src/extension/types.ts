@@ -32,5 +32,13 @@ declare module '@kn/editor' {
             deleteComment: (threadId: string, commentId: string) => ReturnType;
             resolveThread: (threadId: string) => ReturnType;
         }
+        blockComment: {
+            addBlockComment: (blockId: string) => ReturnType;
+            setFirstBlockComment: (threadId: string, content: string) => ReturnType;
+            replyBlockComment: (threadId: string, content: string, parentId?: string) => ReturnType;
+            editBlockComment: (threadId: string, commentId: string, content: string) => ReturnType;
+            deleteBlockComment: (threadId: string, commentId: string) => ReturnType;
+            resolveBlockComment: (threadId: string) => ReturnType;
+        }
     }
 }
