@@ -3,12 +3,12 @@ import React, { useCallback, useMemo, memo } from "react";
 import { BubbleMenu, BubbleMenuProps } from "../../../components";
 import { InfoPanel } from "../info-panel";
 import { copyNode, deleteNodeInner } from "../../../utilities";
-import { Copy, Trash2, Smile } from "@kn/icon";
+import { Copy, Trash2, Smile, Palette, Square } from "@kn/icon";
 import { Node } from "@tiptap/pm/model";
-import { Separator, Popover, PopoverContent, PopoverTrigger, EmojiPicker, EmojiPickerSearch, EmojiPickerContent, EmojiPickerFooter, useTheme } from "@kn/ui";
+import { Separator, Popover, PopoverContent, PopoverTrigger, EmojiPicker, EmojiPickerSearch, EmojiPickerContent, EmojiPickerFooter, useTheme, cn } from "@kn/ui";
 import { Toggle } from "@kn/ui";
 import { getCurrentNode } from "@editor/utilities/node";
-import { PRESET_COLORS, INFO_PANEL_TYPES } from "../constants";
+import { PRESET_COLORS, INFO_PANEL_TYPES, InfoPanelType } from "../constants";
 
 
 export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = memo(({ editor }) => {
@@ -25,15 +25,14 @@ export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = memo(({ editor 
 	);
 
 	const handleTypeClick = useCallback((type: string) => {
-		const typeInfo = types[type as keyof typeof types];
-		editor.chain().updateAttributes(InfoPanel.name, { 
+		editor.chain().updateAttributes(InfoPanel.name, {
 			type: type,
 			customEmoji: null,
 			customBgColorLight: null,
 			customBgColorDark: null,
 			customIconColor: null
 		}).run()
-	}, [editor, types])
+	}, [editor])
 
 	const handlePresetColorClick = useCallback((preset: typeof PRESET_COLORS[0]) => {
 		editor.chain().updateAttributes(InfoPanel.name, {
@@ -59,13 +58,20 @@ export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = memo(({ editor 
 		}).run()
 	}, [editor])
 
-	// Render type buttons (only types with icons)
+	// Check which preset color is active (if any)
+	const activePresetIndex = useMemo(() => {
+		const currentLight = node?.attrs?.customBgColorLight;
+		if (!currentLight) return -1;
+		return PRESET_COLORS.findIndex(p => p.light === currentLight);
+	}, [node?.attrs?.customBgColorLight]);
+
+	// Render type buttons (including default with Square icon)
 	const typeButtons = useMemo(() => {
-		return Object.entries(types)
-			.filter(([key, config]) => config.icon !== null)
+		return (Object.entries(types) as [InfoPanelType, typeof types[InfoPanelType]][])
 			.map(([key, config]) => {
-				const Icon = config.icon!;
-				const isPressed = node?.attrs?.type === key;
+				const Icon = config.icon || Square;
+				const isPressed = node?.attrs?.type === key && !node?.attrs?.customEmoji
+					&& !node?.attrs?.customBgColorLight && !node?.attrs?.customBgColorDark;
 
 				return (
 					<Toggle
@@ -80,20 +86,28 @@ export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = memo(({ editor 
 					</Toggle>
 				)
 			})
-	}, [types, node?.attrs?.type, handleTypeClick]);
+	}, [types, node?.attrs?.type, node?.attrs?.customEmoji, node?.attrs?.customBgColorLight, node?.attrs?.customBgColorDark, handleTypeClick]);
 
-	// Render preset color buttons
+	// Render preset color buttons with active state
 	const presetColorButtons = useMemo(() => {
-		return PRESET_COLORS.map((preset) => (
-			<button
-				key={preset.name}
-				className="w-6 h-6 rounded border border-gray-200 dark:border-gray-600 hover:scale-110 transition-transform"
-				style={{ backgroundColor: theme === 'dark' ? preset.dark : preset.light }}
-				onClick={() => handlePresetColorClick(preset)}
-				title={preset.name}
-			/>
-		))
-	}, [handlePresetColorClick, theme]);
+		return PRESET_COLORS.map((preset, index) => {
+			const isActive = index === activePresetIndex;
+			return (
+				<button
+					key={preset.name}
+					className={cn(
+						"w-6 h-6 rounded border transition-transform hover:scale-110",
+						isActive
+							? "ring-2 ring-blue-500 ring-offset-1 border-blue-400"
+							: "border-gray-200 dark:border-gray-600"
+					)}
+					style={{ backgroundColor: theme === 'dark' ? preset.dark : preset.light }}
+					onClick={() => handlePresetColorClick(preset)}
+					title={preset.name}
+				/>
+			)
+		})
+	}, [handlePresetColorClick, theme, activePresetIndex]);
 
 	const getReferenceClientRect = useCallback(() => {
 		const { selection } = editor.state;
@@ -117,25 +131,21 @@ export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = memo(({ editor 
 			options={{}}
 		>
 			<div className="flex flex-row gap-1 items-center h-8">
-				{/* Type buttons with icons */}
+				{/* Section 1: Type icons (including default) */}
 				{typeButtons}
-				
+
 				<Separator orientation="vertical" className="h-6" />
 
-				{/* Preset Colors */}
+				{/* Section 2: Background colors */}
 				<Popover>
 					<PopoverTrigger asChild>
 						<Toggle
 							size="sm"
-							pressed={node?.attrs?.type === 'default' && !node?.attrs?.customEmoji}
+							pressed={activePresetIndex >= 0}
 							aria-label="Choose background color"
 							title="Background Color"
 						>
-							<div className="w-4 h-4 rounded border border-gray-300 dark:border-gray-600" 
-								style={{ 
-									background: 'linear-gradient(135deg, #f5f5f5 25%, #eff6ff 25%, #eff6ff 50%, #f0fdf4 50%, #f0fdf4 75%, #faf5ff 75%)' 
-								}} 
-							/>
+							<Palette className="h-4 w-4" />
 						</Toggle>
 					</PopoverTrigger>
 					<PopoverContent className="w-fit p-3" align="start">
@@ -148,7 +158,7 @@ export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = memo(({ editor 
 					</PopoverContent>
 				</Popover>
 
-				{/* Custom Emoji Selector */}
+				{/* Section 3: Custom Emoji Selector */}
 				<Popover>
 					<PopoverTrigger asChild>
 						<Toggle
@@ -177,6 +187,8 @@ export const InfoPanelBubbleMenu: React.FC<{ editor: Editor }> = memo(({ editor 
 				</Popover>
 
 				<Separator orientation="vertical" className="h-6" />
+
+				{/* Section 4: Copy / Delete */}
 				<Toggle size="sm" pressed={false} onClick={copyMe} aria-label="Copy" title="Copy">
 					<Copy className="h-4 w-4" />
 				</Toggle>

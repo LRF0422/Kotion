@@ -38,6 +38,7 @@ export interface FileManagerProps {
     target?: 'folder' | 'file' | 'both'
     defaultViewMode?: ViewMode
     onViewModeChange?: (mode: ViewMode) => void
+    showSidebar?: boolean
 }
 
 const VIEW_META: Record<Exclude<FileView, 'home' | 'search'>, { icon: React.ReactNode }> = {
@@ -54,7 +55,7 @@ const VIEW_LABEL_KEY: Record<Exclude<FileView, 'home' | 'search'>, string> = {
 
 export const FileManagerView: React.FC<FileManagerProps> = (props) => {
     const { isMobileOrTablet: isTouch } = useResponsive();
-    const { selectable = false, onCancel, onConfirm, onViewModeChange } = props;
+    const { selectable = false, onCancel, onConfirm, onViewModeChange, showSidebar = true } = props;
     const { t } = useI18n();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -304,7 +305,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                 <div className="relative z-20 flex h-12 w-full items-center gap-1 border-b bg-background px-2">
                     {/* left: nav */}
                     <div className="flex min-w-0 flex-1 items-center gap-1">
-                        {isTouch && (
+                        {isTouch && showSidebar && (
                             <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
                                 <SheetTrigger asChild>
                                     <Button size="icon" variant="ghost" className="h-8 w-8 flex-shrink-0">
@@ -417,7 +418,7 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
                 {/* ===== Body: sidebar + content ===== */}
                 <div className="flex min-h-0 flex-1">
-                    {!isTouch && (
+                    {!isTouch && showSidebar && (
                         <div className="h-full w-[230px] flex-shrink-0 border-r">
                             {sidebar}
                         </div>

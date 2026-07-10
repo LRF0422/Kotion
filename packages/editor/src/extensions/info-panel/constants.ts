@@ -98,4 +98,3 @@ export const PRESET_COLORS: PresetColor[] = [
 ];
 
 export const DEFAULT_INFO_PANEL_TYPE: InfoPanelType = 'default';
-export const DEFAULT_INFO_PANEL_TIPS = '';

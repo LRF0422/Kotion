@@ -1,7 +1,7 @@
 import { Node } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import { InfoPanelView } from "./info-panel-view";
-import { INFO_PANEL_TYPES, DEFAULT_INFO_PANEL_TYPE, DEFAULT_INFO_PANEL_TIPS } from "./constants";
+import { INFO_PANEL_TYPES, DEFAULT_INFO_PANEL_TYPE } from "./constants";
 
 
 declare module "@tiptap/core" {
@@ -37,12 +37,6 @@ export const InfoPanel = Node.create({
 			type: {
 				default: DEFAULT_INFO_PANEL_TYPE,
 				parseHTML: ele => ele.getAttribute("type")
-			},
-			color: {
-				default: "#E9F2FF"
-			},
-			tips: {
-				default: DEFAULT_INFO_PANEL_TIPS
 			},
 			customIconColor: {
 				default: null,

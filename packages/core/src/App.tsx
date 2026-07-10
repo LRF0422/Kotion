@@ -18,7 +18,7 @@ import { Marketplace } from "./components/Shop/Marketplace";
 
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
-import { setRequestToast, setSessionExpiredHandler } from "@kn/common"
+import { setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, clearTokens, useTranslation } from "@kn/common"
 import { registerCoreToolFactories } from "./ai/tools/register"
 import { toast, AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "@kn/ui"
 import { ErrorPage } from "./components/ErrorPage";
@@ -64,6 +64,7 @@ window.ReactDOM = ReactDOM
 const SessionExpiredDialog: React.FC<{ onLoginAgain: () => void; onStay: () => void }> = ({ onLoginAgain, onStay }) => {
     const [open, setOpen] = React.useState(true)
     const handled = React.useRef(false)
+    const { t } = useTranslation()
 
     const handleAction = () => {
         if (handled.current) return
@@ -84,17 +85,17 @@ const SessionExpiredDialog: React.FC<{ onLoginAgain: () => void; onStay: () => v
         }}>
             <AlertDialogContent>
                 <AlertDialogHeader>
-                    <AlertDialogTitle>登录已过期</AlertDialogTitle>
+                    <AlertDialogTitle>{t('auth.sessionExpired.title')}</AlertDialogTitle>
                     <AlertDialogDescription>
-                        您的登录状态已过期，请重新登录。您也可以继续留在当前页面查看内容。
+                        {t('auth.sessionExpired.message')}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogAction onClick={handleAction}>
-                        重新登录
+                        {t('auth.sessionExpired.reLogin')}
                     </AlertDialogAction>
                     <AlertDialogCancel onClick={handleCancel}>
-                        留在当前页面
+                        {t('auth.sessionExpired.stayHere')}
                     </AlertDialogCancel>
                 </AlertDialogFooter>
             </AlertDialogContent>
@@ -117,9 +118,13 @@ function showSessionExpiredDialog() {
     root.render(
         <SessionExpiredDialog
             onLoginAgain={() => {
+                clearTokens()
                 window.location.href = '/login'
             }}
-            onStay={unmount}
+            onStay={() => {
+                resetSessionExpiredGuard()
+                unmount()
+            }}
         />
     )
 }

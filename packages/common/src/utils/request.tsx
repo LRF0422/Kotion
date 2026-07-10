@@ -28,6 +28,12 @@ export function setSessionExpiredHandler(handler: SessionExpiredFn) {
     _sessionExpiredHandler = handler
 }
 
+/** Reset the session-expired guard so future 401s can trigger the dialog again.
+ *  Call this when the user dismisses the dialog and chooses to stay on the page. */
+export function resetSessionExpiredGuard() {
+    isRedirecting = false
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------

@@ -398,6 +398,12 @@ export const resources = {
                     "wechat": "使用微信注册",
                     "haveAccount": "已经拥有账号？",
                     "loginLink": "登录"
+                },
+                "sessionExpired": {
+                    "title": "登录已过期",
+                    "message": "您的登录状态已过期，请重新登录。您也可以继续留在当前页面查看内容。",
+                    "reLogin": "重新登录",
+                    "stayHere": "留在当前页面"
                 }
             },
             "template": {
@@ -1040,6 +1046,12 @@ export const resources = {
                     "wechat": "Sign up with WeChat",
                     "haveAccount": "Already have an account?",
                     "loginLink": "Sign in"
+                },
+                "sessionExpired": {
+                    "title": "Session Expired",
+                    "message": "Your session has expired. Please log in again. You can also stay on the current page to view content.",
+                    "reLogin": "Log in Again",
+                    "stayHere": "Stay on This Page"
                 }
             },
             "template": {

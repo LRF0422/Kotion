@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import { useSelector, GlobalState, useTranslation } from "@kn/common";
-import { useTheme, cn } from "@kn/ui";
+import { useResolvedTheme, cn } from "@kn/ui";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -31,7 +31,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const { node, updateAttributes, deleteNode, editor } = props;
     const attrs = node.attrs as BitableAttrs;
     const { t } = useTranslation();
-    const { theme } = useTheme();
+    const resolvedTheme = useResolvedTheme();
 
     // Current user (for created_by / updated_by)
     const userInfo = useSelector((s: GlobalState) => s.userInfo);
@@ -128,7 +128,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
 
     return (
         <NodeViewWrapper className="node-bitable-wrapper">
-            <div className={cn("bitable bitable-container", theme === "dark" && "bitable--dark")}>
+            <div className={cn("bitable bitable-container", resolvedTheme === "dark" && "bitable--dark")}>
                 <BitableToolbar
                     views={attrs.views}
                     currentViewId={currentViewId}

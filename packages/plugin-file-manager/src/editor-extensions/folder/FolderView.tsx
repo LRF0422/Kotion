@@ -47,6 +47,7 @@ export const FolderView: React.FC<NodeViewProps> = (props) => {
                     className="h-[500px]"
                     defaultViewMode={attrs.viewMode as ViewMode}
                     onViewModeChange={handleViewModeChange}
+                    showSidebar={false}
                 />
             ) : (
                 <EmptyState

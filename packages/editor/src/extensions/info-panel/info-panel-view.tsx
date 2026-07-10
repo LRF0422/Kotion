@@ -1,12 +1,12 @@
 import { cn, useTheme } from "@kn/ui";
 import { NodeViewProps } from "@tiptap/core";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
-import React, { CSSProperties, useMemo, useCallback, memo } from "react";
+import React, { useMemo, memo } from "react";
 
 
 export const InfoPanelView: React.FC<NodeViewProps> = memo((props) => {
 
-	const { node, extension, updateAttributes } = props
+	const { node, extension } = props
 	const { attrs } = node
 	const { theme } = useTheme()
 
@@ -39,41 +39,37 @@ export const InfoPanelView: React.FC<NodeViewProps> = memo((props) => {
 
 	// Memoize icon color
 	const iconColor = useMemo(() => {
-		// Only use custom icon color if explicitly set
 		if (attrs.customIconColor) {
 			return attrs.customIconColor
 		}
 		return typeInfo.iconColor
 	}, [typeInfo.iconColor, attrs.customIconColor])
 
-	// Memoize icon color style
-	const iconStyle = useMemo(() => ({
-		color: iconColor
-	} as CSSProperties), [iconColor])
-
-	// Memoize border color
+	// Memoize border color - consistent for all types, derived from icon color
 	const borderColor = useMemo(() => {
-		// For default type without icon, use a subtle gray border
-		if (attrs.type === 'default' && !attrs.customEmoji) {
-			return theme === "light" ? '#e5e5e5' : '#404040'
-		}
-		// For types with icons, use icon color with opacity
 		return theme === "light"
 			? `${iconColor}25`
 			: `${iconColor}40`
-	}, [theme, iconColor, attrs.type, attrs.customEmoji])
+	}, [theme, iconColor])
+
+	// CSS variables for dynamic colors
+	const calloutStyle = useMemo(() => ({
+		'--callout-bg': backgroundColor,
+		'--callout-border': borderColor,
+	} as React.CSSProperties), [backgroundColor, borderColor])
+
+	// Memoize icon color style
+	const iconStyle = useMemo(() => ({
+		color: iconColor
+	} as React.CSSProperties), [iconColor])
 
 	return (
 		<NodeViewWrapper as='div'>
 			<div
-				style={{
-					backgroundColor,
-					borderColor,
-					borderWidth: '1px',
-					borderStyle: 'solid'
-				}}
+				style={calloutStyle}
 				className={cn(
-					"rounded-md transition-all duration-200 px-2 py-1.5",
+					"rounded-md border px-2 py-1.5 transition-colors duration-150 hover:shadow-sm",
+					"bg-[var(--callout-bg)] border-[var(--callout-border)]",
 					theme === "light" ? "text-gray-900" : "text-gray-100"
 				)}
 			>
@@ -85,7 +81,7 @@ export const InfoPanelView: React.FC<NodeViewProps> = memo((props) => {
 							style={iconStyle}
 						>
 							{attrs.customEmoji ? (
-								<span className="text-xl leading-none flex items-center justify-center w-5 h-5">
+								<span className="text-lg leading-none w-5 h-5 flex items-center justify-center">
 									{attrs.customEmoji}
 								</span>
 							) : (

@@ -87,6 +87,7 @@ export function ThemeProvider({
 // (@kn/ui → ./components → ./theme).
 export * from "./color-scheme"
 export * from "./use-color-scheme"
+export * from "./use-resolved-theme"
 
 export const useTheme = () => {
     const context = useContext(ThemeProviderContext)

@@ -1,7 +1,7 @@
 import React, { useCallback, memo } from "react";
 import { Editor } from "@tiptap/core";
 import { Toggle } from "@kn/ui";
-import { Square } from "@kn/icon";
+import { MessageSquare } from "@kn/icon";
 
 
 export const InfoPanelStaticMenu: React.FC<{ editor: Editor }> = memo(({ editor }) => {
@@ -20,7 +20,7 @@ export const InfoPanelStaticMenu: React.FC<{ editor: Editor }> = memo(({ editor 
 			aria-label="Insert callout"
 			title="Callout"
 		>
-			<Square className="h-4 w-4" />
+			<MessageSquare className="h-4 w-4" />
 		</Toggle>
 	)
 })

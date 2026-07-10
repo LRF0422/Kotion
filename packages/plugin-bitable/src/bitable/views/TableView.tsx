@@ -6,7 +6,7 @@ import { FieldConfig, RecordData, ViewConfig } from "../../types";
 import DataGrid, { Row as DataGridRow } from "react-data-grid";
 import type { RenderRowProps } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
-import { useTheme, cn } from "@kn/ui";
+import { useResolvedTheme, cn } from "@kn/ui";
 import { createFillHandler } from "../../utils/autoFill";
 import { computeSummary } from "../../utils/summary";
 import { debounce } from "lodash";
@@ -54,7 +54,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         groups: groupedData,
     } = props;
 
-    const { theme } = useTheme();
+    const resolvedTheme = useResolvedTheme();
     const { t } = useTranslation();
     const [selectedRows, setSelectedRows] = useState<ReadonlySet<string>>(
         new Set()
@@ -295,7 +295,7 @@ export const TableView: React.FC<TableViewProps> = (props) => {
                     rowClass={isGrouped ? (getRowClass as any) : undefined}
                     className={cn(
                         "bitable-data-grid",
-                        theme === "dark" ? "rdg-dark" : "rdg-light"
+                        resolvedTheme === "dark" ? "rdg-dark" : "rdg-light"
                     )}
                     style={{
                         height: "100%",
