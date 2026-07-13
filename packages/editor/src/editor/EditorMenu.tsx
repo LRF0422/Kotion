@@ -136,7 +136,7 @@ export const EditorMenu: React.FC<{
     return (
         <>
             {toolbar && (
-                <div className="flex flex-nowrap items-center gap-0.5 w-full px-1.5 py-1 z-20 border-b border-border/60 bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
+                <div className="flex flex-nowrap items-center gap-0.5 w-full px-1.5 py-1 z-20 border-b border-border/60 bg-background overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
                     {/* Undo / Redo group */}
                     <div className="flex items-center gap-0.5">
                         <TooltipProvider delayDuration={400}>

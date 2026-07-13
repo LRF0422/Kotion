@@ -189,7 +189,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 									<Button
 										variant="secondary"
 										size="sm"
-										className="h-8 gap-1.5 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border"
+										className="h-8 gap-1.5 bg-background hover:bg-background/90 shadow-lg border"
 										onMouseDown={handleDragStart}
 									>
 										<GripVertical className="h-4 w-4" />
@@ -199,7 +199,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 									<Button
 										variant="secondary"
 										size="sm"
-										className="h-8 gap-1.5 bg-background/80 backdrop-blur-sm hover:bg-background/90 shadow-lg border"
+										className="h-8 gap-1.5 bg-background hover:bg-background/90 shadow-lg border"
 										onClick={handleUploadCover}
 										disabled={isUploading}
 									>
@@ -210,7 +210,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 									<Button
 										variant="secondary"
 										size="sm"
-										className="h-8 gap-1.5 bg-background/80 backdrop-blur-sm hover:bg-destructive hover:text-destructive-foreground shadow-lg border"
+										className="h-8 gap-1.5 bg-background hover:bg-destructive hover:text-destructive-foreground shadow-lg border"
 										onClick={handleRemoveCover}
 									>
 										<Trash2 className="h-4 w-4" />

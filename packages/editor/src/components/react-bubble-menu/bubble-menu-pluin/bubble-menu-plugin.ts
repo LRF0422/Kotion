@@ -312,7 +312,21 @@ export class BubbleMenuView implements PluginView {
 
   focusHandler = () => {
     // we use `setTimeout` to make sure `selection` is already updated
-    setTimeout(() => this.update(this.editor.view))
+    setTimeout(() => {
+      if (this.editor.isDestroyed) return
+      // Fast-exit when there's nothing to (re)show. `update(view)` is called
+      // without `oldState`, so `selectionChanged` inside `updateHandler` is
+      // always `true`, which unconditionally triggers `updatePositionSync()`
+      // + `updatePosition()` — two `posToDOMRect` layout reads plus a
+      // Floating UI compute — every time focus lands on the editor. Radix
+      // Dialog / Sheet / DropdownMenu open/close cycles all return focus
+      // here, so this fires constantly on top of the meta focus/blur
+      // transactions we already filter elsewhere. Skipping when the menu
+      // shouldn't be visible costs one cheap `shouldShow` predicate call
+      // instead of two contentEditable layout flushes.
+      if (!this.getShouldShow()) return
+      this.update(this.editor.view)
+    })
   }
 
   blurHandler = ({ event }: { event: FocusEvent }) => {

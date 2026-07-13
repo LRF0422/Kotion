@@ -67,7 +67,7 @@ export const MobileEditorToolbar: React.FC<{
         <div
             // Keep the editor focused/selected when tapping the toolbar.
             onPointerDown={(e) => e.preventDefault()}
-            className="fixed inset-x-0 z-50 flex items-center gap-0.5 overflow-x-auto border-t bg-background/95 px-1 py-1 backdrop-blur-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="fixed inset-x-0 z-50 flex items-center gap-0.5 overflow-x-auto border-t bg-background px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             style={{ bottom: keyboardHeight }}
         >
             {/* Undo / Redo */}

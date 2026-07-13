@@ -336,6 +336,49 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         }
     }, [editorContentReady, pageId])
 
+    // Keep the tab strip's icon (and title) in sync with the editor doc.
+    //
+    // The definitive source of truth for a page's emoji + title is the title
+    // node inside the editor (see PageHeader — icon is stored under
+    // `firstChild.attrs.icon`; the display title is the node's text content).
+    // `getPage()` returns the last persisted values, but between the initial
+    // fetch and every subsequent local/remote edit the tab strip would
+    // otherwise show a stale (or missing) icon until page reload.
+    //
+    // Subscribe once the editor is content-ready and push updates on every
+    // `docChanged` transaction (Tiptap's focus/blur meta transactions are
+    // filtered out — see `Tiptap transaction listener filtering practice`).
+    // Shallow-diff before dispatching so we don't churn Redux for unrelated
+    // block edits, which fire many transactions per keystroke.
+    useEffect(() => {
+        if (!editorContentReady || !pageId) return
+        const ed = editor.current
+        if (!ed) return
+
+        let lastIcon: string | undefined
+        let lastTitle: string | undefined
+
+        const readAndPush = () => {
+            const node = ed.state.doc.firstChild
+            if (!node || node.type.name !== 'title') return
+            const icon = (node.attrs as any)?.icon?.icon ?? undefined
+            const title = node.textContent || undefined
+            if (icon === lastIcon && title === lastTitle) return
+            lastIcon = icon
+            lastTitle = title
+            updateMeta(pageId, { title, icon })
+        }
+
+        readAndPush()
+
+        const onTx = ({ transaction }: { transaction: any }) => {
+            if (!transaction.docChanged) return
+            readAndPush()
+        }
+        ed.on('transaction', onTx)
+        return () => { ed.off('transaction', onTx) }
+    }, [editorContentReady, pageId, updateMeta])
+
     // Toggle wide/narrow mode. Persists by writing the `fullWidth` attr onto the
     // title node, which marks it dirty and rides the existing PATCH + Yjs sync
     // chain (same path as cover/icon). Store `null` for the default narrow mode

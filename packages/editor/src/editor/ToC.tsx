@@ -215,7 +215,7 @@ export const ToC: React.FC<{ editor: Editor; className?: string; items: TocItem[
 
     return (
         <div className={cn("h-full w-full flex flex-col bg-background dark:bg-background", className)}>
-            <div className="sticky top-0 bg-background/95 dark:bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 dark:supports-[backdrop-filter]:bg-background/60 z-10 border-b dark:border-border px-4 py-3 shadow-sm">
+            <div className="sticky top-0 bg-background dark:bg-background z-10 border-b dark:border-border px-4 py-3 shadow-sm">
                 <div className="flex items-center gap-2">
                     <div className="p-1.5 rounded-md bg-primary/10 dark:bg-primary/20">
                         <List className="h-4 w-4 text-primary dark:text-primary" />
