@@ -21,6 +21,32 @@ const getFlex = (type: 'left' | 'none' | 'right' | 'center', index: number, cols
   }
 };
 
+/**
+ * Safe subset of CSS colors. Blocks anything containing quotes, url(), or
+ * expression-like tokens to prevent style-injection through the background
+ * attribute. Accepts hex, rgb(), rgba(), hsl(), hsla(), var(--*), and named
+ * colors (letters only).
+ */
+export const isSafeBackground = (value: string): boolean => {
+  if (!value) return false;
+  const v = value.trim();
+  if (v.length > 64) return false;
+  return /^(#[0-9a-fA-F]{3,8}|(rgb|rgba|hsl|hsla)\([^"'`]+\)|var\(--[a-zA-Z0-9-_]+\)|[a-zA-Z]+)$/.test(v);
+};
+
+export const PADDING_MAP: Record<string, string> = {
+  none: '0',
+  sm: '6px',
+  md: '12px',
+  lg: '20px'
+};
+
+export const VALIGN_MAP: Record<string, string> = {
+  top: 'flex-start',
+  center: 'center',
+  bottom: 'flex-end'
+};
+
 export const Column = Node.create({
   name: "column",
   content: "block+",
@@ -58,6 +84,30 @@ export const Column = Node.create({
           if (!attributes.width) return {};
           return { width: attributes.width };
         }
+      },
+      background: {
+        default: null,
+        parseHTML: element => element.getAttribute("data-background"),
+        renderHTML: attributes => {
+          if (!attributes.background) return {};
+          return { "data-background": attributes.background };
+        }
+      },
+      padding: {
+        default: 'none',
+        parseHTML: element => element.getAttribute("data-padding") || 'none',
+        renderHTML: attributes => {
+          if (!attributes.padding || attributes.padding === 'none') return {};
+          return { "data-padding": attributes.padding };
+        }
+      },
+      verticalAlign: {
+        default: 'top',
+        parseHTML: element => element.getAttribute("data-valign") || 'top',
+        renderHTML: attributes => {
+          if (!attributes.verticalAlign || attributes.verticalAlign === 'top') return {};
+          return { "data-valign": attributes.verticalAlign };
+        }
       }
     };
   },
@@ -91,9 +141,10 @@ export const Column = Node.create({
 
           doc.descendants((node, pos) => {
             if (node.type.name === Column.name) {
-              // Use custom width if set, otherwise use getFlex for preset layouts
+              // Prefer explicit custom width regardless of preset type; otherwise
+              // fall back to preset-based flex layout.
               let flexStyle: string;
-              if (node.attrs.width !== null && node.attrs.type === 'none') {
+              if (node.attrs.width !== null && node.attrs.width !== undefined) {
                 flexStyle = `flex-basis: ${node.attrs.width}%`;
               } else {
                 flexStyle = getFlex(node.attrs.type, node.attrs.index, node.attrs.cols);

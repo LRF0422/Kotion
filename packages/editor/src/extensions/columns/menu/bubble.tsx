@@ -26,6 +26,7 @@ import { copyNode, deleteNodeInner, isNodeActivePro } from "../../../utilities";
 import { Columns } from "../columns";
 import { Button, IconButton, Separator } from "@kn/ui";
 import { toOtherColumns } from "../utilities";
+import { ColumnsAdvancedPopover } from "./AdvancedPopover";
 
 export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ editor }) => {
   const shouldShow = useCallback<BubbleMenuProps["shouldShow"]>(() => {
@@ -169,6 +170,7 @@ export const ColumnsBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ edi
         <IconButton icon={<IconTwoColumnsLeft className="h-4 w-4" />} onClick={handleTwoColumnsLeft} title="2 columns: left wide" />
         <IconButton icon={<IconTwoColumnsRight className="h-4 w-4" />} onClick={handleTwoColumnsRight} title="2 columns: right wide" />
         <Divider />
+        <ColumnsAdvancedPopover editor={editor} />
         <IconButton icon={<Trash2 className="h-4 w-4" />} onClick={deleteMe} title="Delete columns block" />
       </div>
     </BubbleMenu>

@@ -23,3 +23,18 @@ export { findParentNode } from "prosemirror-utils"
 
 export { BubbleMenu, type BubbleMenuProps, Divider, Resizable, NodeViewErrorBoundary, withNodeViewErrorBoundary } from "./components"
 
+export {
+    normalizeWidths as normalizeColumnWidths,
+    buildColumnsRow,
+    createColumnsNode,
+    createColumnNode,
+    createColumnsFromNodes
+} from "./extensions"
+export type {
+    ColumnPreset,
+    ColumnStyle as ColumnStyleAttrs,
+    CreateColumnsOptions,
+    LayoutCellSpec,
+    LayoutRowSpec
+} from "./extensions"
+

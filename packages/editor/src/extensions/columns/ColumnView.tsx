@@ -2,6 +2,7 @@ import { Trash2 } from "@kn/icon";
 import { cn } from "@kn/ui";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper } from "@tiptap/react";
 import React, { useRef, useCallback, useMemo, useState, useEffect } from "react";
+import { PADDING_MAP, VALIGN_MAP, isSafeBackground } from "./column";
 
 interface ResizeState {
     isResizing: boolean;
@@ -142,14 +143,41 @@ export const ColumnView: React.FC<NodeViewProps> = React.memo((props) => {
     const wrapperClassName = useMemo(() =>
         cn(
             "prose-p:m-1 w-full relative group/column",
-            editor.isEditable ? "p-2 border border-border/40 rounded" : "",
+            editor.isEditable ? "border border-border/40 rounded" : "",
             resizeState?.isResizing && "select-none"
         ), [editor.isEditable, resizeState?.isResizing]
     )
 
+    // Compose inline style for background / padding / vertical alignment.
+    // Kept on the NodeViewWrapper so the outer .column-view decoration (which
+    // owns flex-basis) is untouched — preserves resize logic that measures
+    // .column-view.
+    const wrapperStyle = useMemo<React.CSSProperties>(() => {
+        const padding = PADDING_MAP[node.attrs.padding as string] ?? PADDING_MAP.md;
+        const justifyContent = VALIGN_MAP[node.attrs.verticalAlign as string] ?? VALIGN_MAP.top;
+        const bg = typeof node.attrs.background === 'string' && isSafeBackground(node.attrs.background)
+            ? node.attrs.background
+            : undefined;
+
+        const effectivePadding = node.attrs.padding && node.attrs.padding !== 'none'
+            ? padding
+            : editor.isEditable ? '8px' : '0';
+
+        return {
+            padding: effectivePadding,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent,
+            background: bg,
+            borderRadius: bg ? 6 : undefined,
+            minHeight: 0
+        };
+    }, [node.attrs.padding, node.attrs.verticalAlign, node.attrs.background, editor.isEditable]);
+
     return <NodeViewWrapper
         ref={ref}
         className={wrapperClassName}
+        style={wrapperStyle}
     >
         {editor.isEditable && (
             <button

@@ -7,11 +7,11 @@ import { TextSelection } from "@tiptap/pm/state";
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     columns: {
-      insertColumns: (attrs?: { cols: number }) => ReturnType;
+      insertColumns: (attrs?: { cols?: number; layout?: 'none' | 'left' | 'middle' | 'right' | 'center'; gap?: number | null; widths?: (number | null)[] | null }) => ReturnType;
       addColBefore: () => ReturnType;
       addColAfter: () => ReturnType;
       deleteCol: () => ReturnType;
-      setColumnsType: (type: 'none' | 'left' | 'middle' | 'right') => ReturnType;
+      setColumnsType: (type: 'none' | 'left' | 'center' | 'right') => ReturnType;
     };
   }
 }
@@ -41,6 +41,17 @@ export const Columns = Node.create({
       },
       type: {
         default: 'none'
+      },
+      gap: {
+        default: null,
+        parseHTML: element => {
+          const gap = element.getAttribute("data-gap");
+          return gap ? parseFloat(gap) : null;
+        },
+        renderHTML: attributes => {
+          if (attributes.gap === null || attributes.gap === undefined) return {};
+          return { "data-gap": String(attributes.gap) };
+        }
       }
     };
   },
@@ -53,10 +64,15 @@ export const Columns = Node.create({
     ];
   },
 
-  renderHTML({ HTMLAttributes }) {
+  renderHTML({ HTMLAttributes, node }) {
+    const gap = node?.attrs?.gap;
+    const extra: Record<string, string> = {};
+    if (gap !== null && gap !== undefined && Number.isFinite(gap) && gap >= 0 && gap <= 128) {
+      extra.style = `gap: ${gap}px`;
+    }
     return [
       "div",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
+      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, extra),
       0
     ];
   },
@@ -64,7 +80,11 @@ export const Columns = Node.create({
   addCommands() {
     return {
       insertColumns: attrs => ({ tr, dispatch, editor }) => {
-        const node = createColumns(editor.schema, (attrs && attrs.cols) || 3, null,'none',);
+        const cols = (attrs && attrs.cols) || 3;
+        const layout = (attrs && attrs.layout) || 'none';
+        const gap = attrs && attrs.gap !== undefined ? attrs.gap : null;
+        const widths = (attrs && attrs.widths) || null;
+        const node = createColumns(editor.schema, cols, null, layout, { gap, widths });
 
         if (dispatch) {
           const offset = tr.selection.anchor + 1;

@@ -22,6 +22,20 @@ export {
     ColumnsBubbleMenu,
     ColumnsExtension
 } from "./columns";
+export {
+    normalizeWidths,
+    buildColumnsRow,
+    createColumns as createColumnsNode,
+    createColumn as createColumnNode,
+    createColumnsFromNodes
+} from "./columns/utilities";
+export type {
+    ColumnPreset,
+    ColumnStyle,
+    CreateColumnsOptions,
+    LayoutCellSpec,
+    LayoutRowSpec
+} from "./columns/utilities";
 export { Perf, addAnalytics } from "./perf";
 
 export * from './placeholder'

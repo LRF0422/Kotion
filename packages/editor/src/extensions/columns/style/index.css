@@ -1,6 +1,7 @@
 .columns {
     display: flex;
     width: 100%;
+    /* Per-block gap can be driven via the [data-gap] attribute; fall back to 12px */
     gap: 12px;
     contain: layout style;
     position: relative;
@@ -17,6 +18,11 @@
         }
     }
 }
+
+/* Attribute-driven gap: the actual gap is emitted as inline `style="gap: Npx"`
+   by the Columns node view. This selector only pins the zero case to avoid
+   relying on the still-limited CSS attr() fallback. */
+.columns[data-gap="0"] { gap: 0; }
 
 /* Optimize column-view decorations */
 .column-view {
