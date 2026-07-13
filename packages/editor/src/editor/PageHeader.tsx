@@ -3,6 +3,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { Clock, Plus, X, Image, ImagePlus, Trash2, Move, GripVertical } from "@kn/icon";
 import React, { useContext, useState, useCallback, useRef, useEffect } from "react";
 import type { Editor } from "@tiptap/core";
+import type { Transaction } from "@tiptap/pm/state";
 import { PageContext } from "@editor/editor/context";
 import { FileService, useOptionalService } from "@kn/common";
 
@@ -52,8 +53,17 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 	const [attrs, setAttrs] = useState<Record<string, any>>(() => readTitleAttrs())
 
 	useEffect(() => {
-		const update = () => setAttrs(readTitleAttrs())
-		update()
+		// Title attrs (cover / icon / fullWidth) live on the title Node and only
+		// change on doc edits. Gating on `docChanged` skips both Tiptap's
+		// focus/blur meta transactions — which Radix Dialog / Sheet /
+		// DropdownMenu triggers on every open by stealing editor focus — and
+		// selection-only transactions. Reading firstChild.attrs and calling
+		// setAttrs on every one of those is pure overhead per PageEditor.
+		const update = ({ transaction }: { transaction: Transaction }) => {
+			if (!transaction.docChanged) return
+			setAttrs(readTitleAttrs())
+		}
+		setAttrs(readTitleAttrs())
 		editor.on('transaction', update)
 		return () => { editor.off('transaction', update) }
 	}, [editor, readTitleAttrs])

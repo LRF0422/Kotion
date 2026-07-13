@@ -1,4 +1,5 @@
 import { Editor } from "@tiptap/core";
+import type { Transaction } from "@tiptap/pm/state";
 import {
     useCallback,
     useEffect,
@@ -31,6 +32,17 @@ import {
 
 /** The scroll container that wraps the editor (see editor/render.tsx). */
 const EDITOR_CONTAINER_ID = "editor-container";
+
+/**
+ * Selector for the LRU tab-pool layer that keeps a whole PageEditor mounted
+ * but visually inactive. `TabbedEditorArea` stamps this attribute on the
+ * wrapper it toggles `aria-hidden` on. Anchoring on a bespoke attribute
+ * instead of the generic `[aria-hidden]` avoids false-positives from Radix
+ * modal overlays, which set `aria-hidden="true"` on `document.body`'s
+ * non-portal children (typically `#root`) — otherwise every Dialog / Sheet /
+ * DropdownMenu open would spuriously hide margin cards on all editors.
+ */
+const TAB_LAYER_SELECTOR = "[data-editor-tab-layer]";
 
 export interface MarginItem {
     id: string;
@@ -144,12 +156,14 @@ export function useMarginCards<T extends MarginItem>(
     const reflow = useCallback(() => {
         if (!editor || editor.isDestroyed || disabled) return;
 
-        // Hidden tab guard. Inactive tab layers are kept mounted but hidden —
-        // either display:none (0×0 rect) or, in the LRU tab pool, an
-        // `aria-hidden="true"` + opacity-0 layer that keeps full size. Either
-        // way our cards are portaled to <body>, so without this guard a
-        // backgrounded tab's cards would float over the visible tab.
-        if (editor.view.dom.closest('[aria-hidden="true"]')) {
+        // Hidden tab guard. Inactive tab layers in the LRU pool are kept
+        // mounted but flipped to `aria-hidden="true"` + opacity-0. Our cards
+        // portal to <body>, so without this guard a backgrounded tab's cards
+        // would float over the visible tab. We look ONLY at the tab-layer
+        // wrapper — see TAB_LAYER_SELECTOR — never at arbitrary ancestors,
+        // because Radix modals set `aria-hidden` high up the tree.
+        const tabLayer = editor.view.dom.closest<HTMLElement>(TAB_LAYER_SELECTOR);
+        if (tabLayer?.getAttribute("aria-hidden") === "true") {
             setPanelLeft(null);
             return;
         }
@@ -235,7 +249,22 @@ export function useMarginCards<T extends MarginItem>(
             return;
         }
 
-        const onTransaction = () => {
+        // Skip only Tiptap's focus/blur meta-only transactions. These fire
+        // every time a Radix Dialog / Sheet / DropdownMenu opens or closes
+        // (Radix steals focus, Tiptap's FocusEvents extension dispatches a
+        // meta-only `focus` / `blur` transaction in response). Without this
+        // gate every menu open would run collect(editor) — an O(doc) walk —
+        // AND reflow — an O(anchors) burst of `coordsAtPos` layout reads —
+        // once per comment panel AND once per sticky-note panel. All other
+        // meta-only transactions (block-comment plugin state changes, sticky-
+        // note hover metas, etc.) still pass through so anchors stay in sync.
+        const onTransaction = ({ transaction }: { transaction: Transaction }) => {
+            const isFocusBlurOnly =
+                !transaction.docChanged &&
+                !transaction.selectionSet &&
+                (transaction.getMeta("focus") != null ||
+                    transaction.getMeta("blur") != null);
+            if (isFocusBlurOnly) return;
             rawRef.current = collect(editor);
             requestAnimationFrame(reflow);
         };
@@ -254,18 +283,23 @@ export function useMarginCards<T extends MarginItem>(
         const io = new IntersectionObserver(() => requestAnimationFrame(reflow));
         io.observe(editor.view.dom);
 
-        // The LRU tab pool hides inactive editors with opacity (not display:none)
-        // and flips `aria-hidden` on the tab layer — which fires no scroll /
-        // transaction / intersection event. Watch that attribute so a card hides
-        // the instant its tab is backgrounded and reappears when it returns.
-        const ariaTarget = editor.view.dom.closest<HTMLElement>("[aria-hidden]");
+        // The LRU tab pool hides inactive editors with opacity (not
+        // display:none) and flips `aria-hidden` on the tab layer — which
+        // fires no scroll / transaction / intersection event. Watch that
+        // attribute so a card hides the instant its tab is backgrounded and
+        // reappears when it returns. Scope precisely to the tab layer (see
+        // TAB_LAYER_SELECTOR) so Radix's aria-hidden churn on ancestors
+        // doesn't wake this observer.
+        const ariaTarget = editor.view.dom.closest<HTMLElement>(TAB_LAYER_SELECTOR);
         const mo = ariaTarget
             ? new MutationObserver(() => requestAnimationFrame(reflow))
             : null;
-        mo?.observe(ariaTarget as HTMLElement, {
-            attributes: true,
-            attributeFilter: ["aria-hidden"],
-        });
+        if (ariaTarget && mo) {
+            mo.observe(ariaTarget, {
+                attributes: true,
+                attributeFilter: ["aria-hidden"],
+            });
+        }
 
         return () => {
             editor.off("transaction", onTransaction);

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Editor, useMarginCards, findNodeByBlockId } from "@kn/editor";
+import type { Transaction } from "@kn/editor";
 import { useIsMobile } from "@kn/ui";
 import type { CommentItem as CommentItemType } from "../types";
 import { MarginCommentCard } from "./MarginCommentCard";
@@ -96,6 +97,13 @@ export const CommentMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) => 
     // Mirror the extension's active thread — check both inline (mark) and
     // block-level storage. Block takes priority since addBlockComment sets it
     // last.
+    //
+    // Skip ONLY Tiptap's focus/blur meta-only transactions (see FocusEvents in
+    // @tiptap/core — they carry a `focus` / `blur` meta with no doc or
+    // selection change). Radix Dialog / Sheet / DropdownMenu steal focus every
+    // time they open, and without this filter each menu open would wake this
+    // sync twice. All other meta-only transactions (e.g. block-comment plugin
+    // state changes) still pass through so the panel stays in sync.
     useEffect(() => {
         if (!editor) return;
         const sync = () => {
@@ -103,9 +111,18 @@ export const CommentMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) => 
             const markActive = (editor.storage as any).comment?.activeThreadId || null;
             setActiveThreadId(blockActive || markActive);
         };
+        const onTx = ({ transaction }: { transaction: Transaction }) => {
+            const isFocusBlurOnly =
+                !transaction.docChanged &&
+                !transaction.selectionSet &&
+                (transaction.getMeta("focus") != null ||
+                    transaction.getMeta("blur") != null);
+            if (isFocusBlurOnly) return;
+            sync();
+        };
         sync();
-        editor.on("transaction", sync);
-        return () => { editor.off("transaction", sync); };
+        editor.on("transaction", onTx);
+        return () => { editor.off("transaction", onTx); };
     }, [editor]);
 
     // Clean up orphaned empty threads: when the user leaves a thread that still

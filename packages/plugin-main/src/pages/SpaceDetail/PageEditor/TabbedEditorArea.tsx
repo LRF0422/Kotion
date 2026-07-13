@@ -131,6 +131,12 @@ export const TabbedEditorArea: React.FC<TabbedEditorAreaProps> = ({ spaceId }) =
                         // switching.
                         <div
                             key={pid}
+                            // Consumed by editor hooks (see `use-margin-cards`)
+                            // that need to detect "my tab was backgrounded"
+                            // without being tricked by Radix modals stamping
+                            // aria-hidden on the app root when a Dialog /
+                            // Sheet / DropdownMenu opens.
+                            data-editor-tab-layer
                             aria-hidden={!isActive}
                             className={cn(
                                 // animate-in fades freshly-mounted (uncached) tabs in;

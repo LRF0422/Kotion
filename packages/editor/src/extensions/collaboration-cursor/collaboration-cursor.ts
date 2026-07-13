@@ -184,15 +184,6 @@ export const NodeSelectionCursor = Extension.create<NodeSelectionCursorOptions>(
             selection.constructor.name === 'NodeSelection' ||
             (selection.$head.pos === selection.$anchor.pos && selection.from !== selection.to);
 
-        console.log('NodeSelectionCursor: onSelectionUpdate', {
-            isNodeSelection,
-            constructorName: selection.constructor.name,
-            from: selection.from,
-            to: selection.to,
-            $headPos: selection.$head.pos,
-            $anchorPos: selection.$anchor.pos,
-        });
-
         // Store nodeSelection in a SEPARATE awareness field to avoid conflicts with yCursorPlugin
         // yCursorPlugin manages its own 'cursor' field, so we use 'nodeSelection' instead
         provider.awareness.setLocalStateField('nodeSelection', {

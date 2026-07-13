@@ -1,691 +1,300 @@
-import { createRoot, Root } from 'react-dom/client';
-
-import { Extension } from '@tiptap/core';
-import { safePos } from '../../utilities/position';
-import { ActiveNode, selectAncestorNodeByDom } from '../../utilities/select-node-by-dom';
-import { removePossibleTable } from '../../utilities/table';
+import { Extension } from '@tiptap/core'
 import {
-  NodeSelection,
-  Plugin as PMPlugin,
-  PluginKey as PMPluginKey,
-  Selection,
-  TextSelection,
-} from '@tiptap/pm/state';
-import { findParentNodeClosestToPos } from 'prosemirror-utils';
-import { Decoration, DecorationSet, EditorView } from '@tiptap/pm/view';
-import { createColumnsFromNodes } from '../columns/utilities';
-import { Node, Slice, Fragment } from '@tiptap/pm/model';
-import React from 'react';
-import { DragHandle, BlockMenuItem } from './block-menu';
-import { Editor } from '@tiptap/core';
+    NodeSelection,
+    Plugin as PMPlugin,
+    PluginKey as PMPluginKey,
+    Selection,
+    TextSelection,
+} from '@tiptap/pm/state'
+import { Decoration, DecorationSet, EditorView } from '@tiptap/pm/view'
+import { Node } from '@tiptap/pm/model'
+import { findParentNodeClosestToPos } from 'prosemirror-utils'
 
-const DragablePluginKey = new PMPluginKey('dragable');
+import { ActiveNode } from '../../utilities/select-node-by-dom'
+import { safePos } from '../../utilities/position'
+import { removePossibleTable } from '../../utilities/table'
+import { BlockMenuItem } from './block-menu'
+import { createHoverController } from './hover-controller'
+import { createDragSource } from './drag-source'
+import { createColumnDropController } from './column-drop'
+
+const DragablePluginKey = new PMPluginKey('dragable')
+const SelectionDecorationPluginKey = new PMPluginKey('AncestorDragablePluginFocusKey')
+
+/**
+ * Delay before wiping lingering selection state after a non-column drop.
+ * ProseMirror's own drop transaction commits synchronously; scheduling the
+ * cleanup at the tail of the current task lets that commit land first and
+ * avoids fighting its own selection update.
+ */
+const DROP_CLEAR_DELAY_MS = 100
+
+const SELECTED_NODE_CLASSES = [
+    'ProseMirror-selectednode',
+    'ProseMirror-selectedblocknode-dragable',
+    'ProseMirror-selectedblocknode-normal',
+] as const
 
 export interface DragableStorage {
-  blockMenuItems: BlockMenuItem[]
+    blockMenuItems: BlockMenuItem[]
 }
 
 declare module '@tiptap/core' {
-  interface Storage {
-    dragable: DragableStorage;
-  }
+    interface Storage {
+        dragable: DragableStorage
+    }
 }
 
-export const Dragable = Extension.create<DragableStorage>({
-  name: 'dragable',
+/**
+ * Mutable state shared between the four `dragable` sub-controllers. This
+ * intentionally replaces what was a bag of top-level `let`s in the old
+ * monolithic implementation — bundling them in one object makes it obvious
+ * which pieces are read/written across module boundaries.
+ *
+ * Ownership summary:
+ *   - `view`           — orchestrator sets it in `view()` update.
+ *   - `activeNode`     — hover-controller writes; drag-source and orchestrator
+ *                         reset on drop / dragend / mouseup.
+ *   - `activeSelection`— drag-source writes on grip mousedown; orchestrator
+ *                         resets after drop / dragend.
+ *   - `dragging`       — drag-source flips true at dragstart; orchestrator
+ *                         and drag-source flip back on drop / dragend / mouseup.
+ *   - `draggedNodeInfo`— drag-source writes on mousedown; read by column-drop
+ *                         and the drop orchestrator; reset on completion.
+ */
+export interface DragSharedState {
+    view: EditorView | null
+    activeNode: ActiveNode | null
+    activeSelection: Selection | null
+    dragging: boolean
+    draggedNodeInfo: { node: Node; pos: number } | null
+}
 
-  addStorage() {
+function createSharedState(): DragSharedState {
     return {
-      blockMenuItems: [] as BlockMenuItem[],
+        view: null,
+        activeNode: null,
+        activeSelection: null,
+        dragging: false,
+        draggedNodeInfo: null,
     }
-  },
+}
 
-  addProseMirrorPlugins() {
-    const editor = this.editor
-    const storage = this.storage as DragableStorage
+/**
+ * `Dragable` — Notion-style drag handle + block menu for every top-level
+ * block, plus a Notion-style "drop next to a block to make columns"
+ * interaction.
+ *
+ * Implementation is split across four collaborators sharing a small mutable
+ * state bag (`DragSharedState` above):
+ *
+ *   - `hover-controller` — handle DOM + block menu React root + rAF-throttled
+ *                          mousemove hover resolution.
+ *   - `drag-source`      — grip mousedown / mouseup / dragstart callbacks
+ *                          wired into the React DragHandle.
+ *   - `column-drop`      — drop-zone indicator + column-split drop consumer.
+ *   - selection decoration — small PMPlugin below that styles NodeSelections.
+ *
+ * The orchestrator here owns the ProseMirror plugin lifecycle and the drop
+ * fallback (when column-split doesn't apply, fall through to the normal
+ * ProseMirror drag-drop with a small post-drop cleanup).
+ */
+export const Dragable = Extension.create<DragableStorage>({
+    name: 'dragable',
 
-    let editorView: EditorView;
-    let containerDOM: HTMLElement;
-    let blockMenuMountDOM: HTMLElement;
-    let activeNode: ActiveNode | null;
-    let activeSelection: Selection | null;
-    let dragging = false;
-    let draggedNodeInfo: { node: Node; pos: number } | null = null;
-    let mouseleaveTimer: any = null;
-    let blockMenuRoot: Root | null = null;
+    addStorage() {
+        return {
+            blockMenuItems: [] as BlockMenuItem[],
+        }
+    },
 
-    // Column drop zone state
-    let dropZoneIndicator: HTMLElement | null = null;
-    let dropZoneTarget: { node: Node; pos: number; el: HTMLElement; side: 'left' | 'right' } | null = null;
-    let columnDropTimer: any = null;
-    const COLUMN_DROP_DELAY = 120; // ms to wait before showing column indicator
+    addProseMirrorPlugins() {
+        const editor = this.editor
+        const shared = createSharedState()
 
-    const createDragHandleContainer = () => {
-      const container = document.createElement('div');
-      container.className = 'drag-handle-container';
-
-      // Single React mount that renders the whole handle UI (the "+" add button
-      // and the draggable grip). Drag events are wired up in React via callbacks.
-      const menuMount = document.createElement('div');
-      menuMount.className = 'block-menu-mount';
-      container.appendChild(menuMount);
-
-      return { container, menuMount };
-    };
-
-    const showDragHandleDOM = () => {
-      containerDOM?.classList?.add('show');
-      containerDOM?.classList?.remove('hide');
-    };
-
-    const hideDragHandleDOM = () => {
-      // Don't hide if the block menu dropdown is open
-      if (containerDOM?.getAttribute('data-menu-open') === 'true') return;
-      containerDOM?.classList?.remove('show');
-      containerDOM?.classList?.remove('active');
-      containerDOM?.classList?.add('hide');
-    };
-
-    const renderBlockMenu = () => {
-      if (!blockMenuMountDOM || !editor) return
-
-      if (!blockMenuRoot) {
-        blockMenuRoot = createRoot(blockMenuMountDOM)
-      }
-
-      // Always read from editor.storage to get the latest blockMenuItems
-      // (editor.storage.dragable is replaced by render.tsx/collaboration.tsx
-      // after the extension is created, so the captured `storage` reference
-      // becomes stale)
-      const currentItems = (editor.storage?.dragable as DragableStorage)?.blockMenuItems || []
-
-      blockMenuRoot.render(
-        React.createElement(DragHandle, {
-          editor: editor as Editor,
-          activeNode,
-          items: currentItems,
-          onGripMouseDown: handleMouseDown,
-          onGripMouseUp: handleMouseUp,
-          onGripDragStart: handleDragStart,
+        // Construction order matters: drag-source needs to call column-drop's
+        // hide (on mouseUp), so column-drop is built first.
+        const columnDrop = createColumnDropController(shared)
+        const dragSource = createDragSource({
+            shared,
+            hideDropIndicator: columnDrop.hide,
         })
-      )
-    }
-
-    const unmountBlockMenu = () => {
-      if (blockMenuRoot) {
-        blockMenuRoot.unmount()
-        blockMenuRoot = null
-      }
-    }
-
-    const renderDragHandleDOM = (view: EditorView, referenceRectDOM: HTMLElement, activeNode: ActiveNode) => {
-      const root = view.dom.parentElement;
-
-      if (!root) return;
-
-      // For a details block the resolved reference can be the inner summary/content,
-      // which flexbox insets to the right of the leading ▶ toggle. Anchoring the
-      // handle to that inset point drops it on top of the toggle (+ ▶ ⠿ ● overlap).
-      // Anchor to the outer `.details` box so the handle stays in the left gutter.
-      const detailsBox = referenceRectDOM.closest?.('.details') as HTMLElement | null;
-      const anchorDOM = detailsBox ?? referenceRectDOM;
-
-      const targetNodeRect = anchorDOM.getBoundingClientRect();
-      const rootRect = root.getBoundingClientRect();
-
-      let offsetX = -5;
-
-      if (anchorDOM.tagName === 'LI') {
-        offsetX = anchorDOM.getAttribute('data-checked') ? -3 : -16;
-      }
-
-      const containerWidth = containerDOM.offsetWidth || 38; // 18px + 2px gap + 18px
-      const left = targetNodeRect.left - rootRect.left - containerWidth + offsetX;
-      const top = targetNodeRect.top - rootRect.top + 8 + root.scrollTop;
-
-      containerDOM.style.left = `${left}px`;
-      containerDOM.style.top = `${top - 2}px`;
-
-      showDragHandleDOM();
-    };
-
-    const handleMouseEnter = () => {
-      if (!activeNode) return null;
-
-      clearTimeout(mouseleaveTimer);
-      showDragHandleDOM();
-    };
-
-    const handleMouseLeave = () => {
-      if (!activeNode) return null;
-      mouseleaveTimer = setTimeout(() => {
-        hideDragHandleDOM();
-      }, 300);
-    };
-
-    const handleMouseDown = () => {
-      if (!activeNode) return null;
-
-      const nodePos = activeNode.$pos.pos - activeNode.offset;
-      draggedNodeInfo = { node: activeNode.node, pos: nodePos };
-
-      if (NodeSelection.isSelectable(activeNode.node)) {
-        const nodeSelection = NodeSelection.create(editorView.state.doc, nodePos);
-        editorView.dispatch(editorView.state.tr.setSelection(nodeSelection));
-        editorView.focus();
-        activeSelection = nodeSelection;
-        return nodeSelection;
-      }
-
-      // For non-selectable nodes (paragraphs, headings, etc.) we still
-      // track the node via draggedNodeInfo so the column drop logic works.
-      return null;
-    };
-
-    const handleMouseUp = () => {
-      if (!dragging) return;
-
-      dragging = false;
-      activeSelection = null;
-      activeNode = null;
-      draggedNodeInfo = null;
-      hideDropZoneIndicator();
-    };
-
-    // Column drop zone functions
-    const createDropZoneIndicator = () => {
-      const indicator = document.createElement('div');
-      indicator.className = 'column-drop-indicator';
-      return indicator;
-    };
-
-    const showDropZoneIndicator = (targetEl: HTMLElement, side: 'left' | 'right') => {
-      if (!dropZoneIndicator) {
-        dropZoneIndicator = createDropZoneIndicator();
-        editorView.dom.parentElement?.appendChild(dropZoneIndicator);
-      }
-
-      const root = editorView.dom.parentElement!;
-      const targetRect = targetEl.getBoundingClientRect();
-      const rootRect = root.getBoundingClientRect();
-      const scrollTop = root.scrollTop;
-
-      // A thin vertical insertion bar pinned to the target block's left or right
-      // edge — the bar's width / glow live in CSS. `left` / `top` / `height`
-      // animate via CSS transition, so left↔right switches slide smoothly.
-      const top = targetRect.top - rootRect.top + scrollTop;
-      const left = side === 'left'
-        ? targetRect.left - rootRect.left - 3
-        : targetRect.right - rootRect.left - 1;
-
-      dropZoneIndicator.style.top = `${top}px`;
-      dropZoneIndicator.style.height = `${targetRect.height}px`;
-      dropZoneIndicator.style.left = `${left}px`;
-      dropZoneIndicator.className = `column-drop-indicator ${side}`;
-      dropZoneIndicator.style.display = 'block';
-    };
-
-    const hideDropZoneIndicator = () => {
-      if (dropZoneIndicator) {
-        dropZoneIndicator.style.display = 'none';
-      }
-      dropZoneTarget = null;
-      clearTimeout(columnDropTimer);
-    };
-
-    const detectDropSide = (event: DragEvent, targetEl: HTMLElement): 'left' | 'right' => {
-      const rect = targetEl.getBoundingClientRect();
-      const midX = rect.left + rect.width / 2;
-      return event.clientX < midX ? 'left' : 'right';
-    };
-
-    const handleDragStart = (event: DragEvent) => {
-      dragging = true;
-      if (!event.dataTransfer || !draggedNodeInfo) return;
-
-      // Build the drag slice from the dragged node so that non-selectable
-      // blocks (paragraphs, headings) work the same as selectable ones.
-      let slice: Slice;
-      if (activeSelection && NodeSelection.isSelectable(draggedNodeInfo.node)) {
-        slice = activeSelection.content();
-      } else {
-        slice = new Slice(Fragment.from(draggedNodeInfo.node), 0, 0);
-      }
-
-      event.dataTransfer.effectAllowed = 'copyMove';
-      const { dom, text } = editorView.serializeForClipboard(slice);
-      event.dataTransfer.clearData();
-      event.dataTransfer.setData('text/html', dom.innerHTML);
-      event.dataTransfer.setData('text/plain', text);
-      event.dataTransfer.setDragImage(activeNode?.el as any, 0, 0);
-
-      editorView.dragging = {
-        slice,
-        move: true,
-      };
-    };
-
-    return [
-      new PMPlugin({
-        key: DragablePluginKey,
-        view: (view) => {
-          if (view.editable) {
-            const result = createDragHandleContainer();
-            containerDOM = result.container;
-            blockMenuMountDOM = result.menuMount;
-
-            // Hover show/hide on container only (not individual children).
-            // The grip's drag/click events are wired up inside the React
-            // DragHandle component (see renderBlockMenu).
-            containerDOM.addEventListener('mouseenter', handleMouseEnter);
-            containerDOM.addEventListener('mouseleave', handleMouseLeave);
-
-            view.dom.parentNode?.appendChild(containerDOM);
-            view.dom.parentElement?.setAttribute('style', "position: relative;");
-          }
-
-          return {
-            update(view) {
-              editorView = view;
-            },
-            destroy: () => {
-              if (!containerDOM) return;
-
-              clearTimeout(mouseleaveTimer);
-              clearTimeout(columnDropTimer);
-              unmountBlockMenu();
-              containerDOM.removeEventListener('mouseenter', handleMouseEnter);
-              containerDOM.removeEventListener('mouseleave', handleMouseLeave);
-              containerDOM.remove();
-              dropZoneIndicator?.remove();
-              dropZoneIndicator = null;
-            },
-          };
-        },
-        props: {
-          handleDOMEvents: {
-            dragover: (view, event: DragEvent) => {
-              if (!view.editable || !dragging || !draggedNodeInfo) return false;
-
-              const coords = { left: event.clientX, top: event.clientY };
-              const pos = view.posAtCoords(coords);
-
-              if (!pos || pos.pos === 0) {
-                hideDropZoneIndicator();
-                return false;
-              }
-
-              // Get target DOM element (skip text nodes)
-              let targetDom: HTMLElement | null = event.target as HTMLElement;
-              while (targetDom && targetDom.nodeType === 3) {
-                targetDom = targetDom.parentElement;
-              }
-
-              if (!targetDom || targetDom === view.dom) {
-                hideDropZoneIndicator();
-                return false;
-              }
-
-              // Check if target is inside a column's content (not the column itself)
-              // If so, skip column indicator to allow normal drag-drop into columns
-              const columnContent = targetDom.closest('.node-column');
-              if (columnContent) {
-                // Check if we're hovering over content inside the column, not the column border
-                const columnRect = columnContent.getBoundingClientRect();
-                const isNearBorder = event.clientX < columnRect.left + 20 || event.clientX > columnRect.right - 20;
-                if (!isNearBorder) {
-                  // Inside column content - allow normal drop
-                  hideDropZoneIndicator();
-                  return false;
-                }
-              }
-
-              // Resolve the block node using the same robust path as the drag
-              // handle (mousemove): climb to the enclosing react-renderer for
-              // custom nodes (image/table/etc.), then defer to
-              // selectAncestorNodeByDom. The previous bespoke tag-whitelist walk
-              // failed for many blocks (code/quote/nested wrappers), so the
-              // indicator never appeared for them.
-              let blockDom: HTMLElement | null = targetDom;
-              let maybeReactRenderer: HTMLElement | null = targetDom;
-              while (maybeReactRenderer && !maybeReactRenderer.classList?.contains('react-renderer')) {
-                maybeReactRenderer = maybeReactRenderer.parentElement;
-              }
-              if (maybeReactRenderer && !maybeReactRenderer.classList?.contains('node-columns')) {
-                blockDom = maybeReactRenderer;
-              }
-
-              const result = selectAncestorNodeByDom(blockDom, view);
-              if (!result) {
-                hideDropZoneIndicator();
-                return false;
-              }
-
-              // Skip containers that can't become a column
-              const skipTypes = ['doc', 'title', 'tableOfContents'];
-              if (skipTypes.includes(result.node.type.name)) {
-                hideDropZoneIndicator();
-                return false;
-              }
-
-              // Nodes that aren't valid standalone column content (bare list
-              // items aren't in the `block` group; nesting columns is confusing).
-              // Skip column-split for these on EITHER the dragged or target side,
-              // falling back to normal drag-drop.
-              const noColumnTypes = ['listItem', 'taskItem', 'columns', 'column'];
-              const draggedTypeName = draggedNodeInfo.node.type.name;
-              if (
-                noColumnTypes.includes(result.node.type.name) ||
-                (draggedTypeName && noColumnTypes.includes(draggedTypeName))
-              ) {
-                hideDropZoneIndicator();
-                return false;
-              }
-
-              // Don't drop on itself
-              const draggedPos = draggedNodeInfo.pos;
-              const targetPos = result.$pos.pos - result.offset;
-              if (targetPos === draggedPos) {
-                hideDropZoneIndicator();
-                return false;
-              }
-
-              // Don't drop on parent or child of dragged node
-              const draggedNode = draggedNodeInfo.node;
-              if (draggedNode) {
-                const draggedEnd = draggedPos + draggedNode.nodeSize;
-                // Target is inside dragged node
-                if (targetPos >= draggedPos && targetPos < draggedEnd) {
-                  hideDropZoneIndicator();
-                  return false;
-                }
-                // Dragged is inside target
-                const targetEnd = targetPos + result.node.nodeSize;
-                if (draggedPos >= targetPos && draggedPos < targetEnd) {
-                  hideDropZoneIndicator();
-                  return false;
-                }
-              }
-
-              const side = detectDropSide(event, result.el);
-
-              // Show indicator after delay
-              if (!dropZoneTarget ||
-                dropZoneTarget.pos !== targetPos ||
-                dropZoneTarget.side !== side) {
-                clearTimeout(columnDropTimer);
-                dropZoneTarget = {
-                  node: result.node,
-                  pos: targetPos,
-                  el: result.el,
-                  side
-                };
-                columnDropTimer = setTimeout(() => {
-                  if (dropZoneTarget) {
-                    showDropZoneIndicator(dropZoneTarget.el, dropZoneTarget.side);
-                  }
-                }, COLUMN_DROP_DELAY);
-              }
-
-              return false;
-            },
-            drop: (view, event: DragEvent) => {
-              if (!view.editable || !containerDOM) return false;
-              if (!draggedNodeInfo) return false;
-
-              // Always clear the column drop timer on any drop
-              clearTimeout(columnDropTimer);
-
-              // Check if we should create columns
-              if (dropZoneTarget) {
-                const draggedNode = draggedNodeInfo.node;
-
-                const columnsNode = draggedNode
-                  ? createColumnsFromNodes(
-                      view.state.schema,
-                      dropZoneTarget.side === 'left' ? draggedNode.toJSON() : dropZoneTarget.node.toJSON(),
-                      dropZoneTarget.side === 'left' ? dropZoneTarget.node.toJSON() : draggedNode.toJSON()
-                    )
-                  : null;
-
-                // Only intercept the drop when we can actually build the layout;
-                // otherwise let it fall through to the normal drag-drop below.
-                if (draggedNode && columnsNode) {
-                  event.preventDefault();
-                  event.stopPropagation();
-
-                  try {
-                    const tr = view.state.tr;
-                    const draggedPos = draggedNodeInfo.pos;
-                    const targetPos = dropZoneTarget.pos;
-
-                    // Delete dragged node first if it's before target
-                    if (draggedPos < targetPos) {
-                      tr.delete(draggedPos, draggedPos + draggedNode.nodeSize);
-                      // Adjust target position after deletion
-                      const adjustedTargetPos = tr.mapping.map(targetPos);
-                      const targetNode = tr.doc.nodeAt(adjustedTargetPos);
-                      if (targetNode) {
-                        tr.replaceWith(adjustedTargetPos, adjustedTargetPos + targetNode.nodeSize, columnsNode);
-                      }
-                    } else {
-                      // Replace target first, then delete dragged
-                      tr.replaceWith(targetPos, targetPos + dropZoneTarget.node.nodeSize, columnsNode);
-                      const adjustedDraggedPos = tr.mapping.map(draggedPos);
-                      tr.delete(adjustedDraggedPos, adjustedDraggedPos + draggedNode.nodeSize);
-                    }
-
-                    view.dispatch(tr);
-                  } catch (err) {
-                    console.error('Error creating columns:', err);
-                  }
-
-                  hideDropZoneIndicator();
-                  activeSelection = null;
-                  activeNode = null;
-                  draggedNodeInfo = null;
-                  dragging = false;
-
-                  return true;
-                }
-
-                // Couldn't build columns — clear the indicator and continue.
-                hideDropZoneIndicator();
-              }
-
-              const eventPos = view.posAtCoords({
-                left: event.clientX,
-                top: event.clientY,
-              });
-
-              setTimeout(() => {
-                if (activeSelection) {
-                  [
-                    'ProseMirror-selectednode',
-                    'ProseMirror-selectedblocknode-dragable',
-                    'ProseMirror-selectedblocknode-normal',
-                  ].forEach((cls) => {
-                    (view.dom as HTMLElement).querySelectorAll(`.${cls}`).forEach((dom) => dom.classList.remove(cls));
-                  });
-                  const noneSelection = new TextSelection(
-                    view.state.doc.resolve(safePos(view.state, eventPos?.pos ?? 0))
-                  );
-                  view.dispatch(view.state.tr.setSelection(noneSelection));
-                  editor.commands.blur();
-
-                  activeSelection = null;
-                  activeNode = null;
-                }
-                draggedNodeInfo = null;
-              }, 100);
-
-              if (!eventPos) {
-                hideDropZoneIndicator();
-                return true;
-              }
-
-              const maybeTitle = findParentNodeClosestToPos(
-                view.state.doc.resolve(safePos(editor.state, eventPos.pos)),
-                (node) => node.type.name === 'title'
-              );
-
-              // 不允许在 title 处放置
-              if (eventPos.pos === 0 || maybeTitle) {
-                hideDropZoneIndicator();
-                return true;
-              }
-
-              if (dragging) {
-                const tr = removePossibleTable(view, event);
-
-                dragging = false;
-                hideDropZoneIndicator();
-
-                if (tr) {
-                  view.dispatch(tr);
-                  event.preventDefault();
-                  return true;
-                }
-              }
-
-              hideDropZoneIndicator();
-              return false;
-            },
-            mousemove: (view, event) => {
-              if (!view.editable || !containerDOM) return false;
-
-              // Keep the handle pinned to its block while the block menu is open.
-              if (containerDOM.getAttribute('data-menu-open') === 'true') return false;
-
-              const coords = { left: event.clientX, top: event.clientY };
-              const pos = view.posAtCoords(coords);
-
-              if (!pos || !pos.pos) return false;
-
-              let dom: any = view.nodeDOM(pos.pos) || view.domAtPos(pos.pos)?.node || event.target;
-
-              const maybeTaskItemOrListItem = findParentNodeClosestToPos(view.state.doc.resolve(pos.pos), (node) =>
-                ['taskItem', 'listItem'].some((name) => name === node.type.name)
-              );
-
-              if (!dom) {
-                if (dragging) return false;
-                hideDragHandleDOM();
-                return false;
-              }
-
-              while (dom && dom.nodeType === 3) {
-                dom = dom.parentElement;
-              }
-
-              // 选中列表项
-              if (maybeTaskItemOrListItem) {
-                while (dom && dom.tagName !== 'LI') {
-                  dom = dom.parentElement;
-                }
-              }
-
-              if (dom.tagName === 'LI') {
-                if (dom?.parentElement?.childElementCount === 1) {
-                  return false;
-                }
-              }
-
-              // 不允许选中整个列表
-              if (dom.tagName === 'UL' || dom.tagName === 'OL') {
-                return false;
-              }
-
-              try {
-                let maybeReactRenderer: HTMLElement | null = dom;
-
-                while (maybeReactRenderer && !maybeReactRenderer.classList?.contains('react-renderer')) {
-                  maybeReactRenderer = maybeReactRenderer.parentElement;
-                }
-
-                if (maybeReactRenderer && !maybeReactRenderer?.classList?.contains('node-columns')) {
-                  dom = maybeReactRenderer;
-                }
-              } catch (e) {
-                //
-              }
-
-              if (!(dom instanceof Element)) {
-                if (dragging) return false;
-                hideDragHandleDOM();
-                return false;
-              }
-
-              const result = selectAncestorNodeByDom(dom, view);
-
-              if (
-                !result ||
-                result.node.type.name === 'doc' ||
-                result.node.type.name === 'title' ||
-                result.node.type.name === 'tableOfContents'
-              ) {
-                if (dragging) return false;
-                hideDragHandleDOM();
-                return false;
-              }
-
-              activeNode = result;
-              renderDragHandleDOM(view, result.el, activeNode);
-              renderBlockMenu();
-              return false;
-            },
-            keydown: () => {
-              if (!editorView.editable || !containerDOM) return false;
-              hideDragHandleDOM();
-              return false;
-            },
-            mouseleave: () => {
-              clearTimeout(mouseleaveTimer);
-              mouseleaveTimer = setTimeout(() => {
-                hideDragHandleDOM();
-              }, 400);
-              return false;
-            },
-            dragleave: (view, event: DragEvent) => {
-              // Hide indicator when leaving the editor
-              if (event.target === view.dom || !view.dom.contains(event.relatedTarget as any)) {
-                hideDropZoneIndicator();
-              }
-              return false;
-            },
-            dragend: () => {
-              hideDropZoneIndicator();
-              dragging = false;
-              activeSelection = null;
-              draggedNodeInfo = null;
-              return false;
-            },
-          },
-        },
-      }),
-      new PMPlugin({
-        key: new PMPluginKey('AncestorDragablePluginFocusKey'),
-        props: {
-          decorations(state) {
-            const usingActiveSelection = !!activeSelection;
-            const selection = state.selection;
-
-            if (selection instanceof NodeSelection) {
-              const { from, to } = selection;
-
-              return DecorationSet.create(state.doc, [
-                Decoration.node(safePos(state, from), safePos(state, to), {
-                  class: usingActiveSelection
-                    ? 'ProseMirror-selectedblocknode-dragable'
-                    : 'ProseMirror-selectedblocknode-normal',
-                }),
-              ]);
+        const hover = createHoverController({ editor, shared, dragSource })
+
+        const clearSelectedNodeClasses = (view: EditorView) => {
+            const root = view.dom as HTMLElement
+            for (const cls of SELECTED_NODE_CLASSES) {
+                root.querySelectorAll(`.${cls}`).forEach((el) => el.classList.remove(cls))
             }
+        }
 
-            return DecorationSet.empty;
-          },
-        },
-      }),
-    ];
-  },
-});
+        return [
+            new PMPlugin({
+                key: DragablePluginKey,
+                view: (view) => {
+                    shared.view = view
+                    if (view.editable) {
+                        hover.attach(view)
+                        columnDrop.attach(view)
+                    }
+                    return {
+                        update(nextView) {
+                            shared.view = nextView
+                        },
+                        destroy: () => {
+                            hover.detach()
+                            columnDrop.detach()
+                            shared.view = null
+                        },
+                    }
+                },
+                props: {
+                    handleDOMEvents: {
+                        dragover: (view, event) => {
+                            columnDrop.onDragOver(view, event as DragEvent)
+                            return false
+                        },
+
+                        drop: (view, event) => {
+                            const dropEvent = event as DragEvent
+                            if (!view.editable) return false
+                            if (!shared.draggedNodeInfo) return false
+
+                            // 1) Try to consume as a column-split drop first.
+                            //    When this returns true, the drop transaction
+                            //    has already been dispatched.
+                            if (columnDrop.tryConsumeDrop(view, dropEvent)) {
+                                shared.activeSelection = null
+                                shared.activeNode = null
+                                shared.draggedNodeInfo = null
+                                shared.dragging = false
+                                return true
+                            }
+
+                            // 2) Fall back to normal drag-drop. ProseMirror
+                            //    will run its own drop handling after we
+                            //    return; we just clean up around the edges.
+                            const eventPos = view.posAtCoords({
+                                left: dropEvent.clientX,
+                                top: dropEvent.clientY,
+                            })
+
+                            // Defer selection cleanup until PM's own drop
+                            // transaction has landed (see DROP_CLEAR_DELAY_MS).
+                            setTimeout(() => {
+                                if (shared.activeSelection) {
+                                    clearSelectedNodeClasses(view)
+                                    const noneSelection = new TextSelection(
+                                        view.state.doc.resolve(safePos(view.state, eventPos?.pos ?? 0))
+                                    )
+                                    view.dispatch(view.state.tr.setSelection(noneSelection))
+                                    editor.commands.blur()
+                                    shared.activeSelection = null
+                                    shared.activeNode = null
+                                }
+                                shared.draggedNodeInfo = null
+                            }, DROP_CLEAR_DELAY_MS)
+
+                            if (!eventPos) {
+                                columnDrop.hide()
+                                return true
+                            }
+
+                            const maybeTitle = findParentNodeClosestToPos(
+                                view.state.doc.resolve(safePos(editor.state, eventPos.pos)),
+                                (node) => node.type.name === 'title'
+                            )
+
+                            // Never let a drop land inside the title.
+                            if (eventPos.pos === 0 || maybeTitle) {
+                                columnDrop.hide()
+                                return true
+                            }
+
+                            if (shared.dragging) {
+                                const tr = removePossibleTable(view, dropEvent)
+                                shared.dragging = false
+                                columnDrop.hide()
+                                if (tr) {
+                                    view.dispatch(tr)
+                                    dropEvent.preventDefault()
+                                    return true
+                                }
+                            }
+
+                            columnDrop.hide()
+                            return false
+                        },
+
+                        mousemove: (view, event) => {
+                            hover.onMouseMove(view, event as MouseEvent)
+                            return false
+                        },
+
+                        keydown: (view) => {
+                            if (!view.editable) return false
+                            hover.onKeyDown()
+                            return false
+                        },
+
+                        mouseleave: () => {
+                            hover.onEditorMouseLeave()
+                            return false
+                        },
+
+                        dragleave: (view, event) => {
+                            const dragEvent = event as DragEvent
+                            // Hide the indicator only when the pointer left
+                            // the editor DOM entirely (dragleave fires on
+                            // every inner element transition too).
+                            if (
+                                dragEvent.target === view.dom ||
+                                !view.dom.contains(dragEvent.relatedTarget as any)
+                            ) {
+                                columnDrop.hide()
+                            }
+                            return false
+                        },
+
+                        dragend: () => {
+                            columnDrop.hide()
+                            shared.dragging = false
+                            shared.activeSelection = null
+                            shared.draggedNodeInfo = null
+                            // NOTE: `activeNode` is intentionally NOT cleared
+                            // here — the pointer may still be over the source
+                            // block, and clearing it would cause the handle
+                            // to blink out until the next mousemove pass.
+                            return false
+                        },
+                    },
+                },
+            }),
+
+            // ── Selection decoration ────────────────────────────────────
+            // Styles the current NodeSelection with a distinct class when it
+            // was originated by the drag handle (as opposed to a keyboard /
+            // click NodeSelection). Kept tiny and inline — it's the only
+            // consumer of `shared.activeSelection`'s truthiness outside the
+            // drag-source module.
+            new PMPlugin({
+                key: SelectionDecorationPluginKey,
+                props: {
+                    decorations(state) {
+                        const usingActiveSelection = !!shared.activeSelection
+                        const selection = state.selection
+                        if (!(selection instanceof NodeSelection)) return DecorationSet.empty
+                        const { from, to } = selection
+                        return DecorationSet.create(state.doc, [
+                            Decoration.node(safePos(state, from), safePos(state, to), {
+                                class: usingActiveSelection
+                                    ? 'ProseMirror-selectedblocknode-dragable'
+                                    : 'ProseMirror-selectedblocknode-normal',
+                            }),
+                        ])
+                    },
+                },
+            }),
+        ]
+    },
+})

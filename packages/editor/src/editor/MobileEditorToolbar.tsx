@@ -1,6 +1,7 @@
 import React, { ElementType, useEffect, useMemo, useState } from "react";
 import { ExtensionWrapper } from "@kn/common";
 import { Editor } from "@tiptap/core";
+import type { Transaction } from "@tiptap/pm/state";
 import { Toggle, Separator, useVirtualKeyboard } from "@kn/ui";
 import { Undo2, Redo2 } from "@kn/icon";
 import { isArray } from "lodash";
@@ -27,9 +28,16 @@ export const MobileEditorToolbar: React.FC<{
     const { keyboardHeight, isOpen } = useVirtualKeyboard();
 
     // Re-render on editor transactions so undo/redo enabled state stays fresh.
+    // Undo/redo availability only changes on doc-affecting transactions, so
+    // gate on `docChanged` — this skips Tiptap's focus/blur metas (which fire
+    // every time a Radix Dialog / Sheet / DropdownMenu opens or closes) and
+    // selection-only transactions, both of which can't move history state.
     const [, force] = useState(0);
     useEffect(() => {
-        const onTx = () => force((n) => n + 1);
+        const onTx = ({ transaction }: { transaction: Transaction }) => {
+            if (!transaction.docChanged) return;
+            force((n) => n + 1);
+        };
         editor.on("transaction", onTx);
         return () => {
             editor.off("transaction", onTx);

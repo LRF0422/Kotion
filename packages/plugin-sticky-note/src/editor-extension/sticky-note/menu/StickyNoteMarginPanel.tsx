@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Editor, useMarginCards } from "@kn/editor";
+import type { Transaction } from "@kn/editor";
 import { useIsMobile } from "@kn/ui";
 import { StickyNoteCard } from "./StickyNoteCard";
 import { StickyNoteSheet } from "./StickyNoteSheet";
@@ -58,6 +59,13 @@ export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) 
     }, [editor]);
 
     // Mirror the extension's active note and hovered note from storage.
+    //
+    // Skip ONLY Tiptap's focus/blur meta-only transactions (see FocusEvents in
+    // @tiptap/core — they carry a `focus` / `blur` meta with no doc or
+    // selection change). Radix Dialog / Sheet / DropdownMenu steal focus every
+    // time they open, and without this filter each menu open would wake this
+    // sync. All other meta-only transactions (highlight click / hover metas
+    // dispatched from sticky-note.ts) still pass through unchanged.
     useEffect(() => {
         if (!editor) return;
         const sync = () => {
@@ -65,9 +73,18 @@ export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) 
             setActiveNoteId(s?.activeNoteId ?? null);
             setHoveredNoteId(s?.hoveredNoteId ?? null);
         };
+        const onTx = ({ transaction }: { transaction: Transaction }) => {
+            const isFocusBlurOnly =
+                !transaction.docChanged &&
+                !transaction.selectionSet &&
+                (transaction.getMeta("focus") != null ||
+                    transaction.getMeta("blur") != null);
+            if (isFocusBlurOnly) return;
+            sync();
+        };
         sync();
-        editor.on("transaction", sync);
-        return () => { editor.off("transaction", sync); };
+        editor.on("transaction", onTx);
+        return () => { editor.off("transaction", onTx); };
     }, [editor]);
 
     // Scroll the active card into view (desktop only).

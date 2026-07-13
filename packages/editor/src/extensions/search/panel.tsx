@@ -6,6 +6,7 @@ import React, {
     useState,
 } from "react";
 import { Editor } from "@tiptap/core";
+import type { Transaction } from "@tiptap/pm/state";
 import { useDebounceFn } from "ahooks";
 import {
     ArrowDown,
@@ -82,9 +83,21 @@ export const SearchPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
     useEffect(() => {
         const onResults = () => forceRender();
         event.on(ON_SEARCH_RESULTS, onResults);
-        // Also re-render on any transaction so index/counter stay fresh when
-        // navigation or replace completes via the plugin state.
-        const onTx = () => forceRender();
+        // Also re-render on any doc- or selection-affecting transaction so
+        // the index/counter stays fresh when navigation or replace completes
+        // via the plugin state. Skip Tiptap's focus/blur meta transactions:
+        // they carry no relevant change and are dispatched every time a Radix
+        // Dialog / Sheet / DropdownMenu opens, which would otherwise churn a
+        // useless re-render of the search panel on every menu open.
+        const onTx = ({ transaction }: { transaction: Transaction }) => {
+            const isFocusBlurOnly =
+                !transaction.docChanged &&
+                !transaction.selectionSet &&
+                (transaction.getMeta("focus") != null ||
+                    transaction.getMeta("blur") != null);
+            if (isFocusBlurOnly) return;
+            forceRender();
+        };
         editor.on("transaction", onTx);
         return () => {
             event.off(ON_SEARCH_RESULTS, onResults);

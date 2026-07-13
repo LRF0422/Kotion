@@ -17,7 +17,7 @@ export {
 } from "@tiptap/react"
 export { mergeAttributes } from "@tiptap/core"
 export { Slice, Schema, NodeType, Node, DOMSerializer } from "@tiptap/pm/model"
-export { EditorState, TextSelection, NodeSelection, Plugin, PluginKey } from "@tiptap/pm/state"
+export { EditorState, TextSelection, NodeSelection, Plugin, PluginKey, type Transaction } from "@tiptap/pm/state"
 export { EditorView, Decoration, DecorationSet, type DecorationSource } from "@tiptap/pm/view"
 export { findParentNode } from "prosemirror-utils"
 

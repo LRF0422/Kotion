@@ -1,4 +1,5 @@
 import { Editor } from "@tiptap/core";
+import type { Transaction } from "@tiptap/pm/state";
 import deepEqual from "deep-equal";
 import { useEffect, useRef, useState } from "react";
 
@@ -19,7 +20,17 @@ export function useAttributes<T extends object, R = T>(
   const prevValueCache = useRef<R>(value);
 
   useEffect(() => {
-    const listener = () => {
+    // Only re-evaluate when the doc or selection actually changed. Tiptap
+    // dispatches meta-only transactions on every focus/blur, and Radix
+    // modals steal focus on open — so without this gate every toolbar
+    // button backed by `useAttributes` would run `getAttributes` +
+    // deepEqual twice per menu open, once per subscription.
+    //
+    // `transaction` already covers selection changes, so the separate
+    // `selectionUpdate` listener the old implementation carried was pure
+    // duplication and has been removed.
+    const listener = ({ transaction }: { transaction: Transaction }) => {
+      if (!transaction.docChanged && !transaction.selectionSet) return;
       const attrs = {
         ...defaultValue,
         ...editor.getAttributes(attribute)
@@ -39,11 +50,9 @@ export function useAttributes<T extends object, R = T>(
       prevValueCache.current = nextAttrs;
     };
 
-    editor.on("selectionUpdate", listener);
     editor.on("transaction", listener);
 
     return () => {
-      editor.off("selectionUpdate", listener);
       editor.off("transaction", listener);
     };
   }, [editor, defaultValue, attribute, mapFn]);
