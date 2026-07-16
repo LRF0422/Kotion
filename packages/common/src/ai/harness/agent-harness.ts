@@ -25,18 +25,28 @@ import {
     parseToolArgs,
     withInactivityTimeout,
 } from './tool-loop'
+import { V2AgentRuntime } from './v2-agent-runtime'
 
 /** Per-yield SSE inactivity timeout — treat the stream as hung after this. */
 const DEFAULT_INACTIVITY_TIMEOUT_MS = 60_000 * 10
 
 export class AgentHarnessImpl implements AgentHarness {
     private client: KnowledgeChatClient
+    private v2Runtime: V2AgentRuntime
 
     constructor(client?: KnowledgeChatClient) {
         this.client = client ?? new KnowledgeChatClient()
+        this.v2Runtime = new V2AgentRuntime()
     }
 
     async *run(input: HarnessRunInput): AsyncGenerator<HarnessEvent> {
+        // V2: delegate to the server-driven runtime (completely different execution model)
+        if (input.apiVersion === 'v2') {
+            yield* this.v2Runtime.run(input)
+            return
+        }
+
+        // V1: frontend-driven bidirectional tool loop (existing behavior)
         const {
             catalog,
             resolveTool,

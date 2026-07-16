@@ -19,6 +19,9 @@ import type {
 import { getBearerHeader } from '../../utils/auth'
 
 export { parseSSEStream, collectSSEEvents } from './sse-parser'
+export { parseV2SSEStream } from './v2-sse-parser'
+export { V2ChatClient } from './v2-client'
+export type { V2ChatClientOptions, ToolResultPayload } from './v2-client'
 export type * from './types'
 
 const DEFAULT_API_BASE = '/api/knowledge-agent/api/v1'

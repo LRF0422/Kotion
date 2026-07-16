@@ -1,0 +1,239 @@
+package com.knowledge.agent.v2.handler;
+
+import com.knowledge.agent.tool.ToolRegistry;
+import com.knowledge.agent.v2.engine.AgentState;
+import com.knowledge.agent.v2.engine.StateHandler;
+import com.knowledge.agent.v2.engine.Transition;
+import com.knowledge.agent.v2.event.AgentEvent;
+import com.knowledge.agent.v2.event.ThinkingEvent;
+import com.knowledge.agent.v2.llm.InferenceRequest;
+import com.knowledge.agent.v2.llm.InferenceResponse;
+import com.knowledge.agent.v2.llm.LlmAdapter;
+import com.knowledge.agent.v2.llm.LlmChunk;
+import com.knowledge.agent.v2.session.AgentSession;
+import com.knowledge.agent.v2.session.ConversationMessage;
+import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Handles the THINK state — LLM inference with live token streaming.
+ *
+ * <p>This is the core handler that replaces V1's {@code runTurn()} method.
+ * It performs a single LLM call, streams tokens to the event bus as they
+ * arrive, accumulates the full response, and determines the next state:
+ * <ul>
+ *   <li>Tool calls present → transition to ACT</li>
+ *   <li>No tool calls → transition to DONE</li>
+ *   <li>Error → transition to ERROR</li>
+ * </ul>
+ *
+ * <p>The handler is stateless — all accumulation happens in local variables
+ * within the reactive chain. The accumulated response is stored in the
+ * session's execution state for the ActHandler to consume.
+ */
+@Slf4j
+public class ThinkHandler implements StateHandler {
+
+    private final LlmAdapter llmAdapter;
+    private final ToolRegistry toolRegistry;
+
+    public ThinkHandler(LlmAdapter llmAdapter, ToolRegistry toolRegistry) {
+        this.llmAdapter = llmAdapter;
+        this.toolRegistry = toolRegistry;
+    }
+
+    @Override
+    public Flux<AgentEvent> handle(AgentSession session, AgentState state) {
+        int iteration = session.getExecution().nextIteration();
+        String sessionId = session.getSessionId();
+
+        log.debug("ThinkHandler: iteration {} for session {}", iteration, sessionId);
+
+        // Build the inference request
+        InferenceRequest request = buildRequest(session);
+
+        // Emit ThinkStart event
+        ThinkingEvent.ThinkStart startEvent = new ThinkingEvent.ThinkStart(sessionId, iteration);
+
+        // Accumulate the full response while streaming deltas
+        ResponseAccumulator accumulator = new ResponseAccumulator();
+        long startTimeMs = System.currentTimeMillis();
+
+        // Stream LLM chunks, converting each to an AgentEvent
+        Flux<AgentEvent> liveDeltas = llmAdapter.streamInfer(request)
+                .handle((chunk, sink) -> {
+                    accumulator.feed(chunk);
+                    AgentEvent delta = chunkToDelta(chunk, sessionId, iteration);
+                    if (delta != null) {
+                        sink.next(delta);
+                    }
+                });
+
+        // After streaming completes, determine the next state
+        Flux<AgentEvent> tail = Flux.defer(() -> {
+            long latencyMs = System.currentTimeMillis() - startTimeMs;
+            InferenceResponse response = accumulator.assemble();
+
+            // Record token usage
+            session.getExecution().addTokenUsage(
+                    response.getPromptTokens(), response.getCompletionTokens());
+
+            // Emit ThinkEnd event
+            ThinkingEvent.ThinkEnd endEvent = new ThinkingEvent.ThinkEnd(
+                    sessionId, iteration, response.getFinishReason(),
+                    response.getPromptTokens(), response.getCompletionTokens(), latencyMs);
+
+            if (response.hasToolCalls()) {
+                // Store tool calls in execution state for ActHandler
+                session.getExecution().setPendingToolCalls(response.getToolCalls());
+
+                // Store the assistant message with tool calls
+                appendAssistantMessage(session, response);
+
+                return Flux.just(endEvent, Transition.toAct(sessionId));
+            }
+
+            // No tool calls — agent is done
+            return Flux.just(endEvent, Transition.toDone(sessionId, "stop"));
+        });
+
+        return Flux.concat(Flux.just(startEvent), liveDeltas, tail)
+                .onErrorResume(e -> {
+                    log.error("ThinkHandler: LLM error in session {}: {}",
+                            sessionId, e.getMessage(), e);
+                    return Flux.just(Transition.toError(sessionId, "llm_error: " + e.getMessage()));
+                });
+    }
+
+    private InferenceRequest buildRequest(AgentSession session) {
+        List<ConversationMessage> messages = session.getExecution().getMessages();
+        // Pass frontend tools from the client request so the LLM can invoke them.
+        // toolIds=null means include all registered backend tools.
+        String toolsJson = toolRegistry.buildToolsJson(session.getToolIds().isEmpty() ? null : session.getToolIds(),
+                session.getFrontendTools().isEmpty() ? null : session.getFrontendTools());
+
+        return InferenceRequest.builder()
+                .model(session.getModelName())
+                .messages(messages)
+                .toolsJson(toolsJson)
+                .toolChoice("auto")
+                .stream(true)
+                .build();
+    }
+
+    private AgentEvent chunkToDelta(LlmChunk chunk, String sessionId, int iteration) {
+        switch (chunk.getType()) {
+            case TEXT_DELTA:
+                if (chunk.getTextDelta() != null && !chunk.getTextDelta().isEmpty()) {
+                    return new ThinkingEvent.ThinkDelta(
+                            sessionId, iteration,
+                            ThinkingEvent.ThinkDelta.DeltaType.TEXT,
+                            chunk.getTextDelta());
+                }
+                return null;
+            case REASONING_DELTA:
+                if (chunk.getReasoningDelta() != null && !chunk.getReasoningDelta().isEmpty()) {
+                    return new ThinkingEvent.ThinkDelta(
+                            sessionId, iteration,
+                            ThinkingEvent.ThinkDelta.DeltaType.REASONING,
+                            chunk.getReasoningDelta());
+                }
+                return null;
+            case TOOL_CALL_DELTA:
+            case FINISH:
+                // Tool call deltas are accumulated silently; FINISH is handled in tail
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    private void appendAssistantMessage(AgentSession session, InferenceResponse response) {
+        List<ConversationMessage.ToolCallInfo> toolCalls = new ArrayList<>();
+        for (InferenceResponse.ToolCallData tc : response.getToolCalls()) {
+            toolCalls.add(new ConversationMessage.ToolCallInfo(
+                    tc.getId(), "function", tc.getName(), tc.getArguments()));
+        }
+
+        ConversationMessage assistantMsg = ConversationMessage.builder()
+                .role("assistant")
+                .content(response.getContent())
+                .reasoningContent(response.getReasoningContent())
+                .toolCalls(toolCalls)
+                .build();
+
+        session.getExecution().addMessage(assistantMsg);
+    }
+
+    /**
+     * Accumulates streaming chunks into a complete InferenceResponse.
+     */
+    private static class ResponseAccumulator {
+        private final StringBuilder content = new StringBuilder();
+        private final StringBuilder reasoning = new StringBuilder();
+        private final List<ToolCallAccumulator> toolCalls = new ArrayList<>();
+        private String finishReason = "stop";
+        private int promptTokens = 0;
+        private int completionTokens = 0;
+
+        void feed(LlmChunk chunk) {
+            switch (chunk.getType()) {
+                case TEXT_DELTA:
+                    if (chunk.getTextDelta() != null) content.append(chunk.getTextDelta());
+                    break;
+                case REASONING_DELTA:
+                    if (chunk.getReasoningDelta() != null) reasoning.append(chunk.getReasoningDelta());
+                    break;
+                case TOOL_CALL_DELTA:
+                    feedToolCall(chunk.getToolCallDelta());
+                    break;
+                case FINISH:
+                    finishReason = chunk.getFinishReason();
+                    promptTokens = chunk.getPromptTokens();
+                    completionTokens = chunk.getCompletionTokens();
+                    break;
+            }
+        }
+
+        private void feedToolCall(LlmChunk.ToolCallDelta delta) {
+            if (delta == null) return;
+            int idx = delta.getIndex();
+            while (toolCalls.size() <= idx) {
+                toolCalls.add(new ToolCallAccumulator());
+            }
+            ToolCallAccumulator acc = toolCalls.get(idx);
+            if (delta.getId() != null) acc.id = delta.getId();
+            if (delta.getName() != null) acc.name = delta.getName();
+            if (delta.getArgumentsDelta() != null) acc.arguments.append(delta.getArgumentsDelta());
+        }
+
+        InferenceResponse assemble() {
+            List<InferenceResponse.ToolCallData> calls = null;
+            if (!toolCalls.isEmpty()) {
+                calls = new ArrayList<>();
+                for (ToolCallAccumulator acc : toolCalls) {
+                    calls.add(new InferenceResponse.ToolCallData(
+                            acc.id, acc.name, acc.arguments.toString()));
+                }
+            }
+
+            return InferenceResponse.builder()
+                    .content(content.length() > 0 ? content.toString() : null)
+                    .reasoningContent(reasoning.length() > 0 ? reasoning.toString() : null)
+                    .toolCalls(calls)
+                    .finishReason(finishReason)
+                    .promptTokens(promptTokens)
+                    .completionTokens(completionTokens)
+                    .build();
+        }
+    }
+
+    private static class ToolCallAccumulator {
+        String id;
+        String name;
+        StringBuilder arguments = new StringBuilder();
+    }
+}

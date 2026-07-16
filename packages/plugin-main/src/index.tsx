@@ -341,6 +341,74 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "zoomOut": "缩小",
           "untitled": "未命名"
         },
+        "recent": {
+          "title": "最近访问"
+        },
+        "favorites": {
+          "title": "收藏",
+          "viewAll": "查看全部",
+          "allFavorites": "全部收藏",
+          "empty": "收藏页面以快速访问",
+          "add": "添加到收藏"
+        },
+        "pages": {
+          "title": "页面",
+          "empty": "暂无页面"
+        },
+        "page": {
+          "title": "页面",
+          "create": "新建页面",
+          "copyLink": "复制链接",
+          "moveToTrash": "移动到回收站"
+        },
+        "template": {
+          "title": "模板",
+          "saveAsTemplate": "保存为模板",
+          "untitled": "未命名模板",
+          "selectTemplate": "选择模板",
+          "allTemplates": "全部模板",
+          "loadFailed": "加载模板失败",
+          "deleteSuccess": "模板已删除",
+          "deleteFailed": "删除模板失败",
+          "useFailed": "使用模板失败",
+          "dialogTitle": "保存为模板",
+          "dialogDesc": "将当前页面保存为可重复使用的模板",
+          "sectionInfo": "模板信息",
+          "sectionInfoDesc": "填写模板的基本信息",
+          "author": "作者",
+          "nameLabel": "模板名称",
+          "namePlaceholder": "输入模板名称",
+          "nameRequired": "请输入模板名称",
+          "cover": "封面",
+          "description": "描述",
+          "descPlaceholder": "输入模板描述",
+          "cancel": "取消",
+          "confirm": "保存",
+          "saveSuccess": "模板保存成功",
+          "saveFailed": "模板保存失败"
+        },
+        "import": {
+          "title": "导入"
+        },
+        "export": {
+          "title": "导出"
+        },
+        "settings": {
+          "title": "设置"
+        },
+        "trash": {
+          "title": "回收站",
+          "empty": "回收站为空",
+          "restore": "恢复"
+        },
+        "search": {
+          "placeholder": "搜索页面...",
+          "empty": "未找到结果"
+        },
+        "space": {
+          "title": "空间",
+          "personal": "个人空间"
+        },
       }
     },
     "en": {
@@ -571,6 +639,74 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "zoomIn": "Zoom in",
           "zoomOut": "Zoom out",
           "untitled": "Untitled"
+        },
+        "recent": {
+          "title": "Recent"
+        },
+        "favorites": {
+          "title": "Favorites",
+          "viewAll": "View all",
+          "allFavorites": "All Favorites",
+          "empty": "Star pages for quick access",
+          "add": "Add to favorites"
+        },
+        "pages": {
+          "title": "Pages",
+          "empty": "No pages yet"
+        },
+        "page": {
+          "title": "Page",
+          "create": "New Page",
+          "copyLink": "Copy link",
+          "moveToTrash": "Move to trash"
+        },
+        "template": {
+          "title": "Templates",
+          "saveAsTemplate": "Save as Template",
+          "untitled": "Untitled Template",
+          "selectTemplate": "Select Template",
+          "allTemplates": "All Templates",
+          "loadFailed": "Failed to load templates",
+          "deleteSuccess": "Template deleted",
+          "deleteFailed": "Failed to delete template",
+          "useFailed": "Failed to use template",
+          "dialogTitle": "Save as Template",
+          "dialogDesc": "Save the current page as a reusable template",
+          "sectionInfo": "Template Info",
+          "sectionInfoDesc": "Fill in the template information",
+          "author": "Author",
+          "nameLabel": "Template Name",
+          "namePlaceholder": "Enter template name",
+          "nameRequired": "Template name is required",
+          "cover": "Cover",
+          "description": "Description",
+          "descPlaceholder": "Enter template description",
+          "cancel": "Cancel",
+          "confirm": "Save",
+          "saveSuccess": "Template saved successfully",
+          "saveFailed": "Failed to save template"
+        },
+        "import": {
+          "title": "Import"
+        },
+        "export": {
+          "title": "Export"
+        },
+        "settings": {
+          "title": "Settings"
+        },
+        "trash": {
+          "title": "Trash",
+          "empty": "Trash is empty",
+          "restore": "Restore"
+        },
+        "search": {
+          "placeholder": "Search pages...",
+          "empty": "No results found."
+        },
+        "space": {
+          "title": "Space",
+          "personal": "Personal Space"
         },
       }
     },

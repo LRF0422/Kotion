@@ -1,36 +1,24 @@
-import { useState, FormEvent, useCallback, useMemo, useRef, useEffect } from "react"
-import { Sparkles, Send, Trash2, HelpCircle, Square, XCircle, Settings, Plus, ChevronDown, Globe, X, Check, MessageCircle, Bot } from "@kn/icon"
-import {
-    Button, Streamdown,
-    Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Input,
-} from "@kn/ui"
-import {
-    ChatBubble,
-    ChatBubbleMessage,
-} from "@kn/ui"
-import { ChatInput } from "@kn/ui"
+import React, { useState, useCallback, useMemo, useRef } from "react"
+import { Sparkles } from "@kn/icon"
+import { Streamdown, ChatBubble, ChatBubbleMessage } from "@kn/ui"
 import {
     ExpandableChat,
     ExpandableChatHeader,
     ExpandableChatBody,
     ExpandableChatFooter,
-    useChatContext,
+    ChatMessageList,
 } from "@kn/ui"
-import { ChatMessageList } from "@kn/ui"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@kn/ui"
-import React from "react"
 import { Editor } from "@kn/editor"
-import { useEditorAgentOptimized, ToolExecutionEvent, UserChoiceRequest, fetchModels, applySubAgentAnnotations } from "@kn/common"
+import {
+    useEditorAgentOptimized,
+    ToolExecutionEvent,
+    UserChoiceRequest,
+    applySubAgentAnnotations,
+} from "@kn/common"
 import type { ChatMode } from "@kn/common"
-import type { ModelInfo } from "@kn/common"
+
 import { SubAgentTree } from "./SubAgentTree"
 import { PlanApprovalCard } from "./PlanApprovalCard"
-
 import {
     ExecutionStep, PendingUserChoice, ChatError,
     classifyError,
@@ -38,271 +26,53 @@ import {
 import type { AnnotationData, Message } from "./chat-types"
 import { getHistoryForAI } from "./chat-persistence"
 import { useChatSessions } from "./useChatSessions"
-import type { ChatSessionMeta } from "./chat-sessions"
 import { useStreamingBuffer } from "./use-streaming-buffer"
 import { MessageBubble } from "./MessageBubble"
 import { LiveSteps } from "./ExecutionStepsDisplay"
-import { QuickPrompts } from "./QuickPrompts"
 import { ErrorDisplay } from "./ErrorDisplay"
+import { ChatHeader } from "./chat/ChatHeader"
+import { ChatEmptyState } from "./chat/ChatEmptyState"
+import { ChatComposer } from "./chat/ChatComposer"
+import { UserChoiceCard } from "./chat/UserChoiceCard"
 
-/** Close button that accesses ChatContext from *inside* ExpandableChat */
-const ChatCloseButton: React.FC = () => {
-    const chatContext = useChatContext()
-    return (
-        <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => chatContext?.toggleChat()}
-            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground transition-colors"
-        >
-            <X className="h-3.5 w-3.5" />
-        </Button>
-    )
-}
-
-// ─── Model Selector ────────────────────────────────────────────────
+// ─── Persistence keys ──────────────────────────────────────────────
 
 const MODEL_STORAGE_KEY = 'kn_chat_model'
 const MODE_STORAGE_KEY = 'kn_chat_mode'
 
-/** Compact model selector dropdown that fetches available models from the backend API. */
-const ModelSelector: React.FC<{
-    model: string
-    onModelChange: (model: string) => void
-}> = ({ model, onModelChange }) => {
-    const [models, setModels] = useState<ModelInfo[]>([])
-    const [open, setOpen] = useState(false)
-    const loadedRef = useRef(false)
-
-    // Fetch models when dropdown opens for the first time
-    useEffect(() => {
-        if (open && !loadedRef.current) {
-            loadedRef.current = true
-            fetchModels().then(setModels)
-        }
-    }, [open])
-
-    // Group models by provider
-    const grouped = useMemo(() => {
-        const map = new Map<string, ModelInfo[]>()
-        for (const m of models) {
-            const provider = m.provider || 'other'
-            if (!map.has(provider)) map.set(provider, [])
-            map.get(provider)!.push(m)
-        }
-        return map
-    }, [models])
-
-    // Display name for current model
-    const displayLabel = model || 'deepseek-chat'
-
-    return (
-        <DropdownMenu open={open} onOpenChange={setOpen}>
-            <DropdownMenuTrigger asChild>
-                <button
-                    className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                    type="button"
-                >
-                    <Sparkles className="h-3 w-3" />
-                    <span className="max-w-[80px] truncate">{displayLabel}</span>
-                    <ChevronDown className="h-2.5 w-2.5" />
-                </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[200px]">
-                {models.length === 0 && (
-                    <div className="px-2 py-1.5 text-[10px] text-muted-foreground">Loading models...</div>
-                )}
-                {Array.from(grouped.entries()).map(([provider, providerModels]) => (
-                    <React.Fragment key={provider}>
-                        <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                            {provider}
-                        </div>
-                        {providerModels.map((m) => (
-                            <DropdownMenuItem
-                                key={m.id}
-                                onClick={() => onModelChange(m.id)}
-                                className="flex items-center justify-between text-xs"
-                            >
-                                <span>{m.name || m.id}</span>
-                                {model === m.id && (
-                                    <Check className="h-3 w-3 text-primary" />
-                                )}
-                            </DropdownMenuItem>
-                        ))}
-                    </React.Fragment>
-                ))}
-            </DropdownMenuContent>
-        </DropdownMenu>
-    )
-}
-
-// ─── Session Tabs ──────────────────────────────────────────────────
+// ─── Chat ──────────────────────────────────────────────────────────
 
 /**
- * Compact segmented toggle for switching between Ask and Agent modes.
- * Ask mode: read-only Q&A (no document editing).
- * Agent mode: can operate the page (insert/edit/delete content).
+ * Main Chat surface for the AI plugin.  This component owns state and
+ * orchestrates the streaming lifecycle; the visual pieces (header, empty
+ * state, composer, user-choice card, message bubbles) live in dedicated
+ * files under ./chat and ./ so this file stays readable.
  */
-const ChatModeToggle: React.FC<{
-    mode: ChatMode
-    onModeChange: (mode: ChatMode) => void
-}> = ({ mode, onModeChange }) => {
-    const modes: { id: ChatMode; label: string; icon: React.ReactNode }[] = [
-        { id: 'ask', label: 'Ask', icon: <MessageCircle className="h-3 w-3" /> },
-        { id: 'agent', label: 'Agent', icon: <Bot className="h-3 w-3" /> },
-    ]
-    return (
-        <div className="flex items-center p-0.5 rounded-md bg-muted/60 text-[10px] font-medium">
-            {modes.map((m) => (
-                <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => onModeChange(m.id)}
-                    title={m.id === 'ask'
-                        ? 'Ask mode — answer questions only (read-only)'
-                        : 'Agent mode — can edit and operate the page'}
-                    className={
-                        'flex items-center gap-1 px-1.5 py-0.5 rounded-sm transition-colors ' +
-                        (mode === m.id
-                            ? 'bg-background text-foreground shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground')
-                    }
-                >
-                    {m.icon}
-                    <span>{m.label}</span>
-                </button>
-            ))}
-        </div>
-    )
-}
-
-
-interface SessionTabsProps {
-    sessions: ChatSessionMeta[]
-    activeSessionId: string
-    onSwitch: (id: string) => void
-    onNewSession: () => void
-    onDelete: (id: string) => void
-}
-
-/**
- * Horizontal, scrollable tab strip for switching between chat sessions.
- * Each tab exposes an inline × button that deletes that session.
- * A trailing + button creates a new chat.
- */
-const SessionTabs: React.FC<SessionTabsProps> = ({
-    sessions, activeSessionId, onSwitch, onNewSession, onDelete,
-}) => {
-    const activeTabRef = useRef<HTMLDivElement | null>(null)
-
-    // Keep the active tab visible when sessions or active id change.
-    useEffect(() => {
-        activeTabRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-    }, [activeSessionId])
-
-    const handleDelete = useCallback((e: React.MouseEvent, id: string) => {
-        e.stopPropagation()
-        e.preventDefault()
-        onDelete(id)
-    }, [onDelete])
-
-    return (
-        <div
-            role="tablist"
-            aria-label="Chat sessions"
-            className="flex items-center gap-0.5 min-w-0 flex-1 overflow-x-auto scrollbar-thin"
-            style={{ scrollbarWidth: 'thin' }}
-        >
-            {sessions.map((s) => {
-                const isActive = s.id === activeSessionId
-                const title = s.title || 'New chat'
-                return (
-                    <div
-                        key={s.id}
-                        ref={isActive ? activeTabRef : undefined}
-                        role="tab"
-                        aria-selected={isActive}
-                        onClick={() => !isActive && onSwitch(s.id)}
-                        title={title}
-                        className={
-                            'group relative flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md cursor-pointer select-none shrink-0 max-w-[140px] transition-colors ' +
-                            (isActive
-                                ? 'bg-muted text-foreground'
-                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground')
-                        }
-                    >
-                        <span
-                            className={
-                                'truncate text-[11px] ' +
-                                (isActive ? 'font-semibold' : 'font-medium')
-                            }
-                        >
-                            {title}
-                        </span>
-                        <button
-                            type="button"
-                            onClick={(e) => handleDelete(e, s.id)}
-                            aria-label={`Delete ${title}`}
-                            className={
-                                'flex items-center justify-center h-3.5 w-3.5 rounded-sm text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-colors ' +
-                                (isActive ? 'opacity-70 hover:opacity-100' : 'opacity-0 group-hover:opacity-100')
-                            }
-                        >
-                            <X className="h-2.5 w-2.5" />
-                        </button>
-                    </div>
-                )
-            })}
-            <button
-                type="button"
-                onClick={onNewSession}
-                aria-label="New chat"
-                title="New chat"
-                className="flex items-center justify-center h-5 w-5 shrink-0 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
-            >
-                <Plus className="h-3 w-3" />
-            </button>
-        </div>
-    )
-}
-
-// ─── Chat Component ────────────────────────────────────────────────
-
 export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => {
-    const [currentSteps, setCurrentSteps] = useState<ExecutionStep[]>([])
-    const stepsRef = useRef<ExecutionStep[]>([])
-
-    // Model selection state (persisted in localStorage)
+    // ─── Model / mode preferences (persisted) ─────────────────────
     const [selectedModel, setSelectedModel] = useState<string>(() => {
-        try {
-            return localStorage.getItem(MODEL_STORAGE_KEY) || ''
-        } catch { return '' }
+        try { return localStorage.getItem(MODEL_STORAGE_KEY) || '' } catch { return '' }
     })
-
     const handleModelChange = useCallback((model: string) => {
         setSelectedModel(model)
         try { localStorage.setItem(MODEL_STORAGE_KEY, model) } catch { /* ignore */ }
     }, [])
 
-    // Chat mode state — "ask" (read-only Q&A) or "agent" (can operate page)
     const [chatMode, setChatMode] = useState<ChatMode>(() => {
         try {
             const stored = localStorage.getItem(MODE_STORAGE_KEY)
             return stored === 'ask' || stored === 'agent' ? stored : 'agent'
         } catch { return 'agent' }
     })
-
     const handleModeChange = useCallback((mode: ChatMode) => {
         setChatMode(mode)
         try { localStorage.setItem(MODE_STORAGE_KEY, mode) } catch { /* ignore */ }
     }, [])
 
-    // User choice state
-    const [pendingChoice, setPendingChoice] = useState<PendingUserChoice | null>(null)
-    const [customInput, setCustomInput] = useState("")
-    const pendingChoiceRef = useRef<PendingUserChoice | null>(null)
+    // ─── Execution steps (live tool-call tape) ────────────────────
+    const [currentSteps, setCurrentSteps] = useState<ExecutionStep[]>([])
+    const stepsRef = useRef<ExecutionStep[]>([])
 
-    // Tool execution callback
     const handleToolExecution = useCallback((event: ToolExecutionEvent) => {
         if (event.status === 'start') {
             const newStep: ExecutionStep = {
@@ -310,29 +80,33 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                 toolName: event.toolName,
                 args: event.args,
                 status: 'running',
-                timestamp: event.timestamp
+                timestamp: event.timestamp,
             }
             stepsRef.current = [...stepsRef.current, newStep]
             setCurrentSteps([...stepsRef.current])
         } else {
-            const updatedSteps = stepsRef.current.map(step => {
+            const updated = stepsRef.current.map(step => {
                 if (step.toolName === event.toolName && step.status === 'running') {
                     return {
                         ...step,
                         result: event.result,
                         error: event.error,
                         status: event.status === 'success' ? 'success' as const : 'error' as const,
-                        duration: event.duration
+                        duration: event.duration,
                     }
                 }
                 return step
             })
-            stepsRef.current = updatedSteps
-            setCurrentSteps([...updatedSteps])
+            stepsRef.current = updated
+            setCurrentSteps([...updated])
         }
     }, [])
 
-    // User choice request handler
+    // ─── User-choice bridge ───────────────────────────────────────
+    const [pendingChoice, setPendingChoice] = useState<PendingUserChoice | null>(null)
+    const [customInput, setCustomInput] = useState("")
+    const pendingChoiceRef = useRef<PendingUserChoice | null>(null)
+
     const handleUserChoiceRequest = useCallback((request: UserChoiceRequest): Promise<string> => {
         return new Promise((resolve, reject) => {
             const choice: PendingUserChoice = { request, resolve, reject }
@@ -368,12 +142,19 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         }
     }, [])
 
-    const { stream, stop } = useEditorAgentOptimized(editor, handleToolExecution, handleUserChoiceRequest, {
-        model: selectedModel || undefined,
-        mode: chatMode,
-    })
+    // ─── Streaming agent ──────────────────────────────────────────
+    const { stream, stop } = useEditorAgentOptimized(
+        editor,
+        handleToolExecution,
+        handleUserChoiceRequest,
+        {
+            model: selectedModel || undefined,
+            mode: chatMode,
+            apiVersion: 'v2',
+        },
+    )
 
-    // Multi-session management (messages + backend session ids per chat).
+    // ─── Multi-session store ──────────────────────────────────────
     const {
         sessions,
         activeSessionId,
@@ -388,12 +169,12 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         parseAnnotations,
     } = useChatSessions()
 
+    // ─── Annotations / sub-agents / plan ──────────────────────────
     const [annotations, setAnnotations] = useState<AnnotationData[]>([])
-
-    // Sub-agent tree (P6) + pending plan (P7), derived from the annotation
-    // stream. applySubAgentAnnotations folds the full annotation list from
-    // scratch, replaying all deltas — so deriving per render is correct.
-    const subAgents = useMemo(() => applySubAgentAnnotations({}, annotations as any[]), [annotations])
+    const subAgents = useMemo(
+        () => applySubAgentAnnotations({}, annotations as any[]),
+        [annotations],
+    )
     const pendingPlan = useMemo<{ plan: any } | null>(() => {
         for (let i = annotations.length - 1; i >= 0; i--) {
             const a = annotations[i] as any
@@ -402,46 +183,37 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         return null
     }, [annotations])
 
+    // ─── Composer state ───────────────────────────────────────────
     const [input, setInput] = useState("")
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<ChatError | null>(null)
 
-    // Streaming buffer (rAF batched)
     const buffer = useStreamingBuffer()
 
     // Reasoning content buffer (for thinking/reasoner models)
     const [streamingReasoning, setStreamingReasoning] = useState<string>('')
     const reasoningRef = useRef<string>('')
 
-    // Last user message ref for retry
     const lastUserMessageRef = useRef<string>("")
+    const composerRef = useRef<HTMLTextAreaElement>(null)
 
-    // Textarea ref — used for auto-resize and refocus-after-send.
-    const inputRef = useRef<HTMLTextAreaElement>(null)
+    const generateMessageId = useCallback(
+        () => `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        [],
+    )
 
-    // Auto-grow the input with its content, capped at ~5 lines. The @kn/ui
-    // ChatInput is otherwise a fixed-height box, which makes multi-line input
-    // cramped. Inline height wins over the kit's height class.
-    useEffect(() => {
-        const el = inputRef.current
-        if (!el) return
-        // Inline styles win over the kit's height/max-height utility classes.
-        el.style.maxHeight = '120px'
-        el.style.height = 'auto'
-        el.style.height = `${Math.min(el.scrollHeight, 120)}px`
-    }, [input])
+    // ─── Reset transient state when switching contexts ────────────
+    const resetTransient = useCallback(() => {
+        stepsRef.current = []
+        setCurrentSteps([])
+        setAnnotations([])
+        setError(null)
+        buffer.reset()
+        reasoningRef.current = ''
+        setStreamingReasoning('')
+    }, [buffer])
 
-    // Generate unique message ID
-    const generateMessageId = useCallback(() => {
-        return `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    }, [])
-
-    // Check if input is valid
-    const isInputValid = useMemo(() => {
-        return input.trim().length > 0 && !isLoading
-    }, [input, isLoading])
-
-    // Core submit logic (used by both form submit and retry)
+    // ─── Submit ───────────────────────────────────────────────────
     const submitMessage = useCallback(async (messageText: string) => {
         const userMessage: Message = {
             id: generateMessageId(),
@@ -449,7 +221,6 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
             sender: "user",
             timestamp: Date.now(),
         }
-
         setMessages((prev) => [...prev, userMessage])
         setIsLoading(true)
         setError(null)
@@ -459,13 +230,12 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         buffer.reset()
         reasoningRef.current = ''
         setStreamingReasoning('')
-        setAnnotations([]) // Reset team state for new message
+        setAnnotations([])
 
         try {
-            // Build history with token-limited context
             const currentMessages = [...messages, userMessage]
             const historyMessages = getHistoryForAI(currentMessages)
-            // Remove the last user message from history since it's passed as prompt
+            // Remove the last user message from history — it's passed as prompt.
             const history = historyMessages.slice(0, -1)
 
             const { textStream } = await stream({
@@ -483,23 +253,13 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                 },
             })
 
-            // textStream is an async iterable of strings from the backend
             for await (const part of textStream) {
                 buffer.append(part)
             }
 
-            // Force-flush the buffer to guarantee the streaming bubble
-            // is rendered at least once before we replace it with the
-            // final message.  Without this, if all chunks arrive within
-            // a single animation frame the rAF callback never fires and
-            // `buffer.reset()` cancels it – the user never sees the
-            // streaming text, only the final message appearing at once.
+            // Force-flush + yield a frame so React commits the streaming
+            // bubble at least once before we replace it with the final one.
             buffer.forceFlush()
-
-            // Yield one frame so React can render the streaming text.
-            // Without this gap, React 18 batches forceFlush (setDisplayText)
-            // and reset (setDisplayText(null)) into a single render where
-            // only the final null state is committed.
             await new Promise<void>(r => requestAnimationFrame(() => r()))
 
             const aiMessage: Message = {
@@ -508,9 +268,8 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                 reasoningContent: reasoningRef.current || undefined,
                 sender: "ai",
                 timestamp: Date.now(),
-                steps: [...stepsRef.current]
+                steps: [...stepsRef.current],
             }
-
             setMessages((prev) => [...prev, aiMessage])
             buffer.reset()
             reasoningRef.current = ''
@@ -537,8 +296,6 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                 const classifiedError = classifyError(err)
                 setError(classifiedError)
 
-                // Show the error as an AI message in the dialog so the
-                // user can see what went wrong instead of a blank bubble.
                 const currentContent = buffer.getContent()
                 const errorMessage = currentContent
                     ? `${currentContent}\n\n⚠️ ${classifiedError.message}`
@@ -559,29 +316,35 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         } finally {
             setIsLoading(false)
         }
-    }, [stream, generateMessageId, messages, buffer, backendSessionId, backendConversationId, parseAnnotations, setMessages])
+    }, [
+        stream, generateMessageId, messages, buffer,
+        backendSessionId, backendConversationId, parseAnnotations, setMessages,
+    ])
 
-    const handleSubmit = useCallback(async (e: FormEvent) => {
-        e.preventDefault()
-        if (!isInputValid) return
-        const messageText = input
+    const handleSend = useCallback(() => {
+        const text = input.trim()
+        if (!text || isLoading) return
         setInput("")
-        submitMessage(messageText)
-        // Reset the auto-grown height and keep focus for the next message.
+        submitMessage(text)
+        // Return focus to the composer for a chat-like flow.
         requestAnimationFrame(() => {
-            if (inputRef.current) inputRef.current.style.height = 'auto'
-            inputRef.current?.focus()
+            if (composerRef.current) composerRef.current.style.height = 'auto'
+            composerRef.current?.focus()
         })
-    }, [input, isInputValid, submitMessage])
+    }, [input, isLoading, submitMessage])
 
-    // Quick prompt submit
+    const handleInputChange = useCallback((value: string) => {
+        setInput(value)
+        if (error) setError(null)
+    }, [error])
+
+    // Quick prompt in empty state
     const handleQuickSubmit = useCallback((prompt: string) => {
         if (isLoading) return
         submitMessage(prompt)
     }, [isLoading, submitMessage])
 
-    // Plan mode (P7): approve → execute the plan; reject → re-plan. Both resume
-    // the same conversation via submitMessage (history + session carry context).
+    // Plan approval / rejection
     const handlePlanDecision = useCallback((decision: 'approved' | 'rejected') => {
         if (isLoading) return
         const plan = pendingPlan?.plan
@@ -601,93 +364,44 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         submitMessage(prompt)
     }, [isLoading, pendingPlan, submitMessage])
 
-    // Retry last failed message
     const handleRetry = useCallback(() => {
         if (!lastUserMessageRef.current || isLoading) return
         setError(null)
         submitMessage(lastUserMessageRef.current)
     }, [isLoading, submitMessage])
 
-    const handleStop = useCallback(() => {
-        stop()
-    }, [stop])
-
-    const handleAttachFile = useCallback(() => {
-        console.log("Attach file clicked")
-    }, [])
-
-    const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        setInput(e.target.value)
-        setError(null)
-    }, [])
-
-    const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault()
-            if (isInputValid) {
-                handleSubmit(e as any)
-            }
-        }
-    }, [isInputValid, handleSubmit])
-
-    // Clear the current chat (keeps the session, wipes its messages + backend ids).
+    // ─── Session lifecycle ────────────────────────────────────────
     const handleClearChat = useCallback(() => {
         if (isLoading) stop()
-        setCurrentSteps([])
-        stepsRef.current = []
-        setAnnotations([])
-        setError(null)
+        resetTransient()
         clearActiveMessages()
-    }, [isLoading, stop, clearActiveMessages])
+    }, [isLoading, stop, resetTransient, clearActiveMessages])
 
-    // Create a brand-new chat session and switch to it.
     const handleNewSession = useCallback(() => {
         if (isLoading) stop()
-        setCurrentSteps([])
-        stepsRef.current = []
-        setAnnotations([])
-        setError(null)
-        buffer.reset()
-        reasoningRef.current = ''
-        setStreamingReasoning('')
+        resetTransient()
         createSession()
-    }, [isLoading, stop, createSession, buffer])
+    }, [isLoading, stop, resetTransient, createSession])
 
-    // Switch to an existing session.
     const handleSwitchSession = useCallback((id: string) => {
         if (id === activeSessionId) return
         if (isLoading) stop()
-        setCurrentSteps([])
-        stepsRef.current = []
-        setAnnotations([])
-        setError(null)
-        buffer.reset()
-        reasoningRef.current = ''
-        setStreamingReasoning('')
+        resetTransient()
         switchSession(id)
-    }, [activeSessionId, isLoading, stop, switchSession, buffer])
+    }, [activeSessionId, isLoading, stop, resetTransient, switchSession])
 
-    // Delete a session.
     const handleDeleteSession = useCallback((id: string) => {
         if (id === activeSessionId) {
             if (isLoading) stop()
-            setCurrentSteps([])
-            stepsRef.current = []
-            setAnnotations([])
-            setError(null)
-            buffer.reset()
-            reasoningRef.current = ''
-            setStreamingReasoning('')
+            resetTransient()
         }
         deleteSession(id)
-    }, [activeSessionId, isLoading, stop, deleteSession, buffer])
+    }, [activeSessionId, isLoading, stop, resetTransient, deleteSession])
 
-    // Message count
-    const messageCount = messages.length
+    // ─── Derived UI flags ─────────────────────────────────────────
+    const isEmpty = messages.length === 0 && !isLoading
 
-    // Show quick prompts when empty state
-    const showQuickPrompts = messages.length === 0 && !isLoading
-
+    // ─── Render ───────────────────────────────────────────────────
     return (
         <ExpandableChat
             size="lg"
@@ -708,75 +422,31 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                         />
                     )}
                     <Sparkles
-                        className={`h-6 w-6 relative z-10 transition-transform duration-500 ${isLoading ? 'scale-95 drop-shadow-[0_0_6px_currentColor]' : ''
-                            }`}
+                        className={`h-6 w-6 relative z-10 transition-transform duration-500 ${isLoading ? 'scale-95 drop-shadow-[0_0_6px_currentColor]' : ''}`}
                     />
                 </div>
             }
         >
-            {/* Header */}
-            <ExpandableChatHeader className="flex items-center justify-between px-3 py-1.5 border-b bg-background/95 backdrop-blur-sm">
-                <SessionTabs
+            <ExpandableChatHeader className="p-0 border-0">
+                <ChatHeader
                     sessions={sessions}
                     activeSessionId={activeSessionId}
+                    hasMessages={messages.length > 0}
                     onSwitch={handleSwitchSession}
                     onNewSession={handleNewSession}
                     onDelete={handleDeleteSession}
+                    onClear={handleClearChat}
                 />
-                <div className="flex items-center gap-1.5 shrink-0 pl-1">
-                    <ChatModeToggle mode={chatMode} onModeChange={handleModeChange} />
-                    <div className="flex items-center gap-px">
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={handleClearChat}
-                                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive transition-colors"
-                                    >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom" className="text-xs">Clear current chat</TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <ChatCloseButton />
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom" className="text-xs">Close</TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    </div>
-                </div>
             </ExpandableChatHeader>
 
-            <ExpandableChatBody className="bg-muted/30 dark:bg-background overflow-x-hidden">
+            <ExpandableChatBody className="bg-muted/20 dark:bg-background overflow-x-hidden">
                 <ChatMessageList>
-                    {/* Empty state greeting */}
-                    {showQuickPrompts && (
-                        <div className="flex flex-col items-center justify-center py-4 px-3">
-                            <h2 className="text-sm font-semibold text-foreground mb-0.5">
-                                {chatMode === 'ask' ? 'Ask me anything' : 'How can I help you today?'}
-                            </h2>
-                            <p className="text-xs text-muted-foreground mb-4 text-center max-w-[240px]">
-                                {chatMode === 'ask'
-                                    ? 'I can answer questions about your documents.'
-                                    : 'Ask about your documents or try an action below.'}
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Quick prompts in empty state */}
-                    {showQuickPrompts && (
-                        <QuickPrompts onSubmit={handleQuickSubmit} />
+                    {isEmpty && (
+                        <ChatEmptyState mode={chatMode} onSubmit={handleQuickSubmit} />
                     )}
 
                     {messages.map((message) => (
-                        <MessageBubble
-                            key={message.id}
-                            message={message}
-                        />
+                        <MessageBubble key={message.id} message={message} />
                     ))}
 
                     {/* Live execution steps */}
@@ -791,7 +461,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                                 <details open className="group">
                                     <summary className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground cursor-pointer select-none">
                                         <Sparkles className="h-3 w-3 animate-pulse" />
-                                        <span>思考过程...</span>
+                                        <span>思考过程…</span>
                                     </summary>
                                     <div className="mt-1.5 pl-1 border-l-2 border-muted-foreground/20 text-[11px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap break-words">
                                         {streamingReasoning}
@@ -810,10 +480,13 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                         </ChatBubble>
                     )}
 
-                    {/* Loading indicator */}
+                    {/* Loading indicator (before any content arrives) */}
                     {isLoading && !buffer.displayText && currentSteps.length === 0 && (
                         <ChatBubble variant="received">
-                            <ChatBubbleMessage isLoading className="bg-card border border-border/60 dark:bg-muted/40 dark:border-transparent p-2.5 rounded-lg rounded-tl-sm" />
+                            <ChatBubbleMessage
+                                isLoading
+                                className="bg-card border border-border/60 dark:bg-muted/40 dark:border-transparent p-2.5 rounded-lg rounded-tl-sm"
+                            />
                         </ChatBubble>
                     )}
 
@@ -824,7 +497,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                         </div>
                     )}
 
-                    {/* Plan approval (P7) — shown once the agent proposes a plan */}
+                    {/* Plan approval (P7) */}
                     {pendingPlan && !isLoading && (
                         <div className="mx-2 my-1.5">
                             <PlanApprovalCard
@@ -836,77 +509,16 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                         </div>
                     )}
 
-                    {/* User Choice Dialog */}
+                    {/* User choice dialog */}
                     {pendingChoice && (
-                        <div className="mx-2 my-1.5 p-2.5 rounded-lg bg-muted/50 border border-border/60 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
-                            <div className="flex items-start gap-2 mb-2">
-                                <div className="p-1.5 rounded bg-muted">
-                                    <HelpCircle className="h-3 w-3 text-muted-foreground" />
-                                </div>
-                                <div className="flex-1 min-w-0 pt-0.5">
-                                    <p className="font-medium text-xs text-foreground">{pendingChoice.request.question}</p>
-                                    <p className="text-[10px] text-muted-foreground mt-0.5">Select an option to continue</p>
-                                </div>
-                            </div>
-
-                            <div className="space-y-1">
-                                {pendingChoice.request.options.map((option) => (
-                                    <button
-                                        key={option.id}
-                                        onClick={() => handleOptionSelect(option.id)}
-                                        className="w-full p-2 rounded-md border border-border/60 bg-background/80 hover:bg-muted/60 transition-all text-left group"
-                                    >
-                                        <div className="flex items-center gap-1.5">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 group-hover:bg-foreground transition-colors" />
-                                            <span className="font-medium text-xs">{option.label}</span>
-                                        </div>
-                                        {option.description && (
-                                            <p className="text-[10px] text-muted-foreground mt-0.5 ml-3 line-clamp-2">{option.description}</p>
-                                        )}
-                                    </button>
-                                ))}
-                            </div>
-
-                            {pendingChoice.request.allowCustomInput && (
-                                <div className="mt-2 pt-2 border-t border-border/50">
-                                    <p className="text-[10px] text-muted-foreground mb-1">Or provide a custom response:</p>
-                                    <div className="flex gap-1.5">
-                                        <Input
-                                            value={customInput}
-                                            onChange={(e) => setCustomInput(e.target.value)}
-                                            placeholder="Type your response..."
-                                            className="flex-1 h-7 text-xs"
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' && customInput.trim()) {
-                                                    e.preventDefault()
-                                                    handleCustomSubmit()
-                                                }
-                                            }}
-                                        />
-                                        <Button
-                                            size="sm"
-                                            onClick={handleCustomSubmit}
-                                            disabled={!customInput.trim()}
-                                            className="h-7 px-2 bg-primary text-primary-foreground hover:bg-primary/90"
-                                        >
-                                            <Send className="h-3 w-3" />
-                                        </Button>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="mt-2 flex justify-end">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={handleCancelChoice}
-                                    className="h-6 px-2 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive text-[10px]"
-                                >
-                                    <XCircle className="h-3 w-3 mr-0.5" />
-                                    Cancel
-                                </Button>
-                            </div>
-                        </div>
+                        <UserChoiceCard
+                            choice={pendingChoice}
+                            customInput={customInput}
+                            onCustomInputChange={setCustomInput}
+                            onSelect={handleOptionSelect}
+                            onCustomSubmit={handleCustomSubmit}
+                            onCancel={handleCancelChoice}
+                        />
                     )}
 
                     {/* Error display with retry */}
@@ -920,98 +532,21 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                 </ChatMessageList>
             </ExpandableChatBody>
 
-            {/* Footer */}
-            <ExpandableChatFooter className="bg-background/80 backdrop-blur-sm p-2 border-t">
-                <form
-                    onSubmit={handleSubmit}
-                    className="relative rounded-lg border border-border/60 bg-background focus-within:border-ring/40 focus-within:ring-1 focus-within:ring-ring/30 transition-all"
-                >
-                    {/* Context tag */}
-                    {showQuickPrompts && (
-                        <div className="flex items-center gap-1.5 px-3 pt-2">
-                            <div className="inline-flex items-center gap-0.5 px-1.5 py-px rounded-full bg-muted/60 text-[10px] text-muted-foreground">
-                                <Globe className="h-2.5 w-2.5" />
-                                <span>Knowledge Doc</span>
-                            </div>
-                        </div>
-                    )}
-                    <ChatInput
-                        ref={inputRef}
-                        value={input}
-                        onChange={handleInputChange}
-                        onKeyDown={handleKeyDown}
-                        placeholder={chatMode === 'ask' ? "Ask a question..." : "Do anything with AI..."}
-                        disabled={isLoading}
-                        rows={1}
-                        className="min-h-[40px] max-h-[120px] overflow-y-auto resize-none rounded-lg bg-transparent border-0 px-3 py-2 text-xs shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
-                    />
-                    <div className="flex items-center px-2 pb-2 pt-0 justify-between">
-                        <div className="flex items-center gap-px">
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            type="button"
-                                            onClick={handleAttachFile}
-                                            disabled={isLoading}
-                                            className="h-7 w-7 text-muted-foreground/60 hover:text-foreground hover:bg-muted/60 transition-colors"
-                                        >
-                                            <Plus className="h-3.5 w-3.5" />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-xs">Add content</TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            type="button"
-                                            disabled={isLoading}
-                                            className="h-7 w-7 text-muted-foreground/60 hover:text-foreground hover:bg-muted/60 transition-colors"
-                                        >
-                                            <Settings className="h-3.5 w-3.5" />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-xs">Settings</TooltipContent>
-                                </Tooltip>
-                                <ModelSelector model={selectedModel} onModelChange={handleModelChange} />
-                            </TooltipProvider>
-                        </div>
-                        {isLoading ? (
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="destructive"
-                                            className="h-7 px-2.5 gap-1 rounded-lg"
-                                            onClick={handleStop}
-                                        >
-                                            <Square className="h-3 w-3" />
-                                            <span className="text-[10px] font-medium">Stop</span>
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-xs">Stop generation</TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        ) : (
-                            <Button
-                                type="submit"
-                                size="sm"
-                                aria-label="Send message"
-                                className="h-7 w-7 p-0 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                                disabled={!isInputValid}
-                            >
-                                <Send className="h-3.5 w-3.5" />
-                            </Button>
-                        )}
-                    </div>
-                </form>
+            <ExpandableChatFooter className="bg-background/80 backdrop-blur-sm p-2.5 border-t">
+                <ChatComposer
+                    ref={composerRef}
+                    value={input}
+                    onChange={handleInputChange}
+                    onSubmit={handleSend}
+                    onStop={stop}
+                    isLoading={isLoading}
+                    mode={chatMode}
+                    onModeChange={handleModeChange}
+                    model={selectedModel}
+                    onModelChange={handleModelChange}
+                />
             </ExpandableChatFooter>
         </ExpandableChat>
     )
 }
+

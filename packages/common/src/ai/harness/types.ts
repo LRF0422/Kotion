@@ -63,6 +63,12 @@ export interface HarnessRunInput {
     /** Per-yield SSE inactivity timeout in ms (default 10 minutes). */
     inactivityTimeoutMs?: number
     /**
+     * API version to use: 'v1' (OpenAI-compatible SSE) or 'v2' (semantic events).
+     * Defaults to 'v1' for backward compatibility. When set to 'v2', the harness
+     * uses V2ChatClient which parses the V2 semantic SSE protocol.
+     */
+    apiVersion?: 'v1' | 'v2'
+    /**
      * Notification callback used only for the "tool not available on frontend"
      * path. Frontend tool execution tracking is handled by wrapping tools with
      * {@link wrapToolsWithCallback} before they reach `resolveTool`.

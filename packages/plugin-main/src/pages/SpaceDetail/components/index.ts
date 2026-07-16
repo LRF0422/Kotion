@@ -1,0 +1,7 @@
+export { SpaceSidebar } from './SpaceSidebar'
+export { SpaceHeader } from './SpaceHeader'
+export { QuickActions } from './QuickActions'
+export { RecentPages } from './RecentPages'
+export { FavoritesSection } from './FavoritesSection'
+export { PageTreeSection } from './PageTreeSection'
+export { BottomUtilities } from './BottomUtilities'

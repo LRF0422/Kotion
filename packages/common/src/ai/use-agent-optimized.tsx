@@ -43,6 +43,8 @@ export const useEditorAgentOptimized = (
         model?: string
         /** Chat mode: "ask" = Q&A only, "agent" = can operate the page (default). */
         mode?: ChatMode
+        /** API version: 'v1' (default, OpenAI SSE) or 'v2' (semantic SSE protocol). */
+        apiVersion?: 'v1' | 'v2'
     }
 ) => {
     // AbortController ref for stopping generation
@@ -58,6 +60,8 @@ export const useEditorAgentOptimized = (
     const modelRef = useRef<string | undefined>(agentOptions?.model)
     // Ref for latest chat mode (avoids stale closure in stream callback)
     const modeRef = useRef<ChatMode>(agentOptions?.mode || 'agent')
+    // Ref for API version
+    const apiVersionRef = useRef<'v1' | 'v2'>(agentOptions?.apiVersion || 'v1')
 
     // Keep model ref in sync with agentOptions
     useEffect(() => {
@@ -68,6 +72,11 @@ export const useEditorAgentOptimized = (
     useEffect(() => {
         modeRef.current = agentOptions?.mode || 'agent'
     }, [agentOptions?.mode])
+
+    // Keep API version ref in sync
+    useEffect(() => {
+        apiVersionRef.current = agentOptions?.apiVersion || 'v1'
+    }, [agentOptions?.apiVersion])
 
     // Shared capability catalog wiring (providers, plugins, skills).
     const {
@@ -151,6 +160,7 @@ export const useEditorAgentOptimized = (
                 conversationId: options.conversationId,
                 signal,
                 onToolExecution,
+                apiVersion: apiVersionRef.current,
             })
 
             const textStream = (async function* (): AsyncGenerator<string> {

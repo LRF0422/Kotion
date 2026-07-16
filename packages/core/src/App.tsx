@@ -18,9 +18,10 @@ import { Marketplace } from "./components/Shop/Marketplace";
 
 import { resources } from "./locales/resources"
 import { merge } from "lodash";
-import { setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, clearTokens, useTranslation } from "@kn/common"
+import { setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, useTranslation, useApi, APIS, saveTokens } from "@kn/common"
 import { registerCoreToolFactories } from "./ai/tools/register"
-import { toast, AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "@kn/ui"
+import { toast, AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel, Button, Input, Label } from "@kn/ui"
+import { Loader2, Eye, EyeOff } from "@kn/icon"
 import { ErrorPage } from "./components/ErrorPage";
 import { PluginErrorBoundary } from "./components/PluginErrorBoundary";
 import ReactDOM from "react-dom";
@@ -61,27 +62,60 @@ window.ReactDOM = ReactDOM
 // Session-expired dialog (rendered imperatively when token expires)
 // ---------------------------------------------------------------------------
 
-const SessionExpiredDialog: React.FC<{ onLoginAgain: () => void; onStay: () => void }> = ({ onLoginAgain, onStay }) => {
+const SessionExpiredDialog: React.FC<{ onSuccess: () => void; onStay: () => void }> = ({ onSuccess, onStay }) => {
     const [open, setOpen] = React.useState(true)
+    const [mode, setMode] = React.useState<'prompt' | 'form'>('prompt')
+    const [account, setAccount] = React.useState('')
+    const [password, setPassword] = React.useState('')
+    const [showPassword, setShowPassword] = React.useState(false)
+    const [loading, setLoading] = React.useState(false)
+    const [errorMsg, setErrorMsg] = React.useState('')
     const handled = React.useRef(false)
     const { t } = useTranslation()
 
-    const handleAction = () => {
-        if (handled.current) return
-        handled.current = true
-        onLoginAgain()
-    }
-
-    const handleCancel = () => {
+    const handleStay = () => {
         if (handled.current) return
         handled.current = true
         onStay()
     }
 
+    const handleSubmit = async (e?: React.FormEvent) => {
+        e?.preventDefault()
+        if (loading) return
+        if (!account.trim() || !password) {
+            setErrorMsg(t('auth.sessionExpired.emptyFields') || t('auth.login.submit'))
+            return
+        }
+        setLoading(true)
+        setErrorMsg('')
+        try {
+            const res: any = await useApi(APIS.LOGIN, {
+                account,
+                password,
+                grantType: 'password',
+                type: 'account',
+                scope: 'all',
+            })
+            const { data } = res
+            saveTokens(data.access_token, data.refresh_token)
+            localStorage.setItem('isLogin', 'false')
+            if (handled.current) return
+            handled.current = true
+            onSuccess()
+        } catch (err: any) {
+            // request.tsx already toasts on non-200; surface a compact inline hint too
+            setErrorMsg(err?.message || '')
+        } finally {
+            setLoading(false)
+        }
+    }
+
     return (
         <AlertDialog open={open} onOpenChange={(v) => {
-            if (!v) handleCancel()
-            setOpen(v)
+            // Only allow closing via the explicit "stay" button; ignore outside clicks
+            // to avoid accidentally dismissing the re-login form.
+            if (!v && mode === 'prompt') handleStay()
+            else setOpen(v)
         }}>
             <AlertDialogContent>
                 <AlertDialogHeader>
@@ -90,13 +124,77 @@ const SessionExpiredDialog: React.FC<{ onLoginAgain: () => void; onStay: () => v
                         {t('auth.sessionExpired.message')}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
+
+                {mode === 'form' && (
+                    <form className="space-y-4 py-2" onSubmit={handleSubmit}>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="session-relogin-account" className="text-sm">
+                                {t('auth.common.email')}
+                            </Label>
+                            <Input
+                                id="session-relogin-account"
+                                autoFocus
+                                autoComplete="username"
+                                value={account}
+                                onChange={(e) => setAccount(e.target.value)}
+                                placeholder={t('auth.common.emailPlaceholder')}
+                                disabled={loading}
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="session-relogin-password" className="text-sm">
+                                {t('auth.common.password')}
+                            </Label>
+                            <div className="relative">
+                                <Input
+                                    id="session-relogin-password"
+                                    type={showPassword ? 'text' : 'password'}
+                                    autoComplete="current-password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder={t('auth.login.passwordPlaceholder')}
+                                    className="pr-10"
+                                    disabled={loading}
+                                />
+                                <button
+                                    type="button"
+                                    tabIndex={-1}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                                    onClick={() => setShowPassword((v) => !v)}
+                                >
+                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </button>
+                            </div>
+                        </div>
+                        {errorMsg && (
+                            <p className="text-xs text-destructive">{errorMsg}</p>
+                        )}
+                        {/* Hidden submit so pressing Enter within the inputs submits the form */}
+                        <button type="submit" className="hidden" aria-hidden="true" />
+                    </form>
+                )}
+
                 <AlertDialogFooter>
-                    <AlertDialogAction onClick={handleAction}>
-                        {t('auth.sessionExpired.reLogin')}
-                    </AlertDialogAction>
-                    <AlertDialogCancel onClick={handleCancel}>
-                        {t('auth.sessionExpired.stayHere')}
-                    </AlertDialogCancel>
+                    {mode === 'prompt' ? (
+                        <>
+                            <AlertDialogCancel onClick={handleStay}>
+                                {t('auth.sessionExpired.stayHere')}
+                            </AlertDialogCancel>
+                            <AlertDialogAction onClick={(e) => { e.preventDefault(); setMode('form') }}>
+                                {t('auth.sessionExpired.reLogin')}
+                            </AlertDialogAction>
+                        </>
+                    ) : (
+                        <>
+                            <Button variant="ghost" type="button" onClick={handleStay} disabled={loading}>
+                                {t('auth.sessionExpired.stayHere')}
+                            </Button>
+                            <Button type="button" onClick={() => handleSubmit()} disabled={loading}>
+                                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {t('auth.login.submit')}
+                            </Button>
+                        </>
+                    )}
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
@@ -117,9 +215,12 @@ function showSessionExpiredDialog() {
 
     root.render(
         <SessionExpiredDialog
-            onLoginAgain={() => {
-                clearTokens()
-                window.location.href = '/login'
+            onSuccess={() => {
+                // Fresh tokens saved — allow future 401s to re-trigger this dialog,
+                // then close in place without navigating away.
+                resetSessionExpiredGuard()
+                toast.success(translateSafe('auth.login.title', 'Logged in'))
+                unmount()
             }}
             onStay={() => {
                 resetSessionExpiredGuard()
@@ -127,6 +228,18 @@ function showSessionExpiredDialog() {
             }}
         />
     )
+}
+
+// Imperative i18n lookup for use outside of React components (e.g. after the
+// dialog has already unmounted). Falls back to the provided default text when
+// i18n is not initialised or the key is missing.
+function translateSafe(key: string, fallback: string): string {
+    try {
+        const value = (i18n as any)?.t?.(key)
+        return typeof value === 'string' && value !== key ? value : fallback
+    } catch {
+        return fallback
+    }
 }
 
 export type Plugins = common.KPlugin<any>[]
