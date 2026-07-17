@@ -2,114 +2,218 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+ * Kotion Landing Design System
+ *  - Warm-paper base with scene color tokens
+ *  - Light & dark dual themes
+ * ============================================================ */
+
 @layer base {
     :root {
-        --gradient-start: #fafafa;
-        --gradient-end: #f0f0ff;
-        --accent-blue: #2563eb;
-        --accent-indigo: #4f46e5;
-        --accent-violet: #7c3aed;
+        /* Base surface & ink */
+        --kn-paper: #fbfaf7;
+        --kn-paper-2: #f5f3ed;
+        --kn-ink: #1b1b18;
+        --kn-ink-soft: #4b4b45;
+        --kn-line: rgba(24, 24, 27, 0.08);
+
+        /* Scene colors (accent per capability) */
+        --scene-editor-50: #eef2ff;
+        --scene-editor-100: #e0e7ff;
+        --scene-editor-500: #6366f1;
+        --scene-editor-600: #4f46e5;
+
+        --scene-collab-50: #ecfdf5;
+        --scene-collab-100: #d1fae5;
+        --scene-collab-500: #10b981;
+        --scene-collab-600: #059669;
+
+        --scene-bitable-50: #f5f3ff;
+        --scene-bitable-100: #ede9fe;
+        --scene-bitable-500: #8b5cf6;
+        --scene-bitable-600: #7c3aed;
+
+        --scene-ai-50: #fdf4ff;
+        --scene-ai-100: #fae8ff;
+        --scene-ai-500: #d946ef;
+        --scene-ai-600: #c026d3;
+
+        --scene-canvas-50: #fffbeb;
+        --scene-canvas-100: #fef3c7;
+        --scene-canvas-500: #f59e0b;
+        --scene-canvas-600: #d97706;
+
+        --scene-selfhost-50: #f1f5f9;
+        --scene-selfhost-100: #e2e8f0;
+        --scene-selfhost-500: #64748b;
+        --scene-selfhost-600: #475569;
     }
 
     .dark {
-        --gradient-start: #0a0a0f;
-        --gradient-end: #0f0f1a;
+        --kn-paper: #0b0b0f;
+        --kn-paper-2: #111117;
+        --kn-ink: #f2f1ec;
+        --kn-ink-soft: #b1b0a9;
+        --kn-line: rgba(255, 255, 255, 0.08);
+
+        --scene-editor-50: rgba(99, 102, 241, 0.12);
+        --scene-editor-100: rgba(99, 102, 241, 0.22);
+        --scene-editor-500: #818cf8;
+        --scene-editor-600: #a5b4fc;
+
+        --scene-collab-50: rgba(16, 185, 129, 0.12);
+        --scene-collab-100: rgba(16, 185, 129, 0.22);
+        --scene-collab-500: #34d399;
+        --scene-collab-600: #6ee7b7;
+
+        --scene-bitable-50: rgba(139, 92, 246, 0.12);
+        --scene-bitable-100: rgba(139, 92, 246, 0.22);
+        --scene-bitable-500: #a78bfa;
+        --scene-bitable-600: #c4b5fd;
+
+        --scene-ai-50: rgba(217, 70, 239, 0.12);
+        --scene-ai-100: rgba(217, 70, 239, 0.22);
+        --scene-ai-500: #e879f9;
+        --scene-ai-600: #f0abfc;
+
+        --scene-canvas-50: rgba(245, 158, 11, 0.12);
+        --scene-canvas-100: rgba(245, 158, 11, 0.22);
+        --scene-canvas-500: #fbbf24;
+        --scene-canvas-600: #fcd34d;
+
+        --scene-selfhost-50: rgba(100, 116, 139, 0.14);
+        --scene-selfhost-100: rgba(100, 116, 139, 0.28);
+        --scene-selfhost-500: #94a3b8;
+        --scene-selfhost-600: #cbd5e1;
     }
 }
 
 @layer utilities {
-    .text-notion {
-        @apply text-gray-900 dark:text-gray-50;
+
+    /* -------- Legacy text helpers (kept for backwards compatibility) -------- */
+    .text-notion { color: var(--kn-ink); }
+    .text-notion-light { color: var(--kn-ink-soft); }
+    .bg-notion { background-color: var(--kn-paper); }
+    .border-notion { border: 1px solid var(--kn-line); }
+
+    /* -------- Container & spacing -------- */
+    .container-padding {
+        @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+    }
+    .section-padding {
+        @apply py-20 md:py-28;
     }
 
-    .text-notion-light {
-        @apply text-gray-500 dark:text-gray-400;
+    /* -------- Cards & elevation -------- */
+    .card-lift {
+        @apply relative rounded-xl border transition-all duration-300 ease-out;
+        background-color: var(--kn-paper);
+        border-color: var(--kn-line);
+        box-shadow:
+            0 1px 2px rgba(0, 0, 0, 0.04),
+            0 8px 24px -12px rgba(0, 0, 0, 0.08);
+    }
+    .card-lift:hover {
+        transform: translateY(-2px);
+        box-shadow:
+            0 2px 4px rgba(0, 0, 0, 0.06),
+            0 20px 40px -16px rgba(0, 0, 0, 0.12);
+    }
+    .dark .card-lift {
+        box-shadow:
+            0 1px 2px rgba(0, 0, 0, 0.2),
+            0 8px 24px -12px rgba(0, 0, 0, 0.4);
     }
 
-    .bg-notion {
-        @apply bg-background;
-    }
-
-    .bg-notion-hover {
-        @apply hover:bg-gray-50 transition-colors duration-200;
-    }
-
-    .border-notion {
-        @apply border border-border;
-    }
-
-    /* Hero gradient - subtle, professional */
-    .bg-gradient-hero {
-        background: linear-gradient(180deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
-    }
-
-    .bg-gradient-warm {
-        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 40%, #f1f5f9 100%);
-    }
-
-    .dark .bg-gradient-warm {
-        background: linear-gradient(180deg, #09090b 0%, #0c0c14 40%, #111118 100%);
-    }
-
-    /* Cards */
     .bento-card {
-        @apply relative overflow-hidden rounded-xl p-6 transition-all duration-200;
-        @apply bg-white dark:bg-gray-900/80;
-        @apply border border-gray-200 dark:border-gray-800;
-        @apply hover:shadow-lg hover:border-gray-300 dark:hover:border-gray-700;
+        @apply card-lift p-6 md:p-7 overflow-hidden;
     }
 
-    .bento-card-lg {
-        @apply bento-card col-span-2 row-span-2;
+    /* -------- Chip / pill -------- */
+    .chip {
+        @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium;
+        background-color: var(--kn-paper-2);
+        color: var(--kn-ink-soft);
+        border: 1px solid var(--kn-line);
+    }
+    .chip-scene {
+        background-color: var(--scene-color-50, var(--scene-editor-50));
+        color: var(--scene-color-600, var(--scene-editor-600));
+        border-color: transparent;
     }
 
-    .bento-card-wide {
-        @apply bento-card col-span-2;
-    }
-
-    .bento-card-tall {
-        @apply bento-card row-span-2;
-    }
-
-    /* Glass effect */
+    /* -------- Glass -------- */
     .glass {
-        @apply backdrop-blur-xl bg-white/80 dark:bg-gray-950/80;
+        backdrop-filter: blur(14px);
+        background-color: color-mix(in srgb, var(--kn-paper) 78%, transparent);
     }
 
-    /* Gradient text - deep, professional blue-violet */
+    /* -------- Buttons -------- */
+    .btn-primary {
+        @apply inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-all duration-150;
+        background-color: var(--kn-ink);
+        color: var(--kn-paper);
+    }
+    .btn-primary:hover {
+        opacity: 0.92;
+        transform: translateY(-1px);
+    }
+    .btn-secondary {
+        @apply inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-all duration-150;
+        background-color: var(--kn-paper);
+        color: var(--kn-ink);
+        border: 1px solid var(--kn-line);
+    }
+    .btn-secondary:hover {
+        background-color: var(--kn-paper-2);
+    }
+
+    /* -------- Gradient text (brand mark) -------- */
     .gradient-text {
         @apply bg-clip-text text-transparent;
-        background-image: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-indigo) 40%, var(--accent-violet) 100%);
+        background-image: linear-gradient(135deg, #fb923c 0%, #f472b6 55%, #a855f7 100%);
     }
 
-    .dark .gradient-text {
-        background-image: linear-gradient(135deg, #93c5fd 0%, #a5b4fc 40%, #c4b5fd 100%);
+    /* -------- Hero backgrounds -------- */
+    .hero-paper {
+        position: relative;
+        background:
+            radial-gradient(ellipse 90% 60% at 50% -10%, color-mix(in srgb, var(--scene-ai-500) 12%, transparent) 0%, transparent 60%),
+            radial-gradient(ellipse 70% 50% at 15% 100%, color-mix(in srgb, var(--scene-editor-500) 10%, transparent) 0%, transparent 60%),
+            radial-gradient(ellipse 70% 50% at 100% 40%, color-mix(in srgb, var(--scene-canvas-500) 8%, transparent) 0%, transparent 60%),
+            var(--kn-paper);
+    }
+    .hero-paper::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+        pointer-events: none;
+        opacity: 0.5;
+        mix-blend-mode: multiply;
+    }
+    .dark .hero-paper::after {
+        mix-blend-mode: screen;
+        opacity: 0.25;
     }
 
-    /* Subtle float */
-    .float-animation {
-        animation: float 8s ease-in-out infinite;
-    }
+    /* Warm section alt background (legacy kept) */
+    .bg-gradient-warm { background: var(--kn-paper); }
+    .section-alt { background-color: var(--kn-paper-2); }
 
-    @keyframes float {
-        0%, 100% { transform: translateY(0px); }
-        50% { transform: translateY(-8px); }
-    }
-
-    /* Fade in */
-    .fade-in-up {
-        animation: fadeInUp 0.6s ease-out forwards;
-    }
-
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* Stagger children */
-    .stagger-children > * {
-        animation: fadeInUp 0.5s ease-out forwards;
+    /* -------- Reveal animation -------- */
+    .reveal {
         opacity: 0;
+        transform: translateY(12px);
+        transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .reveal.is-visible {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    .stagger-children > * {
+        opacity: 0;
+        animation: fadeInUp 0.5s ease-out forwards;
     }
     .stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
     .stagger-children > *:nth-child(2) { animation-delay: 0.1s; }
@@ -117,113 +221,57 @@
     .stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
     .stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
     .stagger-children > *:nth-child(6) { animation-delay: 0.3s; }
-
-    /* Button styles */
-    .btn-primary {
-        @apply inline-flex items-center justify-center px-6 py-2.5 rounded-lg font-medium text-sm;
-        @apply bg-gray-900 dark:bg-white text-white dark:text-gray-900;
-        @apply hover:bg-gray-800 dark:hover:bg-gray-100;
-        @apply transition-all duration-150;
+    .fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .float-animation { animation: float 8s ease-in-out infinite; }
+    @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50%      { transform: translateY(-8px); }
     }
 
-    .btn-secondary {
-        @apply inline-flex items-center justify-center px-6 py-2.5 rounded-lg font-medium text-sm;
-        @apply bg-white dark:bg-gray-800 text-gray-900 dark:text-white;
-        @apply border border-gray-200 dark:border-gray-700;
-        @apply hover:bg-gray-50 dark:hover:bg-gray-700;
-        @apply transition-all duration-150;
+    /* -------- Divider -------- */
+    .divider-soft {
+        border-top: 1px solid var(--kn-line);
     }
 
-    /* Logo cloud */
+    /* -------- Logo cloud -------- */
     .logo-cloud {
-        @apply flex items-center justify-center gap-10 md:gap-16 flex-wrap;
-        @apply opacity-40 hover:opacity-70;
-        @apply transition-all duration-300;
+        @apply flex items-center justify-center gap-10 md:gap-16 flex-wrap opacity-60 hover:opacity-90 transition-all duration-300;
     }
 
-    .logo-cloud img {
-        @apply h-6 md:h-8 w-auto;
+    /* -------- Prose (docs) -------- */
+    .prose-kotion {
+        color: var(--kn-ink);
+        line-height: 1.75;
+        font-size: 15px;
     }
+    .prose-kotion h1 { @apply text-3xl md:text-4xl font-bold mt-2 mb-6 tracking-tight; }
+    .prose-kotion h2 { @apply text-2xl font-semibold mt-12 mb-4 tracking-tight; }
+    .prose-kotion h3 { @apply text-lg font-semibold mt-8 mb-3; }
+    .prose-kotion p  { @apply my-4; color: var(--kn-ink-soft); }
+    .prose-kotion strong { color: var(--kn-ink); font-weight: 600; }
+    .prose-kotion ul { @apply list-disc pl-6 my-4 space-y-1; color: var(--kn-ink-soft); }
+    .prose-kotion ol { @apply list-decimal pl-6 my-4 space-y-1; color: var(--kn-ink-soft); }
+    .prose-kotion code:not(pre code) {
+        @apply rounded px-1.5 py-0.5 text-[0.85em] font-mono;
+        background: var(--kn-paper-2);
+        color: var(--scene-ai-600);
+    }
+    .prose-kotion a { color: var(--scene-editor-600); text-decoration: underline; text-underline-offset: 3px; }
+    .prose-kotion blockquote {
+        @apply pl-4 my-6 italic;
+        border-left: 3px solid var(--scene-editor-500);
+        color: var(--kn-ink-soft);
+    }
+    .prose-kotion table { @apply w-full my-6 text-sm border-collapse; }
+    .prose-kotion th, .prose-kotion td { border: 1px solid var(--kn-line); @apply px-3 py-2 text-left; }
+    .prose-kotion th { background: var(--kn-paper-2); }
 
-    /* Feature icon */
+    /* -------- Feature icon -------- */
     .feature-icon {
-        @apply w-10 h-10 rounded-lg flex items-center justify-center mb-4;
-        @apply transition-transform duration-200 group-hover:scale-105;
-    }
-
-    /* Section spacing */
-    .section-padding {
-        @apply py-20 md:py-28;
-    }
-
-    .container-padding {
-        @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
-    }
-
-    /* Mesh gradient for hero background */
-    .hero-mesh {
-        position: relative;
-    }
-    .hero-mesh::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background:
-            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.08) 0%, transparent 60%),
-            radial-gradient(ellipse 60% 40% at 80% 50%, rgba(139, 92, 246, 0.05) 0%, transparent 50%),
-            radial-gradient(ellipse 60% 40% at 20% 60%, rgba(59, 130, 246, 0.05) 0%, transparent 50%);
-        pointer-events: none;
-    }
-    .dark .hero-mesh::before {
-        background:
-            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.12) 0%, transparent 60%),
-            radial-gradient(ellipse 60% 40% at 80% 50%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
-            radial-gradient(ellipse 60% 40% at 20% 60%, rgba(59, 130, 246, 0.06) 0%, transparent 50%);
-    }
-
-    /* Subtle section divider */
-    .section-alt {
-        @apply bg-gray-50/50 dark:bg-gray-900/30;
-    }
-
-    /* Legacy classes */
-    .notion-block {
-        @apply p-4 rounded-md bg-notion border-notion mb-3 transition-all duration-200;
-    }
-
-    .notion-heading {
-        @apply font-bold text-notion mb-2;
-    }
-
-    .notion-text {
-        @apply text-notion mb-2;
-    }
-
-    .notion-quote {
-        @apply border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-notion-light my-4;
-    }
-
-    .notion-list {
-        @apply list-disc pl-6 text-notion my-4;
-    }
-
-    .notion-toggle {
-        @apply cursor-pointer;
-    }
-
-    .notion-toggle-content {
-        @apply pl-6 overflow-hidden transition-all duration-300;
-    }
-
-    .notion-callout {
-        @apply flex items-start p-4 bg-gray-50 dark:bg-gray-800 rounded-md my-4;
-    }
-
-    .notion-callout-icon {
-        @apply mr-3 text-xl;
-    }
-
-    .notion-divider {
-        @apply border-t border-gray-200 dark:border-gray-700 my-6;
+        @apply w-11 h-11 rounded-xl flex items-center justify-center mb-4 transition-transform duration-200 group-hover:scale-105;
     }
 }

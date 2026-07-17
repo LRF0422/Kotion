@@ -1,113 +1,163 @@
 import React from "react";
-import { Github, Twitter, Linkedin } from "@kn/icon";
+import { Link, useTranslation } from "@kn/common";
+import { Github, MessageCircle, Heart } from "@kn/icon";
+import {
+    GITHUB_URL,
+    GITHUB_ISSUES_URL,
+    GITHUB_DISCUSSIONS_URL,
+    GITHUB_CONTRIBUTE_URL,
+    GITHUB_LICENSE_URL,
+    LIVE_DEMO_URL,
+    DESKTOP_RELEASE_URL,
+    ZHIHU_URL,
+    DOCS_INSTALL,
+    DOCS_PLUGIN_DEV,
+} from "../../constants/links";
+
+interface FooterLink {
+    labelKey: string;
+    to?: string;
+    href?: string;
+}
+
+interface FooterColumn {
+    titleKey: string;
+    links: FooterLink[];
+}
+
+const COLUMNS: FooterColumn[] = [
+    {
+        titleKey: "footer.col-product",
+        links: [
+            { labelKey: "footer.link-web", href: LIVE_DEMO_URL },
+            { labelKey: "footer.link-desktop", href: DESKTOP_RELEASE_URL },
+            { labelKey: "footer.link-selfhost", to: DOCS_INSTALL },
+            { labelKey: "footer.link-roadmap", href: `${GITHUB_URL}/projects` },
+        ],
+    },
+    {
+        titleKey: "footer.col-resources",
+        links: [
+            { labelKey: "footer.link-docs", to: "/doc" },
+            { labelKey: "footer.link-quickstart", to: DOCS_INSTALL },
+            { labelKey: "footer.link-plugin-dev", to: DOCS_PLUGIN_DEV },
+            { labelKey: "footer.link-templates", to: "/templates" },
+        ],
+    },
+    {
+        titleKey: "footer.col-community",
+        links: [
+            { labelKey: "footer.link-github", href: GITHUB_URL },
+            { labelKey: "footer.link-issues", href: GITHUB_ISSUES_URL },
+            { labelKey: "footer.link-discussions", href: GITHUB_DISCUSSIONS_URL },
+            { labelKey: "footer.link-contribute", href: GITHUB_CONTRIBUTE_URL },
+        ],
+    },
+    {
+        titleKey: "footer.col-legal",
+        links: [
+            { labelKey: "footer.link-license", href: GITHUB_LICENSE_URL },
+            { labelKey: "footer.link-privacy", href: `${GITHUB_URL}/blob/main/PRIVACY.md` },
+            { labelKey: "footer.link-terms", href: `${GITHUB_URL}/blob/main/TERMS.md` },
+        ],
+    },
+];
 
 export const Footer: React.FC = () => {
-    return <footer className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950">
-        <div className="container-padding py-16">
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-8 lg:gap-12">
-                {/* Brand Column */}
-                <div className="col-span-2">
-                    <div className="flex items-center mb-6">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center">
-                            <span className="text-white font-bold text-sm">K</span>
+    const { t } = useTranslation();
+    return (
+        <footer className="border-t" style={{ borderColor: "var(--kn-line)", background: "var(--kn-paper)" }}>
+            <div className="container-padding py-16">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-8 lg:gap-12">
+                    {/* Brand column */}
+                    <div className="col-span-2">
+                        <div className="flex items-center mb-5">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center">
+                                <span className="text-white font-bold text-sm">K</span>
+                            </div>
+                            <span className="ml-2 text-xl font-semibold tracking-tight" style={{ color: "var(--kn-ink)" }}>
+                                Kotion
+                            </span>
                         </div>
-                        <span className="ml-2 text-xl font-bold text-notion">Kotion</span>
+                        <p className="text-sm max-w-xs mb-6" style={{ color: "var(--kn-ink-soft)" }}>
+                            {t("footer.strapline")}
+                        </p>
+                        <div className="flex items-center gap-3">
+                            <a
+                                href={GITHUB_URL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="GitHub"
+                                className="w-10 h-10 rounded-lg flex items-center justify-center transition-all card-lift"
+                                style={{ color: "var(--kn-ink-soft)" }}
+                            >
+                                <Github className="h-4 w-4" />
+                            </a>
+                            <a
+                                href={ZHIHU_URL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Zhihu"
+                                className="w-10 h-10 rounded-lg flex items-center justify-center transition-all card-lift"
+                                style={{ color: "var(--kn-ink-soft)" }}
+                            >
+                                <MessageCircle className="h-4 w-4" />
+                            </a>
+                        </div>
                     </div>
-                    <p className="text-notion-light text-sm mb-6 max-w-xs">
-                        The all-in-one workspace for your notes, tasks, wikis, and databases.
-                    </p>
-                    <div className="flex items-center gap-4">
-                        <a
-                            href="https://twitter.com"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-notion-light hover:text-notion hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
-                        >
-                            <Twitter className="h-4 w-4" />
-                        </a>
-                        <a
-                            href="https://github.com/LRF0422/knowledge-repo.git"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-notion-light hover:text-notion hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
-                        >
-                            <Github className="h-4 w-4" />
-                        </a>
-                        <a
-                            href="https://linkedin.com"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-notion-light hover:text-notion hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
-                        >
-                            <Linkedin className="h-4 w-4" />
-                        </a>
-                    </div>
+
+                    {/* Column links */}
+                    {COLUMNS.map((col) => (
+                        <div key={col.titleKey}>
+                            <h3
+                                className="text-xs font-semibold mb-4 uppercase tracking-wider"
+                                style={{ color: "var(--kn-ink)" }}
+                            >
+                                {t(col.titleKey)}
+                            </h3>
+                            <ul className="space-y-3">
+                                {col.links.map((l) => (
+                                    <li key={l.labelKey}>
+                                        {l.to ? (
+                                            <Link
+                                                to={l.to}
+                                                className="text-sm hover:opacity-80 transition-opacity"
+                                                style={{ color: "var(--kn-ink-soft)" }}
+                                            >
+                                                {t(l.labelKey)}
+                                            </Link>
+                                        ) : (
+                                            <a
+                                                href={l.href}
+                                                target={l.href?.startsWith("http") ? "_blank" : undefined}
+                                                rel={l.href?.startsWith("http") ? "noopener noreferrer" : undefined}
+                                                className="text-sm hover:opacity-80 transition-opacity"
+                                                style={{ color: "var(--kn-ink-soft)" }}
+                                            >
+                                                {t(l.labelKey)}
+                                            </a>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
                 </div>
 
-                {/* Product Column */}
-                <div>
-                    <h3 className="text-sm font-semibold text-notion mb-4 uppercase tracking-wider">Product</h3>
-                    <ul className="space-y-3">
-                        <li><a href="#features" className="text-sm text-notion-light hover:text-notion transition-colors">Features</a></li>
-                        <li><a href="/templates" className="text-sm text-notion-light hover:text-notion transition-colors">Templates</a></li>
-                        <li><a href="#pricing" className="text-sm text-notion-light hover:text-notion transition-colors">Pricing</a></li>
-                        <li><a href="/plugins" className="text-sm text-notion-light hover:text-notion transition-colors">Plugins</a></li>
-                    </ul>
-                </div>
-
-                {/* Resources Column */}
-                <div>
-                    <h3 className="text-sm font-semibold text-notion mb-4 uppercase tracking-wider">Resources</h3>
-                    <ul className="space-y-3">
-                        <li><a href="/doc" className="text-sm text-notion-light hover:text-notion transition-colors">Documentation</a></li>
-                        <li><a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">Guides</a></li>
-                        <li><a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">API Reference</a></li>
-                        <li><a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">Community</a></li>
-                    </ul>
-                </div>
-
-                {/* Company Column */}
-                <div>
-                    <h3 className="text-sm font-semibold text-notion mb-4 uppercase tracking-wider">Company</h3>
-                    <ul className="space-y-3">
-                        <li><a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">About</a></li>
-                        <li><a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">Blog</a></li>
-                        <li><a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">Careers</a></li>
-                        <li><a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">Contact</a></li>
-                    </ul>
-                </div>
-
-                {/* Legal Column */}
-                <div>
-                    <h3 className="text-sm font-semibold text-notion mb-4 uppercase tracking-wider">Legal</h3>
-                    <ul className="space-y-3">
-                        <li><a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">Privacy</a></li>
-                        <li><a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">Terms</a></li>
-                        <li><a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">Cookie Policy</a></li>
-                        <li><a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">Status</a></li>
-                    </ul>
-                </div>
-            </div>
-
-            {/* Bottom Section */}
-            <div className="border-t border-gray-100 dark:border-gray-800 mt-12 pt-8">
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                    <p className="text-sm text-notion-light">
-                        © {new Date().getFullYear()} Kotion. All rights reserved.
-                    </p>
-                    <div className="flex items-center gap-6">
-                        <a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">
-                            Privacy Policy
-                        </a>
-                        <a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">
-                            Terms of Service
-                        </a>
-                        <a href="#" className="text-sm text-notion-light hover:text-notion transition-colors">
-                            Cookies
-                        </a>
+                {/* Bottom bar */}
+                <div className="mt-12 pt-8 border-t" style={{ borderColor: "var(--kn-line)" }}>
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <p className="text-sm" style={{ color: "var(--kn-ink-soft)" }}>
+                            © {new Date().getFullYear()} Kotion · {t("footer.copyright")}
+                        </p>
+                        <p className="text-sm inline-flex items-center gap-1.5" style={{ color: "var(--kn-ink-soft)" }}>
+                            {t("footer.made-with")}
+                            <Heart className="h-3.5 w-3.5" style={{ color: "var(--scene-ai-500)" }} />
+                            · {t("footer.mit-line")}
+                        </p>
                     </div>
                 </div>
             </div>
-        </div>
-    </footer>
-}
+        </footer>
+    );
+};

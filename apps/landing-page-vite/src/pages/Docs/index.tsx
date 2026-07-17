@@ -1,13 +1,28 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate, Link } from "@kn/common";
 import { Button } from "@kn/ui";
 import {
     BookOpen, Rocket, Puzzle, Brain, Database, Users, Server, Code,
-    ChevronRight, ChevronLeft, Search, FileText, Keyboard, Terminal,
-    Blocks, Palette, BarChart3, Globe, Shield, Zap, ArrowRight, Menu, X,
-    ExternalLink, Copy, Check
+    ChevronRight, ChevronLeft, Search, FileText,
+    Blocks, Palette, BarChart3, Globe, Shield, Zap, Menu, X,
+    ExternalLink, Copy, Check, Github
 } from "@kn/icon";
 import { useTranslation } from "@kn/common";
+import { GITHUB_URL } from "../../constants/links";
+
+type DocScene = "editor" | "collab" | "bitable" | "ai" | "canvas" | "selfhost";
+const SECTION_SCENE: Record<string, DocScene> = {
+    "introduction": "editor",
+    "getting-started": "collab",
+    "core-concepts": "editor",
+    "editor": "editor",
+    "plugins": "bitable",
+    "ai-features": "ai",
+    "database": "bitable",
+    "collaboration": "collab",
+    "self-hosting": "selfhost",
+    "api-reference": "canvas",
+};
 
 // ============================================================
 // Documentation section definitions
@@ -981,6 +996,76 @@ const SECTION_CONTENT: Record<string, React.FC<{ t: (key: string) => string }>> 
 };
 
 // ============================================================
+// Right-column TOC — reads h2/h3 from current section content
+// ============================================================
+interface TocItem { id: string; text: string; level: number }
+
+const TableOfContents: React.FC<{ containerRef: React.RefObject<HTMLDivElement>; section: string; scene: DocScene }> = ({ containerRef, section, scene }) => {
+    const { t } = useTranslation();
+    const [items, setItems] = useState<TocItem[]>([]);
+    const [activeId, setActiveId] = useState<string | null>(null);
+
+    useEffect(() => {
+        const root = containerRef.current;
+        if (!root) return;
+        const nodes = Array.from(root.querySelectorAll<HTMLElement>("h2[id], h3[id]"));
+        setItems(
+            nodes.map((n) => ({
+                id: n.id,
+                text: n.textContent?.trim() ?? "",
+                level: n.tagName === "H2" ? 2 : 3,
+            })),
+        );
+        if (nodes.length === 0) {
+            setActiveId(null);
+            return;
+        }
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const visible = entries
+                    .filter((e) => e.isIntersecting)
+                    .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+                if (visible[0]) setActiveId((visible[0].target as HTMLElement).id);
+            },
+            { rootMargin: "-80px 0px -70% 0px", threshold: 0 },
+        );
+        nodes.forEach((n) => observer.observe(n));
+        return () => observer.disconnect();
+    }, [containerRef, section]);
+
+    if (items.length === 0) return null;
+    return (
+        <aside className="hidden xl:block w-56 flex-shrink-0">
+            <div className="sticky top-24 pt-2">
+                <div className="text-xs uppercase tracking-[0.2em] mb-3" style={{ color: "var(--kn-ink-soft)" }}>
+                    {t("docs.toc-title")}
+                </div>
+                <ul className="space-y-1 text-sm border-l" style={{ borderColor: "var(--kn-line)" }}>
+                    {items.map((it) => {
+                        const active = activeId === it.id;
+                        return (
+                            <li key={it.id}>
+                                <a
+                                    href={`#${it.id}`}
+                                    className={`block pl-3 py-1 -ml-px border-l transition-colors ${it.level === 3 ? "pl-6 text-xs" : ""}`}
+                                    style={{
+                                        borderColor: active ? `var(--scene-${scene}-500)` : "transparent",
+                                        color: active ? `var(--scene-${scene}-600)` : "var(--kn-ink-soft)",
+                                        fontWeight: active ? 600 : 400,
+                                    }}
+                                >
+                                    {it.text}
+                                </a>
+                            </li>
+                        );
+                    })}
+                </ul>
+            </div>
+        </aside>
+    );
+};
+
+// ============================================================
 // Main Docs component
 // ============================================================
 export const Docs: React.FC = () => {
@@ -989,97 +1074,143 @@ export const Docs: React.FC = () => {
     const { t } = useTranslation();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+    const contentRef = useRef<HTMLDivElement>(null);
 
     const currentSection = section || "introduction";
+    const scene = SECTION_SCENE[currentSection] ?? "editor";
 
     // Close sidebar on navigation (mobile)
     useEffect(() => {
         setSidebarOpen(false);
+        // scroll page top when section changes
+        contentRef.current?.scrollTo?.({ top: 0 });
     }, [currentSection]);
 
-    const filteredSections = DOC_SECTIONS.filter(s => {
-        if (!searchQuery) return true;
-        const q = searchQuery.toLowerCase();
-        const title = t(`docs.nav-${s.id}`).toLowerCase();
-        if (title.includes(q)) return true;
-        return s.children?.some(c => t(`docs.nav-${c.id}`).toLowerCase().includes(q));
-    });
+    const filteredSections = useMemo(() =>
+        DOC_SECTIONS.filter((s) => {
+            if (!searchQuery) return true;
+            const q = searchQuery.toLowerCase();
+            const title = t(`docs.nav-${s.id}`).toLowerCase();
+            if (title.includes(q)) return true;
+            return s.children?.some((c) => t(`docs.nav-${c.id}`).toLowerCase().includes(q));
+        }),
+    [searchQuery, t]);
 
     const ContentComponent = SECTION_CONTENT[currentSection];
 
-    // Find prev/next sections for navigation
-    const flatSections = DOC_SECTIONS.map(s => s.id);
+    const flatSections = DOC_SECTIONS.map((s) => s.id);
     const currentIndex = flatSections.indexOf(currentSection);
     const prevSection = currentIndex > 0 ? flatSections[currentIndex - 1] : null;
     const nextSection = currentIndex < flatSections.length - 1 ? flatSections[currentIndex + 1] : null;
 
     return (
-        <div className="min-h-screen bg-white dark:bg-gray-950">
+        <div className="min-h-screen" style={{ background: "var(--kn-paper)", color: "var(--kn-ink)" }}>
             {/* Mobile sidebar toggle */}
-            <div className="lg:hidden sticky top-0 z-40 flex items-center gap-3 px-4 py-3 bg-white/80 dark:bg-gray-950/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800">
+            <div
+                className="lg:hidden sticky top-0 z-40 flex items-center gap-3 px-4 py-3 border-b glass"
+                style={{ borderColor: "var(--kn-line)" }}
+            >
                 <button
                     onClick={() => setSidebarOpen(!sidebarOpen)}
-                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    className="p-2 rounded-lg transition-colors"
+                    style={{ color: "var(--kn-ink)" }}
+                    aria-label="Toggle menu"
                 >
-                    {sidebarOpen ? <X className="w-5 h-5 text-notion" /> : <Menu className="w-5 h-5 text-notion" />}
+                    {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
                 </button>
-                <span className="text-sm font-medium text-notion">{t(`docs.nav-${currentSection}`)}</span>
+                <span className="text-sm font-medium" style={{ color: "var(--kn-ink)" }}>
+                    {t(`docs.nav-${currentSection}`)}
+                </span>
             </div>
 
             <div className="container-padding">
                 <div className="flex gap-0 lg:gap-8 relative">
-                    {/* Sidebar */}
-                    <aside className={`
-                        fixed lg:sticky top-0 lg:top-4 left-0 z-30
-                        w-72 lg:w-64 xl:w-72 flex-shrink-0
-                        h-screen lg:h-[calc(100dvh-65px)]
-                        bg-white dark:bg-gray-950 lg:bg-transparent
-                        border-r lg:border-r-0 border-gray-200 dark:border-gray-800
-                        transition-transform duration-300
-                        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-                        overflow-y-auto py-6 px-4 lg:px-0
-                    `}>
+                    {/* Left sidebar */}
+                    <aside
+                        className={`
+                            fixed lg:sticky top-0 lg:top-4 left-0 z-30
+                            w-72 lg:w-64 flex-shrink-0
+                            h-screen lg:h-[calc(100dvh-65px)]
+                            border-r lg:border-r-0
+                            transition-transform duration-300
+                            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+                            overflow-y-auto py-6 px-4 lg:px-0
+                        `}
+                        style={{
+                            background: "var(--kn-paper)",
+                            borderColor: "var(--kn-line)",
+                        }}
+                    >
                         {/* Search */}
                         <div className="relative mb-6">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--kn-ink-soft)" }} />
                             <input
                                 type="text"
                                 placeholder={t("docs.search-placeholder")}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 text-notion placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                                className="w-full pl-10 pr-4 py-2 text-sm rounded-lg outline-none border transition-all"
+                                style={{
+                                    background: "var(--kn-paper-2)",
+                                    borderColor: "var(--kn-line)",
+                                    color: "var(--kn-ink)",
+                                }}
                             />
                         </div>
 
-                        {/* Navigation */}
                         <nav className="space-y-1">
-                            {filteredSections.map((section) => {
-                                const isActive = currentSection === section.id;
-                                const isParentActive = section.children?.some(c => c.id === currentSection);
-
+                            {filteredSections.map((s) => {
+                                const isActive = currentSection === s.id;
+                                const isParentActive = s.children?.some((c) => c.id === currentSection);
+                                const groupScene = SECTION_SCENE[s.id] ?? "editor";
+                                const isCollapsed = collapsed[s.id];
+                                const showChildren = !isCollapsed && (isActive || isParentActive || !!searchQuery);
                                 return (
-                                    <div key={section.id}>
-                                        <Link
-                                            to={`/doc/${section.id}`}
-                                            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
-                                                    ? 'bg-primary/10 text-primary'
-                                                    : isParentActive
-                                                        ? 'text-notion'
-                                                        : 'text-notion-light hover:text-notion hover:bg-gray-100 dark:hover:bg-gray-800'
-                                                }`}
-                                        >
-                                            <span className={isActive ? 'text-primary' : 'text-gray-400'}>{section.icon}</span>
-                                            {t(`docs.nav-${section.id}`)}
-                                        </Link>
+                                    <div key={s.id}>
+                                        <div className="flex items-center">
+                                            <Link
+                                                to={`/doc/${s.id}`}
+                                                className="flex-1 flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+                                                style={{
+                                                    background: isActive ? `var(--scene-${groupScene}-50)` : "transparent",
+                                                    color: isActive
+                                                        ? `var(--scene-${groupScene}-600)`
+                                                        : isParentActive
+                                                            ? "var(--kn-ink)"
+                                                            : "var(--kn-ink-soft)",
+                                                }}
+                                            >
+                                                <span style={{ color: isActive ? `var(--scene-${groupScene}-600)` : "var(--kn-ink-soft)" }}>{s.icon}</span>
+                                                {t(`docs.nav-${s.id}`)}
+                                            </Link>
+                                            {s.children && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCollapsed((prev) => ({ ...prev, [s.id]: !prev[s.id] }))}
+                                                    className="p-1 rounded-md hover:opacity-80"
+                                                    style={{ color: "var(--kn-ink-soft)" }}
+                                                    aria-label="Toggle group"
+                                                >
+                                                    <ChevronRight
+                                                        className="w-3.5 h-3.5 transition-transform"
+                                                        style={{ transform: showChildren ? "rotate(90deg)" : "rotate(0)" }}
+                                                    />
+                                                </button>
+                                            )}
+                                        </div>
 
-                                        {/* Sub-items */}
-                                        {section.children && (isActive || isParentActive) && (
-                                            <div className="ml-7 mt-1 space-y-1 border-l-2 border-gray-100 dark:border-gray-800 pl-3">
-                                                {section.children.map((child) => (
+                                        {s.children && showChildren && (
+                                            <div
+                                                className="ml-7 mt-1 space-y-1 border-l pl-3"
+                                                style={{ borderColor: "var(--kn-line)" }}
+                                            >
+                                                {s.children.map((child) => (
                                                     <a
                                                         key={child.id}
                                                         href={`#${child.id}`}
-                                                        className="block px-2 py-1.5 text-sm text-notion-light hover:text-notion transition-colors rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                                                        className="block px-2 py-1.5 text-sm rounded-lg transition-colors hover:opacity-80"
+                                                        style={{ color: "var(--kn-ink-soft)" }}
                                                     >
                                                         {t(`docs.nav-${child.id}`)}
                                                     </a>
@@ -1100,14 +1231,14 @@ export const Docs: React.FC = () => {
                         />
                     )}
 
-                    {/* Main content */}
+                    {/* Middle content */}
                     <main className="flex-1 min-w-0 py-8 lg:py-10">
-                        <div className="max-w-3xl">
+                        <div ref={contentRef} className="max-w-3xl prose-kotion">
                             {ContentComponent ? (
                                 <ContentComponent t={t} />
                             ) : (
                                 <div className="text-center py-20">
-                                    <p className="text-notion-light">{t("docs.section-not-found")}</p>
+                                    <p style={{ color: "var(--kn-ink-soft)" }}>{t("docs.section-not-found")}</p>
                                     <Button
                                         variant="outline"
                                         className="mt-4 rounded-lg"
@@ -1118,12 +1249,28 @@ export const Docs: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Prev/Next navigation */}
-                            <div className="flex items-center justify-between mt-16 pt-8 border-t border-gray-200 dark:border-gray-800">
+                            {/* Edit on GitHub */}
+                            <div className="mt-16 pt-6 border-t" style={{ borderColor: "var(--kn-line)" }}>
+                                <a
+                                    href={`${GITHUB_URL}/blob/main/apps/landing-page-vite/src/pages/Docs/index.tsx`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-sm hover:opacity-80"
+                                    style={{ color: "var(--kn-ink-soft)" }}
+                                >
+                                    <Github className="w-4 h-4" />
+                                    {t("docs.edit-on-github")}
+                                    <ExternalLink className="w-3 h-3" />
+                                </a>
+                            </div>
+
+                            {/* Prev/Next */}
+                            <div className="flex items-center justify-between mt-8 pt-6 border-t" style={{ borderColor: "var(--kn-line)" }}>
                                 {prevSection ? (
                                     <Link
                                         to={`/doc/${prevSection}`}
-                                        className="flex items-center gap-2 text-sm text-notion-light hover:text-notion transition-colors group"
+                                        className="flex items-center gap-2 text-sm transition-colors group"
+                                        style={{ color: "var(--kn-ink-soft)" }}
                                     >
                                         <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
                                         {t(`docs.nav-${prevSection}`)}
@@ -1132,7 +1279,8 @@ export const Docs: React.FC = () => {
                                 {nextSection ? (
                                     <Link
                                         to={`/doc/${nextSection}`}
-                                        className="flex items-center gap-2 text-sm text-notion-light hover:text-notion transition-colors group"
+                                        className="flex items-center gap-2 text-sm transition-colors group"
+                                        style={{ color: `var(--scene-${scene}-600)` }}
                                     >
                                         {t(`docs.nav-${nextSection}`)}
                                         <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -1141,6 +1289,9 @@ export const Docs: React.FC = () => {
                             </div>
                         </div>
                     </main>
+
+                    {/* Right TOC */}
+                    <TableOfContents containerRef={contentRef} section={currentSection} scene={scene} />
                 </div>
             </div>
         </div>

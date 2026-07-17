@@ -6,16 +6,21 @@ import { Footer } from "../Footer";
 
 
 export const Layout: React.FC = () => {
-    return <div className="min-h-screen bg-white dark:bg-gray-950">
-        <div className="absolute" id="ref"></div>
-        <header>
-            <Header />
-        </header>
-        <ScrollArea className="h-[calc(100dvh-65px)]">
-            <main>
-                <Outlet />
-            </main>
-            <Footer />
-        </ScrollArea>
-    </div>
-}
+    return (
+        <div
+            className="min-h-screen"
+            style={{ background: "var(--kn-paper)", color: "var(--kn-ink)" }}
+        >
+            <div className="absolute" id="ref"></div>
+            <header>
+                <Header />
+            </header>
+            <ScrollArea className="h-[calc(100dvh-65px)]">
+                <main>
+                    <Outlet />
+                </main>
+                <Footer />
+            </ScrollArea>
+        </div>
+    );
+};
