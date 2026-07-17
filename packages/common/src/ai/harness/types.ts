@@ -68,6 +68,10 @@ export interface HarnessRunInput {
      * uses V2ChatClient which parses the V2 semantic SSE protocol.
      */
     apiVersion?: 'v1' | 'v2'
+    /** Sampling temperature; when undefined the backend default is used. */
+    temperature?: number
+    /** Max response tokens; when undefined the backend default is used. */
+    maxTokens?: number
     /**
      * Notification callback used only for the "tool not available on frontend"
      * path. Frontend tool execution tracking is handled by wrapping tools with

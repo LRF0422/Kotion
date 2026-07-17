@@ -275,9 +275,23 @@ export function useMarginCards<T extends MarginItem>(
         reflow();
 
         editor.on("transaction", onTransaction);
-        const container = getContainer(editor);
-        container?.addEventListener("scroll", onScrollOrResize, { passive: true });
+        // Scroll: listen on the window in the CAPTURE phase. Scroll events
+        // don't bubble, but capture reaches every descendant scroller — the
+        // editor container, page chrome, sidebars. Anchors are viewport-
+        // relative, so ANY scroller moving the editor invalidates them;
+        // listening only on #editor-container let cards drift when anything
+        // else scrolled.
+        window.addEventListener("scroll", onScrollOrResize, { passive: true, capture: true });
         window.addEventListener("resize", onScrollOrResize, { passive: true });
+
+        // Async content growth: node views that render/grow WITHOUT a
+        // ProseMirror transaction (bitable rows loading, images, mermaid /
+        // drawio / chart embeds, web fonts) push anchors down the page. With
+        // no transaction and no scroll, the card would stay at its stale top
+        // — the visible "drift". Watching the ProseMirror element's size
+        // catches every such case and re-anchors the cards.
+        const contentRO = new ResizeObserver(() => requestAnimationFrame(reflow));
+        contentRO.observe(editor.view.dom);
 
         // Catch tab show/hide (display:none toggles fire no scroll/transaction).
         const io = new IntersectionObserver(() => requestAnimationFrame(reflow));
@@ -303,8 +317,9 @@ export function useMarginCards<T extends MarginItem>(
 
         return () => {
             editor.off("transaction", onTransaction);
-            container?.removeEventListener("scroll", onScrollOrResize);
+            window.removeEventListener("scroll", onScrollOrResize, { capture: true } as any);
             window.removeEventListener("resize", onScrollOrResize);
+            contentRO.disconnect();
             io.disconnect();
             mo?.disconnect();
         };

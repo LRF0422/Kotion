@@ -71,6 +71,8 @@ export class AgentHarnessImpl implements AgentHarness {
                 signal,
                 stream: true,
                 mode,
+                temperature: input.temperature,
+                maxTokens: input.maxTokens,
                 skills: catalog.skills.length > 0 ? catalog.skills : undefined,
                 // When skills-only mode is active, catalog.tools is empty
                 // and tools[] is omitted from the wire payload entirely —

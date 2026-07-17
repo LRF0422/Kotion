@@ -15,7 +15,7 @@ import {
     UserChoiceRequest,
     applySubAgentAnnotations,
 } from "@kn/common"
-import type { ChatMode } from "@kn/common"
+import type { ChatMode, ChatModelParams } from "@kn/common"
 
 import { SubAgentTree } from "./SubAgentTree"
 import { PlanApprovalCard } from "./PlanApprovalCard"
@@ -39,6 +39,27 @@ import { UserChoiceCard } from "./chat/UserChoiceCard"
 
 const MODEL_STORAGE_KEY = 'kn_chat_model'
 const MODE_STORAGE_KEY = 'kn_chat_mode'
+const MODEL_PARAMS_STORAGE_KEY = 'kn_chat_model_params'
+
+/** Parse persisted model-param JSON, ignoring malformed or out-of-range values. */
+const readModelParams = (): ChatModelParams => {
+    try {
+        const raw = localStorage.getItem(MODEL_PARAMS_STORAGE_KEY)
+        if (!raw) return {}
+        const parsed = JSON.parse(raw)
+        if (!parsed || typeof parsed !== 'object') return {}
+        const out: ChatModelParams = {}
+        if (typeof parsed.temperature === 'number' && Number.isFinite(parsed.temperature)) {
+            out.temperature = parsed.temperature
+        }
+        if (typeof parsed.maxTokens === 'number' && Number.isFinite(parsed.maxTokens) && parsed.maxTokens > 0) {
+            out.maxTokens = Math.floor(parsed.maxTokens)
+        }
+        return out
+    } catch {
+        return {}
+    }
+}
 
 // ─── Chat ──────────────────────────────────────────────────────────
 
@@ -67,6 +88,20 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
     const handleModeChange = useCallback((mode: ChatMode) => {
         setChatMode(mode)
         try { localStorage.setItem(MODE_STORAGE_KEY, mode) } catch { /* ignore */ }
+    }, [])
+
+    // Sampling params (temperature, maxTokens). Empty object = fall back to
+    // whatever the backend model defaults to; persisted so tweaks survive reloads.
+    const [modelParams, setModelParams] = useState<ChatModelParams>(readModelParams)
+    const handleModelParamsChange = useCallback((next: ChatModelParams) => {
+        setModelParams(next)
+        try {
+            if (next.temperature === undefined && next.maxTokens === undefined) {
+                localStorage.removeItem(MODEL_PARAMS_STORAGE_KEY)
+            } else {
+                localStorage.setItem(MODEL_PARAMS_STORAGE_KEY, JSON.stringify(next))
+            }
+        } catch { /* ignore */ }
     }, [])
 
     // ─── Execution steps (live tool-call tape) ────────────────────
@@ -151,6 +186,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
             model: selectedModel || undefined,
             mode: chatMode,
             apiVersion: 'v2',
+            modelParams,
         },
     )
 
@@ -544,6 +580,8 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                     onModeChange={handleModeChange}
                     model={selectedModel}
                     onModelChange={handleModelChange}
+                    modelParams={modelParams}
+                    onModelParamsChange={handleModelParamsChange}
                 />
             </ExpandableChatFooter>
         </ExpandableChat>

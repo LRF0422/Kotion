@@ -27,17 +27,20 @@ export const StickyNoteStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) =
         }
 
         if (selection.empty) return;
-        editor.commands.addStickyNote();
 
-        // Move caret to the end of the selection so the user can keep typing,
-        // and also surface the new card immediately in the margin panel.
+        // addStickyNote already dispatches the "activate this new note" meta on
+        // the same transaction, so the margin panel will scroll to and focus
+        // the new card automatically. We still collapse the selection to the
+        // end of the marked range so a subsequent keystroke doesn't overwrite
+        // the just-highlighted text.
+        editor.commands.addStickyNote();
         const markType = editor.schema.marks.stickyNote;
         const lastAttrs = editor.getAttributes("stickyNote");
         const noteId = lastAttrs.note_id;
         if (noteId) {
             const range = findStickyNoteRange(editor.state.doc, markType, noteId);
             if (range) {
-                editor.chain().focus().setTextSelection(range.to).run();
+                editor.chain().setTextSelection(range.to).run();
             }
         }
     }, [editor, isActive]);
@@ -50,7 +53,7 @@ export const StickyNoteStaticMenu: React.FC<{ editor: Editor }> = ({ editor }) =
                         size="sm"
                         pressed={isActive}
                         onClick={handleToggle}
-                        aria-label="Toggle sticky note"
+                        aria-label={isActive ? t("stickyNote.remove") : t("stickyNote.add")}
                     >
                         <StickyNoteIcon className="h-4 w-4" />
                     </Toggle>

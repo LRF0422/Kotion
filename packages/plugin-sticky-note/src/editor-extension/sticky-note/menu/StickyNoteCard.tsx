@@ -1,19 +1,32 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEditor, EditorContent, Editor as InnerEditor, useEditorExtension } from "@kn/editor";
 import type { AnyExtension } from "@kn/editor";
-import { Button, useTheme } from "@kn/ui";
+import { Button, Popover, PopoverContent, PopoverTrigger, useTheme } from "@kn/ui";
 import { Trash2, Palette, Bold, Italic, List, ListOrdered, Code } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 import { findStickyNoteColor, STICKY_NOTE_COLORS } from "../constants";
 
 /**
- * Extensions from the parent editor that should NOT be active inside
- * the tiny in-card mini editor. Mostly UI affordances that don't make
- * sense in a small annotation surface.
+ * Extensions from the parent editor kept alive inside the in-card mini editor.
+ * Whitelist (rather than blocklist) so we don't inherit slash menus, bubble
+ * menus, drag handles, floating UIs, unique-id trackers, etc. inside a tiny
+ * annotation surface — those all misbehave when nested and add heavy plugin
+ * state we don't need.
  */
-const INNER_EDITOR_EXCLUDED = new Set<string>([
-    "dragable", // floating drag handle / "+" add-block button
-    "placeholder"
+const INNER_EDITOR_ALLOWED = new Set<string>([
+    "doc",
+    "paragraph",
+    "text",
+    "undoRedo",
+    "history",
+    "bold",
+    "italic",
+    "code",
+    "strike",
+    "bulletList",
+    "orderedList",
+    "listItem",
+    "hardBreak",
 ]);
 
 const VIEWPORT_MARGIN = 16;
@@ -49,25 +62,25 @@ export interface StickyNoteCardProps {
     onContentChange: (content: string) => void;
     onColorChange: (color: string) => void;
     onDelete: () => void;
-    /** Whether this card's highlight is the active (clicked) one. */
+    /** Whether this card's highlight is the active (clicked / newly-created) one. */
     isActive?: boolean;
     /** Whether this card's highlight is being hovered. */
     isHovered?: boolean;
     /** Called when the card starts/stops being hovered (noteId or null). */
     onHoverChange?: (noteId: string | null) => void;
-    /** Called when a collapsed card is clicked to expand it. */
-    onActivate?: (noteId: string) => void;
     /**
      * "margin" (default): fixed-positioned card in the editor's left margin (desktop).
      * "sheet": plain block that fills its container (mobile bottom sheet) — no
-     * fixed positioning, toolbar always visible.
+     * fixed positioning.
      */
     variant?: "margin" | "sheet";
 }
 
 /**
- * Always-visible margin sticky note. Hosts a tiny rich-text editor
- * (StarterKit) so the user can format content (bold/italic/lists/code).
+ * Always-visible margin sticky note. Hosts a tiny rich-text editor (whitelisted
+ * extensions from the parent) so the user can format content
+ * (bold/italic/lists/code). Cards render at full height regardless of hover;
+ * `isActive` is used only to auto-focus the mini editor on creation.
  */
 export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
     noteId,
@@ -84,7 +97,6 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
     isActive = false,
     isHovered = false,
     onHoverChange,
-    onActivate,
     variant = "margin",
 }) => {
     const { theme } = useTheme();
@@ -94,10 +106,7 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
     const tone = isDark ? palette.dark : palette.light;
 
     const [showColors, setShowColors] = useState(false);
-
-    // Two-step delete: first click arms, second click within 2s confirms.
-    const [confirmDelete, setConfirmDelete] = useState(false);
-    const confirmDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [confirmOpen, setConfirmOpen] = useState(false);
 
     // Color picker container ref — used for click-outside detection.
     const colorPopRef = useRef<HTMLDivElement>(null);
@@ -128,15 +137,14 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
     // Debounced save handle
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Reuse the parent editor's full extension set so the inner mini-editor
-    // supports the same formatting (marks, lists, code, etc.). We exclude
-    // "stickyNote" to avoid infinite recursion, plus a few extensions that
-    // don't belong inside a tiny inline card (drag handle, etc.).
+    // Reuse a curated subset of the parent editor's extensions so formatting
+    // works but the small note isn't infected with slash / bubble / floating
+    // UIs. The parent list already excludes stickyNote itself.
     const [parentExtensions] = useEditorExtension("stickyNote");
     const innerExtensions = useMemo(
         () =>
-            (parentExtensions as AnyExtension[]).filter(
-                (e) => !INNER_EDITOR_EXCLUDED.has(e.name)
+            (parentExtensions as AnyExtension[]).filter((e) =>
+                INNER_EDITOR_ALLOWED.has(e.name)
             ),
         [parentExtensions]
     );
@@ -181,9 +189,31 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
     useEffect(() => {
         return () => {
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-            if (confirmDeleteTimerRef.current) clearTimeout(confirmDeleteTimerRef.current);
         };
     }, []);
+
+    // Auto-focus the mini editor once per "activation" (newly created note or
+    // clicked highlight). We track the last focused noteId in a ref so the
+    // effect doesn't repeatedly steal focus while the card is active.
+    const lastFocusedRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!innerEditor || innerEditor.isDestroyed) return;
+        if (!isActive || !isEditable) return;
+        if (lastFocusedRef.current === noteId) return;
+        lastFocusedRef.current = noteId;
+        // Wait a tick so the card is mounted and the parent has finished its
+        // own focus dance after the mark was added.
+        const timer = setTimeout(() => {
+            if (!innerEditor.isDestroyed) innerEditor.commands.focus("end");
+        }, 0);
+        return () => clearTimeout(timer);
+    }, [isActive, isEditable, innerEditor, noteId]);
+
+    // Reset the focus latch once the card stops being active so a future
+    // re-activation can steal focus again.
+    useEffect(() => {
+        if (!isActive) lastFocusedRef.current = null;
+    }, [isActive]);
 
     const isEmpty = innerEditor ? innerEditor.isEmpty : !content;
 
@@ -195,35 +225,19 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
         [innerEditor]
     );
 
-    const handleDelete = useCallback(() => {
+    const handleDeleteClick = useCallback(() => {
+        // Empty note: no content to lose, just delete.
         if (isEmpty) {
             onDelete();
             return;
         }
-        if (confirmDelete) {
-            if (confirmDeleteTimerRef.current) clearTimeout(confirmDeleteTimerRef.current);
-            setConfirmDelete(false);
-            onDelete();
-        } else {
-            setConfirmDelete(true);
-            confirmDeleteTimerRef.current = setTimeout(() => setConfirmDelete(false), 2000);
-        }
-    }, [confirmDelete, isEmpty, onDelete]);
+        // Otherwise open an explicit confirmation popover.
+        setConfirmOpen(true);
+    }, [isEmpty, onDelete]);
 
     // Viewport clamping for the margin variant so cards near the bottom
     // don't extend off-screen.
     const placed = variant === "margin" ? placeVertically(top) : null;
-
-    // Collapsed state: margin cards show a compact excerpt when not active or
-    // hovered, reducing visual noise for documents with many notes.
-    const isCollapsed = variant === "margin" && !isActive && !isHovered;
-
-    const excerpt = useMemo(() => {
-        if (!content) return "";
-        const tmp = document.createElement("div");
-        tmp.innerHTML = content;
-        return tmp.textContent || "";
-    }, [content]);
 
     return (
         <div
@@ -255,23 +269,6 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
                     borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
                 }}
             >
-                {isCollapsed ? (
-                    <div
-                        className="px-3 py-2 cursor-pointer"
-                        onClick={() => onActivate?.(noteId)}
-                    >
-                        <div className="flex items-start gap-1.5">
-                            <span
-                                className="mt-1 h-2 w-2 rounded-full flex-shrink-0"
-                                style={{ backgroundColor: tone.border }}
-                            />
-                            <p className="line-clamp-2 text-[12px] leading-snug text-foreground/70">
-                                {excerpt || t("stickyNote.placeholder")}
-                            </p>
-                        </div>
-                    </div>
-                ) : (
-                <>
                 {/* Body */}
                 <div
                     className="px-3 py-2.5 sticky-note-card-editor relative"
@@ -285,11 +282,10 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
                     <EditorContent editor={innerEditor} />
                 </div>
 
-                {/* Footer toolbar — fades in on hover/focus */}
+                {/* Footer toolbar — always visible when editable */}
                 {isEditable && (
                     <div
-                        className={`sticky-note-card-toolbar flex items-center gap-0.5 px-2 py-1.5 ${showColors || variant === "sheet" ? "is-open" : ""
-                            }`}
+                        className="sticky-note-card-toolbar flex items-center gap-0.5 px-2 py-1.5"
                         style={{ borderTop: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}` }}
                     >
                         <ToolbarButton
@@ -346,12 +342,13 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
                                     {STICKY_NOTE_COLORS.map((c) => {
                                         const swatch = isDark ? c.dark : c.light;
                                         const selected = c.name === color;
+                                        const colorLabel = t(`stickyNote.colors.${c.name}`, { defaultValue: c.label });
                                         return (
                                             <button
                                                 key={c.name}
                                                 type="button"
-                                                aria-label={c.label}
-                                                title={c.label}
+                                                aria-label={colorLabel}
+                                                title={colorLabel}
                                                 className={`h-5 w-5 rounded-full transition-transform duration-150 hover:scale-110 ${selected ? "ring-2 ring-offset-1 ring-offset-popover" : ""
                                                     }`}
                                                 style={{
@@ -370,23 +367,53 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
                             )}
                         </div>
 
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`h-5 w-5 p-0 transition-colors ${
-                                confirmDelete
-                                    ? "text-destructive bg-destructive/10"
-                                    : "text-foreground/60 hover:text-destructive hover:bg-destructive/10"
-                            }`}
-                            onClick={handleDelete}
-                            aria-label={confirmDelete ? t("stickyNote.deleteConfirm") : t("stickyNote.delete")}
-                            title={confirmDelete ? t("stickyNote.deleteConfirm") : t("stickyNote.delete")}
-                        >
-                            <Trash2 className="h-3 w-3" />
-                        </Button>
+                        {/* Delete: empty note → one click deletes; non-empty → confirm. */}
+                        <Popover open={confirmOpen} onOpenChange={setConfirmOpen}>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-5 w-5 p-0 text-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                    onClick={handleDeleteClick}
+                                    aria-label={t("stickyNote.delete")}
+                                    title={t("stickyNote.delete")}
+                                >
+                                    <Trash2 className="h-3 w-3" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                                side="top"
+                                align="end"
+                                className="w-56 p-3"
+                                onOpenAutoFocus={(e) => e.preventDefault()}
+                            >
+                                <p className="text-sm text-foreground mb-3">
+                                    {t("stickyNote.deleteConfirm")}
+                                </p>
+                                <div className="flex justify-end gap-2">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs"
+                                        onClick={() => setConfirmOpen(false)}
+                                    >
+                                        {t("stickyNote.cancel")}
+                                    </Button>
+                                    <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs"
+                                        onClick={() => {
+                                            setConfirmOpen(false);
+                                            onDelete();
+                                        }}
+                                    >
+                                        {t("stickyNote.delete")}
+                                    </Button>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
                     </div>
-                )}
-                </>
                 )}
             </div>
         </div>
@@ -404,6 +431,10 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ tooltip, active, onClick,
         type="button"
         title={tooltip}
         aria-label={tooltip}
+        // Keep the mini editor focused when clicking a toolbar button — without
+        // this the button steals focus on mousedown and `chain().focus()` in
+        // the handler runs against the wrong (parent) editor.
+        onMouseDown={(e) => e.preventDefault()}
         onClick={onClick}
         className={`h-5 w-5 inline-flex items-center justify-center rounded-[4px] text-foreground/60 hover:text-foreground hover:bg-black/[0.08] dark:hover:bg-white/10 transition-colors ${active ? "bg-black/10 dark:bg-white/15 text-foreground" : ""
             }`}

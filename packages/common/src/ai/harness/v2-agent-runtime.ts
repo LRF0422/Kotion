@@ -73,9 +73,10 @@ export class V2AgentRuntime {
             model,
             messages,
             stream: true,
-            temperature: 0.7,
+            temperature: input.temperature ?? 0.7,
         }
 
+        if (input.maxTokens != null) body.maxTokens = input.maxTokens
         if (sessionId) body.sessionId = sessionId
         if (conversationId) body.conversationId = conversationId
         if (mode) body.mode = mode

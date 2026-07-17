@@ -19,8 +19,10 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@kn/ui'
-import type { ChatMode, ModelInfo } from '@kn/common'
-import { fetchModels } from '@kn/common'
+import type { ChatMode, ChatModelParams, ModelInfo } from '@kn/common'
+import { fetchModels, useTranslation } from '@kn/common'
+
+import { ModelParamsPopover } from './ModelParamsPopover'
 
 // ─── Mode toggle ───────────────────────────────────────────────────
 
@@ -30,14 +32,15 @@ interface ModeToggleProps {
     disabled?: boolean
 }
 
-const MODES: { id: ChatMode; label: string; icon: React.ReactNode; hint: string }[] = [
-    { id: 'ask', label: 'Ask', icon: <MessageCircle className="h-3 w-3" />, hint: 'Ask mode — answer only, read-only' },
-    { id: 'agent', label: 'Agent', icon: <Bot className="h-3 w-3" />, hint: 'Agent mode — can edit the document' },
-]
-
-const ModeToggle: React.FC<ModeToggleProps> = ({ mode, onModeChange, disabled }) => (
+const ModeToggle: React.FC<ModeToggleProps> = ({ mode, onModeChange, disabled }) => {
+    const { t } = useTranslation()
+    const modes: { id: ChatMode; label: string; icon: React.ReactNode; hint: string }[] = [
+        { id: 'ask', label: t('ai.chat.modeAsk', { defaultValue: 'Ask' }), icon: <MessageCircle className="h-3 w-3" />, hint: t('ai.chat.modeAskHint', { defaultValue: 'Ask 模式 — 仅回答，只读' }) },
+        { id: 'agent', label: t('ai.chat.modeAgent', { defaultValue: 'Agent' }), icon: <Bot className="h-3 w-3" />, hint: t('ai.chat.modeAgentHint', { defaultValue: 'Agent 模式 — 可编辑文档' }) },
+    ]
+    return (
     <div className="inline-flex items-center p-0.5 rounded-md bg-muted/70 text-[10px] font-medium">
-        {MODES.map((m) => {
+        {modes.map((m) => {
             const active = mode === m.id
             return (
                 <button
@@ -59,7 +62,8 @@ const ModeToggle: React.FC<ModeToggleProps> = ({ mode, onModeChange, disabled })
             )
         })}
     </div>
-)
+    )
+}
 
 // ─── Model selector ────────────────────────────────────────────────
 
@@ -70,6 +74,7 @@ interface ModelSelectorProps {
 }
 
 const ModelSelector: React.FC<ModelSelectorProps> = ({ model, onModelChange, disabled }) => {
+    const { t } = useTranslation()
     const [models, setModels] = useState<ModelInfo[]>([])
     const [open, setOpen] = useState(false)
     const loadedRef = useRef(false)
@@ -108,7 +113,9 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ model, onModelChange, dis
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[220px]">
                 {models.length === 0 && (
-                    <div className="px-2 py-1.5 text-[10px] text-muted-foreground">Loading models…</div>
+                    <div className="px-2 py-1.5 text-[10px] text-muted-foreground">
+                        {t('ai.chat.loadingModels', { defaultValue: '加载模型中…' })}
+                    </div>
                 )}
                 {Array.from(grouped.entries()).map(([provider, providerModels]) => (
                     <React.Fragment key={provider}>
@@ -144,6 +151,8 @@ interface ChatComposerProps {
     onModeChange: (mode: ChatMode) => void
     model: string
     onModelChange: (model: string) => void
+    modelParams: ChatModelParams
+    onModelParamsChange: (params: ChatModelParams) => void
 }
 
 /**
@@ -153,9 +162,14 @@ interface ChatComposerProps {
  * focused on what actually works.
  */
 export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(function ChatComposer(
-    { value, onChange, onSubmit, onStop, isLoading, mode, onModeChange, model, onModelChange },
+    {
+        value, onChange, onSubmit, onStop, isLoading,
+        mode, onModeChange, model, onModelChange,
+        modelParams, onModelParamsChange,
+    },
     ref,
 ) {
+    const { t } = useTranslation()
     const inputRef = useRef<HTMLTextAreaElement | null>(null)
     // Expose the internal ref to the parent.
     React.useImperativeHandle(ref, () => inputRef.current as HTMLTextAreaElement)
@@ -196,8 +210,8 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 onKeyDown={handleKeyDown}
                 placeholder={
                     mode === 'ask'
-                        ? 'Ask a question about your document…'
-                        : 'Ask, edit, or automate anything…'
+                        ? t('ai.chat.askPlaceholder', { defaultValue: '向 AI 提问关于文档的问题…' })
+                        : t('ai.chat.agentPlaceholder', { defaultValue: '提问、编辑或自动化任何事情…' })
                 }
                 disabled={isLoading}
                 rows={1}
@@ -207,6 +221,11 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 <div className="flex items-center gap-1.5 min-w-0">
                     <ModeToggle mode={mode} onModeChange={onModeChange} disabled={isLoading} />
                     <ModelSelector model={model} onModelChange={onModelChange} disabled={isLoading} />
+                    <ModelParamsPopover
+                        params={modelParams}
+                        onChange={onModelParamsChange}
+                        disabled={isLoading}
+                    />
                 </div>
                 {isLoading ? (
                     <TooltipProvider>
@@ -220,17 +239,21 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                                     onClick={onStop}
                                 >
                                     <Square className="h-3 w-3" />
-                                    <span className="text-[10px] font-medium">Stop</span>
+                                    <span className="text-[10px] font-medium">
+                                        {t('ai.stop', { defaultValue: '停止' })}
+                                    </span>
                                 </Button>
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">Stop generation</TooltipContent>
+                            <TooltipContent side="top" className="text-xs">
+                                {t('ai.chat.stopGeneration', { defaultValue: '停止生成' })}
+                            </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
                 ) : (
                     <Button
                         type="submit"
                         size="sm"
-                        aria-label="Send message"
+                        aria-label={t('ai.chat.send', { defaultValue: '发送消息' })}
                         disabled={!isValid}
                         className="h-7 w-7 p-0 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                     >

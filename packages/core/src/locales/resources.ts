@@ -507,7 +507,28 @@ export const resources = {
                 "accept": "完成",
                 "refinePlaceholder": "继续修改，如：再短一点…",
                 "customPlaceholder": "告诉 AI 如何处理选中内容…",
-                "blockPlaceholder": "让 AI 帮你写点什么…"
+                "blockPlaceholder": "让 AI 帮你写点什么…",
+                "modelParams": {
+                    "title": "模型参数",
+                    "reset": "重置",
+                    "temperature": "温度",
+                    "temperatureHint": "越低越精确稳定，越高越有创造力",
+                    "maxTokens": "最大 Tokens",
+                    "maxTokensPlaceholder": "如 4096",
+                    "maxTokensHint": "留空使用模型默认值，后端会限制到上下文窗口范围内",
+                    "serverDefault": "服务器默认"
+                },
+                "chat": {
+                    "modeAsk": "Ask",
+                    "modeAgent": "Agent",
+                    "modeAskHint": "Ask 模式 — 仅回答，只读",
+                    "modeAgentHint": "Agent 模式 — 可编辑文档",
+                    "askPlaceholder": "向 AI 提问关于文档的问题…",
+                    "agentPlaceholder": "提问、编辑或自动化任何事情…",
+                    "stopGeneration": "停止生成",
+                    "send": "发送消息",
+                    "loadingModels": "加载模型中…"
+                }
             },
             "settings": {
                 "title": "设置",
@@ -1155,7 +1176,28 @@ export const resources = {
                 "accept": "Done",
                 "refinePlaceholder": "Keep editing, e.g. make it shorter…",
                 "customPlaceholder": "Tell AI what to do with the selection…",
-                "blockPlaceholder": "Ask AI to write something for you…"
+                "blockPlaceholder": "Ask AI to write something for you…",
+                "modelParams": {
+                    "title": "Model Parameters",
+                    "reset": "Reset",
+                    "temperature": "Temperature",
+                    "temperatureHint": "Lower = more focused & deterministic. Higher = more creative.",
+                    "maxTokens": "Max Tokens",
+                    "maxTokensPlaceholder": "e.g. 4096",
+                    "maxTokensHint": "Leave empty to use model default. Backend clamps to context window.",
+                    "serverDefault": "Server default"
+                },
+                "chat": {
+                    "modeAsk": "Ask",
+                    "modeAgent": "Agent",
+                    "modeAskHint": "Ask mode — answer only, read-only",
+                    "modeAgentHint": "Agent mode — can edit the document",
+                    "askPlaceholder": "Ask a question about your document…",
+                    "agentPlaceholder": "Ask, edit, or automate anything…",
+                    "stopGeneration": "Stop generation",
+                    "send": "Send message",
+                    "loadingModels": "Loading models…"
+                }
             },
             "settings": {
                 "title": "Settings",

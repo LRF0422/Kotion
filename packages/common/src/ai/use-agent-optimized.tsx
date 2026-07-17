@@ -27,6 +27,17 @@ import { EDITOR_AGENT_PROMPT, ASK_MODE_PROMPT } from "./constants"
 export type ChatMode = 'ask' | 'agent'
 
 /**
+ * User-tunable model parameters that ride along with every chat request.
+ * Fields are all optional — an unset value falls back to the backend default.
+ */
+export type ChatModelParams = {
+    /** Sampling temperature (typical range 0.0 – 2.0). */
+    temperature?: number
+    /** Cap on the response length in tokens. */
+    maxTokens?: number
+}
+
+/**
  * Optimized editor agent hook with backend-driven architecture.
  *
  * The frontend produces a full capability catalog (skills + tools) and ships
@@ -45,6 +56,8 @@ export const useEditorAgentOptimized = (
         mode?: ChatMode
         /** API version: 'v1' (default, OpenAI SSE) or 'v2' (semantic SSE protocol). */
         apiVersion?: 'v1' | 'v2'
+        /** User-tunable sampling params (temperature, maxTokens). */
+        modelParams?: ChatModelParams
     }
 ) => {
     // AbortController ref for stopping generation
@@ -62,6 +75,8 @@ export const useEditorAgentOptimized = (
     const modeRef = useRef<ChatMode>(agentOptions?.mode || 'agent')
     // Ref for API version
     const apiVersionRef = useRef<'v1' | 'v2'>(agentOptions?.apiVersion || 'v1')
+    // Ref for latest model params (avoids stale closure in stream callback)
+    const modelParamsRef = useRef<ChatModelParams | undefined>(agentOptions?.modelParams)
 
     // Keep model ref in sync with agentOptions
     useEffect(() => {
@@ -77,6 +92,11 @@ export const useEditorAgentOptimized = (
     useEffect(() => {
         apiVersionRef.current = agentOptions?.apiVersion || 'v1'
     }, [agentOptions?.apiVersion])
+
+    // Keep model params ref in sync
+    useEffect(() => {
+        modelParamsRef.current = agentOptions?.modelParams
+    }, [agentOptions?.modelParams])
 
     // Shared capability catalog wiring (providers, plugins, skills).
     const {
@@ -151,6 +171,7 @@ export const useEditorAgentOptimized = (
             // Drive the unified harness; map its typed events back onto this
             // hook's text-stream + callback contract. Tool execution tracking is
             // handled by `wrappedTools` (wrapped with onToolExecution).
+            const params = modelParamsRef.current
             const events = harnessRef.current.run({
                 messages: chatMessages,
                 model: modelRef.current || undefined,
@@ -161,6 +182,8 @@ export const useEditorAgentOptimized = (
                 signal,
                 onToolExecution,
                 apiVersion: apiVersionRef.current,
+                temperature: params?.temperature,
+                maxTokens: params?.maxTokens,
             })
 
             const textStream = (async function* (): AsyncGenerator<string> {

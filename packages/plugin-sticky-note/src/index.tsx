@@ -26,7 +26,17 @@ export const stickyNote = new StickyNotePlugin({
                     color: "Color",
                     delete: "Delete sticky note",
                     deleteConfirm: "Click again to delete",
-                    sheetTitle: "Sticky Note"
+                    cancel: "Cancel",
+                    open: "Open sticky note",
+                    sheetTitle: "Sticky Note",
+                    colors: {
+                        yellow: "Yellow",
+                        pink: "Pink",
+                        blue: "Blue",
+                        green: "Green",
+                        purple: "Purple",
+                        orange: "Orange"
+                    }
                 }
             }
         },
@@ -46,7 +56,17 @@ export const stickyNote = new StickyNotePlugin({
                     color: "颜色",
                     delete: "删除便签",
                     deleteConfirm: "再次点击以删除",
-                    sheetTitle: "便签"
+                    cancel: "取消",
+                    open: "打开便签",
+                    sheetTitle: "便签",
+                    colors: {
+                        yellow: "黄色",
+                        pink: "粉色",
+                        blue: "蓝色",
+                        green: "绿色",
+                        purple: "紫色",
+                        orange: "橙色"
+                    }
                 }
             }
         }

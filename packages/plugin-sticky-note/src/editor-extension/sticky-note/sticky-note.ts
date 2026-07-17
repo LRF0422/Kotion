@@ -14,6 +14,13 @@ declare module "@kn/editor" {
             updateStickyNoteColor: (noteId: string, color: string) => ReturnType;
             /** Remove a sticky note entirely. */
             removeStickyNote: (noteId: string) => ReturnType;
+            /**
+             * Ask the margin panel to bring the given note into view and focus
+             * its mini editor. Purely UI-state; does not modify the document.
+             */
+            focusStickyNote: (noteId: string | null) => ReturnType;
+            /** Ask the margin panel to emphasize a note (bidirectional hover). */
+            hoverStickyNote: (noteId: string | null) => ReturnType;
         };
     }
 }
@@ -122,8 +129,8 @@ export interface StickyNoteRange {
 
 /**
  * Collect every sticky-note mark in the document, grouped by note_id, with the
- * contiguous span [from, to) it covers. Shared by the inline mobile markers and
- * (conceptually) the margin panel.
+ * contiguous span [from, to) it covers. Shared by the margin panel and the
+ * plugin's own hover-decoration builder.
  */
 export function collectStickyNotes(doc: any, markType: any): StickyNoteRange[] {
     const map = new Map<string, StickyNoteRange>();
@@ -150,35 +157,54 @@ export function collectStickyNotes(doc: any, markType: any): StickyNoteRange[] {
     return Array.from(map.values());
 }
 
-const stickyNoteMarkerKey = new PluginKey("stickyNoteMarker");
+/**
+ * Single source of truth for the sticky-note UI overlay state.
+ * `activeNoteId` — the note whose margin card should be scrolled into view and
+ *   whose mini editor should take focus (e.g. after creation, or after clicking
+ *   a highlight). Also used to open the bottom sheet on mobile.
+ * `hoveredNoteId` — the note whose highlight and margin card should be
+ *   emphasized (bidirectional hover sync).
+ *
+ * The panel subscribes to transactions and reads this via `getState()`. It is
+ * NEVER duplicated into `editor.storage` or React state (except as derived
+ * snapshots).
+ */
+export interface StickyNoteUIState {
+    activeNoteId: string | null;
+    hoveredNoteId: string | null;
+}
+
+export const stickyNoteUIKey = new PluginKey<StickyNoteUIState>("stickyNoteUI");
 
 /**
- * Build widget decorations: a small tappable marker at the END of each note's
- * range. The marker is hidden on tablet/desktop via CSS (the margin cards are
- * used there) and only shown on mobile, where tapping it opens the note's
- * bottom sheet. Being a widget keeps it inline with the text and scrolling
- * naturally — no fragile fixed-positioning.
+ * Meta payload shape. Each field is optional so callers can patch either or
+ * both. `activeNoteId: undefined` means "leave alone"; explicit `null` clears.
  */
-function buildStickyNoteDecorations(doc: any, markType: any): DecorationSet {
-    if (!markType) return DecorationSet.empty;
-    const notes = collectStickyNotes(doc, markType);
-    const decorations = notes.map((n) =>
-        Decoration.widget(
-            n.to,
-            () => {
-                const btn = document.createElement("button");
-                btn.type = "button";
-                btn.className = "sticky-note-marker";
-                btn.setAttribute("data-note-id", n.noteId);
-                btn.setAttribute("data-color", n.color);
-                btn.setAttribute("contenteditable", "false");
-                btn.setAttribute("aria-label", "Open sticky note");
-                return btn;
-            },
-            { side: 1, key: `sticky-note-marker-${n.noteId}-${n.color}`, ignoreSelection: true }
+export interface StickyNoteUIMeta {
+    activeNoteId?: string | null;
+    hoveredNoteId?: string | null;
+}
+
+/**
+ * Every doc range covered by `hoveredNoteId`, tagged with the `.is-hovered`
+ * class. Complements the mark's own `.sticky-note-highlight` (which stays
+ * static). Doing this via decorations keeps hover styling inside ProseMirror
+ * rather than reaching into the DOM from React.
+ */
+function buildHoverDecorations(
+    doc: any,
+    markType: any,
+    hoveredNoteId: string | null
+): DecorationSet {
+    if (!markType || !hoveredNoteId) return DecorationSet.empty;
+    const ranges = findAllStickyNoteRanges(doc, markType, hoveredNoteId);
+    if (ranges.length === 0) return DecorationSet.empty;
+    return DecorationSet.create(
+        doc,
+        ranges.map((r) =>
+            Decoration.inline(r.from, r.to, { class: "is-hovered" })
         )
     );
-    return DecorationSet.create(doc, decorations);
 }
 
 const StickyNoteMark = Mark.create({
@@ -235,12 +261,22 @@ const StickyNoteMark = Mark.create({
         return {
             addStickyNote:
                 (options) =>
-                    ({ commands }) => {
-                        return commands.setMark("stickyNote", {
-                            note_id: uuidv4(),
+                    ({ commands, tr, dispatch }) => {
+                        const noteId = uuidv4();
+                        const ok = commands.setMark("stickyNote", {
+                            note_id: noteId,
                             color: options?.color || DEFAULT_STICKY_NOTE_COLOR,
                             content: options?.content || "",
                         });
+                        if (ok && dispatch) {
+                            // Piggy-back on the same tr so the panel can pick up the
+                            // new active note in the same transaction cycle that adds
+                            // the mark — no double dispatch, no visible race.
+                            tr.setMeta(stickyNoteUIKey, {
+                                activeNoteId: noteId,
+                            } satisfies StickyNoteUIMeta);
+                        }
+                        return ok;
                     },
 
             updateStickyNoteContent:
@@ -258,7 +294,8 @@ const StickyNoteMark = Mark.create({
                             tr.removeMark(range.from, range.to, markType);
                             tr.addMark(range.from, range.to, newMark);
                         }
-                        tr.setMeta("addToHistory", false);
+                        // Content edits enter history — undo/redo restores prior text,
+                        // consistent with color / delete behaviour.
                         return true;
                     },
 
@@ -277,7 +314,6 @@ const StickyNoteMark = Mark.create({
                             tr.removeMark(range.from, range.to, markType);
                             tr.addMark(range.from, range.to, newMark);
                         }
-                        // Color is a discrete user action — allow undo/redo.
                         return true;
                     },
 
@@ -290,20 +326,35 @@ const StickyNoteMark = Mark.create({
                         for (const range of ranges) {
                             tr.removeMark(range.from, range.to, markType);
                         }
+                        // Also clear the UI state pointing at this note.
+                        tr.setMeta(stickyNoteUIKey, {
+                            activeNoteId: null,
+                            hoveredNoteId: null,
+                        } satisfies StickyNoteUIMeta);
                         return true;
                     },
-        };
-    },
 
-    addStorage() {
-        // The note whose mobile bottom-sheet is open (set by tapping an inline
-        // marker or clicking a highlight). Also tracked by the desktop margin
-        // panel to emphasize / scroll the active card into view.
-        // hoveredNoteId powers the bidirectional hover-sync between a highlight
-        // in the document and its margin card.
-        return {
-            activeNoteId: null as string | null,
-            hoveredNoteId: null as string | null,
+            focusStickyNote:
+                (noteId) =>
+                    ({ tr, dispatch }) => {
+                        if (dispatch) {
+                            tr.setMeta(stickyNoteUIKey, {
+                                activeNoteId: noteId,
+                            } satisfies StickyNoteUIMeta);
+                        }
+                        return true;
+                    },
+
+            hoverStickyNote:
+                (noteId) =>
+                    ({ tr, dispatch }) => {
+                        if (dispatch) {
+                            tr.setMeta(stickyNoteUIKey, {
+                                hoveredNoteId: noteId,
+                            } satisfies StickyNoteUIMeta);
+                        }
+                        return true;
+                    },
         };
     },
 
@@ -325,78 +376,86 @@ const StickyNoteMark = Mark.create({
     },
 
     addProseMirrorPlugins() {
-        const extension = this;
         return [
-            new Plugin({
-                key: stickyNoteMarkerKey,
+            new Plugin<StickyNoteUIState & { deco: DecorationSet }>({
+                key: stickyNoteUIKey as PluginKey<any>,
                 state: {
-                    init: (_config, state) =>
-                        buildStickyNoteDecorations(state.doc, state.schema.marks.stickyNote),
+                    init: (_config, state) => ({
+                        activeNoteId: null,
+                        hoveredNoteId: null,
+                        deco: buildHoverDecorations(state.doc, state.schema.marks.stickyNote, null),
+                    }),
                     apply(tr, old, _oldState, newState) {
-                        // Only re-walk the doc when it actually changed; otherwise
-                        // just map existing decorations through the transaction.
-                        if (!tr.docChanged) return old.map(tr.mapping, tr.doc);
-                        return buildStickyNoteDecorations(newState.doc, newState.schema.marks.stickyNote);
+                        const meta = tr.getMeta(stickyNoteUIKey) as StickyNoteUIMeta | undefined;
+                        const nextActive =
+                            meta && "activeNoteId" in meta
+                                ? meta.activeNoteId ?? null
+                                : old.activeNoteId;
+                        const nextHovered =
+                            meta && "hoveredNoteId" in meta
+                                ? meta.hoveredNoteId ?? null
+                                : old.hoveredNoteId;
+
+                        // Rebuild decorations only when the hovered id or the doc
+                        // changed; otherwise map the existing set through the tx.
+                        let deco = old.deco;
+                        const markType = newState.schema.marks.stickyNote;
+                        if (nextHovered !== old.hoveredNoteId || tr.docChanged) {
+                            deco = buildHoverDecorations(newState.doc, markType, nextHovered);
+                        } else if (deco.find().length > 0) {
+                            deco = deco.map(tr.mapping, tr.doc);
+                        }
+
+                        if (
+                            nextActive === old.activeNoteId &&
+                            nextHovered === old.hoveredNoteId &&
+                            deco === old.deco
+                        ) {
+                            return old;
+                        }
+                        return {
+                            activeNoteId: nextActive,
+                            hoveredNoteId: nextHovered,
+                            deco,
+                        };
                     },
                 },
                 props: {
                     decorations(state) {
-                        return stickyNoteMarkerKey.getState(state);
+                        const s = (stickyNoteUIKey as PluginKey<any>).getState(state);
+                        return s?.deco ?? DecorationSet.empty;
                     },
                     handleDOMEvents: {
-                        // Prevent the caret from landing on the marker button.
-                        mousedown: (_view, event) => {
-                            const target = event.target as HTMLElement | null;
-                            if (target?.closest?.(".sticky-note-marker")) {
-                                event.preventDefault();
-                                return true;
-                            }
-                            return false;
-                        },
-                        // Tap a marker → open that note's bottom sheet. We store the
-                        // id and dispatch an empty meta transaction so the React
-                        // margin panel (which listens to "transaction") picks it up.
-                        // Clicking a highlight (desktop) also sets activeNoteId so
-                        // the margin panel can scroll to / emphasize the card.
+                        // Clicking a highlight sets it as the active note so the
+                        // margin panel scrolls to (and focuses) the card. We do
+                        // NOT preventDefault so the caret still lands normally.
                         click: (view, event) => {
                             const target = event.target as HTMLElement | null;
-
-                            // Marker click (mobile) — open bottom sheet.
-                            const marker = target?.closest?.(".sticky-note-marker") as HTMLElement | null;
-                            if (marker) {
-                                const noteId = marker.getAttribute("data-note-id");
-                                if (noteId) {
-                                    extension.storage.activeNoteId = noteId;
-                                    view.dispatch(view.state.tr.setMeta("stickyNoteMarkerClick", true));
-                                }
-                                event.preventDefault();
-                                return true;
-                            }
-
-                            // Highlight click — set active note so the margin
-                            // panel can scroll to / emphasize the card. Don't
-                            // preventDefault so the caret is still placed.
                             const highlight = target?.closest?.(".sticky-note-highlight") as HTMLElement | null;
-                            if (highlight) {
-                                const noteId = highlight.getAttribute("data-note-id");
-                                if (noteId) {
-                                    extension.storage.activeNoteId = noteId;
-                                    view.dispatch(view.state.tr.setMeta("stickyNoteHighlightClick", true));
-                                }
-                            }
+                            if (!highlight) return false;
+                            const noteId = highlight.getAttribute("data-note-id");
+                            if (!noteId) return false;
+                            view.dispatch(
+                                view.state.tr.setMeta(stickyNoteUIKey, {
+                                    activeNoteId: noteId,
+                                } satisfies StickyNoteUIMeta)
+                            );
                             return false;
                         },
-                        // Hover sync: when the pointer enters / leaves a
-                        // highlight, update hoveredNoteId so the margin panel
-                        // can emphasize the corresponding card.
+                        // Pointer-based hover sync (pointerover/out is symmetric and
+                        // won't lie about "did we leave the element" the way
+                        // mouseover alone does when moving to a child).
                         mouseover: (view, event) => {
                             const target = event.target as HTMLElement | null;
                             const highlight = target?.closest?.(".sticky-note-highlight") as HTMLElement | null;
                             const noteId = highlight?.getAttribute("data-note-id") ?? null;
-                            if (extension.storage.hoveredNoteId !== noteId) {
-                                extension.storage.hoveredNoteId = noteId;
-                                view.dispatch(view.state.tr.setMeta("stickyNoteHover", true));
-                            }
+                            const cur = (stickyNoteUIKey as PluginKey<any>).getState(view.state);
+                            if (cur?.hoveredNoteId === noteId) return false;
+                            view.dispatch(
+                                view.state.tr.setMeta(stickyNoteUIKey, {
+                                    hoveredNoteId: noteId,
+                                } satisfies StickyNoteUIMeta)
+                            );
                             return false;
                         },
                     },

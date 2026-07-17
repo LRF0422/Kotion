@@ -1,11 +1,16 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Editor, useMarginCards } from "@kn/editor";
 import type { Transaction } from "@kn/editor";
 import { useIsMobile } from "@kn/ui";
+import { useTranslation } from "@kn/common";
 import { StickyNoteCard } from "./StickyNoteCard";
 import { StickyNoteSheet } from "./StickyNoteSheet";
-import { collectStickyNotes } from "../sticky-note";
+import {
+    collectStickyNotes,
+    stickyNoteUIKey,
+    type StickyNoteUIState,
+} from "../sticky-note";
 
 interface NoteItem {
     id: string;
@@ -25,12 +30,105 @@ function getNotes(editor: Editor): NoteItem[] {
         .sort((a, b) => a.from - b.from);
 }
 
+/**
+ * Subscribe to the sticky-note UI plugin state and return the latest snapshot.
+ * Filters Tiptap focus/blur meta-only transactions so a Radix Dialog / Sheet /
+ * DropdownMenu opening doesn't wake us up (same trick as useMarginCards).
+ */
+function useStickyNoteUIState(editor: Editor): StickyNoteUIState {
+    const [state, setState] = useState<StickyNoteUIState>(() => ({
+        activeNoteId: null,
+        hoveredNoteId: null,
+    }));
+    useEffect(() => {
+        if (!editor) return;
+        const read = () => {
+            const s = stickyNoteUIKey.getState(editor.state) as StickyNoteUIState | undefined;
+            setState({
+                activeNoteId: s?.activeNoteId ?? null,
+                hoveredNoteId: s?.hoveredNoteId ?? null,
+            });
+        };
+        const onTx = ({ transaction }: { transaction: Transaction }) => {
+            const isFocusBlurOnly =
+                !transaction.docChanged &&
+                !transaction.selectionSet &&
+                (transaction.getMeta("focus") != null ||
+                    transaction.getMeta("blur") != null);
+            if (isFocusBlurOnly) return;
+            read();
+        };
+        read();
+        editor.on("transaction", onTx);
+        return () => { editor.off("transaction", onTx); };
+    }, [editor]);
+    return state;
+}
+
+/**
+ * Mobile-only: compute the vertical viewport position of each sticky note's
+ * anchor so we can render a small marker in the right gutter. Doesn't share
+ * `useMarginCards` because we anchor to viewport-right (not the text column
+ * edge), and we don't need overlap resolution — markers are 6×24 and can stack
+ * pixel-tight if the doc happens to have overlapping notes.
+ */
+function useMobileMarkerAnchors(
+    editor: Editor,
+    notes: NoteItem[],
+    enabled: boolean
+) {
+    const [tops, setTops] = useState<Record<string, number>>({});
+    useEffect(() => {
+        if (!enabled || !editor) {
+            setTops({});
+            return;
+        }
+        const compute = () => {
+            if (editor.isDestroyed) return;
+            const next: Record<string, number> = {};
+            for (const n of notes) {
+                try {
+                    const coords = editor.view.coordsAtPos(n.from);
+                    if (coords.top < 0 || coords.top > window.innerHeight) continue;
+                    next[n.id] = coords.top;
+                } catch {
+                    /* skip */
+                }
+            }
+            setTops(next);
+        };
+        compute();
+        const onTx = ({ transaction }: { transaction: Transaction }) => {
+            const isFocusBlurOnly =
+                !transaction.docChanged &&
+                !transaction.selectionSet &&
+                (transaction.getMeta("focus") != null ||
+                    transaction.getMeta("blur") != null);
+            if (isFocusBlurOnly) return;
+            requestAnimationFrame(compute);
+        };
+        const onScroll = () => requestAnimationFrame(compute);
+        editor.on("transaction", onTx);
+        window.addEventListener("scroll", onScroll, { passive: true, capture: true });
+        window.addEventListener("resize", onScroll, { passive: true });
+        // Async node-view growth (bitable rows, images, embeds) moves anchors
+        // without any transaction or scroll — re-anchor instead of drifting.
+        const ro = new ResizeObserver(() => requestAnimationFrame(compute));
+        ro.observe(editor.view.dom);
+        return () => {
+            editor.off("transaction", onTx);
+            window.removeEventListener("scroll", onScroll, { capture: true } as any);
+            window.removeEventListener("resize", onScroll);
+            ro.disconnect();
+        };
+    }, [editor, notes, enabled]);
+    return tops;
+}
+
 export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
     const isMobile = useIsMobile();
-    // Mobile: which note's bottom-sheet is open (mirrors editor.storage.stickyNote.activeNoteId).
-    const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
-    // Hovered note — drives bidirectional highlight/card emphasis.
-    const [hoveredNoteId, setHoveredNoteId] = useState<string | null>(null);
+    const { t } = useTranslation();
+    const { activeNoteId, hoveredNoteId } = useStickyNoteUIState(editor);
 
     const { panelLeft, panelWidth, anchors, registerCard } = useMarginCards<NoteItem>(editor, {
         side: "left",
@@ -40,79 +138,43 @@ export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) 
         disabled: isMobile,
     });
 
-    // Memoized notes for mobile — avoids walking the doc on every render.
-    // Only recomputes when the doc actually changes.
+    // Notes list for mobile. Only recomputes when the doc actually changes.
     const mobileNotes = useMemo(
         () => (isMobile ? getNotes(editor) : []),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [isMobile, editor, editor.state.doc]
     );
 
+    const mobileMarkerTops = useMobileMarkerAnchors(editor, mobileNotes, isMobile);
+
+    const setActive = useCallback(
+        (noteId: string | null) => {
+            editor.commands.focusStickyNote(noteId);
+        },
+        [editor]
+    );
+
     const closeActiveNote = useCallback(() => {
-        const storage = (editor?.storage as any)?.stickyNote;
-        if (storage) {
-            storage.activeNoteId = null;
-            storage.hoveredNoteId = null;
+        editor.commands.focusStickyNote(null);
+        editor.commands.hoverStickyNote(null);
+    }, [editor]);
+
+    // Scroll the active card into view (desktop only). Guards against triggering
+    // on the initial null → null "change".
+    const lastScrolledRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (isMobile) return;
+        if (!activeNoteId) {
+            lastScrolledRef.current = null;
+            return;
         }
-        setActiveNoteId(null);
-        setHoveredNoteId(null);
-    }, [editor]);
-
-    // Mirror the extension's active note and hovered note from storage.
-    //
-    // Skip ONLY Tiptap's focus/blur meta-only transactions (see FocusEvents in
-    // @tiptap/core — they carry a `focus` / `blur` meta with no doc or
-    // selection change). Radix Dialog / Sheet / DropdownMenu steal focus every
-    // time they open, and without this filter each menu open would wake this
-    // sync. All other meta-only transactions (highlight click / hover metas
-    // dispatched from sticky-note.ts) still pass through unchanged.
-    useEffect(() => {
-        if (!editor) return;
-        const sync = () => {
-            const s = (editor.storage as any).stickyNote;
-            setActiveNoteId(s?.activeNoteId ?? null);
-            setHoveredNoteId(s?.hoveredNoteId ?? null);
-        };
-        const onTx = ({ transaction }: { transaction: Transaction }) => {
-            const isFocusBlurOnly =
-                !transaction.docChanged &&
-                !transaction.selectionSet &&
-                (transaction.getMeta("focus") != null ||
-                    transaction.getMeta("blur") != null);
-            if (isFocusBlurOnly) return;
-            sync();
-        };
-        sync();
-        editor.on("transaction", onTx);
-        return () => { editor.off("transaction", onTx); };
-    }, [editor]);
-
-    // Scroll the active card into view (desktop only).
-    useEffect(() => {
-        if (!activeNoteId || isMobile) return;
-        // The card's outer div carries data-note-id + the sticky-note-card-enter class.
+        if (lastScrolledRef.current === activeNoteId) return;
+        lastScrolledRef.current = activeNoteId;
         const el = document.querySelector(
             `.sticky-note-card-enter[data-note-id="${activeNoteId}"]`
         );
-        if (el) {
-            el.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     }, [activeNoteId, isMobile]);
-
-    // Card → highlight hover sync: toggle the is-hovered class on the
-    // corresponding highlight span(s) in the document.
-    useEffect(() => {
-        if (!editor || !editor.view) return;
-        const dom = editor.view.dom;
-        dom
-            .querySelectorAll(".sticky-note-highlight.is-hovered")
-            .forEach((el) => el.classList.remove("is-hovered"));
-        if (hoveredNoteId) {
-            dom
-                .querySelectorAll(`.sticky-note-highlight[data-note-id="${hoveredNoteId}"]`)
-                .forEach((el) => el.classList.add("is-hovered"));
-        }
-    }, [hoveredNoteId, editor]);
 
     const handleContentChange = useCallback(
         (noteId: string, content: string) => {
@@ -135,37 +197,53 @@ export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) 
         [editor]
     );
 
-    const handleHoverChange = useCallback((noteId: string | null) => {
-        const storage = (editor?.storage as any)?.stickyNote;
-        if (storage) storage.hoveredNoteId = noteId;
-        setHoveredNoteId(noteId);
-    }, [editor]);
+    const handleHoverChange = useCallback(
+        (noteId: string | null) => {
+            editor.commands.hoverStickyNote(noteId);
+        },
+        [editor]
+    );
 
-    const handleActivate = useCallback((noteId: string) => {
-        const storage = (editor?.storage as any)?.stickyNote;
-        if (storage) storage.activeNoteId = noteId;
-        setActiveNoteId(noteId);
-    }, [editor]);
-
-    // Mobile: no room for margin cards. Each note shows an inline marker (a
-    // ProseMirror widget rendered by the extension); tapping it sets
-    // activeNoteId, and we present that note in a bottom sheet for editing.
+    // ── Mobile ────────────────────────────────────────────────────────────
+    // Render one gutter marker per note (right edge of the viewport) plus a
+    // bottom sheet for the active note. The old inline widget marker is gone —
+    // it used to sit at `n.to`, which often fell in the middle of a paragraph
+    // and broke the text flow.
     if (isMobile) {
         const active = activeNoteId
             ? mobileNotes.find((n) => n.id === activeNoteId)
             : undefined;
-        if (!active) return null;
-        return (
-            <StickyNoteSheet
-                open
-                onOpenChange={(open) => { if (!open) closeActiveNote(); }}
-                color={active.color}
-                content={active.content}
-                isEditable={editor.isEditable}
-                onContentChange={(c) => handleContentChange(active.id, c)}
-                onColorChange={(c) => handleColorChange(active.id, c)}
-                onDelete={() => { handleDelete(active.id); closeActiveNote(); }}
-            />
+        return createPortal(
+            <>
+                {mobileNotes.map((n) => {
+                    const top = mobileMarkerTops[n.id];
+                    if (top == null) return null;
+                    return (
+                        <button
+                            key={n.id}
+                            type="button"
+                            className="sticky-note-gutter-marker"
+                            data-color={n.color}
+                            style={{ top: `${top}px` }}
+                            aria-label={t("stickyNote.open")}
+                            onClick={() => setActive(n.id)}
+                        />
+                    );
+                })}
+                {active && (
+                    <StickyNoteSheet
+                        open
+                        onOpenChange={(open) => { if (!open) closeActiveNote(); }}
+                        color={active.color}
+                        content={active.content}
+                        isEditable={editor.isEditable}
+                        onContentChange={(c) => handleContentChange(active.id, c)}
+                        onColorChange={(c) => handleColorChange(active.id, c)}
+                        onDelete={() => { handleDelete(active.id); closeActiveNote(); }}
+                    />
+                )}
+            </>,
+            document.body
         );
     }
 
@@ -193,7 +271,6 @@ export const StickyNoteMarginPanel: React.FC<{ editor: Editor }> = ({ editor }) 
                     isActive={activeNoteId === note.id}
                     isHovered={hoveredNoteId === note.id}
                     onHoverChange={handleHoverChange}
-                    onActivate={handleActivate}
                     onContentChange={(c) => handleContentChange(note.id, c)}
                     onColorChange={(c) => handleColorChange(note.id, c)}
                     onDelete={() => handleDelete(note.id)}

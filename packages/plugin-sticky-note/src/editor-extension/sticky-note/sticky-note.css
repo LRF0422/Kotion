@@ -12,8 +12,12 @@
     background-color: rgb(255 212 0 / 0.32);
 }
 
-/* When the corresponding margin card is hovered, emphasize the highlight. */
-.sticky-note-highlight.is-hovered {
+/* When the corresponding margin card is hovered, emphasize the highlight.
+   Uses `:has(.is-hovered)` because the plugin adds `.is-hovered` via a
+   ProseMirror inline decoration, which wraps the range in an inner span
+   (rather than adding a class to the mark span itself). `:has()` targets the
+   outer mark span whenever any descendant carries the flag. */
+.sticky-note-highlight:has(.is-hovered) {
     background-color: rgb(255 212 0 / 0.35);
     border-bottom-width: 3px;
 }
@@ -44,27 +48,27 @@
 }
 
 /* Card-hovered highlight emphasis (stronger than :hover) */
-.sticky-note-highlight.is-hovered[data-color="yellow"] {
+.sticky-note-highlight[data-color="yellow"]:has(.is-hovered) {
     background-color: rgb(255 212 0 / 0.38);
 }
 
-.sticky-note-highlight.is-hovered[data-color="pink"] {
+.sticky-note-highlight[data-color="pink"]:has(.is-hovered) {
     background-color: rgb(240 98 146 / 0.38);
 }
 
-.sticky-note-highlight.is-hovered[data-color="blue"] {
+.sticky-note-highlight[data-color="blue"]:has(.is-hovered) {
     background-color: rgb(74 144 226 / 0.38);
 }
 
-.sticky-note-highlight.is-hovered[data-color="green"] {
+.sticky-note-highlight[data-color="green"]:has(.is-hovered) {
     background-color: rgb(124 179 66 / 0.42);
 }
 
-.sticky-note-highlight.is-hovered[data-color="purple"] {
+.sticky-note-highlight[data-color="purple"]:has(.is-hovered) {
     background-color: rgb(156 106 222 / 0.38);
 }
 
-.sticky-note-highlight.is-hovered[data-color="orange"] {
+.sticky-note-highlight[data-color="orange"]:has(.is-hovered) {
     background-color: rgb(243 156 18 / 0.42);
 }
 
@@ -118,60 +122,67 @@
 }
 
 /* Dark theme card-hovered emphasis */
-.dark .sticky-note-highlight.is-hovered[data-color="yellow"] {
+.dark .sticky-note-highlight[data-color="yellow"]:has(.is-hovered) {
     background-color: rgb(255 212 0 / 0.44);
 }
 
-.dark .sticky-note-highlight.is-hovered[data-color="pink"] {
+.dark .sticky-note-highlight[data-color="pink"]:has(.is-hovered) {
     background-color: rgb(240 98 146 / 0.48);
 }
 
-.dark .sticky-note-highlight.is-hovered[data-color="blue"] {
+.dark .sticky-note-highlight[data-color="blue"]:has(.is-hovered) {
     background-color: rgb(74 144 226 / 0.48);
 }
 
-.dark .sticky-note-highlight.is-hovered[data-color="green"] {
+.dark .sticky-note-highlight[data-color="green"]:has(.is-hovered) {
     background-color: rgb(124 179 66 / 0.52);
 }
 
-.dark .sticky-note-highlight.is-hovered[data-color="purple"] {
+.dark .sticky-note-highlight[data-color="purple"]:has(.is-hovered) {
     background-color: rgb(156 106 222 / 0.48);
 }
 
-.dark .sticky-note-highlight.is-hovered[data-color="orange"] {
+.dark .sticky-note-highlight[data-color="orange"]:has(.is-hovered) {
     background-color: rgb(243 156 18 / 0.52);
 }
 
-/* Inline mobile marker: a small tappable colored dot at the end of a sticky
-   note's range. Hidden on tablet/desktop, where the margin cards are used. */
-.sticky-note-marker {
+/* Mobile right-gutter marker: a small colored bar anchored to the viewport's
+   right edge at the vertical position of a note. Tapping it opens the note's
+   bottom sheet. Replaces the previous inline widget marker, which sat mid-
+   paragraph and broke the text flow. */
+.sticky-note-gutter-marker {
     display: none;
 }
 
 @media (max-width: 767px) {
-    .sticky-note-marker {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 14px;
-        height: 14px;
-        margin: 0 2px;
+    .sticky-note-gutter-marker {
+        display: block;
+        position: fixed;
+        right: 4px;
+        width: 6px;
+        height: 24px;
         padding: 0;
         border: none;
-        border-radius: 9999px;
-        vertical-align: middle;
-        cursor: pointer;
+        border-radius: 3px;
         background-color: #f5c518;
-        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+        cursor: pointer;
+        z-index: 30;
         -webkit-tap-highlight-color: transparent;
+        transition: transform 0.12s ease, box-shadow 0.12s ease;
     }
 
-    .sticky-note-marker[data-color="yellow"] { background-color: #f5c518; }
-    .sticky-note-marker[data-color="pink"] { background-color: #f06292; }
-    .sticky-note-marker[data-color="blue"] { background-color: #4a90e2; }
-    .sticky-note-marker[data-color="green"] { background-color: #7cb342; }
-    .sticky-note-marker[data-color="purple"] { background-color: #9c6ade; }
-    .sticky-note-marker[data-color="orange"] { background-color: #f39c12; }
+    .sticky-note-gutter-marker:active {
+        transform: scale(0.94);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    .sticky-note-gutter-marker[data-color="yellow"] { background-color: #f5c518; }
+    .sticky-note-gutter-marker[data-color="pink"] { background-color: #f06292; }
+    .sticky-note-gutter-marker[data-color="blue"] { background-color: #4a90e2; }
+    .sticky-note-gutter-marker[data-color="green"] { background-color: #7cb342; }
+    .sticky-note-gutter-marker[data-color="purple"] { background-color: #9c6ade; }
+    .sticky-note-gutter-marker[data-color="orange"] { background-color: #f39c12; }
 }
 
 /* Card enter animation */
@@ -255,15 +266,9 @@
     transform: translateY(-2px);
 }
 
-/* Toolbar fades in on hover/focus / when popovers are open */
+/* Toolbar is always visible when the card is editable — the previous fade-in
+   made formatting affordances hard to discover. */
 .sticky-note-card-toolbar {
-    opacity: 0;
-    transition: opacity 0.15s ease;
-}
-
-.group\/card:hover .sticky-note-card-toolbar,
-.group\/card:focus-within .sticky-note-card-toolbar,
-.sticky-note-card-toolbar.is-open {
     opacity: 1;
 }
 
