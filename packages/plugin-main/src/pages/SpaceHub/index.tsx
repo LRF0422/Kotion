@@ -2,14 +2,16 @@ import { useTranslation } from "@kn/common";
 import {
     Button, Input, Pagination, PaginationContent, PaginationEllipsis, PaginationItem,
     PaginationLink, PaginationNext, PaginationPrevious, Select, SelectContent, SelectItem,
-    SelectTrigger, SelectValue, Skeleton, toast, cn, useIsMobile
+    SelectTrigger, SelectValue, Skeleton, toast, cn, useIsMobile,
+    Tabs, TabsContent, TabsList, TabsTrigger
 } from "@kn/ui";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Box, EyeIcon, FolderOpen, Grid3X3, List, Plus, SearchIcon, Star } from "@kn/icon";
+import { ArrowLeft, Box, EyeIcon, FolderOpen, Grid3X3, List, Plus, SearchIcon, Star, Users } from "@kn/icon";
 import { Space } from "../../model/Space";
 import { useApi, useDebounce, useNavigator, useUploadFile } from "@kn/common";
 import { APIS } from "../../api";
 import { CreateSpaceDlg } from "../components/SpaceForm";
+import { useLocation } from "react-router-dom";
 
 
 // Deterministic color per space id — same palette/approach as the Home page so
@@ -163,11 +165,19 @@ export const SpaceHub: React.FC = () => {
     const { t } = useTranslation()
     const navigator = useNavigator()
     const { usePath } = useUploadFile()
+    const location = useLocation()
+
+    // Read initial tab from URL query parameter (?tab=team)
+    const initialTab = useMemo(() => {
+        const params = new URLSearchParams(location.search)
+        return params.get('tab') || 'all'
+    }, [])
 
     const [favorites, setFavorites] = useState<Space[]>([])
     const [spaces, setSpaces] = useState<Space[]>([])
     const [totalSpaces, setTotalSpaces] = useState<number>(0)
     const [category, setCategory] = useState<string>('All')
+    const [spaceTab, setSpaceTab] = useState<string>(initialTab)
     const [searchValue, setSearchValue] = useState<string>('')
     const [currentPage, setCurrentPage] = useState<number>(1)
     const [totalPages, setTotalPages] = useState<number>(1)
@@ -192,6 +202,9 @@ export const SpaceHub: React.FC = () => {
             const params: any = { template: false, pageSize, current: currentPage }
             if (debouncedSearchValue) params.searchValue = debouncedSearchValue
             if (category !== 'All') params.category = category
+            // Filter by type based on selected tab
+            if (spaceTab === 'team') params.type = 'COLLABORATION'
+            else if (spaceTab === 'normal') params.type = 'SPACE'
 
             const res = await useApi(APIS.QUERY_SPACE, params)
             const total = res.data.total || 0
@@ -207,7 +220,7 @@ export const SpaceHub: React.FC = () => {
             setShowLoadingSpaces(false)
             setIsLoadingSpaces(false)
         }
-    }, [currentPage, debouncedSearchValue, category, t])
+    }, [currentPage, debouncedSearchValue, category, spaceTab, t])
 
     // Fetch the favorite spaces shown in the pinned section.
     const fetchFavorites = useCallback(async () => {
@@ -249,10 +262,10 @@ export const SpaceHub: React.FC = () => {
     useEffect(() => { fetchSpaces() }, [fetchSpaces])
     useEffect(() => { fetchFavorites() }, [fetchFavorites])
 
-    // Reset to page 1 whenever the search term or category changes.
+    // Reset to page 1 whenever the search term or category or tab changes.
     useEffect(() => {
         setCurrentPage(1)
-    }, [debouncedSearchValue, category])
+    }, [debouncedSearchValue, category, spaceTab])
 
     const favoriteIds = useMemo(() => new Set(favorites.map(f => f.id)), [favorites])
     const isFavorite = useCallback((space: Space) => favoriteIds.has(space.id), [favoriteIds])
@@ -354,12 +367,22 @@ export const SpaceHub: React.FC = () => {
                 {/* All spaces */}
                 <section className="flex flex-col gap-3.5 shrink-0">
                     <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                            <FolderOpen size={14} className="text-muted-foreground" />
-                            <h2 className="text-sm font-medium text-muted-foreground">
-                                {t('space-hub.all-spaces', 'All Spaces')}
-                            </h2>
-                        </div>
+                        <Tabs value={spaceTab} onValueChange={setSpaceTab} className="w-auto">
+                            <TabsList className="h-8">
+                                <TabsTrigger value="all" className="text-xs px-3 h-6 gap-1">
+                                    <FolderOpen size={12} />
+                                    {t('space-hub.tab-all', 'All')}
+                                </TabsTrigger>
+                                <TabsTrigger value="normal" className="text-xs px-3 h-6 gap-1">
+                                    <Box size={12} />
+                                    {t('space-hub.tab-normal', 'Normal')}
+                                </TabsTrigger>
+                                <TabsTrigger value="team" className="text-xs px-3 h-6 gap-1">
+                                    <Users size={12} />
+                                    {t('space-hub.tab-team', 'Team')}
+                                </TabsTrigger>
+                            </TabsList>
+                        </Tabs>
                         {!isMobile && (
                             <div className="flex items-center gap-0.5 rounded-md border border-border/60 p-0.5">
                                 <Button

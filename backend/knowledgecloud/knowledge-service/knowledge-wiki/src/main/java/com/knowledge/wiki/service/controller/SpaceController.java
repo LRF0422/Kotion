@@ -131,6 +131,15 @@ public class SpaceController {
         return R.data(spaceApplication.queryTemplate(dto));
     }
 
+    /**
+     * Get templates scoped to a specific space (team space template library)
+     * GET /knowledge-wiki/space/{spaceId}/templates
+     */
+    @GetMapping("/{spaceId}/page/templates")
+    public R<List<PageVO>> getSpaceTemplates(@PathVariable("spaceId") Long spaceId) {
+        return R.data(spaceApplication.getSpaceTemplates(spaceId));
+    }
+
     @GetMapping("/page/favorites")
     public R<List<PageVO>> getFavoritePages(QueryFavoriteDTO dto) {
         return R.data(spaceApplication.queryFavoritePage(dto));
@@ -429,6 +438,48 @@ public class SpaceController {
     public R<IPage<BlockVersionVO>> getBlockVersionHistory(
             QueryBlockVersionDTO dto) {
         return R.data(spaceApplication.getBlockVersionHistory(dto));
+    }
+
+    // ==================== Page Tags & Featured API ====================
+
+    /**
+     * Toggle pin status of a page
+     * PUT /knowledge-wiki/space/{spaceId}/page/{pageId}/pin
+     */
+    @PutMapping("/{spaceId}/page/{pageId}/pin")
+    public R<?> togglePagePin(@PathVariable("spaceId") Long spaceId,
+            @PathVariable("pageId") Long pageId) {
+        spaceApplication.togglePagePin(spaceId, pageId);
+        return R.success();
+    }
+
+    /**
+     * Get pinned pages for a space
+     * GET /knowledge-wiki/space/{spaceId}/page/pinned
+     */
+    @GetMapping("/{spaceId}/page/pinned")
+    public R<List<PageVO>> getPinnedPages(@PathVariable("spaceId") Long spaceId) {
+        return R.data(spaceApplication.getPinnedPages(spaceId));
+    }
+
+    /**
+     * Update page tags
+     * PUT /knowledge-wiki/space/page/{pageId}/tags
+     */
+    @PutMapping("/page/{pageId}/tags")
+    public R<?> updatePageTags(@PathVariable("pageId") Long pageId,
+            @RequestBody List<String> tags) {
+        spaceApplication.updatePageTags(pageId, tags);
+        return R.success();
+    }
+
+    /**
+     * Get all tags used in a space
+     * GET /knowledge-wiki/space/{spaceId}/tags
+     */
+    @GetMapping("/{spaceId}/tags")
+    public R<List<String>> getSpaceTags(@PathVariable("spaceId") Long spaceId) {
+        return R.data(spaceApplication.getSpaceTags(spaceId));
     }
 
 }

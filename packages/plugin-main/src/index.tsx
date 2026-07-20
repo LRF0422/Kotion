@@ -6,6 +6,7 @@ import { PageRouteSync } from './pages/SpaceDetail/PageEditor/PageRouteSync'
 import { SpaceSettings } from './pages/SpaceDetail/Settings'
 import { InviteCollaboration } from './pages/InviteCollaboration'
 import { SpaceHub } from './pages/SpaceHub'
+import { TeamSpaceHome } from './pages/TeamSpaceHome'
 import { KPlugin, PluginConfig } from '@kn/common'
 import React from 'react'
 import { LayoutGrid } from '@kn/icon'
@@ -58,6 +59,11 @@ export const DefaultPluginInstance = new DefaultPlugin({
           name: '/space-detail/:id/graph',
           path: '/space-detail/:id/graph',
           element: <SpaceGraph />
+        },
+        {
+          name: '/space-detail/:id/home',
+          path: '/space-detail/:id/home',
+          element: <TeamSpaceHome />
         }
       ]
     }
@@ -121,6 +127,8 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "all": "查看全部",
           "recent-pages": "最近的页面",
           "collaboration": "协作空间",
+          "team-spaces": "团队空间",
+          "team-badge": "团队",
           "favorites": "收藏页面",
           "no-favorites": "暂无收藏页面",
           "no-favorites-hint": "给页面加星标即可在此快速访问",
@@ -147,6 +155,10 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "create-space": "创建空间",
           "favorites": "收藏",
           "all-spaces": "所有空间",
+          "tab-all": "全部",
+          "tab-normal": "普通空间",
+          "tab-team": "团队空间",
+          "count": "{{n}} 个空间",
           "stat-total": "空间总数",
           "stat-favorites": "已收藏",
           "stat-current": "当前页",
@@ -158,7 +170,20 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "try-different": "尝试其他搜索词",
           "no-results": "未找到匹配的空间",
           "search-placeholder": "搜索空间...",
-          "no-description": "暂无描述"
+          "no-description": "暂无描述",
+          "fetch-error": "加载空间列表失败",
+          "favorite-updated": "收藏已更新",
+          "favorite-error": "更新收藏失败",
+          "grid-view": "网格视图",
+          "list-view": "列表视图",
+          "toggle-favorite": "切换收藏",
+          "view-space": "查看空间",
+          "goto-page": "跳转到第",
+          "category-all": "全部",
+          "category-app": "应用",
+          "category-feature": "功能",
+          "category-connector": "连接器",
+          "clear-search": "清除搜索"
         },
         "toc": {
           "title": "目录",
@@ -181,7 +206,83 @@ export const DefaultPluginInstance = new DefaultPlugin({
           uploadError: "上传失败",
           namePlaceholder: "请输入空间名称",
           descPlaceholder: "请输入空间描述",
-          moreCover: "更多封面"
+          moreCover: "更多封面",
+          "type": "空间类型",
+          "type-placeholder": "选择空间类型",
+          "type-normal": "普通空间",
+          "type-collaboration": "协作空间",
+          "type-collab-desc": "团队工作区，支持成员管理、活动动态和实时协作",
+          "type-normal-desc": "标准的知识组织和分享空间",
+          "section-basic": "基本信息",
+          "section-basic-desc": "设置新空间的基本信息",
+          "section-appearance": "外观设置",
+          "section-appearance-desc": "自定义空间的外观",
+          "name-required": "空间名称不能为空",
+          "name-placeholder": "输入空间名称",
+          "name-help": "这是空间的显示名称",
+          "desc-placeholder": "描述这个空间的用途",
+          "desc-help": "简要描述帮助他人了解空间的用途",
+          "icon-help": "选择一个 emoji 或图片作为空间图标",
+          "cover-upload": "上传封面图片",
+          "cover-browse": "点击选择",
+          "cover-change": "更换封面",
+          "cover-presets": "或从预设中选择",
+          "cover-help": "封面图片让您的空间更容易识别",
+          "dialog-desc": "创建一个新空间来组织内容并与他人协作。",
+          "cancel": "取消",
+          "creating": "创建中..."
+        },
+        "teamSpace": {
+          "home": "团队首页",
+          "overview": "总览",
+          "settings": "设置",
+          "newPage": "新建页面",
+          "inviteMember": "邀请成员",
+          "recentPages": "最近页面",
+          "recentActivity": "最近动态",
+          "recentlyEdited": "最近编辑",
+          "activity": "动态",
+          "pinned": "置顶",
+          "untitled": "无标题",
+          "noPages": "暂无页面，创建第一个页面吧！",
+          "createFirst": "创建页面",
+          "noPinned": "暂无置顶页面",
+          "members": "成员",
+          "manage": "管理",
+          "viewAll": "查看全部 {{count}} 名成员",
+          "noMembers": "暂无成员",
+          "stat": {
+            "pages": "页面",
+            "members": "成员",
+            "pinned": "置顶",
+            "activities": "动态"
+          }
+        },
+        "activity": {
+          "empty": "暂无动态",
+          "loadMore": "加载更多"
+        },
+        "comment": {
+          "empty": "暂无评论，开始讨论吧！",
+          "placeholder": "写评论... 使用 @ 提及他人",
+          "replyPlaceholder": "写回复...",
+          "submitError": "发表评论失败",
+          "deleteError": "删除评论失败",
+          "resolveError": "更新评论失败"
+        },
+        "template": {
+          "emptyTitle": "暂无团队模板",
+          "emptyDesc": "将页面保存为模板以与团队共享。团队成员可以使用模板快速创建新页面。",
+          "untitled": "无标题模板",
+          "use": "使用模板",
+          "useError": "从模板创建页面失败",
+          "deleted": "模板已删除",
+          "deleteError": "删除模板失败"
+        },
+        "tags": {
+          "label": "标签",
+          "addPlaceholder": "添加标签...",
+          "saveError": "保存标签失败"
         },
         "space-settings": {
           "title": "空间设置",
@@ -240,6 +341,9 @@ export const DefaultPluginInstance = new DefaultPlugin({
             "tab": "成员设置",
             "title": "成员管理",
             "description": "添加、移除和管理有权访问此空间的成员。"
+          },
+          "templates": {
+            "tab": "模板库"
           },
           "archive": {
             "tab": "归档",
@@ -420,6 +524,8 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "all": "View All",
           "recent-pages": "Recent Pages",
           "collaboration": "Collaboration Spaces",
+          "team-spaces": "Team Spaces",
+          "team-badge": "Team",
           "favorites": "Favorite Pages",
           "no-favorites": "No favorite pages yet",
           "no-favorites-hint": "Star pages to add them here",
@@ -446,6 +552,10 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "create-space": "Create Space",
           "favorites": "Favorites",
           "all-spaces": "All Spaces",
+          "tab-all": "All",
+          "tab-normal": "Normal",
+          "tab-team": "Team",
+          "count": "{{n}} spaces",
           "stat-total": "Total Spaces",
           "stat-favorites": "Favorites",
           "stat-current": "Current Page",
@@ -457,7 +567,20 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "try-different": "Try a different search term",
           "no-results": "No spaces found matching your search",
           "search-placeholder": "Search spaces...",
-          "no-description": "No description"
+          "no-description": "No description",
+          "fetch-error": "Failed to load spaces",
+          "favorite-updated": "Favorite updated",
+          "favorite-error": "Failed to update favorite",
+          "grid-view": "Grid view",
+          "list-view": "List view",
+          "toggle-favorite": "Toggle favorite",
+          "view-space": "View space",
+          "goto-page": "Go to page",
+          "category-all": "All",
+          "category-app": "App",
+          "category-feature": "Feature",
+          "category-connector": "Connector",
+          "clear-search": "Clear search"
         },
         "toc": {
           "title": "Table of Contents",
@@ -480,7 +603,83 @@ export const DefaultPluginInstance = new DefaultPlugin({
           uploadError: "Failed to upload cover",
           namePlaceholder: "Name for the space",
           descPlaceholder: "Description for the space",
-          moreCover: "More Cover"
+          moreCover: "More Cover",
+          "type": "Space Type",
+          "type-placeholder": "Select space type",
+          "type-normal": "Normal Space",
+          "type-collaboration": "Collaboration Space",
+          "type-collab-desc": "Team workspace with member management, activity feed and real-time collaboration",
+          "type-normal-desc": "Standard space for organizing and sharing knowledge",
+          "section-basic": "Basic Information",
+          "section-basic-desc": "Set the basic information for your new space",
+          "section-appearance": "Appearance",
+          "section-appearance-desc": "Customize how your space looks",
+          "name-required": "Space name is required",
+          "name-placeholder": "Enter space name",
+          "name-help": "This is the display name for your space",
+          "desc-placeholder": "Describe what this space is about",
+          "desc-help": "A brief description helps others understand the purpose of this space",
+          "icon-help": "Choose an emoji or image as the space icon",
+          "cover-upload": "Upload cover image",
+          "cover-browse": "Click to browse",
+          "cover-change": "Change cover",
+          "cover-presets": "Or choose from presets",
+          "cover-help": "A cover image makes your space more recognizable",
+          "dialog-desc": "Create a new space to organize your content and collaborate with others.",
+          "cancel": "Cancel",
+          "creating": "Creating..."
+        },
+        "teamSpace": {
+          "home": "Team Home",
+          "overview": "Overview",
+          "settings": "Settings",
+          "newPage": "New Page",
+          "inviteMember": "Invite Member",
+          "recentPages": "Recent Pages",
+          "recentActivity": "Recent Activity",
+          "recentlyEdited": "Recently Edited",
+          "activity": "Activity",
+          "pinned": "Pinned",
+          "untitled": "Untitled",
+          "noPages": "No pages yet. Create your first page!",
+          "createFirst": "Create Page",
+          "noPinned": "No pinned pages yet",
+          "members": "Members",
+          "manage": "Manage",
+          "viewAll": "View all {{count}} members",
+          "noMembers": "No members yet",
+          "stat": {
+            "pages": "Pages",
+            "members": "Members",
+            "pinned": "Pinned",
+            "activities": "Activities"
+          }
+        },
+        "activity": {
+          "empty": "No activity yet",
+          "loadMore": "Load more"
+        },
+        "comment": {
+          "empty": "No comments yet. Start the conversation!",
+          "placeholder": "Write a comment... Use @ to mention",
+          "replyPlaceholder": "Write a reply...",
+          "submitError": "Failed to post comment",
+          "deleteError": "Failed to delete comment",
+          "resolveError": "Failed to update comment"
+        },
+        "template": {
+          "emptyTitle": "No team templates yet",
+          "emptyDesc": "Save any page as a template to share it with your team. Team members can use templates to create new pages quickly.",
+          "untitled": "Untitled Template",
+          "use": "Use Template",
+          "useError": "Failed to create page from template",
+          "deleted": "Template deleted",
+          "deleteError": "Failed to delete template"
+        },
+        "tags": {
+          "label": "Tags",
+          "addPlaceholder": "Add a tag...",
+          "saveError": "Failed to save tags"
         },
         "space-settings": {
           "title": "Space Settings",
@@ -539,6 +738,9 @@ export const DefaultPluginInstance = new DefaultPlugin({
             "tab": "Members",
             "title": "Member Management",
             "description": "Add, remove, and manage members with access to this space."
+          },
+          "templates": {
+            "tab": "Templates"
           },
           "archive": {
             "tab": "Archive",

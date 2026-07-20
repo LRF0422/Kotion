@@ -1,6 +1,6 @@
 import React from 'react'
 import { Button, Badge, cn } from '@kn/ui'
-import { LayoutTemplate, Network, Settings, Trash2, Undo2, CircleArrowUp, FileDown, FileUp } from '@kn/icon'
+import { LayoutTemplate, Network, Settings, Trash2, Undo2, CircleArrowUp, FileDown, FileUp, Users } from '@kn/icon'
 import { useTranslation } from '@kn/common'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@kn/ui'
 import { TemplateCreator } from '../TemplateCreator'
@@ -18,6 +18,7 @@ interface BottomUtilitiesProps {
     onOpenTemplates: () => void
     onNavigateGraph: () => void
     onNavigateSettings: () => void
+    onNavigateTeamHome?: () => void
     onRestorePage: (pageId: string) => void
     onImport?: () => void
     onExport?: () => void
@@ -35,6 +36,7 @@ export const BottomUtilities: React.FC<BottomUtilitiesProps> = ({
     onOpenTemplates,
     onNavigateGraph,
     onNavigateSettings,
+    onNavigateTeamHome,
     onRestorePage,
     onImport,
     onExport,
@@ -44,6 +46,17 @@ export const BottomUtilities: React.FC<BottomUtilitiesProps> = ({
 
     return (
         <div className={cn("border-t pt-1 mt-auto space-y-0.5 px-1 pb-2 flex-shrink-0", className)}>
+            {/* Team Space Home */}
+            {onNavigateTeamHome && (
+                <button
+                    className="flex items-center gap-2 w-full py-1.5 px-3 rounded-md cursor-pointer hover:bg-muted transition-colors text-xs sm:text-sm"
+                    onClick={onNavigateTeamHome}
+                >
+                    <Users className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="flex-1 text-left">{t('teamSpace.home') || 'Team Home'}</span>
+                </button>
+            )}
+
             {/* Templates */}
             <button
                 className="flex items-center gap-2 w-full py-1.5 px-3 rounded-md cursor-pointer hover:bg-muted transition-colors text-xs sm:text-sm"

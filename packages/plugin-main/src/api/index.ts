@@ -245,4 +245,103 @@ export const APIS = {
         method: 'GET',
         name: 'Get Space Graph'
     } as API,
+    // ==================== Team Space Member APIs ====================
+    /** List members of a team space */
+    LIST_SPACE_MEMBERS: {
+        url: '/knowledge-wiki/space/:spaceId/member/list',
+        method: 'GET'
+    } as API,
+    /** Invite members to a team space */
+    INVITE_SPACE_MEMBERS: {
+        url: '/knowledge-wiki/space/:spaceId/member/invite',
+        method: 'POST'
+    } as API,
+    /** Update a space member's role */
+    UPDATE_SPACE_MEMBER_ROLE: {
+        url: '/knowledge-wiki/space/:spaceId/member/role',
+        method: 'PUT'
+    } as API,
+    /** Remove a member from a space */
+    REMOVE_SPACE_MEMBER: {
+        url: '/knowledge-wiki/space/:spaceId/member/:userId',
+        method: 'DELETE'
+    } as API,
+    /** Leave a space */
+    LEAVE_SPACE: {
+        url: '/knowledge-wiki/space/:spaceId/member/leave',
+        method: 'POST'
+    } as API,
+    /** Transfer space ownership */
+    TRANSFER_SPACE_OWNERSHIP: {
+        url: '/knowledge-wiki/space/:spaceId/member/transfer/:newOwnerId',
+        method: 'PUT'
+    } as API,
+    // ==================== Activity Feed APIs ====================
+    /** Get space activity feed */
+    GET_SPACE_ACTIVITIES: {
+        url: '/knowledge-wiki/space/:spaceId/activity/list',
+        method: 'GET'
+    } as API,
+    // ==================== Page Comment APIs ====================
+    /** Get comments for a page */
+    GET_PAGE_COMMENTS: {
+        url: '/knowledge-wiki/space/page/:pageId/comment/list',
+        method: 'GET'
+    } as API,
+    /** Add a comment to a page */
+    ADD_PAGE_COMMENT: {
+        url: '/knowledge-wiki/space/page/:pageId/comment',
+        method: 'POST'
+    } as API,
+    /** Delete a comment */
+    DELETE_PAGE_COMMENT: {
+        url: '/knowledge-wiki/space/page/:pageId/comment/:commentId',
+        method: 'DELETE'
+    } as API,
+    /** Toggle comment resolved status */
+    TOGGLE_COMMENT_RESOLVED: {
+        url: '/knowledge-wiki/space/page/:pageId/comment/:commentId/resolve',
+        method: 'PUT'
+    } as API,
+    /** Add reaction to a comment */
+    ADD_COMMENT_REACTION: {
+        url: '/knowledge-wiki/space/page/:pageId/comment/:commentId/reaction',
+        method: 'POST'
+    } as API,
+    /** Remove reaction from a comment */
+    REMOVE_COMMENT_REACTION: {
+        url: '/knowledge-wiki/space/page/:pageId/comment/:commentId/reaction',
+        method: 'DELETE'
+    } as API,
+    /** Get comment count for a page */
+    GET_COMMENT_COUNT: {
+        url: '/knowledge-wiki/space/page/:pageId/comment/count',
+        method: 'GET'
+    } as API,
+    // ==================== Page Tags & Featured APIs ====================
+    /** Pin/unpin a page in a space */
+    TOGGLE_PAGE_PIN: {
+        url: '/knowledge-wiki/space/:spaceId/page/:pageId/pin',
+        method: 'PUT'
+    } as API,
+    /** Get pinned pages for a space */
+    GET_PINNED_PAGES: {
+        url: '/knowledge-wiki/space/:spaceId/page/pinned',
+        method: 'GET'
+    } as API,
+    /** Update page tags */
+    UPDATE_PAGE_TAGS: {
+        url: '/knowledge-wiki/space/page/:pageId/tags',
+        method: 'PUT'
+    } as API,
+    /** Get all tags used in a space */
+    GET_SPACE_TAGS: {
+        url: '/knowledge-wiki/space/:spaceId/tags',
+        method: 'GET'
+    } as API,
+    /** Get space-scoped templates (team template library) */
+    GET_SPACE_TEMPLATES: {
+        url: '/knowledge-wiki/space/:spaceId/page/templates',
+        method: 'GET'
+    } as API,
 }

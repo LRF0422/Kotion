@@ -9,7 +9,9 @@ import { Basic } from "./Basic";
 import { Archive } from "./Archive";
 import { Delete } from "./Delete";
 import { PageManagement } from "./Page";
-import { Settings, Shield, Users, Archive as ArchiveIcon, Trash2, FileText } from "@kn/icon";
+import { Members } from "./Members";
+import { SpaceTemplateLibrary } from "../TemplateLibrary";
+import { Settings, Shield, Users, Archive as ArchiveIcon, Trash2, FileText, LayoutTemplate } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 
 export const SettingContext = createContext<{ space?: Space; spaceId?: string }>({})
@@ -69,7 +71,7 @@ export const SpaceSettings: React.FC = () => {
                 <Card className="max-w-6xl mx-auto border-none">
                     <CardContent className="p-5">
                         <Tabs defaultValue="basic" className="space-y-4">
-                            <TabsList className="grid w-full grid-cols-5 h-auto p-0.5">
+                            <TabsList className="grid w-full grid-cols-6 h-auto p-0.5">
                                 <TabsTrigger value="basic" className="flex items-center gap-1.5 py-2 text-xs">
                                     <FileText className="h-3.5 w-3.5" />
                                     <span className="hidden sm:inline">{t("space-settings.basic.tab")}</span>
@@ -81,6 +83,10 @@ export const SpaceSettings: React.FC = () => {
                                 <TabsTrigger value="member" className="flex items-center gap-1.5 py-2 text-xs">
                                     <Users className="h-3.5 w-3.5" />
                                     <span className="hidden sm:inline">{t("space-settings.member.tab")}</span>
+                                </TabsTrigger>
+                                <TabsTrigger value="templates" className="flex items-center gap-1.5 py-2 text-xs">
+                                    <LayoutTemplate className="h-3.5 w-3.5" />
+                                    <span className="hidden sm:inline">{t("space-settings.templates.tab", "Templates")}</span>
                                 </TabsTrigger>
                                 <TabsTrigger value="archive" className="flex items-center gap-1.5 py-2 text-xs">
                                     <ArchiveIcon className="h-3.5 w-3.5" />
@@ -98,11 +104,10 @@ export const SpaceSettings: React.FC = () => {
                                 <PageManagement />
                             </TabsContent>
                             <TabsContent value="member" className="mt-4">
-                                <div className="flex flex-col items-center justify-center py-10 text-center">
-                                    <Users className="h-12 w-12 text-muted-foreground/50 mb-3" />
-                                    <h3 className="text-base font-semibold mb-1.5">{t("space-settings.member.title")}</h3>
-                                    <p className="text-xs text-muted-foreground max-w-md">{t("space-settings.member.description")}</p>
-                                </div>
+                                <Members />
+                            </TabsContent>
+                            <TabsContent value="templates" className="mt-4">
+                                {params.id && <SpaceTemplateLibrary spaceId={params.id} />}
                             </TabsContent>
                             <TabsContent value="archive" className="mt-4">
                                 <Archive />

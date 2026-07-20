@@ -24,7 +24,12 @@ public enum CollaboratorRole {
     /**
      * Regular member - basic access rights
      */
-    MEMBER("MEMBER", "Member");
+    MEMBER("MEMBER", "Member"),
+
+    /**
+     * Guest - read-only access
+     */
+    GUEST("GUEST", "Guest");
 
     private final String code;
     private final String description;

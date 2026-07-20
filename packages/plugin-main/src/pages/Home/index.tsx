@@ -2,7 +2,7 @@ import { APIS } from "../../api";
 import { Button, Card, CardContent, Skeleton, cn, useIsMobile } from "@kn/ui";
 import { useApi, useNavigator, useSelector, GlobalState, event, TOGGLE_AI_ASSISTANT } from "@kn/common";
 import { Space } from "../../model/Space";
-import { ArrowRight, BanIcon, Book, Box, Clock, FilePlus, FolderPlus, LayoutGrid, Moon, Plus, Sparkles, Star, Sun, Sunset } from "@kn/icon";
+import { ArrowRight, BanIcon, Book, Box, FilePlus, FolderPlus, LayoutGrid, Moon, Plus, Sparkles, Star, Sun, Sunset, Users } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { useTranslation } from "@kn/common";
@@ -22,11 +22,19 @@ const pickHue = (key?: string): number => {
     return HUE_PALETTE[Math.abs(hash) % HUE_PALETTE.length]
 }
 
-// Notion-style: flat surfaces, color lives only in the small icon chip.
+// Notion-style palette: flat surfaces + soft tinted covers on cards.
+// The bright hue is expressed as a subtle chip color, a soft cover gradient
+// and a light border tint so the page stays airy rather than saturated.
 const hueStyles = (hue: number) => ({
     chip: {
         backgroundColor: `hsl(${hue} 70% 55% / 0.14)`,
         color: `hsl(${hue} 60% 48%)`,
+    } as React.CSSProperties,
+    cover: {
+        backgroundImage: `linear-gradient(135deg, hsl(${hue} 78% 88% / 0.9), hsl(${(hue + 24) % 360} 72% 82% / 0.85))`,
+    } as React.CSSProperties,
+    coverDark: {
+        backgroundImage: `linear-gradient(135deg, hsl(${hue} 45% 22% / 0.55), hsl(${(hue + 24) % 360} 40% 18% / 0.55))`,
     } as React.CSSProperties,
 })
 
@@ -48,6 +56,7 @@ export const Home: React.FC = () => {
 
     const isMobile = useIsMobile()
     const [recentSpaces, setRecentSpaces] = useState<Space[]>([])
+    const [teamSpaces, setTeamSpaces] = useState<Space[]>([])
     const [recentPages, setRecentPages] = useState<any[]>([])
     const [favoritePages, setFavoritePages] = useState<any[]>([])
     const [flag, setFlag] = useState(0)
@@ -70,32 +79,30 @@ export const Home: React.FC = () => {
     const isAfternoon = currentHour >= 12 && currentHour < 18
 
     const getGreeting = () => {
-        if (isMorning) return t("home.greeting.morning") || "Good Morning"
-        if (isAfternoon) return t("home.greeting.afternoon") || "Good Afternoon"
-        return t("home.greeting.evening") || "Good Evening"
+        if (isMorning) return t("home.greeting.morning") || "Good morning"
+        if (isAfternoon) return t("home.greeting.afternoon") || "Good afternoon"
+        return t("home.greeting.evening") || "Good evening"
     }
 
+    // Notion favors an emoji-like symbol next to the greeting rather than a
+    // colored icon tile. We keep the lucide icon but render it larger and
+    // without a colored plate so it feels closer to a page emoji.
     const getGreetingIcon = () => {
-        if (isMorning) return <Sun className="h-6 w-6 text-amber-500" />
-        if (isAfternoon) return <Sunset className="h-6 w-6 text-orange-500" />
-        return <Moon className="h-6 w-6 text-indigo-400" />
+        if (isMorning) return <Sun className="h-8 w-8 text-amber-500" strokeWidth={1.6} />
+        if (isAfternoon) return <Sunset className="h-8 w-8 text-orange-500" strokeWidth={1.6} />
+        return <Moon className="h-8 w-8 text-indigo-400" strokeWidth={1.6} />
     }
-
-    // Small tinted square behind the time-of-day icon — the only color in the header.
-    const heroIconBg = isMorning
-        ? "bg-amber-500/10"
-        : isAfternoon
-            ? "bg-orange-500/10"
-            : "bg-indigo-500/10"
 
     useEffect(() => {
         setLoading(true)
         Promise.all([
             useApi(APIS.QUERY_SPACE, { template: false, pageSize: 4 }),
+            useApi(APIS.QUERY_SPACE, { template: false, pageSize: 4, type: 'COLLABORATION' }),
             useApi(APIS.QUERY_RECENT_PAGE, { pageSize: 8 }),
             useApi(APIS.QUERY_FAVORITE, { pageSize: 8 })
-        ]).then(([spacesRes, pagesRes, favoritesRes]) => {
+        ]).then(([spacesRes, teamRes, pagesRes, favoritesRes]) => {
             setRecentSpaces(spacesRes.data.records || [])
+            setTeamSpaces(teamRes.data.records || [])
             setRecentPages(pagesRes.data.records || [])
             const favData = favoritesRes?.data
             setFavoritePages(Array.isArray(favData) ? favData : (favData?.records || []))
@@ -148,7 +155,8 @@ export const Home: React.FC = () => {
         }
     }
 
-    // Reusable quick-action button used in the hero.
+    // Reusable quick-action button used in the hero. Notion-style: borderless,
+    // subtle hover, chip icon carries the only color.
     const QuickAction: React.FC<{
         icon: React.ReactNode
         label: string
@@ -165,8 +173,9 @@ export const Home: React.FC = () => {
                 disabled={btnLoading}
                 data-tour={dataTour}
                 className={cn(
-                    "group flex items-center gap-2.5 rounded-md border border-border/60 bg-transparent px-3 py-2",
-                    "text-left transition-colors duration-150 hover:bg-muted/60",
+                    "group inline-flex items-center gap-2 rounded-md px-2.5 py-1.5",
+                    "text-left transition-colors duration-150",
+                    "hover:bg-muted/60 active:bg-muted",
                     "disabled:opacity-60 disabled:cursor-not-allowed",
                     isMobile && "flex-1 justify-center"
                 )}
@@ -177,14 +186,28 @@ export const Home: React.FC = () => {
                 >
                     {icon}
                 </span>
-                {!isMobile && <span className="text-sm font-medium truncate">{label}</span>}
+                {!isMobile && <span className="text-[13px] font-medium text-foreground/80 group-hover:text-foreground truncate">{label}</span>}
             </button>
         )
     }
 
+    // Small uppercase section header used above every content block. Kept as
+    // a local helper so the whole page shares identical spacing/typography.
+    const SectionHeader: React.FC<{
+        title: string
+        action?: React.ReactNode
+    }> = ({ title, action }) => (
+        <div className="flex items-center justify-between px-1">
+            <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+                {title}
+            </h2>
+            {action}
+        </div>
+    )
+
     return (
         <div className={cn(
-            "flex justify-center pb-10 pt-2 overflow-auto h-full",
+            "flex justify-center pb-16 pt-2 overflow-auto h-full",
             isMobile && "px-4"
         )}>
             <style>{`
@@ -193,35 +216,37 @@ export const Home: React.FC = () => {
                     to { opacity: 1; transform: translateY(0); }
                 }
                 .home-fade-up { animation: home-fade-up 0.35s ease both; }
+                /* Hide horizontal scrollbar on the recent-visited row while keeping it scrollable. */
+                .home-hscroll::-webkit-scrollbar { display: none; }
+                .home-hscroll { scrollbar-width: none; -ms-overflow-style: none; }
             `}</style>
             <div className={cn(
-                "flex flex-col gap-9 w-full",
-                !isMobile && "max-w-[800px]"
+                "flex flex-col w-full",
+                isMobile ? "gap-8" : "gap-10",
+                !isMobile && "max-w-[860px]"
             )}>
-                {/* Greeting */}
+                {/* Greeting — echoes the Notion page header: emoji-like icon,
+                    large soft title, muted meta line beneath. */}
                 <div className={cn(
                     "home-fade-up shrink-0",
-                    isMobile ? "mt-4" : "mt-8"
+                    isMobile ? "mt-6" : "mt-14"
                 )}>
-                    <div className="flex items-center gap-3">
-                        <div className={cn(
-                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-                            heroIconBg
-                        )}>
+                    <div className="flex items-center gap-4">
+                        <div className="shrink-0">
                             {getGreetingIcon()}
                         </div>
                         <div className="flex flex-col">
                             <h1 className={cn(
-                                "font-semibold tracking-tight",
-                                isMobile ? "text-2xl" : "text-3xl"
+                                "font-semibold tracking-tight leading-tight",
+                                isMobile ? "text-2xl" : "text-[34px]"
                             )}>
                                 {getGreeting()}{userInfo?.name ? `, ${userInfo.name}` : ""}
                             </h1>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="mt-1 text-[13px] text-muted-foreground">
                                 {format(new Date(), "EEEE, MMMM d")}
                                 {weekEditedCount > 0 && (
                                     <>
-                                        {" · "}
+                                        <span className="mx-2 text-muted-foreground/40">·</span>
                                         <span className="text-foreground/70">
                                             {t("home.week-stat", { n: weekEditedCount })}
                                         </span>
@@ -231,10 +256,11 @@ export const Home: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Quick actions */}
+                    {/* Quick actions — flat, borderless pills. */}
                     <div className={cn(
-                        "mt-4 flex gap-2",
-                        isMobile ? "flex-row" : "flex-wrap"
+                        "mt-5 flex gap-1",
+                        isMobile ? "flex-row" : "flex-wrap",
+                        !isMobile && "-ml-2.5"
                     )}>
                         <QuickAction
                             icon={creatingPage
@@ -278,27 +304,28 @@ export const Home: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Recent Spaces */}
-                <section className="flex flex-col gap-3.5 shrink-0">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Clock size={14} className="text-muted-foreground" />
-                            <h2 className="text-sm font-medium text-muted-foreground">{t("home.rs") || "Recent Spaces"}</h2>
-                        </div>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
-                            onClick={() => navigator.go({ to: "/all-spaces" })}
-                        >
-                            {t("home.all") || "View All"}
-                            <ArrowRight className="h-3 w-3" />
-                        </Button>
-                    </div>
+                {/* Recent Spaces — Notion's "Recently visited" horizontal row:
+                    each card has a soft gradient cover with the icon sitting
+                    on the cover, mimicking a page cover + emoji. */}
+                <section className="flex flex-col gap-3 shrink-0">
+                    <SectionHeader
+                        title={t("home.rs") || "Recently visited"}
+                        action={
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 gap-1 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                                onClick={() => navigator.go({ to: "/all-spaces" })}
+                            >
+                                {t("home.all") || "View all"}
+                                <ArrowRight className="h-3 w-3" />
+                            </Button>
+                        }
+                    />
                     {loading ? (
-                        <div className="grid gap-3 w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                        <div className="flex gap-3 overflow-hidden">
                             {[...Array(isMobile ? 2 : 4)].map((_, index) => (
-                                <Skeleton key={index} className={cn("w-full rounded-lg", isMobile ? "h-[120px]" : "h-[128px]")} />
+                                <Skeleton key={index} className="h-[150px] w-[190px] shrink-0 rounded-xl" />
                             ))}
                         </div>
                     ) : recentSpaces.length === 0 ? (
@@ -318,7 +345,7 @@ export const Home: React.FC = () => {
                             }
                         />
                     ) : (
-                        <div className="grid gap-3 w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                        <div className="home-hscroll -mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
                             {recentSpaces.map((space: any) => {
                                 const hue = pickHue(space.id)
                                 const styles = hueStyles(hue)
@@ -328,20 +355,24 @@ export const Home: React.FC = () => {
                                         type="button"
                                         onClick={() => navigator.go({ to: `/space-detail/${space.id}` })}
                                         className={cn(
-                                            "group relative flex flex-col items-start overflow-hidden rounded-lg border border-border/60 bg-card p-4 text-left",
-                                            "transition-colors duration-150 hover:bg-muted/50",
-                                            isMobile ? "h-[120px]" : "h-[128px]"
+                                            "group relative flex shrink-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-card text-left",
+                                            "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-8px_rgba(15,15,15,0.15)] hover:border-border",
+                                            "dark:hover:shadow-[0_4px_16px_-8px_rgba(0,0,0,0.6)]",
+                                            isMobile ? "h-[144px] w-[168px]" : "h-[152px] w-[192px]"
                                         )}
                                     >
+                                        {/* Soft cover strip acts as the "page cover" in Notion. */}
+                                        <div className="relative h-[72px] w-full" style={styles.cover}>
+                                            <div className="absolute inset-0 dark:block hidden" style={styles.coverDark} />
+                                        </div>
                                         <span
-                                            className="flex h-10 w-10 items-center justify-center rounded-lg text-2xl leading-none"
-                                            style={styles.chip}
+                                            className="absolute left-3 top-[48px] flex h-9 w-9 items-center justify-center rounded-md bg-background text-xl leading-none shadow-sm ring-1 ring-border/60"
                                         >
-                                            {space.icon?.icon || <Box className="h-5 w-5" />}
+                                            {space.icon?.icon || <Box className="h-4 w-4 text-muted-foreground" />}
                                         </span>
-                                        <div className="mt-auto w-full">
-                                            <p className="truncate text-sm font-medium">{space.name}</p>
-                                            <p className="truncate text-xs text-muted-foreground">
+                                        <div className="flex flex-1 flex-col justify-end px-3 pb-3 pt-4">
+                                            <p className="truncate text-[13.5px] font-medium">{space.name}</p>
+                                            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                                                 {relativeTime(space.updateTime)}
                                             </p>
                                         </div>
@@ -352,16 +383,78 @@ export const Home: React.FC = () => {
                     )}
                 </section>
 
-                {/* Recent Pages */}
-                <section className="flex flex-col gap-3.5 shrink-0">
-                    <div className="flex items-center gap-2">
-                        <Clock size={14} className="text-muted-foreground" />
-                        <h2 className="text-sm font-medium text-muted-foreground">{t("home.recent-pages") || "Recent Pages"}</h2>
-                    </div>
+                {/* Team Spaces — same card language as Recently visited so the
+                    two sections read as siblings; a tiny "Team" pill on the
+                    title carries the only differentiator. */}
+                {teamSpaces.length > 0 && (
+                    <section className="flex flex-col gap-3 shrink-0">
+                        <SectionHeader
+                            title={t("home.team-spaces") || "Team spaces"}
+                            action={
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 gap-1 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                                    onClick={() => navigator.go({ to: "/all-spaces?tab=team" })}
+                                >
+                                    {t("home.all") || "View all"}
+                                    <ArrowRight className="h-3 w-3" />
+                                </Button>
+                            }
+                        />
+                        <div className="home-hscroll -mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+                            {teamSpaces.map((space: any) => {
+                                const hue = pickHue(space.id)
+                                const styles = hueStyles(hue)
+                                return (
+                                    <button
+                                        key={space.id}
+                                        type="button"
+                                        onClick={() => navigator.go({ to: `/space-detail/${space.id}/home` })}
+                                        className={cn(
+                                            "group relative flex shrink-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-card text-left",
+                                            "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-8px_rgba(15,15,15,0.15)] hover:border-border",
+                                            "dark:hover:shadow-[0_4px_16px_-8px_rgba(0,0,0,0.6)]",
+                                            isMobile ? "h-[144px] w-[168px]" : "h-[152px] w-[192px]"
+                                        )}
+                                    >
+                                        <div className="relative h-[72px] w-full" style={styles.cover}>
+                                            <div className="absolute inset-0 dark:block hidden" style={styles.coverDark} />
+                                            <span className="absolute right-2 top-2 rounded bg-background/70 px-1.5 py-0.5 text-[10px] font-medium text-foreground/70 ring-1 ring-border/60 backdrop-blur">
+                                                {t("home.team-badge") || "Team"}
+                                            </span>
+                                        </div>
+                                        <span
+                                            className="absolute left-3 top-[48px] flex h-9 w-9 items-center justify-center rounded-md bg-background text-xl leading-none shadow-sm ring-1 ring-border/60"
+                                        >
+                                            {space.icon?.icon || <Users className="h-4 w-4 text-muted-foreground" />}
+                                        </span>
+                                        <div className="flex flex-1 flex-col justify-end px-3 pb-3 pt-4">
+                                            <p className="truncate text-[13.5px] font-medium">{space.name}</p>
+                                            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                                                {space.memberCount ? `${space.memberCount} members` : relativeTime(space.updateTime)}
+                                            </p>
+                                        </div>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </section>
+                )}
+
+                {/* Recent Pages — Notion-style flat list rows: no card, no
+                    border, just a hover surface, an emoji-style icon and a
+                    right-aligned timestamp. */}
+                <section className="flex flex-col gap-2 shrink-0">
+                    <SectionHeader title={t("home.recent-pages") || "Recently edited"} />
                     {loading ? (
-                        <div className="grid gap-3 w-full grid-cols-1 md:grid-cols-2">
-                            {[...Array(isMobile ? 4 : 6)].map((_, index) => (
-                                <Skeleton key={index} className="w-full h-[60px] rounded-lg" />
+                        <div className="flex flex-col">
+                            {[...Array(isMobile ? 4 : 5)].map((_, index) => (
+                                <div key={index} className="flex items-center gap-3 px-2 py-2">
+                                    <Skeleton className="h-6 w-6 rounded-md" />
+                                    <Skeleton className="h-4 flex-1 max-w-[50%]" />
+                                    <Skeleton className="h-3 w-16" />
+                                </div>
                             ))}
                         </div>
                     ) : recentPages.length === 0 ? (
@@ -371,55 +464,57 @@ export const Home: React.FC = () => {
                             desc={t("home.no-recent-pages-hint") || "Pages you visit will appear here"}
                         />
                     ) : (
-                        <div className="grid gap-3 w-full grid-cols-1 md:grid-cols-2">
+                        <ul className="flex flex-col">
                             {recentPages.map((page: any) => {
                                 const hue = pickHue(page.id)
                                 const styles = hueStyles(hue)
                                 return (
-                                    <button
+                                    <li
                                         key={page.id}
-                                        type="button"
                                         onClick={() => navigator.go({ to: `/space-detail/${page.spaceId}/page/edit/${page.id}` })}
                                         className={cn(
-                                            "group flex items-center gap-3 rounded-lg border border-border/60 bg-card p-3 text-left",
-                                            "transition-colors duration-150 hover:bg-muted/50"
+                                            "group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5",
+                                            "transition-colors duration-100 hover:bg-muted/60"
                                         )}
                                     >
                                         <span
-                                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg leading-none"
+                                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[15px] leading-none"
                                             style={styles.chip}
                                         >
-                                            {page.icon?.icon || <Box className="h-4 w-4" />}
+                                            {page.icon?.icon || <Box className="h-3.5 w-3.5" />}
                                         </span>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-medium">{page.title || "Untitled"}</p>
-                                            <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
-                                                <Clock className="h-3 w-3 shrink-0" />
-                                                <span className="truncate">
-                                                    {page.updateBy
-                                                        ? `${page.updateBy}${page.updateTime ? " · " + relativeTime(page.updateTime) : ""}`
-                                                        : (relativeTime(page.updateTime) || (t("home.last-update") || "Last update"))}
+                                        <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
+                                            {page.title || "Untitled"}
+                                        </span>
+                                        <span className="hidden shrink-0 items-center gap-1 text-[11px] text-muted-foreground sm:flex">
+                                            {page.updateBy && (
+                                                <span className="max-w-[120px] truncate text-foreground/50">
+                                                    {page.updateBy}
                                                 </span>
-                                            </p>
-                                        </div>
-                                    </button>
+                                            )}
+                                            {page.updateBy && page.updateTime && (
+                                                <span className="text-muted-foreground/40">·</span>
+                                            )}
+                                            <span>
+                                                {relativeTime(page.updateTime) || (t("home.last-update") || "Last update")}
+                                            </span>
+                                        </span>
+                                    </li>
                                 )
                             })}
-                        </div>
+                        </ul>
                     )}
                 </section>
 
-                {/* Favorite Pages */}
-                <section className="flex flex-col gap-3.5 shrink-0">
-                    <div className="flex items-center gap-2">
-                        <Star size={14} className="text-amber-500" />
-                        <h2 className="text-sm font-medium text-muted-foreground">{t("home.favorites") || "Favorite Pages"}</h2>
-                    </div>
+                {/* Favorite Pages — mirrors the recent-pages list layout so
+                    the whole lower half reads as a single scannable index. */}
+                <section className="flex flex-col gap-2 shrink-0">
+                    <SectionHeader title={t("home.favorites") || "Favorites"} />
                     {loading ? (
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col">
                             {[...Array(3)].map((_, index) => (
-                                <div key={index} className="flex items-center gap-3 py-2">
-                                    <Skeleton className="h-8 w-8 rounded-lg" />
+                                <div key={index} className="flex items-center gap-3 px-2 py-2">
+                                    <Skeleton className="h-6 w-6 rounded-md" />
                                     <Skeleton className="h-4 flex-1 max-w-[40%]" />
                                     <Skeleton className="h-3 w-20" />
                                 </div>
@@ -432,26 +527,28 @@ export const Home: React.FC = () => {
                             desc={t("home.no-favorites-hint") || "Star pages to add them here"}
                         />
                     ) : (
-                        <ul className="flex flex-col gap-1">
+                        <ul className="flex flex-col">
                             {favoritePages.map((data: any) => {
                                 const hue = pickHue(data.id)
                                 const styles = hueStyles(hue)
                                 return (
                                     <li
                                         key={data.id}
-                                        className="flex items-center gap-3 rounded-md px-2 py-1.5 cursor-pointer transition-colors hover:bg-muted/60"
+                                        className="group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors duration-100 hover:bg-muted/60"
                                         onClick={() => navigator.go({ to: `/space-detail/${data.spaceId}/page/edit/${data.id}` })}
                                     >
                                         <span
-                                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-base leading-none"
+                                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[15px] leading-none"
                                             style={styles.chip}
                                         >
-                                            {data.icon?.icon || <Box className="h-4 w-4" />}
+                                            {data.icon?.icon || <Box className="h-3.5 w-3.5" />}
                                         </span>
-                                        <span className="flex-1 truncate text-sm font-medium">{data.title}</span>
+                                        <span className="flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
+                                            {data.title}
+                                        </span>
                                         {data.updateTime && (
-                                            <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                                                <Clock className="h-3 w-3" />
+                                            <span className="hidden shrink-0 items-center gap-1 text-[11px] text-muted-foreground sm:flex">
+                                                <Star className="h-3 w-3 text-amber-400/80" />
                                                 {relativeTime(data.updateTime)}
                                             </span>
                                         )}
@@ -462,18 +559,16 @@ export const Home: React.FC = () => {
                     )}
                 </section>
 
-                {/* Learn Knowledge */}
-                <section className="flex flex-col gap-3.5 shrink-0">
-                    <div className="flex items-center gap-2">
-                        <Book size={14} className="text-muted-foreground" />
-                        <h2 className="text-sm font-medium text-muted-foreground">{t("home.learning") || "Learn Knowledge"}</h2>
-                    </div>
-                    <Card className="border-dashed bg-muted/20">
+                {/* Learn Knowledge — muted callout in a dashed frame, kept
+                    intentionally quiet so it never competes with the content. */}
+                <section className="flex flex-col gap-2 shrink-0">
+                    <SectionHeader title={t("home.learning") || "Learn"} />
+                    <Card className="border-dashed border-border/60 bg-transparent shadow-none">
                         <CardContent className="flex items-center gap-3 py-4">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted/60">
                                 <BanIcon className="h-4 w-4 text-muted-foreground" />
                             </div>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-[13px] text-muted-foreground">
                                 {t("home.coming-soon-desc") || "This feature is coming soon, stay tuned!"}
                             </p>
                         </CardContent>
@@ -485,19 +580,20 @@ export const Home: React.FC = () => {
 }
 
 
-// Compact, centered empty state used across sections.
+// Compact, centered empty state used across sections. Kept borderless and
+// airy so it inherits the Notion aesthetic of the surrounding sections.
 const EmptyBlock: React.FC<{
     icon: React.ReactNode
     title: string
     desc?: string
     action?: React.ReactNode
 }> = ({ icon, title, desc, action }) => (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border/60 py-10 text-center">
-        <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/50 bg-muted/10 py-12 text-center">
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
             {icon}
         </div>
-        <p className="text-sm font-medium">{title}</p>
-        {desc && <p className="mt-1 text-xs text-muted-foreground">{desc}</p>}
+        <p className="text-[13px] font-medium">{title}</p>
+        {desc && <p className="mt-1 text-[11px] text-muted-foreground">{desc}</p>}
         {action}
     </div>
 )

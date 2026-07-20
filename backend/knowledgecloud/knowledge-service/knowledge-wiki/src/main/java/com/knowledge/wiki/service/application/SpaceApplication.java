@@ -80,6 +80,7 @@ import com.knowledge.wiki.service.service.IShareLinkService;
 import com.knowledge.wiki.service.service.ISpaceService;
 import com.knowledge.wiki.service.service.IWikiLinkService;
 import com.knowledge.wiki.service.service.IBlockVersionService;
+import com.knowledge.wiki.service.service.ISpaceMemberService;
 import com.knowledge.system.vo.UserVO;
 
 import cn.hutool.core.bean.BeanUtil;
@@ -120,15 +121,29 @@ public class SpaceApplication {
     private IBlockVersionService blockVersionService;
     @Autowired
     private IPageSnapshotService pageSnapshotService;
+    @Autowired
+    private ISpaceMemberService spaceMemberService;
 
     /**
      * Create a new space
+     * For COLLABORATION type spaces, automatically adds the creator as OWNER member
      *
      * @param dto space data transfer object
      */
     public void createSpace(SpaceDTO dto) {
         log.info("Creating space: {}", dto.getName());
-        spaceService.createOrSave(SpaceConverter.INSTANCE.convertDO(dto));
+        Space space = SpaceConverter.INSTANCE.convertDO(dto);
+        Space savedSpace = spaceService.createOrSave(space);
+
+        // For team/collaboration spaces, add creator as OWNER member
+        if (savedSpace != null && savedSpace.getId() != null
+                && (dto.getType() == SpaceType.COLLABORATION
+                        || dto.getType() == SpaceType.SPACE)) {
+            Long userId = SecurityContextUtil.getUserId();
+            spaceMemberService.addMember(savedSpace.getId(), userId, CollaboratorRole.OWNER, null);
+            log.info("Added creator {} as OWNER of team space {}", userId, savedSpace.getId());
+        }
+
         log.info("Space created successfully: {}", dto.getName());
     }
 
@@ -472,12 +487,14 @@ public class SpaceApplication {
     /**
      * Build the page relation graph for every space the current user can see.
      *
-     * <p>Visible spaces = spaces the user owns (any non-template type) ∪ spaces
+     * <p>
+     * Visible spaces = spaces the user owns (any non-template type) ∪ spaces
      * the user has an explicit permission row for. Nodes are the live pages
      * (not deleted / trashed / template) in those spaces; edges are page-level
      * references from {@code wiki_link} whose both endpoints are visible nodes.
      *
-     * <p>All ids are emitted as strings to preserve 19-digit snowflake precision
+     * <p>
+     * All ids are emitted as strings to preserve 19-digit snowflake precision
      * on the JS frontend.
      */
     public SpaceGraphVO getSpaceGraph() {
@@ -663,10 +680,25 @@ public class SpaceApplication {
 
     public IPage<SpaceVO> page(QuerySpaceDTO dto) {
         MPJLambdaWrapper<Space> wrapper = MPJWrappers.lambdaJoin(Space.class);
-        wrapper.eq(dto.isTemplate(), Space::getType, SpaceType.TEMPALTE)
-                .selectAll(Space.class)
-                .eq(!dto.isTemplate(), Space::getType, SpaceType.SPACE)
-                .orderByDesc(Space::getCreateTime);
+        wrapper.selectAll(Space.class);
+
+        if (dto.isTemplate()) {
+            wrapper.eq(Space::getType, SpaceType.TEMPALTE);
+        } else if (dto.getType() != null) {
+            // Filter by specific type
+            wrapper.eq(Space::getType, dto.getType());
+        } else {
+            // Default: show both SPACE and COLLABORATION types
+            wrapper.in(Space::getType, SpaceType.SPACE, SpaceType.COLLABORATION);
+        }
+
+        // Search by name
+        if (dto.getSearchValue() != null && !dto.getSearchValue().isEmpty()) {
+            wrapper.like(Space::getName, dto.getSearchValue());
+        }
+
+        wrapper.orderByDesc(Space::getCreateTime);
+
         if (dto.isFavorite()) {
             wrapper.leftJoin(FavoriteItem.class, FavoriteItem::getObjectId, Space::getId)
                     .isNotNull(dto.isFavorite(), FavoriteItem::getObjectId);
@@ -1394,6 +1426,83 @@ public class SpaceApplication {
     public IPage<BlockVersionVO> getBlockVersionHistory(
             com.knowledge.wiki.service.entity.dto.QueryBlockVersionDTO dto) {
         return blockVersionService.getBlockVersionHistory(dto);
+    }
+
+    // ==================== Page Tags & Featured ====================
+
+    /**
+     * Get templates scoped to a specific space (team space template library)
+     */
+    public List<PageVO> getSpaceTemplates(Long spaceId) {
+        List<Page> templates = pageService.lambdaQuery()
+                .eq(Page::getSpaceId, spaceId)
+                .eq(Page::getIsTemplate, true)
+                .ne(Page::getStatus, PageStatus.DELETED)
+                .orderByDesc(Page::getUpdateTime)
+                .list();
+        return templates.stream()
+                .map(page -> {
+                    PageVO vo = PageConverter.INSTANCE.convertVO(page);
+                    return vo;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Toggle the pinned status of a page within a space
+     */
+    public void togglePagePin(Long spaceId, Long pageId) {
+        Page page = pageService.getById(pageId);
+        if (page == null || !spaceId.equals(page.getSpaceId())) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        page.setPinned(!Boolean.TRUE.equals(page.getPinned()));
+        pageService.updateById(page);
+        log.info("Toggled pin status of page {} in space {} to {}", pageId, spaceId, page.getPinned());
+    }
+
+    /**
+     * Get all pinned/featured pages in a space
+     */
+    public List<PageVO> getPinnedPages(Long spaceId) {
+        List<Page> pages = pageService.lambdaQuery()
+                .eq(Page::getSpaceId, spaceId)
+                .eq(Page::getPinned, true)
+                .orderByDesc(Page::getUpdateTime)
+                .list();
+        return pages.stream()
+                .map(PageConverter.INSTANCE::convertVO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Update tags for a page
+     */
+    public void updatePageTags(Long pageId, List<String> tags) {
+        Page page = pageService.getById(pageId);
+        if (page == null) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        page.setTags(tags);
+        pageService.updateById(page);
+        log.info("Updated tags for page {}: {}", pageId, tags);
+    }
+
+    /**
+     * Get all distinct tags used across pages in a space
+     */
+    public List<String> getSpaceTags(Long spaceId) {
+        List<Page> pages = pageService.lambdaQuery()
+                .eq(Page::getSpaceId, spaceId)
+                .isNotNull(Page::getTags)
+                .select(Page::getTags)
+                .list();
+        return pages.stream()
+                .filter(p -> p.getTags() != null)
+                .flatMap(p -> p.getTags().stream())
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
     }
 
 }

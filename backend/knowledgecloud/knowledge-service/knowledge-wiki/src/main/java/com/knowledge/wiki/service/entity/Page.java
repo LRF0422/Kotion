@@ -1,5 +1,7 @@
 package com.knowledge.wiki.service.entity;
 
+import java.util.List;
+
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
@@ -35,5 +37,16 @@ public class Page extends BaseSubject {
     private boolean draft;
     @TableField(exist = false)
     private VersionStatus versionStatus;
+
+    /**
+     * Whether the page is pinned/featured in the space
+     */
+    private Boolean pinned;
+
+    /**
+     * Page tags (JSON array of strings)
+     */
+    @TableField(typeHandler = JacksonTypeHandler.class)
+    private List<String> tags;
 
 }

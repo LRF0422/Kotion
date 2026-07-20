@@ -279,6 +279,10 @@ export const SpaceDetail: React.FC = () => {
         navigator.go({ to: `/space-detail/${params.id}/settings` })
     }, [params.id, navigator])
 
+    const handleNavigateTeamHome = useCallback(() => {
+        navigator.go({ to: `/space-detail/${params.id}/home` })
+    }, [params.id, navigator])
+
     // --- Mobile header ---
 
     useEffect(() => {
@@ -332,6 +336,7 @@ export const SpaceDetail: React.FC = () => {
         onPageClick: handlePageClick,
         onNavigateGraph: handleNavigateGraph,
         onNavigateSettings: handleNavigateSettings,
+        onNavigateTeamHome: (space?.type === 'COLLABORATION' || space?.type === 'SPACE') ? handleNavigateTeamHome : undefined,
     }
 
     return space && (

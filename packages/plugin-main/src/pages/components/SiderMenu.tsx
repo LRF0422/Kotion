@@ -1,5 +1,5 @@
 import { useNavigator, GlobalState, useApi, clearTokens, useSelector } from "@kn/common";
-import { CalendarCheck2, LayoutDashboard, LayoutGrid, PanelBottom, Power, Settings, ShoppingBag, UserRoundPlus } from "@kn/icon";
+import { CalendarCheck2, LayoutDashboard, LayoutGrid, PanelBottom, Power, Settings, ShoppingBag, Users, UserRoundPlus } from "@kn/icon";
 import React, { ReactNode } from "react";
 import { EmptyProps } from "@kn/ui";
 import { useLocation } from "react-router-dom";
@@ -95,6 +95,18 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini' }> = ({ size
             onClick: () => {
                 navigator.go({
                     to: "/spaces"
+                })
+            }
+        },
+        {
+            name: 'Team Spaces',
+            icon: <Users className="h-5 w-5" />,
+            key: '/all-spaces?tab=team',
+            attachTabs: true,
+            id: '/all-spaces?tab=team',
+            onClick: () => {
+                navigator.go({
+                    to: "/all-spaces?tab=team"
                 })
             }
         },

@@ -37,6 +37,7 @@ interface SpaceSidebarProps {
     onPageClick: (pageId: string) => void
     onNavigateGraph: () => void
     onNavigateSettings: () => void
+    onNavigateTeamHome?: () => void
     onTreeSelected?: () => void
     onImport?: () => void
     onExport?: () => void
@@ -72,6 +73,7 @@ export const SpaceSidebar: React.FC<SpaceSidebarProps> = ({
     onPageClick,
     onNavigateGraph,
     onNavigateSettings,
+    onNavigateTeamHome,
     onTreeSelected,
     onImport,
     onExport,
@@ -142,6 +144,7 @@ export const SpaceSidebar: React.FC<SpaceSidebarProps> = ({
                 onOpenTemplates={onOpenTemplates}
                 onNavigateGraph={onNavigateGraph}
                 onNavigateSettings={onNavigateSettings}
+                onNavigateTeamHome={onNavigateTeamHome}
                 onRestorePage={onRestorePage}
                 onImport={onImport}
                 onExport={onExport}

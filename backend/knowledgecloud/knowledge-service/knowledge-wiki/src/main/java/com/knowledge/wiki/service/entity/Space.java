@@ -9,6 +9,7 @@ import com.knowledge.core.common.base.Icon;
 import com.knowledge.core.common.base.TenantEntity;
 import com.knowledge.wiki.service.entity.enums.SpaceStatus;
 import com.knowledge.wiki.service.entity.enums.SpaceType;
+import com.knowledge.wiki.service.entity.enums.SpaceVisibility;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -30,4 +31,15 @@ public class Space extends TenantEntity {
     private String cover;
     @TableField(typeHandler = JacksonTypeHandler.class)
     private List<String> screenShot;
+
+    /**
+     * Space visibility: PUBLIC or PRIVATE
+     * Default: PRIVATE for team spaces
+     */
+    private SpaceVisibility visibility;
+
+    /**
+     * Whether the space is archived
+     */
+    private Boolean archived;
 }

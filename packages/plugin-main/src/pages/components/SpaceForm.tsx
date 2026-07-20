@@ -6,10 +6,11 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormDescription, For
 import { Input } from "@kn/ui";
 import { Textarea } from "@kn/ui";
 import { Separator } from "@kn/ui";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
 import { toast } from "@kn/ui";
 import { useApi, useUploadFile, GlobalState } from "@kn/common";
 import { zodResolver } from "@kn/ui";
-import { Upload, CheckCircle2, ImageIcon } from "@kn/icon";
+import { Upload, CheckCircle2, ImageIcon, Users, BookOpen } from "@kn/icon";
 import React, { ReactNode, useState } from "react";
 import { useForm } from "@kn/ui";
 import { useSelector, useTranslation } from "@kn/common";
@@ -35,6 +36,7 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
             error: t("creation.name-required", "Space name is required")
         }).min(1, t("creation.name-required", "Space name is required")),
         description: z.string().optional(),
+        type: z.enum(["SPACE", "COLLABORATION"]).default("SPACE"),
         nickName: z.string().default(userInfo?.name as string),
         userId: z.string().default(userInfo?.id as string),
         cover: z.string()
@@ -49,6 +51,7 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
             },
             name: "",
             description: "",
+            type: "SPACE",
             cover: "upload/20251022/2c9402c970f95483446ded792b32ac22.png",
             nickName: userInfo?.name,
             userId: userInfo?.id
@@ -129,6 +132,47 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
                                 </FormControl>
                                 <FormDescription>
                                     {t("creation.desc-help", "A brief description helps others understand the purpose of this space")}
+                                </FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+
+                    <FormField
+                        control={form.control}
+                        name="type"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>{t("creation.type", "Space Type")}</FormLabel>
+                                <FormControl>
+                                    <Select value={field.value} onValueChange={field.onChange}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder={t("creation.type-placeholder", "Select space type")} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="SPACE">
+                                                <div className="flex items-center gap-2">
+                                                    <BookOpen className="h-4 w-4 text-muted-foreground" />
+                                                    <div>
+                                                        <span>{t("creation.type-normal", "Normal Space")}</span>
+                                                    </div>
+                                                </div>
+                                            </SelectItem>
+                                            <SelectItem value="COLLABORATION">
+                                                <div className="flex items-center gap-2">
+                                                    <Users className="h-4 w-4 text-blue-500" />
+                                                    <div>
+                                                        <span>{t("creation.type-collaboration", "Collaboration Space")}</span>
+                                                    </div>
+                                                </div>
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </FormControl>
+                                <FormDescription>
+                                    {field.value === 'COLLABORATION'
+                                        ? t("creation.type-collab-desc", "Team workspace with member management, activity feed and real-time collaboration")
+                                        : t("creation.type-normal-desc", "Standard space for organizing and sharing knowledge")}
                                 </FormDescription>
                                 <FormMessage />
                             </FormItem>
