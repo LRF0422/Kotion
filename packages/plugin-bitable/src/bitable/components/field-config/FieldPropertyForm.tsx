@@ -23,6 +23,7 @@ import {
     PopoverTrigger,
     Alert,
     AlertDescription,
+    ColorPicker,
 } from "@kn/ui";
 import {
     Trash2,
@@ -37,65 +38,22 @@ import { getConversionWarning } from "../../../utils/fieldConversion";
 import { FieldTypeSelector } from "./FieldTypeSelector";
 
 // ---------------------------------------------------------------------------
-// Color picker
+// Color picker — uses unified ColorPicker from @kn/ui
 // ---------------------------------------------------------------------------
-const ColorPicker: React.FC<{
+const BitableColorPicker: React.FC<{
     value: string;
     onChange: (color: string) => void;
     t: (key: string) => string;
-}> = ({ value, onChange, t }) => {
-    const [isOpen, setIsOpen] = useState(false);
-
+}> = ({ value, onChange }) => {
+    const swatches = PRESET_COLORS.map((c) => c.value);
     return (
-        <Popover open={isOpen} onOpenChange={setIsOpen}>
-            <PopoverTrigger asChild>
-                <Button
-                    variant="outline"
-                    className="bitable-field-config__color-trigger"
-                    style={{ backgroundColor: value }}
-                >
-                    <span className="sr-only">{t("bitable.fieldConfig.selectColor")}</span>
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-64 p-3" align="start">
-                <div className="space-y-3">
-                    <Label className="text-xs font-medium">
-                        {t("bitable.fieldConfig.selectColor")}
-                    </Label>
-                    <div className="grid grid-cols-6 gap-2">
-                        {PRESET_COLORS.map((color) => (
-                            <button
-                                key={color.value}
-                                onClick={() => {
-                                    onChange(color.value);
-                                    setIsOpen(false);
-                                }}
-                                className={`bitable-field-config__color-swatch${
-                                    value === color.value
-                                        ? " bitable-field-config__color-swatch--active"
-                                        : ""
-                                }`}
-                                style={{ backgroundColor: color.value }}
-                                title={color.name}
-                            />
-                        ))}
-                    </div>
-                    <Separator />
-                    <div className="flex items-center gap-2">
-                        <Label htmlFor="custom-color" className="text-xs">
-                            {t("bitable.fieldConfig.custom")}
-                        </Label>
-                        <input
-                            id="custom-color"
-                            type="color"
-                            value={value}
-                            onChange={(e) => onChange(e.target.value)}
-                            className="w-full h-8 rounded border cursor-pointer"
-                        />
-                    </div>
-                </div>
-            </PopoverContent>
-        </Popover>
+        <ColorPicker
+            value={value}
+            onChange={onChange}
+            swatches={swatches}
+            trigger="toggle"
+            align="start"
+        />
     );
 };
 
@@ -157,7 +115,7 @@ export const FieldTypeConfig: React.FC<TypeConfigProps> = ({
                     <div className="space-y-2 max-h-[200px] overflow-y-auto">
                         {options.map((option) => (
                             <div key={option.id} className="flex items-center gap-2">
-                                <ColorPicker
+                                <BitableColorPicker
                                     value={option.color}
                                     onChange={(color) => updateOption(option.id, { color })}
                                     t={t}

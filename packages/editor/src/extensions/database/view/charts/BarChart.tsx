@@ -100,7 +100,7 @@ const Component: React.FC<any> = (props) => {
                                                     }
                                                 </SelectContent>
                                             </Select>
-                                            <ColorPicker simple background={it.color || ""} setBackground={(value) => {
+                                            <ColorPicker value={it.color || "#3b82f6"} trigger="toggle" onChange={(value) => {
                                                 const item = config.yAxis.find((i: any) => i.key === it.key)
                                                 item.color = value
                                                 config.yAxis = [...(config.yAxis || [])]

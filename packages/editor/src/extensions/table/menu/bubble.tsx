@@ -340,11 +340,11 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ edito
               <TooltipTrigger asChild>
                 <div>
                   <ColorPicker
-                    simple
-                    icon={<IconFontColor />}
-                    background={currentCellColor}
-                    setBackground={handleCellColor}
-                    handleUnSet={handleUnsetCellColor}
+                    value={currentCellColor || '#000000'}
+                    onChange={handleCellColor}
+                    onUnset={handleUnsetCellColor}
+                    trigger="toggle"
+                    triggerIcon={<IconFontColor />}
                   />
                 </div>
               </TooltipTrigger>
@@ -356,10 +356,10 @@ export const TableBubbleMenu: React.FC<{ editor: Editor }> = React.memo(({ edito
               <TooltipTrigger asChild>
                 <div>
                   <ColorPicker
-                    simple
-                    background={currentCellBackgroundColor}
-                    setBackground={handleCellBackgroundColor}
-                    handleUnSet={handleUnsetCellBackgroundColor}
+                    value={currentCellBackgroundColor || '#ffffff'}
+                    onChange={handleCellBackgroundColor}
+                    onUnset={handleUnsetCellBackgroundColor}
+                    trigger="toggle"
                   />
                 </div>
               </TooltipTrigger>

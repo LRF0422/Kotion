@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import {
     Input,
+    ColorPicker,
 } from "@kn/ui";
 import {
     ChevronRight,
@@ -163,17 +164,16 @@ export const KanbanColumnHeader: React.FC<KanbanColumnHeaderProps> = ({
                     className="bitable-kanban__color-picker"
                     onClick={(e) => e.stopPropagation()}
                 >
-                    {OPTION_COLORS.map((c: string) => (
-                        <button
-                            key={c}
-                            className="bitable-kanban__color-swatch"
-                            style={{ backgroundColor: c }}
-                            onClick={() => {
-                                onChangeColor(column.key, c);
-                                setShowColorPicker(false);
-                            }}
-                        />
-                    ))}
+                    <ColorPicker
+                        value={column.color || OPTION_COLORS[0]}
+                        onChange={(c) => {
+                            onChangeColor(column.key, c);
+                            setShowColorPicker(false);
+                        }}
+                        swatches={OPTION_COLORS}
+                        trigger="button"
+                        align="start"
+                    />
                 </div>
             )}
 

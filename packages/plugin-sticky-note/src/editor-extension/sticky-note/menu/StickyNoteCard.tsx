@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEditor, EditorContent, Editor as InnerEditor, useEditorExtension } from "@kn/editor";
 import type { AnyExtension } from "@kn/editor";
-import { Button, Popover, PopoverContent, PopoverTrigger, useTheme } from "@kn/ui";
+import { Button, Popover, PopoverContent, PopoverTrigger, ColorPicker, useTheme } from "@kn/ui";
 import { Trash2, Palette, Bold, Italic, List, ListOrdered, Code } from "@kn/icon";
 import { useTranslation } from "@kn/common";
 import { findStickyNoteColor, STICKY_NOTE_COLORS } from "../constants";
@@ -337,32 +337,32 @@ export const StickyNoteCard: React.FC<StickyNoteCardProps> = ({
                             </ToolbarButton>
                             {showColors && (
                                 <div
-                                    className="sticky-note-color-pop absolute right-0 bottom-8 z-50 flex items-center gap-1.5 p-2 rounded-lg border bg-popover text-popover-foreground shadow-lg"
+                                    className="sticky-note-color-pop absolute right-0 bottom-8 z-50 p-1 rounded-lg border bg-popover text-popover-foreground shadow-lg"
                                 >
-                                    {STICKY_NOTE_COLORS.map((c) => {
-                                        const swatch = isDark ? c.dark : c.light;
-                                        const selected = c.name === color;
-                                        const colorLabel = t(`stickyNote.colors.${c.name}`, { defaultValue: c.label });
-                                        return (
-                                            <button
-                                                key={c.name}
-                                                type="button"
-                                                aria-label={colorLabel}
-                                                title={colorLabel}
-                                                className={`h-5 w-5 rounded-full transition-transform duration-150 hover:scale-110 ${selected ? "ring-2 ring-offset-1 ring-offset-popover" : ""
-                                                    }`}
-                                                style={{
-                                                    backgroundColor: swatch.bg,
-                                                    border: `1px solid ${swatch.border}`,
-                                                    ...(selected ? { boxShadow: `0 0 0 1px ${swatch.border}` } : {}),
-                                                }}
-                                                onClick={() => {
-                                                    onColorChange(c.name);
-                                                    setShowColors(false);
-                                                }}
-                                            />
-                                        );
-                                    })}
+                                    <ColorPicker
+                                        value={(() => {
+                                            const p = findStickyNoteColor(color);
+                                            const tone = isDark ? p.dark : p.light;
+                                            return tone.bg;
+                                        })()}
+                                        onChange={(hex) => {
+                                            // Find closest matching sticky note color by bg
+                                            const match = STICKY_NOTE_COLORS.find((c) => {
+                                                const tone = isDark ? c.dark : c.light;
+                                                return tone.bg.toLowerCase() === hex.toLowerCase();
+                                            });
+                                            if (match) {
+                                                onColorChange(match.name);
+                                            }
+                                            setShowColors(false);
+                                        }}
+                                        swatches={STICKY_NOTE_COLORS.map((c) => {
+                                            const tone = isDark ? c.dark : c.light;
+                                            return tone.bg;
+                                        })}
+                                        trigger="button"
+                                        align="end"
+                                    />
                                 </div>
                             )}
                         </div>

@@ -858,11 +858,14 @@ const DataTableView: React.FC<{ chartData: ChartData }> = ({ chartData }) => {
 
     return (
         <div className="overflow-auto not-prose" style={{ maxHeight: Math.max(chartData.height || 300, 300) }}>
-            <Table className="text-xs">
+            <Table className="text-xs w-full">
                 <TableHeader>
-                    <TableRow>
-                        {allKeys.map((key) => (
-                            <TableHead key={key} className="h-8 text-xs font-medium">
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        {allKeys.map((key, i) => (
+                            <TableHead
+                                key={key}
+                                className={`h-7 text-[11px] font-semibold tracking-wide uppercase text-muted-foreground/80 ${i === 0 ? 'pl-3' : 'text-right pr-3'}`}
+                            >
                                 {key}
                             </TableHead>
                         ))}
@@ -870,9 +873,12 @@ const DataTableView: React.FC<{ chartData: ChartData }> = ({ chartData }) => {
                 </TableHeader>
                 <TableBody>
                     {data.map((row, rowIndex) => (
-                        <TableRow key={rowIndex}>
-                            {allKeys.map((key) => (
-                                <TableCell key={key} className="py-1.5 text-xs">
+                        <TableRow key={rowIndex} className={`${rowIndex % 2 === 0 ? '' : 'bg-muted/20'} hover:bg-muted/40 transition-colors`}>
+                            {allKeys.map((key, i) => (
+                                <TableCell
+                                    key={key}
+                                    className={`py-1 text-xs tabular-nums ${i === 0 ? 'pl-3 font-medium' : 'text-right pr-3 text-muted-foreground'}`}
+                                >
                                     {row[key] != null ? String(row[key]) : "-"}
                                 </TableCell>
                             ))}
@@ -1449,7 +1455,7 @@ export const ChartView: React.FC<NodeViewProps> = (props) => {
                         Tablet/Desktop: side-by-side 50/50 split. */}
                     <div className="flex flex-col md:flex-row gap-0">
                         {/* Left Panel: Data + Config */}
-                        <div className="w-full md:w-1/2 border-b md:border-b-0 md:border-r min-w-0 order-2 md:order-none">
+                        <div className="w-full md:w-2/5 border-b md:border-b-0 md:border-r min-w-0 order-2 md:order-none">
                             <Tabs defaultValue="table" className="h-full flex flex-col">
                                 <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-11 md:h-9 px-1">
                                     <TabsTrigger value="table" className="text-xs gap-1 data-[state=active]:shadow-none">
@@ -1509,7 +1515,7 @@ export const ChartView: React.FC<NodeViewProps> = (props) => {
                         </div>
 
                         {/* Right Panel: Chart Preview */}
-                        <div className="w-full md:w-1/2 p-2 flex flex-col items-center justify-center order-1 md:order-none">
+                        <div className="w-full md:w-3/5 p-3 flex flex-col items-center justify-center order-1 md:order-none">
                             {(activeChartData?.title || activeChartData?.description) && (
                                 <div className="w-full text-center mb-1">
                                     {activeChartData.title && <div className="text-sm font-medium">{activeChartData.title}</div>}
