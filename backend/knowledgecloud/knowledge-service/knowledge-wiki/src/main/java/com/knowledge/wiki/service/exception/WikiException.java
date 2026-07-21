@@ -41,6 +41,9 @@ public enum WikiException implements BusinessExceptionAssert {
     INVALID_INVITATION_STATUS(4004, "无效的邀请状态"),
     COLLABORATOR_NOT_FOUND(4005, "协作者不存在"),
     FORBIDDEN_ACCESS(4006, "无权访问"),
+    SHARE_LINK_NOT_FOUND(4007, "分享链接不存在或已被重置"),
+    SHARE_LINK_EXPIRED(4008, "分享链接已过期"),
+    SHARE_LINK_DISABLED(4009, "分享链接已关闭"),
 
     // Validation related (6000-6999)
     INVALID_PARAMETER(6001, "参数无效"),

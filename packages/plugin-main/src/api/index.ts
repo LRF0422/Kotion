@@ -178,6 +178,21 @@ export const APIS = {
         url: '/knowledge-wiki/space/page/:pageId/share-link',
         method: 'POST'
     } as API,
+    /** Get current active share link of a page (null when sharing is off) */
+    GET_PAGE_SHARE_LINK: {
+        url: '/knowledge-wiki/space/page/:pageId/share-link',
+        method: 'GET'
+    } as API,
+    /** Disable a share link */
+    DISABLE_SHARE_LINK: {
+        url: '/knowledge-wiki/space/page/:pageId/share-link/:shortCode',
+        method: 'DELETE'
+    } as API,
+    /** Resolve a public share link (no auth required) */
+    RESOLVE_SHARE_LINK: {
+        url: '/knowledge-wiki/share/public/:shortCode/resolve',
+        method: 'GET'
+    } as API,
     /** Validate invitation token */
     VALIDATE_INVITATION: {
         url: '/knowledge-wiki/collaboration/invitation/:token/validate',
@@ -275,6 +290,16 @@ export const APIS = {
     TRANSFER_SPACE_OWNERSHIP: {
         url: '/knowledge-wiki/space/:spaceId/member/transfer/:newOwnerId',
         method: 'PUT'
+    } as API,
+    /** List pending invitations of a space */
+    LIST_PENDING_INVITATIONS: {
+        url: '/knowledge-wiki/space/:spaceId/invitations/pending',
+        method: 'GET'
+    } as API,
+    /** Revoke a pending invitation */
+    REVOKE_INVITATION: {
+        url: '/knowledge-wiki/space/:spaceId/invitations/:invitationId',
+        method: 'DELETE'
     } as API,
     // ==================== Activity Feed APIs ====================
     /** Get space activity feed */

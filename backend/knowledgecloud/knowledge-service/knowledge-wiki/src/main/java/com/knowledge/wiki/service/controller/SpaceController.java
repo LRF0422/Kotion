@@ -336,6 +336,44 @@ public class SpaceController {
     }
 
     /**
+     * Get the current active share link of a page (null when sharing is off)
+     */
+    @GetMapping("/page/{pageId}/share-link")
+    public R<?> getPageShareLink(@PathVariable("pageId") Long pageId) {
+        return R.data(spaceApplication.getPageShareLink(pageId));
+    }
+
+    /**
+     * Disable a share link
+     */
+    @DeleteMapping("/page/{pageId}/share-link/{shortCode}")
+    public R<?> disableShareLink(@PathVariable("pageId") Long pageId,
+            @PathVariable("shortCode") String shortCode) {
+        spaceApplication.disableShareLink(pageId, shortCode);
+        return R.success();
+    }
+
+    /**
+     * List pending invitations of a space
+     * GET /knowledge-wiki/space/{id}/invitations/pending
+     */
+    @GetMapping("/{id}/invitations/pending")
+    public R<?> getPendingInvitations(@PathVariable("id") Long id) {
+        return R.data(spaceApplication.getPendingInvitations(id));
+    }
+
+    /**
+     * Revoke a pending invitation
+     * DELETE /knowledge-wiki/space/{id}/invitations/{invitationId}
+     */
+    @DeleteMapping("/{id}/invitations/{invitationId}")
+    public R<?> revokeInvitation(@PathVariable("id") Long id,
+            @PathVariable("invitationId") Long invitationId) {
+        spaceApplication.revokeInvitation(id, invitationId);
+        return R.success();
+    }
+
+    /**
      * Get pages that current user has been invited to collaborate on
      * GET /knowledge-wiki/space/page/invited
      */

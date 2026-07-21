@@ -57,3 +57,5 @@ knowledge:
       - /knowledge-auth/oauth/**
       - /knowledge-auth/oauth2/**
       - /knowledge-auth/token/**
+      # 分享链接公开访问（免登录解析分享页面）
+      - /knowledge-wiki/share/public/**

@@ -6,9 +6,9 @@ import {
     Tabs, TabsContent, TabsList, TabsTrigger
 } from "@kn/ui";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Box, EyeIcon, FolderOpen, Grid3X3, List, Plus, SearchIcon, Star, Users } from "@kn/icon";
+import { ArrowLeft, Box, Crown, EyeIcon, FolderOpen, Globe, Grid3X3, List, Plus, SearchIcon, Star, Users } from "@kn/icon";
 import { Space } from "../../model/Space";
-import { useApi, useDebounce, useNavigator, useUploadFile } from "@kn/common";
+import { GlobalState, useApi, useDebounce, useNavigator, useSelector, useUploadFile } from "@kn/common";
 import { APIS } from "../../api";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { useLocation } from "react-router-dom";
@@ -39,22 +39,41 @@ const bannerStyle = (hue: number): React.CSSProperties => ({
     backgroundImage: `linear-gradient(135deg, hsl(${hue} 70% 60% / 0.28), hsl(${(hue + 40) % 360} 70% 55% / 0.12))`,
 })
 
+// Small role badge distinguishing spaces the current user owns from ones they joined.
+const RoleBadge: React.FC<{ owned: boolean; ownedLabel: string; joinedLabel: string }> = ({ owned, ownedLabel, joinedLabel }) => (
+    <span
+        className={cn(
+            "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none",
+            owned
+                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                : "bg-muted text-muted-foreground"
+        )}
+    >
+        {owned && <Crown className="h-2.5 w-2.5" />}
+        {owned ? ownedLabel : joinedLabel}
+    </span>
+)
+
 
 interface SpaceCardProps {
     space: Space
     favorite: boolean
     index: number
     cover?: string
+    owned: boolean
     onOpen: (id: string) => void
     onToggleFavorite: (id: string, favorite: boolean) => void
     noDescription: string
     favoriteLabel: string
+    ownedLabel: string
+    joinedLabel: string
+    publicLabel: string
 }
 
 // Gallery-style card: cover (or hue gradient) banner with the icon chip tucked
 // over its lower edge, then name + description. Star toggle reveals on hover.
 const SpaceCard: React.FC<SpaceCardProps> = ({
-    space, favorite, index, cover, onOpen, onToggleFavorite, noDescription, favoriteLabel
+    space, favorite, index, cover, owned, onOpen, onToggleFavorite, noDescription, favoriteLabel, ownedLabel, joinedLabel, publicLabel
 }) => {
     const hue = pickHue(space.id)
     return (
@@ -94,6 +113,15 @@ const SpaceCard: React.FC<SpaceCardProps> = ({
                     {space.icon?.icon || <Box className="h-5 w-5" />}
                 </span>
                 <p className="mt-7 truncate text-sm font-semibold">{space.name}</p>
+                <div className="mt-1 flex items-center gap-1">
+                    <RoleBadge owned={owned} ownedLabel={ownedLabel} joinedLabel={joinedLabel} />
+                    {space.visibility === 'PUBLIC' && (
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium leading-none text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
+                            <Globe className="h-2.5 w-2.5" />
+                            {publicLabel}
+                        </span>
+                    )}
+                </div>
                 <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
                     {space.description || noDescription}
                 </p>
@@ -106,16 +134,20 @@ const SpaceCard: React.FC<SpaceCardProps> = ({
 interface SpaceRowProps {
     space: Space
     favorite: boolean
+    owned: boolean
     onOpen: (id: string) => void
     onToggleFavorite: (id: string, favorite: boolean) => void
     noDescription: string
     favoriteLabel: string
     viewLabel: string
+    ownedLabel: string
+    joinedLabel: string
+    publicLabel: string
 }
 
 // Compact list row used by the "list" view mode.
 const SpaceRow: React.FC<SpaceRowProps> = ({
-    space, favorite, onOpen, onToggleFavorite, noDescription, favoriteLabel, viewLabel
+    space, favorite, owned, onOpen, onToggleFavorite, noDescription, favoriteLabel, viewLabel, ownedLabel, joinedLabel, publicLabel
 }) => {
     const hue = pickHue(space.id)
     return (
@@ -133,7 +165,16 @@ const SpaceRow: React.FC<SpaceRowProps> = ({
                 {space.icon?.icon || <Box className="h-4 w-4" />}
             </span>
             <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{space.name}</p>
+                <div className="flex items-center gap-1.5">
+                    <p className="truncate text-sm font-medium">{space.name}</p>
+                    <RoleBadge owned={owned} ownedLabel={ownedLabel} joinedLabel={joinedLabel} />
+                    {space.visibility === 'PUBLIC' && (
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium leading-none text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
+                            <Globe className="h-2.5 w-2.5" />
+                            {publicLabel}
+                        </span>
+                    )}
+                </div>
                 <p className="truncate text-xs text-muted-foreground">
                     {space.description || noDescription}
                 </p>
@@ -166,6 +207,7 @@ export const SpaceHub: React.FC = () => {
     const navigator = useNavigator()
     const { usePath } = useUploadFile()
     const location = useLocation()
+    const { userInfo } = useSelector((state: GlobalState) => state)
 
     // Read initial tab from URL query parameter (?tab=team)
     const initialTab = useMemo(() => {
@@ -192,6 +234,14 @@ export const SpaceHub: React.FC = () => {
     const noDescription = t('space-hub.no-description', 'No description')
     const favoriteLabel = t('space-hub.toggle-favorite', 'Toggle favorite')
     const viewLabel = t('space-hub.view-space', 'View space')
+    const ownedLabel = t('space-hub.badge-owned', 'Owned')
+    const joinedLabel = t('space-hub.badge-joined', 'Joined')
+    const publicLabel = t('space-hub.badge-public', 'Public')
+
+    // Whether the current user owns the space (vs. joined as a member/guest)
+    const isOwned = useCallback((space: Space) =>
+        !!userInfo?.id && space.userId != null && String(space.userId) === String(userInfo.id),
+        [userInfo?.id])
 
     // Fetch the paginated, filtered list of spaces.
     const fetchSpaces = useCallback(async () => {
@@ -353,10 +403,14 @@ export const SpaceHub: React.FC = () => {
                                         favorite
                                         index={index}
                                         cover={coverOf(space)}
+                                        owned={isOwned(space)}
                                         onOpen={navigateToSpace}
                                         onToggleFavorite={(id) => toggleFavorite(id)}
                                         noDescription={noDescription}
                                         favoriteLabel={favoriteLabel}
+                                        ownedLabel={ownedLabel}
+                                        joinedLabel={joinedLabel}
+                                        publicLabel={publicLabel}
                                     />
                                 ))}
                             </div>
@@ -457,10 +511,14 @@ export const SpaceHub: React.FC = () => {
                                             favorite={isFavorite(space)}
                                             index={index}
                                             cover={coverOf(space)}
+                                            owned={isOwned(space)}
                                             onOpen={navigateToSpace}
                                             onToggleFavorite={(id) => toggleFavorite(id)}
                                             noDescription={noDescription}
                                             favoriteLabel={favoriteLabel}
+                                            ownedLabel={ownedLabel}
+                                            joinedLabel={joinedLabel}
+                                            publicLabel={publicLabel}
                                         />
                                     ))}
                                 </div>
@@ -471,11 +529,15 @@ export const SpaceHub: React.FC = () => {
                                             key={space.id}
                                             space={space}
                                             favorite={isFavorite(space)}
+                                            owned={isOwned(space)}
                                             onOpen={navigateToSpace}
                                             onToggleFavorite={(id) => toggleFavorite(id)}
                                             noDescription={noDescription}
                                             favoriteLabel={favoriteLabel}
                                             viewLabel={viewLabel}
+                                            ownedLabel={ownedLabel}
+                                            joinedLabel={joinedLabel}
+                                            publicLabel={publicLabel}
                                         />
                                     ))}
                                 </div>

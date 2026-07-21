@@ -10,14 +10,21 @@ import com.knowledge.core.message.core.IEventBus;
 import com.knowledge.wiki.service.exception.WikiException;
 import com.knowledge.wiki.service.entity.CollaborationInvitation;
 import com.knowledge.wiki.service.entity.Collaborator;
+import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.PageCollaborator;
+import com.knowledge.wiki.service.entity.enums.CollaboratorRole;
 import com.knowledge.wiki.service.entity.event.InvitationAcceptEvent;
 import com.knowledge.wiki.service.service.ICollaborationInvitationService;
 import com.knowledge.wiki.service.service.ICollaborationService;
 import com.knowledge.wiki.service.service.ICollaboratorService;
 import com.knowledge.wiki.service.service.IPageCollaboratorService;
+import com.knowledge.wiki.service.service.IPageService;
+import com.knowledge.wiki.service.service.ISpaceMemberService;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 public class CollaborationServiceImpl implements ICollaborationService {
 
     @Autowired
@@ -26,6 +33,10 @@ public class CollaborationServiceImpl implements ICollaborationService {
     private ICollaboratorService collaboratorService;
     @Autowired
     private IPageCollaboratorService pageCollaboratorService;
+    @Autowired
+    private IPageService pageService;
+    @Autowired
+    private ISpaceMemberService spaceMemberService;
     @Autowired
     private IEventBus eventBus;
 
@@ -77,11 +88,34 @@ public class CollaborationServiceImpl implements ICollaborationService {
             }
         }
 
+        // Invitee becomes a persistent space member (GUEST) so the page stays
+        // accessible through the normal routes after the inviter goes offline
+        ensureSpaceMembership(invitation);
+
         // Dispatch event
         InvitationAcceptEvent event = new InvitationAcceptEvent(this);
         event.setId(invitationId);
         eventBus.dispatch(event);
         return collaborator;
+    }
+
+    /**
+     * Idempotently add the invitee to the target space as GUEST.
+     */
+    private void ensureSpaceMembership(CollaborationInvitation invitation) {
+        Long spaceId = invitation.getSpaceId();
+        if (spaceId == null && invitation.getPageId() != null) {
+            Page page = pageService.getById(invitation.getPageId());
+            spaceId = page != null ? page.getSpaceId() : null;
+        }
+        if (spaceId == null || invitation.getInviteeId() == null) {
+            return;
+        }
+        if (!spaceMemberService.isMember(spaceId, invitation.getInviteeId())) {
+            spaceMemberService.addMember(spaceId, invitation.getInviteeId(),
+                    CollaboratorRole.GUEST, invitation.getInviterId());
+            log.info("Added invitee {} as GUEST to space {}", invitation.getInviteeId(), spaceId);
+        }
     }
 
     @Override

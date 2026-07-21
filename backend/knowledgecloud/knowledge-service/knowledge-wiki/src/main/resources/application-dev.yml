@@ -24,6 +24,9 @@ spring:
       request-timeout: 120000
 
 knowledge:
+  wiki:
+    # Front-end base URL used to build share links (/share/{shortCode})
+    front-base-url: http://localhost:5173
   rocketmq:
     enable: true
     producer:

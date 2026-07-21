@@ -5,6 +5,7 @@ import { SpaceGraph } from './pages/SpaceGraph'
 import { PageRouteSync } from './pages/SpaceDetail/PageEditor/PageRouteSync'
 import { SpaceSettings } from './pages/SpaceDetail/Settings'
 import { InviteCollaboration } from './pages/InviteCollaboration'
+import { SharedPage } from './pages/SharedPage'
 import { SpaceHub } from './pages/SpaceHub'
 import { TeamSpaceHome } from './pages/TeamSpaceHome'
 import { KPlugin, PluginConfig } from '@kn/common'
@@ -38,6 +39,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
     { name: '/all-spaces', path: '/all-spaces', element: <SpaceHub /> },
     // { name: '/ai-assistant', path: '/ai-assistant', element: <AIAssistantPage /> },
     { name: '/collaborate/:token', path: '/collaborate/:token', element: <InviteCollaboration /> },
+    { name: '/share/:shortCode', path: '/share/:shortCode', element: <SharedPage /> },
     {
       name: '/space-detail/:id',
       path: '/space-detail/:id',
@@ -183,7 +185,10 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "category-app": "应用",
           "category-feature": "功能",
           "category-connector": "连接器",
-          "clear-search": "清除搜索"
+          "clear-search": "清除搜索",
+          "badge-owned": "我拥有的",
+          "badge-joined": "我加入的",
+          "badge-public": "公开"
         },
         "toc": {
           "title": "目录",
@@ -270,15 +275,6 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "deleteError": "删除评论失败",
           "resolveError": "更新评论失败"
         },
-        "template": {
-          "emptyTitle": "暂无团队模板",
-          "emptyDesc": "将页面保存为模板以与团队共享。团队成员可以使用模板快速创建新页面。",
-          "untitled": "无标题模板",
-          "use": "使用模板",
-          "useError": "从模板创建页面失败",
-          "deleted": "模板已删除",
-          "deleteError": "删除模板失败"
-        },
         "tags": {
           "label": "标签",
           "addPlaceholder": "添加标签...",
@@ -294,7 +290,8 @@ export const DefaultPluginInstance = new DefaultPlugin({
             "name": {
               "label": "空间名称",
               "placeholder": "输入空间名称",
-              "required": "空间名称是必填项"
+              "required": "空间名称是必填项",
+              "help": "这是空间的显示名称"
             },
             "description": {
               "label": "描述",
@@ -315,7 +312,16 @@ export const DefaultPluginInstance = new DefaultPlugin({
             },
             "save": "保存更改",
             "cancel": "取消",
-            "saving": "保存中..."
+            "saving": "保存中...",
+            "retry": "请稍后重试。",
+            "visibility": {
+              "label": "可见性",
+              "private": "私密",
+              "private-desc": "仅成员可以访问此空间",
+              "public": "公开",
+              "public-desc": "工作区内的任何人都可以发现并阅读",
+              "help": "公开空间对所有工作区用户以只读方式可见"
+            }
           },
           "page": {
             "tab": "页面设置",
@@ -377,7 +383,12 @@ export const DefaultPluginInstance = new DefaultPlugin({
             },
             "delete_btn": "删除空间",
             "undo_warning": "此操作无法撤消"
-          }
+          },
+          "appearance": {
+            "title": "外观",
+            "description": "自定义空间的外观"
+          },
+          "error": "保存设置失败"
         },
         "collaboration": {
           "title": "邀请协作",
@@ -467,6 +478,12 @@ export const DefaultPluginInstance = new DefaultPlugin({
         },
         "template": {
           "title": "模板",
+          "emptyTitle": "暂无团队模板",
+          "emptyDesc": "将页面保存为模板以与团队共享。团队成员可以使用模板快速创建新页面。",
+          "use": "使用模板",
+          "useError": "从模板创建页面失败",
+          "deleted": "模板已删除",
+          "deleteError": "删除模板失败",
           "saveAsTemplate": "保存为模板",
           "untitled": "未命名模板",
           "selectTemplate": "选择模板",
@@ -512,6 +529,110 @@ export const DefaultPluginInstance = new DefaultPlugin({
         "space": {
           "title": "空间",
           "personal": "个人空间"
+        },
+        "share": {
+          "title": "分享",
+          "description": "邀请他人协作此页面",
+          "description-with-title": "分享“{{title}}”",
+          "input-placeholder": "搜索用户或输入邮箱...",
+          "invite": "邀请",
+          "invite-empty": "请先选择用户或输入邮箱",
+          "invite-success": "已发送 {{count}} 个邀请",
+          "invite-error": "发送邀请失败",
+          "invite-email": "邀请 {{email}}",
+          "people-with-access": "有权限的人",
+          "inherited-from-role": "继承自空间角色（{{role}}）",
+          "no-access": "暂无协作者",
+          "role-owner": "所有者",
+          "role-admin": "管理员",
+          "role-member": "成员",
+          "role-guest": "访客",
+          "link-title": "分享链接",
+          "link-off": "关闭",
+          "link-anyone-view": "任何拥有链接的人可查看",
+          "link-anyone-edit": "任何拥有链接的人可编辑",
+          "link-perm-view": "可查看",
+          "link-perm-edit": "可编辑",
+          "expiry-never": "永久有效",
+          "expiry-7d": "7 天",
+          "expiry-30d": "30 天",
+          "reset-link": "重置链接",
+          "reset-link-tip": "重置后旧链接将失效",
+          "copy-link": "复制链接",
+          "link-updated": "分享链接已更新",
+          "link-disabled": "分享链接已关闭",
+          "link-error": "操作分享链接失败",
+          "expires-at": "{{time}} 过期"
+        },
+        "sharedPage": {
+          "invalid-link": "无效的分享链接",
+          "resolve-error": "无法打开分享链接",
+          "loading": "正在加载分享页面...",
+          "unavailable": "链接不可用",
+          "back-home": "返回首页",
+          "untitled": "无标题",
+          "read-only": "只读",
+          "expires-at": "{{time}} 过期",
+          "enter-edit": "进入编辑"
+        },
+        "inviteLanding": {
+          "title": "页面协作邀请",
+          "subtitle": "{{name}} 邀请你协作编辑此页面",
+          "inviter": "邀请人",
+          "already-accepted": "你已接受此邀请",
+          "open-page": "打开页面",
+          "accept": "接受邀请",
+          "expires-at": "{{time}} 过期"
+        },
+        "members": {
+          "title": "空间成员",
+          "subtitle": "管理谁可以访问此空间",
+          "invite": "邀请",
+          "inviteTitle": "邀请成员",
+          "inviteDesc": "按姓名或邮箱搜索并邀请成员加入此空间。",
+          "add": "添加",
+          "allRoles": "全部角色",
+          "cancel": "取消",
+          "empty": "暂无成员",
+          "emptyDesc": "邀请团队成员开始协作",
+          "fetchError": "加载成员失败",
+          "filterPlaceholder": "搜索成员...",
+          "searchPlaceholder": "搜索用户...",
+          "noResults": "未找到用户",
+          "noMatch": "没有匹配的成员",
+          "invited": "成员邀请成功",
+          "inviteError": "邀请成员失败",
+          "joined": "加入于",
+          "invitedBy": "由 {{name}} 邀请",
+          "pagePending": "页面：{{title}}",
+          "spacePending": "空间邀请",
+          "unknownInvitee": "未知受邀人",
+          "pendingTitle": "待处理邀请",
+          "noPending": "暂无待处理邀请",
+          "revoke": "撤销",
+          "invitationRevoked": "邀请已撤销",
+          "revokeError": "撤销邀请失败",
+          "makeAdmin": "设为管理员",
+          "makeMember": "设为成员",
+          "makeGuest": "设为访客",
+          "remove": "移除",
+          "removed": "成员已移除",
+          "removeError": "移除成员失败",
+          "roleUpdated": "角色已更新",
+          "roleError": "更新角色失败",
+          "transfer": "转让所有权",
+          "transferTitle": "转让所有权？",
+          "transferDesc": "将此空间的所有权转让给 {{name}}。你将变为管理员，且此操作无法由你撤销。",
+          "transferConfirm": "转让",
+          "transferred": "所有权已转让",
+          "transferError": "转让所有权失败",
+          "leave": "退出空间",
+          "leaveTitle": "退出此空间？",
+          "leaveDesc": "你将失去对此空间所有页面的访问权限，只能通过邀请重新加入。",
+          "leaveConfirm": "退出",
+          "left": "你已退出该空间",
+          "leaveError": "退出空间失败",
+          "you": "（你）"
         },
       }
     },
@@ -580,7 +701,10 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "category-app": "App",
           "category-feature": "Feature",
           "category-connector": "Connector",
-          "clear-search": "Clear search"
+          "clear-search": "Clear search",
+          "badge-owned": "Owned",
+          "badge-joined": "Joined",
+          "badge-public": "Public"
         },
         "toc": {
           "title": "Table of Contents",
@@ -667,15 +791,6 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "deleteError": "Failed to delete comment",
           "resolveError": "Failed to update comment"
         },
-        "template": {
-          "emptyTitle": "No team templates yet",
-          "emptyDesc": "Save any page as a template to share it with your team. Team members can use templates to create new pages quickly.",
-          "untitled": "Untitled Template",
-          "use": "Use Template",
-          "useError": "Failed to create page from template",
-          "deleted": "Template deleted",
-          "deleteError": "Failed to delete template"
-        },
         "tags": {
           "label": "Tags",
           "addPlaceholder": "Add a tag...",
@@ -691,7 +806,8 @@ export const DefaultPluginInstance = new DefaultPlugin({
             "name": {
               "label": "Space Name",
               "placeholder": "Enter space name",
-              "required": "Space name is required"
+              "required": "Space name is required",
+              "help": "This is the display name for your space"
             },
             "description": {
               "label": "Description",
@@ -712,7 +828,16 @@ export const DefaultPluginInstance = new DefaultPlugin({
             },
             "save": "Save Changes",
             "cancel": "Cancel",
-            "saving": "Saving..."
+            "saving": "Saving...",
+            "retry": "Please try again later.",
+            "visibility": {
+              "label": "Visibility",
+              "private": "Private",
+              "private-desc": "Only members can access this space",
+              "public": "Public",
+              "public-desc": "Anyone in the workspace can discover and read",
+              "help": "Public spaces are visible to all workspace users in read-only mode"
+            }
           },
           "page": {
             "tab": "Pages",
@@ -774,7 +899,12 @@ export const DefaultPluginInstance = new DefaultPlugin({
             },
             "delete_btn": "Delete Space",
             "undo_warning": "This action cannot be undone"
-          }
+          },
+          "appearance": {
+            "title": "Appearance",
+            "description": "Customize how your space looks"
+          },
+          "error": "Failed to save settings"
         },
         "collaboration": {
           "title": "Invite to Edit",
@@ -864,6 +994,12 @@ export const DefaultPluginInstance = new DefaultPlugin({
         },
         "template": {
           "title": "Templates",
+          "emptyTitle": "No team templates yet",
+          "emptyDesc": "Save any page as a template to share it with your team. Team members can use templates to create new pages quickly.",
+          "use": "Use Template",
+          "useError": "Failed to create page from template",
+          "deleted": "Template deleted",
+          "deleteError": "Failed to delete template",
           "saveAsTemplate": "Save as Template",
           "untitled": "Untitled Template",
           "selectTemplate": "Select Template",
@@ -909,6 +1045,110 @@ export const DefaultPluginInstance = new DefaultPlugin({
         "space": {
           "title": "Space",
           "personal": "Personal Space"
+        },
+        "share": {
+          "title": "Share",
+          "description": "Invite people to collaborate on this page",
+          "description-with-title": "Share \"{{title}}\"",
+          "input-placeholder": "Search people or enter an email...",
+          "invite": "Invite",
+          "invite-empty": "Select a user or enter an email first",
+          "invite-success": "Sent {{count}} invitation(s)",
+          "invite-error": "Failed to send invitation",
+          "invite-email": "Invite {{email}}",
+          "people-with-access": "People with access",
+          "inherited-from-role": "Inherited from space role ({{role}})",
+          "no-access": "No collaborators yet",
+          "role-owner": "Owner",
+          "role-admin": "Admin",
+          "role-member": "Member",
+          "role-guest": "Guest",
+          "link-title": "Share link",
+          "link-off": "Off",
+          "link-anyone-view": "Anyone with the link can view",
+          "link-anyone-edit": "Anyone with the link can edit",
+          "link-perm-view": "Can view",
+          "link-perm-edit": "Can edit",
+          "expiry-never": "Never expires",
+          "expiry-7d": "7 days",
+          "expiry-30d": "30 days",
+          "reset-link": "Reset link",
+          "reset-link-tip": "The old link will stop working after reset",
+          "copy-link": "Copy link",
+          "link-updated": "Share link updated",
+          "link-disabled": "Share link disabled",
+          "link-error": "Failed to update share link",
+          "expires-at": "Expires {{time}}"
+        },
+        "sharedPage": {
+          "invalid-link": "Invalid share link",
+          "resolve-error": "Failed to open the share link",
+          "loading": "Loading shared page...",
+          "unavailable": "Link unavailable",
+          "back-home": "Back to home",
+          "untitled": "Untitled",
+          "read-only": "Read-only",
+          "expires-at": "Expires {{time}}",
+          "enter-edit": "Open in editor"
+        },
+        "inviteLanding": {
+          "title": "Page collaboration invitation",
+          "subtitle": "{{name}} invited you to collaborate on this page",
+          "inviter": "Invited by",
+          "already-accepted": "You have already accepted this invitation",
+          "open-page": "Open page",
+          "accept": "Accept invitation",
+          "expires-at": "Expires {{time}}"
+        },
+        "members": {
+          "title": "Space Members",
+          "subtitle": "Manage who has access to this space",
+          "invite": "Invite",
+          "inviteTitle": "Invite Members",
+          "inviteDesc": "Search by name or email to invite members to this space.",
+          "add": "Add",
+          "allRoles": "All roles",
+          "cancel": "Cancel",
+          "empty": "No members yet",
+          "emptyDesc": "Invite team members to start collaborating",
+          "fetchError": "Failed to load members",
+          "filterPlaceholder": "Search members...",
+          "searchPlaceholder": "Search users...",
+          "noResults": "No users found",
+          "noMatch": "No members match the filter",
+          "invited": "Member invited successfully",
+          "inviteError": "Failed to invite member",
+          "joined": "Joined",
+          "invitedBy": "by {{name}}",
+          "pagePending": "Page: {{title}}",
+          "spacePending": "Space invitation",
+          "unknownInvitee": "Unknown invitee",
+          "pendingTitle": "Pending Invitations",
+          "noPending": "No pending invitations",
+          "revoke": "Revoke",
+          "invitationRevoked": "Invitation revoked",
+          "revokeError": "Failed to revoke invitation",
+          "makeAdmin": "Make Admin",
+          "makeMember": "Make Member",
+          "makeGuest": "Make Guest",
+          "remove": "Remove",
+          "removed": "Member removed",
+          "removeError": "Failed to remove member",
+          "roleUpdated": "Role updated",
+          "roleError": "Failed to update role",
+          "transfer": "Transfer Ownership",
+          "transferTitle": "Transfer ownership?",
+          "transferDesc": "Transfer ownership of this space to {{name}}. You will become an Admin and this cannot be undone by you.",
+          "transferConfirm": "Transfer",
+          "transferred": "Ownership transferred",
+          "transferError": "Failed to transfer ownership",
+          "leave": "Leave Space",
+          "leaveTitle": "Leave this space?",
+          "leaveDesc": "You will lose access to all pages in this space. You can rejoin only by invitation.",
+          "leaveConfirm": "Leave",
+          "left": "You have left the space",
+          "leaveError": "Failed to leave the space",
+          "you": "(you)"
         },
       }
     },

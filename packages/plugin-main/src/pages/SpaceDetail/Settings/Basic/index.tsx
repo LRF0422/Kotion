@@ -1,8 +1,9 @@
 import { IconPropsProps, IconSelector } from "@kn/ui";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormDescription, FormMessage } from "@kn/ui";
 import { Input } from "@kn/ui";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
 import { Textarea } from "@kn/ui";
-import { Plus, Upload, CheckCircle2 } from "@kn/icon";
+import { Plus, Upload, CheckCircle2, Globe, Lock } from "@kn/icon";
 import React, { useContext, useState } from "react";
 import { Button } from "@kn/ui";
 import { SettingContext } from "..";
@@ -30,7 +31,8 @@ export const Basic: React.FC = () => {
             error: t("space-settings.basic.name.required")
         }).min(1, t("space-settings.basic.name.required")),
         description: z.string().optional(),
-        cover: z.string().optional()
+        cover: z.string().optional(),
+        visibility: z.enum(['PRIVATE', 'PUBLIC']).optional()
     })
 
     const form = useForm<z.infer<typeof FormSchema>>({
@@ -101,6 +103,47 @@ export const Basic: React.FC = () => {
                                 </FormControl>
                                 <FormDescription>
                                     {t("space-settings.basic.description.help")}
+                                </FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+
+                    <FormField
+                        control={form.control}
+                        name="visibility"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>{t("space-settings.basic.visibility.label", { defaultValue: "Visibility" })}</FormLabel>
+                                <FormControl>
+                                    <Select value={field.value || 'PRIVATE'} onValueChange={field.onChange}>
+                                        <SelectTrigger className="max-w-md">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="PRIVATE">
+                                                <div className="flex items-center gap-2">
+                                                    <Lock className="h-4 w-4 text-muted-foreground" />
+                                                    <div className="text-left">
+                                                        <div>{t("space-settings.basic.visibility.private", { defaultValue: "Private" })}</div>
+                                                        <div className="text-xs text-muted-foreground">{t("space-settings.basic.visibility.private-desc", { defaultValue: "Only members can access this space" })}</div>
+                                                    </div>
+                                                </div>
+                                            </SelectItem>
+                                            <SelectItem value="PUBLIC">
+                                                <div className="flex items-center gap-2">
+                                                    <Globe className="h-4 w-4 text-muted-foreground" />
+                                                    <div className="text-left">
+                                                        <div>{t("space-settings.basic.visibility.public", { defaultValue: "Public" })}</div>
+                                                        <div className="text-xs text-muted-foreground">{t("space-settings.basic.visibility.public-desc", { defaultValue: "Anyone in the workspace can discover and read" })}</div>
+                                                    </div>
+                                                </div>
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </FormControl>
+                                <FormDescription>
+                                    {t("space-settings.basic.visibility.help", { defaultValue: "Public spaces are visible to all workspace users in read-only mode" })}
                                 </FormDescription>
                                 <FormMessage />
                             </FormItem>

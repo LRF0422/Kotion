@@ -127,10 +127,24 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                 // to trigger reinit, so emitting it would cause an infinite refresh loop.
                 event.emit(PLUGIN_INIT_SUCCESS)
             } else {
-                // No auth token, redirect to login
+                // Public share pages are viewable without authentication:
+                // initialize with built-in plugins only so their routes resolve.
+                if (window.location.pathname.startsWith('/share/')) {
+                    console.log('No token, but public share route - loading built-in plugins')
+                    await pluginManager.init([])
+                    setPluginsLoaded(true)
+                    onPluginsReady(true)
+                    event.emit(PLUGIN_INIT_SUCCESS)
+                    return
+                }
+                // No auth token, redirect to login preserving the deep link
+                // (e.g. invitation links) so the user lands back after login
                 console.log('No token found, redirecting to login')
                 await pluginManager.init([])
-                window.location.href = '/login'
+                const backTo = window.location.pathname + window.location.search
+                window.location.href = backTo && backTo !== '/'
+                    ? '/login?redirect=' + encodeURIComponent(backTo)
+                    : '/login'
             }
         } catch (error) {
             console.error('Failed to load plugins:', error)

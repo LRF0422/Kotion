@@ -25,7 +25,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSelector } from "@kn/common";
 import { useParams } from "@kn/common";
 import { toast } from "@kn/ui";
-import { CollaborationInvitationDlg } from "../../components/CollaborationInvitationDlg";
+import { SharePanel } from "../../components/SharePanel";
 import { PageBreadcrumb } from "../../../components/PageBreadcrumb";
 import { TemplateCreator } from "../TemplateCreator";
 import { SpaceGraph } from "../../SpaceGraph";
@@ -606,13 +606,13 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                             </>
                         )}
 
-                        {/* Invite Button */}
-                        <CollaborationInvitationDlg pageTitle={page?.title}>
+                        {/* Share Button */}
+                        <SharePanel pageTitle={page?.title}>
                             <Button variant="ghost" size="sm" className="h-7 px-2 gap-1 text-muted-foreground hover:text-foreground">
                                 <UserPlus className="h-3.5 w-3.5" />
-                                <span className="hidden sm:inline text-xs">Invite</span>
+                                <span className="hidden sm:inline text-xs">Share</span>
                             </Button>
-                        </CollaborationInvitationDlg>
+                        </SharePanel>
 
                         <Separator orientation="vertical" className="h-5" />
                     </>

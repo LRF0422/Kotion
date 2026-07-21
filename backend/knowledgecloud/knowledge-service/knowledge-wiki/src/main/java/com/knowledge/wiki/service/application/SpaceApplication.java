@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,11 +54,14 @@ import com.knowledge.wiki.service.entity.dto.ShareLinkResponseDTO;
 import com.knowledge.wiki.service.entity.dto.SpaceMemberDTO;
 import com.knowledge.wiki.service.entity.enums.SpaceType;
 import com.knowledge.wiki.service.entity.enums.SpacePermissionEnum;
+import com.knowledge.wiki.service.entity.enums.InvitationStatus;
 import com.knowledge.wiki.service.entity.enums.PageStatus;
 import com.knowledge.wiki.service.entity.vo.InvitedPageVO;
 import com.knowledge.wiki.service.entity.vo.PageBlockVO;
 import com.knowledge.wiki.service.entity.vo.PageContentVO;
 import com.knowledge.wiki.service.entity.vo.PageVO;
+import com.knowledge.wiki.service.entity.vo.PendingInvitationVO;
+import com.knowledge.wiki.service.entity.vo.SharedPageVO;
 import com.knowledge.wiki.service.entity.vo.SpaceVO;
 import com.knowledge.wiki.service.entity.vo.BacklinkVO;
 import com.knowledge.wiki.service.entity.vo.GraphEdgeVO;
@@ -73,6 +77,7 @@ import com.knowledge.wiki.service.entity.WikiLink;
 import com.knowledge.wiki.service.entity.BlockVersion;
 import com.knowledge.wiki.service.entity.vo.BlockVersionVO;
 import com.knowledge.wiki.service.service.IFavoriteService;
+import com.knowledge.wiki.service.service.ICollaborationInvitationService;
 import com.knowledge.wiki.service.service.IPageService;
 import com.knowledge.wiki.service.service.IPageSnapshotService;
 import com.knowledge.wiki.service.service.IPageCollaboratorService;
@@ -80,6 +85,7 @@ import com.knowledge.wiki.service.service.IShareLinkService;
 import com.knowledge.wiki.service.service.ISpaceService;
 import com.knowledge.wiki.service.service.IWikiLinkService;
 import com.knowledge.wiki.service.service.IBlockVersionService;
+import com.knowledge.wiki.service.service.IPermissionService;
 import com.knowledge.wiki.service.service.ISpaceMemberService;
 import com.knowledge.system.vo.UserVO;
 
@@ -123,6 +129,16 @@ public class SpaceApplication {
     private IPageSnapshotService pageSnapshotService;
     @Autowired
     private ISpaceMemberService spaceMemberService;
+    @Autowired
+    private IPermissionService permissionService;
+    @Autowired
+    private ICollaborationInvitationService collaborationInvitationService;
+
+    /**
+     * Front-end base URL used to build share links, e.g. http://localhost:5173
+     */
+    @Value("${knowledge.wiki.front-base-url:}")
+    private String frontBaseUrl;
 
     /**
      * Create a new space
@@ -352,6 +368,9 @@ public class SpaceApplication {
         if (page == null) {
             throw WikiException.PAGE_NOT_FOUND.newException();
         }
+        // Enforce unified permission model: viewer needs at least READ access
+        permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
+                IPermissionService.PERMISSION_READ);
         PageVO vo = PageConverter.INSTANCE.convertVO(page);
         vo.setFavorite(favoriteService.checkFavorite(pageId, SecurityContextUtil.getUserId()));
 
@@ -649,7 +668,23 @@ public class SpaceApplication {
     }
 
     public List<Tree<Long>> getSpacePageTree(Long spaceId, String searchValue) {
+        Space space = spaceService.getById(spaceId);
+        if (space == null) {
+            throw WikiException.SPACE_NOT_FOUND.newException();
+        }
+        Long userId = SecurityContextUtil.getUserId();
         List<Tree<Long>> tree = spaceService.getPageService().getPageTree(spaceId, searchValue);
+
+        // Users without space-wide access (e.g. GUEST) only see pages they were
+        // explicitly granted, plus the ancestors needed to render the tree.
+        if (permissionService.effectiveSpacePermission(userId, space) == null) {
+            Set<Long> grantedPageIds = permissionService.getGrantedPageIds(userId, spaceId);
+            if (CollUtil.isEmpty(grantedPageIds)) {
+                throw WikiException.FORBIDDEN_ACCESS.newException();
+            }
+            tree = filterTreeByGrantedPages(tree, grantedPageIds);
+        }
+
         if (tree != null) {
             tree.forEach(it -> {
                 it.walk(t -> {
@@ -658,6 +693,25 @@ public class SpaceApplication {
             });
         }
         return tree;
+    }
+
+    /**
+     * Keep only granted pages and their ancestor chain in the page tree.
+     */
+    private List<Tree<Long>> filterTreeByGrantedPages(List<Tree<Long>> nodes, Set<Long> grantedPageIds) {
+        if (CollUtil.isEmpty(nodes)) {
+            return nodes;
+        }
+        List<Tree<Long>> kept = new ArrayList<>();
+        for (Tree<Long> node : nodes) {
+            List<Tree<Long>> children = filterTreeByGrantedPages(node.getChildren(), grantedPageIds);
+            boolean hasVisibleChild = CollUtil.isNotEmpty(children);
+            if (grantedPageIds.contains(node.getId()) || hasVisibleChild) {
+                node.setChildren(hasVisibleChild ? children : null);
+                kept.add(node);
+            }
+        }
+        return kept;
     }
 
     public void addFavoritePage(Long pageId) {
@@ -1180,13 +1234,26 @@ public class SpaceApplication {
     }
 
     public ShareLinkResponseDTO generateShareLink(Long pageId, ShareLinkRequestDTO dto) {
+        Long userId = SecurityContextUtil.getUserId();
+        Page page = pageService.getById(pageId);
+        if (page == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        // Only users who can edit the page may manage its share link
+        permissionService.checkPagePermission(userId, page, IPermissionService.PERMISSION_WRITE);
+
+        // One active link per page: regenerating invalidates the previous one
+        shareLinkService.lambdaUpdate()
+                .eq(ShareLink::getPageId, pageId)
+                .remove();
+
         String shortCode = cn.hutool.core.util.IdUtil.fastSimpleUUID().substring(0, 9);
 
         ShareLink shareLink = new ShareLink();
         shareLink.setPageId(pageId);
         shareLink.setShortCode(shortCode);
-        shareLink.setCreatedBy(SecurityContextUtil.getUserId());
-        shareLink.setIsPublic(dto.getIsPublic() != null ? dto.getIsPublic() : false);
+        shareLink.setCreatedBy(userId);
+        shareLink.setIsPublic(dto.getIsPublic() != null ? dto.getIsPublic() : true);
         shareLink.setPermission(dto.getPermission() != null ? dto.getPermission() : "READ");
         shareLink.setCreatedAt(java.time.LocalDateTime.now());
 
@@ -1196,15 +1263,244 @@ public class SpaceApplication {
 
         shareLinkService.save(shareLink);
 
+        return toShareLinkResponse(shareLink);
+    }
+
+    /**
+     * Get the current active share link of a page, or null when sharing is off.
+     */
+    public ShareLinkResponseDTO getPageShareLink(Long pageId) {
+        Page page = pageService.getById(pageId);
+        if (page == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
+                IPermissionService.PERMISSION_READ);
+
+        ShareLink shareLink = shareLinkService.lambdaQuery()
+                .eq(ShareLink::getPageId, pageId)
+                .orderByDesc(ShareLink::getCreatedAt)
+                .last("limit 1")
+                .one();
+        if (shareLink == null) {
+            return null;
+        }
+        return toShareLinkResponse(shareLink);
+    }
+
+    /**
+     * Disable (delete) a share link of a page.
+     */
+    public void disableShareLink(Long pageId, String shortCode) {
+        Page page = pageService.getById(pageId);
+        if (page == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
+                IPermissionService.PERMISSION_WRITE);
+
+        shareLinkService.lambdaUpdate()
+                .eq(ShareLink::getPageId, pageId)
+                .eq(ShareLink::getShortCode, shortCode)
+                .remove();
+    }
+
+    /**
+     * Resolve a share link short code into read-only page content.
+     * Publicly accessible (no authentication required).
+     */
+    public SharedPageVO resolveShareLink(String shortCode) {
+        if (StrUtil.isBlank(shortCode)) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        ShareLink shareLink = shareLinkService.lambdaQuery()
+                .eq(ShareLink::getShortCode, shortCode)
+                .one();
+        if (shareLink == null) {
+            throw WikiException.SHARE_LINK_NOT_FOUND.newException();
+        }
+        if (Boolean.FALSE.equals(shareLink.getIsPublic())) {
+            throw WikiException.SHARE_LINK_DISABLED.newException();
+        }
+        if (shareLink.getExpiresAt() != null
+                && shareLink.getExpiresAt().isBefore(java.time.LocalDateTime.now())) {
+            throw WikiException.SHARE_LINK_EXPIRED.newException();
+        }
+
+        if (pageService.getById(shareLink.getPageId()) == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        Page page = pageService.getPageContent(shareLink.getPageId());
+        if (page == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+
+        SharedPageVO vo = new SharedPageVO();
+        vo.setPageId(page.getId());
+        vo.setSpaceId(page.getSpaceId());
+        vo.setTitle(page.getTitle());
+        vo.setContent(page.getContent());
+        vo.setPermission(shareLink.getPermission());
+        vo.setExpiresAt(shareLink.getExpiresAt());
+        vo.setUpdateTime(page.getUpdateTime());
+        return vo;
+    }
+
+    private ShareLinkResponseDTO toShareLinkResponse(ShareLink shareLink) {
         ShareLinkResponseDTO response = new ShareLinkResponseDTO();
-        response.setLink("https://app.example.com/share/" + shortCode);
-        response.setShortCode(shortCode);
+        response.setLink(buildShareUrl(shareLink.getShortCode()));
+        response.setShortCode(shareLink.getShortCode());
         response.setExpiresAt(shareLink.getExpiresAt());
         response.setIsPublic(shareLink.getIsPublic());
         response.setPermission(shareLink.getPermission());
         response.setCreatedAt(shareLink.getCreatedAt());
-
         return response;
+    }
+
+    private String buildShareUrl(String shortCode) {
+        String base = StrUtil.isNotBlank(frontBaseUrl)
+                ? StrUtil.removeSuffix(frontBaseUrl.trim(), "/")
+                : "";
+        return base + "/share/" + shortCode;
+    }
+
+    /**
+     * List pending invitations of a space (space-level and page-level).
+     * Only space admins may view.
+     * GET /knowledge-wiki/space/{id}/invitations/pending
+     */
+    public List<PendingInvitationVO> getPendingInvitations(Long spaceId) {
+        Space space = spaceService.getById(spaceId);
+        if (space == null) {
+            throw WikiException.SPACE_NOT_FOUND.newException();
+        }
+        Long userId = SecurityContextUtil.getUserId();
+        if (!IPermissionService.PERMISSION_ADMIN
+                .equals(permissionService.effectiveSpacePermission(userId, space))) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
+        }
+
+        List<CollaborationInvitation> invitations = new ArrayList<>(
+                collaborationInvitationService.lambdaQuery()
+                        .eq(CollaborationInvitation::getSpaceId, spaceId)
+                        .eq(CollaborationInvitation::getStatus, InvitationStatus.PENDING)
+                        .list());
+
+        // Page-level invitations created without an explicit spaceId
+        List<Long> spacePageIds = pageService.lambdaQuery()
+                .select(Page::getId)
+                .eq(Page::getSpaceId, spaceId)
+                .list()
+                .stream()
+                .map(Page::getId)
+                .collect(Collectors.toList());
+        if (CollUtil.isNotEmpty(spacePageIds)) {
+            invitations.addAll(collaborationInvitationService.lambdaQuery()
+                    .isNull(CollaborationInvitation::getSpaceId)
+                    .in(CollaborationInvitation::getPageId, spacePageIds)
+                    .eq(CollaborationInvitation::getStatus, InvitationStatus.PENDING)
+                    .list());
+        }
+        if (CollUtil.isEmpty(invitations)) {
+            return ListUtil.empty();
+        }
+
+        // Enrich with user names and page titles
+        List<Long> userIds = new ArrayList<>();
+        invitations.forEach(inv -> {
+            if (inv.getInviteeId() != null) {
+                userIds.add(inv.getInviteeId());
+            }
+            if (inv.getInviterId() != null) {
+                userIds.add(inv.getInviterId());
+            }
+        });
+        Map<Long, KnowledgeUser> userMap = new HashMap<>();
+        if (CollUtil.isNotEmpty(userIds)) {
+            List<KnowledgeUser> users = ApiClientUtil.resolvingResponse(
+                    userClient.listByIds(userIds.stream().distinct().collect(Collectors.toList())));
+            if (CollUtil.isNotEmpty(users)) {
+                userMap = users.stream()
+                        .collect(Collectors.toMap(KnowledgeUser::getUserId, u -> u, (a, b) -> a));
+            }
+        }
+        List<Long> invPageIds = invitations.stream()
+                .map(CollaborationInvitation::getPageId)
+                .filter(id -> id != null)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, Page> pageMap = new HashMap<>();
+        if (CollUtil.isNotEmpty(invPageIds)) {
+            List<Page> pages = pageService.listByIds(invPageIds);
+            if (CollUtil.isNotEmpty(pages)) {
+                pageMap = pages.stream().collect(Collectors.toMap(Page::getId, p -> p, (a, b) -> a));
+            }
+        }
+
+        Map<Long, KnowledgeUser> finalUserMap = userMap;
+        Map<Long, Page> finalPageMap = pageMap;
+        return invitations.stream()
+                .sorted((a, b) -> {
+                    if (a.getCreatedAt() == null || b.getCreatedAt() == null) {
+                        return 0;
+                    }
+                    return b.getCreatedAt().compareTo(a.getCreatedAt());
+                })
+                .map(inv -> {
+                    PendingInvitationVO vo = new PendingInvitationVO();
+                    vo.setId(inv.getId());
+                    vo.setSpaceId(spaceId);
+                    vo.setPageId(inv.getPageId());
+                    vo.setInviteeId(inv.getInviteeId());
+                    vo.setInviterId(inv.getInviterId());
+                    vo.setPermission(inv.getPermission());
+                    vo.setCreatedAt(inv.getCreatedAt());
+                    vo.setExpiresAt(inv.getExpiresAt());
+                    KnowledgeUser invitee = finalUserMap.get(inv.getInviteeId());
+                    if (invitee != null) {
+                        vo.setInviteeName(invitee.getUserName());
+                        vo.setInviteeEmail(invitee.getEmail());
+                    }
+                    KnowledgeUser inviter = finalUserMap.get(inv.getInviterId());
+                    if (inviter != null) {
+                        vo.setInviterName(inviter.getUserName());
+                    }
+                    Page page = finalPageMap.get(inv.getPageId());
+                    if (page != null) {
+                        vo.setPageTitle(page.getTitle());
+                    }
+                    return vo;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Revoke a pending invitation. Allowed for space admins or the inviter.
+     * DELETE /knowledge-wiki/space/{id}/invitations/{invitationId}
+     */
+    public void revokeInvitation(Long spaceId, Long invitationId) {
+        Space space = spaceService.getById(spaceId);
+        if (space == null) {
+            throw WikiException.SPACE_NOT_FOUND.newException();
+        }
+        CollaborationInvitation invitation = collaborationInvitationService.getById(invitationId);
+        if (invitation == null) {
+            throw WikiException.INVITATION_NOT_FOUND.newException();
+        }
+        if (invitation.getStatus() != InvitationStatus.PENDING) {
+            throw WikiException.INVALID_INVITATION_STATUS.newException();
+        }
+        Long userId = SecurityContextUtil.getUserId();
+        boolean isAdmin = IPermissionService.PERMISSION_ADMIN
+                .equals(permissionService.effectiveSpacePermission(userId, space));
+        if (!isAdmin && !userId.equals(invitation.getInviterId())) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
+        }
+        collaborationInvitationService.lambdaUpdate()
+                .eq(CollaborationInvitation::getId, invitationId)
+                .set(CollaborationInvitation::getStatus, InvitationStatus.EXPIRED)
+                .set(CollaborationInvitation::getUpdatedAt, java.time.LocalDateTime.now())
+                .update();
     }
 
     /**

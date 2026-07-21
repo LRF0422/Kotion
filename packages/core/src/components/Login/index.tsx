@@ -2,7 +2,7 @@ import { Button } from "@kn/ui"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@kn/ui"
 import { Input } from "@kn/ui"
 import { useForm } from "@kn/ui"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { z } from "@kn/ui"
 import { zodResolver } from '@kn/ui';
 import { useApi } from "@kn/common"
@@ -23,6 +23,7 @@ export function Login() {
     const [loginSuccess, setLoginSuccess] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const { t } = useTranslation()
 
     const formSchema = z.object({
@@ -53,8 +54,12 @@ export function Login() {
             // Always enter the workspace. First-run onboarding is handled in-app by
             // TourHost (auto-starts the welcome tour for users who haven't seen it).
             setLoginSuccess(true)
+            // Honor ?redirect=<relative path> so flows like invitation links can
+            // resume where the user left off (only same-origin relative paths).
+            const redirect = searchParams.get('redirect')
+            const target = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
             // Small delay so the overlay paints before React starts unmounting Login
-            setTimeout(() => navigate('/'), 150)
+            setTimeout(() => navigate(target), 150)
         }).catch(e => {
             setLoading(false)
         })
