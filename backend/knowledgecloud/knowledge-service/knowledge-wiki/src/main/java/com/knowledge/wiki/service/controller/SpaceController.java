@@ -429,6 +429,21 @@ public class SpaceController {
     }
 
     /**
+     * Rollback page to a specific version. Creates a brand-new ACTIVE
+     * version containing the rollback delta (non-destructive restore).
+     * POST /knowledge-wiki/space/page/:pageId/rollback
+     */
+    @PostMapping("/page/{pageId}/rollback")
+    public R<com.knowledge.wiki.service.entity.PageVersion> rollbackPageVersion(
+            @PathVariable("pageId") Long pageId,
+            @RequestBody com.knowledge.wiki.service.entity.dto.RollbackVersionDTO dto) {
+        return R.data(spaceApplication.rollbackPageVersion(
+                pageId,
+                dto.getTargetVersionId(),
+                dto.getChangeSummary()));
+    }
+
+    /**
      * Delete draft version
      * DELETE /knowledge-wiki/space/page/:pageId/draft
      */

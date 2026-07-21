@@ -19,7 +19,7 @@ import {
     Download, FileIcon, FileText,
     Link, LoaderCircle,
     MoreHorizontal, Trash2, Upload, List,
-    CloudOff, UserPlus, Star, Network, MoveHorizontal
+    CloudOff, UserPlus, Star, Network, MoveHorizontal, History
 } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "@kn/common";
@@ -29,6 +29,7 @@ import { SharePanel } from "../../components/SharePanel";
 import { PageBreadcrumb } from "../../../components/PageBreadcrumb";
 import { TemplateCreator } from "../TemplateCreator";
 import { SpaceGraph } from "../../SpaceGraph";
+import { PageVersionHistory } from "./PageVersionHistory";
 
 // Status display configuration for save state
 const getStatusDisplay = (saving: boolean, dirty: boolean, error: Error | null, progress?: { done: number; total: number } | null) => {
@@ -163,6 +164,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const { usePath } = useUploadFile();
     const [editorContentReady, setEditorContentReady] = useState(false)
     const [graphOpen, setGraphOpen] = useState(false)
+    const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
 
     // Generate stable user color based on user ID
     const userColor = useMemo(() => {
@@ -430,6 +432,30 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         }
     }, [pageId, spaceId, navigator, t])
 
+    // After a server-side rollback the editor's collab doc still holds the
+    // pre-rollback content. Re-fetch the persisted page and push it into the
+    // editor (updates the Y.Doc so peers converge too), then re-baseline the
+    // dirty tracker so autosave doesn't immediately patch the restored
+    // content back to the server.
+    const handleVersionRestored = useCallback(async () => {
+        if (!pageId) return
+        try {
+            const res: any = await spaceService.getPage(pageId)
+            setPage(res)
+            const ed = editor.current
+            if (ed && res?.content) {
+                const restored = JSON.parse((res.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">"))
+                ed.commands.setContent(restored)
+                const tracker = (ed.storage as any)?.dirtyTracker
+                tracker?.commit?.()
+            }
+            event.emit(ON_PAGE_REFRESH)
+        } catch (err) {
+            console.error('Failed to refresh page after restore:', err)
+            toast.error(t('editor.version.refreshFailed', 'Restored on server — reload the page to see it'))
+        }
+    }, [pageId, spaceService, t])
+
     // Markdown import handler
     const handleImportMarkdown = useCallback(() => {
         const input = document.createElement('input');
@@ -500,6 +526,44 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         e.preventDefault()
         saveNow()
     })
+
+    // Markdown export: serialize the doc via the built-in tiptap-markdown
+    // extension and download it as a .md file. The custom `title` node is
+    // stripped from the serialized body and re-emitted as a proper H1 so the
+    // output round-trips with `handleImportMarkdown` above.
+    const handleExportMarkdown = useCallback(() => {
+        const ed = editor.current
+        if (!ed) return
+        try {
+            const markdownStorage = (ed.storage as any)?.markdown
+            const doc = ed.state.doc
+            const first = doc.firstChild
+            const title = (first?.type.name === 'title' && first.textContent) || page?.title || 'document'
+
+            let bodyMd: string
+            if (markdownStorage?.serializer && first?.type.name === 'title') {
+                // Serialize everything after the title node
+                const bodyDoc = doc.type.create(doc.attrs, doc.content.cut(first.nodeSize, doc.content.size))
+                bodyMd = markdownStorage.serializer.serialize(bodyDoc)
+            } else {
+                bodyMd = markdownStorage?.getMarkdown?.() ?? ed.getText()
+            }
+
+            const md = `# ${title}\n\n${bodyMd}`.trimEnd() + '\n'
+            const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `${title}.md`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+        } catch (err) {
+            console.error('Failed to export markdown:', err)
+            toast.error(t('editor.exportMarkdownFailed', 'Failed to export as Markdown'))
+        }
+    }, [page?.title, t])
 
     // Get current status display
     const statusDisplay = getStatusDisplay(saving, dirty, saveError, saveProgress)
@@ -682,6 +746,15 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                 </div>
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                                onClick={() => setVersionHistoryOpen(true)}
+                                disabled={!pageId}
+                            >
+                                <div className="flex flex-row items-center gap-2">
+                                    <History className="h-4 w-4" />
+                                    <span>{t('editor.versionHistory', 'Version history')}</span>
+                                </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
                                 onClick={handleMoveToTrash}
                             >
@@ -735,6 +808,12 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                                 <span>{t('editor.asPdf', 'As PDF')}</span>
                                             </div>
                                         </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={handleExportMarkdown}>
+                                            <div className="flex flex-row items-center gap-2">
+                                                <FileText className="h-4 w-4" />
+                                                <span>{t('editor.asMarkdown', 'As Markdown')}</span>
+                                            </div>
+                                        </DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuPortal>
                             </DropdownMenuSub>
@@ -763,6 +842,12 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 />
             }
         </main>
+        <PageVersionHistory
+            open={versionHistoryOpen}
+            onOpenChange={setVersionHistoryOpen}
+            pageId={pageId}
+            onRestored={handleVersionRestored}
+        />
         <Sheet open={graphOpen} onOpenChange={setGraphOpen}>
             <SheetContent
                 side="right"

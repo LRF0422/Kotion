@@ -476,6 +476,24 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "copyLink": "复制链接",
           "moveToTrash": "移动到回收站"
         },
+        "editor": {
+          "versionHistory": "版本历史",
+          "asMarkdown": "导出为 Markdown",
+          "exportMarkdownFailed": "导出 Markdown 失败",
+          "version": {
+            "current": "当前",
+            "draft": "草稿",
+            "empty": "暂无版本",
+            "restore": "恢复",
+            "cancel": "取消",
+            "loadFailed": "加载版本历史失败",
+            "restoreSuccess": "已恢复到版本 {{version}}",
+            "restoreFailed": "恢复版本失败",
+            "refreshFailed": "服务端已恢复，请刷新页面查看",
+            "confirmTitle": "恢复到此版本？",
+            "confirmDesc": "页面将恢复到版本 {{version}}。此操作会创建一个新版本，当前内容仍保留在历史记录中，不会丢失。"
+          }
+        },
         "template": {
           "title": "模板",
           "emptyTitle": "暂无团队模板",
@@ -523,8 +541,12 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "restore": "恢复"
         },
         "search": {
-          "placeholder": "搜索页面...",
-          "empty": "未找到结果"
+          "placeholder": "搜索页面和内容...",
+          "empty": "未找到结果",
+          "pages": "页面",
+          "content": "内容",
+          "searching": "搜索中...",
+          "quickActions": "快捷操作"
         },
         "space": {
           "title": "空间",
@@ -992,6 +1014,24 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "copyLink": "Copy link",
           "moveToTrash": "Move to trash"
         },
+        "editor": {
+          "versionHistory": "Version history",
+          "asMarkdown": "As Markdown",
+          "exportMarkdownFailed": "Failed to export as Markdown",
+          "version": {
+            "current": "Current",
+            "draft": "Draft",
+            "empty": "No versions yet",
+            "restore": "Restore",
+            "cancel": "Cancel",
+            "loadFailed": "Failed to load version history",
+            "restoreSuccess": "Restored to version {{version}}",
+            "restoreFailed": "Failed to restore version",
+            "refreshFailed": "Restored on server — reload the page to see it",
+            "confirmTitle": "Restore this version?",
+            "confirmDesc": "The page will be restored to version {{version}}. This creates a new version — the current content is kept in history and nothing is lost."
+          }
+        },
         "template": {
           "title": "Templates",
           "emptyTitle": "No team templates yet",
@@ -1039,8 +1079,12 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "restore": "Restore"
         },
         "search": {
-          "placeholder": "Search pages...",
-          "empty": "No results found."
+          "placeholder": "Search pages and content...",
+          "empty": "No results found.",
+          "pages": "Pages",
+          "content": "Content",
+          "searching": "Searching...",
+          "quickActions": "Quick Actions"
         },
         "space": {
           "title": "Space",

@@ -85,6 +85,7 @@ import com.knowledge.wiki.service.service.IShareLinkService;
 import com.knowledge.wiki.service.service.ISpaceService;
 import com.knowledge.wiki.service.service.IWikiLinkService;
 import com.knowledge.wiki.service.service.IBlockVersionService;
+import com.knowledge.wiki.service.service.IPageContentService;
 import com.knowledge.wiki.service.service.IPermissionService;
 import com.knowledge.wiki.service.service.ISpaceMemberService;
 import com.knowledge.system.vo.UserVO;
@@ -133,6 +134,8 @@ public class SpaceApplication {
     private IPermissionService permissionService;
     @Autowired
     private ICollaborationInvitationService collaborationInvitationService;
+    @Autowired
+    private IPageContentService pageContentService;
 
     /**
      * Front-end base URL used to build share links, e.g. http://localhost:5173
@@ -1055,8 +1058,58 @@ public class SpaceApplication {
      * Note: Implementation pending - currently returns empty list
      */
     public List<PageBlockDetailVO> searchBlocks(String keyword, Long pageId, Long spaceId) {
-        // TODO: Implement block search using block storage
-        return new ArrayList<>();
+        if (StrUtil.isBlank(keyword)) {
+            return new ArrayList<>();
+        }
+
+        // Resolve searchable pages first so trashed/deleted pages never leak into results
+        Map<Long, Page> pageMap;
+        if (pageId != null) {
+            Page page = pageService.getById(pageId);
+            if (page == null || page.getStatus() == PageStatus.DELETED || page.getStatus() == PageStatus.TRASH) {
+                return new ArrayList<>();
+            }
+            pageMap = new HashMap<>();
+            pageMap.put(page.getId(), page);
+        } else if (spaceId != null) {
+            List<Page> pages = pageService.lambdaQuery()
+                    .eq(Page::getSpaceId, spaceId)
+                    .ne(Page::getStatus, PageStatus.DELETED)
+                    .ne(Page::getStatus, PageStatus.TRASH)
+                    .list();
+            if (CollUtil.isEmpty(pages)) {
+                return new ArrayList<>();
+            }
+            pageMap = pages.stream().collect(Collectors.toMap(Page::getId, p -> p, (a, b) -> a));
+        } else {
+            // No scope given: refuse instead of scanning every tenant page
+            return new ArrayList<>();
+        }
+
+        List<PageContent> blocks = pageContentService.lambdaQuery()
+                .in(PageContent::getPageId, pageMap.keySet())
+                .like(PageContent::getText, keyword)
+                .orderByDesc(PageContent::getUpdateTime)
+                .last("LIMIT 50")
+                .list();
+        if (CollUtil.isEmpty(blocks)) {
+            return new ArrayList<>();
+        }
+
+        // Space names for result decoration (usually a single space)
+        Map<Long, String> spaceNames = new HashMap<>();
+        return blocks.stream().map(block -> {
+            Page page = pageMap.get(block.getPageId());
+            Long blockSpaceId = page != null ? page.getSpaceId() : null;
+            String spaceName = null;
+            if (blockSpaceId != null) {
+                spaceName = spaceNames.computeIfAbsent(blockSpaceId, sid -> {
+                    Space space = spaceService.getById(sid);
+                    return space != null ? space.getName() : null;
+                });
+            }
+            return convertToBlockDetailVO(block, page != null ? page.getTitle() : null, blockSpaceId, spaceName);
+        }).collect(Collectors.toList());
     }
 
     public void saveAsTemplate(TemplateDTO dto) {

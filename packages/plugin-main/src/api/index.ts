@@ -135,6 +135,11 @@ export const APIS = {
         url: '/knowledge-wiki/space/page/block/:blockId/versions',
         method: 'GET'
     } as API,
+    /** Full-text search over block contents within a space or page */
+    SEARCH_BLOCKS: {
+        url: '/knowledge-wiki/space/page/block/search',
+        method: 'GET'
+    } as API,
     DELETE_TEMPLATE: {
         url: '/knowledge-wiki/space/page/template/:id',
         method: 'DELETE'

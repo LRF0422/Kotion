@@ -1,15 +1,14 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useResponsive, Button, Sheet, SheetContent, SheetTitle, cn, toast } from "@kn/ui";
-import { LayoutDashboard, Menu, Plus, PanelLeftClose, PanelLeftOpen } from "@kn/icon";
+import { Menu, PanelLeftClose, PanelLeftOpen } from "@kn/icon";
 import { useApi, useService, useNavigator, useToggle, useMobilePageHeader, useTranslation } from "@kn/common";
 import { APIS } from "../../api";
 import { Outlet, useParams, useMatch } from "@kn/common";
 import { Space } from "../../model/Space";
 import { TabbedEditorArea } from "./PageEditor/TabbedEditorArea";
-import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@kn/ui";
 import { event, ON_FAVORITE_CHANGE, ON_PAGE_REFRESH } from "../../event";
 import { TemplateSelector } from "../../components/TemplateSelector";
-import { SpaceSidebar } from "./components";
+import { SpaceSidebar, GlobalSearchDialog } from "./components";
 import { useRecentPages } from "./hooks/useRecentPages";
 
 export const SpaceDetail: React.FC = () => {
@@ -405,28 +404,16 @@ export const SpaceDetail: React.FC = () => {
                 onCreateFromTemplate={handleCreateByTemplate}
             />
 
-            {/* Command Palette (Ctrl+K) */}
-            <CommandDialog open={open} onOpenChange={() => { toggle() }}>
-                <CommandInput placeholder={t('search.placeholder') || 'Search pages...'} />
-                <CommandList>
-                    <CommandEmpty>{t('search.empty') || 'No results found.'}</CommandEmpty>
-                    <CommandGroup heading={t('page.title') || 'Page'}>
-                        <CommandItem onSelect={() => {
-                            handleCreatePage(params.pageId || "0")
-                            toggle()
-                        }}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            <span>{t('page.create') || 'Create Page'}</span>
-                        </CommandItem>
-                    </CommandGroup>
-                    <CommandGroup heading={t('space.title') || 'Space'}>
-                        <CommandItem onSelect={handleGoToPersonalSpace}>
-                            <LayoutDashboard className="mr-2 h-4 w-4" />
-                            <span>{t('space.personal') || 'Personal Space'}</span>
-                        </CommandItem>
-                    </CommandGroup>
-                </CommandList>
-            </CommandDialog>
+            {/* Global Search / Command Palette (Ctrl+K) */}
+            <GlobalSearchDialog
+                open={open}
+                onOpenChange={() => { toggle() }}
+                spaceId={params.id}
+                pageTree={pageTree}
+                onNavigateToPage={handlePageClick}
+                onCreatePage={() => handleCreatePage(params.pageId || "0")}
+                onGoToPersonalSpace={handleGoToPersonalSpace}
+            />
         </div>
     )
 }
