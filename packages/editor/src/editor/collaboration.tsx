@@ -19,7 +19,7 @@ import { PageHeader } from "./PageHeader";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
 import { loadContentProgressive, isLargeDocument } from "./loadContentProgressive";
-import { TableOfContents, getHierarchicalIndexes } from "@editor/extensions";
+import { TableOfContents, getHierarchicalIndexes, MousePointerSync } from "@editor/extensions";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-caret";
 import { TiptapTransformer } from "@hocuspocus/transformer";
@@ -167,6 +167,9 @@ const CollaborationEditorInner = forwardRef<
             cursor.appendChild(label);
             return cursor;
           },
+        }),
+        MousePointerSync.configure({
+          provider: provider,
         }),
       );
     }

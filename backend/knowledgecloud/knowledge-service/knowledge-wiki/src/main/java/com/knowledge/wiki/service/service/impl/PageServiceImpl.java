@@ -454,6 +454,8 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
 
     // Node types for link detection
     private static final String NODE_TYPE_PAGE_LINK = "pageLink";
+    // Inline atom node inserted by the [[ suggestion flow (go-forward format).
+    private static final String NODE_TYPE_PAGE_LINK_NODE = "pageLinkNode";
     private static final String NODE_TYPE_BLOCK_LINK = "blockLink";
     private static final String NODE_TYPE_PAGE_MENTION = "pageMention";
     private static final String NODE_TYPE_BLOCK_MENTION = "blockMention";
@@ -897,6 +899,7 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
 
         switch (type) {
             case NODE_TYPE_PAGE_LINK:
+            case NODE_TYPE_PAGE_LINK_NODE:
             case NODE_TYPE_PAGE_REFERENCE:
                 link.setTargetType(LINK_TYPE_PAGE);
                 link.setLinkKind(LINK_KIND_NORMAL);
@@ -962,9 +965,12 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
             return null;
         }
 
-        // Build snippet from node text
+        // Build snippet from node text; atom nodes (e.g. pageLinkNode) carry no
+        // text, so fall back to the link title stored in their attrs.
         if (StrUtil.isNotBlank(node.getText())) {
             link.setSnippet(node.getText());
+        } else if (attrs != null && StrUtil.isNotBlank(attrs.getStr("title"))) {
+            link.setSnippet(attrs.getStr("title"));
         }
 
         return link;

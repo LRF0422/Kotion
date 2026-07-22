@@ -1,27 +1,29 @@
 /**
- * BlockLinkPicker — cursor-anchored command menu (slash-menu style)
- * Allows users to search and select a block to link to via (( )).
+ * BlockLinkPicker — caret-anchored suggestion list for (( block links.
  *
- * Rendered as a floating dropdown anchored at the caret (positioned by
- * LinkTrigger), NOT a modal dialog.
+ * Driven by the LinkTrigger suggestion plugin: the query is typed inline in
+ * the editor (after `((`). Blocks are grouped by their source page, with the
+ * current page's blocks listed first for quick self-referencing.
  *
  * @module @kn/plugin-block-reference/bidirectional-link/components
  */
 
-import React, { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react';
-import { Input, ScrollArea, cn, Skeleton } from '@kn/ui';
-import { SquareDashedBottom, SearchIcon, Loader2 } from '@kn/icon';
-import { PageContext } from '@kn/editor';
-import { useClickAway } from '@kn/common';
+import React, {
+    forwardRef,
+    useCallback,
+    useContext,
+    useEffect,
+    useImperativeHandle,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
+import { ScrollArea, cn, Skeleton } from '@kn/ui';
+import { SquareDashedBottom, FileText, Loader2 } from '@kn/icon';
+import { PageContext, type SuggestionProps } from '@kn/editor';
 import { searchBlocks, BlockInfo } from '../services/linkService';
-
-interface BlockLinkPickerProps {
-    visible: boolean;
-    /** Space ID - if not provided, will use PageContext */
-    spaceId?: number | string;
-    onSelect: (block: { id: string }) => void;
-    onCancel: () => void;
-}
+import { useI18n } from '../../i18n/use-i18n';
+import type { LinkSuggestionListHandle, LinkSuggestionCommandProps } from '../extensions/LinkTrigger';
 
 /** Extract text preview from block content */
 const getBlockPreview = (block: BlockInfo): string => {
@@ -30,7 +32,6 @@ const getBlockPreview = (block: BlockInfo): string => {
             ? JSON.parse(block.content)
             : block.content;
 
-        // Recursively extract all text from content
         const extractText = (node: any): string => {
             if (!node) return '';
             if (typeof node === 'string') return node;
@@ -45,10 +46,7 @@ const getBlockPreview = (block: BlockInfo): string => {
         };
 
         const text = extractText(content).trim();
-        if (text) {
-            return text.slice(0, 120);
-        }
-        return '';
+        return text ? text.slice(0, 120) : '';
     } catch {
         return '';
     }
@@ -73,20 +71,33 @@ const getBlockTypeLabel = (type: string): string => {
     return typeLabels[type] || type;
 };
 
+/** A block row with its flat keyboard index. */
+interface FlatBlock {
+    block: BlockInfo;
+    preview: string;
+    index: number;
+}
+
+/** Blocks grouped under one source page. */
+interface BlockGroup {
+    pageId: string;
+    pageTitle: string;
+    isCurrentPage: boolean;
+    blocks: FlatBlock[];
+}
+
 /** Block item — slash-menu look (icon chip + hover shift). */
 const BlockItem = React.memo<{
-    block: BlockInfo;
-    index: number;
+    item: FlatBlock;
     isSelected: boolean;
     onSelect: () => void;
     onHover: () => void;
-}>(({ block, index, isSelected, onSelect, onHover }) => {
-    const preview = getBlockPreview(block);
-    const typeLabel = getBlockTypeLabel(block.type);
+}>(({ item, isSelected, onSelect, onHover }) => {
+    const typeLabel = getBlockTypeLabel(item.block.type);
 
     return (
         <div
-            data-index={index}
+            data-index={item.index}
             className={cn(
                 "flex items-start gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer",
                 "transition-all duration-150",
@@ -108,9 +119,9 @@ const BlockItem = React.memo<{
                 <SquareDashedBottom className="h-4 w-4" />
             </span>
             <div className="flex-1 min-w-0">
-                {preview ? (
+                {item.preview ? (
                     <>
-                        <div className="text-sm line-clamp-2">{preview}</div>
+                        <div className="text-sm line-clamp-2">{item.preview}</div>
                         <div className="mt-1 flex items-center gap-2">
                             <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                                 {typeLabel}
@@ -119,11 +130,9 @@ const BlockItem = React.memo<{
                     </>
                 ) : (
                     <div className="flex items-center gap-2">
-                        <span className="text-sm italic text-muted-foreground">
-                            {typeLabel} block
-                        </span>
+                        <span className="text-sm italic text-muted-foreground">{typeLabel}</span>
                         <span className="font-mono text-xs text-muted-foreground/70">
-                            ({block.id.slice(0, 8)}…)
+                            ({item.block.id.slice(0, 8)}…)
                         </span>
                     </div>
                 )}
@@ -149,152 +158,172 @@ const LoadingSkeleton = React.memo(() => (
 ));
 LoadingSkeleton.displayName = 'LoadingSkeleton';
 
-/**
- * BlockLinkPicker Component
- *
- * Floating command menu for selecting blocks to create ((block-id)) links.
- */
-export const BlockLinkPicker: React.FC<BlockLinkPickerProps> = ({
-    visible,
-    spaceId: propSpaceId,
-    onSelect,
-    onCancel,
-}) => {
-    const pageInfo = useContext(PageContext);
-    const spaceId = propSpaceId || pageInfo?.spaceId;
+type PickerProps = SuggestionProps<unknown, LinkSuggestionCommandProps>;
 
-    const [query, setQuery] = useState('');
-    const [blocks, setBlocks] = useState<BlockInfo[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [selectedIndex, setSelectedIndex] = useState(0);
+export const BlockLinkPicker = forwardRef<LinkSuggestionListHandle, PickerProps>(
+    ({ query, command }, ref) => {
+        const pageCtx = useContext(PageContext);
+        const { t } = useI18n();
+        const spaceId = pageCtx?.spaceId;
 
-    const containerRef = useRef<HTMLDivElement>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
-    const listRef = useRef<HTMLDivElement>(null);
+        const [blocks, setBlocks] = useState<BlockInfo[]>([]);
+        const [loading, setLoading] = useState(true);
+        const [selectedIndex, setSelectedIndex] = useState(0);
+        const listRef = useRef<HTMLDivElement>(null);
 
-    // Close when clicking outside the floating menu.
-    useClickAway(() => onCancel(), containerRef);
-
-    // Auto-focus the search field on mount.
-    useEffect(() => {
-        const timer = setTimeout(() => inputRef.current?.focus(), 50);
-        return () => clearTimeout(timer);
-    }, []);
-
-    // Fetch blocks when visible.
-    useEffect(() => {
-        if (visible && spaceId) {
+        // One fetch per open; the inline query filters client-side below.
+        useEffect(() => {
+            if (!spaceId) {
+                setLoading(false);
+                return;
+            }
             setLoading(true);
             searchBlocks(spaceId)
-                .then((data) => {
-                    setBlocks(data.records || []);
-                    setSelectedIndex(0);
-                })
+                .then((data) => setBlocks(data.records || []))
                 .finally(() => setLoading(false));
-        }
-    }, [visible, spaceId]);
+        }, [spaceId]);
 
-    // Filter blocks by query
-    const filteredBlocks = useMemo(() => {
-        if (!query) return blocks;
-        const lowerQuery = query.toLowerCase();
-        return blocks.filter((block) => {
-            const preview = getBlockPreview(block).toLowerCase();
-            return preview.includes(lowerQuery) || block.id.includes(lowerQuery);
-        });
-    }, [blocks, query]);
+        // Filter by query, group by source page, current page first.
+        const groups = useMemo<BlockGroup[]>(() => {
+            const lowerQuery = query.trim().toLowerCase();
+            const matched = blocks
+                .map((block) => ({ block, preview: getBlockPreview(block) }))
+                .filter(({ block, preview }) => {
+                    if (!lowerQuery) return true;
+                    return preview.toLowerCase().includes(lowerQuery) || block.id.includes(lowerQuery);
+                });
 
-    // Keep the keyboard-selected item scrolled into view.
-    useEffect(() => {
-        const el = listRef.current?.querySelector<HTMLElement>(`[data-index="${selectedIndex}"]`);
-        el?.scrollIntoView({ block: 'nearest' });
-    }, [selectedIndex, filteredBlocks.length]);
-
-    // Keyboard navigation
-    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-        switch (e.key) {
-            case 'ArrowDown':
-                e.preventDefault();
-                setSelectedIndex((prev) => (filteredBlocks.length ? (prev + 1) % filteredBlocks.length : 0));
-                break;
-            case 'ArrowUp':
-                e.preventDefault();
-                setSelectedIndex((prev) => (filteredBlocks.length ? (prev - 1 + filteredBlocks.length) % filteredBlocks.length : 0));
-                break;
-            case 'Enter':
-                e.preventDefault();
-                if (filteredBlocks[selectedIndex]) {
-                    onSelect({ id: filteredBlocks[selectedIndex].id });
+            const byPage = new Map<string, BlockGroup>();
+            for (const { block, preview } of matched) {
+                const pid = String(block.pageId ?? '');
+                let group = byPage.get(pid);
+                if (!group) {
+                    group = {
+                        pageId: pid,
+                        pageTitle: block.pageTitle || t('bidirectionalLink.untitled'),
+                        isCurrentPage: pageCtx?.id != null && pid === String(pageCtx.id),
+                        blocks: [],
+                    };
+                    byPage.set(pid, group);
                 }
-                break;
-            case 'Escape':
-                e.preventDefault();
-                onCancel();
-                break;
-        }
-    }, [filteredBlocks, selectedIndex, onSelect, onCancel]);
+                group.blocks.push({ block, preview, index: -1 });
+            }
 
-    return (
-        <div
-            ref={containerRef}
-            onKeyDown={handleKeyDown}
-            className={cn(
-                "w-[420px] p-2 rounded-xl backdrop-blur-sm",
-                "bg-popover text-popover-foreground",
-                "border border-border/60 shadow-xl dark:shadow-2xl"
-            )}
-            role="dialog"
-            aria-label="插入块链接"
-        >
-            {/* Search input */}
-            <div className="relative">
-                <Input
-                    ref={inputRef}
-                    placeholder="搜索块…"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    className="h-9 pr-8"
-                />
-                <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2">
-                    {loading ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    ) : (
-                        <SearchIcon className="h-4 w-4 text-muted-foreground" />
-                    )}
+            const sorted = Array.from(byPage.values()).sort((a, b) => {
+                if (a.isCurrentPage !== b.isCurrentPage) return a.isCurrentPage ? -1 : 1;
+                return a.pageTitle.localeCompare(b.pageTitle);
+            });
+
+            // Assign flat keyboard indices across groups.
+            let i = 0;
+            for (const group of sorted) {
+                for (const item of group.blocks) item.index = i++;
+            }
+            return sorted;
+        }, [blocks, query, pageCtx?.id, t]);
+
+        const flatBlocks = useMemo(() => groups.flatMap((g) => g.blocks), [groups]);
+        const totalCount = flatBlocks.length;
+
+        // Reset selection when the result set changes.
+        useEffect(() => {
+            setSelectedIndex(0);
+        }, [query, blocks]);
+
+        // Keep the keyboard-selected item scrolled into view.
+        useEffect(() => {
+            const el = listRef.current?.querySelector<HTMLElement>(`[data-index="${selectedIndex}"]`);
+            el?.scrollIntoView({ block: 'nearest' });
+        }, [selectedIndex, totalCount]);
+
+        const selectAt = useCallback((index: number) => {
+            const item = flatBlocks[index];
+            if (item) {
+                command({ block: { id: item.block.id } });
+            }
+        }, [flatBlocks, command]);
+
+        useImperativeHandle(ref, () => ({
+            onKeyDown: ({ event: e }) => {
+                if (e.key === 'ArrowDown') {
+                    setSelectedIndex((prev) => (totalCount ? (prev + 1) % totalCount : 0));
+                    return true;
+                }
+                if (e.key === 'ArrowUp') {
+                    setSelectedIndex((prev) => (totalCount ? (prev - 1 + totalCount) % totalCount : 0));
+                    return true;
+                }
+                if (e.key === 'Enter') {
+                    selectAt(selectedIndex);
+                    return true;
+                }
+                return false;
+            },
+        }), [totalCount, selectedIndex, selectAt]);
+
+        return (
+            <div
+                className={cn(
+                    "w-[420px] p-2 rounded-xl backdrop-blur-sm",
+                    "bg-popover text-popover-foreground",
+                    "border border-border/60 shadow-xl dark:shadow-2xl"
+                )}
+                role="listbox"
+                aria-label={t('bidirectionalLink.searchBlocksPlaceholder')}
+            >
+                {/* Inline query indicator */}
+                <div className="flex items-center gap-1.5 px-2 pb-1.5 text-xs text-muted-foreground border-b border-border/60">
+                    <span className="font-mono">((</span>
+                    <span className="truncate">{query || t('bidirectionalLink.searchBlocksPlaceholder')}</span>
+                    {loading && <Loader2 className="ml-auto h-3 w-3 animate-spin" />}
+                </div>
+
+                {/* Grouped block list */}
+                <ScrollArea className="link-panel-scroll mt-1.5 max-h-[300px]">
+                    <div ref={listRef} className="space-y-0.5 pr-1">
+                        {loading ? (
+                            <LoadingSkeleton />
+                        ) : totalCount === 0 ? (
+                            <div className="flex flex-col items-center justify-center gap-1 py-8 text-sm text-muted-foreground">
+                                <SquareDashedBottom className="mb-1 h-7 w-7 opacity-40" />
+                                <span>{t('bidirectionalLink.noBlocks')}</span>
+                                <span className="text-xs opacity-70">{t('bidirectionalLink.tryDifferentSearch')}</span>
+                            </div>
+                        ) : (
+                            groups.map((group) => (
+                                <div key={group.pageId}>
+                                    <div className="flex items-center gap-1.5 px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground">
+                                        <FileText className="h-3 w-3 flex-shrink-0" />
+                                        <span className="truncate">{group.pageTitle}</span>
+                                        {group.isCurrentPage && (
+                                            <span className="rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary">
+                                                {t('bidirectionalLink.currentPage')}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {group.blocks.map((item) => (
+                                        <BlockItem
+                                            key={item.block.id}
+                                            item={item}
+                                            isSelected={selectedIndex === item.index}
+                                            onSelect={() => selectAt(item.index)}
+                                            onHover={() => setSelectedIndex(item.index)}
+                                        />
+                                    ))}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </ScrollArea>
+
+                {/* Footer hint */}
+                <div className="mt-2 flex items-center justify-between border-t border-border/60 px-1 pt-2 text-xs text-muted-foreground">
+                    <span>{t('bidirectionalLink.navHint')}</span>
+                    <span>{t('bidirectionalLink.selectHint')}</span>
                 </div>
             </div>
+        );
+    }
+);
 
-            {/* Block list */}
-            <ScrollArea className="mt-2 max-h-[300px]">
-                <div ref={listRef} className="space-y-0.5 pr-1">
-                    {loading ? (
-                        <LoadingSkeleton />
-                    ) : filteredBlocks.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center gap-1 py-8 text-sm text-muted-foreground">
-                            <SquareDashedBottom className="mb-1 h-7 w-7 opacity-40" />
-                            <span>未找到块</span>
-                            <span className="text-xs opacity-70">换个关键词试试</span>
-                        </div>
-                    ) : (
-                        filteredBlocks.map((block, index) => (
-                            <BlockItem
-                                key={block.id}
-                                block={block}
-                                index={index}
-                                isSelected={selectedIndex === index}
-                                onSelect={() => onSelect({ id: block.id })}
-                                onHover={() => setSelectedIndex(index)}
-                            />
-                        ))
-                    )}
-                </div>
-            </ScrollArea>
-
-            {/* Footer hint */}
-            <div className="mt-2 flex items-center justify-between border-t border-border/60 px-1 pt-2 text-xs text-muted-foreground">
-                <span>↑↓ 导航</span>
-                <span>Enter 选择 · Esc 关闭</span>
-            </div>
-        </div>
-    );
-};
+BlockLinkPicker.displayName = 'BlockLinkPicker';

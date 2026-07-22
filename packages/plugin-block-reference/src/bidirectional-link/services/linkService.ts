@@ -30,6 +30,8 @@ export interface PageTreeNode {
 export interface BlockInfo {
     id: string;
     pageId: number;
+    /** Title of the page containing this block (used by the grouped picker) */
+    pageTitle?: string;
     type: string;
     content: any;
 }
@@ -78,6 +80,7 @@ export async function searchPages(query?: string): Promise<PageTreeNode[]> {
             name: p.title,
             parentId: 0,
             spaceId: p.spaceId,
+            spaceName: p.spaceName,
         }));
     } catch {
         return [];

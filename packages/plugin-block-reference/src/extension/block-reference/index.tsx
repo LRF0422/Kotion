@@ -2,11 +2,8 @@ import { ExtensionWrapper } from "@kn/common";
 import { PageReference } from "./page-reference";
 import { FilePlus2, Link2, SquareDashedBottom } from "@kn/icon";
 import React from "react";
-import { computePosition, flip, shift, posToDOMRect, ReactRenderer } from "@kn/editor";
-import { PageSelector } from "./PageSelector";
-import { BlockSelector } from "./BlockSelector";
 import { BlockReference } from "./block-references";
-import { PageLink, BlockLink, LinkTrigger, PageFooter } from "../../bidirectional-link";
+import { PageLink, PageLinkNode, BlockLink, LinkTrigger, PageFooter } from "../../bidirectional-link";
 
 /**
  * Block Reference Extension
@@ -15,7 +12,7 @@ import { PageLink, BlockLink, LinkTrigger, PageFooter } from "../../bidirectiona
  */
 export const BlockReferenceExtension: ExtensionWrapper = {
     name: "blockReference",
-    extendsion: [PageReference, BlockReference, PageLink, BlockLink, LinkTrigger],
+    extendsion: [PageReference, BlockReference, PageLink, PageLinkNode, BlockLink, LinkTrigger],
     pageFooter: PageFooter,
     slashConfig: [
         {
@@ -53,39 +50,10 @@ export const BlockReferenceExtension: ExtensionWrapper = {
             text: "关联页面",
             slash: '/linkPage',
             action: (editor) => {
-                const component = new ReactRenderer(PageSelector, {
-                    editor: editor,
-                    props: {
-                        onCancel: () => {
-                            editor.view.dom.parentElement?.removeChild(component.element)
-                            component.destroy()
-                        },
-                        editor
-                    }
-                })
-                component.render()
-                editor.view.dom.parentElement?.appendChild(component.element)
-                const { selection } = editor.state
-                const { view } = editor
-                const domRect = posToDOMRect(view, selection.from, selection.to)
-
-                const virtualElement = {
-                    getBoundingClientRect: () => domRect,
-                    getClientRects: () => [domRect],
-                }
-
-                computePosition(virtualElement, component.element as HTMLElement, {
-                    placement: "bottom-start",
-                    // Flip above the caret when there isn't room below, and shift
-                    // horizontally to keep the dropdown within the viewport — without
-                    // this the panel gets clipped when the caret sits near an edge.
-                    middleware: [flip(), shift({ padding: 8 })],
-                }).then(({ x, y, strategy }) => {
-                    (component.element as HTMLElement).style.zIndex = '1000';
-                    (component.element as HTMLElement).style.position = strategy;
-                    (component.element as HTMLElement).style.left = `${x + 2}px`;
-                    (component.element as HTMLElement).style.top = `${y}px`;
-                })
+                // Insert the [[ trigger text so the inline suggestion flow
+                // (PageLinkPicker → pageLinkNode) takes over — identical to
+                // typing [[ by hand, keeping both entries consistent.
+                editor.chain().focus().insertContent('[[').run()
             }
         },
         {
@@ -93,37 +61,10 @@ export const BlockReferenceExtension: ExtensionWrapper = {
             text: "关联块",
             slash: '/linkBlock',
             action: (editor) => {
-                editor.view.dispatch(editor.state.tr.insertText("("))
-                const component = new ReactRenderer(BlockSelector, {
-                    editor: editor,
-                    props: {
-                        onCancel: () => {
-                            editor.view.dom.parentElement?.removeChild(component.element)
-                            component.destroy()
-                        },
-                        editor
-                    }
-                })
-                component.render()
-                editor.view.dom.parentElement?.appendChild(component.element)
-                const { selection } = editor.state
-                const { view } = editor
-                const domRect = posToDOMRect(view, selection.from, selection.to)
-
-                const virtualElement = {
-                    getBoundingClientRect: () => domRect,
-                    getClientRects: () => [domRect],
-                }
-
-                computePosition(virtualElement, component.element as HTMLElement, {
-                    placement: "bottom-start",
-                    middleware: [flip(), shift({ padding: 8 })],
-                }).then(({ x, y, strategy }) => {
-                    (component.element as HTMLElement).style.zIndex = '1000';
-                    (component.element as HTMLElement).style.position = strategy;
-                    (component.element as HTMLElement).style.left = `${x + 2}px`;
-                    (component.element as HTMLElement).style.top = `${y}px`;
-                })
+                // Insert the (( trigger text so the inline suggestion flow
+                // (BlockLinkPicker → blockLink embed) takes over — identical
+                // to typing (( by hand, keeping both entries consistent.
+                editor.chain().focus().insertContent('((').run()
             }
         }
     ]

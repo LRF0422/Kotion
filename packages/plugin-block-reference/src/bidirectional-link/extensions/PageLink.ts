@@ -1,33 +1,27 @@
 /**
- * PageLink Mark Extension
- * Creates inline page links with [[Page Title]] syntax.
- * 
+ * PageLink Mark Extension (LEGACY)
+ *
+ * Kept only so documents created before the inline `pageLinkNode` migration
+ * still parse and render their `[[Page Title]]` text links. New links are
+ * inserted as `pageLinkNode` atoms (see ./PageLinkNode.tsx).
+ *
  * @module @kn/plugin-block-reference/bidirectional-link/extensions
  */
 
-import { Mark, mergeAttributes, ChainedCommands, Plugin, PluginKey } from "@kn/editor";
+import { Mark, mergeAttributes, Plugin, PluginKey } from "@kn/editor";
 import { event } from "@kn/common";
 
 /**
  * Global event emitted when a [[page link]] is clicked in the editor.
  * A ProseMirror plugin cannot use React hooks (useNavigator), so the click is
  * bridged to PageFooter (always mounted) which resolves the spaceId and navigates.
- * Payload: { pageId: string }
+ * Payload: { pageId, title, left, top, direct }
  */
 export const PAGE_LINK_CLICK = "WIKI_PAGE_LINK_CLICK";
 
 export interface PageLinkAttributes {
     pageId: number | null;
     title: string | null;
-}
-
-declare module '@kn/editor' {
-    interface Commands<ReturnType> {
-        pageLink: {
-            setPageLink: (attrs: { pageId: number; title: string }) => ReturnType;
-            unsetPageLink: () => ReturnType;
-        };
-    }
 }
 
 export const PageLink = Mark.create({
@@ -57,7 +51,6 @@ export const PageLink = Mark.create({
                 'data-page-link': 'true',
                 'data-page-id': HTMLAttributes.pageId,
                 class: 'wiki-page-link',
-                style: 'color: var(--primary); cursor: pointer; border-bottom: 1px dashed currentColor;',
             }),
             0,
         ];
@@ -68,47 +61,28 @@ export const PageLink = Mark.create({
             new Plugin({
                 key: new PluginKey('pageLinkClick'),
                 props: {
-                    handleClick(_view, _pos, e) {
+                    handleClick(view, _pos, e) {
                         const el = (e.target as HTMLElement)?.closest('[data-page-link]');
                         const pageId = el?.getAttribute('data-page-id');
                         if (!pageId) return false;
                         e.preventDefault();
-                        // Don't navigate on click: hand the click target's position and
-                        // title to PageFooter, which shows a tooltip the user must click
-                        // to actually jump (avoids accidental navigation while editing).
                         const rect = el!.getBoundingClientRect();
                         const title = (el?.textContent || '').replace(/^\[\[/, '').replace(/\]\]$/, '');
+                        // Cmd/Ctrl+Click and read-only mode jump straight away;
+                        // a plain click while editing shows the confirm tooltip
+                        // (avoids accidental navigation mid-edit).
+                        const direct = e.metaKey || e.ctrlKey || !view.editable;
                         event.emit(PAGE_LINK_CLICK as any, {
                             pageId,
                             title,
                             left: rect.left,
                             top: rect.bottom + 4,
+                            direct,
                         });
                         return true;
                     },
                 },
             }),
         ];
-    },
-
-    addCommands() {
-        return {
-            setPageLink:
-                ({ pageId, title }: { pageId: number; title: string }) =>
-                    ({ chain }: { chain: () => ChainedCommands }) => {
-                        // IMPORTANT: Insert the [[Title]] pattern for backend parsing
-                        return chain()
-                            .insertContent({
-                                type: 'text',
-                                text: `[[${title}]]`,
-                                marks: [{ type: this.name, attrs: { pageId, title } }],
-                            })
-                            .run();
-                    },
-            unsetPageLink:
-                () =>
-                    ({ chain }: { chain: () => ChainedCommands }) =>
-                        chain().unsetMark(this.name).run(),
-        };
     },
 });

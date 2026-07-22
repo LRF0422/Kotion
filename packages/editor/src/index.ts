@@ -16,6 +16,7 @@ export {
     Node as PMNode, MarkViewContent, ReactMarkViewRenderer, ReactRenderer
 } from "@tiptap/react"
 export { mergeAttributes } from "@tiptap/core"
+export { default as Suggestion, type SuggestionProps, type SuggestionKeyDownProps, type SuggestionOptions } from "@tiptap/suggestion"
 export { Slice, Schema, NodeType, Node, DOMSerializer } from "@tiptap/pm/model"
 export { EditorState, TextSelection, NodeSelection, Plugin, PluginKey, type Transaction } from "@tiptap/pm/state"
 export { EditorView, Decoration, DecorationSet, type DecorationSource } from "@tiptap/pm/view"

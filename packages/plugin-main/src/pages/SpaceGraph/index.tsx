@@ -13,10 +13,10 @@ import { Network, Loader2, RefreshCw, Maximize2, X, ZoomIn, ZoomOut, Layers } fr
 import { APIS } from "../../api";
 import type { GraphEdge, GraphNode, SimLink, SimNode, ViewTransform } from "./types";
 
-/** Distinct-enough palette; spaces are colored by stable index into this list. */
+/** Muted, Notion-like palette; spaces are colored by stable index into this list. */
 const PALETTE = [
-    "#6366f1", "#06b6d4", "#10b981", "#f59e0b", "#ef4444",
-    "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#3b82f6",
+    "#337EA9", "#448361", "#D9730D", "#9065B0", "#C14C8A",
+    "#CB912F", "#D44C47", "#787774", "#548164", "#5B97BD",
 ];
 
 const MIN_RADIUS = 6;
@@ -457,14 +457,14 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                     {t("graph.stats", { nodes: nodes.length, edges: links.length })}
                 </span>
                 {focusId && (
-                    <span className="flex items-center gap-1 text-xs rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 pl-2 pr-1 py-0.5 max-w-[140px] md:max-w-[200px]">
-                        <Network className="h-3 w-3 flex-shrink-0" />
+                    <span className="flex items-center gap-1 text-xs rounded-md border border-border bg-muted/60 text-foreground pl-2 pr-1 py-0.5 max-w-[140px] md:max-w-[200px]">
+                        <Network className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                         <span className="truncate">
                             {focusedNode?.title || t("graph.untitled")}
                         </span>
                         <button
                             type="button"
-                            className="rounded-full hover:bg-indigo-100 p-0.5 flex-shrink-0"
+                            className="rounded-sm hover:bg-muted p-0.5 flex-shrink-0 text-muted-foreground hover:text-foreground"
                             onClick={clearFocus}
                             aria-label={t("graph.clearFocus")}
                             title={t("graph.clearFocus")}
@@ -512,6 +512,19 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                 onWheel={onWheel}
             >
                 <svg width="100%" height="100%" className="block">
+                    <defs>
+                        {/* Faint dot grid that pans/zooms with the graph for a canvas feel. */}
+                        <pattern
+                            id="graph-dot-grid"
+                            width={24}
+                            height={24}
+                            patternUnits="userSpaceOnUse"
+                            patternTransform={`translate(${view.x},${view.y}) scale(${view.k})`}
+                        >
+                            <circle cx={1} cy={1} r={1} className="fill-muted-foreground/10" />
+                        </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#graph-dot-grid)" />
                     <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
                         {/* Edges */}
                         {links.map((l, i) => {
@@ -527,9 +540,11 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                                     y1={s.y!}
                                     x2={tg.x}
                                     y2={tg.y!}
-                                    stroke={active ? "#6366f1" : "#cbd5e1"}
-                                    strokeOpacity={hl && !active ? 0.15 : 0.5}
-                                    strokeWidth={active ? 1.5 : 1}
+                                    stroke={active ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))"}
+                                    strokeOpacity={active ? 0.55 : hl ? 0.08 : 0.25}
+                                    strokeWidth={active ? 1.4 : 1}
+                                    strokeLinecap="round"
+                                    style={{ transition: "stroke-opacity 150ms ease, stroke 150ms ease" }}
                                 />
                             );
                         })}
@@ -540,45 +555,79 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                             const r = radiusOf(n);
                             const isCurrentSpace = n.spaceId === currentId;
                             const isFocused = n.id === focusId;
+                            const isHovered = hovered === n.id;
                             const dimmed =
                                 (!!hl && hl !== n.id && !neighbors.get(hl)?.has(n.id)) ||
                                 !matches(n);
                             const color = spaceColor.get(n.spaceId) || PALETTE[0];
+                            const rr = isHovered || isFocused ? r * 1.1 : r;
+                            const smooth = { transition: "r 150ms ease" } as const;
                             return (
                                 <g
                                     key={n.id}
                                     transform={`translate(${n.x},${n.y})`}
-                                    style={{ cursor: "pointer", opacity: dimmed ? 0.2 : 1 }}
+                                    style={{
+                                        cursor: "pointer",
+                                        opacity: dimmed ? 0.15 : 1,
+                                        transition: "opacity 150ms ease",
+                                    }}
                                     onPointerDown={(e) => onNodePointerDown(e, n)}
                                     onPointerUp={() => onNodeClick(n)}
                                     onPointerEnter={() => setHovered(n.id)}
                                     onPointerLeave={() => setHovered(null)}
                                 >
-                                    {isFocused && (
+                                    {/* Flat hairline ring marking hover / focus / current space. */}
+                                    {(isHovered || isFocused || isCurrentSpace) && (
                                         <circle
-                                            r={r + 5}
+                                            r={rr + 4}
                                             fill="none"
-                                            stroke="#6366f1"
-                                            strokeWidth={2}
-                                            strokeDasharray="3 2"
+                                            stroke={color}
+                                            strokeOpacity={isFocused ? 0.8 : 0.45}
+                                            strokeWidth={1.5}
+                                            strokeDasharray={isFocused ? "3 3" : undefined}
+                                            style={smooth}
                                         />
                                     )}
                                     <circle
-                                        r={r}
+                                        r={rr}
                                         fill={color}
-                                        stroke={isFocused ? "#6366f1" : isCurrentSpace ? "#111827" : "#fff"}
-                                        strokeWidth={isFocused ? 3 : isCurrentSpace ? 2.5 : 1.5}
+                                        stroke="hsl(var(--background))"
+                                        strokeWidth={1.5}
+                                        style={smooth}
                                     />
-                                    {(view.k > 0.6 || hl === n.id || isFocused) && (
-                                        <text
-                                            y={r + 11}
-                                            textAnchor="middle"
-                                            fontSize={10}
-                                            fill="currentColor"
-                                            className="text-foreground pointer-events-none select-none"
-                                        >
-                                            {(n.title || t("graph.untitled")).slice(0, 18)}
-                                        </text>
+                                    {(view.k > 0.6 || isHovered || isFocused) && (
+                                        <>
+                                            <text
+                                                y={rr + 13}
+                                                textAnchor="middle"
+                                                fontSize={10}
+                                                fontWeight={isHovered || isFocused ? 600 : 400}
+                                                fill="hsl(var(--foreground))"
+                                                fillOpacity={isHovered || isFocused ? 1 : 0.75}
+                                                stroke="hsl(var(--background))"
+                                                strokeWidth={3}
+                                                strokeLinejoin="round"
+                                                paintOrder="stroke"
+                                                className="pointer-events-none select-none"
+                                            >
+                                                {(n.title || t("graph.untitled")).slice(0, 18)}
+                                            </text>
+                                            {(isHovered || isFocused) && n.spaceName && (
+                                                <text
+                                                    y={rr + 25}
+                                                    textAnchor="middle"
+                                                    fontSize={9}
+                                                    fill="hsl(var(--muted-foreground))"
+                                                    stroke="hsl(var(--background))"
+                                                    strokeWidth={3}
+                                                    strokeLinejoin="round"
+                                                    paintOrder="stroke"
+                                                    className="pointer-events-none select-none"
+                                                >
+                                                    {n.spaceName}
+                                                </text>
+                                            )}
+                                        </>
                                     )}
                                 </g>
                             );
@@ -590,22 +639,22 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                 {legend.length > 0 && (!isMobile || showLegend) && (
                     <div
                         className={cn(
-                            "absolute overflow-auto rounded-md border bg-background/90 backdrop-blur px-2 py-1.5 shadow-sm",
+                            "absolute overflow-auto rounded-md border border-border bg-background/95 backdrop-blur-sm px-2.5 py-2 shadow-sm",
                             isMobile
                                 ? "bottom-2 left-2 right-14 max-h-[35%]"
-                                : "top-2 right-2 max-w-[220px] max-h-[40%]",
+                                : "top-3 right-3 max-w-[220px] max-h-[40%]",
                         )}
                     >
                         <div className="text-[11px] font-medium text-muted-foreground mb-1">
                             {t("graph.legend")}
                         </div>
                         {legend.map((s) => (
-                            <div key={s.id} className="flex items-center gap-1.5 py-0.5">
+                            <div key={s.id} className="flex items-center gap-2 py-0.5">
                                 <span
-                                    className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                                    className="h-2 w-2 rounded-full flex-shrink-0"
                                     style={{ background: s.color }}
                                 />
-                                <span className={cn("text-xs truncate", s.id === currentId && "font-semibold")}>
+                                <span className={cn("text-xs truncate text-muted-foreground", s.id === currentId && "font-medium text-foreground")}>
                                     {s.name}
                                 </span>
                             </div>

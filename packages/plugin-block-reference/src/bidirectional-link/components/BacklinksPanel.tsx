@@ -1,18 +1,25 @@
 /**
  * BacklinksPanel Component
- * Displays a list of pages/blocks that link to the current page.
- * 
+ *
+ * Displays references pointing at the current page:
+ * - Backlinks grouped by source page (collapsible groups)
+ * - Kind filter chips (all / links / mentions / embeds) when mixed
+ * - Snippet keyword highlighting of the current page title
+ * - Unlinked mentions (title appears in text without a structured link)
+ * - Refresh (invalidates the local index) and graph entry actions
+ *
  * @module @kn/plugin-block-reference/bidirectional-link/components
  */
 
-import React, { useState, useEffect, useCallback, useContext } from 'react';
-import { cn, ScrollArea, Skeleton } from '@kn/ui';
-import { Link2, FileText, SquareDashedBottom } from '@kn/icon';
+import React, { useState, useEffect, useCallback, useContext, useMemo } from 'react';
+import { cn, ScrollArea, Skeleton, Collapsible, CollapsibleTrigger, CollapsibleContent } from '@kn/ui';
+import { Link2, FileText, SquareDashedBottom, RefreshCcw, Waypoints, ChevronRight, AtSign } from '@kn/icon';
 import { useNavigator } from "@kn/common";
 import { PageContext } from "@kn/editor";
 import { getPageBacklinks } from '../services/linkService';
-import { getLocalPageBacklinks } from '../services/localBacklinkIndex';
+import { getLocalPageBacklinks, getUnlinkedMentions, invalidateBacklinkIndex } from '../services/localBacklinkIndex';
 import { useSpaceService } from '../../hooks';
+import { useI18n } from '../../i18n/use-i18n';
 import type { BacklinkVO } from '../../types';
 
 interface BacklinksPanelProps {
@@ -26,14 +33,41 @@ interface BacklinksPanelProps {
     className?: string;
 }
 
-/** Backlink item component */
+type FilterKind = 'ALL' | 'NORMAL' | 'MENTION' | 'EMBED';
+
+/** Wrap occurrences of `keyword` inside `text` with a highlight span. */
+const highlightKeyword = (text: string, keyword?: string): React.ReactNode => {
+    const kw = keyword?.trim();
+    if (!text || !kw) return text;
+    const lower = text.toLowerCase();
+    const lowerKw = kw.toLowerCase();
+    const parts: React.ReactNode[] = [];
+    let cursor = 0;
+    let idx = lower.indexOf(lowerKw);
+    while (idx >= 0) {
+        if (idx > cursor) parts.push(text.slice(cursor, idx));
+        parts.push(
+            <span key={idx} className="backlink-snippet-highlight">
+                {text.slice(idx, idx + kw.length)}
+            </span>
+        );
+        cursor = idx + kw.length;
+        idx = lower.indexOf(lowerKw, cursor);
+    }
+    if (cursor < text.length) parts.push(text.slice(cursor));
+    return parts.length ? parts : text;
+};
+
+/** Single backlink / mention row (snippet + kind badge). */
 const BacklinkItem = React.memo<{
     backlink: BacklinkVO;
+    keyword?: string;
+    blockBadge: string;
     onClick: () => void;
-}>(({ backlink, onClick }) => (
+}>(({ backlink, keyword, blockBadge, onClick }) => (
     <div
         className={cn(
-            "flex items-start gap-3 p-2 rounded-md cursor-pointer transition-colors",
+            "flex items-start gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors",
             "hover:bg-muted"
         )}
         onClick={onClick}
@@ -46,37 +80,65 @@ const BacklinkItem = React.memo<{
             }
         }}
     >
-        {/* Icon */}
-        <div className="flex-shrink-0 mt-0.5">
-            {backlink.sourcePageIcon ? (
-                <span className="text-lg">{backlink.sourcePageIcon.icon}</span>
-            ) : (
-                <FileText className="h-5 w-5 text-muted-foreground" />
-            )}
-        </div>
-
-        {/* Content */}
         <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-                <span className="font-medium text-sm truncate">
-                    {backlink.sourcePageTitle}
-                </span>
-                {backlink.sourceType === 'BLOCK' && (
-                    <span className="flex items-center gap-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded">
-                        <SquareDashedBottom className="h-3 w-3" />
-                        Block
-                    </span>
-                )}
-            </div>
-            {backlink.snippet && (
-                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                    {backlink.snippet}
+            {backlink.snippet ? (
+                <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                    {highlightKeyword(backlink.snippet, keyword)}
                 </p>
+            ) : (
+                <p className="text-xs text-muted-foreground italic">…</p>
             )}
         </div>
+        {backlink.sourceType === 'BLOCK' && backlink.linkKind === 'EMBED' && (
+            <span className="flex-shrink-0 flex items-center gap-1 text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded">
+                <SquareDashedBottom className="h-3 w-3" />
+                {blockBadge}
+            </span>
+        )}
     </div>
 ));
 BacklinkItem.displayName = 'BacklinkItem';
+
+/** Collapsible group of backlinks from a single source page. */
+const SourcePageGroup = React.memo<{
+    pageTitle: string;
+    icon: { type: string; icon: string } | null;
+    items: BacklinkVO[];
+    keyword?: string;
+    blockBadge: string;
+    onItemClick: (link: BacklinkVO) => void;
+}>(({ pageTitle, icon, items, keyword, blockBadge, onItemClick }) => (
+    <Collapsible defaultOpen>
+        <CollapsibleTrigger className="group flex w-full items-center gap-1.5 px-2 py-1.5 rounded-md hover:bg-muted transition-colors">
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+            {icon?.icon ? (
+                <span className="text-sm leading-none">{icon.icon}</span>
+            ) : (
+                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+            <span className="text-sm font-medium truncate">{pageTitle}</span>
+            {items.length > 1 && (
+                <span className="ml-auto text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                    {items.length}
+                </span>
+            )}
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+            <div className="ml-4 border-l border-border/60 pl-1 space-y-0.5">
+                {items.map((link, i) => (
+                    <BacklinkItem
+                        key={`${link.sourceId}-${i}`}
+                        backlink={link}
+                        keyword={keyword}
+                        blockBadge={blockBadge}
+                        onClick={() => onItemClick(link)}
+                    />
+                ))}
+            </div>
+        </CollapsibleContent>
+    </Collapsible>
+));
+SourcePageGroup.displayName = 'SourcePageGroup';
 
 /** Loading skeleton */
 const LoadingSkeleton = React.memo(() => (
@@ -94,12 +156,39 @@ const LoadingSkeleton = React.memo(() => (
 ));
 LoadingSkeleton.displayName = 'LoadingSkeleton';
 
+interface PageGroup {
+    pageId: string;
+    pageTitle: string;
+    icon: { type: string; icon: string } | null;
+    items: BacklinkVO[];
+}
+
+/** Group a flat backlink list by source page, preserving order. */
+const groupBySourcePage = (links: BacklinkVO[]): PageGroup[] => {
+    const map = new Map<string, PageGroup>();
+    for (const link of links) {
+        const key = String(link.sourcePageId);
+        const group = map.get(key);
+        if (group) {
+            group.items.push(link);
+        } else {
+            map.set(key, {
+                pageId: key,
+                pageTitle: link.sourcePageTitle,
+                icon: link.sourcePageIcon,
+                items: [link],
+            });
+        }
+    }
+    return Array.from(map.values());
+};
+
 /**
  * BacklinksPanel Component
- * 
- * Displays backlinks (references from other pages/blocks) to the current page.
- * Hidden when there are no backlinks.
- * 
+ *
+ * Displays backlinks and unlinked mentions for the current page.
+ * Hidden when both lists are empty.
+ *
  * @example
  * <BacklinksPanel pageId={123} />
  */
@@ -109,22 +198,28 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
 }) => {
     const pageCtx = useContext(PageContext);
     const spaceService = useSpaceService();
+    const { t } = useI18n();
     // Keep the raw (string) id. Page ids are 19-digit snowflakes > 2^53, so
     // Number(id) corrupts the last digits — the backlinks request then 404s and
     // the global interceptor pops a "页面不存在" toast on every page open.
     const pageId = pageIdProp ?? pageCtx.id ?? undefined;
     const currentSpaceId = pageCtx.spaceId;
+    const currentTitle = pageCtx.title;
 
     const [backlinks, setBacklinks] = useState<BacklinkVO[]>([]);
+    const [mentions, setMentions] = useState<BacklinkVO[]>([]);
     const [loading, setLoading] = useState(false);
+    const [filter, setFilter] = useState<FilterKind>('ALL');
+    const [refreshTick, setRefreshTick] = useState(0);
     const navigator = useNavigator();
 
-    // Fetch backlinks when the target page changes.
+    // Fetch backlinks + unlinked mentions when the target page changes.
     // Prefer the backend index; fall back to a local scan of the current space
     // while the backend backlinks endpoint is not yet available.
     useEffect(() => {
         if (!pageId) {
             setBacklinks([]);
+            setMentions([]);
             return;
         }
         let cancelled = false;
@@ -132,18 +227,35 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
         (async () => {
             try {
                 const remote = await getPageBacklinks(pageId);
-                const result = remote.length
+                const links = remote.length
                     ? remote
                     : await getLocalPageBacklinks(currentSpaceId, pageId, spaceService);
-                if (!cancelled) setBacklinks(result);
+                if (cancelled) return;
+                setBacklinks(links);
+                // Mentions are always locally computed (backend has no index yet).
+                const found = await getUnlinkedMentions(currentSpaceId, pageId, currentTitle, spaceService);
+                if (!cancelled) setMentions(found);
             } catch {
-                if (!cancelled) setBacklinks([]);
+                if (!cancelled) {
+                    setBacklinks([]);
+                    setMentions([]);
+                }
             } finally {
                 if (!cancelled) setLoading(false);
             }
         })();
         return () => { cancelled = true; };
-    }, [pageId, currentSpaceId, spaceService]);
+    }, [pageId, currentSpaceId, currentTitle, spaceService, refreshTick]);
+
+    const handleRefresh = useCallback(() => {
+        invalidateBacklinkIndex();
+        setRefreshTick((n) => n + 1);
+    }, []);
+
+    const handleViewGraph = useCallback(() => {
+        if (!currentSpaceId || !pageId) return;
+        navigator.go({ to: `/space-detail/${currentSpaceId}/graph?focus=${pageId}` });
+    }, [navigator, currentSpaceId, pageId]);
 
     // Handle click to navigate to the source page (resolving cross-space targets).
     const handleClick = useCallback((link: BacklinkVO) => {
@@ -155,47 +267,154 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
         });
     }, [navigator, currentSpaceId]);
 
-    // Don't render if loading or no backlinks
+    // Kinds actually present decide whether the filter chips are worth showing.
+    const presentKinds = useMemo(() => {
+        const kinds = new Set<FilterKind>();
+        for (const link of backlinks) kinds.add(link.linkKind === 'EMBED' ? 'EMBED' : 'NORMAL');
+        if (mentions.length) kinds.add('MENTION');
+        return kinds;
+    }, [backlinks, mentions]);
+
+    const filteredBacklinks = useMemo(() => {
+        if (filter === 'ALL') return backlinks;
+        if (filter === 'MENTION') return [];
+        return backlinks.filter((l) => (l.linkKind === 'EMBED' ? 'EMBED' : 'NORMAL') === filter);
+    }, [backlinks, filter]);
+
+    const showMentions = (filter === 'ALL' || filter === 'MENTION') && mentions.length > 0;
+    const groups = useMemo(() => groupBySourcePage(filteredBacklinks), [filteredBacklinks]);
+
     if (loading) {
         return (
             <div className={cn("border-t mt-6 pt-4", className)}>
                 <div className="flex items-center gap-2 mb-3 px-2">
                     <Link2 className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">反向链接</span>
+                    <span className="text-sm font-medium">{t('bidirectionalLink.backlinksTitle')}</span>
                 </div>
                 <LoadingSkeleton />
             </div>
         );
     }
 
-    // Hide panel when no backlinks
-    if (backlinks.length === 0) {
+    // Hide panel when there is nothing to show at all.
+    if (backlinks.length === 0 && mentions.length === 0) {
         return null;
     }
+
+    const allChips: { kind: FilterKind; label: string }[] = [
+        { kind: 'ALL', label: t('bidirectionalLink.filterAll') },
+        { kind: 'NORMAL', label: t('bidirectionalLink.filterLinks') },
+        { kind: 'MENTION', label: t('bidirectionalLink.filterMentions') },
+        { kind: 'EMBED', label: t('bidirectionalLink.filterEmbeds') },
+    ];
+    const filterChips = allChips.filter((c) => c.kind === 'ALL' || presentKinds.has(c.kind));
 
     return (
         <div className={cn("border-t mt-6 pt-4", className)}>
             {/* Header */}
-            <div className="flex items-center gap-2 mb-3 px-2">
+            <div className="flex items-center gap-2 mb-2 px-2">
                 <Link2 className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Backlinks</span>
+                <span className="text-sm font-medium">{t('bidirectionalLink.backlinksTitle')}</span>
                 <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                     {backlinks.length}
                 </span>
+                <div className="ml-auto flex items-center gap-0.5">
+                    <button
+                        type="button"
+                        onClick={handleRefresh}
+                        title={t('bidirectionalLink.refresh')}
+                        aria-label={t('bidirectionalLink.refresh')}
+                        className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    >
+                        <RefreshCcw className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleViewGraph}
+                        title={t('bidirectionalLink.viewGraph')}
+                        aria-label={t('bidirectionalLink.viewGraph')}
+                        className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    >
+                        <Waypoints className="h-3.5 w-3.5" />
+                    </button>
+                </div>
             </div>
 
-            {/* Backlinks list */}
-            <ScrollArea className="max-h-[300px]">
-                <div className="space-y-1">
-                    {backlinks.map((backlink, index) => (
-                        <BacklinkItem
-                            key={`${backlink.sourceId}-${index}`}
-                            backlink={backlink}
-                            onClick={() => handleClick(backlink)}
-                        />
+            {/* Kind filter chips — only when more than one kind exists */}
+            {presentKinds.size > 1 && (
+                <div className="flex items-center gap-1 mb-2 px-2">
+                    {filterChips.map((chip) => (
+                        <button
+                            key={chip.kind}
+                            type="button"
+                            onClick={() => setFilter(chip.kind)}
+                            className={cn(
+                                "px-2 py-0.5 rounded-full text-xs transition-colors",
+                                filter === chip.kind
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-muted text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            {chip.label}
+                        </button>
                     ))}
                 </div>
-            </ScrollArea>
+            )}
+
+            {/* Backlinks grouped by source page */}
+            {groups.length > 0 && (
+                <ScrollArea className="link-panel-scroll max-h-[300px]">
+                    <div className="space-y-0.5">
+                        {groups.map((group) => (
+                            <SourcePageGroup
+                                key={group.pageId}
+                                pageTitle={group.pageTitle}
+                                icon={group.icon}
+                                items={group.items}
+                                keyword={currentTitle}
+                                blockBadge={t('bidirectionalLink.blockBadge')}
+                                onItemClick={handleClick}
+                            />
+                        ))}
+                    </div>
+                </ScrollArea>
+            )}
+
+            {/* Unlinked mentions */}
+            {showMentions && (
+                <Collapsible defaultOpen className="mt-3">
+                    <CollapsibleTrigger className="group flex w-full items-center gap-1.5 px-2 py-1.5 rounded-md hover:bg-muted transition-colors">
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+                        <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-sm font-medium">{t('bidirectionalLink.unlinkedMentionsTitle')}</span>
+                        <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                            {mentions.length}
+                        </span>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                        <div className="ml-4 border-l border-border/60 pl-1 space-y-0.5 mt-0.5">
+                            {mentions.map((mention, i) => (
+                                <div key={`${mention.sourceId}-${i}`}>
+                                    <div className="flex items-center gap-1.5 px-2 pt-1">
+                                        {mention.sourcePageIcon?.icon ? (
+                                            <span className="text-sm leading-none">{mention.sourcePageIcon.icon}</span>
+                                        ) : (
+                                            <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                                        )}
+                                        <span className="text-sm font-medium truncate">{mention.sourcePageTitle}</span>
+                                    </div>
+                                    <BacklinkItem
+                                        backlink={mention}
+                                        keyword={currentTitle}
+                                        blockBadge={t('bidirectionalLink.blockBadge')}
+                                        onClick={() => handleClick(mention)}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </CollapsibleContent>
+                </Collapsible>
+            )}
         </div>
     );
 };

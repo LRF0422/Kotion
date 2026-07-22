@@ -1,160 +1,175 @@
 /**
  * Link Trigger Extension
- * Automatically detects [[ and (( triggers and opens link pickers.
- * 
+ *
+ * Inline-filtering triggers for bidirectional links, built on
+ * @tiptap/suggestion (same mechanism as the slash menu):
+ *
+ * - `[[query` filters pages inline; Enter/click inserts a pageLinkNode.
+ * - `((query` filters blocks inline; Enter/click inserts a blockLink embed.
+ * - Esc dismisses the menu and leaves the typed text untouched, so users can
+ *   still type literal brackets.
+ *
  * @module @kn/plugin-block-reference/bidirectional-link/extensions
  */
 
-import { Extension, Plugin, PluginKey, EditorView, Editor, ReactRenderer, computePosition, flip, posToDOMRect } from "@kn/editor";
+import {
+    Extension,
+    Suggestion,
+    type SuggestionProps,
+    type SuggestionKeyDownProps,
+    PluginKey,
+    ReactRenderer,
+    computePosition,
+    flip,
+    shift,
+} from "@kn/editor";
+import type { Editor, Range } from "@kn/editor";
 import { PageLinkPicker } from "../components/PageLinkPicker";
 import { BlockLinkPicker } from "../components/BlockLinkPicker";
 
+/** Imperative handle exposed by both suggestion lists. */
+export interface LinkSuggestionListHandle {
+    onKeyDown: (props: SuggestionKeyDownProps) => boolean;
+}
+
+/** Payload passed from the lists back to the suggestion `command`. */
+export interface LinkSuggestionCommandProps {
+    page?: { id: number | string; title: string };
+    block?: { id: string };
+}
+
 /**
- * LinkTrigger Extension
- * 
- * Listens for [[ and (( key sequences and opens the appropriate picker.
- * The pickers automatically get spaceId from PageContext.
+ * Shared renderer: mounts the given list component as a caret-anchored
+ * floating menu and forwards suggestion lifecycle events to it.
  */
-export const LinkTrigger = Extension.create({
-    name: 'linkTrigger',
-    priority: 100,
+const createSuggestionRenderer = (Component: React.ComponentType<any>) => {
+    return () => {
+        let component: ReactRenderer<LinkSuggestionListHandle> | null = null;
 
-    addProseMirrorPlugins() {
-        const editor = this.editor;
-        let activeComponent: ReactRenderer | null = null;
-
-        const cleanupComponent = () => {
-            if (activeComponent) {
-                try {
-                    activeComponent.element?.parentElement?.removeChild(activeComponent.element);
-                } catch {
-                    // Element might already be removed
-                }
-                activeComponent.destroy();
-                activeComponent = null;
-            }
-        };
-
-        const positionComponent = (component: ReactRenderer, editor: Editor) => {
-            const { selection } = editor.state;
-            const domRect = posToDOMRect(editor.view, selection.from, selection.to);
-
+        const updatePosition = (clientRect: (() => DOMRect | null) | null | undefined) => {
+            const rect = clientRect?.();
+            if (!component || !rect) return;
+            const el = component.element as HTMLElement;
+            // The ReactRenderer wrapper is a block-level div: appended to body it
+            // spans the full viewport width, which makes shift() clamp x to the
+            // left edge. Shrink it to its content before measuring.
+            el.style.position = 'fixed';
+            el.style.width = 'max-content';
+            el.style.zIndex = '9999';
+            // Provisional anchor so the menu never flashes at the viewport
+            // corner while computePosition resolves asynchronously.
+            el.style.left = `${rect.left}px`;
+            el.style.top = `${rect.bottom}px`;
             const virtualElement = {
-                getBoundingClientRect: () => domRect,
-                getClientRects: () => [domRect],
+                getBoundingClientRect: () => rect,
+                getClientRects: () => [rect],
             };
-
-            computePosition(virtualElement, component.element as HTMLElement, {
+            computePosition(virtualElement, el, {
                 placement: "bottom-start",
-                middleware: [flip()],
+                strategy: "fixed",
+                middleware: [flip(), shift({ padding: 8 })],
             }).then(({ x, y, strategy }) => {
-                const el = component.element as HTMLElement;
-                el.style.zIndex = '9999';
+                if (!component) return;
                 el.style.position = strategy;
                 el.style.left = `${x}px`;
                 el.style.top = `${y}px`;
             });
         };
 
-        const showPagePicker = (deleteChars: number) => {
-            cleanupComponent();
-
-            // Delete trigger characters
-            const { state, view } = editor;
-            const from = state.selection.from - deleteChars;
-            if (from >= 0) {
-                view.dispatch(state.tr.delete(from, state.selection.from));
+        const destroy = () => {
+            if (!component) return;
+            if (document.body.contains(component.element)) {
+                document.body.removeChild(component.element);
             }
-
-            const component = new ReactRenderer(PageLinkPicker, {
-                editor,
-                props: {
-                    visible: true,
-                    // spaceId will be obtained from PageContext inside the component
-                    onSelect: (page: { id: number; title: string }) => {
-                        (editor.commands as any).setPageLink({ pageId: page.id, title: page.title });
-                        cleanupComponent();
-                        editor.commands.focus();
-                    },
-                    onCancel: () => {
-                        cleanupComponent();
-                        editor.commands.focus();
-                    },
-                },
-            });
-
-            component.render();
-            document.body.appendChild(component.element);
-            activeComponent = component;
-            positionComponent(component, editor);
+            component.destroy();
+            component = null;
         };
 
-        const showBlockPicker = (deleteChars: number) => {
-            cleanupComponent();
+        return {
+            onStart: (props: SuggestionProps) => {
+                if (!props.editor.isEditable) return;
+                component = new ReactRenderer(Component, {
+                    props,
+                    editor: props.editor,
+                });
+                component.render();
+                document.body.appendChild(component.element);
+                updatePosition(props.clientRect);
+            },
 
-            // Delete trigger characters
-            const { state, view } = editor;
-            const from = state.selection.from - deleteChars;
-            if (from >= 0) {
-                view.dispatch(state.tr.delete(from, state.selection.from));
-            }
+            onUpdate: (props: SuggestionProps) => {
+                if (!component) return;
+                component.updateProps(props);
+                updatePosition(props.clientRect);
+            },
 
-            const component = new ReactRenderer(BlockLinkPicker, {
-                editor,
-                props: {
-                    visible: true,
-                    // spaceId will be obtained from PageContext inside the component
-                    onSelect: (block: { id: string }) => {
-                        (editor.commands as any).setBlockLink({ blockId: block.id });
-                        cleanupComponent();
-                        editor.commands.focus();
-                    },
-                    onCancel: () => {
-                        cleanupComponent();
-                        editor.commands.focus();
-                    },
-                },
-            });
+            onKeyDown: (props: SuggestionKeyDownProps) => {
+                if (!component) return false;
+                if (props.event.key === 'Escape') {
+                    // Dismiss the menu but keep the typed [[query text so the
+                    // user can continue typing literal brackets.
+                    destroy();
+                    return true;
+                }
+                return component.ref?.onKeyDown(props) ?? false;
+            },
 
-            component.render();
-            document.body.appendChild(component.element);
-            activeComponent = component;
-            positionComponent(component, editor);
+            onExit: () => {
+                destroy();
+            },
+        };
+    };
+};
+
+export const LinkTrigger = Extension.create({
+    name: 'linkTrigger',
+    priority: 100,
+
+    addProseMirrorPlugins() {
+        const pageCommand = ({ editor, range, props }: { editor: Editor; range: Range; props: LinkSuggestionCommandProps }) => {
+            if (!props.page) return;
+            editor
+                .chain()
+                .focus()
+                .deleteRange(range)
+                .setPageLink({ pageId: props.page.id, title: props.page.title })
+                .run();
+        };
+
+        const blockCommand = ({ editor, range, props }: { editor: Editor; range: Range; props: LinkSuggestionCommandProps }) => {
+            if (!props.block) return;
+            editor
+                .chain()
+                .focus()
+                .deleteRange(range)
+                .setBlockLink({ blockId: props.block.id })
+                .run();
         };
 
         return [
-            new Plugin({
-                key: new PluginKey('linkTrigger'),
-
-                props: {
-                    handleTextInput(view: EditorView, from: number, _to: number, text: string) {
-                        const { state } = view;
-                        const $from = state.doc.resolve(from);
-                        const textBefore = $from.parent.textBetween(
-                            Math.max(0, $from.parentOffset - 1),
-                            $from.parentOffset,
-                            ''
-                        );
-
-                        // Check for [[ trigger
-                        if (text === '[' && textBefore === '[') {
-                            setTimeout(() => {
-                                showPagePicker(2);
-                            }, 0);
-                            return false;
-                        }
-
-                        // Check for (( trigger
-                        if (text === '(' && textBefore === '(') {
-                            setTimeout(() => {
-                                showBlockPicker(2);
-                            }, 0);
-                            return false;
-                        }
-
-                        return false;
-                    },
-                },
+            Suggestion({
+                editor: this.editor,
+                pluginKey: new PluginKey('pageLinkSuggestion'),
+                char: '[[',
+                allowSpaces: true,
+                allowedPrefixes: null,
+                startOfLine: false,
+                decorationClass: 'link-suggestion-query',
+                command: pageCommand,
+                items: ({ query }) => [query],
+                render: createSuggestionRenderer(PageLinkPicker),
+            }),
+            Suggestion({
+                editor: this.editor,
+                pluginKey: new PluginKey('blockLinkSuggestion'),
+                char: '((',
+                allowSpaces: true,
+                allowedPrefixes: null,
+                startOfLine: false,
+                decorationClass: 'link-suggestion-query',
+                command: blockCommand,
+                items: ({ query }) => [query],
+                render: createSuggestionRenderer(BlockLinkPicker),
             }),
         ];
     },

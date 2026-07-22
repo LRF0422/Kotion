@@ -1,0 +1,70 @@
+/*
+ * Bidirectional link styles.
+ *
+ * `.wiki-page-link` — legacy [[Page Title]] mark (kept for documents created
+ * before the inline `pageLinkNode` migration). Styled as a subtle pill that
+ * matches PageReferenceView instead of the old inline dashed underline.
+ *
+ * `.wiki-page-link-node` — the new inline atom node pill (most styling lives
+ * in the React view via Tailwind; here we only keep ProseMirror-selection
+ * feedback that Tailwind can't express on NodeViewWrapper).
+ */
+
+.ProseMirror .wiki-page-link {
+    color: hsl(var(--primary));
+    cursor: pointer;
+    border-radius: 0.25rem;
+    padding: 0 0.125rem;
+    text-decoration: none;
+    border-bottom: 1px dashed hsl(var(--primary) / 0.5);
+    transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.ProseMirror .wiki-page-link:hover {
+    background-color: hsl(var(--primary) / 0.08);
+    border-bottom-color: hsl(var(--primary));
+}
+
+.dark .ProseMirror .wiki-page-link:hover {
+    background-color: hsl(var(--primary) / 0.16);
+}
+
+/* New inline page link node: selection ring when node-selected */
+.ProseMirror .wiki-page-link-node.ProseMirror-selectednode>span {
+    box-shadow: 0 0 0 2px hsl(var(--primary) / 0.4);
+    border-radius: 0.25rem;
+}
+
+/* Block link embed container */
+.ProseMirror .block-link-embed {
+    border-radius: 0.375rem;
+}
+
+/* Inline query highlight while a [[ / (( suggestion is active */
+.ProseMirror .link-suggestion-query {
+    color: hsl(var(--primary));
+    background-color: hsl(var(--primary) / 0.08);
+    border-radius: 0.25rem;
+    padding: 0 0.125rem;
+}
+
+/* Snippet keyword highlight inside the backlinks panel */
+.backlink-snippet-highlight {
+    background-color: hsl(var(--primary) / 0.15);
+    color: hsl(var(--primary));
+    border-radius: 0.125rem;
+    padding: 0 0.125rem;
+    font-weight: 500;
+}
+
+/*
+ * Radix ScrollArea wraps children in a `display: table` div that sizes to
+ * content, so long titles push past the panel width and `truncate` never
+ * kicks in (text gets hard-clipped by overflow:hidden instead of showing
+ * an ellipsis). Restore block flow inside our link panels.
+ */
+.link-panel-scroll [data-radix-scroll-area-viewport]>div {
+    display: block !important;
+    width: 100%;
+    min-width: 0;
+}

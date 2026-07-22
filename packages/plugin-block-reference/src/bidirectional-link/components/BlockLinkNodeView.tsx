@@ -9,9 +9,11 @@
 import React, { useMemo, useCallback, useRef, useContext, useEffect, useState } from "react";
 import { NodeViewWrapper, type NodeViewProps, AnyExtension, EditorContent, StyledEditor, useEditor, useEditorExtension, PageContext, JSONContent } from "@kn/editor";
 import { useHover, useNavigator } from "@kn/common";
-import { ArrowUpRight, RefreshCcw, Trash2 } from "@kn/icon";
+import { ArrowUpRight, FileText, RefreshCcw, Trash2 } from "@kn/icon";
 import { cn, IconButton, Skeleton, Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@kn/ui";
 import { useBidirectionalBlockInfo } from "../hooks/useBidirectionalBlockInfo";
+import { usePageInfo } from "../../hooks";
+import { useI18n } from "../../i18n/use-i18n";
 
 /** Memoized toolbar button with tooltip */
 const ToolbarButton = React.memo<{
@@ -65,10 +67,14 @@ export const BlockLinkView: React.FC<NodeViewProps> = React.memo((props) => {
     const hover = useHover(ref);
     const navigator = useNavigator();
     const pageInfo = useContext(PageContext);
+    const { t } = useI18n();
     const [refreshKey, setRefreshKey] = useState(0);
 
     // Use new hook for block info fetching
     const { blockInfo, loading, error, refetch } = useBidirectionalBlockInfo(blockId, true);
+
+    // Resolve the source page's live title/icon for the "from" header.
+    const { pageInfo: sourcePage } = usePageInfo(blockInfo?.pageId != null ? String(blockInfo.pageId) : null);
 
     const handleRefresh = useCallback(() => {
         refetch();
@@ -134,7 +140,7 @@ export const BlockLinkView: React.FC<NodeViewProps> = React.memo((props) => {
         <NodeViewWrapper
             as="div"
             ref={ref}
-            className="border border-dashed border-border rounded-sm relative group my-2"
+            className="block-link-embed border border-dashed border-border rounded-sm relative group my-2"
             role="region"
             aria-label="Block Link"
             aria-busy={loading}
@@ -143,19 +149,48 @@ export const BlockLinkView: React.FC<NodeViewProps> = React.memo((props) => {
 
             {error && (
                 <div className="p-4 text-center text-destructive text-sm" role="alert">
-                    <span className="font-medium">Load failed:</span> {error}
+                    <span className="font-medium">{t('bidirectionalLink.loadFailed')}:</span> {error}
                 </div>
             )}
 
             {!loading && !error && content && (
-                <StyledEditor className="px-0" style={{ padding: "5px" }}>
-                    {blockEditor && <EditorContent editor={blockEditor} />}
-                </StyledEditor>
+                <>
+                    {/* Source page header */}
+                    {blockInfo?.pageId && (
+                        <div
+                            className={cn(
+                                "flex items-center gap-1.5 px-2 py-1 border-b border-dashed border-border",
+                                "text-xs text-muted-foreground cursor-pointer hover:text-primary transition-colors"
+                            )}
+                            onClick={goToDetail}
+                            role="link"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    goToDetail();
+                                }
+                            }}
+                        >
+                            {sourcePage?.icon?.icon ? (
+                                <span className="text-sm leading-none">{sourcePage.icon.icon}</span>
+                            ) : (
+                                <FileText className="h-3 w-3 flex-shrink-0" />
+                            )}
+                            <span className="truncate">
+                                {t('bidirectionalLink.from')}: {sourcePage?.title || t('bidirectionalLink.untitled')}
+                            </span>
+                        </div>
+                    )}
+                    <StyledEditor className="px-0" style={{ padding: "5px" }}>
+                        {blockEditor && <EditorContent editor={blockEditor} />}
+                    </StyledEditor>
+                </>
             )}
 
             {!loading && !error && !content && (
                 <div className="p-4 text-center text-muted-foreground text-sm italic">
-                    Block not found or deleted
+                    {t('bidirectionalLink.blockNotFound')}
                 </div>
             )}
 
@@ -174,19 +209,19 @@ export const BlockLinkView: React.FC<NodeViewProps> = React.memo((props) => {
                 <ToolbarButton
                     icon={refreshIcon}
                     onClick={handleRefresh}
-                    label="Refresh"
+                    label={t('bidirectionalLink.refresh')}
                     disabled={loading}
                 />
                 <ToolbarButton
                     icon={<ArrowUpRight className="w-4 h-4" />}
                     onClick={goToDetail}
-                    label="Go to source"
+                    label={t('bidirectionalLink.goToSource')}
                 />
                 {editor.isEditable && (
                     <ToolbarButton
                         icon={<Trash2 className="w-4 h-4" />}
                         onClick={deleteNode}
-                        label="Delete"
+                        label={t('bidirectionalLink.delete')}
                     />
                 )}
             </div>

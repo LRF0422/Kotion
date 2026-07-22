@@ -9,12 +9,17 @@
  * @module @kn/plugin-block-reference/bidirectional-link
  */
 
+// Styles (pill link, suggestion highlight, snippet highlight)
+import './styles/bidirectional-link.css';
+
 // API definitions
 export { APIS } from './api';
 
 // Extensions
 export { PageLink, PAGE_LINK_CLICK } from './extensions/PageLink';
 export type { PageLinkAttributes } from './extensions/PageLink';
+export { PageLinkNode } from './extensions/PageLinkNode';
+export type { PageLinkNodeAttributes } from './extensions/PageLinkNode';
 export { BlockLink } from './extensions/BlockLink';
 export type { BlockLinkAttributes } from './extensions/BlockLink';
 export { LinkTrigger } from './extensions/LinkTrigger';
@@ -38,6 +43,8 @@ export {
 export {
     getLocalPageBacklinks,
     buildSpaceBacklinkIndex,
+    getUnlinkedMentions,
+    invalidateBacklinkIndex,
 } from './services/localBacklinkIndex';
 export type {
     BacklinkVO,
