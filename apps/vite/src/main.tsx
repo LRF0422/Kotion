@@ -18,7 +18,6 @@ import { stickyNote } from "@kn/plugin-sticky-note"
 import { theme } from "@kn/plugin-theme"
 import { office} from "@kn/plugin-office"
 
-
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <App plugins={[ai, bitable, blockReference, speechToText, chart,
     comment, stickyNote, theme, office,

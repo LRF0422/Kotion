@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>KN Admin</title>
+  <script>
+    // Apply saved theme immediately to prevent flash
+    (function () {
+      const theme = localStorage.getItem('kn-ui-theme') || localStorage.getItem('theme');
+      if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
+  <style>
+    html {
+      background-color: hsl(0 0% 100%);
+    }
+
+    html.dark {
+      background-color: hsl(240 10% 3.9%);
+    }
+
+    #root:empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      min-height: 100dvh;
+    }
+
+    #root:empty::after {
+      content: 'KN Admin';
+      font-size: 48px;
+      font-weight: bold;
+      color: hsl(240 5.9% 10%);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    html.dark #root:empty::after {
+      color: hsl(0 0% 98%);
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.4;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>
