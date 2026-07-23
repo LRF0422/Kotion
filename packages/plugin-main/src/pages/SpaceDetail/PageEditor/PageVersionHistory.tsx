@@ -31,6 +31,16 @@ export interface PageVersionHistoryProps {
 
 const PAGE_SIZE = 50
 
+/**
+ * The backend serializes IBaseEnum fields as `{ value, desc }` objects
+ * (global EnumSerializer), so `status` must be unwrapped before comparing
+ * against plain strings like 'ACTIVE' / 'DRAFT'.
+ */
+const normalizeStatus = (s: unknown): string => {
+    if (s && typeof s === 'object') return String((s as any).value ?? '')
+    return s != null ? String(s) : ''
+}
+
 const formatTime = (value?: string | number): string => {
     if (!value) return ''
     try {
@@ -66,8 +76,12 @@ export const PageVersionHistory: React.FC<PageVersionHistoryProps> = ({
                 pageId, current: 1, pageSize: PAGE_SIZE,
             })
             const data = res?.data
-            setVersions(data?.records || [])
-            setTotal(data?.total ?? (data?.records?.length || 0))
+            const records: PageVersionItem[] = (data?.records || []).map((r: any) => ({
+                ...r,
+                status: normalizeStatus(r?.status),
+            }))
+            setVersions(records)
+            setTotal(data?.total ?? records.length)
         } catch (err) {
             console.error('Failed to load version history:', err)
             toast.error(t('editor.version.loadFailed', 'Failed to load version history'))

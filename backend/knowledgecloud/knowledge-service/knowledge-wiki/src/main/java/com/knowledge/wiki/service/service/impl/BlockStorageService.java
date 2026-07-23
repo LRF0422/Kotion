@@ -31,6 +31,7 @@ import com.knowledge.wiki.service.entity.dto.BlockPatchItemDTO;
 import com.knowledge.wiki.service.mapper.PageContentMapper;
 import com.knowledge.wiki.service.service.IBlockVersionService;
 import com.knowledge.wiki.service.service.IPageContentService;
+import com.knowledge.wiki.service.service.IPageSnapshotService;
 import com.knowledge.wiki.service.service.IPageVersionService;
 
 import cn.hutool.core.collection.CollUtil;
@@ -102,6 +103,23 @@ public class BlockStorageService {
 
     @Autowired
     private BlockCacheService blockCacheService;
+
+    @Autowired
+    private IBlockVersionService blockVersionService;
+
+    @Autowired
+    private IPageSnapshotService pageSnapshotService;
+
+    /**
+     * {@code @Lazy} to break the circular dependency:
+     * {@code BlockStorageService -> IPageVersionService -> BlockStorageService}.
+     */
+    @Autowired
+    @Lazy
+    private IPageVersionService pageVersionService;
+
+    /** Plain helper (not a Spring bean) that builds block change-log rows. */
+    private final BlockChangeRecorder changeRecorder = new BlockChangeRecorder();
 
     /**
      * Self-injection (via proxy) so methods that have already done CPU-only work
@@ -1028,7 +1046,22 @@ public class BlockStorageService {
         }
 
         // --- Phase 2: Execute deletes ---
+        // Capture the current version of each block about to be deleted FIRST,
+        // so the change log can record the correct prevVersion.
+        Map<String, Integer> deletedPrevVersions = new HashMap<>();
         if (CollUtil.isNotEmpty(allDeletedIds)) {
+            processBatched(new ArrayList<>(allDeletedIds), BATCH_SIZE, batch -> {
+                List<Map<String, Object>> rows = pageContentService.listMaps(
+                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PageContent>()
+                                .select(PageContent::getId, PageContent::getVersion)
+                                .eq(PageContent::getPageId, pageId)
+                                .in(PageContent::getId, batch));
+                for (Map<String, Object> row : rows) {
+                    Object ver = row.get("version");
+                    deletedPrevVersions.put((String) row.get("id"),
+                            ver != null ? ((Number) ver).intValue() : 1);
+                }
+            });
             // Batched delete to avoid oversized IN clauses
             processBatched(new ArrayList<>(allDeletedIds), BATCH_SIZE, batch -> {
                 pageContentService.lambdaUpdate()
@@ -1050,9 +1083,6 @@ public class BlockStorageService {
         }
 
         // --- Phase 4: Collect new block versions for client round-trip ---
-        // Page/block version *history* is intentionally NOT recorded (version &
-        // rollback removed). The per-block `version` column is kept only for
-        // optimistic-concurrency (prevVersion) on the next patch.
         Map<String, Integer> newVersions = new HashMap<>();
         for (PageContent b : createdBlocks) {
             newVersions.put(b.getId(), b.getVersion() != null ? b.getVersion() : 1);
@@ -1063,7 +1093,66 @@ public class BlockStorageService {
         }
         result.setBlockVersions(newVersions);
 
+        // --- Phase 5: Record change history & seal ONE new ACTIVE PageVersion ---
+        // Save = Publish: every effective patch (created/updated/deleted > 0)
+        // writes its per-block delta rows and seals them under a brand-new
+        // ACTIVE PageVersion. Readers reconstruct any historical state via
+        // walk-back (PageSnapshotService.getPageStateAtVersion). Pure-skip
+        // patches (no effective change) intentionally seal nothing.
+        boolean hasChanges = CollUtil.isNotEmpty(createdBlocks)
+                || CollUtil.isNotEmpty(updatedBlocks)
+                || CollUtil.isNotEmpty(allDeletedIds);
+        if (hasChanges) {
+            // 5a. Write pending change rows (page_version_id = NULL for now).
+            List<BlockVersion> changeRows = changeRecorder.buildAllRecords(
+                    pageId, createdBlocks, updatedBlocks, allDeletedIds, deletedPrevVersions);
+            if (CollUtil.isNotEmpty(changeRows)) {
+                processBatched(changeRows, BATCH_SIZE, blockVersionService::saveBatch);
+            }
+
+            // 5b. Seal a new ACTIVE PageVersion; demote the previous one.
+            PageVersion currentActive = pageVersionService.getCurrentActiveVersion(pageId);
+            PageVersion sealed = new PageVersion();
+            sealed.setSubjectId(pageId);
+            sealed.setStatus(VersionStatus.ACTIVE);
+            sealed.setVersion(currentActive == null ? "1"
+                    : String.valueOf(Integer.parseInt(currentActive.getVersion()) + 1));
+            if (currentActive != null) {
+                sealed.setLastVersionId(currentActive.getId());
+                sealed.setTitle(currentActive.getTitle());
+                sealed.setParentId(currentActive.getParentId());
+            }
+            sealed.setChangeSummary(buildChangeSummary(
+                    createdBlocks.size(), updatedBlocks.size(), allDeletedIds.size()));
+            pageVersionService.save(sealed);
+            if (currentActive != null) {
+                currentActive.setStatus(VersionStatus.IN_ACTIVE);
+                pageVersionService.updateById(currentActive);
+            }
+
+            // 5c. Tag the pending rows with the sealed page version.
+            pageSnapshotService.snapshotBlocks(pageId, sealed.getId(), sealed.getVersion());
+
+            result.setPageVersionId(sealed.getId());
+            result.setPageVersion(sealed.getVersion());
+        }
+
         return result;
+    }
+
+    /** Human-readable one-liner describing what a sealed patch changed. */
+    private String buildChangeSummary(int created, int updated, int deleted) {
+        List<String> parts = new ArrayList<>();
+        if (created > 0) {
+            parts.add(created + " added");
+        }
+        if (updated > 0) {
+            parts.add(updated + " edited");
+        }
+        if (deleted > 0) {
+            parts.add(deleted + " removed");
+        }
+        return String.join(", ", parts);
     }
 
     /**

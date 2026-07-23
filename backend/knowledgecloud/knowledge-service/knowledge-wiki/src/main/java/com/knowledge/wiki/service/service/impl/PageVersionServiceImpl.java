@@ -217,6 +217,15 @@ public class PageVersionServiceImpl extends AbstractVersionService<Page, PageVer
         List<BlockVersion> targetState = pageSnapshotService.getPageStateAtVersion(
                 pageId, targetVersion.getVersion());
 
+        // SAFETY: an empty walk-back state means the target version predates
+        // block-history recording (or its rows were purged). Applying the diff
+        // would delete the ENTIRE current document — refuse instead.
+        if (CollUtil.isEmpty(targetState)) {
+            log.warn("rollbackToVersion: empty walk-back state for pageId={} targetVersion={}, aborting",
+                    pageId, targetVersion.getVersion());
+            throw WikiException.NO_VERSION_TO_ROLLBACK.newException();
+        }
+
         // 2. Read current state from wiki_page_block.
         List<PageContent> currentBlocks = pageContentService.findByPageId(pageId);
 
@@ -266,13 +275,24 @@ public class PageVersionServiceImpl extends AbstractVersionService<Page, PageVer
             changes.add(item);
         }
 
+        // Only delete a current block when history gives POSITIVE evidence it
+        // did not exist at the target version. Blocks with no recorded rows at
+        // or before the target (e.g. created before history recording started,
+        // or bulk-imported) have an UNKNOWN state at that version — deleting
+        // them would destroy content the history never captured, so keep them.
+        Set<String> deleteCandidates = new HashSet<>();
         for (String currentId : currentTopLevelIds) {
             if (!targetTopLevelIds.contains(currentId)) {
-                BlockPatchItemDTO del = new BlockPatchItemDTO();
-                del.setAction("delete");
-                del.setBlockId(currentId);
-                changes.add(del);
+                deleteCandidates.add(currentId);
             }
+        }
+        Set<String> safeToDelete = filterHistoricallyAbsent(
+                pageId, deleteCandidates, targetVersion.getVersion());
+        for (String currentId : safeToDelete) {
+            BlockPatchItemDTO del = new BlockPatchItemDTO();
+            del.setAction("delete");
+            del.setBlockId(currentId);
+            changes.add(del);
         }
 
         // 6. Apply via patchBlocks — this re-uses Task 2 and atomically seals
@@ -304,6 +324,92 @@ public class PageVersionServiceImpl extends AbstractVersionService<Page, PageVer
         }
 
         return newVersion;
+    }
+
+    /**
+     * From the given deletion candidates, keep only the blocks whose history
+     * PROVES they were absent at {@code targetVersion}:
+     * <ul>
+     *   <li>the block has sealed rows at or before the target version, yet the
+     *       walk-back excluded it — i.e. its latest event there is a delete; or</li>
+     *   <li>the block's EARLIEST sealed event is a {@code create} AFTER the
+     *       target version — it simply did not exist yet.</li>
+     * </ul>
+     * Blocks with no sealed history at all, or whose earliest recorded event is
+     * an {@code update}/{@code delete} after the target (meaning they predate
+     * history recording), are filtered OUT and preserved.
+     */
+    private Set<String> filterHistoricallyAbsent(Long pageId, Set<String> candidates,
+            String targetVersion) {
+        Set<String> result = new HashSet<>();
+        if (CollUtil.isEmpty(candidates)) {
+            return result;
+        }
+        int targetVer;
+        try {
+            targetVer = Integer.parseInt(targetVersion);
+        } catch (NumberFormatException e) {
+            log.warn("filterHistoricallyAbsent: invalid target version '{}' for pageId={}",
+                    targetVersion, pageId);
+            return result;
+        }
+
+        List<BlockVersion> rows = blockVersionService.lambdaQuery()
+                .select(BlockVersion::getBlockId, BlockVersion::getPageVersion,
+                        BlockVersion::getChangeAction)
+                .eq(BlockVersion::getPageId, pageId)
+                .in(BlockVersion::getBlockId, candidates)
+                .isNotNull(BlockVersion::getPageVersionId)
+                .list();
+
+        // blockId -> earliest sealed event (by numeric page_version)
+        Map<String, BlockVersion> earliest = new HashMap<>();
+        Set<String> hasRowsAtOrBefore = new HashSet<>();
+        for (BlockVersion row : rows) {
+            Integer ver = parseVersionSafe(row.getPageVersion());
+            if (ver == null) {
+                continue;
+            }
+            if (ver <= targetVer) {
+                hasRowsAtOrBefore.add(row.getBlockId());
+            }
+            BlockVersion prev = earliest.get(row.getBlockId());
+            Integer prevVer = prev != null ? parseVersionSafe(prev.getPageVersion()) : null;
+            if (prev == null || (prevVer != null && ver < prevVer)) {
+                earliest.put(row.getBlockId(), row);
+            }
+        }
+
+        for (String blockId : candidates) {
+            if (hasRowsAtOrBefore.contains(blockId)) {
+                // Walk-back saw its history and still excluded it -> it was
+                // deleted at/before the target version. Safe to delete.
+                result.add(blockId);
+                continue;
+            }
+            BlockVersion first = earliest.get(blockId);
+            if (first != null && "create".equalsIgnoreCase(first.getChangeAction())) {
+                // Born after the target version. Safe to delete.
+                result.add(blockId);
+                continue;
+            }
+            log.warn("rollbackToVersion: keeping blockId={} on pageId={} — no sealed history "
+                    + "at or before version {} (predates history recording)",
+                    blockId, pageId, targetVersion);
+        }
+        return result;
+    }
+
+    /** Parse a page version string to int, returning null when malformed. */
+    private Integer parseVersionSafe(String version) {
+        if (StrUtil.isBlank(version)) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(version);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /**

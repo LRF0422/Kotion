@@ -136,6 +136,10 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             generate(prompt);
+        } else if (e.key === "Escape" && !result && !isLoading) {
+            // Notion-style: Esc on an empty draft discards the block.
+            e.preventDefault();
+            props.deleteNode();
         }
         e.stopPropagation();
     };
@@ -163,22 +167,22 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
 
     return (
         <NodeViewWrapper as="div" className="my-2">
-            <div className="overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm">
+            <div className="overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm">
                 {/* Header */}
-                <div className="flex items-center justify-between border-b px-3 py-2">
-                    <div className="flex items-center gap-1.5 text-sm font-medium">
+                <div className="flex items-center justify-between border-b px-4 py-2.5">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
                         {isLoading ? (
                             <Loader2 className="h-4 w-4 animate-spin text-purple-500" />
                         ) : (
                             <Sparkles className="h-4 w-4 text-purple-500" />
                         )}
-                        {t("ai.title", { defaultValue: "AI 写作" })}
+                        {t("ai.title", { defaultValue: "由 AI 生成" })}
                     </div>
                     <button
                         onClick={props.deleteNode}
                         disabled={isLoading}
                         title={t("ai.delete", { defaultValue: "删除" })}
-                        className="rounded-sm p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+                        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
                     >
                         <X className="h-4 w-4" />
                     </button>
@@ -186,7 +190,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
 
                 {/* Preview (streaming / result / error) */}
                 {(isLoading || result || error) && (
-                    <div className="max-h-[360px] overflow-y-auto border-b px-3 py-2.5">
+                    <div className="max-h-[360px] overflow-y-auto border-b px-4 py-3">
                         {error ? (
                             <div className="flex items-start gap-2 text-sm text-destructive">
                                 <X className="mt-0.5 h-4 w-4 shrink-0" />
@@ -207,8 +211,8 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
 
                 {/* Input row: initial prompt, or follow-up refine after a result */}
                 {!isLoading && (
-                    <div className="px-3 py-2">
-                        <div className="flex items-end gap-2">
+                    <div className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
                             <textarea
                                 ref={promptRef}
                                 value={hasResult ? refineText : prompt}
@@ -223,22 +227,21 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
                                         ? t("ai.refinePlaceholder", { defaultValue: "继续修改，如：再正式一点…" })
                                         : t("ai.blockPlaceholder", { defaultValue: "让 AI 帮你写点什么…" })
                                 }
-                                className="flex-1 resize-none rounded-md border border-input bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring"
+                                className="flex-1 resize-none rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring"
                             />
-                            <Button
-                                size="icon"
-                                className="h-7 w-7 shrink-0"
+                            <button
                                 disabled={hasResult ? !refineText.trim() : !prompt.trim()}
                                 onClick={() => (hasResult ? refine() : generate(prompt))}
                                 aria-label="Send"
+                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-40"
                             >
-                                <Send className="h-3.5 w-3.5" />
-                            </Button>
+                                <Send className="h-4 w-4" />
+                            </button>
                         </div>
 
                         {/* Quick prompts (idle only) */}
                         {!hasResult && !result && (
-                            <div className="mt-2 flex flex-wrap gap-1.5">
+                            <div className="mt-2.5 flex flex-wrap gap-2">
                                 {QUICK_PROMPTS.map((q) => (
                                     <button
                                         key={q.zh}
@@ -246,7 +249,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
                                             setPrompt(q.seed);
                                             setTimeout(() => promptRef.current?.focus(), 0);
                                         }}
-                                        className="rounded-full border bg-muted/40 px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                                        className="rounded-full border px-3 py-1 text-[13px] text-foreground/80 transition-colors hover:bg-accent hover:text-accent-foreground"
                                     >
                                         {q[lang]}
                                     </button>
@@ -257,13 +260,13 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
                 )}
 
                 {/* Footer actions */}
-                <div className="flex items-center justify-between gap-2 border-t bg-muted/30 px-3 py-2">
+                <div className="flex items-center justify-between gap-2 border-t px-4 py-2">
                     <div className="flex items-center gap-0.5">
                         {hasResult && (
                             <button
                                 title={t("ai.copy", { defaultValue: "复制" })}
                                 onClick={copy}
-                                className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                             >
                                 <Copy className="h-3.5 w-3.5" />
                             </button>
@@ -272,7 +275,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
                             <button
                                 title={t("ai.regenerate", { defaultValue: "重新生成" })}
                                 onClick={() => runMessages(messagesRef.current)}
-                                className="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                             >
                                 <RotateCcw className="h-3.5 w-3.5" />
                             </button>
@@ -290,7 +293,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
                                 <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="h-7 px-2.5 text-xs text-muted-foreground"
+                                    className="h-7 px-2.5 text-sm font-normal text-muted-foreground"
                                     onClick={props.deleteNode}
                                 >
                                     {t("ai.discard", { defaultValue: "丢弃" })}
@@ -298,7 +301,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
                                 {hasResult && (
                                     <Button size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={accept}>
                                         <Check className="h-3 w-3" />
-                                        {t("ai.accept", { defaultValue: "完成" })}
+                                        {t("ai.accept", { defaultValue: "保留" })}
                                     </Button>
                                 )}
                             </>
