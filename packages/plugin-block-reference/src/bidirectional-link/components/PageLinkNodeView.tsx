@@ -3,9 +3,11 @@
  *
  * - Resolves the live page title/icon at render time (cached via usePageInfo),
  *   so renames never leave stale text in documents.
- * - Hover shows a preview card (icon, title, space, content excerpt) with a
- *   jump action; a plain click while editing opens the same card instead of
- *   navigating (avoids accidental jumps).
+ * - Hover shows a preview card (icon, title, space, content excerpt) with
+ *   edit and jump actions; a plain click while editing opens the same card
+ *   instead of navigating (avoids accidental jumps). The card's Edit button
+ *   opens the target page in a draggable floating window (PageEditWindow)
+ *   for in-place editing — no navigation.
  * - Cmd/Ctrl+Click, or any click in read-only mode, navigates immediately.
  * - Broken links (target deleted) render struck-through with a remove action.
  *
@@ -15,10 +17,11 @@
 import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { NodeViewWrapper, type NodeViewProps, PageContext } from "@kn/editor";
 import { useNavigator } from "@kn/common";
-import { ArrowUpRight, FileText, Loader2, Trash2 } from "@kn/icon";
+import { ArrowUpRight, FileText, Loader2, Pencil, Trash2 } from "@kn/icon";
 import { cn, HoverCard, HoverCardContent, HoverCardTrigger, Button } from "@kn/ui";
 import { usePageInfo, useSpaceService } from "../../hooks";
 import { useI18n } from "../../i18n/use-i18n";
+import { PageEditWindow } from "./PageEditWindow";
 
 /** Flatten a ProseMirror JSON tree into a short plain-text excerpt. */
 const extractExcerpt = (content: string | undefined, maxLen = 140): string => {
@@ -51,8 +54,9 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
     const spaceService = useSpaceService();
     const { t } = useI18n();
     const [cardOpen, setCardOpen] = useState(false);
+    const [editOpen, setEditOpen] = useState(false);
 
-    const { pageInfo, loading, error } = usePageInfo(pageId);
+    const { pageInfo, loading, error, refetch } = usePageInfo(pageId);
     const isBroken = !loading && !!error;
     const displayTitle = pageInfo?.title || titleAttr || t('bidirectionalLink.untitled');
     const icon = pageInfo?.icon?.icon || null;
@@ -94,7 +98,8 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
         if (e.metaKey || e.ctrlKey || !editor.isEditable) {
             handleJump();
         } else {
-            // Plain click while editing: open the preview card for confirmation.
+            // Plain click while editing: open the preview card; editing is an
+            // explicit action via the card's Edit button.
             setCardOpen(true);
         }
     }, [isBroken, editor.isEditable, handleJump]);
@@ -103,6 +108,18 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
         setCardOpen(false);
         deleteNode();
     }, [deleteNode]);
+
+    const handleEdit = useCallback(() => {
+        if (!pageId || isBroken) return;
+        setCardOpen(false);
+        setEditOpen(true);
+    }, [pageId, isBroken]);
+
+    const handleEditClose = useCallback(() => {
+        setEditOpen(false);
+        // The popup invalidated the page cache; refresh the preview data.
+        refetch();
+    }, [refetch]);
 
     return (
         <NodeViewWrapper as="span" className="wiki-page-link-node inline align-baseline">
@@ -188,20 +205,34 @@ export const PageLinkNodeView: React.FC<NodeViewProps> = React.memo((props) => {
                                 <span className="text-[10px] text-muted-foreground">
                                     {t('bidirectionalLink.ctrlClickHint')}
                                 </span>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs text-primary"
-                                    onClick={handleJump}
-                                >
-                                    {t('bidirectionalLink.jumpTo')}
-                                    <ArrowUpRight className="ml-0.5 h-3 w-3" />
-                                </Button>
+                                <div className="flex items-center gap-0.5">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs text-primary"
+                                        onClick={handleEdit}
+                                    >
+                                        <Pencil className="mr-0.5 h-3 w-3" />
+                                        {t('bidirectionalLink.edit')}
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs text-primary"
+                                        onClick={handleJump}
+                                    >
+                                        {t('bidirectionalLink.jumpTo')}
+                                        <ArrowUpRight className="ml-0.5 h-3 w-3" />
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     )}
                 </HoverCardContent>
             </HoverCard>
+            {editOpen && pageId && (
+                <PageEditWindow pageId={pageId} onClose={handleEditClose} />
+            )}
         </NodeViewWrapper>
     );
 });

@@ -47,4 +47,11 @@ export const APIS = {
         method: 'GET',
         name: 'Get Block Info'
     } as API,
+
+    /** Incremental save for the in-place page edit window (same contract as the main PageEditor) */
+    PATCH_PAGE_BLOCKS: {
+        url: '/knowledge-wiki/space/page/:id/blocks',
+        method: 'PATCH',
+        name: 'Patch Page Blocks'
+    } as API,
 };

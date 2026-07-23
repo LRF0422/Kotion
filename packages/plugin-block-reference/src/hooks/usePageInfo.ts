@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useToggle } from "@kn/common";
 import type { PageInfo } from "../types";
 import { useSpaceService } from "./useSpaceService";
@@ -13,17 +13,19 @@ import { pageCache } from "../utils/cache";
  * - Handles deleted pages gracefully
  * 
  * @param pageId - The ID of the page to fetch
- * @returns Object containing pageInfo, loading state, and error state
+ * @returns Object containing pageInfo, loading state, error state and a refetch
+ *   function that bypasses the cache (used after in-place edits)
  * 
  * @example
  * ```tsx
- * const { pageInfo, loading, error } = usePageInfo(pageId);
+ * const { pageInfo, loading, error, refetch } = usePageInfo(pageId);
  * ```
  */
 export const usePageInfo = (pageId: string | null) => {
     const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
     const [loading, { toggle }] = useToggle(false);
     const [error, setError] = useState<string | null>(null);
+    const [version, setVersion] = useState(0);
     const spaceService = useSpaceService();
 
     useEffect(() => {
@@ -58,7 +60,14 @@ export const usePageInfo = (pageId: string | null) => {
         };
 
         fetchPageInfo();
-    }, [spaceService, pageId, toggle]);
+    }, [spaceService, pageId, toggle, version]);
 
-    return { pageInfo, loading, error };
+    // Drop the cached entry and refetch — call after the page was edited
+    // elsewhere (e.g. the in-place edit popup) so previews show fresh content.
+    const refetch = useCallback(() => {
+        if (pageId) pageCache.invalidate(pageId);
+        setVersion(v => v + 1);
+    }, [pageId]);
+
+    return { pageInfo, loading, error, refetch };
 };
