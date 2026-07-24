@@ -18,6 +18,11 @@ export const ESSENTIAL_TOOLS = [
     'write',
     'insertNear',
     'replaceContent',
+    'replaceRange',
+    // blockId addressing & batch tools
+    'replaceBlockById',
+    'insertAtBlockId',
+    'applyEdits',
     // Delete tools
     'deleteBySearch',
     'deleteBlock',
@@ -30,6 +35,9 @@ export const ESSENTIAL_TOOLS = [
     // Layout tools
     'insertColumns',
     'getColumnsInfo',
+    // Page tools
+    'searchPages',
+    'insertPageLink',
 ] as const
 
 // Category descriptions
@@ -41,6 +49,7 @@ export const CATEGORY_DESCRIPTIONS: Record<ToolCategory, string> = {
     'layout': '布局工具 - 用于管理多列布局',
     'interaction': '交互工具 - 用于与用户交互',
     'web': '网络工具 - 用于网页搜索和获取',
+    'page': '页面工具 - 用于跨页面搜索、创建页面、插入页面链接和页面跳转',
     'plugin': '插件工具 - 来自已安装插件的工具',
     'discovery': '发现工具 - 用于发现和加载其他工具'
 }
@@ -480,6 +489,24 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         loaded: false,
         source: 'builtin'
     },
+    {
+        name: 'createCheckpoint',
+        category: 'interaction',
+        description: '创建文档检查点快照，大规模修改前调用，可配合 rollbackToCheckpoint 一键恢复',
+        priority: 8,
+        tags: ['checkpoint', 'snapshot', 'history', 'safety'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'rollbackToCheckpoint',
+        category: 'interaction',
+        description: '将文档整体恢复到指定检查点状态',
+        priority: 8,
+        tags: ['rollback', 'restore', 'history', 'recovery'],
+        loaded: false,
+        source: 'builtin'
+    },
 
     // ===== Selection Tools =====
     {
@@ -496,9 +523,9 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
     {
         name: 'replaceRange',
         category: 'document-write',
-        description: '在精确位置范围内替换文本内容',
+        description: '在精确位置范围内替换文本，支持 expectedText 校验与失效自动重定位',
         priority: 9,
-        tags: ['edit', 'replace', 'position', 'precision'],
+        tags: ['edit', 'replace', 'position', 'precision', 'essential'],
         loaded: false,
         source: 'builtin'
     },
@@ -508,6 +535,73 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         description: '在精确位置范围内应用格式',
         priority: 9,
         tags: ['format', 'position', 'precision'],
+        loaded: false,
+        source: 'builtin'
+    },
+
+    // ===== BlockId Addressing & Batch Tools =====
+    {
+        name: 'replaceBlockById',
+        category: 'document-write',
+        description: '通过稳定的 blockId 替换整个块的内容，支持 Markdown，编辑后寻址不失效',
+        priority: 10,
+        tags: ['blockId', 'replace', 'block', 'markdown', 'essential'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'insertAtBlockId',
+        category: 'document-write',
+        description: '在指定 blockId 的块之前或之后插入内容，支持 Markdown',
+        priority: 10,
+        tags: ['blockId', 'insert', 'block', 'markdown', 'essential'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'applyEdits',
+        category: 'document-write',
+        description: '在单个事务中批量执行多个编辑操作（替换/插入/删除/追加），一步撤销，多处修改首选',
+        priority: 10,
+        tags: ['batch', 'transaction', 'blockId', 'edit', 'essential'],
+        loaded: false,
+        source: 'builtin'
+    },
+
+    // ===== Page Tools =====
+    {
+        name: 'searchPages',
+        category: 'page',
+        description: '按关键词搜索知识库中的页面，返回 pageId、标题和所属空间',
+        priority: 8,
+        tags: ['page', 'search', 'knowledge-base', 'essential'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'createPage',
+        category: 'page',
+        description: '在当前空间创建新页面，可作为子页面并可同时插入链接',
+        priority: 8,
+        tags: ['page', 'create', 'subpage'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'insertPageLink',
+        category: 'page',
+        description: '在当前文档中插入指向其他页面的双向链接（[[页面]]）',
+        priority: 8,
+        tags: ['page', 'link', 'bidirectional', 'reference', 'essential'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'openPage',
+        category: 'page',
+        description: '跳转到指定页面',
+        priority: 7,
+        tags: ['page', 'navigate', 'open'],
         loaded: false,
         source: 'builtin'
     },

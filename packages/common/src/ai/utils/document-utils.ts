@@ -29,6 +29,11 @@ export const buildNodeInfo = (node: Node, pos: number, includeFullText: boolean 
 
 /**
  * Extract document structure
+ *
+ * Each block carries its stable `blockId` (when the UniqueID extension has
+ * assigned one), a short `textPreview` and its nesting `depth` so the agent
+ * can identify and address blocks from a single read — no follow-up
+ * readChunk round-trips just to figure out "which block is which".
  */
 export const extractDocumentStructure = (editor: Editor): DocumentStructure => {
     const headings: DocumentStructure['headings'] = []
@@ -45,10 +50,26 @@ export const extractDocumentStructure = (editor: Editor): DocumentStructure => {
         }
 
         if (node.isBlock) {
+            const text = node.textContent
             const blockInfo: DocumentStructure['blocks'][0] = {
                 type: node.type.name,
                 pos,
-                size: node.nodeSize
+                size: node.nodeSize,
+                // depth 1 = top-level block; children of containers are deeper
+                depth: editor.state.doc.resolve(pos).depth + 1
+            }
+
+            const blockId = (node.attrs.id ?? node.attrs.blockId) as string | undefined
+            if (blockId) {
+                blockInfo.blockId = blockId
+            }
+
+            if (text) {
+                blockInfo.textPreview = text.slice(0, 60) + (text.length > 60 ? '…' : '')
+            }
+
+            if (node.type.name === 'heading') {
+                blockInfo.level = node.attrs.level || 1
             }
 
             if (node.isTextblock) {

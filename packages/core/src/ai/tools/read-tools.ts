@@ -78,7 +78,6 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
 
                 return true
             })
-            console.log('nodes', result);
 
             return {
                 success: true,
@@ -93,7 +92,7 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
     },
 
     searchInDocument: {
-        description: '在文档中搜索指定文本，返回每个字符的精确位置可直接用于选择和替换',
+        description: '在文档中搜索指定文本，返回精确的 from/to 位置和所在块的 blockId，可直接用于替换或 blockId 寻址编辑',
         inputSchema: z.object({
             query: z.string().describe("搜索文本"),
             caseSensitive: z.boolean().optional().describe("是否区分大小写"),
@@ -108,10 +107,10 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
                 from: number
                 to: number
                 text: string
-                characters: Array<{ char: string; pos: number }>
                 context: string
                 blockType: string
                 blockPos: number
+                blockId?: string
             }> = []
 
             const searchText = caseSensitive ? query : query.toLowerCase()
@@ -138,15 +137,6 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
                     const from = pos + 1 + index
                     const to = from + query.length
 
-                    // Build character-level position array
-                    const characters: Array<{ char: string; pos: number }> = []
-                    for (let i = 0; i < query.length; i++) {
-                        characters.push({
-                            char: originalText[index + i],
-                            pos: from + i
-                        })
-                    }
-
                     const contextStart = Math.max(0, index - 50)
                     const contextEnd = Math.min(node.textContent.length, index + query.length + 50)
 
@@ -154,10 +144,10 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
                         from,
                         to,
                         text: originalText.substring(index, index + query.length),
-                        characters,
                         context: node.textContent.substring(contextStart, contextEnd),
                         blockType: node.type.name,
-                        blockPos: pos
+                        blockPos: pos,
+                        blockId: (node.attrs?.id ?? node.attrs?.blockId) as string | undefined
                     })
 
                     searchIndex = index + 1 // Continue searching for more matches
@@ -171,7 +161,7 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
                 results,
                 totalFound: results.length,
                 hasMore: results.length >= limit,
-                tip: 'Use from/to for range selection, or characters[i].pos for specific character position'
+                tip: 'Use from/to for replaceRange, or blockId for replaceBlockById/applyEdits'
             }
         }
     }

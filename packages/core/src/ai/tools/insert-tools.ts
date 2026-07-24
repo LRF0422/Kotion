@@ -84,12 +84,20 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                     return { error: '文档中没有块节点' }
                 }
 
-                const targetIndex = blockIndex !== undefined
-                    ? Math.min(Math.max(0, blockIndex), blocks.length - 1)
-                    : blocks.length - 1
+                // No blockIndex → append at the true end of the document
+                // (doc.content.size, not last-block pos+size which breaks with
+                // nested blocks).
+                let targetIndex: number | undefined
+                let insertPos: number
+                let targetBlock: (typeof blocks)[number] | undefined
 
-                const targetBlock = blocks[targetIndex]
-                const insertPos = targetBlock.pos + targetBlock.size
+                if (blockIndex !== undefined) {
+                    targetIndex = Math.min(Math.max(0, blockIndex), blocks.length - 1)
+                    targetBlock = blocks[targetIndex]
+                    insertPos = targetBlock.pos + targetBlock.size
+                } else {
+                    insertPos = editor.state.doc.content.size
+                }
 
                 const docSize = editor.state.doc.nodeSize
 
@@ -110,7 +118,7 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                 return {
                     success: true,
                     blockIndex: targetIndex,
-                    blockType: targetBlock.type,
+                    blockType: targetBlock?.type ?? 'documentEnd',
                     insertedAfter: insertPos,
                     insertedSize: newDocSize - docSize,
                     parsedNodes: nodes.length,

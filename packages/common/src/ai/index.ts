@@ -9,6 +9,9 @@ export * from "./constants"
 // Tools (backend-only; editor-specific tools are in @kn/core)
 export * from "./tools"
 
+// Page bridge — page-level operations (search/create/open) for AI tools
+export * from "./page-bridge"
+
 // Providers
 export * from "./providers"
 

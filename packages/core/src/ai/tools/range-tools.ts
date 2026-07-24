@@ -3,23 +3,48 @@ import { z } from "@kn/ui"
 import type { ToolsRecord } from "@kn/common"
 
 /**
+ * Find every occurrence of `text` in the doc, returning absolute from/to.
+ * Used by replaceRange self-healing when positions have gone stale.
+ */
+const findTextOccurrences = (editor: Editor, text: string): Array<{ from: number; to: number }> => {
+    const matches: Array<{ from: number; to: number }> = []
+    editor.state.doc.descendants((node, pos) => {
+        if (!node.isTextblock) return true
+        const nodeText = node.textContent
+        let searchIndex = 0
+        while (searchIndex < nodeText.length) {
+            const index = nodeText.indexOf(text, searchIndex)
+            if (index === -1) break
+            const from = pos + 1 + index
+            matches.push({ from, to: from + text.length })
+            searchIndex = index + 1
+        }
+        return true
+    })
+    return matches
+}
+
+/**
  * Create range-based precision editing tools for AI agent
  */
 export const createRangeTools = (editor: Editor): ToolsRecord => ({
     replaceRange: {
-        description: '在精确位置范围内替换文本。先用 searchInDocument 查找精确位置，再用此工具替换指定位置的内容。适用于同一文本多次出现时的精确编辑',
+        description: '在精确位置范围内替换文本。先用 searchInDocument 查找精确位置，再用此工具替换。强烈建议传入 expectedText：若位置已因其他编辑失效，会自动重新定位该文本后替换',
         inputSchema: z.object({
             from: z.number().describe("替换范围起始位置"),
             to: z.number().describe("替换范围结束位置"),
-            content: z.string().describe("替换成的新内容")
+            content: z.string().describe("替换成的新内容"),
+            expectedText: z.string().optional().describe("预期在 from-to 位置的原文本，用于校验位置是否仍有效，失效时自动重新定位")
         }),
-        execute: async ({ from, to, content }: {
+        execute: async ({ from, to, content, expectedText }: {
             from: number
             to: number
             content: string
+            expectedText?: string
         }) => {
             try {
                 const docSize = editor.state.doc.content.size
+                let relocated = false
 
                 if (from < 0 || from > docSize) {
                     return { error: `起始位置 ${from} 超出文档范围（0-${docSize}）` }
@@ -29,6 +54,29 @@ export const createRangeTools = (editor: Editor): ToolsRecord => ({
                 }
                 if (from >= to) {
                     return { error: `起始位置 ${from} 必须小于结束位置 ${to}` }
+                }
+
+                // Self-heal: verify the range still holds the expected text,
+                // otherwise re-locate it (positions go stale after any edit).
+                if (expectedText) {
+                    const actualText = editor.state.doc.textBetween(from, to)
+                    if (actualText !== expectedText) {
+                        const occurrences = findTextOccurrences(editor, expectedText)
+                        if (occurrences.length === 0) {
+                            return {
+                                error: `位置 ${from}-${to} 的实际文本是 "${actualText}"，与预期的 "${expectedText}" 不符，且文档中已找不到该文本。请重新读取文档`
+                            }
+                        }
+                        if (occurrences.length > 1) {
+                            return {
+                                error: `位置已失效，且 "${expectedText}" 在文档中出现 ${occurrences.length} 次，无法自动重定位。请用 searchInDocument 获取最新位置`,
+                                occurrences
+                            }
+                        }
+                        from = occurrences[0].from
+                        to = occurrences[0].to
+                        relocated = true
+                    }
                 }
 
                 // Extract old text before replacement
@@ -51,7 +99,8 @@ export const createRangeTools = (editor: Editor): ToolsRecord => ({
                     newContent: content,
                     from,
                     to,
-                    message: `已将位置 ${from}-${to} 的文本 "${oldText}" 替换为 "${content}"`
+                    ...(relocated ? { relocated: true } : {}),
+                    message: `已将位置 ${from}-${to} 的文本 "${oldText}" 替换为 "${content}"${relocated ? '（原位置已失效，已自动重新定位）' : ''}`
                 }
             } catch (error) {
                 return { error: `替换失败: ${error instanceof Error ? error.message : '未知错误'}` }

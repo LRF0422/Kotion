@@ -48,6 +48,14 @@ export interface DocumentStructure {
         pos: number
         size: number
         textInsertPos?: number
+        /** Stable block id — survives edits, preferred for addressing blocks */
+        blockId?: string
+        /** Truncated text preview (<= 60 chars) so the agent can identify blocks without extra reads */
+        textPreview?: string
+        /** Nesting depth: 1 = top-level block, 2+ = nested inside a container */
+        depth?: number
+        /** Heading level (only present for heading blocks) */
+        level?: number
     }>
 }
 
@@ -108,6 +116,7 @@ export type ToolCategory =
     | 'layout'             // 布局操作
     | 'interaction'        // 用户交互
     | 'web'                // 网络操作
+    | 'page'               // 页面级操作（跨页面）
     | 'plugin'             // 插件工具
     | 'discovery'          // 发现工具
 

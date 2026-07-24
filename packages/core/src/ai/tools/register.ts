@@ -20,6 +20,8 @@ import {
     createHistoryTools,
     createSelectionTools,
     createRangeTools,
+    createBlockIdTools,
+    createPageTools,
 } from './index'
 
 /**
@@ -41,5 +43,7 @@ export function registerCoreToolFactories(): void {
         createHistoryTools,
         createSelectionTools,
         createRangeTools,
+        createBlockIdTools,
+        createPageTools,
     ])
 }

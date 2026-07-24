@@ -10,6 +10,7 @@ import type { IncrementalPayload } from "@kn/editor";
 import { event, ON_PAGE_REFRESH, ON_FAVORITE_CHANGE } from "../../../event";
 import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation } from "@kn/common";
 import { useNavigator, usePageTabs } from "@kn/common";
+import { setPageBridge, clearPageBridge, type PageBridge } from "@kn/common";
 import { GlobalState } from "@kn/common";
 import { Editor } from "@kn/editor";
 import * as Y from "@kn/editor";
@@ -301,6 +302,46 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         event.on(ON_FAVORITE_CHANGE, handler)
         return () => { event.off(ON_FAVORITE_CHANGE, handler) }
     }, [refreshFavoriteState])
+
+    // Expose page-level capabilities (search/create/open pages) to the AI
+    // agent's page tools via the PageBridge registry. Only the active tab
+    // registers, so tools always act on the page the user is looking at.
+    useEffect(() => {
+        if (props.active === false || !pageId) return
+
+        const bridge: PageBridge = {
+            getCurrentPage: () => ({
+                pageId: pageId ? String(pageId) : undefined,
+                spaceId: spaceId ? String(spaceId) : undefined,
+                title: page?.title,
+                parentId: page?.parentId ? String(page.parentId) : undefined
+            }),
+            searchPages: async (query?: string) => {
+                const res: any = await spaceService.queryPage({ searchValue: query, pageSize: 30 })
+                const records = Array.isArray(res) ? res : res?.records ?? []
+                return records.map((p: any) => ({
+                    id: String(p.id),
+                    title: p.title,
+                    spaceId: p.spaceId !== undefined ? String(p.spaceId) : undefined,
+                    spaceName: p.spaceName
+                }))
+            },
+            createPage: async ({ spaceId: targetSpaceId, title, parentId }) => {
+                const created: any = await spaceService.createPage({
+                    spaceId: targetSpaceId,
+                    title,
+                    parentId
+                })
+                return { id: String(created?.id ?? created), title }
+            },
+            openPage: (targetPageId: string, targetSpaceId?: string) => {
+                navigator.go({ to: `/space-detail/${targetSpaceId ?? spaceId}/page/edit/${targetPageId}` })
+            }
+        }
+
+        setPageBridge(bridge)
+        return () => clearPageBridge(bridge)
+    }, [pageId, spaceId, page, props.active, spaceService, navigator])
 
     const toggleFavorite = useCallback(async () => {
         if (!pageId || favoriteToggling) return

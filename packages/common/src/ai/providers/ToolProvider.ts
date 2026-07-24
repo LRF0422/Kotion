@@ -18,6 +18,7 @@ import type {
 } from '../types'
 import { BUILTIN_TOOL_METADATA } from '../discovery/tool-metadata'
 import { getToolFactories } from '../tools/tool-factory-registry'
+import { runWithAITransactionMeta } from '../utils/editor-effects'
 
 // Re-export ToolFactory for consumers
 export type { ToolFactory } from '../tools/tool-factory-registry'
@@ -70,9 +71,23 @@ export class ToolProvider {
             Object.assign(allTools, tools)
         }
         for (const [name, tool] of Object.entries(allTools)) {
-            this.tools.set(name, tool as ToolDefinition)
+            this.tools.set(name, this.tagAsAIEdit(tool as ToolDefinition))
             const meta = this.toolMetadata.get(name)
             if (meta) meta.loaded = true
+        }
+    }
+
+    /**
+     * Wrap a tool so every editor transaction it dispatches carries the
+     * AI-origin meta. Downstream consumers (auto-save, collab, UI) can then
+     * distinguish agent edits from user edits.
+     */
+    private tagAsAIEdit(tool: ToolDefinition): ToolDefinition {
+        const originalExecute = tool.execute
+        return {
+            ...tool,
+            execute: (args: any) =>
+                runWithAITransactionMeta(this.editor, () => originalExecute(args)),
         }
     }
 
@@ -96,7 +111,7 @@ export class ToolProvider {
 
             const existing = this.tools.get(name)
             this.toolMetadata.set(name, metadata)
-            this.tools.set(name, tool as ToolDefinition)
+            this.tools.set(name, this.tagAsAIEdit(tool as ToolDefinition))
             if (!existing) changed = true
         }
 
