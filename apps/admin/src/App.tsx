@@ -1,6 +1,7 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ThemeProvider, Toaster } from '@kn/ui'
 import { AdminLayout } from './layout/AdminLayout'
+import { Login } from './pages/login/Login'
 import { Dashboard } from './pages/dashboard/Dashboard'
 import { UserList } from './pages/users/UserList'
 import { RoleList } from './pages/roles/RoleList'
@@ -11,13 +12,29 @@ import { PluginList } from './pages/plugins/PluginList'
 import { AISettings } from './pages/ai/AISettings'
 import { LogList } from './pages/logs/LogList'
 import { SystemSettings } from './pages/settings/SystemSettings'
+import { isLoggedIn } from './lib/auth'
+
+const RequireAuth = ({ children }: { children: React.ReactNode }) => {
+  if (!isLoggedIn()) {
+    return <Navigate to="/login" replace />
+  }
+  return <>{children}</>
+}
 
 export const App = () => {
   return (
     <ThemeProvider defaultTheme="system" storageKey="kn-ui-theme">
       <HashRouter>
         <Routes>
-          <Route path="/" element={<AdminLayout />}>
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/"
+            element={(
+              <RequireAuth>
+                <AdminLayout />
+              </RequireAuth>
+            )}
+          >
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="users" element={<UserList />} />

@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Sidebar,
   SidebarContent,
@@ -24,6 +24,7 @@ import {
   ModeToggle,
   Avatar,
   AvatarFallback,
+  AvatarImage,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -46,6 +47,7 @@ import {
   LogOut,
   UserCircle,
 } from '@kn/icon'
+import { clearTokens, getAuthUser } from '@/lib/auth'
 
 interface NavItem {
   title: string
@@ -101,7 +103,15 @@ const findActiveItem = (pathname: string) =>
 
 export const AdminLayout = () => {
   const location = useLocation()
+  const navigate = useNavigate()
   const activeItem = findActiveItem(location.pathname)
+  const authUser = getAuthUser()
+  const displayName = authUser?.userName || authUser?.account || '管理员'
+
+  const handleLogout = () => {
+    clearTokens()
+    navigate('/login', { replace: true })
+  }
 
   return (
     <SidebarProvider>
@@ -155,11 +165,14 @@ export const AdminLayout = () => {
                 <DropdownMenuTrigger asChild>
                   <SidebarMenuButton size="lg">
                     <Avatar className="size-8 rounded-lg">
-                      <AvatarFallback className="rounded-lg">AD</AvatarFallback>
+                      {authUser?.avatar && <AvatarImage src={authUser.avatar} alt={displayName} />}
+                      <AvatarFallback className="rounded-lg">{displayName.slice(0, 1).toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div className="grid flex-1 text-left text-sm leading-tight">
-                      <span className="truncate font-semibold">Administrator</span>
-                      <span className="truncate text-xs text-muted-foreground">admin@kotion.top</span>
+                      <span className="truncate font-semibold">{displayName}</span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {authUser?.authority || authUser?.account || '-'}
+                      </span>
                     </div>
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
@@ -170,7 +183,7 @@ export const AdminLayout = () => {
                     <UserCircle className="mr-2 size-4" />
                     个人信息
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="text-destructive">
+                  <DropdownMenuItem className="text-destructive" onClick={handleLogout}>
                     <LogOut className="mr-2 size-4" />
                     退出登录
                   </DropdownMenuItem>

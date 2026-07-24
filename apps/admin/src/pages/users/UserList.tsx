@@ -1,14 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import {
   Button,
   Card,
   CardContent,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Label,
   Table,
   TableBody,
   TableCell,
@@ -21,35 +23,71 @@ import {
   DropdownMenuTrigger,
   Avatar,
   AvatarFallback,
+  AvatarImage,
   useToast,
 } from '@kn/ui'
-import { MoreHorizontal, Plus, Search, KeyRound, Ban, CircleCheck, Trash2 } from '@kn/icon'
+import { MoreHorizontal, Plus, Search, KeyRound, Trash2, Loader2 } from '@kn/icon'
 import { PageHeader } from '@/components/PageHeader'
-import { StatusBadge } from '@/components/StatusBadge'
-import { MOCK_USERS, type AdminUser } from '@/mock/data'
+import { TablePagination } from '@/components/TablePagination'
+import { getUserList, removeUsers, resetUserPassword, submitUser, type UserVO } from '@/api'
+import { usePagedData } from '@/lib/use-paged-data'
+
+const PAGE_SIZE = 10
 
 export const UserList = () => {
   const { toast } = useToast()
-  const [users, setUsers] = useState<AdminUser[]>(MOCK_USERS)
   const [keyword, setKeyword] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [search, setSearch] = useState('')
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ account: '', name: '', password: '', email: '', phone: '' })
 
-  const filtered = useMemo(() => {
-    return users.filter((user) => {
-      const matchKeyword = !keyword
-        || user.name.includes(keyword)
-        || user.account.includes(keyword)
-        || user.email.includes(keyword)
-      const matchStatus = statusFilter === 'all' || user.status === statusFilter
-      return matchKeyword && matchStatus
-    })
-  }, [users, keyword, statusFilter])
+  const fetcher = useCallback(
+    (current: number) => getUserList({ current, size: PAGE_SIZE, searchValue: search || undefined }),
+    [search],
+  )
+  const { records, total, pages, current, setCurrent, loading, error, reload } = usePagedData<UserVO>(
+    fetcher,
+    [search],
+  )
 
-  const toggleStatus = (id: string) => {
-    setUsers((prev) => prev.map((user) => (
-      user.id === id ? { ...user, status: user.status === 'active' ? 'disabled' : 'active' } : user
-    )))
-    toast({ title: '用户状态已更新' })
+  const handleCreate = async () => {
+    if (!form.account || !form.password) {
+      toast({ title: '账号和密码为必填项', variant: 'destructive' })
+      return
+    }
+    setSaving(true)
+    try {
+      await submitUser({ ...form, name: form.name || form.account })
+      toast({ title: '用户已创建' })
+      setDialogOpen(false)
+      setForm({ account: '', name: '', password: '', email: '', phone: '' })
+      reload()
+    } catch (err) {
+      toast({ title: '创建失败', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleResetPassword = async (user: UserVO) => {
+    try {
+      await resetUserPassword(String(user.id))
+      toast({ title: '密码已重置', description: `账号 ${user.account} 的密码已恢复为初始密码` })
+    } catch (err) {
+      toast({ title: '重置失败', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
+    }
+  }
+
+  const handleRemove = async (user: UserVO) => {
+    if (!window.confirm(`确认删除用户「${user.name || user.account}」？该操作不可恢复。`)) return
+    try {
+      await removeUsers(String(user.id))
+      toast({ title: '用户已删除' })
+      reload()
+    } catch (err) {
+      toast({ title: '删除失败', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
+    }
   }
 
   return (
@@ -58,7 +96,7 @@ export const UserList = () => {
         title="用户管理"
         description="管理平台账户、状态与角色分配"
         actions={(
-          <Button onClick={() => toast({ title: '新建用户', description: '接入后端 UserController 后开放' })}>
+          <Button onClick={() => setDialogOpen(true)}>
             <Plus className="mr-1 size-4" />
             新建用户
           </Button>
@@ -70,22 +108,13 @@ export const UserList = () => {
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="搜索姓名 / 账号 / 邮箱"
+            placeholder="搜索姓名 / 账号（回车）"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && setSearch(keyword.trim())}
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-32">
-            <SelectValue placeholder="状态" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部状态</SelectItem>
-            <SelectItem value="active">正常</SelectItem>
-            <SelectItem value="disabled">已禁用</SelectItem>
-          </SelectContent>
-        </Select>
-        <span className="ml-auto text-sm text-muted-foreground">共 {filtered.length} 位用户</span>
+        <span className="ml-auto text-sm text-muted-foreground">共 {total} 位用户</span>
       </div>
 
       <Card>
@@ -96,35 +125,47 @@ export const UserList = () => {
                 <TableHead>用户</TableHead>
                 <TableHead>账号</TableHead>
                 <TableHead>角色</TableHead>
+                <TableHead>手机</TableHead>
                 <TableHead>所属租户</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>最近登录</TableHead>
                 <TableHead className="w-12" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((user) => (
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                    <Loader2 className="mx-auto size-5 animate-spin" />
+                  </TableCell>
+                </TableRow>
+              )}
+              {!loading && error && (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-32 text-center text-destructive">{error}</TableCell>
+                </TableRow>
+              )}
+              {!loading && !error && records.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">暂无用户</TableCell>
+                </TableRow>
+              )}
+              {!loading && !error && records.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="size-8">
-                        <AvatarFallback>{user.name.slice(0, 1)}</AvatarFallback>
+                        {user.avatar && <AvatarImage src={user.avatar} alt={user.name} />}
+                        <AvatarFallback>{(user.name || user.account || '?').slice(0, 1)}</AvatarFallback>
                       </Avatar>
                       <div>
-                        <div className="font-medium">{user.name}</div>
-                        <div className="text-xs text-muted-foreground">{user.email}</div>
+                        <div className="font-medium">{user.name || user.realName || '-'}</div>
+                        <div className="text-xs text-muted-foreground">{user.email || '-'}</div>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>{user.account}</TableCell>
-                  <TableCell>{user.role}</TableCell>
-                  <TableCell className="text-muted-foreground">{user.tenant}</TableCell>
-                  <TableCell>
-                    {user.status === 'active'
-                      ? <StatusBadge variant="success">正常</StatusBadge>
-                      : <StatusBadge variant="muted">已禁用</StatusBadge>}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{user.lastLogin}</TableCell>
+                  <TableCell>{user.roleName || '-'}</TableCell>
+                  <TableCell className="text-muted-foreground">{user.phone || '-'}</TableCell>
+                  <TableCell className="text-muted-foreground">{user.tenantId || '-'}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -133,19 +174,11 @@ export const UserList = () => {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => toast({ title: '已发送重置密码邮件' })}>
+                        <DropdownMenuItem onClick={() => handleResetPassword(user)}>
                           <KeyRound className="mr-2 size-4" />
                           重置密码
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => toggleStatus(user.id)}>
-                          {user.status === 'active'
-                            ? <><Ban className="mr-2 size-4" />禁用账户</>
-                            : <><CircleCheck className="mr-2 size-4" />启用账户</>}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => toast({ title: '删除用户', description: '需二次确认，接入后端后开放' })}
-                        >
+                        <DropdownMenuItem className="text-destructive" onClick={() => handleRemove(user)}>
                           <Trash2 className="mr-2 size-4" />
                           删除用户
                         </DropdownMenuItem>
@@ -156,8 +189,51 @@ export const UserList = () => {
               ))}
             </TableBody>
           </Table>
+          <TablePagination current={current} pages={pages} total={total} onChange={setCurrent} />
         </CardContent>
       </Card>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>新建用户</DialogTitle>
+            <DialogDescription>创建平台账户，密码可由用户登录后自行修改</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label>账号 *</Label>
+              <Input value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} />
+            </div>
+            <div className="grid gap-2">
+              <Label>昵称</Label>
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </div>
+            <div className="grid gap-2">
+              <Label>初始密码 *</Label>
+              <Input
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>邮箱</Label>
+              <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </div>
+            <div className="grid gap-2">
+              <Label>手机</Label>
+              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>取消</Button>
+            <Button onClick={handleCreate} disabled={saving}>
+              {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
+              创建
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

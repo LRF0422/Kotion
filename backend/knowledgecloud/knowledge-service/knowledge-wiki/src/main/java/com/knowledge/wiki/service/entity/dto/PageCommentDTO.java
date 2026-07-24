@@ -13,6 +13,8 @@ import lombok.Data;
 public class PageCommentDTO {
     private Long id;
     private Long pageId;
+    /** Page title (only populated in admin list) */
+    private String pageTitle;
     private Long userId;
     private String userName;
     private String userAvatar;

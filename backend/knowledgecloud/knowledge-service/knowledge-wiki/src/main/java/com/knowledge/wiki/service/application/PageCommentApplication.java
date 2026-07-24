@@ -9,15 +9,18 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.knowledge.core.message.feign.IMessageClient;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.KnowledgeUser;
 import com.knowledge.core.tool.api.R;
+import com.knowledge.core.tool.utils.Func;
 import com.knowledge.system.feign.IUserClient;
 import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.PageComment;
 import com.knowledge.wiki.service.entity.dto.CreateCommentDTO;
 import com.knowledge.wiki.service.entity.dto.PageCommentDTO;
+import com.knowledge.wiki.service.entity.dto.QueryCommentDTO;
 import com.knowledge.wiki.service.service.IPageCommentService;
 import com.knowledge.wiki.service.service.IPageService;
 
@@ -80,6 +83,38 @@ public class PageCommentApplication {
         return topLevel.stream()
                 .map(comment -> buildCommentDTO(comment, repliesMap, userMap))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Paged global comment list for admin moderation
+     */
+    public IPage<PageCommentDTO> pageComments(QueryCommentDTO dto) {
+        IPage<PageComment> page = pageCommentService.lambdaQuery()
+                .eq(dto.getResolved() != null, PageComment::getResolved, dto.getResolved())
+                .eq(dto.getPageId() != null, PageComment::getPageId, dto.getPageId())
+                .like(Func.isNotBlank(dto.getSearchValue()), PageComment::getContent, dto.getSearchValue())
+                .orderByDesc(PageComment::getCreateTime)
+                .page(dto.page());
+
+        List<PageComment> records = page.getRecords();
+        if (CollUtil.isEmpty(records)) {
+            return page.convert(c -> buildCommentDTO(c, java.util.Collections.emptyMap(),
+                    java.util.Collections.emptyMap()));
+        }
+
+        // Resolve users and page titles in batch
+        Map<Long, KnowledgeUser> userMap = resolveUsers(records.stream()
+                .map(PageComment::getUserId).distinct().collect(Collectors.toList()));
+        List<Long> pageIds = records.stream()
+                .map(PageComment::getPageId).distinct().collect(Collectors.toList());
+        Map<Long, String> titleMap = pageService.listByIds(pageIds).stream()
+                .collect(Collectors.toMap(Page::getId, p -> p.getTitle() == null ? "" : p.getTitle(), (a, b) -> a));
+
+        return page.convert(comment -> {
+            PageCommentDTO commentDTO = buildCommentDTO(comment, java.util.Collections.emptyMap(), userMap);
+            commentDTO.setPageTitle(titleMap.get(comment.getPageId()));
+            return commentDTO;
+        });
     }
 
     /**

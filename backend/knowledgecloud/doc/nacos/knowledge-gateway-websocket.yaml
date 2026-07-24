@@ -51,8 +51,9 @@ spring:
 knowledge:
   secure:
     skip-url:
-      # WebSocket 连接路径 (可选，WebSocket 服务已有自己的认证)
-      # - /ws/**
+      # WebSocket 连接路径 (必须放行：浏览器 WS 无法设置 Authorization 头，
+      # token 通过 query 参数传递，由 message 服务的 HandshakeInterceptor 校验)
+      - /ws/**
       # 公开接口
       - /knowledge-auth/oauth/**
       - /knowledge-auth/oauth2/**

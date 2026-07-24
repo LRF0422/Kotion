@@ -1,71 +1,95 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import {
   Button,
   Card,
   CardContent,
   Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
   useToast,
 } from '@kn/ui'
-import { MoreHorizontal, Search, History, Eye, RotateCcw, Trash2 } from '@kn/icon'
+import { Search, Loader2, FileText, RotateCcw } from '@kn/icon'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
-import { MOCK_PAGES, type AdminPage } from '@/mock/data'
+import { TablePagination } from '@/components/TablePagination'
+import { getPageList, restorePage, type PageStatus, type PageVO } from '@/api'
+import { formatDateTime, usePagedData } from '@/lib/use-paged-data'
 
-const STATUS_META: Record<AdminPage['status'], { label: string; variant: 'success' | 'warning' | 'muted' }> = {
-  published: { label: '已发布', variant: 'success' },
-  draft: { label: '草稿', variant: 'warning' },
-  trashed: { label: '回收站', variant: 'muted' },
+const PAGE_SIZE = 10
+
+const STATUS_BADGE: Record<PageStatus, { label: string; variant: 'success' | 'warning' | 'danger' | 'muted' }> = {
+  ACTIVE: { label: '已发布', variant: 'success' },
+  DRAFT: { label: '草稿', variant: 'warning' },
+  TRASH: { label: '回收站', variant: 'danger' },
+  DELETED: { label: '已删除', variant: 'muted' },
 }
 
 export const PageList = () => {
   const { toast } = useToast()
   const [keyword, setKeyword] = useState('')
-  const [statusTab, setStatusTab] = useState('all')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('ACTIVE')
 
-  const filtered = useMemo(() => {
-    return MOCK_PAGES.filter((page) => {
-      const matchKeyword = !keyword || page.title.includes(keyword) || page.author.includes(keyword)
-      const matchStatus = statusTab === 'all' || page.status === statusTab
-      return matchKeyword && matchStatus
-    })
-  }, [keyword, statusTab])
+  const fetcher = useCallback(
+    (current: number) =>
+      getPageList({
+        current,
+        pageSize: PAGE_SIZE,
+        searchValue: search || undefined,
+        status: statusFilter === 'all' ? undefined : (statusFilter as PageStatus),
+      }),
+    [search, statusFilter],
+  )
+  const { records, total, pages, current, setCurrent, loading, error, reload } = usePagedData<PageVO>(
+    fetcher,
+    [search, statusFilter],
+  )
+
+  const handleRestore = async (page: PageVO) => {
+    try {
+      await restorePage(String(page.id))
+      toast({ title: '页面已恢复', description: page.title })
+      reload()
+    } catch (err) {
+      toast({ title: '恢复失败', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
+    }
+  }
 
   return (
     <div>
-      <PageHeader title="页面管理" description="平台全部页面的检索、版本与回收站管理" />
+      <PageHeader title="页面管理" description="平台内页面内容的状态与治理" />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Tabs value={statusTab} onValueChange={setStatusTab}>
-          <TabsList>
-            <TabsTrigger value="all">全部</TabsTrigger>
-            <TabsTrigger value="published">已发布</TabsTrigger>
-            <TabsTrigger value="draft">草稿</TabsTrigger>
-            <TabsTrigger value="trashed">回收站</TabsTrigger>
-          </TabsList>
-        </Tabs>
         <div className="relative w-64">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="搜索标题 / 作者"
+            placeholder="搜索页面标题（回车）"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && setSearch(keyword.trim())}
           />
         </div>
-        <span className="ml-auto text-sm text-muted-foreground">共 {filtered.length} 个页面</span>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-32">
+            <SelectValue placeholder="状态" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ACTIVE">已发布</SelectItem>
+            <SelectItem value="DRAFT">草稿</SelectItem>
+            <SelectItem value="TRASH">回收站</SelectItem>
+          </SelectContent>
+        </Select>
+        <span className="ml-auto text-sm text-muted-foreground">共 {total} 个页面</span>
       </div>
 
       <Card>
@@ -75,66 +99,60 @@ export const PageList = () => {
               <TableRow>
                 <TableHead>页面标题</TableHead>
                 <TableHead>所属空间</TableHead>
-                <TableHead>作者</TableHead>
-                <TableHead>块数量</TableHead>
-                <TableHead>版本数</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>更新时间</TableHead>
-                <TableHead className="w-12" />
+                <TableHead className="text-right">创建时间</TableHead>
+                <TableHead className="w-24" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((page) => {
-                const meta = STATUS_META[page.status]
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                    <Loader2 className="mx-auto size-5 animate-spin" />
+                  </TableCell>
+                </TableRow>
+              )}
+              {!loading && error && (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-32 text-center text-destructive">{error}</TableCell>
+                </TableRow>
+              )}
+              {!loading && !error && records.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">暂无页面</TableCell>
+                </TableRow>
+              )}
+              {!loading && !error && records.map((page) => {
+                const badge = STATUS_BADGE[page.status || 'ACTIVE'] || STATUS_BADGE.ACTIVE
                 return (
                   <TableRow key={page.id}>
-                    <TableCell className="font-medium">{page.title}</TableCell>
-                    <TableCell className="text-muted-foreground">{page.space}</TableCell>
-                    <TableCell>{page.author}</TableCell>
-                    <TableCell>{page.blocks}</TableCell>
-                    <TableCell>{page.versions}</TableCell>
                     <TableCell>
-                      <StatusBadge variant={meta.variant}>{meta.label}</StatusBadge>
+                      <div className="flex items-center gap-2 font-medium">
+                        <FileText className="size-4 shrink-0 text-muted-foreground" />
+                        <span className="max-w-72 truncate">{page.title || '（无标题）'}</span>
+                      </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{page.updateTime}</TableCell>
+                    <TableCell className="text-muted-foreground">{page.spaceId || '-'}</TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="size-8">
-                            <MoreHorizontal className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => toast({ title: '查看页面', description: '跳转前台预览，接入后开放' })}>
-                            <Eye className="mr-2 size-4" />
-                            查看页面
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => toast({ title: '版本历史', description: '接入版本接口后开放' })}>
-                            <History className="mr-2 size-4" />
-                            版本历史
-                          </DropdownMenuItem>
-                          {page.status === 'trashed' ? (
-                            <DropdownMenuItem onClick={() => toast({ title: '页面已恢复' })}>
-                              <RotateCcw className="mr-2 size-4" />
-                              恢复页面
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => toast({ title: '移入回收站', description: '接入后端后开放' })}
-                            >
-                              <Trash2 className="mr-2 size-4" />
-                              移入回收站
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <StatusBadge variant={badge.variant}>{badge.label}</StatusBadge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{formatDateTime(page.updateTime)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{formatDateTime(page.createTime)}</TableCell>
+                    <TableCell className="text-right">
+                      {page.status === 'TRASH' && (
+                        <Button variant="outline" size="sm" onClick={() => handleRestore(page)}>
+                          <RotateCcw className="mr-1 size-3.5" />
+                          恢复
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 )
               })}
             </TableBody>
           </Table>
+          <TablePagination current={current} pages={pages} total={total} onChange={setCurrent} />
         </CardContent>
       </Card>
     </div>

@@ -1,5 +1,6 @@
 package com.knowledge.system.controller;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.github.xiaoymin.knife4j.annotations.ApiOperationSupport;
 import com.knowledge.core.mp.support.Condition;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
@@ -43,9 +44,19 @@ public class UserController {
 	}
 
 	/**
-	 * 查询单条
+	 * 用户分页列表
 	 */
 	@ApiOperationSupport(order = 2)
+	@ApiOperation(value = "用户列表", notes = "传入QueryUserDTO")
+	@GetMapping("/list")
+	public R<IPage<UserVO>> list(QueryUserDTO dto) {
+		return R.data(UserConverter.INSTANCE.convert(userService.userList(dto)));
+	}
+
+	/**
+	 * 查询单条
+	 */
+	@ApiOperationSupport(order = 3)
 	@ApiOperation(value = "查看详情", notes = "传入id")
 	@GetMapping("/info")
 	public R<UserVO> info() {
