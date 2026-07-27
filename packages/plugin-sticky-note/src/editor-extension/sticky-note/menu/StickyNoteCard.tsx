@@ -32,21 +32,22 @@ const INNER_EDITOR_ALLOWED = new Set<string>([
 const VIEWPORT_MARGIN = 16;
 
 /**
- * Clamp a card's fixed top so it never spills past the viewport, and compute
- * the max height available for its (scrollable) body. Mirrors the comment
- * plugin's placeVertically so cards near the bottom of the viewport don't
- * extend off-screen.
+ * Compute the max height available for a card's (scrollable) body WITHOUT
+ * moving the card. `useMarginCards` already lays the cards out top-to-bottom
+ * in anchor order with overlap resolved; re-clamping a bottom card upward
+ * here (the comment plugin's behavior for its single ACTIVE card) made
+ * always-expanded sticky notes jump ~560px up and land on top of the cards
+ * above them — the panel looked shuffled. So the top is only floored to the
+ * viewport margin; a card near the bottom edge keeps its slot and just gets
+ * a smaller body, running off-screen until scrolling brings it up.
  */
 function placeVertically(top: number, hardCap = 560): { top: number; maxHeight: number } {
     const vh = typeof window !== "undefined" ? window.innerHeight : 800;
     const maxAllowed = Math.min(hardCap, vh - VIEWPORT_MARGIN * 2);
-    let t = Math.max(VIEWPORT_MARGIN, top);
-    let available = vh - t - VIEWPORT_MARGIN;
-    if (available < Math.min(240, maxAllowed)) {
-        t = Math.max(VIEWPORT_MARGIN, vh - VIEWPORT_MARGIN - maxAllowed);
-        available = vh - t - VIEWPORT_MARGIN;
-    }
-    return { top: t, maxHeight: Math.min(available, maxAllowed) };
+    const t = Math.max(VIEWPORT_MARGIN, top);
+    const available = vh - t - VIEWPORT_MARGIN;
+    // Floor keeps a usable body (see the 80px body floor at the call site).
+    return { top: t, maxHeight: Math.min(Math.max(available, 128), maxAllowed) };
 }
 
 export interface StickyNoteCardProps {
