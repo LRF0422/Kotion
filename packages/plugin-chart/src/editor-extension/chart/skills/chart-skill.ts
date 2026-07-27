@@ -45,9 +45,11 @@ Chart data structure:
   // Advanced features (bar/line/area/compose/scatter):
   "referenceLines": [{ "axis": "y", "value": 100, "label": "Target", "dashed": true }],
   "enableBrush": false,   // zoom/pan for large datasets
-  "stackOffset": "expand", // with stacked:true → 100% percentage stack
+  "stackOffset": "expand", // with stacked:true → 100% percentage stack (axis ticks auto-render as %)
   "gradientFill": true,    // area gradient fill
   "logScale": false,       // logarithmic value (Y) axis
+  "valueFormat": "auto",   // value tick/label format: "auto" (compact 8.1M for large numbers) | "compact" | "percent" | "none"
+  "xTickAngle": -35,       // X label rotation; omit to auto-rotate long/crowded labels
   // Scatter / bubble:
   "sizeKey": "revenue",    // third dimension → bubble size
   "scatterSeries": [{ "name": "Group A", "xKey": "x", "yKey": "y", "sizeKey": "z", "data": [/* rows */] }]
@@ -84,7 +86,10 @@ Guidelines:
 - Add referenceLines for targets/averages/limits; prefer dashed lines for thresholds
 - Use enableBrush for large datasets so users can zoom/pan
 - Use stacked:true with stackOffset:"expand" for 100% (percentage) stacked charts
-- Use logScale:true when values span several orders of magnitude
+- Use logScale:true when values span several orders of magnitude (values must be positive)
+- Large values are auto-compacted on axes (8.1M); set valueFormat:"percent" when data values are percentages, "none" to show raw values
+- Long or crowded X labels auto-rotate; set xTickAngle explicitly (e.g. -35 or -90) to control it
+- radialBar values within 0–100 are treated as percentages; larger raw values get an auto-scaled domain
 - Use meaningful categoryKey values as labels
 - Ensure data array has enough entries for a readable chart
 - Use stacked: true for stacked bar/area charts

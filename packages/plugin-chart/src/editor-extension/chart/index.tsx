@@ -348,6 +348,8 @@ export const ChartExtension: ExtensionWrapper = {
                     stackOffset: z.enum(['none', 'expand']).describe("堆叠方式，'expand' 为 100% 百分比堆叠（需配合 stacked:true）").optional(),
                     gradientFill: z.boolean().describe("面积图/组合图的面积系列是否使用渐变填充").optional(),
                     logScale: z.boolean().describe("数值轴(Y)是否使用对数刻度").optional(),
+                    valueFormat: z.enum(['auto', 'compact', 'percent', 'none']).describe("数值轴刻度/数据标签格式：'auto'（默认，大数自动缩写为 8.1M）、'compact'（始终缩写）、'percent'（追加 %）、'none'（原始值）。100% 堆叠图始终显示百分比刻度").optional(),
+                    xTickAngle: z.number().describe("X 轴分类标签旋转角度（如 -35）。缺省时标签过长/过密会自动旋转").optional(),
                     // --- 散点/气泡 ---
                     sizeKey: z.string().describe("气泡大小对应的字段名（散点图第三维度，启用气泡图）").optional(),
                     scatterSeries: z.array(z.object({
@@ -568,6 +570,8 @@ export const ChartExtension: ExtensionWrapper = {
                     stackOffset: z.enum(['none', 'expand']).describe("'expand' 为 100% 百分比堆叠").optional(),
                     gradientFill: z.boolean().describe("面积系列是否渐变填充").optional(),
                     logScale: z.boolean().describe("数值轴是否对数刻度").optional(),
+                    valueFormat: z.enum(['auto', 'compact', 'percent', 'none']).describe("数值格式：auto/compact/percent/none").optional(),
+                    xTickAngle: z.number().describe("X 轴标签旋转角度").optional(),
                     sizeKey: z.string().describe("气泡大小字段名").optional(),
                     scatterSeries: z.array(z.object({
                         name: z.string().describe("系列名称"),

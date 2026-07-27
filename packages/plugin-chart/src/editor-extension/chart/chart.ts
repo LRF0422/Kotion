@@ -112,6 +112,14 @@ export interface ChartData {
     gradientFill?: boolean;
     /** Use a logarithmic scale on the value (Y) axis. */
     logScale?: boolean;
+    /** Number format for value-axis ticks and data labels.
+     *  'auto' (default): thousands separators, compact notation (8.1M) for large numbers;
+     *  'compact': always compact; 'percent': append '%'; 'none': raw value.
+     *  Note: 100% stacked charts (stackOffset 'expand') always show percentage ticks. */
+    valueFormat?: 'auto' | 'compact' | 'percent' | 'none';
+    /** Rotation angle (degrees) for category (X) axis labels, e.g. -35.
+     *  When unset, labels auto-rotate if they are long or crowded. */
+    xTickAngle?: number;
 
     // --- Scatter / bubble specific ---
     /** Field name controlling bubble size (Z axis). Falls back to dataKeys[2]. */

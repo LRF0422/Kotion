@@ -145,7 +145,7 @@ function buildChartConfig(chartData: ChartData): ChartConfig {
  * Whether a chart has enough data to render. Most types need a non-empty
  * `data` array; sankey instead needs its `sankey` node/link graph.
  */
-function hasRenderableData(chartData: ChartData | null): boolean {
+function hasRenderableData(chartData: ChartData | null): chartData is ChartData {
     if (!chartData) return false
     if (chartData.type === "sankey") {
         return !!(chartData.sankey?.nodes?.length && chartData.sankey?.links?.length)
@@ -209,6 +209,102 @@ function validateSankeyGraph(sankey?: SankeyData): { ok: boolean; error?: string
 function valueAxisScaleProps(chartData: ChartData) {
     if (!chartData.logScale) return {}
     return { scale: "log" as const, domain: ["auto", "auto"] as [string, string], allowDataOverflow: true }
+}
+
+/** Compact number formatter shared by axis ticks and data labels (8100000 → 8.1M). */
+const compactFormatter = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 })
+
+/**
+ * Format a numeric value according to the chart's `valueFormat`.
+ * 'auto' (default) keeps small numbers readable and compacts large ones;
+ * 'compact' always compacts; 'percent' appends '%'; 'none' shows the raw value.
+ */
+function formatValue(value: unknown, format?: string): string {
+    if (typeof value !== "number" || !Number.isFinite(value)) return String(value ?? "")
+    switch (format) {
+        case "none":
+            return String(value)
+        case "percent":
+            return `${value.toLocaleString()}%`
+        case "compact":
+            return compactFormatter.format(value)
+        case "auto":
+        default:
+            return Math.abs(value) >= 10000 ? compactFormatter.format(value) : value.toLocaleString()
+    }
+}
+
+/**
+ * Tick formatter for the value axis. In 100% stacked mode ('expand') the axis
+ * runs 0–1, so ticks are rendered as percentages regardless of valueFormat.
+ */
+function getValueTickFormatter(chartData: ChartData): (v: any) => string {
+    if (chartData.stacked && chartData.stackOffset === "expand") {
+        return (v: any) => (typeof v === "number" ? `${Math.round(v * 100)}%` : String(v))
+    }
+    return (v: any) => formatValue(v, chartData.valueFormat)
+}
+
+/** Truncate long category labels so axis ticks stay readable (full text stays in the tooltip). */
+const CATEGORY_LABEL_MAX = 14
+function truncateLabel(v: any): string {
+    const s = String(v ?? "")
+    return s.length > CATEGORY_LABEL_MAX ? `${s.slice(0, CATEGORY_LABEL_MAX - 1)}…` : s
+}
+
+/**
+ * Extra props for the category (X) axis to handle long / crowded labels.
+ * An explicit `xTickAngle` wins; otherwise labels auto-rotate when many
+ * categories or long labels would overlap. Labels are always truncated.
+ */
+function categoryAxisProps(chartData: ChartData): Record<string, any> {
+    const categoryKey = chartData.categoryKey || "name"
+    const data = chartData.data || []
+    const maxLen = data.reduce((m, row) => Math.max(m, String(row?.[categoryKey] ?? "").length), 0)
+    const autoRotate = (data.length > 8 && maxLen > 4) || maxLen > 10
+    const angle = chartData.xTickAngle ?? (autoRotate ? -35 : 0)
+    if (!angle) {
+        return { tickFormatter: truncateLabel }
+    }
+    return {
+        tickFormatter: truncateLabel,
+        angle,
+        textAnchor: angle < 0 ? "end" : "start",
+        height: 60,
+    }
+}
+
+/** Width for the category Y-axis of horizontal bar charts, sized to the (truncated) labels. */
+function horizontalCategoryAxisWidth(chartData: ChartData): number {
+    const categoryKey = chartData.categoryKey || "name"
+    const maxLen = (chartData.data || []).reduce((m, row) => {
+        const len = Math.min(String(row?.[categoryKey] ?? "").length, CATEGORY_LABEL_MAX)
+        return Math.max(m, len)
+    }, 0)
+    // ~6.5px per character at the 12px tick font, plus padding
+    return Math.min(160, Math.max(60, Math.round(maxLen * 6.5) + 16))
+}
+
+/**
+ * Domain for radialBar rings. Values within 0–100 keep the classic percentage
+ * domain; larger values get a rounded-up "nice" maximum so raw counts don't
+ * overflow (previously the domain was hard-coded to [0, 100]).
+ */
+function radialBarDomain(chartData: ChartData, dataKey: string): [number, number] {
+    const values = (chartData.data || [])
+        .map(row => Number(row?.[dataKey]))
+        .filter(v => Number.isFinite(v))
+    const max = values.length ? Math.max(...values) : 0
+    if (max <= 100) return [0, 100]
+    const pow = 10 ** Math.floor(Math.log10(max))
+    const niceStep = [1, 1.5, 2, 2.5, 5, 10].find(s => s * pow >= max) ?? 10
+    return [0, niceStep * pow]
+}
+
+/** Hide per-point dots on dense line charts to keep rendering fast and clean. */
+const LINE_DOT_LIMIT = 60
+function lineDotProps(chartData: ChartData): false | { r: number } {
+    return (chartData.data?.length ?? 0) > LINE_DOT_LIMIT ? false : { r: 4 }
 }
 
 /**
@@ -288,13 +384,20 @@ const BarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; heig
                 {chartData.showGrid !== false && <CartesianGrid vertical={false} strokeDasharray="3 3" />}
                 {chartData.horizontal ? (
                     <>
-                        <YAxis dataKey={categoryKey} type="category" tickLine={false} axisLine={false} width={100} />
-                        <XAxis type="number" hide={false} {...valueAxisScaleProps(chartData)} />
+                        <YAxis
+                            dataKey={categoryKey}
+                            type="category"
+                            tickLine={false}
+                            axisLine={false}
+                            width={horizontalCategoryAxisWidth(chartData)}
+                            tickFormatter={truncateLabel}
+                        />
+                        <XAxis type="number" hide={false} tickFormatter={getValueTickFormatter(chartData)} {...valueAxisScaleProps(chartData)} />
                     </>
                 ) : (
                     <>
-                        <XAxis dataKey={categoryKey} tickLine={false} tickMargin={10} axisLine={false} />
-                        <YAxis tickLine={false} axisLine={false} {...valueAxisScaleProps(chartData)} />
+                        <XAxis dataKey={categoryKey} tickLine={false} tickMargin={10} axisLine={false} {...categoryAxisProps(chartData)} />
+                        <YAxis tickLine={false} axisLine={false} tickFormatter={getValueTickFormatter(chartData)} {...valueAxisScaleProps(chartData)} />
                     </>
                 )}
                 <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
@@ -307,7 +410,7 @@ const BarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; heig
                         radius={chartData.stacked ? undefined : [4, 4, 0, 0]}
                     >
                         {chartData.showDataLabels && (
-                            <LabelList dataKey={key} position="top" className="fill-foreground text-xs" />
+                            <LabelList dataKey={key} position="top" className="fill-foreground text-xs" formatter={(v: any) => formatValue(v, chartData.valueFormat)} />
                         )}
                     </Bar>
                 ))}
@@ -332,8 +435,8 @@ const LineChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; hei
         <ChartContainer config={config} className="w-full" style={{ height }}>
             <LineChart data={chartData.data} accessibilityLayer>
                 {chartData.showGrid !== false && <CartesianGrid strokeDasharray="3 3" />}
-                <XAxis dataKey={categoryKey} tickLine={false} tickMargin={10} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} {...valueAxisScaleProps(chartData)} />
+                <XAxis dataKey={categoryKey} tickLine={false} tickMargin={10} axisLine={false} {...categoryAxisProps(chartData)} />
+                <YAxis tickLine={false} axisLine={false} tickFormatter={getValueTickFormatter(chartData)} {...valueAxisScaleProps(chartData)} />
                 <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
                 {dataKeys.map((key, index) => (
                     <Line
@@ -342,10 +445,10 @@ const LineChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; hei
                         dataKey={key}
                         stroke={resolveSeriesColor(chartData, key, index, isDark)}
                         strokeWidth={2}
-                        dot={{ r: 4 }}
+                        dot={lineDotProps(chartData)}
                     >
                         {chartData.showDataLabels && (
-                            <LabelList dataKey={key} position="top" className="fill-foreground text-xs" />
+                            <LabelList dataKey={key} position="top" className="fill-foreground text-xs" formatter={(v: any) => formatValue(v, chartData.valueFormat)} />
                         )}
                     </Line>
                 ))}
@@ -374,8 +477,8 @@ const AreaChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; hei
             <AreaChart data={chartData.data} stackOffset={stackOffset} accessibilityLayer>
                 {renderAreaGradients(chartData, isDark)}
                 {chartData.showGrid !== false && <CartesianGrid vertical={false} strokeDasharray="3 3" />}
-                <XAxis dataKey={categoryKey} tickLine={false} tickMargin={10} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} {...valueAxisScaleProps(chartData)} />
+                <XAxis dataKey={categoryKey} tickLine={false} tickMargin={10} axisLine={false} {...categoryAxisProps(chartData)} />
+                <YAxis tickLine={false} axisLine={false} tickFormatter={getValueTickFormatter(chartData)} {...valueAxisScaleProps(chartData)} />
                 <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
                 {dataKeys.map((key, index) => {
                     const color = resolveSeriesColor(chartData, key, index, isDark)
@@ -485,7 +588,7 @@ const RadialBarChartRender: React.FC<{ chartData: ChartData; config: ChartConfig
         <ChartContainer config={config} className="w-full" style={{ height }}>
             <RadialBarChart data={chartData.data} cx="50%" cy="50%" innerRadius="20%" outerRadius="90%">
                 <ChartTooltip content={<ChartTooltipContent nameKey={categoryKey} />} />
-                <PolarAngleAxis dataKey={dataKey} domain={[0, 100]} tick={false} />
+                <PolarAngleAxis dataKey={dataKey} type="number" domain={radialBarDomain(chartData, dataKey)} tick={false} />
                 {/* Each ring is a separate category, so color per-row via <Cell>
                     (like the pie chart). Without explicit fills, RadialBar falls
                     back to the SVG default and renders every ring black. */}
@@ -533,8 +636,8 @@ const ScatterChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; 
         <ChartContainer config={config} className="w-full" style={{ height }}>
             <ScatterChart>
                 {chartData.showGrid !== false && <CartesianGrid strokeDasharray="3 3" />}
-                <XAxis type="number" dataKey={xKey} name={xKey} tickLine={false} axisLine={false} {...valueAxisScaleProps(chartData)} />
-                <YAxis type="number" dataKey={yKey} name={yKey} tickLine={false} axisLine={false} />
+                <XAxis type="number" dataKey={xKey} name={xKey} tickLine={false} axisLine={false} tickFormatter={getValueTickFormatter(chartData)} {...valueAxisScaleProps(chartData)} />
+                <YAxis type="number" dataKey={yKey} name={yKey} tickLine={false} axisLine={false} tickFormatter={getValueTickFormatter(chartData)} />
                 {hasSize && <ZAxis type="number" dataKey={series[0].sizeKey} range={[60, 600]} />}
                 <ChartTooltip cursor={{ strokeDasharray: "3 3" }} content={<ChartTooltipContent />} />
                 {series.map((s, index) => (
@@ -575,10 +678,10 @@ const ComposedChartRender: React.FC<{ chartData: ChartData; config: ChartConfig;
             <ComposedChart data={chartData.data} accessibilityLayer>
                 {renderAreaGradients(chartData, isDark)}
                 {chartData.showGrid !== false && <CartesianGrid vertical={false} strokeDasharray="3 3" />}
-                <XAxis dataKey={categoryKey} tickLine={false} tickMargin={10} axisLine={false} />
-                <YAxis yAxisId="left" tickLine={false} axisLine={false} {...valueAxisScaleProps(chartData)} />
+                <XAxis dataKey={categoryKey} tickLine={false} tickMargin={10} axisLine={false} {...categoryAxisProps(chartData)} />
+                <YAxis yAxisId="left" tickLine={false} axisLine={false} tickFormatter={getValueTickFormatter(chartData)} {...valueAxisScaleProps(chartData)} />
                 {(showRight || hasRightSeries) && (
-                    <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} />
+                    <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} tickFormatter={getValueTickFormatter(chartData)} />
                 )}
                 <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
                 {dataKeys.map((key, index) => {
@@ -596,10 +699,10 @@ const ComposedChartRender: React.FC<{ chartData: ChartData; config: ChartConfig;
                                     dataKey={key}
                                     stroke={colorVar}
                                     strokeWidth={2}
-                                    dot={{ r: 4 }}
+                                    dot={lineDotProps(chartData)}
                                 >
                                     {chartData.showDataLabels && (
-                                        <LabelList dataKey={key} position="top" className="fill-foreground text-xs" />
+                                        <LabelList dataKey={key} position="top" className="fill-foreground text-xs" formatter={(v: any) => formatValue(v, chartData.valueFormat)} />
                                     )}
                                 </Line>
                             )
@@ -626,7 +729,7 @@ const ComposedChartRender: React.FC<{ chartData: ChartData; config: ChartConfig;
                                     radius={[4, 4, 0, 0]}
                                 >
                                     {chartData.showDataLabels && (
-                                        <LabelList dataKey={key} position="top" className="fill-foreground text-xs" />
+                                        <LabelList dataKey={key} position="top" className="fill-foreground text-xs" formatter={(v: any) => formatValue(v, chartData.valueFormat)} />
                                     )}
                                 </Bar>
                             )
@@ -664,7 +767,7 @@ const FunnelChartRender: React.FC<{ chartData: ChartData; config: ChartConfig; h
                     })}
                     <LabelList position="right" dataKey={categoryKey} className="fill-foreground text-xs" stroke="none" />
                     {chartData.showDataLabels && (
-                        <LabelList position="inside" dataKey={dataKey} className="fill-background text-xs" stroke="none" />
+                        <LabelList position="inside" dataKey={dataKey} className="fill-background text-xs" stroke="none" formatter={(v: any) => formatValue(v, chartData.valueFormat)} />
                     )}
                 </Funnel>
             </FunnelChart>
@@ -1084,6 +1187,44 @@ const ConfigPanel: React.FC<{
                             />
                         )}
                     </div>
+
+                    {/* Value formatting & X label angle */}
+                    <div className="flex items-center gap-2 pt-1">
+                        <span className="text-[11px] text-muted-foreground w-20 shrink-0">Value Format</span>
+                        <Select
+                            value={chartData.valueFormat || "auto"}
+                            onValueChange={(v) => onUpdate({ valueFormat: v === "auto" ? undefined : v as ChartData["valueFormat"] })}
+                        >
+                            <SelectTrigger className="h-6 text-[11px] flex-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="auto" className="text-xs">Auto (8.1M)</SelectItem>
+                                <SelectItem value="compact" className="text-xs">Compact</SelectItem>
+                                <SelectItem value="percent" className="text-xs">Percent (%)</SelectItem>
+                                <SelectItem value="none" className="text-xs">Raw</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    {chartData.type !== "scatter" && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-muted-foreground w-20 shrink-0">Label Angle</span>
+                            <Select
+                                value={chartData.xTickAngle === undefined ? "auto" : String(chartData.xTickAngle)}
+                                onValueChange={(v) => onUpdate({ xTickAngle: v === "auto" ? undefined : Number(v) })}
+                            >
+                                <SelectTrigger className="h-6 text-[11px] flex-1">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="auto" className="text-xs">Auto</SelectItem>
+                                    <SelectItem value="0" className="text-xs">0°</SelectItem>
+                                    <SelectItem value="-35" className="text-xs">-35°</SelectItem>
+                                    <SelectItem value="-90" className="text-xs">-90°</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
                     {/* Reference / threshold lines */}
                     <div className="space-y-1 pt-1">
