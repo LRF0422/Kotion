@@ -18,6 +18,13 @@ const MAX_SESSIONS = 50
 export const BACKEND_SESSION_TTL_MS = 30 * 60 * 1000
 
 // ─── Types ─────────────────────────────────────────────────────────
+/** A page bound to a chat session via the @-mention picker. */
+export interface ChatTargetPage {
+    pageId: string
+    title: string
+    spaceId?: string
+}
+
 export interface ChatSessionMeta {
     /** Local UUID identifying this chat session in the UI. */
     id: string
@@ -31,6 +38,8 @@ export interface ChatSessionMeta {
     backendConversationId?: string
     /** Timestamp when the backend session was last seen (used for TTL). */
     backendSessionUpdatedAt?: number
+    /** Page this session's agent edits (off-screen) instead of the open document. */
+    targetPage?: ChatTargetPage
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef } from "react"
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import { Sparkles } from "@kn/icon"
 import { Streamdown, ChatBubble, ChatBubbleMessage } from "@kn/ui"
 import {
@@ -8,14 +8,16 @@ import {
     ExpandableChatFooter,
     ChatMessageList,
 } from "@kn/ui"
-import { Editor } from "@kn/editor"
+import { Editor, PageEditWindow } from "@kn/editor"
 import {
     useEditorAgentOptimized,
     ToolExecutionEvent,
     UserChoiceRequest,
     applySubAgentAnnotations,
+    getOffscreenEditorBridge,
+    getPageBridge,
 } from "@kn/common"
-import type { ChatMode, ChatModelParams } from "@kn/common"
+import type { ChatMode, ChatModelParams, OffscreenEditorHandle } from "@kn/common"
 
 import { SubAgentTree } from "./SubAgentTree"
 import { PlanApprovalCard } from "./PlanApprovalCard"
@@ -25,6 +27,7 @@ import {
 } from "./chat-types"
 import type { AnnotationData, Message } from "./chat-types"
 import { getHistoryForAI } from "./chat-persistence"
+import type { ChatTargetPage } from "./chat-sessions"
 import { useChatSessions } from "./useChatSessions"
 import { useStreamingBuffer } from "./use-streaming-buffer"
 import { MessageBubble } from "./MessageBubble"
@@ -33,6 +36,7 @@ import { ErrorDisplay } from "./ErrorDisplay"
 import { ChatHeader } from "./chat/ChatHeader"
 import { ChatEmptyState } from "./chat/ChatEmptyState"
 import { ChatComposer } from "./chat/ChatComposer"
+import type { TargetPageStatus } from "./chat/PageMentionPicker"
 import { UserChoiceCard } from "./chat/UserChoiceCard"
 
 // ─── Persistence keys ──────────────────────────────────────────────
@@ -177,19 +181,6 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         }
     }, [])
 
-    // ─── Streaming agent ──────────────────────────────────────────
-    const { stream, stop } = useEditorAgentOptimized(
-        editor,
-        handleToolExecution,
-        handleUserChoiceRequest,
-        {
-            model: selectedModel || undefined,
-            mode: chatMode,
-            apiVersion: 'v2',
-            modelParams,
-        },
-    )
-
     // ─── Multi-session store ──────────────────────────────────────
     const {
         sessions,
@@ -202,8 +193,116 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         switchSession,
         deleteSession,
         clearActiveMessages,
+        targetPage,
+        setTargetPage,
         parseAnnotations,
     } = useChatSessions()
+
+    // ─── Off-screen target editor (@-page binding) ──────────────
+    // When the active session binds a page, its off-screen collaborative
+    // editor is swapped into the agent hook below so every editing tool
+    // operates on that page. If the bound page is the one currently open,
+    // we skip the off-screen session and use the main editor directly.
+    const [offscreenHandle, setOffscreenHandle] = useState<OffscreenEditorHandle | null>(null)
+    const [targetStatus, setTargetStatus] = useState<TargetPageStatus>('idle')
+    const offscreenHandleRef = useRef<OffscreenEditorHandle | null>(null)
+    offscreenHandleRef.current = offscreenHandle
+    // Bumped by the chip's retry affordance to re-run the acquire effect.
+    const [acquireAttempt, setAcquireAttempt] = useState(0)
+
+    const targetPageId = targetPage?.pageId
+    useEffect(() => {
+        setOffscreenHandle(null)
+        if (!targetPageId) {
+            setTargetStatus('idle')
+            return
+        }
+        const currentPageId = getPageBridge()?.getCurrentPage()?.pageId
+        if (currentPageId && String(currentPageId) === targetPageId) {
+            setTargetStatus('current')
+            return
+        }
+        const bridge = getOffscreenEditorBridge()
+        if (!bridge) {
+            setTargetStatus('error')
+            return
+        }
+        let cancelled = false
+        let acquired: OffscreenEditorHandle | null = null
+        setTargetStatus('connecting')
+        bridge.acquire(targetPageId)
+            .then(handle => {
+                if (cancelled) {
+                    handle.release()
+                    return
+                }
+                acquired = handle
+                setOffscreenHandle(handle)
+                setTargetStatus('ready')
+            })
+            .catch(err => {
+                console.error('Failed to acquire off-screen editor:', err)
+                if (!cancelled) setTargetStatus('error')
+            })
+        return () => {
+            cancelled = true
+            acquired?.release()
+        }
+    }, [activeSessionId, targetPageId, acquireAttempt])
+
+    const handleRetryPage = useCallback(() => setAcquireAttempt(n => n + 1), [])
+
+    // Page hosting this chat instance — the implicit default target shown in
+    // the composer chip when no page is @-bound. Chat is mounted per editor
+    // tab, so this never changes for a given instance; we poll briefly only
+    // because the page title loads asynchronously after the editor mounts.
+    const [currentPage, setCurrentPage] = useState<ChatTargetPage | undefined>()
+    useEffect(() => {
+        let tries = 0
+        const read = () => {
+            const info = getPageBridge()?.getCurrentPage()
+            if (!info?.pageId) return false
+            setCurrentPage({
+                pageId: String(info.pageId),
+                // Title may still be loading; the chip's "当前页面" suffix keeps
+                // the affordance legible until it arrives.
+                title: info.title || '',
+                spaceId: info.spaceId,
+            })
+            return !!info.title
+        }
+        if (read()) return
+        const timer = setInterval(() => {
+            if (read() || ++tries >= 20) clearInterval(timer)
+        }, 500)
+        return () => clearInterval(timer)
+    }, [editor])
+
+    // Open the bound page in the draggable floating editor window (same
+    // PageEditWindow as PageLink's in-place editing — no navigation, so the
+    // chat and any in-flight agent run stay untouched; the window's editor
+    // joins the same Y.Doc room and shows the agent's edits live).
+    const [editWindowPageId, setEditWindowPageId] = useState<string | null>(null)
+    const handleOpenPageWindow = useCallback(() => {
+        if (targetPage) setEditWindowPageId(targetPage.pageId)
+    }, [targetPage])
+
+    // All agent tools bind to whichever editor we hand the hook — the
+    // off-screen one when a target page is attached, else the main editor.
+    const agentEditor = (offscreenHandle?.editor as Editor) ?? editor
+
+    // ─── Streaming agent ──────────────────────────────────────────
+    const { stream, stop } = useEditorAgentOptimized(
+        agentEditor,
+        handleToolExecution,
+        handleUserChoiceRequest,
+        {
+            model: selectedModel || undefined,
+            mode: chatMode,
+            apiVersion: 'v2',
+            modelParams,
+        },
+    )
 
     // ─── Annotations / sub-agents / plan ──────────────────────────
     const [annotations, setAnnotations] = useState<AnnotationData[]>([])
@@ -274,8 +373,14 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
             // Remove the last user message from history — it's passed as prompt.
             const history = historyMessages.slice(0, -1)
 
+            // Implicit context line so the model knows which page the tools
+            // are wired to (the UI keeps showing the raw user message).
+            const prompt = targetPage
+                ? `（本会话绑定编辑页面「${targetPage.title}」，所有文档工具作用于该页面）\n${messageText}`
+                : messageText
+
             const { textStream } = await stream({
-                prompt: messageText,
+                prompt,
                 messages: history,
                 sessionId: backendSessionId,
                 conversationId: backendConversationId,
@@ -351,10 +456,15 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
             }
         } finally {
             setIsLoading(false)
+            // Persist whatever this round edited on the off-screen page.
+            offscreenHandleRef.current?.flush().catch(err => {
+                console.error('Failed to flush off-screen edits:', err)
+            })
         }
     }, [
         stream, generateMessageId, messages, buffer,
         backendSessionId, backendConversationId, parseAnnotations, setMessages,
+        targetPage,
     ])
 
     const handleSend = useCallback(() => {
@@ -582,8 +692,23 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                     onModelChange={handleModelChange}
                     modelParams={modelParams}
                     onModelParamsChange={handleModelParamsChange}
+                    targetPage={targetPage}
+                    currentPage={currentPage}
+                    targetStatus={targetStatus}
+                    onPickPage={setTargetPage}
+                    onClearPage={() => setTargetPage(null)}
+                    onRetryPage={handleRetryPage}
+                    onOpenPageWindow={handleOpenPageWindow}
                 />
             </ExpandableChatFooter>
+
+            {/* Floating page editor opened from the @-page chip */}
+            {editWindowPageId && (
+                <PageEditWindow
+                    pageId={editWindowPageId}
+                    onClose={() => setEditWindowPageId(null)}
+                />
+            )}
         </ExpandableChat>
     )
 }

@@ -15,6 +15,7 @@ import {
     AIAssistantPanel,
     useAIAssistantShortcut
 } from "./ai/system-agent"
+import { OffscreenEditorHost } from "./ai/offscreen"
 
 interface LayoutProps {
     onPluginsReady: (ready: boolean) => void
@@ -230,6 +231,9 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                 <div>
                     {/* Onboarding / feature tours */}
                     <TourHost />
+
+                    {/* Hidden collaborative editors for off-screen page editing (Chat @-page) */}
+                    <OffscreenEditorHost />
 
                     {/* AI Assistant Panel */}
                     <AIAssistantPanel

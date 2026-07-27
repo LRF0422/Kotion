@@ -1,6 +1,7 @@
 export * from "./collaboration";
 export * from "./render";
 export * from "./provider";
+export * from "./PageEditWindow";
 export * from "./ToC"
 export type { TocItem } from "./ToC"
 export * from "@tiptap/core"

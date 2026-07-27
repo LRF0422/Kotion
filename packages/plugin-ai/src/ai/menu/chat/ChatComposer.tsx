@@ -22,7 +22,9 @@ import {
 import type { ChatMode, ChatModelParams, ModelInfo } from '@kn/common'
 import { fetchModels, useTranslation } from '@kn/common'
 
+import type { ChatTargetPage } from '../chat-sessions'
 import { ModelParamsPopover } from './ModelParamsPopover'
+import { PageMentionPicker, TargetPageStatus } from './PageMentionPicker'
 
 // ─── Mode toggle ───────────────────────────────────────────────────
 
@@ -153,6 +155,16 @@ interface ChatComposerProps {
     onModelChange: (model: string) => void
     modelParams: ChatModelParams
     onModelParamsChange: (params: ChatModelParams) => void
+    /** @-page binding of the active session (rendered as a chip row). */
+    targetPage?: ChatTargetPage
+    /** Page hosting this chat — shown as the implicit default target. */
+    currentPage?: ChatTargetPage
+    targetStatus: TargetPageStatus
+    onPickPage: (page: ChatTargetPage) => void
+    onClearPage: () => void
+    onRetryPage: () => void
+    /** Open the bound page in the floating PageEditWindow. */
+    onOpenPageWindow: () => void
 }
 
 /**
@@ -166,11 +178,14 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
         value, onChange, onSubmit, onStop, isLoading,
         mode, onModeChange, model, onModelChange,
         modelParams, onModelParamsChange,
+        targetPage, currentPage, targetStatus, onPickPage, onClearPage, onRetryPage, onOpenPageWindow,
     },
     ref,
 ) {
     const { t } = useTranslation()
     const inputRef = useRef<HTMLTextAreaElement | null>(null)
+    // Popover of the @-page picker; typing `@` at a word boundary opens it.
+    const [mentionOpen, setMentionOpen] = useState(false)
     // Expose the internal ref to the parent.
     React.useImperativeHandle(ref, () => inputRef.current as HTMLTextAreaElement)
 
@@ -183,7 +198,8 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
         el.style.height = `${Math.min(el.scrollHeight, 120)}px`
     }, [value])
 
-    const isValid = value.trim().length > 0 && !isLoading
+    const connecting = targetStatus === 'connecting'
+    const isValid = value.trim().length > 0 && !isLoading && !connecting
 
     const handleFormSubmit = (e: FormEvent) => {
         e.preventDefault()
@@ -195,6 +211,16 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
             if (isValid) onSubmit()
+            return
+        }
+        // `@` at the start or after whitespace opens the page picker.
+        if (e.key === '@' && !targetPage) {
+            const el = e.currentTarget
+            const before = el.value.slice(0, el.selectionStart ?? 0)
+            if (before === '' || /\s$/.test(before)) {
+                e.preventDefault()
+                setMentionOpen(true)
+            }
         }
     }
 
@@ -203,15 +229,29 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
             onSubmit={handleFormSubmit}
             className="relative rounded-xl border border-border/60 bg-background focus-within:border-ring/50 focus-within:ring-2 focus-within:ring-ring/20 transition-all"
         >
+            <PageMentionPicker
+                targetPage={targetPage}
+                currentPage={currentPage}
+                status={targetStatus}
+                disabled={isLoading}
+                open={mentionOpen}
+                onOpenChange={setMentionOpen}
+                onPick={onPickPage}
+                onClear={onClearPage}
+                onRetry={onRetryPage}
+                onOpenWindow={onOpenPageWindow}
+            />
             <ChatInput
                 ref={inputRef}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
-                    mode === 'ask'
-                        ? t('ai.chat.askPlaceholder', { defaultValue: '向 AI 提问关于文档的问题…' })
-                        : t('ai.chat.agentPlaceholder', { defaultValue: '提问、编辑或自动化任何事情…' })
+                    connecting
+                        ? t('ai.chat.targetPageConnectingPlaceholder', { defaultValue: '正在连接目标页面…' })
+                        : mode === 'ask'
+                            ? t('ai.chat.askPlaceholder', { defaultValue: '向 AI 提问关于文档的问题…' })
+                            : t('ai.chat.agentPlaceholder', { defaultValue: '提问、编辑或自动化任何事情…' })
                 }
                 disabled={isLoading}
                 rows={1}

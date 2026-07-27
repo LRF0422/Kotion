@@ -4,6 +4,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import type { AnnotationData, Message, SessionInfo } from './chat-types'
 import {
     ChatSessionMeta,
+    ChatTargetPage,
     deleteSessionMessages,
     deriveTitle,
     generateSessionId,
@@ -40,6 +41,10 @@ export interface UseChatSessionsResult {
     renameSession: (id: string, title: string) => void
     /** Clear all messages & backend ids of the active session (keeps the session itself). */
     clearActiveMessages: () => void
+    /** Page bound to the active session (@-mention), if any. */
+    targetPage: ChatTargetPage | undefined
+    /** Bind / unbind the active session's target page. */
+    setTargetPage: (page: ChatTargetPage | null) => void
     /** Absorb backend session/conversation ids emitted in streaming annotations. */
     parseAnnotations: (annotations: AnnotationData[]) => void
 }
@@ -242,6 +247,19 @@ export function useChatSessions(): UseChatSessionsResult {
         }))
     }, [activeSessionId, updateMeta])
 
+    const targetPage = activeSession?.targetPage
+
+    const setTargetPage = useCallback(
+        (page: ChatTargetPage | null) => {
+            updateMeta(activeSessionId, s => ({
+                ...s,
+                targetPage: page ?? undefined,
+                updatedAt: Date.now(),
+            }))
+        },
+        [activeSessionId, updateMeta],
+    )
+
     const parseAnnotations = useCallback(
         (annotations: AnnotationData[]) => {
             for (const ann of annotations) {
@@ -286,6 +304,8 @@ export function useChatSessions(): UseChatSessionsResult {
         deleteSession,
         renameSession,
         clearActiveMessages,
+        targetPage,
+        setTargetPage,
         parseAnnotations,
     }
 }

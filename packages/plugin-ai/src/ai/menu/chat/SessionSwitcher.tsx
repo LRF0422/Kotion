@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react'
-import { ChevronDown, Plus, X, Check } from '@kn/icon'
+import { AtSign, ChevronDown, Plus, X, Check } from '@kn/icon'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -33,6 +33,7 @@ export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
     const activeItemRef = useRef<HTMLDivElement | null>(null)
     const activeSession = sessions.find((s) => s.id === activeSessionId)
     const activeTitle = activeSession?.title || 'New chat'
+    const activePageTitle = activeSession?.targetPage?.title
 
     // Keep the active item visible when the menu is opened after several
     // sessions have accumulated.
@@ -52,9 +53,15 @@ export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
                 <button
                     type="button"
                     className="group flex items-center gap-1 min-w-0 max-w-[220px] h-6 px-1.5 -ml-1 rounded-md text-foreground hover:bg-muted/60 transition-colors"
-                    title={activeTitle}
+                    title={activePageTitle ? `${activeTitle} — @${activePageTitle}` : activeTitle}
                 >
                     <span className="truncate text-xs font-medium">{activeTitle}</span>
+                    {activePageTitle && (
+                        <span className="flex items-center gap-0.5 min-w-0 shrink text-[10px] text-muted-foreground">
+                            <AtSign className="h-2.5 w-2.5 shrink-0" />
+                            <span className="truncate">{activePageTitle}</span>
+                        </span>
+                    )}
                     <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
                 </button>
             </DropdownMenuTrigger>
@@ -71,6 +78,7 @@ export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
                     {sessions.map((s) => {
                         const isActive = s.id === activeSessionId
                         const title = s.title || 'New chat'
+                        const pageTitle = s.targetPage?.title
                         return (
                             <div
                                 key={s.id}
@@ -94,10 +102,16 @@ export const SessionSwitcher: React.FC<SessionSwitcherProps> = ({
                                         'flex-1 truncate text-xs ' +
                                         (isActive ? 'font-medium' : '')
                                     }
-                                    title={title}
+                                    title={pageTitle ? `${title} — @${pageTitle}` : title}
                                 >
                                     {title}
                                 </span>
+                                {pageTitle && (
+                                    <span className="flex items-center gap-0.5 min-w-0 max-w-[45%] shrink-0 text-[10px] text-muted-foreground">
+                                        <AtSign className="h-2.5 w-2.5 shrink-0" />
+                                        <span className="truncate">{pageTitle}</span>
+                                    </span>
+                                )}
                                 <button
                                     type="button"
                                     onClick={(e) => handleDelete(e, s.id)}

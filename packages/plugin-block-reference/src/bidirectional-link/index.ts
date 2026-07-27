@@ -29,7 +29,6 @@ export { PageLinkPicker } from './components/PageLinkPicker';
 export { BlockLinkPicker } from './components/BlockLinkPicker';
 export { BacklinksPanel } from './components/BacklinksPanel';
 export { PageFooter } from './components/PageFooter';
-export { PageEditWindow } from './components/PageEditWindow';
 
 // Hooks
 export { useLinkTriggers } from './hooks/useLinkTriggers';
