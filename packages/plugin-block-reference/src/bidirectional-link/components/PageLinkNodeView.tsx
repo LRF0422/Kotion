@@ -21,7 +21,7 @@ import { ArrowUpRight, FileText, Loader2, Pencil, Trash2 } from "@kn/icon";
 import { cn, HoverCard, HoverCardContent, HoverCardTrigger, Button } from "@kn/ui";
 import { usePageInfo, useSpaceService } from "../../hooks";
 import { useI18n } from "../../i18n/use-i18n";
-import { PageEditWindow } from "@kn/editor";
+import { PageEditWindow } from "@kn/common";
 import { invalidatePage } from "../../utils/cache";
 
 /** Flatten a ProseMirror JSON tree into a short plain-text excerpt. */

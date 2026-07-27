@@ -8,7 +8,7 @@ import {
     ExpandableChatFooter,
     ChatMessageList,
 } from "@kn/ui"
-import { Editor, PageEditWindow } from "@kn/editor"
+import { Editor } from "@kn/editor"
 import {
     useEditorAgentOptimized,
     ToolExecutionEvent,
@@ -16,6 +16,7 @@ import {
     applySubAgentAnnotations,
     getOffscreenEditorBridge,
     getPageBridge,
+    PageEditWindow,
 } from "@kn/common"
 import type { ChatMode, ChatModelParams, OffscreenEditorHandle } from "@kn/common"
 

@@ -1,34 +1,49 @@
 /**
- * PageEditWindow — draggable floating window for editing a page in place.
+ * PageEditWindow implementation — draggable floating window for editing a
+ * page in place.
  *
- * Lives in @kn/editor so any package can open a page in a floating editor
- * without navigating away (used by plugin-block-reference's page links and
- * plugin-ai's chat @-page chip). The window hosts a full CollaborationEditor
- * bound to the target page's Y.Doc (same room as the main editor, so edits
- * sync live with anyone viewing that page) and persists changes through the
- * same incremental PATCH endpoint the main PageEditor uses.
+ * Lives in @kn/core (which owns the full editor stack) and is published to
+ * consumers through @kn/common's PageEditWindow bridge component: plugins
+ * never import @kn/core, so `registerPageEditWindow()` injects this
+ * implementation at application startup, mirroring registerOffscreenEditorBridge.
+ *
+ * The window hosts a full CollaborationEditor bound to the target page's
+ * Y.Doc (same room as the main editor, so edits sync live with anyone viewing
+ * that page) and persists changes through the same incremental PATCH endpoint
+ * the main PageEditor uses.
  *
  * - Drag by the header bar; resize from the bottom-right corner. Geometry is
  *   mutated directly on the DOM node (no React re-renders while dragging).
  * - Multiple windows can be open at once: they cascade on open, and any
  *   pointerdown inside a window raises it above its siblings (click-to-focus).
  * - Auto-saves via useIncrementalSave; a pending save is flushed on close.
- * - `onPageMutated` lets callers drop their own page caches when the window
- *   loads or persists content (e.g. hover-preview caches).
- *
- * @module @kn/editor/editor
+ * - `onPageMutated` (see the bridge props) lets callers drop their own page
+ *   caches when the window loads or persists content.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { Editor } from "@tiptap/core";
-import { TiptapCollabProvider } from "@hocuspocus/provider";
-import { Doc as YDoc } from "yjs";
-import { useApi, useNavigator, useSelector, useService, useTranslation, type API, type GlobalState } from "@kn/common";
+import {
+    CollaborationEditor,
+    TiptapCollabProvider,
+    Doc as YDoc,
+    useIncrementalSave,
+    type Editor,
+    type IncrementalPayload,
+} from "@kn/editor";
+import {
+    useApi,
+    useNavigator,
+    useSelector,
+    useService,
+    useTranslation,
+    setPageEditWindowImpl,
+    type API,
+    type GlobalState,
+    type PageEditWindowProps,
+} from "@kn/common";
 import { ArrowUpRight, Check, CloudOff, FileText, LoaderCircle, Pencil, X } from "@kn/icon";
 import { cn, Button } from "@kn/ui";
-import { CollaborationEditor } from "./collaboration";
-import { useIncrementalSave, type IncrementalPayload } from "../hooks";
 
 /** Incremental save endpoint — same contract as the main PageEditor. */
 const PATCH_PAGE_BLOCKS: API = {
@@ -38,7 +53,7 @@ const PATCH_PAGE_BLOCKS: API = {
 };
 
 /** The page fields this window needs (matches spaceService.getPage's shape). */
-export interface PageEditWindowPageInfo {
+interface PageInfoLike {
     id: string;
     title: string;
     icon?: { icon: string };
@@ -48,11 +63,11 @@ export interface PageEditWindowPageInfo {
 }
 
 interface SpaceServiceLike {
-    getPage: (pageId: string) => Promise<PageEditWindowPageInfo | null | undefined>;
+    getPage: (pageId: string) => Promise<PageInfoLike | null | undefined>;
 }
 
 // Local translation table bridged to the app's current language, so the
-// window works in packages that don't register their own i18n resources.
+// window works regardless of which i18n resources the host app registered.
 const MESSAGES = {
     en: {
         page: 'Page',
@@ -105,27 +120,16 @@ const restack = () => {
     windowStack.forEach((el, i) => { el.style.zIndex = String(BASE_Z + i); });
 };
 
-export interface PageEditWindowProps {
-    pageId: string;
-    onClose: () => void;
-    /**
-     * Invoked whenever this window may have changed the page's persisted
-     * content (on load, after each save, on close) so callers can invalidate
-     * their own caches of that page.
-     */
-    onPageMutated?: (pageId: string) => void;
-}
-
-export const PageEditWindow: React.FC<PageEditWindowProps> = ({ pageId, onClose, onPageMutated }) => {
+const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, onPageMutated }) => {
     const t = useWindowI18n();
     const navigator = useNavigator();
     // "spaceService" is added to the Services interface via module augmentation
-    // in the app layer, which this package doesn't see — look it up untyped.
+    // in the plugin layer, which core doesn't see — look it up untyped.
     const spaceService = (useService as (name: string) => unknown)("spaceService") as SpaceServiceLike;
     const { userInfo } = useSelector((state: GlobalState) => state);
 
     const winRef = useRef<HTMLDivElement>(null);
-    const [page, setPage] = useState<PageEditWindowPageInfo | null>(null);
+    const [page, setPage] = useState<PageInfoLike | null>(null);
     const [loadError, setLoadError] = useState(false);
     const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
     const [contentReady, setContentReady] = useState(false);
@@ -457,4 +461,13 @@ export const PageEditWindow: React.FC<PageEditWindowProps> = ({ pageId, onClose,
     return createPortal(window_, document.body);
 };
 
-PageEditWindow.displayName = 'PageEditWindow';
+PageEditWindowImpl.displayName = 'PageEditWindowImpl';
+
+/**
+ * Publish the implementation through @kn/common's PageEditWindow bridge.
+ * Must be called once at application startup (alongside
+ * registerOffscreenEditorBridge).
+ */
+export function registerPageEditWindow(): void {
+    setPageEditWindowImpl(PageEditWindowImpl);
+}

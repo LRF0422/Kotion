@@ -21,6 +21,7 @@ import { merge } from "lodash";
 import { setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, useTranslation, useApi, APIS, saveTokens } from "@kn/common"
 import { registerCoreToolFactories } from "./ai/tools/register"
 import { registerOffscreenEditorBridge } from "./ai/offscreen"
+import { registerPageEditWindow } from "./components/PageEditWindowImpl"
 import { toast, AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel, Button, Input, Label } from "@kn/ui"
 import { Loader2, Eye, EyeOff } from "@kn/icon"
 import { ErrorPage } from "./components/ErrorPage";
@@ -270,6 +271,9 @@ export const App: React.FC<AppProps> = (props) => {
 
     // Register the off-screen page editing engine (Chat @-page sessions)
     registerOffscreenEditorBridge()
+
+    // Publish the floating page-edit window through @kn/common's bridge
+    registerPageEditWindow()
 
     // Listen for plugin events to update routes
     useEffect(() => {
