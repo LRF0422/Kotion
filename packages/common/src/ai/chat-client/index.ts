@@ -16,7 +16,7 @@ import type {
     ModelInfo,
     ModelsResponse,
 } from './types'
-import { getBearerHeader } from '../../utils/auth'
+import { authorizedFetch } from '../../utils/session'
 
 export { parseSSEStream, collectSSEEvents } from './sse-parser'
 export { parseV2SSEStream } from './v2-sse-parser'
@@ -58,7 +58,6 @@ export class KnowledgeChatClient {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...getBearerHeader(),
             },
             body: JSON.stringify(body),
             signal: request.signal,
@@ -139,7 +138,7 @@ export class KnowledgeChatClient {
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
             try {
-                const res = await fetch(url, options)
+                const res = await authorizedFetch(url, options)
 
                 if (res.status === 429 || res.status === 502 || res.status === 503) {
                     if (attempt < maxRetries) {
@@ -220,11 +219,9 @@ export function createChatRequest(
 export async function fetchModels(apiBase?: string): Promise<ModelInfo[]> {
     const base = apiBase || DEFAULT_API_BASE
     try {
-        const response = await fetch(`${base}/models`, {
+        const response = await authorizedFetch(`${base}/models`, {
             method: 'GET',
-            headers: {
-                ...getBearerHeader(),
-            },
+            headers: {},
         })
 
         if (!response.ok) {

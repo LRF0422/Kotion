@@ -886,11 +886,29 @@ public class SpaceApplication {
      *         detected conflicts
      */
     public PatchResultDTO patchPageBlocks(com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto) {
+        checkPageWritable(dto.getPageId());
         com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result = this.pageService
                 .patchBlocks(dto.getPageId(), dto.getChanges(), dto.getBlockOrder());
         syncPageTitleFromPatch(dto, result);
 
         return PatchResultDTO.from(result);
+    }
+
+    /**
+     * Assert the current user may write the given page. Applied to the block
+     * patch endpoints — gateway auth alone only proves identity, not that the
+     * caller can modify this particular page.
+     */
+    private void checkPageWritable(Long pageId) {
+        if (pageId == null) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        Page page = pageService.getById(pageId);
+        if (page == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
+                IPermissionService.PERMISSION_WRITE);
     }
 
     /**
@@ -900,6 +918,7 @@ public class SpaceApplication {
      * this when every change is an upsert of a brand-new block (fresh import).
      */
     public PatchResultDTO bulkReplacePageBlocks(com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto) {
+        checkPageWritable(dto.getPageId());
         com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result = this.pageService
                 .bulkReplaceBlocks(dto.getPageId(), dto.getChanges());
         syncPageTitleFromPatch(dto, result);

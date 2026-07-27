@@ -105,6 +105,21 @@ public class PageVersionServiceImpl extends AbstractVersionService<Page, PageVer
     }
 
     /**
+     * Locking read of the ACTIVE version row — used by the patch sealing step
+     * so concurrent patches on the same page serialize on this row instead of
+     * both reading the same version number and sealing duplicates. Only
+     * meaningful inside a transaction (the row lock lives until commit).
+     */
+    @Override
+    public PageVersion getCurrentActiveVersionForUpdate(Long subjectId) {
+        return this.lambdaQuery()
+                .eq(PageVersion::getSubjectId, subjectId)
+                .eq(PageVersion::getStatus, VersionStatus.ACTIVE)
+                .last("FOR UPDATE")
+                .one();
+    }
+
+    /**
      * Clean up duplicate draft versions for a page, keeping only the latest.
      */
     private void cleanupDuplicateDrafts(Long subjectId) {

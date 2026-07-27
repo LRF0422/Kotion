@@ -23,7 +23,7 @@ import { parseV2SSEStream } from '../chat-client/v2-sse-parser'
 import type { HarnessEvent, HarnessRunInput } from './types'
 import type { OnToolExecution, ToolDefinition } from '../types'
 import { parseToolArgs } from './tool-loop'
-import { getBearerHeader } from '../../utils/auth'
+import { authorizedFetch } from '../../utils/session'
 
 const DEFAULT_V2_API_BASE = '/api/knowledge-agent/api/v2/agent'
 
@@ -416,11 +416,10 @@ export class V2AgentRuntime {
      * Open the initial SSE stream.
      */
     private async openStream(body: Record<string, any>, signal?: AbortSignal): Promise<Response> {
-        const response = await fetch(`${this.apiBase}/chat`, {
+        const response = await authorizedFetch(`${this.apiBase}/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...getBearerHeader(),
             },
             body: JSON.stringify(body),
             signal,
@@ -443,11 +442,10 @@ export class V2AgentRuntime {
         toolResults: ToolResultPayload[],
         signal?: AbortSignal
     ): Promise<Response> {
-        const response = await fetch(`${this.apiBase}/chat/resume`, {
+        const response = await authorizedFetch(`${this.apiBase}/chat/resume`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...getBearerHeader(),
             },
             body: JSON.stringify({ sessionId, toolResults }),
             signal,

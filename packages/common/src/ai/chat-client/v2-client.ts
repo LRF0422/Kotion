@@ -27,7 +27,7 @@ import type {
     ChatClientOptions,
     ChatMessage,
 } from './types'
-import { getBearerHeader } from '../../utils/auth'
+import { authorizedFetch } from '../../utils/session'
 
 const DEFAULT_V2_API_BASE = '/api/knowledge-agent/api/v2/agent'
 
@@ -71,7 +71,6 @@ export class V2ChatClient {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...getBearerHeader(),
             },
             body: JSON.stringify(body),
             signal: request.signal,
@@ -103,7 +102,6 @@ export class V2ChatClient {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...getBearerHeader(),
             },
             body: JSON.stringify({
                 sessionId,
@@ -186,7 +184,7 @@ export class V2ChatClient {
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
             try {
-                const res = await fetch(url, options)
+                const res = await authorizedFetch(url, options)
 
                 if (res.status === 429 || res.status === 502 || res.status === 503) {
                     if (attempt < maxRetries) {

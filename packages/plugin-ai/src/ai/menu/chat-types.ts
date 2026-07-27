@@ -47,15 +47,18 @@ export const AVATAR_FALLBACKS = {
 export const INITIAL_MESSAGES: Message[] = []
 
 export function classifyError(err: any): ChatError {
-    const status = err?.status || err?.response?.status
     const message = err?.message || ''
+    // The streaming clients throw plain Errors like `V2 Agent API error (401): ...`,
+    // so the HTTP status is only recoverable from the message text in that case.
+    const statusInMessage = Number(message.match(/\((\d{3})\)/)?.[1])
+    const status = err?.status || err?.response?.status || (Number.isNaN(statusInMessage) ? undefined : statusInMessage)
 
     if (err?.name === 'AbortError' || message.includes('abort')) {
         return { type: 'unknown', message: '生成已停止', retryable: false }
     }
 
     if (status === 401 || status === 403 || message.includes('auth') || message.includes('unauthorized')) {
-        return { type: 'auth', message: '认证失败，请检查 API 密钥配置', retryable: false }
+        return { type: 'auth', message: '登录状态已失效，请重新登录', retryable: false }
     }
 
     if (status === 429 || message.includes('rate') || message.includes('too many')) {

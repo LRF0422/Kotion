@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@kn/ui";
 import { CollaborationEditor, exportToPDF, useIncrementalSave, TiptapCollabProvider } from "@kn/editor";
 import type { IncrementalPayload } from "@kn/editor";
 import { event, ON_PAGE_REFRESH, ON_FAVORITE_CHANGE } from "../../../event";
-import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation } from "@kn/common";
+import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, request, getBearerHeader } from "@kn/common";
 import { useNavigator, usePageTabs } from "@kn/common";
 import { setPageBridge, clearPageBridge, type PageBridge } from "@kn/common";
 import { GlobalState } from "@kn/common";
@@ -51,17 +51,31 @@ const getStatusDisplay = (saving: boolean, dirty: boolean, error: Error | null, 
 // Includes prevVersion for optimistic concurrency and applies server
 // version info after each successful save.
 function usePageSave(editor: Editor | null, pageId: string | null, enabled: boolean) {
+    const { t } = useTranslation()
     // Throttle ON_PAGE_REFRESH emissions caused by rapid title typing
     const titleRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    // Throttle conflict warnings — one toast per burst, not one per save.
+    const lastConflictToastRef = useRef(0)
 
-    // Shared post-save logic: apply server-returned version info and throttle
-    // title-refresh notifications. Used by both handleSave and handleBulkSave.
+    // Shared post-save logic: apply server-returned version info, surface
+    // version conflicts, and throttle title-refresh notifications. Used by
+    // both handleSave and handleBulkSave.
     const applySaveResult = useCallback((res: any, hasTitleChange: boolean) => {
         const data = res?.data
         if (data?.blockVersions) {
             const tracker = (editor?.storage as any)?.dirtyTracker
             if (tracker?.applyServerVersions) {
                 tracker.applyServerVersions(data.blockVersions)
+            }
+        }
+        // Optimistic-concurrency conflicts: the backend applied our (Yjs-merged)
+        // content anyway but flagged the stale prevVersion — tell the user so a
+        // silent last-writer-wins doesn't go unnoticed in non-collab sessions.
+        if (Array.isArray(data?.conflictBlockIds) && data.conflictBlockIds.length > 0) {
+            const now = Date.now()
+            if (now - lastConflictToastRef.current > 5000) {
+                lastConflictToastRef.current = now
+                toast.warning(t('editor.saveConflict', 'Some blocks were modified elsewhere — latest content was kept'))
             }
         }
         if (hasTitleChange) {
@@ -73,7 +87,7 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
                 titleRefreshTimerRef.current = null
             }, 400)
         }
-    }, [editor])
+    }, [editor, t])
 
     const mapChanges = useCallback((payload: IncrementalPayload) =>
         payload.changes.map(c => ({
@@ -118,11 +132,33 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
         }
     }, [])
 
+    // Dismissal-time flush (pagehide): async requests are killed by the
+    // browser at that point, so send the pending patch with `keepalive`.
+    // keepalive bodies are capped (~64KB) — larger payloads fall back to the
+    // normal async request as a best effort.
+    const handleFlush = useCallback((payload: IncrementalPayload) => {
+        if (!pageId) return
+        const body = JSON.stringify({ pageId, changes: mapChanges(payload) })
+        if (body.length > 60_000) {
+            void useApi(APIS.PATCH_PAGE_BLOCKS, { id: pageId }, { pageId, changes: mapChanges(payload) })
+        } else {
+            const base = (request as any)?.defaults?.baseURL ?? '/api'
+            const url = base + APIS.PATCH_PAGE_BLOCKS.url.replace(':id', pageId)
+            void fetch(url, {
+                method: 'PATCH',
+                keepalive: true,
+                headers: { 'Content-Type': 'application/json', ...getBearerHeader() },
+                body,
+            }).catch(() => { /* best effort — page is going away */ })
+        }
+    }, [pageId, mapChanges])
+
     return useIncrementalSave({
         editor,
         enabled,
         onSave: handleSave,
         onBulkSave: handleBulkSave,
+        onFlush: handleFlush,
     })
 }
 

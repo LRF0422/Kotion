@@ -11,6 +11,17 @@ import com.knowledge.wiki.service.entity.dto.QueryPageVersionDTO;
 public interface IPageVersionService extends IVersionService<Page, PageVersion> {
 
     /**
+     * Locking variant of {@code getCurrentActiveVersion} for write paths that
+     * seal a new version: reads the ACTIVE row {@code FOR UPDATE} so concurrent
+     * writers on the same page serialize instead of both sealing the same
+     * version number. MUST be called inside a transaction.
+     *
+     * @param subjectId page ID
+     * @return current active version, or null when none exists yet
+     */
+    PageVersion getCurrentActiveVersionForUpdate(Long subjectId);
+
+    /**
      * Get version history list
      * 
      * @param dto query parameters

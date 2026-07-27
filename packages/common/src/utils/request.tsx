@@ -1,5 +1,17 @@
 import axios from 'axios'
-import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from './auth'
+import { getAccessToken } from './auth'
+import {
+    API_BASE_URL,
+    handleSessionExpired,
+    isSessionRedirecting,
+    refreshAccessToken,
+    resetSessionExpiredGuard,
+    setSessionExpiredHandler,
+} from './session'
+
+// Re-export the session-expired controls so existing import sites
+// (`@kn/common` → './utils/request') keep working unchanged.
+export { setSessionExpiredHandler, resetSessionExpiredGuard }
 
 // ---------------------------------------------------------------------------
 // Configurable toast handler (injected by the app to avoid @kn/ui dependency)
@@ -15,38 +27,11 @@ export function setRequestToast(toastError: ToastFn) {
 }
 
 // ---------------------------------------------------------------------------
-// Configurable session-expired handler (injected by the app to show a
-// confirmation dialog instead of silently redirecting to /login)
-// ---------------------------------------------------------------------------
-
-type SessionExpiredFn = () => void
-
-let _sessionExpiredHandler: SessionExpiredFn | null = null
-
-/** Call once at app startup to wire up the session-expired dialog */
-export function setSessionExpiredHandler(handler: SessionExpiredFn) {
-    _sessionExpiredHandler = handler
-}
-
-/** Reset the session-expired guard so future 401s can trigger the dialog again.
- *  Call this when the user dismisses the dialog and chooses to stay on the page. */
-export function resetSessionExpiredGuard() {
-    isRedirecting = false
-}
-
-// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-// Desktop (Electron) renderer loads from the `app://` custom protocol in
-// production, so a relative `/api` cannot be resolved — it must hit the cloud
-// API via an absolute URL. The web app keeps `/api` (same-origin / dev proxy)
-// to avoid browser CORS.
-const isDesktop = typeof window !== 'undefined' && typeof (window as any).api !== 'undefined'
-const CLOUD_API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'https://kotion.top:888/api'
-const BASE_URL = isDesktop ? CLOUD_API_BASE_URL : '/api'
+const BASE_URL = API_BASE_URL
 const TIMEOUT = 50_000
-const REFRESH_ENDPOINT = '/knowledge-auth/token/refresh'
 
 // ---------------------------------------------------------------------------
 // Axios instance
@@ -57,55 +42,9 @@ const axiosInstance = axios.create({
     timeout: TIMEOUT,
 })
 
-/** Bare axios instance used exclusively for the token-refresh call.
- *  It intentionally has NO interceptors so a 401 from the refresh
- *  endpoint goes straight to the catch block without looping. */
-const refreshAxios = axios.create({
-    baseURL: BASE_URL,
-    timeout: TIMEOUT,
-})
-
-// ---------------------------------------------------------------------------
-// Token-refresh concurrency control
-// ---------------------------------------------------------------------------
-
-let isRefreshing = false
-let refreshSubscribers: Array<(token: string) => void> = []
-/** Prevent duplicate redirect calls when multiple 401s arrive simultaneously */
-let isRedirecting = false
-
-function enqueueRefreshSubscriber(cb: (token: string) => void): void {
-    refreshSubscribers.push(cb)
-}
-
-function flushRefreshSubscribers(token: string): void {
-    refreshSubscribers.forEach(cb => cb(token))
-    refreshSubscribers = []
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function redirectToLogin(): void {
-    clearTokens()
-    window.location.href = '/login'
-}
-
-/** Called when the session is definitively expired (refresh failed or
- *  no refresh token available).  Shows the injected prompt if available,
- *  otherwise falls back to an immediate redirect.  Guarded by `isRedirecting`
- *  so only one prompt appears even when many 401s arrive simultaneously. */
-function handleSessionExpired(): void {
-    if (isRedirecting) return
-    isRedirecting = true
-    clearTokens()
-    if (_sessionExpiredHandler) {
-        _sessionExpiredHandler()
-    } else {
-        redirectToLogin()
-    }
-}
 
 function normalizeErrorMessage(message: string): string {
     if (message === 'Network Error') {
@@ -179,43 +118,22 @@ axiosInstance.interceptors.response.use(
 
         // --- Silent token refresh on HTTP 401 ---
         if (httpStatus === 401 && !config?._retried) {
-            const refreshToken = getRefreshToken()
+            config._retried = true
 
-            if (refreshToken && !isRedirecting) {
-                // Another refresh is already in-flight — queue this request
-                if (isRefreshing) {
-                    return new Promise(resolve => {
-                        enqueueRefreshSubscriber(token => {
-                            config.headers['Authorization'] = `Bearer ${token}`
-                            resolve(axiosInstance(config))
-                        })
-                    })
-                }
+            // A session-expired flow is already running — don't loop.
+            if (isSessionRedirecting()) {
+                return Promise.reject(error)
+            }
 
-                config._retried = true
-                isRefreshing = true
-
-                try {
-                    const refreshRes = await refreshAxios.post(
-                        REFRESH_ENDPOINT,
-                        { refreshToken },
-                        { headers: { Authorization: `Bearer ${refreshToken}` } }
-                    )
-                    const { accessToken, refreshToken: newRefreshToken } = refreshRes.data
-                    saveTokens(accessToken, newRefreshToken)
-                    flushRefreshSubscribers(accessToken)
-                    config.headers['Authorization'] = `Bearer ${accessToken}`
-                    return axiosInstance(config)
-                } catch {
-                    handleSessionExpired()
-                    return Promise.reject(new Error('登录已过期，请重新登录。'))
-                } finally {
-                    isRefreshing = false
-                }
+            // Concurrent 401s share a single in-flight refresh.
+            const newToken = await refreshAccessToken()
+            if (newToken) {
+                config.headers['Authorization'] = `Bearer ${newToken}`
+                return axiosInstance(config)
             }
 
             handleSessionExpired()
-            return Promise.reject(error)
+            return Promise.reject(new Error('登录已过期，请重新登录。'))
         }
 
         // --- Generic error handling ---

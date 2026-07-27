@@ -82,6 +82,14 @@ public class BlockStorageService {
     private static final int BATCH_SIZE = 1000;
 
     /**
+     * Max number of pre-existing block rows a page may hold for the destructive
+     * bulk clear-and-replace path to be allowed. A fresh page carries at most a
+     * title block and a couple of empty paragraphs; anything beyond that means
+     * the request was mis-routed and must take the incremental path instead.
+     */
+    private static final int BULK_MAX_EXISTING_BLOCKS = 8;
+
+    /**
      * Dedicated ObjectMapper for deterministic content hashing.
      * Configured once with sorted keys to ensure stable hash output
      * regardless of insertion order in attrs/content maps.
@@ -900,6 +908,19 @@ public class BlockStorageService {
             return PatchResult.empty();
         }
 
+        // Guard: this path clears blocks not present in the payload, so it is
+        // only safe for a genuinely fresh page. If the page already holds real
+        // content (a mis-routed client, or a stale client racing an editor),
+        // fall back to the incremental path — slower, but never destructive.
+        long existingBlocks = pageContentService.count(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PageContent>()
+                        .eq(PageContent::getPageId, pageId));
+        if (existingBlocks > BULK_MAX_EXISTING_BLOCKS) {
+            log.warn("bulkReplaceBlocks: pageId={} already has {} blocks — routing to incremental patchBlocks",
+                    pageId, existingBlocks);
+            return patchBlocks(pageId, changes, null);
+        }
+
         // Flatten every upsert subtree OUTSIDE any transaction (pure CPU).
         List<PageContent> toUpsert = new ArrayList<>();
         Set<String> allBlockIds = new HashSet<>();
@@ -1005,21 +1026,22 @@ public class BlockStorageService {
             allDeletedIds.addAll(collectSubtreeIdsFromDb(pageId, deletedRootIds));
         }
 
-        // Orphaned children: existing DB children that are NOT in the new subtree
-        // and NOT explicitly deleted (already handled above)
+        // Orphaned children: existing DB children that are NOT in any new subtree
+        // and NOT explicitly deleted (already handled above). One recursive-CTE
+        // round-trip for ALL updated roots — previously one query per root, i.e.
+        // O(patch size) round-trips for a large batch. A block that moved between
+        // two updated roots is protected by the union of all keep-sets (and by
+        // the never-delete-upserted guard below).
         if (CollUtil.isNotEmpty(newSubtreeIdsByRoot)) {
-            for (Map.Entry<String, Set<String>> entry : newSubtreeIdsByRoot.entrySet()) {
-                String rootId = entry.getKey();
-                Set<String> keepIds = entry.getValue();
-                Set<String> existingSubtreeIds = collectSubtreeIdsFromDb(pageId,
-                        Collections.singleton(rootId));
-                if (CollUtil.isEmpty(existingSubtreeIds)) {
-                    continue;
+            Set<String> updatedRootIds = newSubtreeIdsByRoot.keySet();
+            Set<String> existingSubtreeIds = collectSubtreeIdsFromDb(pageId, updatedRootIds);
+            if (CollUtil.isNotEmpty(existingSubtreeIds)) {
+                // The roots themselves are being upserted, not orphaned
+                existingSubtreeIds.removeAll(updatedRootIds);
+                // Remove ids that are in any new subtree (kept)
+                for (Set<String> keepIds : newSubtreeIdsByRoot.values()) {
+                    existingSubtreeIds.removeAll(keepIds);
                 }
-                // The root itself is being upserted, not orphaned
-                existingSubtreeIds.remove(rootId);
-                // Remove ids that are in the new subtree (kept)
-                existingSubtreeIds.removeAll(keepIds);
                 // Remove ids already scheduled for explicit deletion
                 existingSubtreeIds.removeAll(deletedRootIds);
                 allDeletedIds.addAll(existingSubtreeIds);
@@ -1110,13 +1132,16 @@ public class BlockStorageService {
                 processBatched(changeRows, BATCH_SIZE, blockVersionService::saveBatch);
             }
 
-            // 5b. Seal a new ACTIVE PageVersion; demote the previous one.
-            PageVersion currentActive = pageVersionService.getCurrentActiveVersion(pageId);
+            // 5b. Seal a new ACTIVE PageVersion; demote the previous one. The
+            // active row is read FOR UPDATE so concurrent patches on the same
+            // page (e.g. the frontend's concurrent save batches) serialize here
+            // instead of both reading the same number and sealing duplicate or
+            // forked versions.
+            PageVersion currentActive = pageVersionService.getCurrentActiveVersionForUpdate(pageId);
             PageVersion sealed = new PageVersion();
             sealed.setSubjectId(pageId);
             sealed.setStatus(VersionStatus.ACTIVE);
-            sealed.setVersion(currentActive == null ? "1"
-                    : String.valueOf(Integer.parseInt(currentActive.getVersion()) + 1));
+            sealed.setVersion(String.valueOf(currentVersionNumber(pageId, currentActive) + 1));
             if (currentActive != null) {
                 sealed.setLastVersionId(currentActive.getId());
                 sealed.setTitle(currentActive.getTitle());
@@ -1153,6 +1178,25 @@ public class BlockStorageService {
             parts.add(deleted + " removed");
         }
         return String.join(", ", parts);
+    }
+
+    /**
+     * Numeric value of the current active version — 0 when none exists yet.
+     * Legacy non-numeric version strings must not blow up (and roll back) the
+     * whole patch transaction; fall back to the version count instead.
+     */
+    private int currentVersionNumber(Long pageId, PageVersion currentActive) {
+        if (currentActive == null) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(currentActive.getVersion());
+        } catch (NumberFormatException e) {
+            int fallback = pageVersionService.getVersionCount(pageId);
+            log.warn("persistPatch: non-numeric page version '{}' for pageId={}, falling back to count={}",
+                    currentActive.getVersion(), pageId, fallback);
+            return fallback;
+        }
     }
 
     /**

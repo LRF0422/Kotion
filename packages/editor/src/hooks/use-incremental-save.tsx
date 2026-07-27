@@ -30,6 +30,14 @@ export interface UseIncrementalSaveOptions {
   onBulkSave?: (payload: IncrementalPayload) => Promise<void>
   /** Min change count to route to `onBulkSave`. Default 2000. */
   bulkThreshold?: number
+  /**
+   * Optional keepalive transport used when the page is being dismissed
+   * (`pagehide`): normal async requests are killed by the browser at that
+   * point, so consumers provide a `fetch(..., { keepalive: true })`-based
+   * fire-and-forget sender here. Unmount flushes use the regular `onSave`
+   * path (its promise outlives the component).
+   */
+  onFlush?: (payload: IncrementalPayload) => void
 }
 
 export interface SaveProgress {
@@ -53,6 +61,9 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out
 }
 
+/** Backoff schedule for automatic retries after a failed save. */
+const RETRY_DELAYS_MS = [2000, 5000, 15000]
+
 function getTracker(editor: Editor | null): DirtyTrackerStorage | null {
   if (!editor) return null
   const storage = (editor.storage as any)?.dirtyTracker as DirtyTrackerStorage | undefined
@@ -64,7 +75,7 @@ export function useIncrementalSave(options: UseIncrementalSaveOptions): UseIncre
   const {
     editor, enabled, debounceMs = 3000, onSave,
     batchThreshold = 500, batchSize = 400, batchConcurrency = 3,
-    onBulkSave, bulkThreshold = 2000,
+    onBulkSave, bulkThreshold = 2000, onFlush,
   } = options
 
   const [saving, setSaving] = useState(false)
@@ -72,13 +83,30 @@ export function useIncrementalSave(options: UseIncrementalSaveOptions): UseIncre
   const [error, setError] = useState<Error | null>(null)
   const [progress, setProgress] = useState<SaveProgress | null>(null)
   const savingRef = useRef(false)
+  // A save trigger arrived while another save was in flight — run one more
+  // round afterwards so those edits are not stranded until the next edit.
+  const pendingRef = useRef(false)
+  const retryCountRef = useRef(0)
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Top-level block count at the moment tracking was enabled. Used to gate the
+  // bulk (clear-and-replace) fast path to genuinely empty pages.
+  const baselineBlockCountRef = useRef(0)
   const onSaveRef = useRef(onSave)
   onSaveRef.current = onSave
   const onBulkSaveRef = useRef(onBulkSave)
   onBulkSaveRef.current = onBulkSave
+  const onFlushRef = useRef(onFlush)
+  onFlushRef.current = onFlush
+  // Self-reference for retry timers and the pending re-run in `finally`.
+  const doSaveRef = useRef<() => Promise<void>>()
 
   const doSave = useCallback(async () => {
-    if (savingRef.current) return
+    if (savingRef.current) {
+      // Another save is in flight — remember to run again once it finishes so
+      // edits made meanwhile are not stranded until the next keystroke.
+      pendingRef.current = true
+      return
+    }
     const tracker = getTracker(editor)
     if (!tracker) return
 
@@ -94,74 +122,51 @@ export function useIncrementalSave(options: UseIncrementalSaveOptions): UseIncre
     setSaving(true)
     setError(null)
 
-    // A fresh full import is every-block-new: all upserts, none acked yet
-    // (no prevVersion). Route those to the single-shot bulk endpoint when one
-    // is provided — it clears + re-inserts in chunked transactions and seals
-    // one page version, avoiding N per-batch versions and per-block history.
+    // Capture the exact ids in this payload NOW. On success we commit ONLY
+    // these via commitBlocks — a full commit() would re-baseline the whole
+    // document and silently swallow edits/deletions made while the request
+    // was in flight (they'd never be saved again).
+    const payloadUpsertIds: string[] = []
+    const payloadDeleteIds: string[] = []
+    for (const c of payload.changes) {
+      if (c.action === 'delete') payloadDeleteIds.push(c.blockId)
+      else payloadUpsertIds.push(c.blockId)
+    }
+
+    // The bulk (clear-and-replace) fast path is ONLY safe for a first import
+    // into an empty page. "All upserts without prevVersion" alone is not
+    // enough: versions are only learned from this session's saves, so the
+    // first save after opening an existing page looks identical. Require the
+    // baseline at tracking start to have been empty (title block at most).
     const isFreshBulkImport =
       payload.changes.length > bulkThreshold &&
+      baselineBlockCountRef.current <= 1 &&
       payload.changes.every(c => c.action === 'upsert' && c.prevVersion == null)
 
+    let failed = false
     try {
       if (onBulkSaveRef.current && isFreshBulkImport) {
-        await onBulkSaveRef.current(payload)
-        tracker.commit()
-        setDirty(false)
+        try {
+          await onBulkSaveRef.current(payload)
+          tracker.commitBlocks(payloadUpsertIds, payloadDeleteIds)
+        } catch {
+          // Bulk endpoint rejected (e.g. backend guard against a non-empty
+          // page) — fall back to the safe batched incremental path.
+          await runBatchedSave(payload)
+        }
       } else if (payload.changes.length <= batchThreshold) {
         // Small save — one request, one transaction (unchanged fast path).
         await onSaveRef.current(payload)
-        tracker.commit()
-        setDirty(false)
+        if (editor && !editor.isDestroyed) {
+          tracker.commitBlocks(payloadUpsertIds, payloadDeleteIds)
+        }
       } else {
-        // Large save (import/paste of a huge doc) — split into independent
-        // batches so no single request/transaction is oversized. Blocks are
-        // independent rows keyed by id, so batches need no ordering and run
-        // concurrently. Each batch that fails simply stays dirty and retries.
-        const batches = chunk(payload.changes, batchSize)
-        const total = batches.length
-        setProgress({ done: 0, total })
-
-        const ok = new Array<boolean>(total)
-        let firstError: Error | null = null
-        let done = 0
-        let next = 0
-        const worker = async () => {
-          while (next < total) {
-            const i = next++
-            try {
-              await onSaveRef.current({ changes: batches[i] })
-              ok[i] = true
-            } catch (err) {
-              ok[i] = false
-              if (!firstError) firstError = err instanceof Error ? err : new Error(String(err))
-            }
-            done++
-            setProgress({ done, total })
-          }
-        }
-        await Promise.all(
-          Array.from({ length: Math.min(batchConcurrency, total) }, worker),
-        )
-
-        if (!firstError) {
-          tracker.commit()
-          setDirty(false)
-        } else {
-          // Re-baseline only the succeeded batches; failed ones remain dirty.
-          const upIds: string[] = []
-          const delIds: string[] = []
-          for (let i = 0; i < total; i++) {
-            if (!ok[i]) continue
-            for (const c of batches[i]) {
-              if (c.action === 'delete') delIds.push(c.blockId)
-              else upIds.push(c.blockId)
-            }
-          }
-          tracker.commitBlocks(upIds, delIds)
-          throw firstError
-        }
+        await runBatchedSave(payload)
       }
+      retryCountRef.current = 0
+      setDirty(tracker.hasDirty())
     } catch (err) {
+      failed = true
       const e = err instanceof Error ? err : new Error(String(err))
       setError(e)
       console.error('[useIncrementalSave] Save failed:', e)
@@ -169,15 +174,93 @@ export function useIncrementalSave(options: UseIncrementalSaveOptions): UseIncre
       setProgress(null)
       savingRef.current = false
       setSaving(false)
+      if (failed) {
+        // Exponential-backoff retry — without it a failed save is only ever
+        // retried when the user happens to edit again.
+        if (retryCountRef.current < RETRY_DELAYS_MS.length && retryTimerRef.current == null) {
+          const delay = RETRY_DELAYS_MS[retryCountRef.current++]
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null
+            void doSaveRef.current?.()
+          }, delay)
+        }
+      } else if (pendingRef.current) {
+        pendingRef.current = false
+        if (tracker.hasDirty()) void doSaveRef.current?.()
+      }
+    }
+
+    // Large save (import/paste of a huge doc) — split into batches so no
+    // single request/transaction is oversized. Upserts go first (concurrent);
+    // deletes are sent in one final request ONLY after every upsert batch
+    // succeeded — a delete landing before/without its reparented target's
+    // upsert would soft-delete content the backend can no longer rescue
+    // (its "never delete an upserted block" guard is per-request).
+    async function runBatchedSave(p: IncrementalPayload): Promise<void> {
+      const upserts = p.changes.filter(c => c.action !== 'delete')
+      const deletes = p.changes.filter(c => c.action === 'delete')
+      const batches = chunk(upserts, batchSize)
+      const total = batches.length + (deletes.length > 0 ? 1 : 0)
+      setProgress({ done: 0, total })
+
+      const ok = new Array<boolean>(batches.length)
+      let firstError: Error | null = null
+      let done = 0
+      let next = 0
+      const worker = async () => {
+        while (next < batches.length) {
+          const i = next++
+          try {
+            await onSaveRef.current({ changes: batches[i] })
+            ok[i] = true
+          } catch (err) {
+            ok[i] = false
+            if (!firstError) firstError = err instanceof Error ? err : new Error(String(err))
+          }
+          done++
+          setProgress({ done, total })
+        }
+      }
+      await Promise.all(
+        Array.from({ length: Math.min(batchConcurrency, Math.max(batches.length, 1)) }, worker),
+      )
+
+      const succeededUpsertIds: string[] = []
+      for (let i = 0; i < batches.length; i++) {
+        if (!ok[i]) continue
+        for (const c of batches[i]) succeededUpsertIds.push(c.blockId)
+      }
+
+      const succeededDeleteIds: string[] = []
+      if (deletes.length > 0 && !firstError) {
+        try {
+          await onSaveRef.current({ changes: deletes })
+          for (const c of deletes) succeededDeleteIds.push(c.blockId)
+        } catch (err) {
+          if (!firstError) firstError = err instanceof Error ? err : new Error(String(err))
+        }
+        done++
+        setProgress({ done, total })
+      }
+
+      // Partial commit — succeeded blocks re-baseline, failed ones stay dirty
+      // (failed deletes remain in committedOrder and are re-detected).
+      if (editor && !editor.isDestroyed) {
+        tracker!.commitBlocks(succeededUpsertIds, succeededDeleteIds)
+      }
+      if (firstError) throw firstError
     }
   }, [editor, batchThreshold, batchSize, batchConcurrency, bulkThreshold])
+  doSaveRef.current = doSave
 
   // Mark dirty on any doc-changing transaction so the UI can show
   // "Unsaved changes" immediately (before the idle debounce fires).
+  // Remote collab transactions (Yjs sync) are skipped — they are saved by
+  // the client that authored them and must not flip this client's status.
   useEffect(() => {
     if (!editor || !enabled) return
     const handler = ({ transaction }: { transaction: any }) => {
-      if (transaction.docChanged) {
+      if (transaction.docChanged && !transaction.getMeta('y-sync$')) {
         setDirty(true)
       }
     }
@@ -200,13 +283,55 @@ export function useIncrementalSave(options: UseIncrementalSaveOptions): UseIncre
     // loaded into the editor before `enabled` became true (initial Yjs
     // sync, setContent({emitUpdate:false}), progressive load).
     tracker.commit()
+    // Record how much content the page already had — gates the destructive
+    // bulk clear-and-replace fast path to genuinely empty pages.
+    baselineBlockCountRef.current = tracker.committedOrder.length
 
     const unsubscribe = tracker.subscribeIdle(() => {
       doSave()
     }, debounceMs)
 
-    return unsubscribe
+    return () => {
+      unsubscribe()
+      if (retryTimerRef.current != null) {
+        clearTimeout(retryTimerRef.current)
+        retryTimerRef.current = null
+      }
+    }
   }, [editor, enabled, debounceMs, doSave])
+
+  // Best-effort flush of pending changes when the page/component goes away.
+  // Without this, anything typed inside the idle-debounce window is lost on
+  // tab close or page switch.
+  useEffect(() => {
+    if (!editor || !enabled) return
+
+    const collectPayload = (): IncrementalPayload | null => {
+      const tracker = getTracker(editor)
+      if (!tracker) return null
+      const payload = tracker.getPayload()
+      return payload.changes.length > 0 ? payload : null
+    }
+
+    // Tab close / reload: async requests are killed, so use the consumer's
+    // keepalive transport when provided (fire-and-forget by nature).
+    const onPageHide = () => {
+      const payload = collectPayload()
+      if (!payload) return
+      if (onFlushRef.current) onFlushRef.current(payload)
+      else void onSaveRef.current(payload).catch(() => {})
+    }
+    window.addEventListener('pagehide', onPageHide)
+
+    return () => {
+      window.removeEventListener('pagehide', onPageHide)
+      // Unmount / page switch: the regular async path is fine here — the
+      // request's promise outlives the component. Skip the tracker commit
+      // entirely (upserts are idempotent; the tracker dies with the editor).
+      const payload = collectPayload()
+      if (payload) void onSaveRef.current(payload).catch(() => {})
+    }
+  }, [editor, enabled])
 
   const saveNow = useCallback(() => {
     const tracker = getTracker(editor)

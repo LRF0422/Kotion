@@ -51,7 +51,7 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
         const name = (
             <div className="flex flex-row gap-1 items-center group w-full overflow-hidden text-ellipsis relative">
                 <div className="text-left text-ellipsis text-nowrap overflow-hidden flex-1 min-w-0 flex items-center w-full">
-                    {treeNode.icon && <span className="text-xs sm:text-sm">{treeNode.icon.icon}</span>}
+                    {treeNode.icon && <span className="text-xs sm:text-sm mr-1.5 flex-shrink-0">{treeNode.icon.icon}</span>}
                     <span className="text-xs sm:text-sm">{treeNode.name}</span>
                     {treeNode.isDraft && (
                         <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" title="Draft" />
