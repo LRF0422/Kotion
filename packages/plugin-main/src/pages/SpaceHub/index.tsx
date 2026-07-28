@@ -8,36 +8,12 @@ import {
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Box, Crown, EyeIcon, FolderOpen, Globe, Grid3X3, List, Plus, SearchIcon, Star, Users } from "@kn/icon";
 import { Space } from "../../model/Space";
-import { GlobalState, useApi, useDebounce, useNavigator, useSelector, useUploadFile } from "@kn/common";
+import { GlobalState, useApi, useDebounce, useNavigator, useSelector } from "@kn/common";
 import { APIS } from "../../api";
 import { CreateSpaceDlg } from "../components/SpaceForm";
+import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
 import { useLocation } from "react-router-dom";
 
-
-// Deterministic color per space id — same palette/approach as the Home page so
-// the two surfaces feel like one product. Used for icon chips and, when a space
-// has no cover, a soft gradient banner fallback.
-const HUE_PALETTE = [245, 262, 290, 330, 350, 25, 40, 150, 168, 190, 215]
-
-const pickHue = (key?: string): number => {
-    if (!key) return HUE_PALETTE[0]
-    let hash = 0
-    for (let i = 0; i < key.length; i++) {
-        hash = (hash * 31 + key.charCodeAt(i)) | 0
-    }
-    return HUE_PALETTE[Math.abs(hash) % HUE_PALETTE.length]
-}
-
-// Solid base (bg-card class) + a translucent hue layer painted on top, so the
-// chip reads as tinted but stays fully opaque even when it overlaps a cover image.
-const chipStyle = (hue: number): React.CSSProperties => ({
-    backgroundImage: `linear-gradient(hsl(${hue} 70% 55% / 0.16), hsl(${hue} 70% 55% / 0.16))`,
-    color: `hsl(${hue} 60% 48%)`,
-})
-
-const bannerStyle = (hue: number): React.CSSProperties => ({
-    backgroundImage: `linear-gradient(135deg, hsl(${hue} 70% 60% / 0.28), hsl(${(hue + 40) % 360} 70% 55% / 0.12))`,
-})
 
 // Small role badge distinguishing spaces the current user owns from ones they joined.
 const RoleBadge: React.FC<{ owned: boolean; ownedLabel: string; joinedLabel: string }> = ({ owned, ownedLabel, joinedLabel }) => (
@@ -59,7 +35,6 @@ interface SpaceCardProps {
     space: Space
     favorite: boolean
     index: number
-    cover?: string
     owned: boolean
     onOpen: (id: string) => void
     onToggleFavorite: (id: string, favorite: boolean) => void
@@ -70,12 +45,11 @@ interface SpaceCardProps {
     publicLabel: string
 }
 
-// Gallery-style card: cover (or hue gradient) banner with the icon chip tucked
-// over its lower edge, then name + description. Star toggle reveals on hover.
+// Flat gallery card: bare flat icon + name + description, no cover banner.
+// Star toggle reveals on hover.
 const SpaceCard: React.FC<SpaceCardProps> = ({
-    space, favorite, index, cover, owned, onOpen, onToggleFavorite, noDescription, favoriteLabel, ownedLabel, joinedLabel, publicLabel
+    space, favorite, index, owned, onOpen, onToggleFavorite, noDescription, favoriteLabel, ownedLabel, joinedLabel, publicLabel
 }) => {
-    const hue = pickHue(space.id)
     return (
         <div
             role="button"
@@ -83,49 +57,39 @@ const SpaceCard: React.FC<SpaceCardProps> = ({
             onClick={() => onOpen(space.id)}
             onKeyDown={(e) => { if (e.key === "Enter") onOpen(space.id) }}
             className={cn(
-                "space-fade-up group relative flex flex-col overflow-hidden rounded-xl border border-border/60 bg-card text-left",
+                "space-fade-up group relative flex flex-col rounded-xl border border-border/60 bg-card p-3 text-left",
                 "cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-border"
             )}
             style={{ animationDelay: `${Math.min(index, 12) * 35}ms` }}
         >
-            <div
-                className="h-20 w-full bg-cover bg-center"
-                style={cover ? { backgroundImage: `url('${cover}')` } : bannerStyle(hue)}
+            <Button
+                size="icon"
+                variant="ghost"
+                className={cn(
+                    "absolute right-2 top-2 h-7 w-7 rounded-full transition-opacity",
+                    favorite ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                )}
+                aria-label={favoriteLabel}
+                onClick={(e) => { e.stopPropagation(); onToggleFavorite(space.id, favorite) }}
             >
-                <Button
-                    size="icon"
-                    variant="secondary"
-                    className={cn(
-                        "absolute right-2 top-2 h-7 w-7 rounded-full shadow-sm backdrop-blur transition-opacity",
-                        favorite ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                    )}
-                    aria-label={favoriteLabel}
-                    onClick={(e) => { e.stopPropagation(); onToggleFavorite(space.id, favorite) }}
-                >
-                    <Star className={cn("h-3.5 w-3.5", favorite && "fill-amber-400 text-amber-400")} />
-                </Button>
+                <Star className={cn("h-3.5 w-3.5", favorite && "fill-amber-400 text-amber-400")} />
+            </Button>
+            <span className="flex h-10 w-10 items-center justify-center leading-none">
+                {space.icon?.icon ? <PageItemIcon icon={space.icon} size={28} /> : <Box className="h-5 w-5 text-muted-foreground" />}
+            </span>
+            <p className="mt-2 truncate text-sm font-semibold">{space.name}</p>
+            <div className="mt-1 flex items-center gap-1">
+                <RoleBadge owned={owned} ownedLabel={ownedLabel} joinedLabel={joinedLabel} />
+                {space.visibility === 'PUBLIC' && (
+                    <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium leading-none text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
+                        <Globe className="h-2.5 w-2.5" />
+                        {publicLabel}
+                    </span>
+                )}
             </div>
-            <div className="relative px-3 pb-3">
-                <span
-                    className="absolute -top-5 flex h-10 w-10 items-center justify-center rounded-lg bg-card text-xl leading-none ring-2 ring-card"
-                    style={chipStyle(hue)}
-                >
-                    {space.icon?.icon || <Box className="h-5 w-5" />}
-                </span>
-                <p className="mt-7 truncate text-sm font-semibold">{space.name}</p>
-                <div className="mt-1 flex items-center gap-1">
-                    <RoleBadge owned={owned} ownedLabel={ownedLabel} joinedLabel={joinedLabel} />
-                    {space.visibility === 'PUBLIC' && (
-                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium leading-none text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
-                            <Globe className="h-2.5 w-2.5" />
-                            {publicLabel}
-                        </span>
-                    )}
-                </div>
-                <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-                    {space.description || noDescription}
-                </p>
-            </div>
+            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                {space.description || noDescription}
+            </p>
         </div>
     )
 }
@@ -149,7 +113,6 @@ interface SpaceRowProps {
 const SpaceRow: React.FC<SpaceRowProps> = ({
     space, favorite, owned, onOpen, onToggleFavorite, noDescription, favoriteLabel, viewLabel, ownedLabel, joinedLabel, publicLabel
 }) => {
-    const hue = pickHue(space.id)
     return (
         <div
             role="button"
@@ -158,11 +121,8 @@ const SpaceRow: React.FC<SpaceRowProps> = ({
             onKeyDown={(e) => { if (e.key === "Enter") onOpen(space.id) }}
             className="space-fade-up group flex items-center gap-3 rounded-lg border border-border/60 bg-card px-3 py-2.5 cursor-pointer transition-colors duration-150 hover:bg-muted/50"
         >
-            <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-card text-lg leading-none"
-                style={chipStyle(hue)}
-            >
-                {space.icon?.icon || <Box className="h-4 w-4" />}
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center leading-none">
+                {space.icon?.icon ? <PageItemIcon icon={space.icon} size={22} /> : <Box className="h-4 w-4 text-muted-foreground" />}
             </span>
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
@@ -205,7 +165,6 @@ export const SpaceHub: React.FC = () => {
     const isMobile = useIsMobile()
     const { t } = useTranslation()
     const navigator = useNavigator()
-    const { usePath } = useUploadFile()
     const location = useLocation()
     const { userInfo } = useSelector((state: GlobalState) => state)
 
@@ -320,8 +279,6 @@ export const SpaceHub: React.FC = () => {
     const favoriteIds = useMemo(() => new Set(favorites.map(f => f.id)), [favorites])
     const isFavorite = useCallback((space: Space) => favoriteIds.has(space.id), [favoriteIds])
 
-    const coverOf = useCallback((space: Space) => (space.cover ? usePath(space.cover) : undefined), [usePath])
-
     // Page numbers with ellipsis collapsing for long ranges.
     const paginationItems = useMemo(() => {
         const items: (number | 'ellipsis')[] = []
@@ -402,7 +359,6 @@ export const SpaceHub: React.FC = () => {
                                         space={space}
                                         favorite
                                         index={index}
-                                        cover={coverOf(space)}
                                         owned={isOwned(space)}
                                         onOpen={navigateToSpace}
                                         onToggleFavorite={(id) => toggleFavorite(id)}
@@ -510,7 +466,6 @@ export const SpaceHub: React.FC = () => {
                                             space={space}
                                             favorite={isFavorite(space)}
                                             index={index}
-                                            cover={coverOf(space)}
                                             owned={isOwned(space)}
                                             onOpen={navigateToSpace}
                                             onToggleFavorite={(id) => toggleFavorite(id)}

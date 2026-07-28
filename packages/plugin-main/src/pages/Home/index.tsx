@@ -5,6 +5,7 @@ import { Space } from "../../model/Space";
 import { ArrowRight, BanIcon, Book, Box, FilePlus, FolderPlus, LayoutGrid, Moon, Plus, Sparkles, Star, Sun, Sunset, Users } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
+import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
 import { useTranslation } from "@kn/common";
 import { format, parseISO, formatDistanceToNow } from "@kn/ui";
 
@@ -23,7 +24,7 @@ const pickHue = (key?: string): number => {
 }
 
 // Notion-style palette: flat surfaces + soft tinted covers on cards.
-// The bright hue is expressed as a subtle chip color, a soft cover gradient
+// The bright hue is expressed as a subtle chip color, a flat cover tint
 // and a light border tint so the page stays airy rather than saturated.
 const hueStyles = (hue: number) => ({
     chip: {
@@ -31,10 +32,10 @@ const hueStyles = (hue: number) => ({
         color: `hsl(${hue} 60% 48%)`,
     } as React.CSSProperties,
     cover: {
-        backgroundImage: `linear-gradient(135deg, hsl(${hue} 78% 88% / 0.9), hsl(${(hue + 24) % 360} 72% 82% / 0.85))`,
+        backgroundColor: `hsl(${hue} 72% 86%)`,
     } as React.CSSProperties,
     coverDark: {
-        backgroundImage: `linear-gradient(135deg, hsl(${hue} 45% 22% / 0.55), hsl(${(hue + 24) % 360} 40% 18% / 0.55))`,
+        backgroundColor: `hsl(${hue} 42% 20% / 0.55)`,
     } as React.CSSProperties,
 })
 
@@ -366,9 +367,9 @@ export const Home: React.FC = () => {
                                             <div className="absolute inset-0 dark:block hidden" style={styles.coverDark} />
                                         </div>
                                         <span
-                                            className="absolute left-3 top-[48px] flex h-9 w-9 items-center justify-center rounded-md bg-background text-xl leading-none shadow-sm ring-1 ring-border/60"
+                                            className="absolute left-3 top-[48px] flex h-9 w-9 items-center justify-center leading-none"
                                         >
-                                            {space.icon?.icon || <Box className="h-4 w-4 text-muted-foreground" />}
+                                            {space.icon?.icon ? <PageItemIcon icon={space.icon} size={28} /> : <Box className="h-4 w-4 text-muted-foreground" />}
                                         </span>
                                         <div className="flex flex-1 flex-col justify-end px-3 pb-3 pt-4">
                                             <p className="truncate text-[13.5px] font-medium">{space.name}</p>
@@ -425,9 +426,9 @@ export const Home: React.FC = () => {
                                             </span>
                                         </div>
                                         <span
-                                            className="absolute left-3 top-[48px] flex h-9 w-9 items-center justify-center rounded-md bg-background text-xl leading-none shadow-sm ring-1 ring-border/60"
+                                            className="absolute left-3 top-[48px] flex h-9 w-9 items-center justify-center leading-none"
                                         >
-                                            {space.icon?.icon || <Users className="h-4 w-4 text-muted-foreground" />}
+                                            {space.icon?.icon ? <PageItemIcon icon={space.icon} size={28} /> : <Users className="h-4 w-4 text-muted-foreground" />}
                                         </span>
                                         <div className="flex flex-1 flex-col justify-end px-3 pb-3 pt-4">
                                             <p className="truncate text-[13.5px] font-medium">{space.name}</p>
@@ -478,10 +479,10 @@ export const Home: React.FC = () => {
                                         )}
                                     >
                                         <span
-                                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[15px] leading-none"
+                                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md leading-none"
                                             style={styles.chip}
                                         >
-                                            {page.icon?.icon || <Box className="h-3.5 w-3.5" />}
+                                            {page.icon?.icon ? <PageItemIcon icon={page.icon} size={15} /> : <Box className="h-3.5 w-3.5" />}
                                         </span>
                                         <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
                                             {page.title || "Untitled"}
@@ -538,10 +539,10 @@ export const Home: React.FC = () => {
                                         onClick={() => navigator.go({ to: `/space-detail/${data.spaceId}/page/edit/${data.id}` })}
                                     >
                                         <span
-                                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[15px] leading-none"
+                                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md leading-none"
                                             style={styles.chip}
                                         >
-                                            {data.icon?.icon || <Box className="h-3.5 w-3.5" />}
+                                            {data.icon?.icon ? <PageItemIcon icon={data.icon} size={15} /> : <Box className="h-3.5 w-3.5" />}
                                         </span>
                                         <span className="flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
                                             {data.title}

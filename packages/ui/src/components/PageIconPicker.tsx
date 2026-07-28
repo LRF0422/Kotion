@@ -305,27 +305,25 @@ export const PageIconPicker: React.FC<PageIconPickerProps> = ({
                         <TabsTrigger value="upload" className={tabTriggerClass}>Upload</TabsTrigger>
                     )}
                 </TabsList>
-                <div className="ml-auto mr-2 flex items-center gap-1">
+                <div className="ml-auto mr-2 flex shrink-0 items-center gap-0.5">
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 gap-1 px-2 text-muted-foreground hover:text-foreground"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                         onClick={handleRandom}
                         title="Random emoji"
                     >
                         <Shuffle className="h-3.5 w-3.5" />
-                        <span className="text-xs">Random</span>
                     </Button>
                     {onRemove && (
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 gap-1 px-2 text-muted-foreground hover:text-destructive"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                             onClick={onRemove}
                             title="Remove icon"
                         >
                             <Trash2 className="h-3.5 w-3.5" />
-                            <span className="text-xs">Remove</span>
                         </Button>
                     )}
                 </div>

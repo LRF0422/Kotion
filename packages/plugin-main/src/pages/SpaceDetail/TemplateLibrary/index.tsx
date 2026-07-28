@@ -9,6 +9,7 @@ import {
 } from "@kn/icon"
 import { useApi, useNavigator, useTranslation, useSafeState } from "@kn/common"
 import { APIS } from "../../../api"
+import { PageItemIcon } from "../components/PageItemIcon"
 
 interface SpaceTemplateLibraryProps {
     spaceId: string
@@ -113,8 +114,8 @@ export const SpaceTemplateLibrary: React.FC<SpaceTemplateLibraryProps> = ({
                     >
                         <CardContent className="p-4">
                             <div className="flex items-start gap-3">
-                                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-base shrink-0">
-                                    {template.icon?.icon || <LayoutTemplate className="h-4 w-4 text-primary" />}
+                                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+                                    {template.icon?.icon ? <PageItemIcon icon={template.icon as any} size={16} /> : <LayoutTemplate className="h-4 w-4 text-primary" />}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <h4 className="text-sm font-medium truncate">

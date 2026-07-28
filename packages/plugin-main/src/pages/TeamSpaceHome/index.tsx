@@ -12,6 +12,7 @@ import { useApi, useNavigator, useTranslation, useSafeState, useParams } from "@
 import { APIS } from "../../api";
 import { Space, SpaceMember } from "../../model/Space";
 import { ActivityFeed } from "../SpaceDetail/ActivityFeed";
+import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
 
 export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreatePage?: () => void; onNavigateSettings?: () => void }> = (props) => {
     const { t } = useTranslation()
@@ -130,8 +131,8 @@ export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreate
                 {/* Space Header */}
                 <div className="flex items-start justify-between">
                     <div className="flex items-center gap-4">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-2xl">
-                            {space.icon?.icon || <FileText className="h-7 w-7 text-primary" />}
+                        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
+                            {space.icon?.icon ? <PageItemIcon icon={space.icon} size={28} /> : <FileText className="h-7 w-7 text-primary" />}
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold tracking-tight">{space.name}</h1>
@@ -277,8 +278,8 @@ export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreate
                                                             onKeyDown={(e) => e.key === 'Enter' && handlePageClick(page.id)}
                                                             className="flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors hover:bg-muted/60"
                                                         >
-                                                            <div className="flex h-7 w-7 items-center justify-center rounded bg-muted text-sm shrink-0">
-                                                                {page.icon?.icon || <FileText className="h-3.5 w-3.5 text-muted-foreground" />}
+                                                            <div className="flex h-7 w-7 items-center justify-center rounded bg-muted shrink-0">
+                                                                {page.icon?.icon ? <PageItemIcon icon={page.icon} size={14} /> : <FileText className="h-3.5 w-3.5 text-muted-foreground" />}
                                                             </div>
                                                             <p className="text-sm truncate flex-1">{page.title || t('teamSpace.untitled', 'Untitled')}</p>
                                                             <p className="text-[11px] text-muted-foreground shrink-0">
@@ -314,8 +315,8 @@ export const TeamSpaceHome: React.FC<{ space?: Space; spaceId?: string; onCreate
                                                         onKeyDown={(e) => e.key === 'Enter' && handlePageClick(page.id)}
                                                         className="flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors hover:bg-muted/60"
                                                     >
-                                                        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-sm shrink-0">
-                                                            {page.icon?.icon || <FileText className="h-4 w-4 text-muted-foreground" />}
+                                                        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted shrink-0">
+                                                            {page.icon?.icon ? <PageItemIcon icon={page.icon} size={16} /> : <FileText className="h-4 w-4 text-muted-foreground" />}
                                                         </div>
                                                         <div className="flex-1 min-w-0">
                                                             <p className="text-sm font-medium truncate">

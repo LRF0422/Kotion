@@ -9,6 +9,7 @@ import { useSafeState } from "@kn/common";
 import { Edit2, Eye, Plus, Star, UserCircle } from "@kn/icon";
 import React, { useEffect } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
+import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@kn/ui";
 import { useNavigator } from "@kn/common";
 
@@ -52,7 +53,7 @@ export const Spaces: React.FC = () => {
                     }}
                     footer={(data) => <div className="text-sm mt-1">
                         <div className="flex flex-row items-center gap-1">
-                            {data.icon.icon} {data.name}
+                            <PageItemIcon icon={data.icon} size={14} /> {data.name}
                         </div>
                         <a className="flex flex-row items-center italic gap-1 underline  text-gray-500">
                             <UserCircle className="h-3 w-3" />Last update by Leong
@@ -76,7 +77,7 @@ export const Spaces: React.FC = () => {
                         recentPage.map((space, index) => (
                             <div key={index} className="p-1 border-secondary border rounded-md hover:bg-muted transition-all cursor-pointer duration-300 flex flex-row items-center justify-between">
                                 <div className="flex flex-row items-center gap-3">
-                                    <div className="text-[30px]">{space.icon.icon}</div>
+                                    <PageItemIcon icon={space.icon} size={30} />
                                     <div>{space.name}</div>
                                 </div>
                                 <div className="flex flex-row gap-1">

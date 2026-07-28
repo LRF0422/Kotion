@@ -22,6 +22,7 @@ import {
 import { SettingContext } from "..";
 import { useApi } from "@kn/common";
 import { APIS } from "../../../../api";
+import { PageItemIcon } from "../../components/PageItemIcon";
 import { toast } from "@kn/ui";
 import { useTranslation } from "@kn/common";
 
@@ -127,8 +128,8 @@ export const PageManagement: React.FC = () => {
         const resolve = (treeNode: PageTreeNode): any => {
             const name = (
                 <div className="flex flex-row gap-1.5 items-center group w-full overflow-hidden relative">
-                    <span className="text-xs flex-shrink-0">
-                        {treeNode.icon?.icon || <FileText className="h-3 w-3 text-muted-foreground" />}
+                    <span className="flex-shrink-0">
+                        {treeNode.icon?.icon ? <PageItemIcon icon={treeNode.icon} size={12} /> : <FileText className="h-3 w-3 text-muted-foreground" />}
                     </span>
                     <span className="text-xs truncate flex-1">{treeNode.name}</span>
                     <Button
@@ -180,8 +181,8 @@ export const PageManagement: React.FC = () => {
         const resolve = (treeNode: PageTreeNode): any => {
             const name = (
                 <div className="flex flex-row gap-1.5 items-center w-full overflow-hidden">
-                    <span className="text-xs flex-shrink-0">
-                        {treeNode.icon?.icon || <FolderOpen className="h-3 w-3 text-muted-foreground" />}
+                    <span className="flex-shrink-0">
+                        {treeNode.icon?.icon ? <PageItemIcon icon={treeNode.icon} size={12} /> : <FolderOpen className="h-3 w-3 text-muted-foreground" />}
                     </span>
                     <span className="text-xs truncate">{treeNode.name}</span>
                 </div>
@@ -287,9 +288,9 @@ export const PageManagement: React.FC = () => {
                         {/* Current page info */}
                         <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border">
                             <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            <span className="text-sm font-medium truncate">
+                            <span className="text-sm font-medium truncate flex items-center gap-1">
                                 {movingPage?.icon?.icon && (
-                                    <span className="mr-1">{movingPage.icon.icon}</span>
+                                    <PageItemIcon icon={movingPage.icon} size={14} />
                                 )}
                                 {movingPage?.name}
                             </span>
