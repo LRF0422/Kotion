@@ -1,14 +1,14 @@
-import { Separator, cn, Button, PageIconPicker, FlatEmoji, DateIcon, type IconPropsProps } from "@kn/ui";
+import { cn, Button, Input, PageIconPicker, FlatEmoji, DateIcon, type IconPropsProps } from "@kn/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
-import { Clock, Plus, X, Image, ImagePlus, Trash2, Move, GripVertical } from "@kn/icon";
+import { Clock, Plus, X, Image, ImagePlus, Trash2, Move, GripVertical, CalendarDays, UserRound } from "@kn/icon";
 import React, { useContext, useState, useCallback, useRef, useEffect } from "react";
 import type { Editor } from "@tiptap/core";
 import type { Transaction } from "@tiptap/pm/state";
 import { PageContext } from "@editor/editor/context";
-import { FileService, useOptionalService } from "@kn/common";
+import { FileService, useOptionalService, useTranslation } from "@kn/common";
 
 /**
- * 页面头部（封面 / 图标 / 添加按钮 / 只读元数据）。
+ * 页面头部（封面 / 图标 / 添加按钮 / 元信息：作者、创建时间、更新时间、标签）。
  *
  * 这些 UI 原先在 title 节点的 React NodeView（TitleView）里渲染，与可编辑的
  * NodeViewContent 共处一棵 React 子树，导致在 Safari 中文输入法下，合成期间的
@@ -25,12 +25,38 @@ interface CoverConfig {
 	position: number; // 0-100 垂直位置百分比，默认 50
 }
 
+// 标签芯片配色：按标签名哈希固定取色，扇平无边框，深浅色主题均可读。
+const TAG_STYLES = [
+	"bg-gray-500/10 text-gray-600 dark:text-gray-400",
+	"bg-blue-500/10 text-blue-600 dark:text-blue-400",
+	"bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+	"bg-amber-500/10 text-amber-600 dark:text-amber-400",
+	"bg-purple-500/10 text-purple-600 dark:text-purple-400",
+	"bg-pink-500/10 text-pink-600 dark:text-pink-400",
+	"bg-red-500/10 text-red-600 dark:text-red-400",
+	"bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
+];
+
+const tagStyle = (tag: string) => {
+	const hash = tag.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+	return TAG_STYLES[hash % TAG_STYLES.length];
+};
+
+// 后端 LocalDateTime（"2026-07-28T09:26:57" 或 "2026-07-28 09:26:57"）→ "2026-07-28 09:26"
+function formatDateTime(value?: string): string | null {
+	if (!value) return null;
+	const normalized = value.replace("T", " ");
+	const m = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/.exec(normalized);
+	return m ? `${m[1]} ${m[2]}` : normalized;
+}
+
 interface PageHeaderProps {
 	editor: Editor;
 }
 
 export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
-	const { createTime, updateTime } = useContext(PageContext)
+	const { t } = useTranslation()
+	const { createTime, updateTime, createBy, createUserName, createUserAvatar, updateUserName } = useContext(PageContext)
 
 	const [isHovered, setIsHovered] = useState(false)
 	const [isCoverHovered, setIsCoverHovered] = useState(false)
@@ -39,6 +65,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 	const [isUploading, setIsUploading] = useState(false)
 	const [addIconOpen, setAddIconOpen] = useState(false)
 	const [iconPickerOpen, setIconPickerOpen] = useState(false)
+	const [tagPopoverOpen, setTagPopoverOpen] = useState(false)
+	const [tagDraft, setTagDraft] = useState("")
 	const coverRef = useRef<HTMLDivElement>(null)
 	const dragStartY = useRef<number>(0)
 	const dragStartPosition = useRef<number>(50)
@@ -83,6 +111,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 	const hasIcon = !!attrs?.icon?.icon
 	const cover = (attrs?.cover ?? null) as CoverConfig | null
 	const hasCover = !!cover?.url
+	const tags: string[] = Array.isArray(attrs?.tags) ? attrs.tags : []
 
 	const getCoverUrl = useCallback((url: string) => {
 		if (!url) return ""
@@ -165,8 +194,26 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 		return result.name
 	}, [fileService])
 
-	// 既没有封面/图标可显示，又不可编辑（无添加入口）时，整个头部无内容可渲染。
-	if (!hasCover && !hasIcon && !isEditable && !createTime && !updateTime) {
+	// 标签增删：与 icon/cover 同链路写回 title attrs，随 PATCH 入库、随 Yjs 同步。
+	const addTag = useCallback((raw: string) => {
+		const tag = raw.trim()
+		if (!tag || tags.includes(tag)) return
+		setTitleAttrs({ tags: [...tags, tag] })
+		setTagDraft("")
+	}, [tags, setTitleAttrs])
+
+	const removeTag = useCallback((tag: string) => {
+		const next = tags.filter(item => item !== tag)
+		setTitleAttrs({ tags: next.length > 0 ? next : null })
+	}, [tags, setTitleAttrs])
+
+	const authorName = createUserName || createBy
+	const createdText = formatDateTime(createTime)
+	const updatedText = formatDateTime(updateTime)
+	const hasMeta = !!(authorName || createdText || updatedText || tags.length > 0)
+
+	// 既没有封面/图标/元信息可显示，又不可编辑（无添加入口）时，整个头部无内容可渲染。
+	if (!hasCover && !hasIcon && !isEditable && !hasMeta) {
 		return null
 	}
 
@@ -371,26 +418,101 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 					</div>
 				)}
 
-				{/* Metadata (read-only) */}
-				{!isEditable && (createTime || updateTime) && (
-					<div className="flex flex-wrap items-center gap-2 w-full">
-						<div className="group flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-all duration-200 border border-transparent hover:border-border/50">
-							<Clock className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+				{/* Metadata — 紧贴标题上方的一行扁平元信息（作者 / 创建 / 更新 / 标签），
+				    Notion 风格：小字号、静默灰、无边框无背景，编辑/只读态均展示。 */}
+				{(hasMeta || isEditable) && (
+					<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 min-h-[20px] text-xs text-muted-foreground/80">
+						{authorName && (
 							<div className="flex items-center gap-1.5">
-								<span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">Created</span>
-								<span className="text-xs text-muted-foreground/80">{createTime}</span>
+								{createUserAvatar ? (
+									<img
+										src={getCoverUrl(createUserAvatar)}
+										alt={authorName}
+										className="h-4 w-4 rounded-full object-cover"
+										draggable={false}
+									/>
+								) : (
+									<UserRound className="h-3.5 w-3.5" />
+								)}
+								<span className="text-foreground/70 font-medium">{authorName}</span>
 							</div>
-						</div>
-
-						<Separator orientation="vertical" className="h-5" />
-
-						<div className="group flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition-all duration-200 border border-transparent hover:border-border/50">
-							<Clock className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
-							<div className="flex items-center gap-1.5">
-								<span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">Updated</span>
-								<span className="text-xs text-muted-foreground/80">{updateTime}</span>
+						)}
+						{createdText && (
+							<div className="flex items-center gap-1.5" title={`${t('editor.meta.created', 'Created')} ${createdText}`}>
+								<CalendarDays className="h-3.5 w-3.5" />
+								<span>{t('editor.meta.created', 'Created')} {createdText}</span>
 							</div>
-						</div>
+						)}
+						{updatedText && (
+							<div
+								className="flex items-center gap-1.5"
+								title={updateUserName ? `${updateUserName} · ${updatedText}` : undefined}
+							>
+								<Clock className="h-3.5 w-3.5" />
+								<span>{t('editor.meta.updated', 'Updated')} {updatedText}</span>
+							</div>
+						)}
+
+						{/* Tags：哈希配色芯片；编辑态悬停芯片可删除，悬停标题区域显示添加入口 */}
+						{(tags.length > 0 || isEditable) && (
+							<div className="flex flex-wrap items-center gap-1.5">
+								{tags.map(tag => (
+									<span
+										key={tag}
+										className={cn(
+											"group/tag inline-flex h-5 items-center gap-0.5 rounded px-1.5 text-xs font-medium leading-none",
+											tagStyle(tag)
+										)}
+									>
+										{tag}
+										{isEditable && (
+											<button
+												type="button"
+												className="-mr-0.5 hidden rounded-sm p-px opacity-60 hover:opacity-100 group-hover/tag:inline-flex"
+												onClick={() => removeTag(tag)}
+											>
+												<X className="h-3 w-3" />
+											</button>
+										)}
+									</span>
+								))}
+								{isEditable && (
+									<Popover open={tagPopoverOpen} onOpenChange={(open) => { setTagPopoverOpen(open); if (!open) setTagDraft("") }}>
+										<PopoverTrigger asChild>
+											<button
+												type="button"
+												className={cn(
+													"inline-flex h-5 items-center gap-1 rounded px-1.5 text-xs leading-none",
+													"text-muted-foreground/70 hover:bg-muted hover:text-foreground",
+													"opacity-0 transition-opacity duration-200",
+													(isTitleAreaHovered || tagPopoverOpen) && "opacity-100"
+												)}
+											>
+												<Plus className="h-3 w-3" />
+												{t('editor.meta.addTag', 'Add tag')}
+											</button>
+										</PopoverTrigger>
+										<PopoverContent side="bottom" align="start" className="w-56 p-1.5">
+											<Input
+												autoFocus
+												value={tagDraft}
+												onChange={(e) => setTagDraft(e.target.value)}
+												onKeyDown={(e) => {
+													if (e.key === 'Enter') {
+														e.preventDefault()
+														addTag(tagDraft)
+													} else if (e.key === 'Escape') {
+														setTagPopoverOpen(false)
+													}
+												}}
+												placeholder={t('editor.meta.tagPlaceholder', 'Type a tag, press Enter')}
+												className="h-7 text-xs"
+											/>
+										</PopoverContent>
+									</Popover>
+								)}
+							</div>
+						)}
 					</div>
 				)}
 			</div>

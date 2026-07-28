@@ -1,5 +1,6 @@
 package com.knowledge.wiki.service.application;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -951,6 +952,7 @@ public class SpaceApplication {
         com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result = this.pageService
                 .patchBlocks(dto.getPageId(), dto.getChanges(), dto.getBlockOrder());
         syncPageTitleFromPatch(dto, result);
+        touchPageUpdateStamp(dto.getPageId(), result);
 
         return PatchResultDTO.from(result);
     }
@@ -983,8 +985,37 @@ public class SpaceApplication {
         com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result = this.pageService
                 .bulkReplaceBlocks(dto.getPageId(), dto.getChanges());
         syncPageTitleFromPatch(dto, result);
+        touchPageUpdateStamp(dto.getPageId(), result);
 
         return PatchResultDTO.from(result);
+    }
+
+    /**
+     * Bump the page row's {@code update_time}/{@code update_user} after a block
+     * patch that actually changed something. Content edits are persisted in the
+     * block storage tables and never touch the {@code wiki_page} row by
+     * themselves — without this, the page-level "updated at" shown in the
+     * editor header only moves on title/icon changes. Best-effort: never fails
+     * the save.
+     */
+    private void touchPageUpdateStamp(Long pageId,
+            com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result) {
+        if (pageId == null || result == null) {
+            return;
+        }
+        if (result.getCreated() + result.getUpdated() + result.getDeleted() <= 0) {
+            return;
+        }
+        try {
+            pageService.lambdaUpdate()
+                    .eq(Page::getId, pageId)
+                    .set(Page::getUpdateTime, LocalDateTime.now())
+                    .set(Page::getUpdateUser, SecurityContextUtil.getUserId())
+                    .update();
+        } catch (Exception e) {
+            log.warn("patchPageBlocks: failed to touch Page.updateTime for pageId={}: {}",
+                    pageId, e.getMessage());
+        }
     }
 
     private void syncPageTitleFromPatch(
@@ -1061,7 +1092,37 @@ public class SpaceApplication {
             iconChanged = !java.util.Objects.equals(newIconStr, existingIconStr);
         }
 
-        if (!titleChanged && !iconChanged) {
+        // --- Sync tags from title block attrs ---
+        // The frontend persists page tags on the title node's attrs (string[]
+        // or null). Mirror them into the wiki_page.tags JSON column so that
+        // server-side features (getSpaceTags, tag filtering) stay consistent.
+        boolean tagsChanged = false;
+        List<String> newTags = null;
+        if (attrs != null && attrs.containsKey("tags")) {
+            try {
+                newTags = new java.util.ArrayList<>();
+                cn.hutool.json.JSONArray tagsArr = attrs.getJSONArray("tags");
+                if (tagsArr != null) {
+                    for (int i = 0; i < tagsArr.size(); i++) {
+                        String tag = tagsArr.getStr(i);
+                        if (StrUtil.isNotBlank(tag)) {
+                            newTags.add(tag.trim());
+                        }
+                    }
+                }
+                List<String> existingTags = existing.getTags() != null
+                        ? existing.getTags()
+                        : java.util.Collections.emptyList();
+                tagsChanged = !newTags.equals(existingTags);
+            } catch (Exception e) {
+                log.warn("patchPageBlocks: failed to parse title attrs.tags for pageId={}: {}",
+                        dto.getPageId(), e.getMessage());
+                newTags = null;
+                tagsChanged = false;
+            }
+        }
+
+        if (!titleChanged && !iconChanged && !tagsChanged) {
             return;
         }
 
@@ -1085,9 +1146,17 @@ public class SpaceApplication {
                                 "typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler")
                         .update();
             }
+            if (tagsChanged) {
+                // Same JSON-column caveat as icon: name the type handler explicitly.
+                pageService.lambdaUpdate()
+                        .eq(Page::getId, existing.getId())
+                        .set(Page::getTags, newTags,
+                                "typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler")
+                        .update();
+            }
         } catch (Exception e) {
-            // Title/icon sync is best-effort; never fail the save because of it.
-            log.warn("patchPageBlocks: failed to sync Page.title/icon for pageId={}: {}",
+            // Title/icon/tags sync is best-effort; never fail the save because of it.
+            log.warn("patchPageBlocks: failed to sync Page.title/icon/tags for pageId={}: {}",
                     dto.getPageId(), e.getMessage());
         }
     }

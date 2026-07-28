@@ -31,6 +31,7 @@ public class PageVO implements Serializable {
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
     private String cover;
+    private List<String> tags;
     private List<PageVO> parents;
     private List<BacklinkVO> backlinks;
 }

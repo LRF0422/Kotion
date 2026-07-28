@@ -31,6 +31,11 @@ export const Title = Node.create({
 			fullWidth: {
 				default: null
 			},
+			// 页面标签（string[]）：与 icon/cover/fullWidth 同样持久化在 title
+			// attrs 上，随既有同步链入库并通过 Yjs 协作同步。
+			tags: {
+				default: null
+			},
 		}
 	},
 

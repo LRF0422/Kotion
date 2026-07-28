@@ -32,6 +32,24 @@ import { TemplateCreator } from "../TemplateCreator";
 import { SpaceGraph } from "../../SpaceGraph";
 import { PageVersionHistory } from "./PageVersionHistory";
 
+// Author display info for the PageHeader metadata row. Cached per user id so
+// switching between pages by the same author never refetches.
+const userBriefCache = new Map<string, { name?: string; avatar?: string } | undefined>()
+async function resolveUserBrief(id?: string | number): Promise<{ name?: string; avatar?: string } | undefined> {
+    if (!id) return undefined
+    const key = String(id)
+    if (userBriefCache.has(key)) return userBriefCache.get(key)
+    try {
+        const res = await useApi(APIS.GET_USER_DETAIL, { id: key })
+        const data = res?.data
+        const brief = data ? { name: data.name || data.realName || data.account, avatar: data.avatar } : undefined
+        userBriefCache.set(key, brief)
+        return brief
+    } catch {
+        return undefined
+    }
+}
+
 // Status display configuration for save state
 const getStatusDisplay = (saving: boolean, dirty: boolean, error: Error | null, progress?: { done: number; total: number } | null) => {
     if (saving) {
@@ -50,7 +68,7 @@ const getStatusDisplay = (saving: boolean, dirty: boolean, error: Error | null, 
 // Custom hook: wraps useIncrementalSave with the actual PATCH API call
 // Includes prevVersion for optimistic concurrency and applies server
 // version info after each successful save.
-function usePageSave(editor: Editor | null, pageId: string | null, enabled: boolean) {
+function usePageSave(editor: Editor | null, pageId: string | null, enabled: boolean, onSaved?: () => void) {
     const { t } = useTranslation()
     // Throttle ON_PAGE_REFRESH emissions caused by rapid title typing
     const titleRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -87,7 +105,8 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
                 titleRefreshTimerRef.current = null
             }, 400)
         }
-    }, [editor, t])
+        onSaved?.()
+    }, [editor, t, onSaved])
 
     const mapChanges = useCallback((payload: IncrementalPayload) =>
         payload.changes.map(c => ({
@@ -300,6 +319,17 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             // Backfill the tab title + icon now that the page has loaded.
             // IMAGE icons store a file name; only emoji text is usable as a tab icon.
             if (pageId) updateMeta(pageId, { title: res?.title, icon: res?.icon?.type === 'IMAGE' ? undefined : res?.icon?.icon })
+            // Enrich with author display info (name/avatar) for the PageHeader
+            // metadata row. Non-blocking: the page renders first, names fill in.
+            Promise.all([resolveUserBrief(res?.createUser), resolveUserBrief(res?.updateUser)]).then(([creator, updater]) => {
+                if (!creator && !updater) return
+                setPage((prev: any) => prev && prev.id === res.id ? {
+                    ...prev,
+                    createUserName: creator?.name,
+                    createUserAvatar: creator?.avatar,
+                    updateUserName: updater?.name,
+                } : prev)
+            })
         }).catch((err: any) => {
             console.error('Failed to load page:', err)
             toast.error('Failed to load page content')
@@ -479,11 +509,26 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
 
 
     // Incremental auto-save via new hook (PATCH blocks only, no ON_PAGE_REFRESH)
+    // After each successful save, mirror the backend's update stamp locally so
+    // the PageHeader metadata row shows a fresh "updated at" without a reload.
+    const handleSaved = useCallback(() => {
+        const now = new Date()
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+        setPage((prev: any) => prev ? {
+            ...prev,
+            updateTime: stamp,
+            updateUser: userInfo?.id ?? prev.updateUser,
+            updateUserName: userInfo?.name ?? prev.updateUserName,
+        } : prev)
+    }, [userInfo?.id, userInfo?.name])
+
     const { saving, dirty, error: saveError, progress: saveProgress, saveNow } = usePageSave(
         editor.current,
         pageId || null,
         // NOT gated on `active`: backgrounded tabs must keep auto-saving.
-        !!page && !!pageId && editorContentReady
+        !!page && !!pageId && editorContentReady,
+        handleSaved
     )
 
     // Copy a shareable link to the current page to the clipboard

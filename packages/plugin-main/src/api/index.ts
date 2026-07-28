@@ -71,6 +71,11 @@ export const APIS = {
         url: '/knowledge-system/user/info',
         method: 'GET'
     } as API,
+    /** Fetch a user's public profile by id (page author metadata) */
+    GET_USER_DETAIL: {
+        url: '/knowledge-system/user/detail',
+        method: 'GET'
+    } as API,
     CREATE_OR_SAVE_PAGE: {
         url: '/knowledge-wiki/space/page',
         method: 'POST'

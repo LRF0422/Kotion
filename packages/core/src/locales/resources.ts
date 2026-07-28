@@ -454,6 +454,12 @@ export const resources = {
                 "linkCopyFailed": "复制链接失败",
                 "movedToTrash": "已移至回收站",
                 "moveToTrashFailed": "移至回收站失败",
+                "meta": {
+                    "created": "创建于",
+                    "updated": "更新于",
+                    "addTag": "添加标签",
+                    "tagPlaceholder": "输入标签，回车添加"
+                },
                 "tooltip": {
                     "undo": "撤销",
                     "redo": "重做",
@@ -1123,6 +1129,12 @@ export const resources = {
                 "linkCopyFailed": "Failed to copy link",
                 "movedToTrash": "Moved to trash",
                 "moveToTrashFailed": "Failed to move to trash",
+                "meta": {
+                    "created": "Created",
+                    "updated": "Updated",
+                    "addTag": "Add tag",
+                    "tagPlaceholder": "Type a tag, press Enter"
+                },
                 "tooltip": {
                     "undo": "Undo",
                     "redo": "Redo",
