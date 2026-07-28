@@ -298,7 +298,8 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         spaceService.getPage(pageId!).then((res: any) => {
             setPage(res)
             // Backfill the tab title + icon now that the page has loaded.
-            if (pageId) updateMeta(pageId, { title: res?.title, icon: res?.icon?.icon })
+            // IMAGE icons store a file name; only emoji text is usable as a tab icon.
+            if (pageId) updateMeta(pageId, { title: res?.title, icon: res?.icon?.type === 'IMAGE' ? undefined : res?.icon?.icon })
         }).catch((err: any) => {
             console.error('Failed to load page:', err)
             toast.error('Failed to load page content')
@@ -440,7 +441,9 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         const readAndPush = () => {
             const node = ed.state.doc.firstChild
             if (!node || node.type.name !== 'title') return
-            const icon = (node.attrs as any)?.icon?.icon ?? undefined
+            const iconAttr = (node.attrs as any)?.icon
+            // IMAGE icons store a file name; only emoji text is usable as a tab icon.
+            const icon = iconAttr?.type === 'IMAGE' ? undefined : iconAttr?.icon ?? undefined
             const title = node.textContent || undefined
             if (icon === lastIcon && title === lastTitle) return
             lastIcon = icon

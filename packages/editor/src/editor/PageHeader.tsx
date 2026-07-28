@@ -1,4 +1,4 @@
-import { EmojiPicker, EmojiPickerContent, EmojiPickerSearch, Separator, cn, Button } from "@kn/ui";
+import { Separator, cn, Button, PageIconPicker, FlatEmoji, type IconPropsProps } from "@kn/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { Clock, Plus, X, Image, ImagePlus, Trash2, Move, GripVertical } from "@kn/icon";
 import React, { useContext, useState, useCallback, useRef, useEffect } from "react";
@@ -37,6 +37,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 	const [isTitleAreaHovered, setIsTitleAreaHovered] = useState(false)
 	const [isDragging, setIsDragging] = useState(false)
 	const [isUploading, setIsUploading] = useState(false)
+	const [addIconOpen, setAddIconOpen] = useState(false)
+	const [iconPickerOpen, setIconPickerOpen] = useState(false)
 	const coverRef = useRef<HTMLDivElement>(null)
 	const dragStartY = useRef<number>(0)
 	const dragStartPosition = useRef<number>(50)
@@ -145,13 +147,23 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 		}
 	}, [isDragging, handleDragMove, handleDragEnd])
 
-	const setIcon = useCallback((emoji: string) => {
-		setTitleAttrs({ icon: { type: 'EMOJI', icon: emoji } })
+	const setIcon = useCallback((icon: IconPropsProps) => {
+		setTitleAttrs({ icon })
+		setAddIconOpen(false)
+		setIconPickerOpen(false)
 	}, [setTitleAttrs])
 
 	const removeIcon = useCallback(() => {
 		setTitleAttrs({ icon: null })
+		setAddIconOpen(false)
+		setIconPickerOpen(false)
 	}, [setTitleAttrs])
+
+	// 上传自定义图片图标，返回存储文件名（与封面同一条 fileService 链路）。
+	const uploadIconImage = useCallback(async () => {
+		const result = await fileService!.upload({ mimeTypes: ["image/*"] })
+		return result.name
+	}, [fileService])
 
 	// 既没有封面/图标可显示，又不可编辑（无添加入口）时，整个头部无内容可渲染。
 	if (!hasCover && !hasIcon && !isEditable && !createTime && !updateTime) {
@@ -255,7 +267,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 						)}
 					>
 						{!hasIcon && (
-							<Popover>
+							<Popover open={addIconOpen} onOpenChange={setAddIconOpen}>
 								<PopoverTrigger asChild>
 									<Button
 										variant="ghost"
@@ -266,13 +278,11 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 										<span className="text-sm">Add icon</span>
 									</Button>
 								</PopoverTrigger>
-								<PopoverContent side="bottom" align="start" className="p-0 border-none shadow-2xl">
-									<EmojiPicker
-										className="h-[380px] rounded-xl border shadow-xl w-full"
-										onEmojiSelect={({ emoji }) => setIcon(emoji)}>
-										<EmojiPickerSearch />
-										<EmojiPickerContent />
-									</EmojiPicker>
+								<PopoverContent side="bottom" align="start" className="w-auto p-0 rounded-xl shadow-2xl">
+									<PageIconPicker
+										onSelect={setIcon}
+										onUploadImage={fileService ? uploadIconImage : undefined}
+									/>
 								</PopoverContent>
 							</Popover>
 						)}
@@ -291,14 +301,16 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 					</div>
 				)}
 
-				{/* Icon / Emoji */}
+				{/* Icon / Emoji。有封面时用负 margin 上移图标高度的一半（h-20 = 80px，
+				    容器 pt-6 = 24px，-mt-16 = -64px → 上移 40px），使其像 Notion 一样
+				    骑在封面底边上；z-10 确保浮在封面之上。 */}
 				{hasIcon && (
 					<div
-						className="relative group"
+						className={cn("relative group w-fit", hasCover && "-mt-16 z-10")}
 						onMouseEnter={() => setIsHovered(true)}
 						onMouseLeave={() => setIsHovered(false)}
 					>
-						<Popover>
+						<Popover open={iconPickerOpen} onOpenChange={setIconPickerOpen}>
 							<PopoverTrigger disabled={!isEditable}>
 								<div
 									className={cn(
@@ -308,9 +320,20 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 										isEditable && "hover:scale-[1.02] active:scale-[0.98]"
 									)}
 								>
-									<div className="text-[56px] transition-transform duration-300 group-hover:scale-105">
-										{attrs?.icon?.icon}
-									</div>
+									{attrs?.icon?.type === 'IMAGE' ? (
+										<img
+											src={getCoverUrl(attrs.icon.icon)}
+											alt="Page icon"
+											className="h-20 w-20 rounded-xl object-cover transition-transform duration-300 group-hover:scale-105"
+											draggable={false}
+										/>
+									) : (
+										<FlatEmoji
+											emoji={attrs?.icon?.icon}
+											size={64}
+											className="transition-transform duration-300 group-hover:scale-105"
+										/>
+									)}
 									{isEditable && (
 										<button
 											type="button"
@@ -331,13 +354,12 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 									)}
 								</div>
 							</PopoverTrigger>
-							<PopoverContent side="right" align="start" className="p-0 border-none shadow-2xl">
-								<EmojiPicker
-									className="h-[380px] rounded-xl border shadow-xl w-full"
-									onEmojiSelect={({ emoji }) => setIcon(emoji)}>
-									<EmojiPickerSearch />
-									<EmojiPickerContent />
-								</EmojiPicker>
+							<PopoverContent side="right" align="start" className="w-auto p-0 rounded-xl shadow-2xl">
+								<PageIconPicker
+									onSelect={setIcon}
+									onRemove={removeIcon}
+									onUploadImage={fileService ? uploadIconImage : undefined}
+								/>
 							</PopoverContent>
 						</Popover>
 					</div>

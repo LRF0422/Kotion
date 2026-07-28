@@ -8,6 +8,7 @@ import { LoaderIcon, SearchIcon } from "@kn/icon";
 import * as React from "react";
 
 import { cn } from "@ui/lib/utils";
+import { FlatEmoji } from "@ui/components/ui/flat-emoji";
 
 function EmojiPicker({
     className,
@@ -72,7 +73,8 @@ function EmojiPickerEmoji({
             )}
             data-slot="emoji-picker-emoji"
         >
-            {emoji.emoji}
+            {/* 扁平化风格：用 Twemoji 图片替代系统原生字形，跨平台一致 */}
+            <FlatEmoji emoji={emoji.emoji} size={22} />
         </button>
     );
 }
@@ -145,7 +147,7 @@ function EmojiPickerFooter({
                     emoji ? (
                         <>
                             <div className="flex size-7 flex-none items-center justify-center text-lg">
-                                {emoji.emoji}
+                                <FlatEmoji emoji={emoji.emoji} size={20} />
                             </div>
                             <span className="text-secondary-foreground truncate text-xs">
                                 {emoji.label}

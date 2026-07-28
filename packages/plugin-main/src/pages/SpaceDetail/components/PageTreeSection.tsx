@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from 'react'
 import { Button, Input, TreeView, cn } from '@kn/ui'
 import { Plus, MoreHorizontal, Star, Trash2, Package, Link } from '@kn/icon'
-import { useTranslation } from '@kn/common'
+import { useTranslation, useOptionalService, FileService } from '@kn/common'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@kn/ui'
 import { SiderMenuItemProps } from '../../../pages/components/SiderMenu'
 
@@ -39,6 +39,14 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
     className,
 }) => {
     const { t } = useTranslation()
+    const fileService = useOptionalService('fileService') as FileService | undefined
+
+    // IMAGE 类型图标存的是文件名，需解析为下载 URL 后以小图展示。
+    const resolveIconUrl = useCallback((name: string) => {
+        if (/^(https?:|data:)/.test(name)) return name
+        if (fileService) return fileService.getDownloadUrl(name)
+        return `https://kotion.top:888/api/knowledge-resource/oss/endpoint/download?fileName=${name}`
+    }, [fileService])
 
     const handleCopyLink = useCallback((pageId: string) => {
         const url = `${window.location.origin}/space-detail/${spaceId}/page/edit/${pageId}`
@@ -51,7 +59,18 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
         const name = (
             <div className="flex flex-row gap-1 items-center group w-full overflow-hidden text-ellipsis relative">
                 <div className="text-left text-ellipsis text-nowrap overflow-hidden flex-1 min-w-0 flex items-center w-full">
-                    {treeNode.icon && <span className="text-xs sm:text-sm mr-1.5 flex-shrink-0">{treeNode.icon.icon}</span>}
+                    {treeNode.icon && (
+                        treeNode.icon.type === 'IMAGE' ? (
+                            <img
+                                src={resolveIconUrl(treeNode.icon.icon)}
+                                alt=""
+                                className="h-3.5 w-3.5 sm:h-4 sm:w-4 rounded-sm object-cover mr-1.5 flex-shrink-0"
+                                draggable={false}
+                            />
+                        ) : (
+                            <span className="text-xs sm:text-sm mr-1.5 flex-shrink-0">{treeNode.icon.icon}</span>
+                        )
+                    )}
                     <span className="text-xs sm:text-sm">{treeNode.name}</span>
                     {treeNode.isDraft && (
                         <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" title="Draft" />
@@ -138,7 +157,7 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
         }
 
         return baseItem
-    }, [spaceId, onCreatePage, onMoveToTrash, onAddFavorite, onPageClick, handleCopyLink, t])
+    }, [spaceId, onCreatePage, onMoveToTrash, onAddFavorite, onPageClick, handleCopyLink, resolveIconUrl, t])
 
     const elements: SiderMenuItemProps[] = useMemo(() => {
         if (!pageTree || pageTree.length === 0) return []

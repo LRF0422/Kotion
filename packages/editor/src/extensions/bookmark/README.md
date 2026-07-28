@@ -4,13 +4,12 @@ A Tiptap extension for adding rich bookmark cards to your editor. This extension
 
 ## Features
 
-- 📌 Create bookmark cards with URL, title, and description
-- 🖼️ Support for preview images and favicons
-- ✏️ Editable bookmark properties
-- 🎨 Beautiful card-style UI with hover effects
-- 🔗 Click to open bookmarked URLs
-- 🗑️ Delete and edit functionality
-- 📱 Responsive design
+- 📌 Notion-style inline URL input — paste a link to create a bookmark instantly
+- ⚡ Card renders immediately; metadata (title, description, image, favicon) is fetched asynchronously with skeleton loading
+- 🖼️ Support for preview images and favicons (with graceful fallbacks)
+- 🎨 Refined horizontal card UI with hover actions (refresh, edit, delete)
+- 🔗 Click anywhere on the card to open the bookmarked URL
+- 📱 Responsive design (preview image hidden on narrow viewports)
 
 ## Installation
 
@@ -30,7 +29,7 @@ editor.commands.insertBookmark({
 
 ### Using the Toolbar
 
-Click the bookmark icon in the editor toolbar to insert a new bookmark. A dialog will appear where you can enter the bookmark details.
+Click the bookmark icon in the editor toolbar to insert a new bookmark. An inline input appears in place — paste or type a link and press Enter (pasting a valid link commits immediately). Metadata is fetched automatically and fills the card as it loads.
 
 ## Bookmark Attributes
 
@@ -42,7 +41,8 @@ Click the bookmark icon in the editor toolbar to insert a new bookmark. A dialog
 
 ## Keyboard Shortcuts
 
-Currently, no keyboard shortcuts are assigned. You can add them by extending the extension configuration.
+- `Mod-Shift-K` — insert a new bookmark
+- In the inline input: `Enter` to confirm, `Escape` to cancel (an unconfirmed new bookmark is removed)
 
 ## Styling
 
@@ -81,7 +81,6 @@ The bookmark extension consists of:
 ## Future Enhancements
 
 Potential improvements:
-- Auto-fetch metadata from URLs (title, description, image)
-- Support for different card layouts
-- Keyboard shortcuts for inserting bookmarks
+- Metadata fetching via a backend proxy (avoids CORS limitations)
+- Support for different card layouts (large cover / compact single-line)
 - Batch import from bookmark files

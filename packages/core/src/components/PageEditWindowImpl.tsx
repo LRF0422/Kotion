@@ -349,7 +349,8 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
                 ? { icon: <Pencil className="h-3 w-3" />, text: t('statusEditing'), className: 'text-muted-foreground' }
                 : { icon: <Check className="h-3 w-3" />, text: t('statusSaved'), className: 'text-muted-foreground' };
 
-    const icon = page?.icon?.icon || null;
+    // IMAGE icons store a file name; only emoji text renders inline in the header.
+    const icon = page?.icon?.type === 'IMAGE' ? null : page?.icon?.icon || null;
 
     const window_ = (
         <div
