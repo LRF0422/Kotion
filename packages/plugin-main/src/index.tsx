@@ -143,6 +143,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "new-page": "新建页面",
           "all-spaces": "全部空间",
           "ai-assistant": "AI 助手",
+          "relation-graph": "关系图谱",
           "last-update": "最近更新",
           "week-stat": "本周编辑 {{count}} 篇",
           "greeting": {
@@ -681,6 +682,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "new-page": "New Page",
           "all-spaces": "All Spaces",
           "ai-assistant": "AI Assistant",
+          "relation-graph": "Relation Graph",
           "last-update": "Last update",
           "week-stat": "{{count}} pages this week",
           "greeting": {

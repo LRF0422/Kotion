@@ -1,11 +1,12 @@
 import { APIS } from "../../api";
-import { Button, Card, CardContent, Skeleton, cn, useIsMobile } from "@kn/ui";
+import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, Skeleton, cn, useIsMobile } from "@kn/ui";
 import { useApi, useNavigator, useSelector, GlobalState, event, TOGGLE_AI_ASSISTANT } from "@kn/common";
 import { Space } from "../../model/Space";
-import { ArrowRight, BanIcon, Book, Box, FilePlus, FolderPlus, LayoutGrid, Moon, Plus, Sparkles, Star, Sun, Sunset, Users } from "@kn/icon";
+import { ArrowRight, BanIcon, Book, Box, FilePlus, FolderPlus, LayoutGrid, Moon, Network, Plus, Sparkles, Star, Sun, Sunset, Users } from "@kn/icon";
 import React, { useEffect, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
+import { SpaceGraph } from "../SpaceGraph";
 import { useTranslation } from "@kn/common";
 import { format, parseISO, formatDistanceToNow } from "@kn/ui";
 
@@ -63,6 +64,7 @@ export const Home: React.FC = () => {
     const [flag, setFlag] = useState(0)
     const [loading, setLoading] = useState(true)
     const [creatingPage, setCreatingPage] = useState(false)
+    const [graphOpen, setGraphOpen] = useState(false)
     const [currentHour, setCurrentHour] = useState(new Date().getHours())
     const navigator = useNavigator()
     const { t } = useTranslation()
@@ -301,6 +303,12 @@ export const Home: React.FC = () => {
                             hue={290}
                             onClick={() => event.emit(TOGGLE_AI_ASSISTANT)}
                             dataTour="home-ai"
+                        />
+                        <QuickAction
+                            icon={<Network className="h-4 w-4" />}
+                            label={t("home.relation-graph") || "Relation Graph"}
+                            hue={190}
+                            onClick={() => setGraphOpen(true)}
                         />
                     </div>
                 </div>
@@ -576,6 +584,21 @@ export const Home: React.FC = () => {
                     </Card>
                 </section>
             </div>
+
+            {/* Relation graph — rendered lazily inside a large dialog so the
+                d3 simulation only spins up when the user actually opens it. */}
+            <Dialog open={graphOpen} onOpenChange={setGraphOpen}>
+                <DialogContent className="flex h-[80vh] max-w-[min(1100px,92vw)] flex-col gap-0 p-0">
+                    <DialogHeader className="border-b px-4 py-3 text-left">
+                        <DialogTitle>{t("home.relation-graph") || "Relation Graph"}</DialogTitle>
+                    </DialogHeader>
+                    <div className="min-h-0 flex-1">
+                        {graphOpen && (
+                            <SpaceGraph onNavigate={() => setGraphOpen(false)} />
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
