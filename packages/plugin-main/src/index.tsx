@@ -363,7 +363,16 @@ export const DefaultPluginInstance = new DefaultPlugin({
               "restore_anytime": "您可以随时恢复空间",
               "reduce_clutter": "归档空间有助于减少杂乱并改善组织结构"
             },
-            "archive_btn": "归档空间"
+            "archive_btn": "归档空间",
+            "restore_btn": "恢复空间",
+            "archived_title": "此空间已归档",
+            "archived_description": "该空间已从主导航中隐藏，所有内容保持完整。您可以随时恢复它。",
+            "confirm_title": "归档此空间？",
+            "confirm_description": "空间 \"{{name}}\" 将从主导航中隐藏，所有内容保留，可随时恢复。",
+            "confirm_cancel": "取消",
+            "success": "空间已归档",
+            "restore_success": "空间已恢复",
+            "error": "操作失败，请稍后重试"
           },
           "delete": {
             "tab": "删除",
@@ -383,7 +392,12 @@ export const DefaultPluginInstance = new DefaultPlugin({
               "archive_option": "归档是否是更好的选择？"
             },
             "delete_btn": "删除空间",
-            "undo_warning": "此操作无法撤消"
+            "undo_warning": "此操作无法撤消",
+            "confirm_title": "永久删除此空间？",
+            "confirm_description": "空间 \"{{name}}\" 及其所有页面将被永久删除，此操作无法撤消。",
+            "confirm_cancel": "取消",
+            "success": "空间 \"{{name}}\" 已删除",
+            "error": "删除空间失败，请稍后重试"
           },
           "appearance": {
             "title": "外观",
@@ -902,7 +916,16 @@ export const DefaultPluginInstance = new DefaultPlugin({
               "restore_anytime": "You can restore the space at any time",
               "reduce_clutter": "Archived spaces help reduce clutter and improve organization"
             },
-            "archive_btn": "Archive Space"
+            "archive_btn": "Archive Space",
+            "restore_btn": "Restore Space",
+            "archived_title": "This space is archived",
+            "archived_description": "The space is hidden from the main navigation while all content stays intact. You can restore it at any time.",
+            "confirm_title": "Archive this space?",
+            "confirm_description": "Space \"{{name}}\" will be hidden from the main navigation. All content is preserved and you can restore it at any time.",
+            "confirm_cancel": "Cancel",
+            "success": "Space archived",
+            "restore_success": "Space restored",
+            "error": "Operation failed, please try again later"
           },
           "delete": {
             "tab": "Delete",
@@ -922,7 +945,12 @@ export const DefaultPluginInstance = new DefaultPlugin({
               "archive_option": "Would archiving be a better option?"
             },
             "delete_btn": "Delete Space",
-            "undo_warning": "This action cannot be undone"
+            "undo_warning": "This action cannot be undone",
+            "confirm_title": "Permanently delete this space?",
+            "confirm_description": "Space \"{{name}}\" and all of its pages will be permanently deleted. This action cannot be undone.",
+            "confirm_cancel": "Cancel",
+            "success": "Space \"{{name}}\" deleted",
+            "error": "Failed to delete space, please try again later"
           },
           "appearance": {
             "title": "Appearance",

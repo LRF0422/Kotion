@@ -1,11 +1,35 @@
 import { Alert, AlertTitle, AlertDescription } from "@kn/ui"
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
+} from "@kn/ui"
 import { Button } from "@kn/ui"
-import { Trash2, AlertTriangle } from "@kn/icon"
-import React from "react"
-import { useTranslation } from "@kn/common"
+import { toast } from "@kn/ui"
+import { Trash2, AlertTriangle, LoaderCircle } from "@kn/icon"
+import React, { useContext, useState } from "react"
+import { useApi, useNavigator, useTranslation } from "@kn/common"
+import { APIS } from "../../../../api"
+import { SettingContext } from ".."
 
 export const Delete: React.FC = () => {
     const { t } = useTranslation()
+    const { space, spaceId } = useContext(SettingContext)
+    const navigator = useNavigator()
+
+    const [confirmOpen, setConfirmOpen] = useState(false)
+    const [submitting, setSubmitting] = useState(false)
+
+    const handleDelete = async () => {
+        setSubmitting(true)
+        try {
+            await useApi(APIS.DELETE_SPACE, { id: spaceId })
+            toast.success(t("space-settings.delete.success", { name: space?.name }))
+            navigator.go({ to: "/spaces" })
+        } catch (error) {
+            toast.error(t("space-settings.delete.error"))
+            setSubmitting(false)
+        }
+    }
 
     return <div className="space-y-6 max-w-3xl">
         <div>
@@ -44,11 +68,37 @@ export const Delete: React.FC = () => {
             <Button
                 variant="destructive"
                 className="min-w-[150px]"
+                disabled={submitting}
+                onClick={() => setConfirmOpen(true)}
             >
                 <Trash2 className="h-4 w-4 mr-2" />
                 {t("space-settings.delete.delete_btn")}
             </Button>
             <p className="text-xs text-muted-foreground">{t("space-settings.delete.undo_warning")}</p>
         </div>
+
+        <AlertDialog open={confirmOpen} onOpenChange={(o) => { if (!o && !submitting) setConfirmOpen(false) }}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>{t("space-settings.delete.confirm_title")}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        {t("space-settings.delete.confirm_description", { name: space?.name })}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel disabled={submitting}>
+                        {t("space-settings.delete.confirm_cancel")}
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                        disabled={submitting}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={(e) => { e.preventDefault(); handleDelete() }}
+                    >
+                        {submitting && <LoaderCircle className="h-4 w-4 mr-1 animate-spin" />}
+                        {t("space-settings.delete.delete_btn")}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </div>
 }

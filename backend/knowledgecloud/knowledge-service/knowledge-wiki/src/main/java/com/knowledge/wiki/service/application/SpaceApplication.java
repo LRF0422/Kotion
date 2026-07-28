@@ -194,6 +194,59 @@ public class SpaceApplication {
     }
 
     /**
+     * Archive or restore a space. Archived spaces are hidden from the
+     * default space list while all content stays intact.
+     *
+     * @param spaceId  space ID
+     * @param archived true to archive, false to restore
+     */
+    public void archiveSpace(Long spaceId, boolean archived) {
+        Space space = requireSpaceAdmin(spaceId);
+        space.setArchived(archived);
+        spaceService.updateById(space);
+        log.info("Space {} {} by user {}", spaceId, archived ? "archived" : "restored",
+                SecurityContextUtil.getUserId());
+    }
+
+    /**
+     * Permanently delete a space (logic delete) together with its pages.
+     *
+     * @param spaceId space ID
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteSpace(Long spaceId) {
+        requireSpaceAdmin(spaceId);
+        // Mark all pages of the space as deleted so they disappear from
+        // search, graphs and cross-space link lookups.
+        pageService.lambdaUpdate()
+                .eq(Page::getSpaceId, spaceId)
+                .set(Page::getStatus, PageStatus.DELETED)
+                .update();
+        spaceService.removeById(spaceId);
+        log.info("Space {} deleted by user {}", spaceId, SecurityContextUtil.getUserId());
+    }
+
+    /**
+     * Load the space and assert the current user holds ADMIN permission on it
+     * (creator, OWNER or ADMIN member), otherwise throws FORBIDDEN_ACCESS.
+     */
+    private Space requireSpaceAdmin(Long spaceId) {
+        if (spaceId == null) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        Space space = spaceService.getById(spaceId);
+        if (space == null) {
+            throw WikiException.SPACE_NOT_FOUND.newException();
+        }
+        Long userId = SecurityContextUtil.getUserId();
+        if (!IPermissionService.PERMISSION_ADMIN
+                .equals(permissionService.effectiveSpacePermission(userId, space))) {
+            throw WikiException.FORBIDDEN_ACCESS.newException();
+        }
+        return space;
+    }
+
+    /**
      * Get personal space for current user
      * Creates one if it doesn't exist
      *
@@ -752,6 +805,14 @@ public class SpaceApplication {
         // Search by name
         if (dto.getSearchValue() != null && !dto.getSearchValue().isEmpty()) {
             wrapper.like(Space::getName, dto.getSearchValue());
+        }
+
+        // Archived spaces are hidden from the default list; pass archived=true
+        // to query them explicitly.
+        if (Boolean.TRUE.equals(dto.getArchived())) {
+            wrapper.eq(Space::getArchived, true);
+        } else {
+            wrapper.and(w -> w.isNull(Space::getArchived).or().eq(Space::getArchived, false));
         }
 
         wrapper.orderByDesc(Space::getCreateTime);

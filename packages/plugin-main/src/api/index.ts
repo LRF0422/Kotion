@@ -39,6 +39,24 @@ export const APIS = {
         method: 'GET',
         name: 'Get Space Detail'
     } as API,
+    /** Archive a space (hidden from the default list, content preserved) */
+    ARCHIVE_SPACE: {
+        url: '/knowledge-wiki/space/:id/archive',
+        method: 'PUT',
+        name: 'Archive Space'
+    } as API,
+    /** Restore an archived space */
+    UNARCHIVE_SPACE: {
+        url: '/knowledge-wiki/space/:id/unarchive',
+        method: 'PUT',
+        name: 'Unarchive Space'
+    } as API,
+    /** Permanently delete a space and all its pages */
+    DELETE_SPACE: {
+        url: '/knowledge-wiki/space/:id',
+        method: 'DELETE',
+        name: 'Delete Space'
+    } as API,
     GET_PAGE_TREE: {
         url: '/knowledge-wiki/space/:id/page/tree',
         method: 'GET',

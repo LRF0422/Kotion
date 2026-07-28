@@ -24,4 +24,10 @@ public class QuerySpaceDTO extends PageDTO {
      */
     private String searchValue;
 
+    /**
+     * When true, list only archived spaces; otherwise archived spaces
+     * are excluded from the results.
+     */
+    private Boolean archived;
+
 }

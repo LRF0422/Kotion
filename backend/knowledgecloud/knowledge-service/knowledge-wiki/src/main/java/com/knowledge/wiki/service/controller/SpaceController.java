@@ -90,6 +90,36 @@ public class SpaceController {
         return R.success();
     }
 
+    /**
+     * Archive a space (hidden from the default list, content preserved)
+     * PUT /knowledge-wiki/space/{id}/archive
+     */
+    @PutMapping("/{id}/archive")
+    public R<?> archiveSpace(@PathVariable("id") Long id) {
+        spaceApplication.archiveSpace(id, true);
+        return R.success();
+    }
+
+    /**
+     * Restore an archived space
+     * PUT /knowledge-wiki/space/{id}/unarchive
+     */
+    @PutMapping("/{id}/unarchive")
+    public R<?> unarchiveSpace(@PathVariable("id") Long id) {
+        spaceApplication.archiveSpace(id, false);
+        return R.success();
+    }
+
+    /**
+     * Permanently delete a space and all its pages
+     * DELETE /knowledge-wiki/space/{id}
+     */
+    @DeleteMapping("/{id}")
+    public R<?> deleteSpace(@PathVariable("id") Long id) {
+        spaceApplication.deleteSpace(id);
+        return R.success();
+    }
+
     @GetMapping("/{id}/page/tree")
     public R<List<Tree<Long>>> pageTree(@PathVariable("id") Long id,
             @RequestParam(value = "searchValue", required = false) String searchValue) {
