@@ -4,11 +4,12 @@ import { LayoutTemplate, Network, Settings, Trash2, Undo2, CircleArrowUp, FileDo
 import { useTranslation } from '@kn/common'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@kn/ui'
 import { TemplateCreator } from '../TemplateCreator'
+import { PageItemIcon } from './PageItemIcon'
 
 interface TrashItem {
     id: string
     title: string
-    icon?: { icon: string }
+    icon?: { type?: string; icon: string }
 }
 
 interface BottomUtilitiesProps {
@@ -127,8 +128,8 @@ export const BottomUtilities: React.FC<BottomUtilitiesProps> = ({
                     <div className="max-h-[300px] sm:max-h-[350px] overflow-auto">
                         {trash.length > 0 ? trash.map((item, index) => (
                             <DropdownMenuItem key={index} className="flex flex-row justify-between items-center gap-2 py-2">
-                                <div className="flex-1 truncate text-xs sm:text-sm">
-                                    {item.icon?.icon && <span className="mr-1">{item.icon.icon}</span>}
+                                <div className="flex-1 truncate text-xs sm:text-sm flex items-center">
+                                    {item.icon?.icon && <PageItemIcon icon={item.icon} className="mr-1" />}
                                     {item.title}
                                 </div>
                                 <div className="flex items-center gap-1">

@@ -3,11 +3,12 @@ import { Button, cn, Dialog, DialogContent, DialogHeader, DialogTitle } from '@k
 import { Star, Trash2, ChevronDown, ChevronRight } from '@kn/icon'
 import { useTranslation, useApi } from '@kn/common'
 import { APIS } from '../../../api'
+import { PageItemIcon } from './PageItemIcon'
 
 interface FavoriteItem {
     id: string
     title: string
-    icon?: { icon: string }
+    icon?: { type?: string; icon: string }
 }
 
 interface FavoritesSectionProps {
@@ -90,7 +91,7 @@ export const FavoritesSection: React.FC<FavoritesSectionProps> = ({
                                 onClick={() => onPageClick(item.id)}
                             >
                                 {item.icon?.icon && (
-                                    <span className="flex-shrink-0 text-xs sm:text-sm">{item.icon.icon}</span>
+                                    <PageItemIcon icon={item.icon} />
                                 )}
                                 <span className="flex-1 truncate">{item.title || 'Untitled'}</span>
                                 <Button
@@ -143,7 +144,7 @@ export const FavoritesSection: React.FC<FavoritesSectionProps> = ({
                                         }}
                                     >
                                         {item.icon?.icon && (
-                                            <span className="text-sm">{item.icon.icon}</span>
+                                            <PageItemIcon icon={item.icon} size={16} />
                                         )}
                                         <span className="flex-1 text-sm truncate">{item.title || 'Untitled'}</span>
                                         <Button

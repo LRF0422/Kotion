@@ -10,6 +10,7 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
+    FlatEmoji,
 } from "@kn/ui"
 import { ChevronDown, FileText, X } from "@kn/icon"
 import { useTranslation, type PageTab } from "@kn/common"
@@ -135,8 +136,8 @@ export const TabBar: React.FC<TabBarProps> = ({
                                 title={tab.title}
                             >
                                 {tab.icon ? (
-                                    <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center text-[13px] leading-none">
-                                        {tab.icon}
+                                    <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center leading-none">
+                                        <FlatEmoji emoji={tab.icon} size={13} />
                                     </span>
                                 ) : (
                                     <FileText className="h-3.5 w-3.5 flex-shrink-0 opacity-70" />
@@ -204,8 +205,8 @@ export const TabBar: React.FC<TabBarProps> = ({
                                 onSelect={() => onActivate(tab.pageId)}
                             >
                                 {tab.icon ? (
-                                    <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center text-[13px] leading-none">
-                                        {tab.icon}
+                                    <span className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center leading-none">
+                                        <FlatEmoji emoji={tab.icon} size={13} />
                                     </span>
                                 ) : (
                                     <FileText className="h-3.5 w-3.5 flex-shrink-0 opacity-70" />

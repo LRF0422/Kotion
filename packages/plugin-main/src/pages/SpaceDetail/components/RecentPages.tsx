@@ -3,6 +3,7 @@ import { cn } from '@kn/ui'
 import { Clock, ChevronDown, ChevronRight } from '@kn/icon'
 import { useTranslation } from '@kn/common'
 import { RecentPageItem } from '../hooks/useRecentPages'
+import { PageItemIcon } from './PageItemIcon'
 
 interface RecentPagesProps {
     pages: RecentPageItem[]
@@ -47,7 +48,7 @@ export const RecentPages: React.FC<RecentPagesProps> = ({
                             onClick={() => onPageClick(page.id)}
                         >
                             {page.icon?.icon && (
-                                <span className="flex-shrink-0 text-xs sm:text-sm">{page.icon.icon}</span>
+                                <PageItemIcon icon={page.icon} />
                             )}
                             <span className="flex-1 truncate">{page.title || 'Untitled'}</span>
                             {page.updatedAt && (

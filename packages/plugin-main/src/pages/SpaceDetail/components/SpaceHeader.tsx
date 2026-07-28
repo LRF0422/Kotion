@@ -2,6 +2,7 @@ import React from 'react'
 import { IconButton, Input } from '@kn/ui'
 import { Search, StarIcon } from '@kn/icon'
 import { Space } from '../../../model/Space'
+import { PageItemIcon } from './PageItemIcon'
 
 interface SpaceHeaderProps {
     space: Space
@@ -28,7 +29,7 @@ export const SpaceHeader: React.FC<SpaceHeaderProps> = ({
                     className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
                     onClick={onNavigateHome}
                 >
-                    <div className="text-xl flex-shrink-0">{space?.icon?.icon}</div>
+                    <PageItemIcon icon={space?.icon} size={20} />
                     <div className="flex flex-col min-w-0 flex-1">
                         <h2 className="font-semibold text-sm truncate">{space.name}</h2>
                     </div>
