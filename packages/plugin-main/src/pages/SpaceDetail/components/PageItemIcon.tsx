@@ -1,16 +1,18 @@
 import React from 'react'
-import { FlatEmoji, cn } from '@kn/ui'
+import { FlatEmoji, DateIcon, DateIconConfig, cn } from '@kn/ui'
 import { useOptionalService, FileService } from '@kn/common'
 
 /**
  * 侧边栏/列表里的页面小图标统一渲染：
  * - EMOJI：扁平化（Twemoji）渲染，与页面头部保持一致
  * - IMAGE：解析文件名为下载 URL 后以圆角小图展示
+ * - DATE：有 config 时渲染迷你日历卡片，否则降级为 icon 里的 📅
  */
 
 export interface PageIconData {
     type?: string
     icon: string
+    config?: DateIconConfig
 }
 
 interface PageItemIconProps {
@@ -24,6 +26,10 @@ export const PageItemIcon: React.FC<PageItemIconProps> = ({ icon, size = 14, cla
     const fileService = useOptionalService('fileService') as FileService | undefined
 
     if (!icon?.icon) return null
+
+    if (icon.type === 'DATE' && icon.config) {
+        return <DateIcon config={icon.config} size={size} className={className} />
+    }
 
     if (icon.type === 'IMAGE') {
         const name = icon.icon

@@ -7,12 +7,16 @@ import { CompactEmoji, fetchEmojis } from "emojibase";
 import { ScrollArea } from "./ui/scroll-area";
 import { Input } from "./ui/input";
 import { EmojiPicker, EmojiPickerContent, EmojiPickerSearch } from "./ui/emoji-picker";
+import type { DateIconConfig } from "./ui/date-icon";
 
-export type IconType = 'IMAGE' | 'EMOJI'
+export type IconType = 'IMAGE' | 'EMOJI' | 'DATE'
 
 export interface IconPropsProps {
     type: IconType
+    /** EMOJI: unicode 字符；IMAGE: 文件名/URL；DATE: 降级展示用的 emoji（📅） */
     icon: string
+    /** DATE 类型的日历卡片配置（后端不持久化，仅随文档 attrs 保存） */
+    config?: DateIconConfig
 }
 
 export interface IconSelectorProps {

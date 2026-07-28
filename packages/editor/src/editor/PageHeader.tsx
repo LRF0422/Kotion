@@ -1,4 +1,4 @@
-import { Separator, cn, Button, PageIconPicker, FlatEmoji, type IconPropsProps } from "@kn/ui";
+import { Separator, cn, Button, PageIconPicker, FlatEmoji, DateIcon, type IconPropsProps } from "@kn/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@kn/ui";
 import { Clock, Plus, X, Image, ImagePlus, Trash2, Move, GripVertical } from "@kn/icon";
 import React, { useContext, useState, useCallback, useRef, useEffect } from "react";
@@ -326,6 +326,12 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ editor }) => {
 											alt="Page icon"
 											className="h-20 w-20 rounded-xl object-cover transition-transform duration-300 group-hover:scale-105"
 											draggable={false}
+										/>
+									) : attrs?.icon?.type === 'DATE' && attrs?.icon?.config ? (
+										<DateIcon
+											config={attrs.icon.config}
+											size={80}
+											className="transition-transform duration-300 group-hover:scale-105 shadow-sm"
 										/>
 									) : (
 										<FlatEmoji
