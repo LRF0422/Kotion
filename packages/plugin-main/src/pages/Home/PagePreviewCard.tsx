@@ -1,13 +1,23 @@
 /**
  * PagePreviewCard — hover preview for page rows (Home recent/favorite lists).
  *
- * Wraps a row in a HoverCard; when the card opens, the target page's content
- * is fetched (short-TTL cache so repeated hovers don't refetch) and rendered
- * with a real read-only Tiptap editor, so the preview matches actual page
- * rendering (headings, lists, code blocks, embeds…) instead of a plain-text
- * excerpt. The card body is non-interactive; clicking it opens the page.
+ * A single floating card is shared by all rows (via PagePreviewProvider):
+ * hovering a row shows the card, and moving to another row keeps it mounted —
+ * the card slides to the new row while the fresh content crossfades in,
+ * instead of the close-and-reopen flicker of per-row popovers. Content is
+ * fetched lazily (short-TTL cache) and rendered with a real read-only Tiptap
+ * editor, so the preview matches actual page rendering. The card body is
+ * non-interactive; clicking it opens the page.
  */
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
 import {
     AnyExtension,
     Content,
@@ -16,7 +26,7 @@ import {
     useEditor,
     useEditorExtension,
 } from "@kn/editor";
-import { HoverCard, HoverCardContent, HoverCardTrigger, Skeleton, cn } from "@kn/ui";
+import { Skeleton, cn } from "@kn/ui";
 import { FileText } from "@kn/icon";
 import { FileService, useApi, useOptionalService, useTranslation } from "@kn/common";
 import { APIS } from "../../api";
@@ -223,34 +233,222 @@ export interface PagePreviewCardProps {
     children: React.ReactElement;
 }
 
+/** What a hovered row hands to the shared floating card. */
+interface PreviewTarget {
+    pageId: string;
+    rect: { top: number; left: number; right: number };
+    onOpenPage?: () => void;
+}
+
+interface PreviewContextValue {
+    open: (target: PreviewTarget) => void;
+    isOpen: () => boolean;
+    scheduleClose: () => void;
+    cancelClose: () => void;
+}
+
+const PreviewContext = createContext<PreviewContextValue | null>(null);
+
+// Card geometry used for viewport collision handling. Height is an estimate
+// (content-driven), good enough to keep the card fully on screen.
+const CARD_WIDTH = 400;
+const CARD_EST_HEIGHT = 440;
+const CARD_GAP = 12;
+const VIEWPORT_MARGIN = 8;
+const OPEN_DELAY = 500;
+const CLOSE_DELAY = 300;
+const EXIT_MS = 200;
+
+/**
+ * Hosts the single shared preview card. Wrap it around a list whose rows use
+ * PagePreviewCard — the card is position:fixed, so placement in the tree only
+ * scopes which triggers share it.
+ */
+export const PagePreviewProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [target, setTarget] = useState<PreviewTarget | null>(null);
+    const [visible, setVisible] = useState(false);
+    // "Open" means the card is mounted (target set) — NOT the post-rAF visible
+    // flag. Basing isOpen() on visibility raced with the enter animation: a row
+    // switch during those frames scheduled a fresh delayed open while the old
+    // row's leave scheduled a close, so the card flashed and vanished.
+    const targetRef = useRef<PreviewTarget | null>(null);
+    const cardRef = useRef<HTMLDivElement>(null);
+    const closeTimer = useRef<ReturnType<typeof setTimeout>>();
+    const removeTimer = useRef<ReturnType<typeof setTimeout>>();
+
+    const setCard = useCallback((t: PreviewTarget | null) => {
+        targetRef.current = t;
+        setTarget(t);
+    }, []);
+
+    const cancelClose = useCallback(() => {
+        clearTimeout(closeTimer.current);
+        clearTimeout(removeTimer.current);
+    }, []);
+
+    const open = useCallback(
+        (next: PreviewTarget) => {
+            cancelClose();
+            const wasMounted = targetRef.current !== null;
+            setCard(next);
+            if (wasMounted) {
+                // Already on screen (possibly mid-exit): keep/restore visibility
+                // so switching rows never blanks the card.
+                setVisible(true);
+            } else {
+                // Mount hidden at the final position first, then flip visible on
+                // the next frame so the enter transition (fade + scale) plays.
+                requestAnimationFrame(() =>
+                    requestAnimationFrame(() => {
+                        if (targetRef.current) setVisible(true);
+                    })
+                );
+            }
+        },
+        [cancelClose, setCard]
+    );
+
+    const close = useCallback(() => {
+        cancelClose();
+        setVisible(false);
+        removeTimer.current = setTimeout(() => setCard(null), EXIT_MS);
+    }, [cancelClose, setCard]);
+
+    const scheduleClose = useCallback(() => {
+        cancelClose();
+        closeTimer.current = setTimeout(close, CLOSE_DELAY);
+    }, [cancelClose, close]);
+
+    const isOpen = useCallback(() => targetRef.current !== null, []);
+
+    const ctx = useMemo(
+        () => ({ open, isOpen, scheduleClose, cancelClose }),
+        [open, isOpen, scheduleClose, cancelClose]
+    );
+
+    // The fixed-position card goes stale as soon as the page scrolls/resizes —
+    // dismiss immediately. Scrolls that originate inside the card itself (code
+    // blocks/tables/embeds in the rendered content can adjust their scroll on
+    // mount) must NOT dismiss it, or the card self-closes right after opening.
+    useEffect(() => {
+        if (!target) return;
+        const dismiss = (e?: Event) => {
+            if (e?.target instanceof Node && cardRef.current?.contains(e.target)) return;
+            cancelClose();
+            setVisible(false);
+            setCard(null);
+        };
+        window.addEventListener("scroll", dismiss, true);
+        window.addEventListener("resize", dismiss);
+        return () => {
+            window.removeEventListener("scroll", dismiss, true);
+            window.removeEventListener("resize", dismiss);
+        };
+    }, [!!target, cancelClose, setCard]);
+
+    useEffect(() => () => cancelClose(), [cancelClose]);
+
+    // Prefer the row's right side; flip to the left when it would overflow,
+    // and clamp vertically so the (estimated) card stays inside the viewport.
+    const pos = useMemo(() => {
+        if (!target) return null;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        let left = target.rect.right + CARD_GAP;
+        if (left + CARD_WIDTH > vw - VIEWPORT_MARGIN) {
+            left = target.rect.left - CARD_GAP - CARD_WIDTH;
+        }
+        if (left < VIEWPORT_MARGIN) left = VIEWPORT_MARGIN;
+        let top = target.rect.top;
+        if (top + CARD_EST_HEIGHT > vh - VIEWPORT_MARGIN) {
+            top = Math.max(VIEWPORT_MARGIN, vh - VIEWPORT_MARGIN - CARD_EST_HEIGHT);
+        }
+        return { left, top };
+    }, [target]);
+
+    return (
+        <PreviewContext.Provider value={ctx}>
+            {children}
+            {target && pos && (
+                <div
+                    ref={cardRef}
+                    className={cn(
+                        "fixed z-50 w-[400px] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md",
+                        // top/left transition makes the card glide between rows;
+                        // opacity/scale handle enter and exit.
+                        "transition-[top,left,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        visible ? "opacity-100 scale-100" : "opacity-0 scale-[0.97]",
+                        target.onOpenPage && "cursor-pointer"
+                    )}
+                    style={{ top: pos.top, left: pos.left }}
+                    onMouseEnter={cancelClose}
+                    onMouseLeave={scheduleClose}
+                    onClick={() => {
+                        const go = target.onOpenPage;
+                        if (!go) return;
+                        close();
+                        go();
+                    }}
+                >
+                    {/* Keyed by page id: switching rows remounts the body, so the
+                        new page's content fades in while the card slides over. */}
+                    <div key={target.pageId} className="animate-in fade-in-0 duration-200">
+                        <PreviewBody pageId={target.pageId} />
+                    </div>
+                </div>
+            )}
+        </PreviewContext.Provider>
+    );
+};
+
+PagePreviewProvider.displayName = "PagePreviewProvider";
+
 export const PagePreviewCard: React.FC<PagePreviewCardProps> = ({
     pageId,
     disabled,
     onOpenPage,
     children,
 }) => {
-    const [open, setOpen] = useState(false);
+    const ctx = useContext(PreviewContext);
+    const openTimer = useRef<ReturnType<typeof setTimeout>>();
 
-    if (disabled) return children;
+    useEffect(() => () => clearTimeout(openTimer.current), []);
 
-    return (
-        <HoverCard open={open} onOpenChange={setOpen} openDelay={500} closeDelay={150}>
-            <HoverCardTrigger asChild>{children}</HoverCardTrigger>
-            <HoverCardContent
-                side="right"
-                align="start"
-                sideOffset={8}
-                className={cn("w-[400px] overflow-hidden p-0", onOpenPage && "cursor-pointer")}
-                onClick={() => {
-                    if (!onOpenPage) return;
-                    setOpen(false);
-                    onOpenPage();
-                }}
-            >
-                {open && <PreviewBody pageId={pageId} />}
-            </HoverCardContent>
-        </HoverCard>
-    );
+    if (disabled || !ctx) return children;
+
+    const openAt = (el: HTMLElement) => {
+        const r = el.getBoundingClientRect();
+        ctx.open({
+            pageId,
+            rect: { top: r.top, left: r.left, right: r.right },
+            onOpenPage,
+        });
+    };
+
+    const childProps = children.props as {
+        onMouseEnter?: React.MouseEventHandler<HTMLElement>;
+        onMouseLeave?: React.MouseEventHandler<HTMLElement>;
+    };
+
+    return React.cloneElement(children, {
+        onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+            childProps.onMouseEnter?.(e);
+            ctx.cancelClose();
+            clearTimeout(openTimer.current);
+            const el = e.currentTarget;
+            if (ctx.isOpen()) {
+                // Card already up: switch instantly so it glides to this row.
+                openAt(el);
+            } else {
+                openTimer.current = setTimeout(() => openAt(el), OPEN_DELAY);
+            }
+        },
+        onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+            childProps.onMouseLeave?.(e);
+            clearTimeout(openTimer.current);
+            ctx.scheduleClose();
+        },
+    } as Partial<React.HTMLAttributes<HTMLElement>>);
 };
 
 PagePreviewCard.displayName = "PagePreviewCard";

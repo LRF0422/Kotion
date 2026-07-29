@@ -6,7 +6,7 @@ import { ArrowRight, BanIcon, Book, Box, FilePlus, FolderPlus, LayoutGrid, Moon,
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
-import { PagePreviewCard } from "./PagePreviewCard";
+import { PagePreviewCard, PagePreviewProvider } from "./PagePreviewCard";
 import { SpaceGraph } from "../SpaceGraph";
 import { useTranslation } from "@kn/common";
 import { format, parseISO, formatDistanceToNow } from "@kn/ui";
@@ -618,6 +618,7 @@ export const Home: React.FC = () => {
                             />
                         )
                     ) : (
+                        <PagePreviewProvider>
                         <ul className="flex flex-col">
                             {displayedPages.map((page: any) => {
                                 const hue = pickHue(page.id)
@@ -677,6 +678,7 @@ export const Home: React.FC = () => {
                                 )
                             })}
                         </ul>
+                        </PagePreviewProvider>
                     )}
                 </section>
 
