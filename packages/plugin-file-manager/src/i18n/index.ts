@@ -141,6 +141,7 @@ export const translations = {
         attachment: {
             empty: 'Empty attachment',
             downloadTitle: 'Download {{name}}',
+            previewTitle: 'Preview {{name}}',
         },
         image: {
             loading: 'Loading...',
@@ -304,6 +305,7 @@ export const translations = {
         attachment: {
             empty: '空附件',
             downloadTitle: '下载 {{name}}',
+            previewTitle: '预览 {{name}}',
         },
         image: {
             loading: '加载中...',

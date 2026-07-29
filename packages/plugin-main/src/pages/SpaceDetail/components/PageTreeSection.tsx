@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { Button, Input, TreeView, cn } from '@kn/ui'
-import { Plus, MoreHorizontal, Star, Trash2, Package, Link } from '@kn/icon'
-import { useTranslation } from '@kn/common'
+import { Plus, MoreHorizontal, Star, Trash2, Package, Link, AppWindow } from '@kn/icon'
+import { useTranslation, PageEditWindow } from '@kn/common'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@kn/ui'
 import { SiderMenuItemProps } from '../../../pages/components/SiderMenu'
 import { PageItemIcon } from './PageItemIcon'
@@ -40,6 +40,17 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
     className,
 }) => {
     const { t } = useTranslation()
+    // Pages currently opened in floating PageEditWindows (multiple windows cascade)
+    const [editWindowPageIds, setEditWindowPageIds] = useState<string[]>([])
+
+    const openEditWindow = useCallback((pageId: string) => {
+        // Ignore if this page's window is already open — the impl handles focus
+        setEditWindowPageIds((prev) => prev.includes(pageId) ? prev : [...prev, pageId])
+    }, [])
+
+    const closeEditWindow = useCallback((pageId: string) => {
+        setEditWindowPageIds((prev) => prev.filter((id) => id !== pageId))
+    }, [])
 
     const handleCopyLink = useCallback((pageId: string) => {
         const url = `${window.location.origin}/space-detail/${spaceId}/page/edit/${pageId}`
@@ -97,6 +108,15 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
                                 }}
                             >
                                 <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {t('favorites.add') || 'Add to favorites'}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                className="flex flex-row gap-2 text-xs sm:text-sm"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    openEditWindow(treeNode.id)
+                                }}
+                            >
+                                <AppWindow className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {t('page.editInWindow') || 'Edit in window'}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 className="flex flex-row gap-2 text-xs sm:text-sm"
@@ -197,6 +217,15 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
                     </div>
                 ) : null}
             </div>
+
+            {/* Floating page editors opened from the node context menu */}
+            {editWindowPageIds.map((pageId) => (
+                <PageEditWindow
+                    key={pageId}
+                    pageId={pageId}
+                    onClose={() => closeEditWindow(pageId)}
+                />
+            ))}
         </div>
     )
 }

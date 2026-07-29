@@ -19,6 +19,8 @@ export interface FilePreviewDialogProps {
     file: FileItem | null;
     /** Download the file (falls back to opening the URL when not provided) */
     onDownload?: (file: FileItem) => void;
+    /** Optional pre-resolved URL (e.g. absolute http links); overrides fileService resolution */
+    url?: string;
 }
 
 /**
@@ -31,6 +33,7 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     onOpenChange,
     file,
     onDownload,
+    url: urlOverride,
 }) => {
     const fileService = useFileService();
     const [loading, setLoading] = useState(true);
@@ -40,9 +43,10 @@ export const FilePreviewDialog: React.FC<FilePreviewDialogProps> = ({
     const kind: PreviewKind = file && !file.isFolder ? getPreviewKind(file.name) : "none";
 
     const url = useMemo(() => {
+        if (urlOverride) return urlOverride;
         if (!file || !file.path) return "";
         return fileService.getDownloadUrl(file.path);
-    }, [file, fileService]);
+    }, [file, fileService, urlOverride]);
 
     // Reset loading/error state whenever the previewed file changes
     useEffect(() => {

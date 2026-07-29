@@ -494,6 +494,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "title": "页面",
           "create": "新建页面",
           "copyLink": "复制链接",
+          "editInWindow": "小窗编辑",
           "moveToTrash": "移动到回收站"
         },
         "editor": {
@@ -1052,6 +1053,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "title": "Page",
           "create": "New Page",
           "copyLink": "Copy link",
+          "editInWindow": "Edit in window",
           "moveToTrash": "Move to trash"
         },
         "editor": {

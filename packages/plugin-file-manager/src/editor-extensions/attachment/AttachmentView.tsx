@@ -1,8 +1,11 @@
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useFileService } from "@kn/common";
 import { cn } from "@kn/ui";
 import { useI18n } from "../../i18n/use-i18n";
+import { isPreviewable } from "../../utils/fileUtils";
+import { FilePreviewDialog } from "../component/dialogs";
+import type { FileItem } from "../component/FileContext";
 import {
     DownloadIcon,
     BsFileEarmark,
@@ -95,9 +98,10 @@ const getFileVisual = (fileName: string): FileVisual => {
 
 export const AttachmentView: React.FC<NodeViewProps> = (props) => {
     const { node, editor } = props;
-    const { name, path, size, fileType } = node.attrs;
+    const { id, name, path, size, fileType } = node.attrs;
     const fileService = useFileService();
     const { t } = useI18n();
+    const [previewOpen, setPreviewOpen] = useState(false);
 
     // Determine if this is an inline attachment
     const isInline = node.type.name === "attachmentInline";
@@ -111,6 +115,19 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
         return fileService.getDownloadUrl(path);
     }, [path, fileService]);
 
+    // Whether the file can be previewed inline (images, video, audio, PDF, text)
+    const canPreview = !!name && !!downloadUrl && isPreviewable(name);
+
+    // Minimal FileItem for the shared preview dialog
+    const previewFile = useMemo<FileItem>(() => ({
+        id: id ?? "",
+        name: name ?? "",
+        isFolder: false,
+        type: { value: "FILE" as const },
+        path: path ?? undefined,
+        size: size || undefined,
+    }), [id, name, path, size]);
+
     // Handle download
     const handleDownload = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -119,6 +136,27 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
             window.open(downloadUrl, "_blank");
         }
     };
+
+    // Click on the card: preview when possible, otherwise download
+    const handleClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (canPreview) {
+            setPreviewOpen(true);
+        } else if (downloadUrl) {
+            window.open(downloadUrl, "_blank");
+        }
+    };
+
+    // Shared preview dialog element
+    const previewDialog = canPreview ? (
+        <FilePreviewDialog
+            open={previewOpen}
+            onOpenChange={setPreviewOpen}
+            file={previewFile}
+            url={downloadUrl}
+        />
+    ) : null;
 
     // If no name, show placeholder
     if (!name) {
@@ -154,7 +192,7 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
                         "transition-colors hover:border-border hover:bg-muted/80",
                         editor.isEditable ? "cursor-pointer" : "cursor-default"
                     )}
-                    onClick={handleDownload}
+                    onClick={handleClick}
                     title={name}
                 >
                     <Icon className={cn("h-4 w-4 flex-shrink-0", icon)} />
@@ -165,6 +203,7 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
                         </span>
                     )}
                 </span>
+                {previewDialog}
             </NodeViewWrapper>
         );
     }
@@ -178,9 +217,9 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
                     "transition-all duration-200 hover:border-border hover:bg-accent/30 hover:shadow-sm",
                     editor.isEditable ? "cursor-pointer" : "cursor-default"
                 )}
-                onClick={handleDownload}
+                onClick={handleClick}
                 role="button"
-                title={t('attachment.downloadTitle', { name })}
+                title={canPreview ? t('attachment.previewTitle', { name }) : t('attachment.downloadTitle', { name })}
             >
                 {/* File type icon */}
                 <span
@@ -210,10 +249,13 @@ export const AttachmentView: React.FC<NodeViewProps> = (props) => {
                         "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground/60",
                         "transition-colors hover:bg-accent hover:text-foreground"
                     )}
+                    onClick={handleDownload}
+                    title={t('attachment.downloadTitle', { name })}
                 >
                     <DownloadIcon className="h-4 w-4" />
                 </span>
             </div>
+            {previewDialog}
         </NodeViewWrapper>
     );
 };
