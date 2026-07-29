@@ -25,6 +25,7 @@ import { event } from '@kn/common';
 import { searchPages, PageTreeNode } from '../services/linkService';
 import { useSpaceService } from '../../hooks';
 import { useI18n } from '../../i18n/use-i18n';
+import { PagePreviewPane } from './PagePreviewPane';
 import type { LinkSuggestionListHandle, LinkSuggestionCommandProps } from '../extensions/LinkTrigger';
 
 /** Page item — matches the slash menu's item look (icon chip + hover shift). */
@@ -93,6 +94,9 @@ export const PageLinkPicker = forwardRef<LinkSuggestionListHandle, PickerProps>(
         const [loading, setLoading] = useState(true);
         const [creating, setCreating] = useState(false);
         const [selectedIndex, setSelectedIndex] = useState(0);
+        // Debounced id of the highlighted page — drives the side preview pane
+        // without refetching on every arrow-key/hover step through the list.
+        const [previewPageId, setPreviewPageId] = useState<string | null>(null);
         const listRef = useRef<HTMLDivElement>(null);
 
         // Fetch pages across all spaces when the inline query changes (debounced).
@@ -119,6 +123,17 @@ export const PageLinkPicker = forwardRef<LinkSuggestionListHandle, PickerProps>(
             const el = listRef.current?.querySelector<HTMLElement>(`[data-index="${selectedIndex}"]`);
             el?.scrollIntoView({ block: 'nearest' });
         }, [selectedIndex, totalCount]);
+
+        // Editor-rendered preview of the highlighted page (create action → none).
+        useEffect(() => {
+            const page = pages[selectedIndex];
+            if (!page) {
+                setPreviewPageId(null);
+                return;
+            }
+            const timer = setTimeout(() => setPreviewPageId(page.id), 250);
+            return () => clearTimeout(timer);
+        }, [pages, selectedIndex]);
 
         const handleCreate = useCallback(async () => {
             const title = query.trim();
@@ -170,10 +185,13 @@ export const PageLinkPicker = forwardRef<LinkSuggestionListHandle, PickerProps>(
         return (
             <div
                 className={cn(
-                    "w-[320px] p-2 rounded-xl backdrop-blur-sm",
+                    "flex items-stretch overflow-hidden rounded-xl backdrop-blur-sm",
                     "bg-popover text-popover-foreground",
                     "border border-border/60 shadow-xl dark:shadow-2xl"
                 )}
+            >
+            <div
+                className="w-[320px] flex-shrink-0 p-2"
                 role="listbox"
                 aria-label={t('bidirectionalLink.searchPagesPlaceholder')}
             >
@@ -248,6 +266,15 @@ export const PageLinkPicker = forwardRef<LinkSuggestionListHandle, PickerProps>(
                     <span>{t('bidirectionalLink.navHint')}</span>
                     <span>{t('bidirectionalLink.selectHint')}</span>
                 </div>
+            </div>
+
+            {/* Side preview — editor-rendered content of the highlighted page */}
+            {previewPageId && (
+                <PagePreviewPane
+                    pageId={previewPageId}
+                    className="w-[340px] flex-shrink-0 border-l border-border/60 max-h-[380px]"
+                />
+            )}
             </div>
         );
     }

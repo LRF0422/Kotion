@@ -6,6 +6,7 @@ import { ArrowRight, BanIcon, Book, Box, FilePlus, FolderPlus, LayoutGrid, Moon,
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
+import { PagePreviewCard } from "./PagePreviewCard";
 import { SpaceGraph } from "../SpaceGraph";
 import { useTranslation } from "@kn/common";
 import { format, parseISO, formatDistanceToNow } from "@kn/ui";
@@ -622,8 +623,15 @@ export const Home: React.FC = () => {
                                 const hue = pickHue(page.id)
                                 const styles = hueStyles(hue)
                                 return (
-                                    <li
+                                    // Hover shows an editor-rendered preview card (desktop only —
+                                    // hover cards don't fit touch interaction).
+                                    <PagePreviewCard
                                         key={page.id}
+                                        pageId={page.id}
+                                        disabled={isMobile}
+                                        onOpenPage={() => navigator.go({ to: `/space-detail/${page.spaceId}/page/edit/${page.id}` })}
+                                    >
+                                    <li
                                         onClick={() => navigator.go({ to: `/space-detail/${page.spaceId}/page/edit/${page.id}` })}
                                         className={cn(
                                             "group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5",
@@ -665,6 +673,7 @@ export const Home: React.FC = () => {
                                             </span>
                                         </span>
                                     </li>
+                                    </PagePreviewCard>
                                 )
                             })}
                         </ul>

@@ -151,6 +151,9 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "no-space-match": "没有匹配的空间",
           "no-page-match": "没有匹配的页面",
           "clear-tags": "清除",
+          "untitled": "未命名",
+          "preview-error": "预览加载失败",
+          "preview-empty": "该页面暂无内容",
           "greeting": {
             "morning": "早上好",
             "afternoon": "下午好",
@@ -710,6 +713,9 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "no-space-match": "No matching spaces",
           "no-page-match": "No matching pages",
           "clear-tags": "Clear",
+          "untitled": "Untitled",
+          "preview-error": "Failed to load preview",
+          "preview-empty": "This page is empty",
           "greeting": {
             "morning": "Good Morning",
             "afternoon": "Good Afternoon",
