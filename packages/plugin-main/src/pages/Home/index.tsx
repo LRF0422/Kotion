@@ -1,9 +1,9 @@
 import { APIS } from "../../api";
-import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, Skeleton, cn, useIsMobile } from "@kn/ui";
-import { useApi, useNavigator, useSelector, GlobalState, event, TOGGLE_AI_ASSISTANT } from "@kn/common";
+import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, Input, Skeleton, cn, useIsMobile } from "@kn/ui";
+import { useApi, useNavigator, useSelector, GlobalState, event, TOGGLE_AI_ASSISTANT, useDebounce } from "@kn/common";
 import { Space } from "../../model/Space";
-import { ArrowRight, BanIcon, Book, Box, FilePlus, FolderPlus, LayoutGrid, Moon, Network, Plus, Sparkles, Star, Sun, Sunset, Users } from "@kn/icon";
-import React, { useEffect, useState } from "react";
+import { ArrowRight, BanIcon, Book, Box, FilePlus, FolderPlus, LayoutGrid, Moon, Network, Plus, SearchIcon, Sparkles, Star, Sun, Sunset, Tag, Users, X } from "@kn/icon";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
 import { SpaceGraph } from "../SpaceGraph";
@@ -70,6 +70,16 @@ export const Home: React.FC = () => {
     const { t } = useTranslation()
     const { userInfo } = useSelector((state: GlobalState) => state)
 
+    // Search + tag-filter state for the Recent sections. Space/page queries are
+    // debounced and resolved server-side; the page tag filter runs client-side.
+    const [spaceQuery, setSpaceQuery] = useState("")
+    const [pageQuery, setPageQuery] = useState("")
+    const [selectedTags, setSelectedTags] = useState<string[]>([])
+    const debouncedSpaceQuery = useDebounce(spaceQuery, { wait: 400 })
+    const debouncedPageQuery = useDebounce(pageQuery, { wait: 400 })
+    const [spacesLoading, setSpacesLoading] = useState(true)
+    const [pagesLoading, setPagesLoading] = useState(true)
+
     // Update current hour every minute to adapt to time changes
     useEffect(() => {
         const timer = setInterval(() => {
@@ -96,23 +106,55 @@ export const Home: React.FC = () => {
         return <Moon className="h-8 w-8 text-indigo-400" strokeWidth={1.6} />
     }
 
+    // Team spaces + favorites load once (and on manual refresh via `flag`).
     useEffect(() => {
         setLoading(true)
         Promise.all([
-            useApi(APIS.QUERY_SPACE, { template: false, pageSize: 4 }),
             useApi(APIS.QUERY_SPACE, { template: false, pageSize: 4, type: 'COLLABORATION' }),
-            useApi(APIS.QUERY_RECENT_PAGE, { pageSize: 8 }),
             useApi(APIS.QUERY_FAVORITE, { pageSize: 8 })
-        ]).then(([spacesRes, teamRes, pagesRes, favoritesRes]) => {
-            setRecentSpaces(spacesRes.data.records || [])
+        ]).then(([teamRes, favoritesRes]) => {
             setTeamSpaces(teamRes.data.records || [])
-            setRecentPages(pagesRes.data.records || [])
             const favData = favoritesRes?.data
             setFavoritePages(Array.isArray(favData) ? favData : (favData?.records || []))
         }).finally(() => {
             setLoading(false)
         })
     }, [flag])
+
+    // Recent spaces — name search resolved server-side; fetch a wider set while
+    // searching so matches beyond the first few are reachable.
+    useEffect(() => {
+        setSpacesLoading(true)
+        const searching = debouncedSpaceQuery.trim().length > 0
+        useApi(APIS.QUERY_SPACE, {
+            template: false,
+            pageSize: searching ? 12 : 4,
+            ...(searching ? { searchValue: debouncedSpaceQuery.trim() } : {}),
+        }).then((res) => {
+            setRecentSpaces(res.data.records || [])
+        }).catch(() => {
+            setRecentSpaces([])
+        }).finally(() => {
+            setSpacesLoading(false)
+        })
+    }, [debouncedSpaceQuery, flag])
+
+    // Recent pages — title search resolved server-side. Fetch a wider candidate
+    // pool so the client-side tag filter has enough rows to match against.
+    useEffect(() => {
+        setPagesLoading(true)
+        const searching = debouncedPageQuery.trim().length > 0
+        useApi(APIS.QUERY_RECENT_PAGE, {
+            pageSize: 20,
+            ...(searching ? { searchValue: debouncedPageQuery.trim() } : {}),
+        }).then((res) => {
+            setRecentPages(res.data.records || [])
+        }).catch(() => {
+            setRecentPages([])
+        }).finally(() => {
+            setPagesLoading(false)
+        })
+    }, [debouncedPageQuery, flag])
 
     // Pages edited within the last 7 days — small confidence-building stat.
     const weekEditedCount = recentPages.filter((p: any) => {
@@ -123,6 +165,41 @@ export const Home: React.FC = () => {
             return false
         }
     }).length
+
+    // Distinct tags across the loaded recent pages — drives the filter chips.
+    const availableTags = useMemo(() => {
+        const set = new Set<string>()
+        recentPages.forEach((p: any) => {
+            (p.tags || []).forEach((tg: string) => {
+                if (tg) set.add(tg)
+            })
+        })
+        return Array.from(set)
+    }, [recentPages])
+
+    // Client-side tag filter (OR: keep pages carrying any selected tag). The
+    // title search is applied server-side, so `recentPages` already reflects it.
+    const filteredPages = useMemo(() => {
+        if (selectedTags.length === 0) return recentPages
+        return recentPages.filter((p: any) =>
+            Array.isArray(p.tags) && p.tags.some((tg: string) => selectedTags.includes(tg))
+        )
+    }, [recentPages, selectedTags])
+
+    const spaceSearching = debouncedSpaceQuery.trim().length > 0
+    const pageSearching = debouncedPageQuery.trim().length > 0
+
+    // Keep the default view tidy (top 8); show every match while filtering.
+    const displayedPages = useMemo(() => {
+        const active = pageSearching || selectedTags.length > 0
+        return active ? filteredPages : filteredPages.slice(0, 8)
+    }, [filteredPages, pageSearching, selectedTags.length])
+
+    const toggleTag = useCallback((tag: string) => {
+        setSelectedTags((prev) =>
+            prev.includes(tag) ? prev.filter((tg) => tg !== tag) : [...prev, tag]
+        )
+    }, [])
 
     // Create a fresh page in the user's personal space, then open it.
     const handleNewPage = async () => {
@@ -331,28 +408,45 @@ export const Home: React.FC = () => {
                             </Button>
                         }
                     />
-                    {loading ? (
+                    <div className="px-1">
+                        <Input
+                            className="h-8 max-w-xs text-[13px]"
+                            icon={<SearchIcon className="h-3.5 w-3.5" />}
+                            placeholder={t("home.search-spaces", "Search spaces...")}
+                            value={spaceQuery}
+                            onChange={(e) => setSpaceQuery(e.target.value)}
+                            aria-label={t("home.search-spaces", "Search spaces...")}
+                        />
+                    </div>
+                    {spacesLoading ? (
                         <div className="flex gap-3 overflow-hidden">
                             {[...Array(isMobile ? 2 : 4)].map((_, index) => (
                                 <Skeleton key={index} className="h-[150px] w-[190px] shrink-0 rounded-xl" />
                             ))}
                         </div>
                     ) : recentSpaces.length === 0 ? (
-                        <EmptyBlock
-                            icon={<Box className="h-5 w-5" />}
-                            title={t("home.no-spaces") || "No spaces yet"}
-                            desc={t("home.no-spaces-hint") || "Create a space to get started"}
-                            action={
-                                <CreateSpaceDlg
-                                    trigger={
-                                        <Button size="sm" variant="outline" className="mt-2 gap-1.5 h-8 text-xs">
-                                            <Plus className="w-3.5 h-3.5" />{t("home.create-space") || "New Space"}
-                                        </Button>
-                                    }
-                                    callBack={() => setFlag(f => f + 1)}
-                                />
-                            }
-                        />
+                        spaceSearching ? (
+                            <EmptyBlock
+                                icon={<SearchIcon className="h-5 w-5" />}
+                                title={t("home.no-space-match", "No matching spaces")}
+                            />
+                        ) : (
+                            <EmptyBlock
+                                icon={<Box className="h-5 w-5" />}
+                                title={t("home.no-spaces") || "No spaces yet"}
+                                desc={t("home.no-spaces-hint") || "Create a space to get started"}
+                                action={
+                                    <CreateSpaceDlg
+                                        trigger={
+                                            <Button size="sm" variant="outline" className="mt-2 gap-1.5 h-8 text-xs">
+                                                <Plus className="w-3.5 h-3.5" />{t("home.create-space") || "New Space"}
+                                            </Button>
+                                        }
+                                        callBack={() => setFlag(f => f + 1)}
+                                    />
+                                }
+                            />
+                        )
                     ) : (
                         <div className="home-hscroll -mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
                             {recentSpaces.map((space: any) => {
@@ -456,7 +550,50 @@ export const Home: React.FC = () => {
                     right-aligned timestamp. */}
                 <section className="flex flex-col gap-2 shrink-0">
                     <SectionHeader title={t("home.recent-pages") || "Recently edited"} />
-                    {loading ? (
+                    <div className="flex flex-col gap-2 px-1">
+                        <Input
+                            className="h-8 max-w-xs text-[13px]"
+                            icon={<SearchIcon className="h-3.5 w-3.5" />}
+                            placeholder={t("home.search-pages", "Search pages...")}
+                            value={pageQuery}
+                            onChange={(e) => setPageQuery(e.target.value)}
+                            aria-label={t("home.search-pages", "Search pages...")}
+                        />
+                        {availableTags.length > 0 && (
+                            <div className="home-hscroll -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-0.5">
+                                <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                                {availableTags.map((tag) => {
+                                    const active = selectedTags.includes(tag)
+                                    return (
+                                        <button
+                                            key={tag}
+                                            type="button"
+                                            onClick={() => toggleTag(tag)}
+                                            className={cn(
+                                                "shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                                                active
+                                                    ? "bg-primary text-primary-foreground"
+                                                    : "bg-muted/60 text-muted-foreground hover:bg-muted"
+                                            )}
+                                        >
+                                            {tag}
+                                        </button>
+                                    )
+                                })}
+                                {selectedTags.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedTags([])}
+                                        className="flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+                                    >
+                                        <X className="h-3 w-3" />
+                                        {t("home.clear-tags", "Clear")}
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    {pagesLoading ? (
                         <div className="flex flex-col">
                             {[...Array(isMobile ? 4 : 5)].map((_, index) => (
                                 <div key={index} className="flex items-center gap-3 px-2 py-2">
@@ -466,15 +603,22 @@ export const Home: React.FC = () => {
                                 </div>
                             ))}
                         </div>
-                    ) : recentPages.length === 0 ? (
-                        <EmptyBlock
-                            icon={<Book className="h-5 w-5" />}
-                            title={t("home.no-recent-pages") || "No recent pages"}
-                            desc={t("home.no-recent-pages-hint") || "Pages you visit will appear here"}
-                        />
+                    ) : displayedPages.length === 0 ? (
+                        (pageSearching || selectedTags.length > 0) ? (
+                            <EmptyBlock
+                                icon={<SearchIcon className="h-5 w-5" />}
+                                title={t("home.no-page-match", "No matching pages")}
+                            />
+                        ) : (
+                            <EmptyBlock
+                                icon={<Book className="h-5 w-5" />}
+                                title={t("home.no-recent-pages") || "No recent pages"}
+                                desc={t("home.no-recent-pages-hint") || "Pages you visit will appear here"}
+                            />
+                        )
                     ) : (
                         <ul className="flex flex-col">
-                            {recentPages.map((page: any) => {
+                            {displayedPages.map((page: any) => {
                                 const hue = pickHue(page.id)
                                 const styles = hueStyles(hue)
                                 return (
@@ -495,6 +639,18 @@ export const Home: React.FC = () => {
                                         <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
                                             {page.title || "Untitled"}
                                         </span>
+                                        {Array.isArray(page.tags) && page.tags.length > 0 && (
+                                            <span className="hidden shrink-0 items-center gap-1 md:flex">
+                                                {page.tags.slice(0, 2).map((tg: string) => (
+                                                    <span
+                                                        key={tg}
+                                                        className="rounded bg-muted/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                                                    >
+                                                        {tg}
+                                                    </span>
+                                                ))}
+                                            </span>
+                                        )}
                                         <span className="hidden shrink-0 items-center gap-1 text-[11px] text-muted-foreground sm:flex">
                                             {page.updateBy && (
                                                 <span className="max-w-[120px] truncate text-foreground/50">

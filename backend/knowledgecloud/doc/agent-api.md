@@ -24,6 +24,7 @@ Agent 模块提供 AI 聊天补全能力，支持 OpenAI 兼容的 API 格式。
 |---------|------|
 | `deepseek-chat` | DeepSeek 聊天模型 |
 | `deepseek-reasoner` | DeepSeek 推理模型 |
+| `glm-5.2` | 智谱 GLM-5.2 旗舰模型（1M 上下文，支持思考模式，需配置 `ZHIPU_API_KEY`） |
 
 ---
 

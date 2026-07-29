@@ -132,6 +132,11 @@ public class LlmClientFactory {
     public static class ProviderConfig {
         private String baseUrl;
         private String apiKey;
+        /**
+         * Chat completions endpoint path. Defaults to the OpenAI-style path.
+         * Zhipu (bigmodel.cn) uses "/chat/completions" under its /api/paas/v4 base URL.
+         */
+        private String chatPath = "/v1/chat/completions";
         private List<ModelConfig> models = new ArrayList<>();
 
         public List<String> getModelNames() {

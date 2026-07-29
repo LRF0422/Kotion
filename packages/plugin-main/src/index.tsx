@@ -146,6 +146,11 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "relation-graph": "关系图谱",
           "last-update": "最近更新",
           "week-stat": "本周编辑 {{count}} 篇",
+          "search-spaces": "搜索空间...",
+          "search-pages": "搜索页面...",
+          "no-space-match": "没有匹配的空间",
+          "no-page-match": "没有匹配的页面",
+          "clear-tags": "清除",
           "greeting": {
             "morning": "早上好",
             "afternoon": "下午好",
@@ -699,6 +704,11 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "relation-graph": "Relation Graph",
           "last-update": "Last update",
           "week-stat": "{{count}} pages this week",
+          "search-spaces": "Search spaces...",
+          "search-pages": "Search pages...",
+          "no-space-match": "No matching spaces",
+          "no-page-match": "No matching pages",
+          "clear-tags": "Clear",
           "greeting": {
             "morning": "Good Morning",
             "afternoon": "Good Afternoon",

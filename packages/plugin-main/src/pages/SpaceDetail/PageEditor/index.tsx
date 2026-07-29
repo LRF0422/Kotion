@@ -20,7 +20,7 @@ import {
     Download, FileIcon, FileText,
     Link, LoaderCircle,
     MoreHorizontal, Trash2, Upload, List,
-    CloudOff, UserPlus, Star, Network, MoveHorizontal, History
+    CloudOff, UserPlus, Star, Network, MoveHorizontal, History, Presentation
 } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "@kn/common";
@@ -31,6 +31,7 @@ import { PageBreadcrumb } from "../../../components/PageBreadcrumb";
 import { TemplateCreator } from "../TemplateCreator";
 import { SpaceGraph } from "../../SpaceGraph";
 import { PageVersionHistory } from "./PageVersionHistory";
+import { PresentationMode } from "./PresentationMode";
 
 // Author display info for the PageHeader metadata row. Cached per user id so
 // switching between pages by the same author never refetches.
@@ -221,6 +222,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const [editorContentReady, setEditorContentReady] = useState(false)
     const [graphOpen, setGraphOpen] = useState(false)
     const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
+    const [presentationOpen, setPresentationOpen] = useState(false)
 
     // Generate stable user color based on user ID
     const userColor = useMemo(() => {
@@ -871,6 +873,15 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                 </div>
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                                onClick={() => setPresentationOpen(true)}
+                                disabled={!editorContentReady}
+                            >
+                                <div className="flex flex-row items-center gap-2">
+                                    <Presentation className="h-4 w-4" />
+                                    <span>{t('editor.presentation', '演示模式')}</span>
+                                </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                                 onClick={() => setVersionHistoryOpen(true)}
                                 disabled={!pageId}
                             >
@@ -973,6 +984,13 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             pageId={pageId}
             onRestored={handleVersionRestored}
         />
+        {/* 放映模式：挂载即打开（内部自行请求浏览器全屏），关闭即卸载 */}
+        {presentationOpen && (
+            <PresentationMode
+                editor={editor.current}
+                onClose={() => setPresentationOpen(false)}
+            />
+        )}
         <Sheet open={graphOpen} onOpenChange={setGraphOpen}>
             <SheetContent
                 side="right"

@@ -16,7 +16,7 @@ import java.util.*;
 /**
  * Generic OpenAI-compatible HTTP client.
  * Works with any provider that follows the OpenAI chat completions API format
- * (DeepSeek, OpenAI, Ollama, etc.)
+ * (DeepSeek, OpenAI, Ollama, Zhipu GLM, etc.)
  *
  * Uses WebClient for reactive streaming.
  */
@@ -25,12 +25,16 @@ public class OpenAiCompatibleClient implements LlmClient {
 
     private final String providerName;
     private final LlmClientFactory.ProviderConfig config;
+    private final String chatPath;
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
 
     public OpenAiCompatibleClient(String providerName, LlmClientFactory.ProviderConfig config) {
         this.providerName = providerName;
         this.config = config;
+        this.chatPath = config.getChatPath() != null && !config.getChatPath().isEmpty()
+                ? config.getChatPath()
+                : "/v1/chat/completions";
         this.objectMapper = new ObjectMapper();
         this.webClient = WebClient.builder()
                 .baseUrl(config.getBaseUrl())
@@ -49,7 +53,7 @@ public class OpenAiCompatibleClient implements LlmClient {
         try {
             String requestBody = buildRequestBody(request, false);
             String responseBody = webClient.post()
-                    .uri("/v1/chat/completions")
+                    .uri(chatPath)
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(requestBody)
                     .retrieve()
@@ -77,7 +81,7 @@ public class OpenAiCompatibleClient implements LlmClient {
         try {
             String requestBody = buildRequestBody(request, true);
             return webClient.post()
-                    .uri("/v1/chat/completions")
+                    .uri(chatPath)
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.TEXT_EVENT_STREAM)
                     .bodyValue(requestBody)
@@ -126,7 +130,8 @@ public class OpenAiCompatibleClient implements LlmClient {
 
     private String buildRequestBody(LlmRequest request, boolean stream) throws Exception {
         ObjectNode root = objectMapper.createObjectNode();
-        root.put("model", resolveModel(request.getModel()));
+        String model = resolveModel(request.getModel());
+        root.put("model", model);
         root.put("stream", stream);
 
         if (request.getTemperature() > 0) {
@@ -134,6 +139,16 @@ public class OpenAiCompatibleClient implements LlmClient {
         }
         if (request.getMaxTokens() > 0) {
             root.put("max_tokens", request.getMaxTokens());
+        }
+
+        // Merge model-specific extra parameters from YAML config (e.g. Zhipu GLM's
+        // "thinking" / "reasoning_effort"). These are provider extensions to the
+        // OpenAI format and are applied before the standard fields below.
+        ModelConfig modelConfig = config.getModelConfig(model);
+        if (modelConfig != null && modelConfig.getExtra() != null) {
+            for (Map.Entry<String, Object> entry : modelConfig.getExtra().entrySet()) {
+                root.set(entry.getKey(), objectMapper.valueToTree(entry.getValue()));
+            }
         }
 
         // Messages — filter out orphaned tool messages that would cause 400 errors.

@@ -357,7 +357,12 @@ export const resources = {
                 "no-favorites": "还没有收藏的页面",
                 "no-favorites-hint": "收藏页面后会显示在这里",
                 "learning": "知识学习",
-                "coming-soon-desc": "该功能即将上线，敬请期待！"
+                "coming-soon-desc": "该功能即将上线，敬请期待！",
+                "search-spaces": "搜索空间...",
+                "search-pages": "搜索页面...",
+                "no-space-match": "没有匹配的空间",
+                "no-page-match": "没有匹配的页面",
+                "clear-tags": "清除"
             },
             "auth": {
                 "common": {
@@ -454,6 +459,11 @@ export const resources = {
                 "linkCopyFailed": "复制链接失败",
                 "movedToTrash": "已移至回收站",
                 "moveToTrashFailed": "移至回收站失败",
+                "presentation": "演示模式",
+                "presentationExit": "退出放映",
+                "presentationHint": "← → 翻页 · Esc 退出",
+                "presentationPrev": "上一页",
+                "presentationNext": "下一页",
                 "meta": {
                     "created": "创建于",
                     "updated": "更新于",
@@ -1032,7 +1042,12 @@ export const resources = {
                 "no-favorites": "No favorite pages yet",
                 "no-favorites-hint": "Star pages to add them here",
                 "learning": "Learn Knowledge",
-                "coming-soon-desc": "This feature is coming soon, stay tuned!"
+                "coming-soon-desc": "This feature is coming soon, stay tuned!",
+                "search-spaces": "Search spaces...",
+                "search-pages": "Search pages...",
+                "no-space-match": "No matching spaces",
+                "no-page-match": "No matching pages",
+                "clear-tags": "Clear"
             },
             "auth": {
                 "common": {
@@ -1129,6 +1144,11 @@ export const resources = {
                 "linkCopyFailed": "Failed to copy link",
                 "movedToTrash": "Moved to trash",
                 "moveToTrashFailed": "Failed to move to trash",
+                "presentation": "Presentation mode",
+                "presentationExit": "Exit",
+                "presentationHint": "← → to navigate · Esc to exit",
+                "presentationPrev": "Previous slide",
+                "presentationNext": "Next slide",
                 "meta": {
                     "created": "Created",
                     "updated": "Updated",
