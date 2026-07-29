@@ -1,33 +1,38 @@
 package com.knowledge.agent.v2.interceptor;
 
+import com.knowledge.agent.v2.context.ContextCompactor;
 import com.knowledge.agent.v2.engine.AgentState;
 import com.knowledge.agent.v2.event.AgentEvent;
 import com.knowledge.agent.v2.pipeline.AgentInterceptor;
 import com.knowledge.agent.v2.pipeline.InterceptorChain;
 import com.knowledge.agent.v2.session.AgentSession;
-import com.knowledge.agent.v2.session.ConversationMessage;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 
-import java.util.List;
-
 /**
- * Context window interceptor — compresses conversation history when needed.
+ * Context window interceptor — keeps the conversation within the model's
+ * real token budget.
  *
- * <p>Order 50: runs before THINK state to ensure the message list stays
- * within the model's context window. When messages exceed the threshold,
- * older messages are summarized or truncated.
+ * <p>
+ * Order 50: runs before THINK. Triggers when the provider-reported
+ * prompt tokens of the last inference call exceed
+ * {@code maxContextTokens * compactionThreshold}, then delegates to
+ * {@link ContextCompactor} (L1 tool-result eviction → L2 LLM structured
+ * summary → hard-truncation fallback).
  *
- * <p>Current implementation: simple truncation (keeps system prompt + last N
- * messages). Future enhancement: LLM-based summarization of older context.
+ * <p>
+ * The compacted list is written back via
+ * {@code ExecutionState.setMessages(...)} — {@code getMessages()} returns a
+ * defensive copy, so in-place mutation would be silently lost.
  */
 @Slf4j
 public class ContextWindowInterceptor implements AgentInterceptor {
 
-    /** Maximum messages to keep in the working window. */
-    private static final int MAX_MESSAGES = 80;
-    /** Minimum messages to always preserve (system + recent). */
-    private static final int KEEP_RECENT = 20;
+    private final ContextCompactor compactor;
+
+    public ContextWindowInterceptor(ContextCompactor compactor) {
+        this.compactor = compactor;
+    }
 
     @Override
     public int order() {
@@ -36,55 +41,34 @@ public class ContextWindowInterceptor implements AgentInterceptor {
 
     @Override
     public boolean appliesTo(AgentState from, AgentState to) {
-        // Only compress before THINK (when we're about to send to LLM)
+        // Only compact before THINK (when we're about to send to the LLM)
         return to == AgentState.THINK;
     }
 
     @Override
     public Flux<AgentEvent> intercept(AgentSession session, AgentState from, AgentState to,
-                                       InterceptorChain chain) {
-        compressIfNeeded(session);
-        return chain.proceed(session);
-    }
-
-    private void compressIfNeeded(AgentSession session) {
-        List<ConversationMessage> messages = session.getExecution().getMessages();
-        if (messages.size() <= MAX_MESSAGES) {
-            return;
+            InterceptorChain chain) {
+        if (!compactor.shouldCompact(session)) {
+            return chain.proceed(session);
         }
 
-        int excess = messages.size() - MAX_MESSAGES;
-        log.info("ContextWindow: session {} has {} messages, truncating {} from middle",
-                session.getSessionId(), messages.size(), excess);
+        int before = session.getExecution().getMessageCount();
+        int lastPromptTokens = session.getExecution().getLastPromptTokens();
+        log.info("ContextWindow: session {} compacting before THINK (lastPromptTokens={}, messages={})",
+                session.getSessionId(), lastPromptTokens, before);
 
-        // Strategy: keep system message(s) at the start + last KEEP_RECENT messages
-        // Remove from position 1 (after system) up to (size - KEEP_RECENT)
-        int systemMsgCount = 0;
-        for (ConversationMessage msg : messages) {
-            if ("system".equals(msg.getRole())) {
-                systemMsgCount++;
-            } else {
-                break;
-            }
-        }
-
-        int removeFrom = systemMsgCount;
-        int removeTo = messages.size() - KEEP_RECENT;
-
-        if (removeTo > removeFrom) {
-            // Insert a summary placeholder
-            ConversationMessage summary = ConversationMessage.builder()
-                    .role("system")
-                    .content("[Earlier conversation messages truncated for context window management. "
-                            + (removeTo - removeFrom) + " messages removed.]")
-                    .build();
-
-            synchronized (messages) {
-                messages.subList(removeFrom, removeTo).clear();
-                messages.add(removeFrom, summary);
-            }
-            log.debug("ContextWindow: session {} trimmed to {} messages",
-                    session.getSessionId(), messages.size());
-        }
+        return compactor.compact(session)
+                .doOnNext(compacted -> {
+                    session.getExecution().setMessages(compacted);
+                    log.info("ContextWindow: session {} compacted {} -> {} messages",
+                            session.getSessionId(), before, compacted.size());
+                })
+                .onErrorResume(e -> {
+                    // Never block the loop on compaction failure — proceed as-is
+                    log.warn("ContextWindow: session {} compaction failed, proceeding uncompacted: {}",
+                            session.getSessionId(), e.getMessage());
+                    return reactor.core.publisher.Mono.empty();
+                })
+                .thenMany(Flux.defer(() -> chain.proceed(session)));
     }
 }

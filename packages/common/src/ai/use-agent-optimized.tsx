@@ -19,6 +19,7 @@ import { useCapabilityProviders } from "./use-capability-providers"
 
 // Unified agent runtime core
 import { AgentHarnessImpl } from "./harness"
+import type { HarnessEvent } from "./harness"
 
 // Shared constants
 import { EDITOR_AGENT_PROMPT, ASK_MODE_PROMPT } from "./constants"
@@ -41,7 +42,7 @@ export type ChatModelParams = {
  * Optimized editor agent hook with backend-driven architecture.
  *
  * The frontend produces a full capability catalog (skills + tools) and ships
- * it inline with every `/chat/completions` request. The backend performs
+ * it inline with every V2 agent chat request. The backend performs
  * progressive discovery/activation internally and asks the frontend to
  * execute specific tool calls as needed.
  */
@@ -54,8 +55,8 @@ export const useEditorAgentOptimized = (
         model?: string
         /** Chat mode: "ask" = Q&A only, "agent" = can operate the page (default). */
         mode?: ChatMode
-        /** API version: 'v1' (default, OpenAI SSE) or 'v2' (semantic SSE protocol). */
-        apiVersion?: 'v1' | 'v2'
+        /** Custom agent definition id — backend applies its prompt/model/tool set. */
+        agentId?: number
         /** User-tunable sampling params (temperature, maxTokens). */
         modelParams?: ChatModelParams
     }
@@ -73,8 +74,8 @@ export const useEditorAgentOptimized = (
     const modelRef = useRef<string | undefined>(agentOptions?.model)
     // Ref for latest chat mode (avoids stale closure in stream callback)
     const modeRef = useRef<ChatMode>(agentOptions?.mode || 'agent')
-    // Ref for API version
-    const apiVersionRef = useRef<'v1' | 'v2'>(agentOptions?.apiVersion || 'v1')
+    // Ref for the selected custom agent definition
+    const agentIdRef = useRef<number | undefined>(agentOptions?.agentId)
     // Ref for latest model params (avoids stale closure in stream callback)
     const modelParamsRef = useRef<ChatModelParams | undefined>(agentOptions?.modelParams)
 
@@ -88,10 +89,10 @@ export const useEditorAgentOptimized = (
         modeRef.current = agentOptions?.mode || 'agent'
     }, [agentOptions?.mode])
 
-    // Keep API version ref in sync
+    // Keep agent id ref in sync
     useEffect(() => {
-        apiVersionRef.current = agentOptions?.apiVersion || 'v1'
-    }, [agentOptions?.apiVersion])
+        agentIdRef.current = agentOptions?.agentId
+    }, [agentOptions?.agentId])
 
     // Keep model params ref in sync
     useEffect(() => {
@@ -107,6 +108,43 @@ export const useEditorAgentOptimized = (
         getCatalog,
         resolveTool,
     } = useCapabilityProviders(editor, { onToolExecution, onUserChoiceRequest })
+
+    // Map harness events onto the hook's text-stream + callback contract.
+    // Shared by stream() and continueStream().
+    const toTextStream = useCallback((
+        events: AsyncGenerator<HarnessEvent>,
+        callbacks: {
+            onAnnotation?: (annotations: any[]) => void
+            onReasoning?: (content: string) => void
+        }
+    ): AsyncGenerator<string> => {
+        return (async function* (): AsyncGenerator<string> {
+            for await (const ev of events) {
+                switch (ev.type) {
+                    case 'text-delta':
+                        yield ev.content
+                        break
+                    case 'reasoning-delta':
+                        callbacks.onReasoning?.(ev.content)
+                        break
+                    case 'annotation':
+                        callbacks.onAnnotation?.(ev.annotations)
+                        break
+                    case 'session':
+                        callbacks.onAnnotation?.([{
+                            type: 'session-info',
+                            sessionId: ev.sessionId,
+                            conversationId: ev.conversationId,
+                        }])
+                        break
+                    case 'error':
+                        throw new Error(ev.error)
+                    // tool-call-start / tool-call-end already drive
+                    // onToolExecution via wrappedTools; finish ends the loop.
+                }
+            }
+        })()
+    }, [])
 
     // Stream with abort support and history messages
     const stream = useCallback(async (options: {
@@ -181,37 +219,15 @@ export const useEditorAgentOptimized = (
                 conversationId: options.conversationId,
                 signal,
                 onToolExecution,
-                apiVersion: apiVersionRef.current,
+                agentId: agentIdRef.current,
                 temperature: params?.temperature,
                 maxTokens: params?.maxTokens,
             })
 
-            const textStream = (async function* (): AsyncGenerator<string> {
-                for await (const ev of events) {
-                    switch (ev.type) {
-                        case 'text-delta':
-                            yield ev.content
-                            break
-                        case 'reasoning-delta':
-                            options.onReasoning?.(ev.content)
-                            break
-                        case 'annotation':
-                            options.onAnnotation?.(ev.annotations)
-                            break
-                        case 'session':
-                            options.onAnnotation?.([{
-                                type: 'session-info',
-                                sessionId: ev.sessionId,
-                                conversationId: ev.conversationId,
-                            }])
-                            break
-                        case 'error':
-                            throw new Error(ev.error)
-                        // tool-call-start / tool-call-end already drive
-                        // onToolExecution via wrappedTools; finish ends the loop.
-                    }
-                }
-            })()
+            const textStream = toTextStream(events, {
+                onAnnotation: options.onAnnotation,
+                onReasoning: options.onReasoning,
+            })
 
             return { textStream }
         } catch (error: any) {
@@ -222,7 +238,44 @@ export const useEditorAgentOptimized = (
         } finally {
             isStreamingRef.current = false
         }
-    }, [resolveTool, getCatalog, onToolExecution, modeRef])
+    }, [resolveTool, getCatalog, onToolExecution, toTextStream, modeRef])
+
+    // Continue a session suspended on budget exhaustion: the backend grants a
+    // fresh iteration budget and resumes the same session.
+    const continueStream = useCallback(async (options: {
+        sessionId: string
+        onAnnotation?: (annotations: any[]) => void
+        onReasoning?: (content: string) => void
+    }) => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort()
+        }
+        abortControllerRef.current = new AbortController()
+
+        isStreamingRef.current = true
+        try {
+            const events = harnessRef.current.continueSession({
+                sessionId: options.sessionId,
+                resolveTool,
+                signal: abortControllerRef.current.signal,
+                onToolExecution,
+            })
+
+            const textStream = toTextStream(events, {
+                onAnnotation: options.onAnnotation,
+                onReasoning: options.onReasoning,
+            })
+
+            return { textStream }
+        } catch (error: any) {
+            if (error.name === 'AbortError') {
+                return { textStream: async function* () { /* empty */ }() }
+            }
+            throw error
+        } finally {
+            isStreamingRef.current = false
+        }
+    }, [resolveTool, onToolExecution, toTextStream])
 
     // Stop current generation
     const stop = useCallback(() => {
@@ -240,6 +293,7 @@ export const useEditorAgentOptimized = (
 
     return {
         stream,
+        continueStream,
         stop,
         isGenerating,
         toolProvider,

@@ -3,8 +3,6 @@ package com.knowledge.agent.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.knowledge.agent.harness.ContextManagerConfig;
-import com.knowledge.agent.llm.LlmClientFactory;
 import com.knowledge.agent.tool.ProgressiveDiscovery;
 import com.knowledge.agent.tool.Tool;
 import com.knowledge.agent.tool.ToolRegistry;
@@ -19,7 +17,7 @@ import java.util.List;
 
 /**
  * Agent module configuration.
- * Wires the new harness, LLM, and tool system together.
+ * Wires the LLM and tool system together.
  */
 @Configuration
 @EnableScheduling
@@ -56,15 +54,7 @@ public class AgentConfig {
     @Bean
     public ToolInitializer toolInitializer(ToolRegistry toolRegistry,
             ProgressiveDiscovery progressiveDiscovery,
-            ContextManagerConfig contextManagerConfig,
-            LlmClientFactory llmClientFactory,
             List<Tool> tools) {
-        // Wire ContextManagerConfig with LlmClientFactory for summarize strategy.
-        // ContextManager itself is now per-request, so it reads the factory
-        // from this shared config.
-        contextManagerConfig.setLlmClientFactory(llmClientFactory);
-        // SubAgent dependencies are now injected via SubAgentFactory —
-        // no more static SpringContextHelper needed.
         return new ToolInitializer(toolRegistry, progressiveDiscovery, tools);
     }
 
@@ -91,8 +81,6 @@ public class AgentConfig {
             progressiveDiscovery.registerCapability("dataset", "dataset_search");
             progressiveDiscovery.registerCapability("data", "dataset_search");
             progressiveDiscovery.registerCapability("data", "data_process");
-            progressiveDiscovery.registerCapability("delegate", "delegate");
-            progressiveDiscovery.registerCapability("orchestrate", "orchestrate");
 
             log.info("Initialized {} tools with capability mappings", tools.size());
         }

@@ -1,5 +1,7 @@
 package com.knowledge.agent.v2.handler;
 
+import com.knowledge.agent.v2.config.AgentProperties;
+import com.knowledge.agent.v2.context.ContextCompactor;
 import com.knowledge.agent.v2.engine.AgentState;
 import com.knowledge.agent.v2.engine.StateHandler;
 import com.knowledge.agent.v2.engine.Transition;
@@ -20,24 +22,28 @@ import java.util.stream.Collectors;
 /**
  * Handles the ACT state — tool execution.
  *
- * <p>Responsibilities:
+ * <p>
+ * Responsibilities:
  * <ul>
- *   <li>Read pending tool calls from the session execution state</li>
- *   <li>Route each call through the {@link ToolRouter}</li>
- *   <li>For backend tools: execute and transition to OBSERVE</li>
- *   <li>For frontend tools: emit dispatch events and transition to SUSPENDED</li>
+ * <li>Read pending tool calls from the session execution state</li>
+ * <li>Route each call through the {@link ToolRouter}</li>
+ * <li>For backend tools: execute and transition to OBSERVE</li>
+ * <li>For frontend tools: emit dispatch events and transition to SUSPENDED</li>
  * </ul>
  *
- * <p>This handler replaces V1's {@code continueOrFinish()} and
+ * <p>
+ * This handler replaces V1's {@code continueOrFinish()} and
  * {@code executeBackendToolsStreaming()} methods.
  */
 @Slf4j
 public class ActHandler implements StateHandler {
 
     private final ToolRouter toolRouter;
+    private final AgentProperties.ContextConfig contextConfig;
 
-    public ActHandler(ToolRouter toolRouter) {
+    public ActHandler(ToolRouter toolRouter, AgentProperties.ContextConfig contextConfig) {
         this.toolRouter = toolRouter;
+        this.contextConfig = contextConfig;
     }
 
     @Override
@@ -66,8 +72,7 @@ public class ActHandler implements StateHandler {
             Flux<AgentEvent> dispatchEvents = toolRouter.dispatch(calls, session);
             return Flux.concat(
                     dispatchEvents,
-                    Flux.just(Transition.toSuspended(sessionId, "frontend_tool_calls"))
-            );
+                    Flux.just(Transition.toSuspended(sessionId, "frontend_tool_calls")));
         }
 
         // All backend: dispatch and collect outcomes for OBSERVE
@@ -89,20 +94,26 @@ public class ActHandler implements StateHandler {
                 Flux.defer(() -> {
                     session.getExecution().clearPendingToolCalls();
                     return Flux.just(Transition.toObserve(sessionId));
-                })
-        );
+                }));
     }
 
     /**
      * Append a tool result message to the conversation history.
+     *
+     * <p>
+     * Content is capped at {@code toolResultMaxChars} — the full result
+     * has already been emitted to the frontend via the ToolCompleted event;
+     * only the LLM-visible conversation message is truncated.
      */
     private void appendToolMessage(AgentSession session, String toolCallId,
-                                    String toolName, String content) {
+            String toolName, String content) {
+        String governed = ContextCompactor.truncateToolResult(
+                content != null ? content : "", contextConfig.getToolResultMaxChars());
         ConversationMessage toolMsg = ConversationMessage.builder()
                 .role("tool")
                 .toolCallId(toolCallId)
                 .name(toolName)
-                .content(content != null ? content : "")
+                .content(governed)
                 .build();
         session.getExecution().addMessage(toolMsg);
     }

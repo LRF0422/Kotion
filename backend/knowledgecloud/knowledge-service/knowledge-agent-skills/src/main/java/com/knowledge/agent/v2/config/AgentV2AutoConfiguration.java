@@ -1,7 +1,10 @@
 package com.knowledge.agent.v2.config;
 
 import com.knowledge.agent.llm.LlmClientFactory;
+import com.knowledge.agent.store.AgentDefinitionService;
+import com.knowledge.agent.store.AgentStateStore;
 import com.knowledge.agent.tool.ToolRegistry;
+import com.knowledge.agent.v2.context.ContextCompactor;
 import com.knowledge.agent.v2.controller.AgentV2Controller;
 import com.knowledge.agent.v2.engine.AgentEngine;
 import com.knowledge.agent.v2.engine.AgentState;
@@ -12,6 +15,13 @@ import com.knowledge.agent.v2.handler.ActHandler;
 import com.knowledge.agent.v2.handler.InitHandler;
 import com.knowledge.agent.v2.handler.ObserveHandler;
 import com.knowledge.agent.v2.handler.ThinkHandler;
+import com.knowledge.agent.v2.interceptor.AuditInterceptor;
+import com.knowledge.agent.v2.interceptor.ContextWindowInterceptor;
+import com.knowledge.agent.v2.interceptor.MetricsInterceptor;
+import com.knowledge.agent.v2.interceptor.PlanModeGuardInterceptor;
+import com.knowledge.agent.v2.interceptor.RateLimitInterceptor;
+import com.knowledge.agent.v2.interceptor.SnapshotInterceptor;
+import com.knowledge.agent.v2.interceptor.TracingInterceptor;
 import com.knowledge.agent.v2.llm.DefaultLlmAdapter;
 import com.knowledge.agent.v2.llm.LlmAdapter;
 import com.knowledge.agent.v2.llm.ResilientLlmAdapter;
@@ -20,10 +30,15 @@ import com.knowledge.agent.v2.pipeline.InterceptorPipeline;
 import com.knowledge.agent.v2.orchestrator.DAGScheduler;
 import com.knowledge.agent.v2.orchestrator.OrchestratorV2;
 import com.knowledge.agent.v2.tool.BackendExecutor;
+import com.knowledge.agent.v2.tool.CustomAgentResolver;
+import com.knowledge.agent.v2.tool.DelegateTaskTool;
 import com.knowledge.agent.v2.tool.RegistryRoutingStrategy;
 import com.knowledge.agent.v2.tool.RoutingStrategy;
 import com.knowledge.agent.v2.tool.SessionFrontendRoutingStrategy;
 import com.knowledge.agent.v2.tool.ToolRouter;
+import com.knowledge.agent.v2.state.SessionSnapshotCodec;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -35,7 +50,8 @@ import java.util.*;
 /**
  * Spring auto-configuration for the V2 Agent engine.
  *
- * <p>Wires together all V2 components: engine, handlers, pipeline,
+ * <p>
+ * Wires together all V2 components: engine, handlers, pipeline,
  * event bus, LLM adapter, and tool router. Uses conditional beans so
  * that custom implementations can override defaults.
  */
@@ -63,10 +79,84 @@ public class AgentV2AutoConfiguration {
         return new ResilientLlmAdapter(base, properties.getLlm());
     }
 
+    // ---- Interceptors (collected into the InterceptorPipeline bean above) ----
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ContextCompactor contextCompactor(AgentProperties properties, LlmAdapter llmAdapter) {
+        return new ContextCompactor(properties.getContext(), llmAdapter);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ContextWindowInterceptor contextWindowInterceptor(ContextCompactor contextCompactor) {
+        return new ContextWindowInterceptor(contextCompactor);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public TracingInterceptor tracingInterceptor() {
+        return new TracingInterceptor();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public MetricsInterceptor metricsInterceptor() {
+        return new MetricsInterceptor();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public AuditInterceptor auditInterceptor() {
+        return new AuditInterceptor();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public PlanModeGuardInterceptor planModeGuardInterceptor() {
+        return new PlanModeGuardInterceptor();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public RateLimitInterceptor rateLimitInterceptor(AgentProperties properties) {
+        return new RateLimitInterceptor(properties.getRateLimit());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public SessionSnapshotCodec sessionSnapshotCodec(ObjectMapper objectMapper) {
+        return new SessionSnapshotCodec(objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public SnapshotInterceptor snapshotInterceptor(AgentProperties properties,
+            ObjectProvider<AgentStateStore> stateStoreProvider,
+            SessionSnapshotCodec codec) {
+        return new SnapshotInterceptor(properties.getState(),
+                stateStoreProvider.getIfAvailable(), codec);
+    }
+
     @Bean
     @ConditionalOnMissingBean
     public BackendExecutor backendExecutor(ToolRegistry toolRegistry, AgentProperties properties) {
         return new BackendExecutor(toolRegistry, properties.getTool());
+    }
+
+    /**
+     * Delegation tool — runs isolated sub-agents. Uses ObjectProviders to
+     * break the construction cycle (engine → handlers → tool router →
+     * registry → tools → engine) and to keep working when the custom-agent
+     * feature is absent.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public DelegateTaskTool delegateTaskTool(ObjectProvider<AgentEngine> engineProvider,
+            AgentEventBus eventBus,
+            AgentProperties properties,
+            ObjectProvider<CustomAgentResolver> resolverProvider) {
+        return new DelegateTaskTool(engineProvider, eventBus, properties, resolverProvider);
     }
 
     @Bean
@@ -84,8 +174,8 @@ public class AgentV2AutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public ToolRouter toolRouter(List<RoutingStrategy> strategies,
-                                 BackendExecutor backendExecutor,
-                                 AgentProperties properties) {
+            BackendExecutor backendExecutor,
+            AgentProperties properties) {
         return new ToolRouter(strategies, backendExecutor, properties.getTool());
     }
 
@@ -103,8 +193,8 @@ public class AgentV2AutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = "actHandler")
-    public StateHandler actHandler(ToolRouter toolRouter) {
-        return new ActHandler(toolRouter);
+    public StateHandler actHandler(ToolRouter toolRouter, AgentProperties properties) {
+        return new ActHandler(toolRouter, properties.getContext());
     }
 
     @Bean
@@ -116,12 +206,12 @@ public class AgentV2AutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public AgentEngine agentEngine(AgentEventBus eventBus,
-                                   InterceptorPipeline pipeline,
-                                   AgentProperties properties,
-                                   StateHandler initHandler,
-                                   StateHandler thinkHandler,
-                                   StateHandler actHandler,
-                                   StateHandler observeHandler) {
+            InterceptorPipeline pipeline,
+            AgentProperties properties,
+            StateHandler initHandler,
+            StateHandler thinkHandler,
+            StateHandler actHandler,
+            StateHandler observeHandler) {
         Map<AgentState, StateHandler> handlers = new EnumMap<>(AgentState.class);
         handlers.put(AgentState.INIT, initHandler);
         handlers.put(AgentState.THINK, thinkHandler);
@@ -134,8 +224,14 @@ public class AgentV2AutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public AgentV2Controller agentV2Controller(AgentEngine agentEngine,
-                                               AgentProperties properties) {
-        return new AgentV2Controller(agentEngine, properties);
+            AgentProperties properties,
+            ObjectProvider<AgentStateStore> stateStoreProvider,
+            SessionSnapshotCodec codec,
+            AgentEventBus eventBus,
+            ObjectProvider<AgentDefinitionService> definitionServiceProvider) {
+        return new AgentV2Controller(agentEngine, properties,
+                stateStoreProvider.getIfAvailable(), codec, eventBus,
+                definitionServiceProvider.getIfAvailable());
     }
 
     // ---- Orchestrator V2 (Phase 3) ----
@@ -151,9 +247,9 @@ public class AgentV2AutoConfiguration {
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "agent.orchestrator", name = "enabled", havingValue = "true")
     public OrchestratorV2 orchestratorV2(DAGScheduler dagScheduler,
-                                          LlmAdapter llmAdapter,
-                                          AgentEventBus eventBus,
-                                          AgentProperties properties) {
+            LlmAdapter llmAdapter,
+            AgentEventBus eventBus,
+            AgentProperties properties) {
         return new OrchestratorV2(dagScheduler, llmAdapter, eventBus, properties.getOrchestrator());
     }
 }

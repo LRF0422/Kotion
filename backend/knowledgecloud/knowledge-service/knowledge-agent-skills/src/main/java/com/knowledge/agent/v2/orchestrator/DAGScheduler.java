@@ -17,20 +17,27 @@ import java.util.stream.Collectors;
 /**
  * DAG-based scheduler for multi-agent orchestration.
  *
- * <p>Implements topological-order scheduling: tasks with no unresolved
+ * <p>
+ * Implements topological-order scheduling: tasks with no unresolved
  * dependencies are launched in parallel. As each task completes, newly
  * ready tasks are discovered and dispatched.
  *
- * <p>Key features:
+ * <p>
+ * Key features:
  * <ul>
- *   <li><b>Parallel execution</b>: Independent tasks run concurrently</li>
- *   <li><b>Topological ordering</b>: Dependent tasks wait until predecessors complete</li>
- *   <li><b>Session isolation</b>: Each task gets its own child {@link AgentSession}</li>
- *   <li><b>Event forwarding</b>: Sub-agent events are prefixed and forwarded to parent stream</li>
- *   <li><b>Failure handling</b>: A failed task fails the entire plan (fail-fast)</li>
+ * <li><b>Parallel execution</b>: Independent tasks run concurrently</li>
+ * <li><b>Topological ordering</b>: Dependent tasks wait until predecessors
+ * complete</li>
+ * <li><b>Session isolation</b>: Each task gets its own child
+ * {@link AgentSession}</li>
+ * <li><b>Event forwarding</b>: Sub-agent events are prefixed and forwarded to
+ * parent stream</li>
+ * <li><b>Failure handling</b>: A failed task fails the entire plan
+ * (fail-fast)</li>
  * </ul>
  *
- * <p>Thread model: Fully reactive using Project Reactor. No threads are blocked.
+ * <p>
+ * Thread model: Fully reactive using Project Reactor. No threads are blocked.
  */
 @Slf4j
 public class DAGScheduler {
@@ -44,18 +51,21 @@ public class DAGScheduler {
     /**
      * Execute an {@link ExecutionPlan} within the context of a parent session.
      *
-     * <p>Returns a Flux that emits:
+     * <p>
+     * Returns a Flux that emits:
      * <ul>
-     *   <li>{@link DelegationEvent.SubAgentSpawned} for each started task</li>
-     *   <li>{@link DelegationEvent.SubAgentProgress} as tasks iterate</li>
-     *   <li>{@link DelegationEvent.SubAgentCompleted} when tasks finish</li>
+     * <li>{@link DelegationEvent.SubAgentSpawned} for each started task</li>
+     * <li>{@link DelegationEvent.SubAgentProgress} as tasks iterate</li>
+     * <li>{@link DelegationEvent.SubAgentCompleted} when tasks finish</li>
      * </ul>
      *
-     * <p>The Flux completes when ALL tasks in the plan have finished successfully.
+     * <p>
+     * The Flux completes when ALL tasks in the plan have finished successfully.
      * It errors immediately if any task fails (fail-fast).
      *
      * @param plan          the execution plan (DAG)
-     * @param parentSession the parent agent session (provides identity/config context)
+     * @param parentSession the parent agent session (provides identity/config
+     *                      context)
      * @return Flux of delegation events, completing when the entire plan is done
      */
     public Flux<AgentEvent> execute(ExecutionPlan plan, AgentSession parentSession) {
@@ -82,8 +92,8 @@ public class DAGScheduler {
     public Map<String, TaskResult> getResults(ExecutionPlan plan, AgentSession parentSession) {
         // Results are stored in the parent session metadata during execution
         @SuppressWarnings("unchecked")
-        Map<String, TaskResult> results = (Map<String, TaskResult>)
-                parentSession.getMetadata().get("__dag_results_" + plan.getPlanId());
+        Map<String, TaskResult> results = (Map<String, TaskResult>) parentSession.getMetadata()
+                .get("__dag_results_" + plan.getPlanId());
         return results != null ? results : Collections.emptyMap();
     }
 
@@ -144,10 +154,9 @@ public class DAGScheduler {
                     } else {
                         // Emit progress for each iteration boundary
                         if (event instanceof com.knowledge.agent.v2.event.StateEvent.StateTransition) {
-                            DelegationEvent.SubAgentProgress progress =
-                                    new DelegationEvent.SubAgentProgress(
-                                            sessionId, task.getTaskId(), sessionId, 1,
-                                            childSession.getExecution().getIteration(), "running");
+                            DelegationEvent.SubAgentProgress progress = new DelegationEvent.SubAgentProgress(
+                                    sessionId, task.getTaskId(), sessionId, 1,
+                                    childSession.getExecution().getIteration(), "running");
                             state.sink.next(progress);
                         }
                     }
@@ -155,12 +164,11 @@ public class DAGScheduler {
                 .collectList()
                 .subscribe(
                         events -> onTaskCompleted(task, childSession, startTime, state),
-                        error -> onTaskFailed(task, error, startTime, state)
-                );
+                        error -> onTaskFailed(task, error, startTime, state));
     }
 
     private void onTaskCompleted(AgentTask task, AgentSession childSession,
-                                  long startTime, SchedulerState state) {
+            long startTime, SchedulerState state) {
         long duration = System.currentTimeMillis() - startTime;
         String sessionId = state.parentSession.getSessionId();
 
@@ -186,7 +194,7 @@ public class DAGScheduler {
     }
 
     private void onTaskFailed(AgentTask task, Throwable error,
-                               long startTime, SchedulerState state) {
+            long startTime, SchedulerState state) {
         long duration = System.currentTimeMillis() - startTime;
         String sessionId = state.parentSession.getSessionId();
 
@@ -222,6 +230,9 @@ public class DAGScheduler {
                 .mode(AgentMode.EXECUTE)
                 .maxIterations(task.getMaxIterations())
                 .modelName(task.getModelName() != null ? task.getModelName() : parent.getModelName())
+                // Explicitly no frontend tools: a sub-agent has no SSE channel of
+                // its own, so a frontend tool call would suspend it forever.
+                .frontendTools(Collections.emptyList())
                 .toolIds(tools);
 
         if (task.getSystemPrompt() != null) {
@@ -232,14 +243,37 @@ public class DAGScheduler {
 
         AgentSession childSession = builder.build();
 
-        // Seed the conversation with the task description as a user message
-        childSession.getExecution().addMessage(ConversationMessage.user(task.getDescription()));
+        // Seed the conversation with the task description plus a short parent
+        // context block — a bare description loses the overall goal.
+        childSession.getExecution().addMessage(
+                ConversationMessage.user(buildTaskMessage(task, parent)));
 
         return childSession;
     }
 
     /**
-     * Extract the final result from a child session (last assistant message content).
+     * Compose the child's seed message: parent request context + task description.
+     */
+    private String buildTaskMessage(AgentTask task, AgentSession parent) {
+        String parentRequest = null;
+        for (ConversationMessage msg : parent.getExecution().getMessages()) {
+            if ("user".equals(msg.getRole()) && msg.getContent() != null) {
+                parentRequest = msg.getContent();
+                break;
+            }
+        }
+        if (parentRequest == null || parentRequest.isBlank()) {
+            return task.getDescription();
+        }
+        if (parentRequest.length() > 1000) {
+            parentRequest = parentRequest.substring(0, 1000) + "…";
+        }
+        return "【父任务背景】" + parentRequest + "\n\n【你的子任务】" + task.getDescription();
+    }
+
+    /**
+     * Extract the final result from a child session (last assistant message
+     * content).
      */
     private String extractResult(AgentSession childSession) {
         List<ConversationMessage> messages = childSession.getExecution().getMessages();
@@ -253,7 +287,8 @@ public class DAGScheduler {
     }
 
     /**
-     * Validate that the execution plan's dependency graph is acyclic (DAG property).
+     * Validate that the execution plan's dependency graph is acyclic (DAG
+     * property).
      * Uses Kahn's algorithm for topological sort.
      */
     private boolean validateAcyclic(ExecutionPlan plan) {
@@ -312,7 +347,7 @@ public class DAGScheduler {
         final Map<String, TaskResult> results = new ConcurrentHashMap<>();
 
         SchedulerState(ExecutionPlan plan, AgentSession parentSession,
-                       reactor.core.publisher.FluxSink<AgentEvent> sink) {
+                reactor.core.publisher.FluxSink<AgentEvent> sink) {
             this.plan = plan;
             this.parentSession = parentSession;
             this.sink = sink;
@@ -337,10 +372,21 @@ public class DAGScheduler {
             this.success = success;
         }
 
-        public String getTaskId() { return taskId; }
-        public String getContent() { return content; }
-        public long getDurationMs() { return durationMs; }
-        public boolean isSuccess() { return success; }
+        public String getTaskId() {
+            return taskId;
+        }
+
+        public String getContent() {
+            return content;
+        }
+
+        public long getDurationMs() {
+            return durationMs;
+        }
+
+        public boolean isSuccess() {
+            return success;
+        }
     }
 
     // ---- Exception ----

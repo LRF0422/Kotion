@@ -1,14 +1,14 @@
 /**
- * Legacy AI text helpers, now backed by the Knowledge Agent backend.
+ * Legacy AI text helpers, now backed by the Knowledge Agent V2 backend.
  *
  * Historically these called DeepSeek directly from the browser with an API key,
  * which never worked in production (no key / CORS). They now delegate to the
- * same backend SSE proxy the chat uses ({@link KnowledgeChatClient}), so every
- * caller (AI Tools, /ai block, /aicomplete, plugin uploader) shares one working
- * path. Prefer {@link streamKnowledgeText} / {@link KnowledgeChatClient} in new code.
+ * V2 agent SSE endpoint ({@link V2ChatClient}), so every caller (AI Tools,
+ * /ai block, /aicomplete, plugin uploader) shares one working path.
+ * Prefer {@link streamKnowledgeText} / {@link V2ChatClient} in new code.
  */
 
-import { KnowledgeChatClient } from "./chat-client"
+import { V2ChatClient } from "./chat-client"
 import type { ChatMessage } from "./chat-client/types"
 
 export interface StreamTextOptions {
@@ -30,7 +30,7 @@ export function streamKnowledgeChat(
     messages: ChatMessage[],
     options: Omit<StreamTextOptions, "system"> = {}
 ): { textStream: AsyncGenerator<string> } {
-    const client = new KnowledgeChatClient()
+    const client = new V2ChatClient()
 
     const request = {
         model: options.model,
@@ -69,7 +69,7 @@ export function streamKnowledgeText(
 }
 
 /**
- * @deprecated Use {@link streamKnowledgeText} or {@link KnowledgeChatClient}.
+ * @deprecated Use {@link streamKnowledgeText} or {@link V2ChatClient}.
  * Thin backwards-compatible wrapper kept for existing callers; the second
  * argument (previously `tools`) is ignored.
  */

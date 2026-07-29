@@ -16,20 +16,26 @@ import java.util.Map;
 /**
  * The Agent execution engine — a reactive state machine.
  *
- * <p>This is the heart of the V2 architecture. It replaces the 1288-line
+ * <p>
+ * This is the heart of the V2 architecture. It replaces the 1288-line
  * {@code HarnessLoop} God Class with a clean, minimal state machine that:
  * <ol>
- *   <li>Enters a state by invoking the corresponding {@link StateHandler}</li>
- *   <li>Emits events produced by the handler through the pipeline</li>
- *   <li>Consumes the terminal {@link Transition} event to determine the next state</li>
- *   <li>Repeats until a terminal state is reached</li>
+ * <li>Enters a state by invoking the corresponding {@link StateHandler}</li>
+ * <li>Emits events produced by the handler through the pipeline</li>
+ * <li>Consumes the terminal {@link Transition} event to determine the next
+ * state</li>
+ * <li>Repeats until a terminal state is reached</li>
  * </ol>
  *
- * <p>The engine itself contains NO business logic — all behavior is defined by
- * the registered {@link StateHandler}s and {@link com.knowledge.agent.v2.pipeline.AgentInterceptor}s.
+ * <p>
+ * The engine itself contains NO business logic — all behavior is defined by
+ * the registered {@link StateHandler}s and
+ * {@link com.knowledge.agent.v2.pipeline.AgentInterceptor}s.
  *
- * <p>Thread model: The engine runs entirely on Reactor's scheduler. No thread
- * is blocked. The recursive loop is expressed as {@code Flux.defer() + concatWith()}
+ * <p>
+ * Thread model: The engine runs entirely on Reactor's scheduler. No thread
+ * is blocked. The recursive loop is expressed as
+ * {@code Flux.defer() + concatWith()}
  * to avoid stack overflow on deep iterations.
  */
 @Slf4j
@@ -41,9 +47,9 @@ public class AgentEngine {
     private final AgentProperties properties;
 
     public AgentEngine(Map<AgentState, StateHandler> handlers,
-                       InterceptorPipeline pipeline,
-                       AgentEventBus eventBus,
-                       AgentProperties properties) {
+            InterceptorPipeline pipeline,
+            AgentEventBus eventBus,
+            AgentProperties properties) {
         this.handlers = handlers;
         this.pipeline = pipeline;
         this.eventBus = eventBus;
@@ -53,12 +59,14 @@ public class AgentEngine {
     /**
      * Run the agent engine for a session.
      *
-     * <p>Returns a Flux that emits all {@link AgentEvent}s produced during
+     * <p>
+     * Returns a Flux that emits all {@link AgentEvent}s produced during
      * execution. The Flux completes when the engine reaches a terminal state
      * ({@link AgentState#DONE}, {@link AgentState#ERROR}, or
      * {@link AgentState#SUSPENDED}).
      *
-     * <p>Events are also published to the {@link AgentEventBus} for other
+     * <p>
+     * Events are also published to the {@link AgentEventBus} for other
      * consumers (metrics, audit, etc.).
      *
      * @param session the agent session to execute
@@ -105,9 +113,18 @@ public class AgentEngine {
                     long elapsed = session.getExecution().getElapsedMs();
                     AgentState finalState = session.getCurrentState();
                     if (finalState == AgentState.DONE || finalState == AgentState.SUSPENDED) {
+                        String finishReason = "stop";
+                        if (finalState == AgentState.SUSPENDED) {
+                            // Carry the suspend reason so the frontend can tell
+                            // budget exhaustion apart from frontend tool dispatch
+                            String suspendReason = session.getExecution().getSuspendReason();
+                            finishReason = suspendReason != null
+                                    ? "suspended:" + suspendReason
+                                    : "suspended";
+                        }
                         LifecycleEvent.SessionCompleted completedEvent = new LifecycleEvent.SessionCompleted(
                                 session.getSessionId(),
-                                finalState == AgentState.SUSPENDED ? "suspended" : "stop",
+                                finishReason,
                                 session.getExecution().getTotalPromptTokens(),
                                 session.getExecution().getTotalCompletionTokens(),
                                 elapsed);
@@ -120,28 +137,28 @@ public class AgentEngine {
                         return Flux.just((AgentEvent) failedEvent);
                     }
                     return Flux.empty();
-                })
-        ).doOnComplete(() -> {
-            log.info("AgentEngine completed: sessionId={}, iterations={}, elapsed={}ms",
-                    session.getSessionId(), session.getExecution().getIteration(),
-                    session.getExecution().getElapsedMs());
-        }).doOnError(e -> {
-            LifecycleEvent.SessionFailed failedEvent = new LifecycleEvent.SessionFailed(
-                    session.getSessionId(), "INTERNAL", e.getMessage(), false);
-            eventBus.publish(failedEvent);
-            log.error("AgentEngine failed: sessionId={}", session.getSessionId(), e);
-        });
+                })).doOnComplete(() -> {
+                    log.info("AgentEngine completed: sessionId={}, iterations={}, elapsed={}ms",
+                            session.getSessionId(), session.getExecution().getIteration(),
+                            session.getExecution().getElapsedMs());
+                }).doOnError(e -> {
+                    LifecycleEvent.SessionFailed failedEvent = new LifecycleEvent.SessionFailed(
+                            session.getSessionId(), "INTERNAL", e.getMessage(), false);
+                    eventBus.publish(failedEvent);
+                    log.error("AgentEngine failed: sessionId={}", session.getSessionId(), e);
+                });
     }
 
     /**
      * Execute the current state and recursively transition to the next.
      *
-     * <p>This is the core loop expressed as a reactive chain:
+     * <p>
+     * This is the core loop expressed as a reactive chain:
      * <ol>
-     *   <li>Get the handler for the current state</li>
-     *   <li>Execute it through the interceptor pipeline</li>
-     *   <li>Collect events, extracting the Transition</li>
-     *   <li>If terminal: complete; otherwise: recurse via concatWith(defer)</li>
+     * <li>Get the handler for the current state</li>
+     * <li>Execute it through the interceptor pipeline</li>
+     * <li>Collect events, extracting the Transition</li>
+     * <li>If terminal: complete; otherwise: recurse via concatWith(defer)</li>
      * </ol>
      */
     private Flux<AgentEvent> executeState(AgentSession session) {
@@ -152,12 +169,14 @@ public class AgentEngine {
             return Flux.empty();
         }
 
-        // Safety: iteration limit
+        // Safety: iteration limit — suspend (not DONE) so the user can grant
+        // another budget round via /chat/resume {action:"continue"}
         if (session.hasReachedMaxIterations()) {
-            log.warn("AgentEngine: max iterations reached ({}), forcing DONE",
+            log.warn("AgentEngine: max iterations reached ({}), suspending",
                     session.getMaxIterations());
-            session.getExecution().transitionTo(AgentState.DONE);
-            return Flux.just(Transition.toDone(session.getSessionId(), "max_iterations"));
+            session.getExecution().setSuspendReason("iteration_budget_exhausted");
+            session.getExecution().transitionTo(AgentState.SUSPENDED);
+            return Flux.just(Transition.toSuspended(session.getSessionId(), "iteration_budget_exhausted"));
         }
 
         // Find the handler for this state
@@ -198,6 +217,9 @@ public class AgentEngine {
                     // Apply the transition
                     AgentState nextState = transition.getNextState();
                     AgentState fromState = session.getCurrentState();
+                    if (nextState == AgentState.SUSPENDED) {
+                        session.getExecution().setSuspendReason(transition.getReason());
+                    }
                     session.getExecution().transitionTo(nextState);
 
                     // Emit state transition event for observability
@@ -218,8 +240,7 @@ public class AgentEngine {
                     return Flux.concat(
                             emitted,
                             Flux.just(stateTransitionEvent),
-                            Flux.defer(() -> executeState(session))
-                    );
+                            Flux.defer(() -> executeState(session)));
                 }));
     }
 }

@@ -1,7 +1,6 @@
 package com.knowledge.agent.tool;
 
 import com.knowledge.agent.api.dto.AgentMode;
-import com.knowledge.agent.harness.ContextManager;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,10 +12,9 @@ import lombok.NoArgsConstructor;
  *
  * <p>
  * Also carries per-request mutable objects ({@link SkillCatalog},
- * {@link DynamicSkillRegistry}, {@link ContextManager}) that used to be
- * Spring singletons but are now created fresh per request to avoid
- * concurrency bugs. These are set by {@code AgentHarness.run()} for the
- * root agent and by {@code SubAgentFactory.create()} for sub-agents.
+ * {@link DynamicSkillRegistry}) that used to be Spring singletons but are
+ * now created fresh per request to avoid concurrency bugs. These are set
+ * by the v2 execution path when building the tool context.
  */
 @Data
 @Builder
@@ -55,14 +53,14 @@ public class ToolContext {
 
     /**
      * Current delegate depth — incremented when spawning sub-agents.
-     * Used by DelegateTool to prevent runaway recursion.
+     * Used by the delegate tool to prevent runaway recursion.
      */
     @Builder.Default
     private int delegateDepth = 0;
 
     /**
      * Id of the agent that owns this context. {@code null} for the root agent;
-     * a sub-agent's own id once spawned. DelegateTool reads this as the
+     * a sub-agent's own id once spawned. The delegate tool reads this as the
      * {@code parentAgentId} of any sub-agents it spawns, enabling a sub-agent
      * tree (including nested delegation).
      */
@@ -78,38 +76,46 @@ public class ToolContext {
     // ---- Per-request mutable state (NOT shared across requests) ----
 
     /**
-     * Per-request skill catalog. Set by AgentHarness.run() for the root
-     * agent and by SubAgentFactory.create() for sub-agents.
+     * Per-request skill catalog. Set by the v2 execution path when building
+     * the tool context.
      */
     private SkillCatalog skillCatalog;
 
     /**
-     * Per-request dynamic skill registry. Set by AgentHarness.run() for the
-     * root agent and by SubAgentFactory.create() for sub-agents.
+     * Per-request dynamic skill registry. Set by the v2 execution path when
+     * building the tool context.
      */
     private DynamicSkillRegistry dynamicSkillRegistry;
 
     /**
-     * Per-request context manager. Set by AgentHarness.run() for the root
-     * agent and by SubAgentFactory.create() for sub-agents.
+     * Live reference to the owning v2 session's metadata map (a
+     * {@code ConcurrentHashMap}). Backend tools such as
+     * {@code update_task_state} / {@code get_task_state} read and write
+     * scratchpad entries here; changes are visible to the engine and are
+     * persisted with session checkpoints. Kept as a plain {@code Map} to
+     * avoid a dependency from the base tool package onto v2 classes.
+     * May be {@code null} outside the v2 execution path.
      */
-    private ContextManager contextManager;
+    private java.util.Map<String, Object> sessionMetadata;
 
     /**
-     * JSON-serialized {@link com.knowledge.agent.orchestrator.AgentTeamPlan}
-     * for state-snapshot persistence. Set by AgentHarness when the
-     * orchestrator decides to use multi-agent execution. Included in
-     * {@link com.knowledge.agent.store.AgentStateSnapshot} so the plan can
-     * be recovered on restart.
+     * Model name of the owning session. Set by the v2 execution path so tools
+     * that spawn sub-agents ({@code delegate_task}) can inherit the model.
+     */
+    private String modelName;
+
+    /**
+     * Legacy field kept for snapshot compatibility. No longer populated —
+     * the v2 engine tracks orchestration state in the session itself.
      */
     private String orchestrationPlan;
 
     /**
-     * Whether this run should resume from a persisted snapshot. When {@code true}
-     * (set by the caller before invoking {@code HarnessLoop.run()}), the loop
-     * will attempt to restore working messages and iteration state from the
+     * Whether this run should resume from a persisted snapshot. When
+     * {@code true}, the execution layer will attempt to restore working
+     * messages and iteration state from the
      * {@link com.knowledge.agent.store.AgentStateStore}. When {@code false}
-     * (the default), the loop starts fresh — even if a snapshot exists on disk
+     * (the default), the run starts fresh — even if a snapshot exists
      * for this session.
      * <p>
      * This flag prevents multi-turn conversations from clobbering the latest
@@ -126,9 +132,8 @@ public class ToolContext {
      *
      * <p>
      * Per-request mutable objects ({@link SkillCatalog},
-     * {@link DynamicSkillRegistry}, {@link ContextManager}) are deliberately
-     * <b>not</b> copied — the child (sub-agent) gets fresh instances from
-     * {@code SubAgentFactory.create()}.
+     * {@link DynamicSkillRegistry}) are deliberately <b>not</b> copied —
+     * the child (sub-agent) gets fresh instances from its own session setup.
      */
     public ToolContext incrementDepth() {
         return ToolContext.builder()

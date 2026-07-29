@@ -23,20 +23,20 @@ export type HarnessEvent =
     | { type: 'reasoning-delta'; content: string }
     | { type: 'tool-call-start'; id: string; toolName: string; args: Record<string, unknown> }
     | {
-          type: 'tool-call-end'
-          id: string
-          toolName: string
-          result?: unknown
-          error?: string
-          durationMs: number
-      }
+        type: 'tool-call-end'
+        id: string
+        toolName: string
+        result?: unknown
+        error?: string
+        durationMs: number
+    }
     | { type: 'annotation'; annotations: any[] }
     | { type: 'session'; sessionId?: string; conversationId?: string }
     | {
-          type: 'finish'
-          finishReason?: string
-          usage?: { promptTokens: number; completionTokens: number }
-      }
+        type: 'finish'
+        finishReason?: string
+        usage?: { promptTokens: number; completionTokens: number }
+    }
     | { type: 'error'; error: string }
 
 // ============ Run Input ============
@@ -62,12 +62,8 @@ export interface HarnessRunInput {
     mode?: 'plan' | 'execute'
     /** Per-yield SSE inactivity timeout in ms (default 10 minutes). */
     inactivityTimeoutMs?: number
-    /**
-     * API version to use: 'v1' (OpenAI-compatible SSE) or 'v2' (semantic events).
-     * Defaults to 'v1' for backward compatibility. When set to 'v2', the harness
-     * uses V2ChatClient which parses the V2 semantic SSE protocol.
-     */
-    apiVersion?: 'v1' | 'v2'
+    /** Custom agent definition id — backend applies its prompt/model/tool set. */
+    agentId?: number
     /** Sampling temperature; when undefined the backend default is used. */
     temperature?: number
     /** Max response tokens; when undefined the backend default is used. */

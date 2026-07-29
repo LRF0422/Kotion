@@ -30,13 +30,13 @@ import java.util.concurrent.TimeUnit;
  * The full {@link AgentStateSnapshot} JSON is stored in the {@code snapshot}
  * column. Indexed columns (session_id, conversation_id, agent_id, depth,
  * iteration, timestamp) are extracted from the JSON on write to enable
- * efficient querying — particularly {@link #loadLatest(String)} which replaces
- * the O(n) file scan in {@link FileAgentStateStore} with a single SQL query.
+ * efficient querying — particularly {@link #loadLatest(String)} which resolves
+ * the newest snapshot with a single SQL query.
  *
  * <p>
  * Activated via {@code agent.state.backend=jdbc} in application properties.
- * Mutually exclusive with {@link FileAgentStateStore} (activated by
- * {@code agent.state.backend=file}).
+ * This is the only persistence backend — {@code agent.state.backend=none}
+ * disables snapshot persistence entirely.
  *
  * <p>
  * This is a Spring singleton ({@code @Component}) — it is stateless except
@@ -113,7 +113,8 @@ public class JdbcAgentStateStore implements AgentStateStore {
             byte[] json = objectMapper.writeValueAsBytes(snapshot);
             saveBytes(sessionId, json);
         } catch (Exception e) {
-            log.warn("JdbcAgentStateStore: failed to serialize snapshot for sessionId={}: {}", sessionId, e.getMessage());
+            log.warn("JdbcAgentStateStore: failed to serialize snapshot for sessionId={}: {}", sessionId,
+                    e.getMessage());
         }
     }
 

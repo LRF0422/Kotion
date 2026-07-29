@@ -44,4 +44,16 @@ public interface Tool {
     default boolean isFrontend() {
         return false;
     }
+
+    /**
+     * Optional per-tool timeout override in seconds. When non-null, the
+     * executor uses this instead of the global {@code agent.tool.timeout-seconds}.
+     * Long-running tools (e.g. {@code delegate_task}, which runs a full
+     * sub-agent loop) override this to avoid being killed by the default.
+     *
+     * @return timeout in seconds, or null to use the configured default
+     */
+    default Integer getTimeoutOverrideSeconds() {
+        return null;
+    }
 }

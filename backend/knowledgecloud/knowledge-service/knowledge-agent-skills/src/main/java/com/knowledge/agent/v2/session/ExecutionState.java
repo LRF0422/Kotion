@@ -10,17 +10,19 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Mutable execution state within an {@link AgentSession}.
  *
- * <p>This is the ONLY mutable part of the session model. All mutations
+ * <p>
+ * This is the ONLY mutable part of the session model. All mutations
  * go through atomic operations or synchronized methods to ensure
  * thread-safety in the reactive execution environment.
  *
- * <p>The execution state tracks:
+ * <p>
+ * The execution state tracks:
  * <ul>
- *   <li>Current iteration number</li>
- *   <li>Current state machine state</li>
- *   <li>Activated skill names</li>
- *   <li>Working messages (conversation context)</li>
- *   <li>Accumulated token usage</li>
+ * <li>Current iteration number</li>
+ * <li>Current state machine state</li>
+ * <li>Activated skill names</li>
+ * <li>Working messages (conversation context)</li>
+ * <li>Accumulated token usage</li>
  * </ul>
  */
 public class ExecutionState {
@@ -31,6 +33,18 @@ public class ExecutionState {
     private final List<ConversationMessage> workingMessages = Collections.synchronizedList(new ArrayList<>());
     private final AtomicInteger totalPromptTokens = new AtomicInteger(0);
     private final AtomicInteger totalCompletionTokens = new AtomicInteger(0);
+    /**
+     * Prompt token count reported by the provider for the MOST RECENT
+     * inference call — the authoritative measure of the current context
+     * size. 0 until the first usage report arrives.
+     */
+    private volatile int lastPromptTokens = 0;
+    /**
+     * Reason for the most recent SUSPENDED transition (e.g.
+     * "frontend_tool_calls", "iteration_budget_exhausted"). Lets the
+     * completion event tell the frontend WHY the session paused.
+     */
+    private volatile String suspendReason;
     private final long startTimeMs = System.currentTimeMillis();
     private volatile List<InferenceResponse.ToolCallData> pendingToolCalls;
 
@@ -105,6 +119,22 @@ public class ExecutionState {
 
     public int getTotalCompletionTokens() {
         return totalCompletionTokens.get();
+    }
+
+    public int getLastPromptTokens() {
+        return lastPromptTokens;
+    }
+
+    public void setLastPromptTokens(int promptTokens) {
+        this.lastPromptTokens = promptTokens;
+    }
+
+    public String getSuspendReason() {
+        return suspendReason;
+    }
+
+    public void setSuspendReason(String suspendReason) {
+        this.suspendReason = suspendReason;
     }
 
     public long getElapsedMs() {

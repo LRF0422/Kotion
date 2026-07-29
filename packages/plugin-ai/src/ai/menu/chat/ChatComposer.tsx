@@ -19,8 +19,8 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@kn/ui'
-import type { ChatMode, ChatModelParams, ModelInfo } from '@kn/common'
-import { fetchModels, useTranslation } from '@kn/common'
+import type { AgentDefinition, ChatMode, ChatModelParams, ModelInfo } from '@kn/common'
+import { fetchModels, listAgentDefinitions, useTranslation } from '@kn/common'
 
 import type { ChatTargetPage } from '../chat-sessions'
 import { ModelParamsPopover } from './ModelParamsPopover'
@@ -41,29 +41,29 @@ const ModeToggle: React.FC<ModeToggleProps> = ({ mode, onModeChange, disabled })
         { id: 'agent', label: t('ai.chat.modeAgent', { defaultValue: 'Agent' }), icon: <Bot className="h-3 w-3" />, hint: t('ai.chat.modeAgentHint', { defaultValue: 'Agent 模式 — 可编辑文档' }) },
     ]
     return (
-    <div className="inline-flex items-center p-0.5 rounded-md bg-muted/70 text-[10px] font-medium">
-        {modes.map((m) => {
-            const active = mode === m.id
-            return (
-                <button
-                    key={m.id}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => onModeChange(m.id)}
-                    title={m.hint}
-                    className={
-                        'flex items-center gap-1 px-1.5 h-5 rounded-sm transition-colors disabled:opacity-50 ' +
-                        (active
-                            ? 'bg-background text-foreground shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground')
-                    }
-                >
-                    {m.icon}
-                    <span>{m.label}</span>
-                </button>
-            )
-        })}
-    </div>
+        <div className="inline-flex items-center p-0.5 rounded-md bg-muted/70 text-[10px] font-medium">
+            {modes.map((m) => {
+                const active = mode === m.id
+                return (
+                    <button
+                        key={m.id}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => onModeChange(m.id)}
+                        title={m.hint}
+                        className={
+                            'flex items-center gap-1 px-1.5 h-5 rounded-sm transition-colors disabled:opacity-50 ' +
+                            (active
+                                ? 'bg-background text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground')
+                        }
+                    >
+                        {m.icon}
+                        <span>{m.label}</span>
+                    </button>
+                )
+            })}
+        </div>
     )
 }
 
@@ -141,6 +141,90 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ model, onModelChange, dis
     )
 }
 
+// ─── Agent selector ────────────────────────────────────────────────
+
+interface AgentSelectorProps {
+    agentId?: number
+    onAgentChange: (agentId: number | undefined) => void
+    disabled?: boolean
+}
+
+/**
+ * Custom-agent picker: default agent + tenant-scoped custom definitions.
+ * The list reloads on every open so edits from the manager dialog show up
+ * without a page refresh.
+ */
+const AgentSelector: React.FC<AgentSelectorProps> = ({ agentId, onAgentChange, disabled }) => {
+    const { t } = useTranslation()
+    const [agents, setAgents] = useState<AgentDefinition[]>([])
+    const [open, setOpen] = useState(false)
+    const [loading, setLoading] = useState(false)
+
+    useEffect(() => {
+        if (!open) return
+        setLoading(true)
+        listAgentDefinitions()
+            .then(setAgents)
+            .catch(() => setAgents([]))
+            .finally(() => setLoading(false))
+    }, [open])
+
+    const defaultLabel = t('ai.chat.agentDefault', { defaultValue: '默认 Agent' })
+    const selected = agents.find((a) => a.id === agentId)
+    const displayLabel = agentId == null ? defaultLabel : (selected?.name || `#${agentId}`)
+
+    return (
+        <DropdownMenu open={open} onOpenChange={setOpen}>
+            <DropdownMenuTrigger asChild disabled={disabled}>
+                <button
+                    type="button"
+                    disabled={disabled}
+                    title={t('ai.chat.agentSelectorHint', { defaultValue: '选择自定义 Agent' })}
+                    className="flex items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 disabled:opacity-50 transition-colors"
+                >
+                    <Bot className="h-3 w-3" />
+                    <span className="max-w-[80px] truncate">{displayLabel}</span>
+                    <ChevronDown className="h-2.5 w-2.5" />
+                </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[240px]">
+                <DropdownMenuItem
+                    onClick={() => onAgentChange(undefined)}
+                    className="flex items-center justify-between text-xs"
+                >
+                    <span className="truncate">{defaultLabel}</span>
+                    {agentId == null && <Check className="h-3 w-3 text-primary shrink-0 ml-1" />}
+                </DropdownMenuItem>
+                {loading && agents.length === 0 && (
+                    <div className="px-2 py-1.5 text-[10px] text-muted-foreground">
+                        {t('ai.chat.loadingAgents', { defaultValue: '加载 Agent 中…' })}
+                    </div>
+                )}
+                {agents.filter((a) => a.enabled !== false).map((a) => (
+                    <DropdownMenuItem
+                        key={a.id}
+                        onClick={() => onAgentChange(a.id)}
+                        className="flex items-start justify-between text-xs"
+                    >
+                        <div className="min-w-0">
+                            <div className="truncate">{a.name}</div>
+                            {a.description && (
+                                <div className="truncate text-[10px] text-muted-foreground">{a.description}</div>
+                            )}
+                        </div>
+                        {agentId === a.id && <Check className="h-3 w-3 text-primary shrink-0 ml-1 mt-0.5" />}
+                    </DropdownMenuItem>
+                ))}
+                {!loading && agents.length === 0 && (
+                    <div className="px-2 py-1.5 text-[10px] text-muted-foreground">
+                        {t('ai.chat.noCustomAgents', { defaultValue: '暂无自定义 Agent' })}
+                    </div>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    )
+}
+
 // ─── Composer ──────────────────────────────────────────────────────
 
 interface ChatComposerProps {
@@ -153,6 +237,9 @@ interface ChatComposerProps {
     onModeChange: (mode: ChatMode) => void
     model: string
     onModelChange: (model: string) => void
+    /** Selected custom agent definition id; undefined = default agent. */
+    agentId?: number
+    onAgentChange: (agentId: number | undefined) => void
     modelParams: ChatModelParams
     onModelParamsChange: (params: ChatModelParams) => void
     /** @-page binding of the active session (rendered as a chip row). */
@@ -177,6 +264,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
     {
         value, onChange, onSubmit, onStop, isLoading,
         mode, onModeChange, model, onModelChange,
+        agentId, onAgentChange,
         modelParams, onModelParamsChange,
         targetPage, currentPage, targetStatus, onPickPage, onClearPage, onRetryPage, onOpenPageWindow,
     },
@@ -260,6 +348,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
             <div className="flex items-center justify-between px-2 pb-1.5 pt-0.5">
                 <div className="flex items-center gap-1.5 min-w-0">
                     <ModeToggle mode={mode} onModeChange={onModeChange} disabled={isLoading} />
+                    <AgentSelector agentId={agentId} onAgentChange={onAgentChange} disabled={isLoading} />
                     <ModelSelector model={model} onModelChange={onModelChange} disabled={isLoading} />
                     <ModelParamsPopover
                         params={modelParams}

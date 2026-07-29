@@ -21,16 +21,18 @@ import java.util.List;
 /**
  * Handles the THINK state — LLM inference with live token streaming.
  *
- * <p>This is the core handler that replaces V1's {@code runTurn()} method.
+ * <p>
+ * This is the core handler that replaces V1's {@code runTurn()} method.
  * It performs a single LLM call, streams tokens to the event bus as they
  * arrive, accumulates the full response, and determines the next state:
  * <ul>
- *   <li>Tool calls present → transition to ACT</li>
- *   <li>No tool calls → transition to DONE</li>
- *   <li>Error → transition to ERROR</li>
+ * <li>Tool calls present → transition to ACT</li>
+ * <li>No tool calls → transition to DONE</li>
+ * <li>Error → transition to ERROR</li>
  * </ul>
  *
- * <p>The handler is stateless — all accumulation happens in local variables
+ * <p>
+ * The handler is stateless — all accumulation happens in local variables
  * within the reactive chain. The accumulated response is stored in the
  * session's execution state for the ActHandler to consume.
  */
@@ -77,9 +79,14 @@ public class ThinkHandler implements StateHandler {
             long latencyMs = System.currentTimeMillis() - startTimeMs;
             InferenceResponse response = accumulator.assemble();
 
-            // Record token usage
+            // Record token usage. lastPromptTokens is the provider-reported
+            // size of THIS request's context — the authoritative signal used
+            // by ContextCompactor to decide when to compact.
             session.getExecution().addTokenUsage(
                     response.getPromptTokens(), response.getCompletionTokens());
+            if (response.getPromptTokens() > 0) {
+                session.getExecution().setLastPromptTokens(response.getPromptTokens());
+            }
 
             // Emit ThinkEnd event
             ThinkingEvent.ThinkEnd endEvent = new ThinkingEvent.ThinkEnd(
@@ -182,10 +189,12 @@ public class ThinkHandler implements StateHandler {
         void feed(LlmChunk chunk) {
             switch (chunk.getType()) {
                 case TEXT_DELTA:
-                    if (chunk.getTextDelta() != null) content.append(chunk.getTextDelta());
+                    if (chunk.getTextDelta() != null)
+                        content.append(chunk.getTextDelta());
                     break;
                 case REASONING_DELTA:
-                    if (chunk.getReasoningDelta() != null) reasoning.append(chunk.getReasoningDelta());
+                    if (chunk.getReasoningDelta() != null)
+                        reasoning.append(chunk.getReasoningDelta());
                     break;
                 case TOOL_CALL_DELTA:
                     feedToolCall(chunk.getToolCallDelta());
@@ -199,15 +208,19 @@ public class ThinkHandler implements StateHandler {
         }
 
         private void feedToolCall(LlmChunk.ToolCallDelta delta) {
-            if (delta == null) return;
+            if (delta == null)
+                return;
             int idx = delta.getIndex();
             while (toolCalls.size() <= idx) {
                 toolCalls.add(new ToolCallAccumulator());
             }
             ToolCallAccumulator acc = toolCalls.get(idx);
-            if (delta.getId() != null) acc.id = delta.getId();
-            if (delta.getName() != null) acc.name = delta.getName();
-            if (delta.getArgumentsDelta() != null) acc.arguments.append(delta.getArgumentsDelta());
+            if (delta.getId() != null)
+                acc.id = delta.getId();
+            if (delta.getName() != null)
+                acc.name = delta.getName();
+            if (delta.getArgumentsDelta() != null)
+                acc.arguments.append(delta.getArgumentsDelta());
         }
 
         InferenceResponse assemble() {

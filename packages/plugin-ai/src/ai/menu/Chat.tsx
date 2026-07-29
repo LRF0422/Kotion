@@ -37,6 +37,7 @@ import { ErrorDisplay } from "./ErrorDisplay"
 import { ChatHeader } from "./chat/ChatHeader"
 import { ChatEmptyState } from "./chat/ChatEmptyState"
 import { ChatComposer } from "./chat/ChatComposer"
+import { AgentManagerDialog } from "./chat/AgentManagerDialog"
 import type { TargetPageStatus } from "./chat/PageMentionPicker"
 import { UserChoiceCard } from "./chat/UserChoiceCard"
 
@@ -45,6 +46,7 @@ import { UserChoiceCard } from "./chat/UserChoiceCard"
 const MODEL_STORAGE_KEY = 'kn_chat_model'
 const MODE_STORAGE_KEY = 'kn_chat_mode'
 const MODEL_PARAMS_STORAGE_KEY = 'kn_chat_model_params'
+const AGENT_STORAGE_KEY = 'kn_chat_agent'
 
 /** Parse persisted model-param JSON, ignoring malformed or out-of-range values. */
 const readModelParams = (): ChatModelParams => {
@@ -94,6 +96,23 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         setChatMode(mode)
         try { localStorage.setItem(MODE_STORAGE_KEY, mode) } catch { /* ignore */ }
     }, [])
+
+    // Custom agent definition selection (undefined = default agent).
+    const [selectedAgentId, setSelectedAgentId] = useState<number | undefined>(() => {
+        try {
+            const raw = localStorage.getItem(AGENT_STORAGE_KEY)
+            const parsed = raw ? Number(raw) : NaN
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+        } catch { return undefined }
+    })
+    const handleAgentChange = useCallback((agentId: number | undefined) => {
+        setSelectedAgentId(agentId)
+        try {
+            if (agentId == null) localStorage.removeItem(AGENT_STORAGE_KEY)
+            else localStorage.setItem(AGENT_STORAGE_KEY, String(agentId))
+        } catch { /* ignore */ }
+    }, [])
+    const [agentManagerOpen, setAgentManagerOpen] = useState(false)
 
     // Sampling params (temperature, maxTokens). Empty object = fall back to
     // whatever the backend model defaults to; persisted so tweaks survive reloads.
@@ -293,20 +312,22 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
     const agentEditor = (offscreenHandle?.editor as Editor) ?? editor
 
     // ─── Streaming agent ──────────────────────────────────────────
-    const { stream, stop } = useEditorAgentOptimized(
+    const { stream, continueStream, stop } = useEditorAgentOptimized(
         agentEditor,
         handleToolExecution,
         handleUserChoiceRequest,
         {
             model: selectedModel || undefined,
             mode: chatMode,
-            apiVersion: 'v2',
+            agentId: selectedAgentId,
             modelParams,
         },
     )
 
     // ─── Annotations / sub-agents / plan ──────────────────────────
     const [annotations, setAnnotations] = useState<AnnotationData[]>([])
+    // Session suspended on budget exhaustion — offer a "continue" action.
+    const [suspendedSessionId, setSuspendedSessionId] = useState<string | null>(null)
     const subAgents = useMemo(
         () => applySubAgentAnnotations({}, annotations as any[]),
         [annotations],
@@ -344,56 +365,40 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
         setCurrentSteps([])
         setAnnotations([])
         setError(null)
+        setSuspendedSessionId(null)
         buffer.reset()
         reasoningRef.current = ''
         setStreamingReasoning('')
     }, [buffer])
 
-    // ─── Submit ───────────────────────────────────────────────────
-    const submitMessage = useCallback(async (messageText: string) => {
-        const userMessage: Message = {
-            id: generateMessageId(),
-            content: messageText,
-            sender: "user",
-            timestamp: Date.now(),
+    // Stream callbacks shared by initial send & budget-continue.
+    const handleStreamAnnotation = useCallback((newAnnotations: AnnotationData[]) => {
+        setAnnotations(prev => [...prev, ...newAnnotations])
+        parseAnnotations(newAnnotations)
+        // Budget-exhaustion suspension — remember the session so the UI can
+        // offer "继续执行" (backend grants a fresh iteration budget on resume).
+        for (const a of newAnnotations as any[]) {
+            if (a?.type === 'agent_suspended' && a.sessionId) {
+                setSuspendedSessionId(String(a.sessionId))
+            }
         }
-        setMessages((prev) => [...prev, userMessage])
+    }, [parseAnnotations])
+
+    const handleStreamReasoning = useCallback((content: string) => {
+        reasoningRef.current += content
+        setStreamingReasoning(reasoningRef.current)
+    }, [])
+
+    // Shared stream consumption — drives one agent round (send or continue)
+    // to completion and finalizes the AI message / error state.
+    const consumeRound = useCallback(async (
+        start: () => Promise<{ textStream: AsyncGenerator<string> }>
+    ) => {
         setIsLoading(true)
         setError(null)
-        lastUserMessageRef.current = messageText
-        stepsRef.current = []
-        setCurrentSteps([])
-        buffer.reset()
-        reasoningRef.current = ''
-        setStreamingReasoning('')
-        setAnnotations([])
 
         try {
-            const currentMessages = [...messages, userMessage]
-            const historyMessages = getHistoryForAI(currentMessages)
-            // Remove the last user message from history — it's passed as prompt.
-            const history = historyMessages.slice(0, -1)
-
-            // Implicit context line so the model knows which page the tools
-            // are wired to (the UI keeps showing the raw user message).
-            const prompt = targetPage
-                ? `（本会话绑定编辑页面「${targetPage.title}」，所有文档工具作用于该页面）\n${messageText}`
-                : messageText
-
-            const { textStream } = await stream({
-                prompt,
-                messages: history,
-                sessionId: backendSessionId,
-                conversationId: backendConversationId,
-                onAnnotation: (newAnnotations: AnnotationData[]) => {
-                    setAnnotations(prev => [...prev, ...newAnnotations])
-                    parseAnnotations(newAnnotations)
-                },
-                onReasoning: (content: string) => {
-                    reasoningRef.current += content
-                    setStreamingReasoning(reasoningRef.current)
-                },
-            })
+            const { textStream } = await start()
 
             for await (const part of textStream) {
                 buffer.append(part)
@@ -462,10 +467,70 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                 console.error('Failed to flush off-screen edits:', err)
             })
         }
+    }, [buffer, generateMessageId, setMessages])
+
+    // ─── Submit ───────────────────────────────────────────
+    const submitMessage = useCallback(async (messageText: string) => {
+        const userMessage: Message = {
+            id: generateMessageId(),
+            content: messageText,
+            sender: "user",
+            timestamp: Date.now(),
+        }
+        setMessages((prev) => [...prev, userMessage])
+        lastUserMessageRef.current = messageText
+        stepsRef.current = []
+        setCurrentSteps([])
+        buffer.reset()
+        reasoningRef.current = ''
+        setStreamingReasoning('')
+        setAnnotations([])
+        setSuspendedSessionId(null)
+
+        const currentMessages = [...messages, userMessage]
+        const historyMessages = getHistoryForAI(currentMessages)
+        // Remove the last user message from history — it's passed as prompt.
+        const history = historyMessages.slice(0, -1)
+
+        // Implicit context line so the model knows which page the tools
+        // are wired to (the UI keeps showing the raw user message).
+        const prompt = targetPage
+            ? `（本会话绑定编辑页面「${targetPage.title}」，所有文档工具作用于该页面）\n${messageText}`
+            : messageText
+
+        await consumeRound(() => stream({
+            prompt,
+            messages: history,
+            sessionId: backendSessionId,
+            conversationId: backendConversationId,
+            onAnnotation: handleStreamAnnotation,
+            onReasoning: handleStreamReasoning,
+        }))
     }, [
-        stream, generateMessageId, messages, buffer,
-        backendSessionId, backendConversationId, parseAnnotations, setMessages,
-        targetPage,
+        stream, consumeRound, generateMessageId, messages, buffer,
+        backendSessionId, backendConversationId, setMessages,
+        handleStreamAnnotation, handleStreamReasoning, targetPage,
+    ])
+
+    // ─── Continue a budget-suspended session ────────────────────
+    const handleContinueTask = useCallback(async () => {
+        const sessionId = suspendedSessionId
+        if (!sessionId || isLoading) return
+        setSuspendedSessionId(null)
+        stepsRef.current = []
+        setCurrentSteps([])
+        buffer.reset()
+        reasoningRef.current = ''
+        setStreamingReasoning('')
+
+        await consumeRound(() => continueStream({
+            sessionId,
+            onAnnotation: handleStreamAnnotation,
+            onReasoning: handleStreamReasoning,
+        }))
+    }, [
+        suspendedSessionId, isLoading, buffer, consumeRound, continueStream,
+        handleStreamAnnotation, handleStreamReasoning,
     ])
 
     const handleSend = useCallback(() => {
@@ -583,6 +648,7 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                     onNewSession={handleNewSession}
                     onDelete={handleDeleteSession}
                     onClear={handleClearChat}
+                    onOpenAgentManager={() => setAgentManagerOpen(true)}
                 />
             </ExpandableChatHeader>
 
@@ -656,6 +722,20 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                         </div>
                     )}
 
+                    {/* Budget-exhaustion suspension — continue the same session */}
+                    {suspendedSessionId && !isLoading && (
+                        <div className="mx-2 my-1.5 flex items-center gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-[12px] text-muted-foreground">
+                            <span>任务已暂停（迭代预算耗尽）</span>
+                            <button
+                                type="button"
+                                className="ml-auto shrink-0 rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground hover:opacity-90"
+                                onClick={handleContinueTask}
+                            >
+                                继续执行
+                            </button>
+                        </div>
+                    )}
+
                     {/* User choice dialog */}
                     {pendingChoice && (
                         <UserChoiceCard
@@ -691,6 +771,8 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                     onModeChange={handleModeChange}
                     model={selectedModel}
                     onModelChange={handleModelChange}
+                    agentId={selectedAgentId}
+                    onAgentChange={handleAgentChange}
                     modelParams={modelParams}
                     onModelParamsChange={handleModelParamsChange}
                     targetPage={targetPage}
@@ -702,6 +784,9 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
                     onOpenPageWindow={handleOpenPageWindow}
                 />
             </ExpandableChatFooter>
+
+            {/* Custom agent definitions manager */}
+            <AgentManagerDialog open={agentManagerOpen} onOpenChange={setAgentManagerOpen} />
 
             {/* Floating page editor opened from the @-page chip */}
             {editWindowPageId && (

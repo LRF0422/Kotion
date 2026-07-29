@@ -18,11 +18,13 @@ import java.util.concurrent.TimeoutException;
 /**
  * Executes backend tools (server-side) with timeout and error handling.
  *
- * <p>Bridges the V2 engine to V1's {@link ToolRegistry} and {@link Tool}
+ * <p>
+ * Bridges the V2 engine to V1's {@link ToolRegistry} and {@link Tool}
  * implementations. Handles both sync and async tools, applying per-tool
  * timeout to prevent runaway executions.
  *
- * <p>Each execution returns a single {@link ToolOutcome} wrapped in a Flux
+ * <p>
+ * Each execution returns a single {@link ToolOutcome} wrapped in a Flux
  * (to allow streaming progress events for async tools in the future).
  */
 @Slf4j
@@ -41,7 +43,8 @@ public class BackendExecutor {
      *
      * @param call    the tool call to execute
      * @param session the current agent session (for building ToolContext)
-     * @return a Flux containing the tool outcome (may include progress events later)
+     * @return a Flux containing the tool outcome (may include progress events
+     *         later)
      */
     public Flux<ToolOutcome> execute(ToolCall call, AgentSession session) {
         Tool tool = toolRegistry.get(call.getName());
@@ -68,28 +71,29 @@ public class BackendExecutor {
      */
     private Flux<ToolOutcome> executeSync(Tool tool, ToolCall call, ToolContext context) {
         long startMs = System.currentTimeMillis();
+        long timeoutSeconds = resolveTimeout(tool);
 
         return Mono.fromCallable(() -> {
-                    ToolResult result = tool.execute(context, call.getArguments());
-                    long duration = System.currentTimeMillis() - startMs;
+            ToolResult result = tool.execute(context, call.getArguments());
+            long duration = System.currentTimeMillis() - startMs;
 
-                    if (result.isSuccess()) {
-                        return ToolOutcome.success(call.getId(), call.getName(),
-                                result.getOutput() != null ? result.getOutput() : "", duration);
-                    } else {
-                        return ToolOutcome.error(call.getId(), call.getName(),
-                                result.getError() != null ? result.getError() : "Unknown error", duration);
-                    }
-                })
+            if (result.isSuccess()) {
+                return ToolOutcome.success(call.getId(), call.getName(),
+                        result.getOutput() != null ? result.getOutput() : "", duration);
+            } else {
+                return ToolOutcome.error(call.getId(), call.getName(),
+                        result.getError() != null ? result.getError() : "Unknown error", duration);
+            }
+        })
                 .subscribeOn(Schedulers.boundedElastic())
-                .timeout(Duration.ofSeconds(config.getTimeoutSeconds()))
+                .timeout(Duration.ofSeconds(timeoutSeconds))
                 .onErrorResume(err -> {
                     long duration = System.currentTimeMillis() - startMs;
                     if (err instanceof TimeoutException) {
                         log.warn("Tool '{}' timed out after {}s in session {}",
-                                call.getName(), config.getTimeoutSeconds(), context.getSessionId());
+                                call.getName(), timeoutSeconds, context.getSessionId());
                         return Mono.just(ToolOutcome.timeout(
-                                call.getId(), call.getName(), config.getTimeoutSeconds(), duration));
+                                call.getId(), call.getName(), timeoutSeconds, duration));
                     }
                     log.error("Tool '{}' failed in session {}: {}",
                             call.getName(), context.getSessionId(), err.getMessage(), err);
@@ -105,6 +109,7 @@ public class BackendExecutor {
      */
     private Flux<ToolOutcome> executeAsync(AsyncTool asyncTool, ToolCall call, ToolContext context) {
         long startMs = System.currentTimeMillis();
+        long timeoutSeconds = resolveTimeout(asyncTool);
         StringBuilder resultHolder = new StringBuilder();
 
         return asyncTool.executeAsync(context, call.getArguments())
@@ -120,12 +125,12 @@ public class BackendExecutor {
                     String output = resultHolder.toString();
                     return Mono.just(ToolOutcome.success(call.getId(), call.getName(), output, duration));
                 }))
-                .timeout(Duration.ofSeconds(config.getTimeoutSeconds()))
+                .timeout(Duration.ofSeconds(timeoutSeconds))
                 .onErrorResume(err -> {
                     long duration = System.currentTimeMillis() - startMs;
                     if (err instanceof TimeoutException) {
                         return Mono.just(ToolOutcome.timeout(
-                                call.getId(), call.getName(), config.getTimeoutSeconds(), duration));
+                                call.getId(), call.getName(), timeoutSeconds, duration));
                     }
                     return Mono.just(ToolOutcome.error(
                             call.getId(), call.getName(),
@@ -135,12 +140,24 @@ public class BackendExecutor {
     }
 
     /**
+     * Per-tool timeout: the tool's override if present, else the global default.
+     */
+    private long resolveTimeout(Tool tool) {
+        Integer override = tool.getTimeoutOverrideSeconds();
+        return override != null ? override : config.getTimeoutSeconds();
+    }
+
+    /**
      * Build a V1-compatible ToolContext from the V2 AgentSession.
      */
     private ToolContext buildToolContext(AgentSession session) {
         ToolContext.ToolContextBuilder builder = ToolContext.builder()
                 .sessionId(session.getSessionId())
-                .conversationId(session.getConversationId());
+                .conversationId(session.getConversationId())
+                .modelName(session.getModelName())
+                // Live metadata reference — lets scratchpad tools
+                // (update_task_state / get_task_state) mutate session state.
+                .sessionMetadata(session.getMetadata());
 
         if (session.getIdentity() != null) {
             builder.userId(session.getIdentity().getUserId())

@@ -2,16 +2,41 @@ server:
   port: 7780
 
 agent:
+  # LLM provider selection (consumed by LlmClientFactory; providers map
+  # usually supplied via Nacos / environment config)
   default-provider: deepseek
   default-model: deepseek-chat
+  # ---- V2 engine (AgentProperties) ----
+  engine:
+    max-iterations: 20
+    streaming-enabled: true
+    max-delegate-depth: 2
+    delegate-timeout-seconds: 600
+  llm:
+    timeout-seconds: 120
+    max-retries: 3
+    idle-timeout-seconds: 30
+  tool:
+    timeout-seconds: 180
+    max-parallel: 5
+  orchestrator:
+    enabled: false
   context:
-    max-tokens: 32768
-    compression-threshold: 0.75
-    strategy: truncate
-  delegate:
-    max-depth: 2
-    max-sub-agents: 5
-    max-parallel: 3
+    max-context-tokens: 60000
+    compaction-threshold: 0.75
+    keep-recent-messages: 8
+    tool-result-max-chars: 8000
+    evict-tool-results-after-iterations: 3
+  state:
+    backend: jdbc
+    snapshot-interval: 5
+  rate-limit:
+    enabled: true
+    requests-per-minute: 60
+  event-store:
+    enabled: true
+    max-events: 2000
+    ttl-hours: 24
   skill:
     web-search:
       enabled: true

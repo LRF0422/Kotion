@@ -11,20 +11,22 @@ import reactor.core.publisher.Flux;
 /**
  * Handles the OBSERVE state — post-tool-execution decision point.
  *
- * <p>After tools have been executed (ACT state), the OBSERVE handler:
+ * <p>
+ * After tools have been executed (ACT state), the OBSERVE handler:
  * <ul>
- *   <li>Evaluates the conversation state</li>
- *   <li>Checks iteration limits</li>
- *   <li>Decides whether to loop back to THINK for another LLM call</li>
+ * <li>Evaluates the conversation state</li>
+ * <li>Checks iteration limits</li>
+ * <li>Decides whether to loop back to THINK for another LLM call</li>
  * </ul>
  *
- * <p>In the current implementation, OBSERVE always transitions back to THINK
+ * <p>
+ * In the current implementation, OBSERVE always transitions back to THINK
  * (the LLM decides when to stop by not returning tool calls). Future
  * enhancements may add:
  * <ul>
- *   <li>Context window compression before the next LLM call</li>
- *   <li>Checkpoint/snapshot logic</li>
- *   <li>Abort conditions based on error patterns</li>
+ * <li>Context window compression before the next LLM call</li>
+ * <li>Checkpoint/snapshot logic</li>
+ * <li>Abort conditions based on error patterns</li>
  * </ul>
  */
 @Slf4j
@@ -38,11 +40,12 @@ public class ObserveHandler implements StateHandler {
         log.debug("ObserveHandler: session {} at iteration {}, deciding next step",
                 sessionId, iteration);
 
-        // Safety: check if we've hit the iteration limit
+        // Iteration budget exhausted: suspend instead of forcing DONE so the
+        // user can grant another budget round via /chat/resume {action:"continue"}
         if (session.hasReachedMaxIterations()) {
-            log.warn("ObserveHandler: session {} reached max iterations ({}), forcing DONE",
+            log.warn("ObserveHandler: session {} reached max iterations ({}), suspending for continue",
                     sessionId, session.getMaxIterations());
-            return Flux.just(Transition.toDone(sessionId, "max_iterations"));
+            return Flux.just(Transition.toSuspended(sessionId, "iteration_budget_exhausted"));
         }
 
         // Default: loop back to THINK for the next LLM call

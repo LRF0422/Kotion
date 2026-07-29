@@ -24,15 +24,23 @@ export * from "./providers"
 // Capability catalog collector (replaces progressive discovery on the frontend)
 export * from "./capabilities"
 
-// Chat Client - Backend-driven SSE communication
+// Chat Client - Backend-driven SSE communication (V2)
 // Explicitly export to avoid conflicts with types.ts re-exports
 export {
-    KnowledgeChatClient,
-    createChatRequest,
+    V2ChatClient,
+    parseV2SSEStream,
     fetchModels,
-    parseSSEStream,
-    collectSSEEvents,
+    listAgentDefinitions,
+    createAgentDefinition,
+    updateAgentDefinition,
+    deleteAgentDefinition,
+    fetchAgentTools,
 } from "./chat-client/index"
+export type {
+    AgentDefinition,
+    AgentDefinitionInput,
+    AgentToolInfo,
+} from "./chat-client/agent-definitions"
 export type {
     ChatStreamEvent,
     TextDeltaEvent,

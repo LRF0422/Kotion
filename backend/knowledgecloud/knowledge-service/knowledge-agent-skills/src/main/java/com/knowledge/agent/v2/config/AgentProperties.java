@@ -6,11 +6,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Unified configuration properties for the Agent V2 engine.
  *
- * <p>Replaces the scattered {@code @Value} annotations found throughout the V1
+ * <p>
+ * Replaces the scattered {@code @Value} annotations found throughout the V1
  * codebase. All agent-related configuration is centralized here under the
  * {@code agent} prefix.
  *
- * <p>Example {@code application.yml}:
+ * <p>
+ * Example {@code application.yml}:
+ * 
  * <pre>
  * agent:
  *   engine:
@@ -26,10 +29,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *   orchestrator:
  *     enabled: false
  *     fast-path-message-length: 200
+ *   context:
+ *     max-context-tokens: 60000
+ *     compaction-threshold: 0.75
+ *     keep-recent-messages: 8
+ *     tool-result-max-chars: 8000
+ *     evict-tool-results-after-iterations: 3
  *   state:
  *     backend: jdbc
  *     snapshot-interval: 5
- *     dir: /tmp/agent-states
  *   rate-limit:
  *     enabled: true
  *     requests-per-minute: 60
@@ -47,6 +55,7 @@ public class AgentProperties {
     private LlmConfig llm = new LlmConfig();
     private ToolConfig tool = new ToolConfig();
     private OrchestratorConfig orchestrator = new OrchestratorConfig();
+    private ContextConfig context = new ContextConfig();
     private StateConfig state = new StateConfig();
     private RateLimitConfig rateLimit = new RateLimitConfig();
     private EventStoreConfig eventStore = new EventStoreConfig();
@@ -59,6 +68,8 @@ public class AgentProperties {
         private boolean streamingEnabled = true;
         /** Maximum delegate depth for sub-agents. */
         private int maxDelegateDepth = 3;
+        /** Timeout for a delegated sub-agent run (seconds). */
+        private int delegateTimeoutSeconds = 600;
     }
 
     @Data
@@ -96,13 +107,30 @@ public class AgentProperties {
     }
 
     @Data
+    public static class ContextConfig {
+        /** Hard budget for the model context window (prompt tokens). */
+        private int maxContextTokens = 60000;
+        /**
+         * Compaction triggers when lastPromptTokens exceeds maxContextTokens *
+         * threshold.
+         */
+        private double compactionThreshold = 0.75;
+        /** Number of most recent messages always kept verbatim during compaction. */
+        private int keepRecentMessages = 8;
+        /**
+         * Tool results longer than this (chars) are truncated when appended to context.
+         */
+        private int toolResultMaxChars = 8000;
+        /** Tool results older than this many iterations are evicted first (L1). */
+        private int evictToolResultsAfterIterations = 3;
+    }
+
+    @Data
     public static class StateConfig {
-        /** Persistence backend: "file", "jdbc", or "none". */
+        /** Persistence backend: "jdbc" or "none". */
         private String backend = "none";
         /** Snapshot every N iterations (in addition to tool-call boundaries). */
         private int snapshotInterval = 5;
-        /** Base directory for file-based state storage. */
-        private String dir = "/tmp/agent-states";
     }
 
     @Data

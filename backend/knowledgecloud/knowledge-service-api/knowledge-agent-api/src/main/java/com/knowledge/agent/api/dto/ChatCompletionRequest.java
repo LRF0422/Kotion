@@ -37,11 +37,14 @@ public class ChatCompletionRequest {
     private Integer maxTokens;
 
     /**
-     * @deprecated Tool schemas should travel inside {@link SkillPayload#getTools()}.
-     * The top-level {@code tools[]} array is retained for backward compatibility
-     * but will be empty when the frontend operates in skills-only mode
-     * (KN_SKILLS_ONLY_CATALOG). The backend's {@code AgentHarness.mergeFrontendTools()}
-     * already handles null/empty gracefully.
+     * @deprecated Tool schemas should travel inside
+     *             {@link SkillPayload#getTools()}.
+     *             The top-level {@code tools[]} array is retained for backward
+     *             compatibility
+     *             but will be empty when the frontend operates in skills-only mode
+     *             (KN_SKILLS_ONLY_CATALOG). The backend's
+     *             {@code AgentHarness.mergeFrontendTools()}
+     *             already handles null/empty gracefully.
      */
     @Deprecated
     @ApiModelProperty("Tools to enable (OpenAI-compatible format). Deprecated — use SkillPayload.tools instead.")
@@ -67,4 +70,7 @@ public class ChatCompletionRequest {
 
     @ApiModelProperty(value = "Run mode: 'execute' (default) or 'plan' (read-only research → plan → approval)", example = "execute")
     private String mode;
+
+    @ApiModelProperty("Custom agent definition id — when set, the session is assembled from the definition (system prompt / model / tool set / max iterations)")
+    private Long agentId;
 }

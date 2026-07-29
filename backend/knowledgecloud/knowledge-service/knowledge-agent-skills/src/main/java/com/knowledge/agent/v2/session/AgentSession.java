@@ -12,20 +12,27 @@ import java.util.UUID;
 /**
  * Immutable agent session — the complete context for one agent execution.
  *
- * <p>The session is the primary data carrier through the entire engine pipeline.
+ * <p>
+ * The session is the primary data carrier through the entire engine pipeline.
  * It is structurally immutable (fields are final) with the exception of
  * {@link ExecutionState}, which encapsulates all mutable state behind
  * thread-safe operations.
  *
- * <p>Design principles:
+ * <p>
+ * Design principles:
  * <ul>
- *   <li><b>Immutable shell</b>: identity, config, and tool set are fixed at creation</li>
- *   <li><b>Mutable core</b>: only {@code execution} changes during the session lifecycle</li>
- *   <li><b>Thread-safe</b>: all mutable operations go through atomic/synchronized primitives</li>
- *   <li><b>Serializable</b>: can be snapshotted for crash recovery</li>
+ * <li><b>Immutable shell</b>: identity, config, and tool set are fixed at
+ * creation</li>
+ * <li><b>Mutable core</b>: only {@code execution} changes during the session
+ * lifecycle</li>
+ * <li><b>Thread-safe</b>: all mutable operations go through atomic/synchronized
+ * primitives</li>
+ * <li><b>Serializable</b>: can be snapshotted for crash recovery</li>
  * </ul>
  *
- * <p>Replaces V1's {@code ToolContext} + {@code LoopState} + scattered mutable fields.
+ * <p>
+ * Replaces V1's {@code ToolContext} + {@code LoopState} + scattered mutable
+ * fields.
  */
 public class AgentSession {
 
@@ -48,6 +55,11 @@ public class AgentSession {
     private final ExecutionState execution;
 
     // ---- Metadata ----
+    /**
+     * Mutable, thread-safe metadata map. Used for runtime bookkeeping that
+     * must survive checkpoints: agent-maintained task state (scratchpad),
+     * delegate depth, custom agent id, etc.
+     */
     private final Map<String, Object> metadata;
 
     private AgentSession(Builder builder) {
@@ -66,9 +78,10 @@ public class AgentSession {
                 ? Collections.unmodifiableList(builder.frontendTools)
                 : Collections.emptyList();
         this.execution = builder.execution != null ? builder.execution : new ExecutionState();
-        this.metadata = builder.metadata != null
-                ? Collections.unmodifiableMap(builder.metadata)
-                : Collections.emptyMap();
+        this.metadata = new java.util.concurrent.ConcurrentHashMap<>();
+        if (builder.metadata != null) {
+            this.metadata.putAll(builder.metadata);
+        }
     }
 
     // ---- Getters ----

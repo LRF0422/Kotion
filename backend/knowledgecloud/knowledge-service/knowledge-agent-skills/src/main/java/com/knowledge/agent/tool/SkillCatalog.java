@@ -25,7 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>
  * <b>Per-request lifecycle:</b> This class is NOT a Spring bean. A fresh
- * instance is created at the start of each request by {@code AgentHarness.run()}
+ * instance is created at the start of each request by
+ * {@code AgentHarness.run()}
  * and passed through {@code ToolContext} to all components that need it.
  * This eliminates the race condition where concurrent requests would corrupt
  * each other's state on a shared singleton.
@@ -33,9 +34,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <h3>Lifecycle</h3>
  * <ol>
  * <li>At the start of each request, {@link #seed(List)} is called with
- *     the frontend's skill list</li>
+ * the frontend's skill list</li>
  * <li>During the agentic loop, {@link SearchSkillsTool} calls
- *     {@link #search(String)} and {@link #activate(String)}</li>
+ * {@link #search(String)} and {@link #activate(String)}</li>
  * </ol>
  */
 @Slf4j
@@ -82,9 +83,9 @@ public class SkillCatalog {
      * Matching strategy (layered, cheapest first):
      * <ol>
      * <li><b>Domain match</b>: if the query contains a known domain keyword,
-     *     return all skills in that domain</li>
+     * return all skills in that domain</li>
      * <li><b>Keyword match</b>: match against skill name, tags, and
-     *     description words</li>
+     * description words</li>
      * </ol>
      *
      * <p>
@@ -215,7 +216,8 @@ public class SkillCatalog {
      * Check if any skill in the catalog (activated or not) references the
      * given tool name via its embedded {@code tools} list.
      *
-     * <p>Used by {@link HarnessLoop#buildSkillToolHint} to produce a helpful
+     * <p>
+     * Used by the execution loop to produce a helpful
      * error message when the LLM calls a skill tool that hasn't been loaded
      * into {@code frontendToolNames} yet (e.g. same-response as
      * {@code search_skills(activate: ...)}).

@@ -11,7 +11,8 @@ import java.util.Set;
  * Full state snapshot of an agent loop, persisted to disk for crash recovery.
  *
  * <p>
- * Unlike the Redis-backed {@link AgentEventStore} (which is an append-only event
+ * Unlike the Redis-backed {@link AgentEventStore} (which is an append-only
+ * event
  * log for SSE replay), this captures the <b>mutable working state</b> of the
  * agent loop at a natural commit point — the working message list, iteration
  * counter, activated skills, and recent tool calls. On restart, a snapshot can
@@ -57,6 +58,14 @@ public class AgentStateSnapshot {
      * plans are persisted).
      */
     private String orchestrationPlan;
+
+    /**
+     * Full V2 session payload as JSON (see
+     * {@code com.knowledge.agent.v2.state.SessionSnapshotCodec}). When set,
+     * this is the authoritative session state; the legacy V1 fields above
+     * remain for backward-compatible rows.
+     */
+    private String v2SessionJson;
 
     /** Epoch millis when the snapshot was taken. */
     private long timestamp;

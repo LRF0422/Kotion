@@ -4,9 +4,14 @@ import com.knowledge.agent.api.dto.ChatCompletionRequest;
 import com.knowledge.agent.api.dto.ChatMessage;
 import com.knowledge.agent.api.dto.ChatTool;
 import com.knowledge.agent.api.dto.SkillPayload;
+import com.knowledge.agent.store.AgentDefinitionService;
+import com.knowledge.agent.store.AgentStateSnapshot;
+import com.knowledge.agent.store.entity.AgentDefinitionEntity;
+import com.knowledge.agent.store.AgentStateStore;
 import com.knowledge.agent.v2.config.AgentProperties;
 import com.knowledge.agent.v2.engine.AgentEngine;
 import com.knowledge.agent.v2.event.AgentEvent;
+import com.knowledge.agent.v2.event.DelegationEvent;
 import com.knowledge.agent.v2.event.LifecycleEvent;
 import com.knowledge.agent.v2.event.ThinkingEvent;
 import com.knowledge.agent.v2.event.ToolEvent;
@@ -15,6 +20,8 @@ import com.knowledge.agent.v2.session.AgentMode;
 import com.knowledge.agent.v2.session.AgentSession;
 import com.knowledge.agent.v2.session.ConversationMessage;
 import com.knowledge.agent.v2.session.ExecutionState;
+import com.knowledge.agent.v2.state.SessionSnapshotCodec;
+import com.knowledge.agent.v2.eventbus.AgentEventBus;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -36,16 +43,20 @@ import java.util.stream.Collectors;
 /**
  * V2 Agent chat endpoint — semantic SSE protocol.
  *
- * <p>POST /api/v2/agent/chat
+ * <p>
+ * POST /api/v2/agent/chat
  *
- * <p>This replaces the V1 {@code /api/v1/chat/completions} endpoint with:
+ * <p>
+ * This replaces the V1 {@code /api/v1/chat/completions} endpoint with:
  * <ul>
- *   <li>Semantic event types ({@code think.start}, {@code tool.completed}, etc.)</li>
- *   <li>Clean session lifecycle events</li>
- *   <li>Structured event payloads (no OpenAI format wrapping)</li>
+ * <li>Semantic event types ({@code think.start}, {@code tool.completed},
+ * etc.)</li>
+ * <li>Clean session lifecycle events</li>
+ * <li>Structured event payloads (no OpenAI format wrapping)</li>
  * </ul>
  *
- * <p>The V1 endpoint remains available for backward compatibility (deprecated).
+ * <p>
+ * The V1 endpoint remains available for backward compatibility (deprecated).
  */
 @Api(tags = "Agent V2")
 @Slf4j
@@ -56,6 +67,15 @@ public class AgentV2Controller {
 
     private final AgentEngine agentEngine;
     private final AgentProperties properties;
+    /** Snapshot store for crash/restart recovery (null when backend=none). */
+    private final AgentStateStore stateStore;
+    private final SessionSnapshotCodec snapshotCodec;
+    /**
+     * Event bus — source of sub-agent DelegationEvents merged into the SSE stream.
+     */
+    private final AgentEventBus eventBus;
+    /** Custom agent definitions applied via {@code request.agentId} (nullable). */
+    private final AgentDefinitionService definitionService;
 
     /** Suspended sessions waiting for frontend tool results. */
     private final ConcurrentHashMap<String, AgentSession> suspendedSessions = new ConcurrentHashMap<>();
@@ -66,7 +86,8 @@ public class AgentV2Controller {
     /**
      * Main V2 streaming chat endpoint.
      *
-     * <p>Accepts the same request format as V1 for ease of migration, but
+     * <p>
+     * Accepts the same request format as V1 for ease of migration, but
      * the response stream uses the V2 semantic event protocol.
      */
     @ApiOperation("V2 Agent Chat (Semantic SSE)")
@@ -85,17 +106,27 @@ public class AgentV2Controller {
         // Sequence counter for SSE id field
         AtomicLong seq = new AtomicLong(0);
         AtomicReference<Disposable> subscriptionRef = new AtomicReference<>();
+        AtomicReference<Disposable> delegationRef = new AtomicReference<>();
 
         // Emitter lifecycle callbacks
-        emitter.onCompletion(() -> disposeIfActive(subscriptionRef));
+        emitter.onCompletion(() -> {
+            disposeIfActive(subscriptionRef);
+            disposeIfActive(delegationRef);
+        });
         emitter.onTimeout(() -> {
             log.warn("V2 SSE timeout: sessionId={}", session.getSessionId());
             disposeIfActive(subscriptionRef);
+            disposeIfActive(delegationRef);
         });
         emitter.onError(e -> {
             log.error("V2 SSE error: sessionId={}: {}", session.getSessionId(), e.getMessage());
             disposeIfActive(subscriptionRef);
+            disposeIfActive(delegationRef);
         });
+
+        // Sub-agent events (delegate_task) are published on the bus under the
+        // parent session id — merge them into this SSE stream.
+        delegationRef.set(subscribeDelegationEvents(session.getSessionId(), emitter, seq));
 
         // Run the engine and stream events to SSE
         Disposable subscription = agentEngine.run(session)
@@ -105,16 +136,14 @@ public class AgentV2Controller {
                             sendEvent(emitter, event, seq);
                             // If engine suspended, stash session for resume
                             if (event instanceof com.knowledge.agent.v2.event.StateEvent.StateTransition) {
-                                com.knowledge.agent.v2.event.StateEvent.StateTransition st =
-                                        (com.knowledge.agent.v2.event.StateEvent.StateTransition) event;
+                                com.knowledge.agent.v2.event.StateEvent.StateTransition st = (com.knowledge.agent.v2.event.StateEvent.StateTransition) event;
                                 if (st.getToState() == com.knowledge.agent.v2.engine.AgentState.SUSPENDED) {
-                                    suspendedSessions.put(session.getSessionId(), session);
+                                    stashSuspended(session);
                                 }
                             }
                         },
                         error -> sendError(emitter, error, session.getSessionId(), seq),
-                        () -> completeEmitter(emitter)
-                );
+                        () -> completeEmitter(emitter));
 
         subscriptionRef.set(subscription);
         return emitter;
@@ -123,17 +152,28 @@ public class AgentV2Controller {
     // ---- Resume endpoint for FRONTEND tool results ----
 
     /**
-     * Resume a suspended session after frontend tool execution.
+     * Resume a suspended session.
      *
-     * <p>When the engine dispatches FRONTEND tools, it enters SUSPENDED state.
-     * The frontend executes those tools locally and POSTs results here to
-     * continue execution. Returns a new SSE stream for the resumed session.
+     * <p>
+     * Two resume modes:
+     * <ul>
+     * <li>Frontend tool results ({@code toolResults} set): results are
+     * appended and the engine continues reasoning.</li>
+     * <li>{@code action="continue"}: the session was suspended because its
+     * iteration budget ran out — the counter is reset and the loop
+     * continues (context compaction fires automatically before THINK).</li>
+     * </ul>
+     *
+     * <p>
+     * If the session is no longer in memory (process restart), it is
+     * rebuilt from the last persisted snapshot.
      */
     @ApiOperation("Resume suspended session with tool results")
     @PostMapping(value = "/chat/resume")
     public SseEmitter resume(@RequestBody ResumeRequest request) {
         String sessionId = request.getSessionId();
-        AgentSession session = suspendedSessions.remove(sessionId);
+        AgentSession stashed = suspendedSessions.remove(sessionId);
+        final AgentSession session = stashed != null ? stashed : restoreFromSnapshot(sessionId);
 
         if (session == null) {
             SseEmitter errorEmitter = new SseEmitter(0L);
@@ -152,17 +192,29 @@ public class AgentV2Controller {
             return errorEmitter;
         }
 
-        log.info("V2 resume: sessionId={}, toolResults={}", sessionId,
+        log.info("V2 resume: sessionId={}, action={}, toolResults={}", sessionId,
+                request.getAction(),
                 request.getToolResults() != null ? request.getToolResults().size() : 0);
 
-        // Apply tool results to the session
+        // Apply tool results to the session (LLM-visible content is capped;
+        // the frontend already has the full result locally)
         if (request.getToolResults() != null) {
+            int maxChars = properties.getContext().getToolResultMaxChars();
             for (ToolResultPayload tr : request.getToolResults()) {
                 ConversationMessage toolMsg = ConversationMessage.toolResult(
-                        tr.getToolCallId(), tr.getToolName(), tr.getResult());
+                        tr.getToolCallId(), tr.getToolName(),
+                        com.knowledge.agent.v2.context.ContextCompactor
+                                .truncateToolResult(tr.getResult(), maxChars));
                 session.getExecution().addMessage(toolMsg);
             }
         }
+
+        if ("continue".equalsIgnoreCase(request.getAction())) {
+            // Budget-exhaustion resume: grant a fresh iteration budget. The
+            // ContextWindowInterceptor compacts before the next THINK if needed.
+            session.getExecution().setIteration(0);
+        }
+        session.getExecution().setSuspendReason(null);
 
         // Transition from SUSPENDED → THINK (tool results applied, continue reasoning)
         session.getExecution().transitionTo(com.knowledge.agent.v2.engine.AgentState.THINK);
@@ -171,10 +223,22 @@ public class AgentV2Controller {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         AtomicLong seq = new AtomicLong(0);
         AtomicReference<Disposable> subscriptionRef = new AtomicReference<>();
+        AtomicReference<Disposable> delegationRef = new AtomicReference<>();
 
-        emitter.onCompletion(() -> disposeIfActive(subscriptionRef));
-        emitter.onTimeout(() -> disposeIfActive(subscriptionRef));
-        emitter.onError(e -> disposeIfActive(subscriptionRef));
+        emitter.onCompletion(() -> {
+            disposeIfActive(subscriptionRef);
+            disposeIfActive(delegationRef);
+        });
+        emitter.onTimeout(() -> {
+            disposeIfActive(subscriptionRef);
+            disposeIfActive(delegationRef);
+        });
+        emitter.onError(e -> {
+            disposeIfActive(subscriptionRef);
+            disposeIfActive(delegationRef);
+        });
+
+        delegationRef.set(subscribeDelegationEvents(sessionId, emitter, seq));
 
         Disposable subscription = agentEngine.resume(session)
                 .subscribeOn(Schedulers.boundedElastic())
@@ -182,19 +246,74 @@ public class AgentV2Controller {
                         event -> {
                             sendEvent(emitter, event, seq);
                             if (event instanceof com.knowledge.agent.v2.event.StateEvent.StateTransition) {
-                                com.knowledge.agent.v2.event.StateEvent.StateTransition st =
-                                        (com.knowledge.agent.v2.event.StateEvent.StateTransition) event;
+                                com.knowledge.agent.v2.event.StateEvent.StateTransition st = (com.knowledge.agent.v2.event.StateEvent.StateTransition) event;
                                 if (st.getToState() == com.knowledge.agent.v2.engine.AgentState.SUSPENDED) {
-                                    suspendedSessions.put(session.getSessionId(), session);
+                                    stashSuspended(session);
                                 }
                             }
                         },
                         error -> sendError(emitter, error, sessionId, seq),
-                        () -> completeEmitter(emitter)
-                );
+                        () -> completeEmitter(emitter));
 
         subscriptionRef.set(subscription);
         return emitter;
+    }
+
+    // ---- Delegation event forwarding & suspension bookkeeping ----
+
+    /**
+     * Subscribe to sub-agent delegation events for a session and forward them
+     * to the SSE emitter. The engine's own events flow through the run/resume
+     * Flux; only {@link DelegationEvent}s are taken from the bus to avoid
+     * duplicates.
+     */
+    private Disposable subscribeDelegationEvents(String sessionId, SseEmitter emitter, AtomicLong seq) {
+        return eventBus.subscribeSession(sessionId)
+                .filter(ev -> ev instanceof DelegationEvent)
+                .subscribe(
+                        ev -> sendEvent(emitter, ev, seq),
+                        err -> log.warn("V2: delegation event stream error for session {}: {}",
+                                sessionId, err.getMessage()));
+    }
+
+    /**
+     * Stash a suspended session in memory and checkpoint it to the store so
+     * it survives a process restart.
+     */
+    private void stashSuspended(AgentSession session) {
+        suspendedSessions.put(session.getSessionId(), session);
+        if (stateStore != null) {
+            try {
+                stateStore.save(session.getSessionId(), snapshotCodec.encode(session));
+            } catch (Exception e) {
+                log.warn("V2: failed to checkpoint suspended session {}: {}",
+                        session.getSessionId(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Rebuild a session from its last persisted snapshot (process restarted
+     * or the in-memory entry was evicted). The auth token is re-injected
+     * from the current request — it is never persisted.
+     */
+    private AgentSession restoreFromSnapshot(String sessionId) {
+        if (stateStore == null) {
+            return null;
+        }
+        try {
+            AgentStateSnapshot snapshot = stateStore.load(sessionId);
+            AgentSession session = snapshotCodec.decode(snapshot, SecurityContextUtil.getToken());
+            if (session != null) {
+                log.info("V2 resume: session {} restored from snapshot (iteration={})",
+                        sessionId, session.getExecution().getIteration());
+            }
+            return session;
+        } catch (Exception e) {
+            log.warn("V2 resume: failed to restore session {} from snapshot: {}",
+                    sessionId, e.getMessage());
+            return null;
+        }
     }
 
     // ---- Session building ----
@@ -234,7 +353,8 @@ public class AgentV2Controller {
 
         // Determine mode
         AgentMode mode = "plan".equalsIgnoreCase(request.getMode())
-                ? AgentMode.PLAN : AgentMode.EXECUTE;
+                ? AgentMode.PLAN
+                : AgentMode.EXECUTE;
 
         // Extract frontend tools from skills + top-level tools.
         // The frontend ships tool definitions inside each skill's .tools[] array
@@ -242,9 +362,10 @@ public class AgentV2Controller {
         // see every callable tool.
         List<ChatTool> frontendTools = extractFrontendTools(request);
 
-        return AgentSession.builder()
+        AgentSession.Builder builder = AgentSession.builder()
                 .sessionId(request.getSessionId() != null
-                        ? request.getSessionId() : UUID.randomUUID().toString())
+                        ? request.getSessionId()
+                        : UUID.randomUUID().toString())
                 .conversationId(conversationId)
                 .traceId(UUID.randomUUID().toString().substring(0, 8))
                 .identity(identity)
@@ -252,8 +373,78 @@ public class AgentV2Controller {
                 .maxIterations(properties.getEngine().getMaxIterations())
                 .modelName(request.getModel())
                 .frontendTools(frontendTools)
-                .execution(execution)
-                .build();
+                .execution(execution);
+
+        applyAgentDefinition(request, identity.getTenantId(), builder, execution);
+
+        return builder.build();
+    }
+
+    /**
+     * Apply a custom agent definition ({@code request.agentId}) to the session:
+     * system prompt (custom prompt first, merged with any frontend system
+     * message), model fallback, backend tool restriction and iteration budget.
+     * The agentId is recorded in metadata so snapshots can attribute the run.
+     */
+    private void applyAgentDefinition(ChatCompletionRequest request, Long tenantId,
+            AgentSession.Builder builder, ExecutionState execution) {
+        if (request.getAgentId() == null) {
+            return;
+        }
+        if (definitionService == null) {
+            throw new IllegalStateException("Custom agent support is not available");
+        }
+        AgentDefinitionEntity def = definitionService.get(request.getAgentId(), tenantId);
+        if (def == null || Boolean.FALSE.equals(def.getEnabled())) {
+            throw new IllegalArgumentException("Agent definition not found or disabled: "
+                    + request.getAgentId());
+        }
+
+        // System prompt: custom prompt takes the lead. If the frontend already
+        // sent a system message, merge (custom first); otherwise let InitHandler
+        // inject it as the leading system message.
+        List<ConversationMessage> messages = execution.getMessages();
+        boolean merged = false;
+        for (int i = 0; i < messages.size(); i++) {
+            ConversationMessage msg = messages.get(i);
+            if ("system".equals(msg.getRole())) {
+                String frontendPrompt = msg.getContent() != null ? msg.getContent() : "";
+                messages.set(i, ConversationMessage.builder()
+                        .role("system")
+                        .content(def.getSystemPrompt() + "\n\n" + frontendPrompt)
+                        .build());
+                execution.setMessages(messages);
+                merged = true;
+                break;
+            }
+        }
+        if (!merged) {
+            builder.systemPrompt(def.getSystemPrompt());
+        }
+
+        // Model: definition model only fills in when the request left it empty
+        if ((request.getModel() == null || request.getModel().isEmpty())
+                && def.getModelName() != null && !def.getModelName().isEmpty()) {
+            builder.modelName(def.getModelName());
+        }
+
+        // Backend tool restriction (empty = all backend tools)
+        Set<String> toolIds = definitionService.parseToolIds(def.getToolIds());
+        if (!toolIds.isEmpty()) {
+            builder.toolIds(toolIds);
+        }
+
+        if (def.getMaxIterations() != null) {
+            builder.maxIterations(def.getMaxIterations());
+        }
+
+        // Record the agentId for snapshots / observability
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("agentId", def.getId().toString());
+        metadata.put("agentName", def.getName());
+        builder.metadata(metadata);
+
+        log.info("V2 chat: applied agent definition id={}, name={}", def.getId(), def.getName());
     }
 
     /**
@@ -340,7 +531,7 @@ public class AgentV2Controller {
     }
 
     private void sendError(SseEmitter emitter, Throwable error,
-                           String sessionId, AtomicLong seq) {
+            String sessionId, AtomicLong seq) {
         try {
             long id = seq.incrementAndGet();
             Map<String, Object> payload = new LinkedHashMap<>();
@@ -361,7 +552,8 @@ public class AgentV2Controller {
     private void completeEmitter(SseEmitter emitter) {
         try {
             emitter.complete();
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
     /**
@@ -420,6 +612,25 @@ public class AgentV2Controller {
             payload.put("errorCode", e.getErrorCode());
             payload.put("errorMessage", e.getErrorMessage());
             payload.put("durationMs", e.getDurationMs());
+        } else if (event instanceof DelegationEvent) {
+            DelegationEvent d = (DelegationEvent) event;
+            payload.put("agentId", d.getAgentId());
+            payload.put("parentAgentId", d.getParentAgentId());
+            payload.put("depth", d.getDepth());
+            if (event instanceof DelegationEvent.SubAgentSpawned) {
+                DelegationEvent.SubAgentSpawned e = (DelegationEvent.SubAgentSpawned) event;
+                payload.put("agentName", e.getAgentName());
+                payload.put("taskDescription", e.getTaskDescription());
+            } else if (event instanceof DelegationEvent.SubAgentProgress) {
+                DelegationEvent.SubAgentProgress e = (DelegationEvent.SubAgentProgress) event;
+                payload.put("iteration", e.getIteration());
+                payload.put("status", e.getStatus());
+            } else if (event instanceof DelegationEvent.SubAgentCompleted) {
+                DelegationEvent.SubAgentCompleted e = (DelegationEvent.SubAgentCompleted) event;
+                payload.put("result", e.getResult());
+                payload.put("durationMs", e.getDurationMs());
+                payload.put("success", e.isSuccess());
+            }
         } else {
             // Generic: just type and sessionId
             payload.put("eventType", event.type());
@@ -438,9 +649,13 @@ public class AgentV2Controller {
     }
 
     private static Long parseLong(String val) {
-        if (val == null || val.isEmpty()) return null;
-        try { return Long.parseLong(val); }
-        catch (NumberFormatException e) { return null; }
+        if (val == null || val.isEmpty())
+            return null;
+        try {
+            return Long.parseLong(val);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     // ---- Request DTOs ----
@@ -450,6 +665,8 @@ public class AgentV2Controller {
     public static class ResumeRequest {
         private String sessionId;
         private List<ToolResultPayload> toolResults;
+        /** "continue" = budget-exhaustion resume (no tool results). */
+        private String action;
     }
 
     /** A single tool execution result from the frontend. */

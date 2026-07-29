@@ -16,10 +16,7 @@
  * This yields the same HarnessEvent types so the UI layer works unchanged.
  */
 
-import { V2ChatClient } from '../chat-client/v2-client'
 import type { ToolResultPayload } from '../chat-client/v2-client'
-import type { ChatMessage, ChatRequest, ChatStreamEvent, ToolCallDelta } from '../chat-client/types'
-import { parseV2SSEStream } from '../chat-client/v2-sse-parser'
 import type { HarnessEvent, HarnessRunInput } from './types'
 import type { OnToolExecution, ToolDefinition } from '../types'
 import { parseToolArgs } from './tool-loop'
@@ -30,6 +27,18 @@ const DEFAULT_V2_API_BASE = '/api/knowledge-agent/api/v2/agent'
 export interface V2RuntimeOptions {
     /** V2 API base URL */
     apiBase?: string
+}
+
+/** Input for {@link V2AgentRuntime.continueSession} — budget-exhaustion resume. */
+export interface ContinueSessionInput {
+    /** The suspended session to grant a fresh iteration budget to. */
+    sessionId: string
+    /** Resolve a tool executor by name for frontend tool calls. */
+    resolveTool: (name: string) => ToolDefinition | undefined
+    /** Abort signal. */
+    signal: AbortSignal
+    /** Notification callback for the "tool not available" path. */
+    onToolExecution?: OnToolExecution
 }
 
 /**
@@ -80,13 +89,41 @@ export class V2AgentRuntime {
         if (sessionId) body.sessionId = sessionId
         if (conversationId) body.conversationId = conversationId
         if (mode) body.mode = mode
+        if (input.agentId != null) body.agentId = input.agentId
         if (catalog.skills?.length > 0) body.skills = catalog.skills
         if (catalog.tools?.length > 0) body.tools = catalog.tools
         if (catalog.version) body.capabilitiesVersion = catalog.version
 
         // Initial request — starts the full execution stream
+        const stream = await this.openStream(body, signal)
+        yield* this.driveLoop(stream, resolveTool, onToolExecution, sessionId, signal)
+    }
+
+    /**
+     * Continue a session suspended on budget exhaustion: the backend resets
+     * the iteration counter and resumes the same session (compacting context
+     * first if needed). Yields HarnessEvents exactly like {@link run}.
+     */
+    async *continueSession(input: ContinueSessionInput): AsyncGenerator<HarnessEvent> {
+        const stream = await this.postResume(
+            { sessionId: input.sessionId, action: 'continue' }, input.signal)
+        yield* this.driveLoop(
+            stream, input.resolveTool, input.onToolExecution, input.sessionId, input.signal)
+    }
+
+    /**
+     * Drive a stream to completion: consume SSE events, execute any frontend
+     * tools dispatched by the backend, resume with their results, repeat.
+     */
+    private async *driveLoop(
+        initialStream: Response,
+        resolveTool: (name: string) => ToolDefinition | undefined,
+        onToolExecution: OnToolExecution | undefined,
+        sessionId: string | undefined,
+        signal?: AbortSignal,
+    ): AsyncGenerator<HarnessEvent> {
         let currentSessionId = sessionId
-        let stream = await this.openStream(body, signal)
+        let stream = initialStream
 
         while (true) {
             const result = yield* this.consumeStream(
@@ -158,7 +195,8 @@ export class V2AgentRuntime {
 
             // Resume the session with tool results
             currentSessionId = result.sessionId || currentSessionId
-            stream = await this.resumeStream(currentSessionId!, toolResults, signal)
+            stream = await this.postResume(
+                { sessionId: currentSessionId!, toolResults }, signal)
         }
     }
 
@@ -347,15 +385,45 @@ export class V2AgentRuntime {
                     }],
                 }]
 
-            case 'session.completed':
+            case 'session.completed': {
+                const finishReason: string = data.finishReason || 'stop'
+                if (finishReason.startsWith('suspended')) {
+                    // Frontend tool dispatch — the drive loop resumes
+                    // automatically, so no terminal event is surfaced.
+                    if (pendingFrontendTools.length > 0) {
+                        return []
+                    }
+                    // Budget exhaustion (iteration_budget_exhausted) or other
+                    // suspension without pending tools: surface it so the UI
+                    // can offer a "continue" action for this session.
+                    return [
+                        {
+                            type: 'annotation',
+                            annotations: [{
+                                type: 'agent_suspended',
+                                reason: finishReason,
+                                sessionId,
+                            }],
+                        },
+                        {
+                            type: 'finish',
+                            finishReason: 'suspended',
+                            usage: data.usage ? {
+                                promptTokens: data.usage.prompt ?? 0,
+                                completionTokens: data.usage.completion ?? 0,
+                            } : undefined,
+                        },
+                    ]
+                }
                 return [{
                     type: 'finish',
-                    finishReason: data.finishReason || 'stop',
+                    finishReason,
                     usage: data.usage ? {
                         promptTokens: data.usage.prompt ?? 0,
                         completionTokens: data.usage.completion ?? 0,
                     } : undefined,
                 }]
+            }
 
             case 'session.failed':
                 return [{
@@ -434,12 +502,11 @@ export class V2AgentRuntime {
     }
 
     /**
-     * Resume a suspended session by posting tool results.
-     * Returns a new SSE stream for the continued execution.
+     * POST to /chat/resume — either frontend tool results or a budget
+     * "continue" action. Returns a new SSE stream for the continued execution.
      */
-    private async resumeStream(
-        sessionId: string,
-        toolResults: ToolResultPayload[],
+    private async postResume(
+        body: { sessionId: string; toolResults?: ToolResultPayload[]; action?: string },
         signal?: AbortSignal
     ): Promise<Response> {
         const response = await authorizedFetch(`${this.apiBase}/chat/resume`, {
@@ -447,7 +514,7 @@ export class V2AgentRuntime {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ sessionId, toolResults }),
+            body: JSON.stringify(body),
             signal,
         })
 
