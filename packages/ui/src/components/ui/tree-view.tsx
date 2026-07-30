@@ -22,7 +22,9 @@ type TreeViewProps = {
     icon?: ReactNode;
     onTreeSelected?: (key: string) => void;
     size?: Size;
-    loading?: boolean
+    loading?: boolean;
+    /** Imperative locate request: expand ancestors of `id` and scroll it into view. Bump `token` to re-trigger. */
+    locateTarget?: { id: string; token: number } | null;
 } & (
         | {
             initialExpendedItems?: string[];
@@ -65,7 +67,8 @@ export const TreeView = memo(({
     indicator = false,
     onTreeSelected,
     size,
-    loading = false
+    loading = false,
+    locateTarget
 }: TreeViewProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -111,6 +114,7 @@ export const TreeView = memo(({
                 selectParent={selectParent}
                 onTreeSelected={onTreeSelected}
                 size={size}
+                locateTarget={locateTarget}
                 className="w-full h-full"
             >
                 {treeItems}

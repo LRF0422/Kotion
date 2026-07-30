@@ -91,4 +91,9 @@ public class UserVO implements Serializable {
 	private String tenantId;
 
 	private Boolean isSetup;
+
+	/**
+	 * 账号状态（1-正常 2-禁用）
+	 */
+	private Integer status;
 }

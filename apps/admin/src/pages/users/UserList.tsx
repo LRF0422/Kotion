@@ -26,10 +26,11 @@ import {
   AvatarImage,
   useToast,
 } from '@kn/ui'
-import { MoreHorizontal, Plus, Search, KeyRound, Trash2, Loader2 } from '@kn/icon'
+import { MoreHorizontal, Plus, Search, KeyRound, Trash2, Loader2, Ban, CircleCheck } from '@kn/icon'
 import { PageHeader } from '@/components/PageHeader'
+import { StatusBadge } from '@/components/StatusBadge'
 import { TablePagination } from '@/components/TablePagination'
-import { getUserList, removeUsers, resetUserPassword, submitUser, type UserVO } from '@/api'
+import { disableUsers, enableUsers, getUserList, removeUsers, resetUserPassword, submitUser, type UserVO } from '@/api'
 import { usePagedData } from '@/lib/use-paged-data'
 
 const PAGE_SIZE = 10
@@ -76,6 +77,18 @@ export const UserList = () => {
       toast({ title: '密码已重置', description: `账号 ${user.account} 的密码已恢复为初始密码` })
     } catch (err) {
       toast({ title: '重置失败', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
+    }
+  }
+
+  const handleToggleStatus = async (user: UserVO) => {
+    const disabling = user.status !== 2
+    if (disabling && !window.confirm(`确认禁用用户「${user.name || user.account}」？禁用后该账号无法登录。`)) return
+    try {
+      await (disabling ? disableUsers(String(user.id)) : enableUsers(String(user.id)))
+      toast({ title: disabling ? '用户已禁用' : '用户已启用', description: user.account })
+      reload()
+    } catch (err) {
+      toast({ title: '操作失败', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
     }
   }
 
@@ -126,6 +139,7 @@ export const UserList = () => {
                 <TableHead>账号</TableHead>
                 <TableHead>角色</TableHead>
                 <TableHead>手机</TableHead>
+                <TableHead>状态</TableHead>
                 <TableHead>所属租户</TableHead>
                 <TableHead className="w-12" />
               </TableRow>
@@ -133,19 +147,19 @@ export const UserList = () => {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                     <Loader2 className="mx-auto size-5 animate-spin" />
                   </TableCell>
                 </TableRow>
               )}
               {!loading && error && (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center text-destructive">{error}</TableCell>
+                  <TableCell colSpan={7} className="h-32 text-center text-destructive">{error}</TableCell>
                 </TableRow>
               )}
               {!loading && !error && records.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">暂无用户</TableCell>
+                  <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">暂无用户</TableCell>
                 </TableRow>
               )}
               {!loading && !error && records.map((user) => (
@@ -165,6 +179,11 @@ export const UserList = () => {
                   <TableCell>{user.account}</TableCell>
                   <TableCell>{user.roleName || '-'}</TableCell>
                   <TableCell className="text-muted-foreground">{user.phone || '-'}</TableCell>
+                  <TableCell>
+                    {user.status === 2
+                      ? <StatusBadge variant="danger">已禁用</StatusBadge>
+                      : <StatusBadge variant="success">正常</StatusBadge>}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{user.tenantId || '-'}</TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -178,6 +197,17 @@ export const UserList = () => {
                           <KeyRound className="mr-2 size-4" />
                           重置密码
                         </DropdownMenuItem>
+                        {user.status === 2 ? (
+                          <DropdownMenuItem onClick={() => handleToggleStatus(user)}>
+                            <CircleCheck className="mr-2 size-4" />
+                            启用账号
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onClick={() => handleToggleStatus(user)}>
+                            <Ban className="mr-2 size-4" />
+                            禁用账号
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem className="text-destructive" onClick={() => handleRemove(user)}>
                           <Trash2 className="mr-2 size-4" />
                           删除用户

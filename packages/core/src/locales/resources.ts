@@ -345,7 +345,7 @@ export const resources = {
                 "create-space": "新建空间",
                 "all-spaces": "全部空间",
                 "ai-assistant": "AI 助手",
-                "rs": "最近空间",
+                "rs": "空间",
                 "all": "查看全部",
                 "no-spaces": "还没有空间",
                 "no-spaces-hint": "创建一个空间开始使用",
@@ -362,6 +362,7 @@ export const resources = {
                 "search-pages": "搜索页面...",
                 "no-space-match": "没有匹配的空间",
                 "no-page-match": "没有匹配的页面",
+                "team-badge": "团队",
                 "clear-tags": "清除"
             },
             "auth": {
@@ -1062,7 +1063,7 @@ export const resources = {
                 "create-space": "New Space",
                 "all-spaces": "All Spaces",
                 "ai-assistant": "AI Assistant",
-                "rs": "Recent Spaces",
+                "rs": "Spaces",
                 "all": "View All",
                 "no-spaces": "No spaces yet",
                 "no-spaces-hint": "Create a space to get started",
@@ -1079,6 +1080,7 @@ export const resources = {
                 "search-pages": "Search pages...",
                 "no-space-match": "No matching spaces",
                 "no-page-match": "No matching pages",
+                "team-badge": "Team",
                 "clear-tags": "Clear"
             },
             "auth": {

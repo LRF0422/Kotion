@@ -41,6 +41,7 @@ import {
   MessageSquare,
   Blocks,
   Sparkles,
+  Gauge,
   ScrollText,
   Settings,
   BookOpen,
@@ -87,6 +88,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { title: '插件管理', url: '/plugins', icon: Blocks },
       { title: 'AI 配置', url: '/ai', icon: Sparkles },
+      { title: 'AI 用量', url: '/ai-usage', icon: Gauge },
     ],
   },
   {
@@ -98,8 +100,12 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ]
 
+/** 精确段匹配，避免 /ai-usage 被 /ai 误命中 */
+const isPathActive = (pathname: string, url: string) =>
+  pathname === url || pathname.startsWith(`${url}/`)
+
 const findActiveItem = (pathname: string) =>
-  NAV_GROUPS.flatMap((group) => group.items).find((item) => pathname.startsWith(item.url))
+  NAV_GROUPS.flatMap((group) => group.items).find((item) => isPathActive(pathname, item.url))
 
 export const AdminLayout = () => {
   const location = useLocation()
@@ -143,7 +149,7 @@ export const AdminLayout = () => {
                     <SidebarMenuItem key={item.url}>
                       <SidebarMenuButton
                         asChild
-                        isActive={location.pathname.startsWith(item.url)}
+                        isActive={isPathActive(location.pathname, item.url)}
                         tooltip={item.title}
                       >
                         <Link to={item.url}>

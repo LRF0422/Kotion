@@ -22,14 +22,18 @@ import com.knowledge.core.log.converter.LogErrorConverter;
 import com.knowledge.core.log.converter.LogUsualConverter;
 import com.knowledge.core.log.entity.LogApiDO;
 import com.knowledge.core.log.entity.LogErrorDO;
+import com.knowledge.core.log.entity.LogLoginDO;
 import com.knowledge.core.log.entity.LogUsualDO;
 import com.knowledge.core.log.model.LogApi;
 import com.knowledge.core.log.model.LogUsual;
 import com.knowledge.core.log.model.LogError;
+import com.knowledge.core.log.model.LogLogin;
 import com.knowledge.core.log.service.ILogApiService;
 import com.knowledge.core.log.service.ILogUsualService;
 import com.knowledge.core.log.service.ILogErrorService;
+import com.knowledge.core.log.service.ILogLoginService;
 import com.knowledge.core.tool.api.R;
+import com.knowledge.core.tool.utils.BeanUtil;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -48,6 +52,8 @@ public class LogClient implements ILogClient {
 	ILogApiService apiLogService;
 
 	ILogErrorService errorLogService;
+
+	ILogLoginService loginLogService;
 
 	@Override
 	@PostMapping(API_PREFIX + "/saveUsualLog")
@@ -71,5 +77,12 @@ public class LogClient implements ILogClient {
 		log.setParams(log.getParams().replace("&amp;", "&"));
 		LogErrorDO logError = LogErrorConverter.INSTANCE.convertDO(log);
 		return R.data(errorLogService.save(logError));
+	}
+
+	@Override
+	@PostMapping(API_PREFIX + "/saveLoginLog")
+	public R<Boolean> saveLoginLog(@RequestBody LogLogin log) {
+		LogLoginDO logLogin = BeanUtil.copy(log, LogLoginDO.class);
+		return R.data(loginLogService.save(logLogin));
 	}
 }

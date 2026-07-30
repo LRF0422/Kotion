@@ -1,8 +1,8 @@
 import { APIS } from "../../api";
-import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, Input, Skeleton, cn, useIsMobile } from "@kn/ui";
+import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, Input, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger, cn, useIsMobile } from "@kn/ui";
 import { useApi, useNavigator, useSelector, GlobalState, event, TOGGLE_AI_ASSISTANT, useDebounce } from "@kn/common";
 import { Space } from "../../model/Space";
-import { ArrowRight, BanIcon, Book, Box, FilePlus, FolderPlus, LayoutGrid, Moon, Network, Plus, SearchIcon, Sparkles, Star, Sun, Sunset, Tag, Users, X } from "@kn/icon";
+import { ArrowRight, BanIcon, Book, Box, FileText, FilePlus, FolderPlus, LayoutGrid, Moon, Network, Plus, SearchIcon, Sparkles, Star, Sun, Sunset, Tag, Users, X } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
@@ -12,32 +12,12 @@ import { useTranslation } from "@kn/common";
 import { format, parseISO, formatDistanceToNow } from "@kn/ui";
 
 
-// A curated palette of pleasant hues. Each space/page gets a deterministic
-// color derived from its id so the home stays colorful but consistent.
-const HUE_PALETTE = [245, 262, 290, 330, 350, 25, 40, 150, 168, 190, 215]
-
-const pickHue = (key?: string): number => {
-    if (!key) return HUE_PALETTE[0]
-    let hash = 0
-    for (let i = 0; i < key.length; i++) {
-        hash = (hash * 31 + key.charCodeAt(i)) | 0
-    }
-    return HUE_PALETTE[Math.abs(hash) % HUE_PALETTE.length]
-}
-
-// Notion-style palette: flat surfaces + soft tinted covers on cards.
-// The bright hue is expressed as a subtle chip color, a flat cover tint
-// and a light border tint so the page stays airy rather than saturated.
+// Chip tint used by the hero quick actions — a soft translucent fill plus a
+// matching foreground so the icon carries the only color on the page.
 const hueStyles = (hue: number) => ({
     chip: {
         backgroundColor: `hsl(${hue} 70% 55% / 0.14)`,
         color: `hsl(${hue} 60% 48%)`,
-    } as React.CSSProperties,
-    cover: {
-        backgroundColor: `hsl(${hue} 72% 86%)`,
-    } as React.CSSProperties,
-    coverDark: {
-        backgroundColor: `hsl(${hue} 42% 20% / 0.55)`,
     } as React.CSSProperties,
 })
 
@@ -66,6 +46,7 @@ export const Home: React.FC = () => {
     const [loading, setLoading] = useState(true)
     const [creatingPage, setCreatingPage] = useState(false)
     const [graphOpen, setGraphOpen] = useState(false)
+    const [activeTab, setActiveTab] = useState("recent")
     const [currentHour, setCurrentHour] = useState(new Date().getHours())
     const navigator = useNavigator()
     const { t } = useTranslation()
@@ -111,8 +92,8 @@ export const Home: React.FC = () => {
     useEffect(() => {
         setLoading(true)
         Promise.all([
-            useApi(APIS.QUERY_SPACE, { template: false, pageSize: 4, type: 'COLLABORATION' }),
-            useApi(APIS.QUERY_FAVORITE, { pageSize: 8 })
+            useApi(APIS.QUERY_SPACE, { template: false, pageSize: 8, type: 'COLLABORATION' }),
+            useApi(APIS.QUERY_FAVORITE, { pageSize: 12 })
         ]).then(([teamRes, favoritesRes]) => {
             setTeamSpaces(teamRes.data.records || [])
             const favData = favoritesRes?.data
@@ -129,7 +110,7 @@ export const Home: React.FC = () => {
         const searching = debouncedSpaceQuery.trim().length > 0
         useApi(APIS.QUERY_SPACE, {
             template: false,
-            pageSize: searching ? 12 : 4,
+            pageSize: searching ? 12 : 8,
             ...(searching ? { searchValue: debouncedSpaceQuery.trim() } : {}),
         }).then((res) => {
             setRecentSpaces(res.data.records || [])
@@ -190,10 +171,30 @@ export const Home: React.FC = () => {
     const spaceSearching = debouncedSpaceQuery.trim().length > 0
     const pageSearching = debouncedPageQuery.trim().length > 0
 
-    // Keep the default view tidy (top 8); show every match while filtering.
+    // Spaces tab rows — recent and team spaces merged into one flat list,
+    // deduped by id. While searching, only the server-side matches show.
+    const spaceRows = useMemo(() => {
+        const seen = new Set<string>()
+        const rows: { space: any; isTeam: boolean }[] = []
+        recentSpaces.forEach((space: any) => {
+            if (seen.has(space.id)) return
+            seen.add(space.id)
+            rows.push({ space, isTeam: space.type === "COLLABORATION" })
+        })
+        if (!spaceSearching) {
+            teamSpaces.forEach((space: any) => {
+                if (seen.has(space.id)) return
+                seen.add(space.id)
+                rows.push({ space, isTeam: true })
+            })
+        }
+        return rows
+    }, [recentSpaces, teamSpaces, spaceSearching])
+
+    // Keep the default tab view tidy (top 12); show every match while filtering.
     const displayedPages = useMemo(() => {
         const active = pageSearching || selectedTags.length > 0
-        return active ? filteredPages : filteredPages.slice(0, 8)
+        return active ? filteredPages : filteredPages.slice(0, 12)
     }, [filteredPages, pageSearching, selectedTags.length])
 
     const toggleTag = useCallback((tag: string) => {
@@ -391,13 +392,42 @@ export const Home: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Recent Spaces — Notion's "Recently visited" horizontal row:
-                    each card has a soft gradient cover with the icon sitting
-                    on the cover, mimicking a page cover + emoji. */}
-                <section className="flex flex-col gap-3 shrink-0">
-                    <SectionHeader
-                        title={t("home.rs") || "Recently visited"}
-                        action={
+                {/* Recent / Spaces / Favorites — merged into a single tabbed
+                    block of flat list rows so the home stays dense and
+                    scannable. */}
+                <section className="flex flex-col shrink-0">
+                    <Tabs value={activeTab} onValueChange={setActiveTab}>
+                    <div className="flex items-center justify-between px-1">
+                        <TabsList className="h-8 gap-1 bg-transparent p-0">
+                            <TabsTrigger
+                                value="recent"
+                                className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                            >
+                                {t("home.recent-pages") || "Recent Pages"}
+                                {displayedPages.length > 0 && (
+                                    <span className="text-[11px] text-muted-foreground/70">{displayedPages.length}</span>
+                                )}
+                            </TabsTrigger>
+                            <TabsTrigger
+                                value="spaces"
+                                className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                            >
+                                {t("home.rs") || "Spaces"}
+                                {spaceRows.length > 0 && (
+                                    <span className="text-[11px] text-muted-foreground/70">{spaceRows.length}</span>
+                                )}
+                            </TabsTrigger>
+                            <TabsTrigger
+                                value="favorites"
+                                className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                            >
+                                {t("home.favorites") || "Favorites"}
+                                {favoritePages.length > 0 && (
+                                    <span className="text-[11px] text-muted-foreground/70">{favoritePages.length}</span>
+                                )}
+                            </TabsTrigger>
+                        </TabsList>
+                        {activeTab === "spaces" && (
                             <Button
                                 variant="ghost"
                                 size="sm"
@@ -407,8 +437,12 @@ export const Home: React.FC = () => {
                                 {t("home.all") || "View all"}
                                 <ArrowRight className="h-3 w-3" />
                             </Button>
-                        }
-                    />
+                        )}
+                    </div>
+
+                    {/* Spaces — recent + team merged into flat list rows; a
+                        tiny "Team" pill marks collaboration spaces. */}
+                    <TabsContent value="spaces" className="mt-3 flex flex-col gap-2">
                     <div className="px-1">
                         <Input
                             className="h-8 max-w-xs text-[13px]"
@@ -419,13 +453,17 @@ export const Home: React.FC = () => {
                             aria-label={t("home.search-spaces", "Search spaces...")}
                         />
                     </div>
-                    {spacesLoading ? (
-                        <div className="flex gap-3 overflow-hidden">
-                            {[...Array(isMobile ? 2 : 4)].map((_, index) => (
-                                <Skeleton key={index} className="h-[150px] w-[190px] shrink-0 rounded-xl" />
+                    {(spacesLoading || loading) ? (
+                        <div className="flex flex-col">
+                            {[...Array(isMobile ? 4 : 5)].map((_, index) => (
+                                <div key={index} className="flex items-center gap-3 px-2 py-2">
+                                    <Skeleton className="h-6 w-6 rounded-md" />
+                                    <Skeleton className="h-4 flex-1 max-w-[50%]" />
+                                    <Skeleton className="h-3 w-16" />
+                                </div>
                             ))}
                         </div>
-                    ) : recentSpaces.length === 0 ? (
+                    ) : spaceRows.length === 0 ? (
                         spaceSearching ? (
                             <EmptyBlock
                                 icon={<SearchIcon className="h-5 w-5" />}
@@ -449,108 +487,46 @@ export const Home: React.FC = () => {
                             />
                         )
                     ) : (
-                        <div className="home-hscroll -mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
-                            {recentSpaces.map((space: any) => {
-                                const hue = pickHue(space.id)
-                                const styles = hueStyles(hue)
+                        <ul className="flex flex-col">
+                            {spaceRows.map(({ space, isTeam }) => {
                                 return (
-                                    <button
+                                    <li
                                         key={space.id}
-                                        type="button"
-                                        onClick={() => navigator.go({ to: `/space-detail/${space.id}` })}
+                                        onClick={() => navigator.go({ to: isTeam ? `/space-detail/${space.id}/home` : `/space-detail/${space.id}` })}
                                         className={cn(
-                                            "group relative flex shrink-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-card text-left",
-                                            "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-8px_rgba(15,15,15,0.15)] hover:border-border",
-                                            "dark:hover:shadow-[0_4px_16px_-8px_rgba(0,0,0,0.6)]",
-                                            isMobile ? "h-[144px] w-[168px]" : "h-[152px] w-[192px]"
+                                            "group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5",
+                                            "transition-colors duration-100 hover:bg-muted/60"
                                         )}
                                     >
-                                        {/* Soft cover strip acts as the "page cover" in Notion. */}
-                                        <div className="relative h-[72px] w-full" style={styles.cover}>
-                                            <div className="absolute inset-0 dark:block hidden" style={styles.coverDark} />
-                                        </div>
-                                        <span
-                                            className="absolute left-3 top-[48px] flex h-9 w-9 items-center justify-center leading-none"
-                                        >
-                                            {space.icon?.icon ? <PageItemIcon icon={space.icon} size={28} /> : <Box className="h-4 w-4 text-muted-foreground" />}
+                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
+                                            {space.icon?.icon
+                                                ? <PageItemIcon icon={space.icon} size={16} />
+                                                : isTeam
+                                                    ? <Users className="h-4 w-4" />
+                                                    : <Box className="h-4 w-4" />}
                                         </span>
-                                        <div className="flex flex-1 flex-col justify-end px-3 pb-3 pt-4">
-                                            <p className="truncate text-[13.5px] font-medium">{space.name}</p>
-                                            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                                                {relativeTime(space.updateTime)}
-                                            </p>
-                                        </div>
-                                    </button>
-                                )
-                            })}
-                        </div>
-                    )}
-                </section>
-
-                {/* Team Spaces — same card language as Recently visited so the
-                    two sections read as siblings; a tiny "Team" pill on the
-                    title carries the only differentiator. */}
-                {teamSpaces.length > 0 && (
-                    <section className="flex flex-col gap-3 shrink-0">
-                        <SectionHeader
-                            title={t("home.team-spaces") || "Team spaces"}
-                            action={
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 gap-1 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground"
-                                    onClick={() => navigator.go({ to: "/all-spaces?tab=team" })}
-                                >
-                                    {t("home.all") || "View all"}
-                                    <ArrowRight className="h-3 w-3" />
-                                </Button>
-                            }
-                        />
-                        <div className="home-hscroll -mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
-                            {teamSpaces.map((space: any) => {
-                                const hue = pickHue(space.id)
-                                const styles = hueStyles(hue)
-                                return (
-                                    <button
-                                        key={space.id}
-                                        type="button"
-                                        onClick={() => navigator.go({ to: `/space-detail/${space.id}/home` })}
-                                        className={cn(
-                                            "group relative flex shrink-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-card text-left",
-                                            "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_-8px_rgba(15,15,15,0.15)] hover:border-border",
-                                            "dark:hover:shadow-[0_4px_16px_-8px_rgba(0,0,0,0.6)]",
-                                            isMobile ? "h-[144px] w-[168px]" : "h-[152px] w-[192px]"
-                                        )}
-                                    >
-                                        <div className="relative h-[72px] w-full" style={styles.cover}>
-                                            <div className="absolute inset-0 dark:block hidden" style={styles.coverDark} />
-                                            <span className="absolute right-2 top-2 rounded bg-background/70 px-1.5 py-0.5 text-[10px] font-medium text-foreground/70 ring-1 ring-border/60 backdrop-blur">
+                                        <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
+                                            {space.name}
+                                        </span>
+                                        {isTeam && (
+                                            <span className="shrink-0 rounded bg-muted/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                                                 {t("home.team-badge") || "Team"}
                                             </span>
-                                        </div>
-                                        <span
-                                            className="absolute left-3 top-[48px] flex h-9 w-9 items-center justify-center leading-none"
-                                        >
-                                            {space.icon?.icon ? <PageItemIcon icon={space.icon} size={28} /> : <Users className="h-4 w-4 text-muted-foreground" />}
+                                        )}
+                                        <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:flex">
+                                            {isTeam && space.memberCount ? `${space.memberCount} members` : relativeTime(space.updateTime)}
                                         </span>
-                                        <div className="flex flex-1 flex-col justify-end px-3 pb-3 pt-4">
-                                            <p className="truncate text-[13.5px] font-medium">{space.name}</p>
-                                            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                                                {space.memberCount ? `${space.memberCount} members` : relativeTime(space.updateTime)}
-                                            </p>
-                                        </div>
-                                    </button>
+                                    </li>
                                 )
                             })}
-                        </div>
-                    </section>
-                )}
+                        </ul>
+                    )}
+                    </TabsContent>
 
-                {/* Recent Pages — Notion-style flat list rows: no card, no
-                    border, just a hover surface, an emoji-style icon and a
-                    right-aligned timestamp. */}
-                <section className="flex flex-col gap-2 shrink-0">
-                    <SectionHeader title={t("home.recent-pages") || "Recently edited"} />
+                    {/* Recent Pages — Notion-style flat list rows: no card, no
+                        border, just a hover surface, an emoji-style icon and a
+                        right-aligned timestamp. */}
+                    <TabsContent value="recent" className="mt-3 flex flex-col gap-2">
                     <div className="flex flex-col gap-2 px-1">
                         <Input
                             className="h-8 max-w-xs text-[13px]"
@@ -621,14 +597,13 @@ export const Home: React.FC = () => {
                         <PagePreviewProvider>
                         <ul className="flex flex-col">
                             {displayedPages.map((page: any) => {
-                                const hue = pickHue(page.id)
-                                const styles = hueStyles(hue)
                                 return (
                                     // Hover shows an editor-rendered preview card (desktop only —
                                     // hover cards don't fit touch interaction).
                                     <PagePreviewCard
                                         key={page.id}
                                         pageId={page.id}
+                                        icon={page.icon}
                                         disabled={isMobile}
                                         onOpenPage={() => navigator.go({ to: `/space-detail/${page.spaceId}/page/edit/${page.id}` })}
                                     >
@@ -639,11 +614,8 @@ export const Home: React.FC = () => {
                                             "transition-colors duration-100 hover:bg-muted/60"
                                         )}
                                     >
-                                        <span
-                                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md leading-none"
-                                            style={styles.chip}
-                                        >
-                                            {page.icon?.icon ? <PageItemIcon icon={page.icon} size={15} /> : <Box className="h-3.5 w-3.5" />}
+                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
+                                            {page.icon?.icon ? <PageItemIcon icon={page.icon} size={16} /> : <FileText className="h-4 w-4" />}
                                         </span>
                                         <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
                                             {page.title || "Untitled"}
@@ -680,12 +652,11 @@ export const Home: React.FC = () => {
                         </ul>
                         </PagePreviewProvider>
                     )}
-                </section>
+                    </TabsContent>
 
-                {/* Favorite Pages — mirrors the recent-pages list layout so
-                    the whole lower half reads as a single scannable index. */}
-                <section className="flex flex-col gap-2 shrink-0">
-                    <SectionHeader title={t("home.favorites") || "Favorites"} />
+                    {/* Favorite Pages — mirrors the recent-pages list layout so
+                        every tab reads with the same rhythm. */}
+                    <TabsContent value="favorites" className="mt-3 flex flex-col gap-2">
                     {loading ? (
                         <div className="flex flex-col">
                             {[...Array(3)].map((_, index) => (
@@ -703,21 +674,24 @@ export const Home: React.FC = () => {
                             desc={t("home.no-favorites-hint") || "Star pages to add them here"}
                         />
                     ) : (
+                        <PagePreviewProvider>
                         <ul className="flex flex-col">
                             {favoritePages.map((data: any) => {
-                                const hue = pickHue(data.id)
-                                const styles = hueStyles(hue)
                                 return (
-                                    <li
+                                    // Same hover preview as the recent list (desktop only).
+                                    <PagePreviewCard
                                         key={data.id}
+                                        pageId={data.id}
+                                        icon={data.icon}
+                                        disabled={isMobile}
+                                        onOpenPage={() => navigator.go({ to: `/space-detail/${data.spaceId}/page/edit/${data.id}` })}
+                                    >
+                                    <li
                                         className="group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors duration-100 hover:bg-muted/60"
                                         onClick={() => navigator.go({ to: `/space-detail/${data.spaceId}/page/edit/${data.id}` })}
                                     >
-                                        <span
-                                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md leading-none"
-                                            style={styles.chip}
-                                        >
-                                            {data.icon?.icon ? <PageItemIcon icon={data.icon} size={15} /> : <Box className="h-3.5 w-3.5" />}
+                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
+                                            {data.icon?.icon ? <PageItemIcon icon={data.icon} size={16} /> : <FileText className="h-4 w-4" />}
                                         </span>
                                         <span className="flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
                                             {data.title}
@@ -729,10 +703,14 @@ export const Home: React.FC = () => {
                                             </span>
                                         )}
                                     </li>
+                                    </PagePreviewCard>
                                 )
                             })}
                         </ul>
+                        </PagePreviewProvider>
                     )}
+                    </TabsContent>
+                    </Tabs>
                 </section>
 
                 {/* Learn Knowledge — muted callout in a dashed frame, kept

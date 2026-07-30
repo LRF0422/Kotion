@@ -8,6 +8,7 @@ import com.knowledge.agent.v2.context.ContextCompactor;
 import com.knowledge.agent.v2.controller.AgentV2Controller;
 import com.knowledge.agent.v2.engine.AgentEngine;
 import com.knowledge.agent.v2.engine.AgentState;
+import com.knowledge.agent.v2.engine.AgentUsageListener;
 import com.knowledge.agent.v2.engine.StateHandler;
 import com.knowledge.agent.v2.eventbus.AgentEventBus;
 import com.knowledge.agent.v2.eventbus.ReactorEventBus;
@@ -211,14 +212,16 @@ public class AgentV2AutoConfiguration {
             StateHandler initHandler,
             StateHandler thinkHandler,
             StateHandler actHandler,
-            StateHandler observeHandler) {
+            StateHandler observeHandler,
+            ObjectProvider<AgentUsageListener> usageListenerProvider) {
         Map<AgentState, StateHandler> handlers = new EnumMap<>(AgentState.class);
         handlers.put(AgentState.INIT, initHandler);
         handlers.put(AgentState.THINK, thinkHandler);
         handlers.put(AgentState.ACT, actHandler);
         handlers.put(AgentState.OBSERVE, observeHandler);
 
-        return new AgentEngine(handlers, pipeline, eventBus, properties);
+        return new AgentEngine(handlers, pipeline, eventBus, properties,
+                usageListenerProvider.getIfAvailable());
     }
 
     @Bean

@@ -29,13 +29,14 @@ import {
 import { Skeleton, cn } from "@kn/ui";
 import { FileText } from "@kn/icon";
 import { FileService, useApi, useOptionalService, useTranslation } from "@kn/common";
+import { PageIconData, PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
 import { APIS } from "../../api";
 
 /** The page fields the preview needs (subset of GET_PAGE_CONTENT's payload). */
 interface PreviewPage {
     id: string;
     title?: string;
-    icon?: { icon: string; type?: string };
+    icon?: PageIconData;
     spaceName?: string;
     /** JSON string of page content */
     content?: string;
@@ -130,7 +131,7 @@ const PreviewSkeleton: React.FC = () => (
 
 /** Card body — mounted only while the hover card is open, so the fetch and
  *  the read-only editor spin up lazily on first hover. */
-const PreviewBody: React.FC<{ pageId: string }> = ({ pageId }) => {
+const PreviewBody: React.FC<{ pageId: string; icon?: PageIconData | null }> = ({ pageId, icon }) => {
     const { t } = useTranslation();
     const fileService = useOptionalService("fileService") as FileService | undefined;
     const [page, setPage] = useState<PreviewPage | null>(() => readCache(pageId));
@@ -159,7 +160,9 @@ const PreviewBody: React.FC<{ pageId: string }> = ({ pageId }) => {
     }, [pageId]);
 
     const { body, cover } = useMemo(() => parsePage(page?.content), [page?.content]);
-    const icon = page?.icon?.type === "IMAGE" ? null : page?.icon?.icon || null;
+    // Prefer the icon the hovered row already knows (emoji/image/date all
+    // render identically to the list), and fall back to the fetched page.
+    const pageIcon = icon || page?.icon || null;
 
     // Same URL resolution chain as PageHeader: absolute/data URLs pass through,
     // stored file names go through fileService's download endpoint.
@@ -189,8 +192,8 @@ const PreviewBody: React.FC<{ pageId: string }> = ({ pageId }) => {
             )}
             {/* Header: icon + title + space name */}
             <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
-                {icon ? (
-                    <span className="text-base leading-none flex-shrink-0">{icon}</span>
+                {pageIcon?.icon ? (
+                    <PageItemIcon icon={pageIcon} size={16} />
                 ) : (
                     <FileText className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                 )}
@@ -226,6 +229,8 @@ const PreviewBody: React.FC<{ pageId: string }> = ({ pageId }) => {
 
 export interface PagePreviewCardProps {
     pageId: string;
+    /** Row icon reused in the card header so it matches the list exactly. */
+    icon?: PageIconData | null;
     /** Skip the hover card entirely (e.g. on touch devices). */
     disabled?: boolean;
     /** Invoked when the card body is clicked — callers navigate to the page. */
@@ -236,6 +241,7 @@ export interface PagePreviewCardProps {
 /** What a hovered row hands to the shared floating card. */
 interface PreviewTarget {
     pageId: string;
+    icon?: PageIconData | null;
     rect: { top: number; left: number; right: number };
     onOpenPage?: () => void;
 }
@@ -393,7 +399,7 @@ export const PagePreviewProvider: React.FC<{ children: React.ReactNode }> = ({ c
                     {/* Keyed by page id: switching rows remounts the body, so the
                         new page's content fades in while the card slides over. */}
                     <div key={target.pageId} className="animate-in fade-in-0 duration-200">
-                        <PreviewBody pageId={target.pageId} />
+                        <PreviewBody pageId={target.pageId} icon={target.icon} />
                     </div>
                 </div>
             )}
@@ -405,6 +411,7 @@ PagePreviewProvider.displayName = "PagePreviewProvider";
 
 export const PagePreviewCard: React.FC<PagePreviewCardProps> = ({
     pageId,
+    icon,
     disabled,
     onOpenPage,
     children,
@@ -420,6 +427,7 @@ export const PagePreviewCard: React.FC<PagePreviewCardProps> = ({
         const r = el.getBoundingClientRect();
         ctx.open({
             pageId,
+            icon,
             rect: { top: r.top, left: r.left, right: r.right },
             onOpenPage,
         });

@@ -491,7 +491,8 @@ export const DefaultPluginInstance = new DefaultPlugin({
         },
         "pages": {
           "title": "页面",
-          "empty": "暂无页面"
+          "empty": "暂无页面",
+          "locate": "定位当前页面"
         },
         "page": {
           "title": "页面",
@@ -1053,7 +1054,8 @@ export const DefaultPluginInstance = new DefaultPlugin({
         },
         "pages": {
           "title": "Pages",
-          "empty": "No pages yet"
+          "empty": "No pages yet",
+          "locate": "Locate current page"
         },
         "page": {
           "title": "Page",

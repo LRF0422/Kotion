@@ -3,6 +3,7 @@ package com.knowledge.core.log.feign;
 import lombok.extern.slf4j.Slf4j;
 import com.knowledge.core.log.model.LogApi;
 import com.knowledge.core.log.model.LogError;
+import com.knowledge.core.log.model.LogLogin;
 import com.knowledge.core.log.model.LogUsual;
 import com.knowledge.core.tool.api.R;
 import org.springframework.stereotype.Component;
@@ -29,5 +30,10 @@ public class LogClientFallback implements ILogClient {
 	@Override
 	public R<Boolean> saveErrorLog(LogError log) {
 		return R.fail("error log send fail");
+	}
+
+	@Override
+	public R<Boolean> saveLoginLog(LogLogin log) {
+		return R.fail("login log send fail");
 	}
 }

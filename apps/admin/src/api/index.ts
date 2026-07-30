@@ -48,6 +48,8 @@ export interface UserVO {
   deptName?: string
   tenantId?: string
   isSetup?: boolean
+  /** 1-正常 2-禁用（null 视为正常） */
+  status?: number
 }
 
 export interface UserSubmitDTO {
@@ -75,6 +77,12 @@ export const grantUserRoles = (userIds: string, roleIds: string) =>
 
 export const resetUserPassword = (userIds: string) =>
   post<unknown>('/knowledge-system/user/reset-password', undefined, { userIds })
+
+export const enableUsers = (userIds: string) =>
+  post<unknown>('/knowledge-system/user/enable', undefined, { userIds })
+
+export const disableUsers = (userIds: string) =>
+  post<unknown>('/knowledge-system/user/disable', undefined, { userIds })
 
 // ---------- 角色（knowledge-system，current + pageSize） ----------
 
@@ -131,6 +139,36 @@ export const getSpaceList = (params: {
   type?: SpaceType
 }) => get<PageResult<SpaceVO>>('/knowledge-wiki/space/list', params)
 
+// ---------- 空间后台治理（knowledge-wiki /admin/space） ----------
+
+export interface SpaceMemberDTO {
+  id: string
+  name?: string
+  email?: string
+  avatar?: string
+  role?: string
+  joinedAt?: string
+}
+
+export interface AdminSpaceDetailVO {
+  space: SpaceVO
+  memberCount: number
+  pageCount: number
+}
+
+export const getAdminSpaceDetail = (id: string) =>
+  get<AdminSpaceDetailVO>(`/knowledge-wiki/admin/space/${id}/detail`)
+
+export const getAdminSpaceMembers = (id: string) =>
+  get<SpaceMemberDTO[]>(`/knowledge-wiki/admin/space/${id}/members`)
+
+export const archiveSpace = (id: string) => put<unknown>(`/knowledge-wiki/admin/space/${id}/archive`)
+
+export const unarchiveSpace = (id: string) => put<unknown>(`/knowledge-wiki/admin/space/${id}/unarchive`)
+
+export const updateSpaceStatus = (id: string, status: 'ACTIVE' | 'IN_ACTIVE') =>
+  put<unknown>(`/knowledge-wiki/admin/space/${id}/status`, undefined, { status })
+
 // ---------- 页面（knowledge-wiki，current + pageSize） ----------
 
 export type PageStatus = 'DRAFT' | 'ACTIVE' | 'TRASH' | 'DELETED'
@@ -159,6 +197,25 @@ export const getPageList = (params: {
 }) => get<PageResult<PageVO>>('/knowledge-wiki/space/page/list', params)
 
 export const restorePage = (id: string) => put<unknown>(`/knowledge-wiki/space/page/${id}/restore`)
+
+// ---------- 页面后台治理（knowledge-wiki /admin/page） ----------
+
+export const getAdminPageList = (params: {
+  current: number
+  pageSize: number
+  searchValue?: string
+  status?: PageStatus
+  spaceId?: string
+  createUser?: string
+  startTime?: string
+  endTime?: string
+}) => get<PageResult<PageVO>>('/knowledge-wiki/admin/page/list', params)
+
+export const batchRestorePages = (ids: string) =>
+  post<unknown>('/knowledge-wiki/admin/page/batch-restore', undefined, { ids })
+
+export const batchDeletePages = (ids: string) =>
+  del<unknown>('/knowledge-wiki/admin/page/batch', { ids })
 
 // ---------- 评论（knowledge-wiki，current + pageSize） ----------
 
@@ -249,6 +306,128 @@ export type LogKind = 'usual' | 'api' | 'error'
 
 export const getLogList = (kind: LogKind, params: { current: number; size: number }) =>
   get<PageResult<LogVO>>(`/knowledge-log/${kind}/list`, params)
+
+// ---------- 登录日志（knowledge-log，current + size） ----------
+
+export interface LoginLogVO {
+  id: string
+  tenantId?: string
+  account?: string
+  userId?: string
+  /** 1-成功 0-失败 */
+  success?: number
+  failReason?: string
+  remoteIp?: string
+  userAgent?: string
+  createTime?: string
+}
+
+export const getLoginLogList = (params: {
+  current: number
+  size: number
+  account?: string
+  success?: number
+  userId?: string
+}) => get<PageResult<LoginLogVO>>('/knowledge-log/login/list', params)
+
+// ---------- 运营统计（knowledge-system / knowledge-wiki /admin/stats） ----------
+
+export interface DailyCount {
+  date: string
+  value: number
+}
+
+export const getUserRegistrationTrend = (days = 30) =>
+  get<DailyCount[]>('/knowledge-system/admin/stats/user-registrations', { days })
+
+export const getDauTrend = (days = 30) => get<DailyCount[]>('/knowledge-system/admin/stats/dau', { days })
+
+export const getTotalUsers = () => get<number>('/knowledge-system/admin/stats/total-users')
+
+export const getContentTrend = (days = 30) =>
+  get<DailyCount[]>('/knowledge-wiki/admin/stats/content-trend', { days })
+
+export const getSpaceTrend = (days = 30) =>
+  get<DailyCount[]>('/knowledge-wiki/admin/stats/space-trend', { days })
+
+export interface TopSpaceVO {
+  spaceId: string
+  spaceName?: string
+  type?: SpaceType
+  pageCount: number
+}
+
+export const getTopSpaces = (limit = 10) => get<TopSpaceVO[]>('/knowledge-wiki/admin/stats/top-spaces', { limit })
+
+export const getWikiSummary = () =>
+  get<{ totalSpaces: number; totalPages: number }>('/knowledge-wiki/admin/stats/summary')
+
+// ---------- AI 用量（knowledge-agent /admin/ai） ----------
+
+export interface AiDailyTokens {
+  date: string
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  sessions: number
+}
+
+export interface AiUsageByUser {
+  userId: string
+  userName?: string
+  sessions: number
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
+export interface AiUsageByModel {
+  modelName?: string
+  sessions: number
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  cost?: number
+  currency?: string
+}
+
+export interface AiUsageSummary {
+  totalTokens: number
+  sessions: number
+  totalCost: number
+  models: number
+}
+
+export interface ModelPrice {
+  id?: string
+  modelName: string
+  promptPrice?: number
+  completionPrice?: number
+  currency?: string
+  remark?: string
+  updateTime?: string
+}
+
+export const getAiUsageTrend = (days = 30) =>
+  get<AiDailyTokens[]>('/knowledge-agent/admin/ai/usage/trend', { days })
+
+export const getAiUsageByUser = (days = 30, limit = 20) =>
+  get<AiUsageByUser[]>('/knowledge-agent/admin/ai/usage/by-user', { days, limit })
+
+export const getAiUsageByModel = (days = 30) =>
+  get<AiUsageByModel[]>('/knowledge-agent/admin/ai/usage/by-model', { days })
+
+export const getAiUsageSummary = (days = 30) =>
+  get<AiUsageSummary>('/knowledge-agent/admin/ai/usage/summary', { days })
+
+export const getModelPriceList = () =>
+  get<ModelPrice[]>('/knowledge-agent/admin/ai/model-price/list')
+
+export const submitModelPrice = (price: ModelPrice) =>
+  post<unknown>('/knowledge-agent/admin/ai/model-price/submit', price)
+
+export const deleteModelPrice = (id: string) =>
+  del<unknown>(`/knowledge-agent/admin/ai/model-price/${id}`)
 
 // ---------- 系统参数（knowledge-system，current + size） ----------
 

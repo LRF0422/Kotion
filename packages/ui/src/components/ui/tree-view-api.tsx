@@ -69,7 +69,9 @@ type TreeViewProps = {
     closeIcon?: React.ReactNode;
     size?: Size;
     selectParent?: boolean;
-    onTreeSelected?: (key: string) => void
+    onTreeSelected?: (key: string) => void;
+    /** Imperative locate request: expand ancestors of `id` and scroll it into view. Bump `token` to re-trigger. */
+    locateTarget?: { id: string; token: number } | null;
 } & TreeViewComponentProps;
 
 
@@ -109,11 +111,18 @@ const Tree = memo(forwardRef<HTMLDivElement, TreeViewProps>(
             size,
             selectParent = false,
             onTreeSelected,
+            locateTarget,
             dir,
             ...props
         },
         ref
     ) => {
+        const containerRef = React.useRef<HTMLDivElement | null>(null);
+        const setRefs = useCallback((node: HTMLDivElement | null) => {
+            containerRef.current = node;
+            if (typeof ref === "function") ref(node);
+            else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+        }, [ref]);
         const [selectedId, setSelectedId] = useState<string | undefined>(
             initialSelectedId
         );
@@ -178,6 +187,28 @@ const Tree = memo(forwardRef<HTMLDivElement, TreeViewProps>(
             }
         }, [initialSelectedId, elements]);
 
+        // Locate request: expand ancestors, then scroll the target node into view with a brief highlight
+        useEffect(() => {
+            if (!locateTarget?.id) return;
+            expandSpecificTargetedElements(elements, locateTarget.id);
+            setSelectedId(locateTarget.id);
+            const timer = setTimeout(() => {
+                const escaped = typeof CSS !== "undefined" && CSS.escape
+                    ? CSS.escape(locateTarget.id)
+                    : locateTarget.id.replace(/"/g, '\\"');
+                const node = containerRef.current?.querySelector<HTMLElement>(
+                    `[data-tree-item-id="${escaped}"]`
+                );
+                if (!node) return;
+                node.scrollIntoView({ behavior: "smooth", block: "center" });
+                node.classList.add("ring-1", "ring-primary/50", "bg-primary/10");
+                setTimeout(() => {
+                    node.classList.remove("ring-1", "ring-primary/50", "bg-primary/10");
+                }, 1200);
+            }, 250); // wait for accordion expand animation before scrolling
+            return () => clearTimeout(timer);
+        }, [locateTarget, elements, expandSpecificTargetedElements]);
+
         const direction: "rtl" | "ltr" = dir === "rtl" ? "rtl" : "ltr";
 
         // Memoize context value to prevent unnecessary re-renders of all tree children
@@ -199,7 +230,7 @@ const Tree = memo(forwardRef<HTMLDivElement, TreeViewProps>(
 
         return (
             <TreeContext.Provider value={contextValue}>
-                <div ref={ref} className={cn("w-full px-2 flex flex-col min-h-0", className)} dir={dir as Direction}>
+                <div ref={setRefs} className={cn("w-full px-2 flex flex-col min-h-0", className)} dir={dir as Direction}>
                     <AccordionPrimitive.Root
                         {...props}
                         type="multiple"
@@ -320,7 +351,7 @@ const Folder = memo(forwardRef<
                 className="relative overflow-hidden h-full"
             >
                 {
-                    selectParent ? <div className={cn(
+                    selectParent ? <div data-tree-item-id={value} className={cn(
                         `flex items-center gap-2 text-base rounded-md w-full`,
                         getSize(size),
                         className,
@@ -349,6 +380,7 @@ const Folder = memo(forwardRef<
                         </span>
                     </div> : (
                         <AccordionPrimitive.Trigger
+                            data-tree-item-id={value}
                             className={cn(
                                 `flex items-center gap-1 text-base rounded-md w-full px-1 py-1 relative`,
                                 getSize(size),
@@ -447,6 +479,7 @@ const File = memo(forwardRef<
                 <AccordionPrimitive.Trigger
                     ref={ref}
                     // {...props}
+                    data-tree-item-id={value}
                     dir={direction}
                     disabled={!isSelectable}
                     aria-label="File"

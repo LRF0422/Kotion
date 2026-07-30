@@ -15,6 +15,8 @@
  */
 package com.knowledge.auth.controller;
 
+import com.knowledge.core.log.feign.ILogClient;
+import com.knowledge.core.log.model.LogLogin;
 import com.knowledge.core.secure.AuthInfo;
 import com.knowledge.core.tool.api.R;
 import com.knowledge.core.tool.support.Kv;
@@ -26,7 +28,9 @@ import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import com.knowledge.auth.granter.ITokenGranter;
+import com.knowledge.auth.granter.RefreshTokenGranter;
 import com.knowledge.auth.granter.TokenGranterBuilder;
 import com.knowledge.auth.granter.TokenParameter;
 import com.knowledge.auth.utils.TokenUtil;
@@ -37,6 +41,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.servlet.http.HttpServletRequest;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -45,12 +51,15 @@ import java.util.concurrent.TimeUnit;
  *
  * @author Chill
  */
+@Slf4j
 @RestController
 @AllArgsConstructor
 @Api(value = "用户授权认证", tags = "授权接口")
 public class AuthController {
 
 	private RedisUtil redisUtil;
+
+	private ILogClient logClient;
 
 	@PostMapping("oauth2/token")
 	@ApiOperation(value = "获取认证token", notes = "传入租户ID:tenantId,账号:account,密码:password")
@@ -76,10 +85,47 @@ public class AuthController {
 		UserInfo userInfo = granter.grant(tokenParameter);
 
 		if (userInfo == null || userInfo.getUser() == null || userInfo.getUser().getId() == null) {
+			recordLoginLog(grantType, tenantId, account, null, 0, "BAD_CREDENTIALS");
 			return R.fail(TokenUtil.USER_NOT_FOUND);
 		}
 
+		// 禁用账号拦截：status 2-禁用
+		if (Integer.valueOf(2).equals(userInfo.getUser().getStatus())) {
+			recordLoginLog(grantType, tenantId, account, userInfo, 0, "USER_DISABLED");
+			return R.fail(TokenUtil.USER_DISABLED);
+		}
+
+		recordLoginLog(grantType, tenantId, account, userInfo, 1, null);
 		return R.data(TokenUtil.createAuthInfo(userInfo));
+	}
+
+	/**
+	 * 登录日志落库（刷新令牌不记录，失败不影响登录主流程）
+	 */
+	private void recordLoginLog(String grantType, String tenantId, String account, UserInfo userInfo, int success, String failReason) {
+		if (RefreshTokenGranter.GRANT_TYPE.equals(grantType)) {
+			return;
+		}
+		try {
+			LogLogin logLogin = new LogLogin();
+			logLogin.setTenantId(Func.toStr(tenantId, TokenUtil.DEFAULT_TENANT_ID));
+			logLogin.setAccount(account);
+			if (userInfo != null && userInfo.getUser() != null) {
+				logLogin.setUserId(userInfo.getUser().getId());
+				logLogin.setAccount(Func.toStr(userInfo.getUser().getAccount(), account));
+			}
+			logLogin.setSuccess(success);
+			logLogin.setFailReason(failReason);
+			HttpServletRequest request = WebUtil.getRequest();
+			if (request != null) {
+				logLogin.setRemoteIp(WebUtil.getIP(request));
+				logLogin.setUserAgent(request.getHeader(WebUtil.USER_AGENT_HEADER));
+			}
+			logLogin.setCreateTime(LocalDateTime.now());
+			logClient.saveLoginLog(logLogin);
+		} catch (Exception e) {
+			log.warn("登录日志记录失败: account={}", account, e);
+		}
 	}
 
 	@GetMapping("/captcha")

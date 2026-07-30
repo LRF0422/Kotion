@@ -19,6 +19,7 @@ import com.knowledge.core.launch.constant.AppConstant;
 import com.knowledge.core.log.model.LogApi;
 import com.knowledge.core.log.model.LogUsual;
 import com.knowledge.core.log.model.LogError;
+import com.knowledge.core.log.model.LogLogin;
 import com.knowledge.core.tool.api.R;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -63,5 +64,14 @@ public interface ILogClient {
 	 */
 	@PostMapping(API_PREFIX + "/saveErrorLog")
 	R<Boolean> saveErrorLog(@RequestBody LogError log);
+
+	/**
+	 * 保存登录日志
+	 *
+	 * @param log 日志实体
+	 * @return boolean
+	 */
+	@PostMapping(API_PREFIX + "/saveLoginLog")
+	R<Boolean> saveLoginLog(@RequestBody LogLogin log);
 
 }

@@ -45,15 +45,26 @@ public class AgentEngine {
     private final InterceptorPipeline pipeline;
     private final AgentEventBus eventBus;
     private final AgentProperties properties;
+    /** Optional usage accounting hook; may be null when not configured. */
+    private final AgentUsageListener usageListener;
 
     public AgentEngine(Map<AgentState, StateHandler> handlers,
             InterceptorPipeline pipeline,
             AgentEventBus eventBus,
             AgentProperties properties) {
+        this(handlers, pipeline, eventBus, properties, null);
+    }
+
+    public AgentEngine(Map<AgentState, StateHandler> handlers,
+            InterceptorPipeline pipeline,
+            AgentEventBus eventBus,
+            AgentProperties properties,
+            AgentUsageListener usageListener) {
         this.handlers = handlers;
         this.pipeline = pipeline;
         this.eventBus = eventBus;
         this.properties = properties;
+        this.usageListener = usageListener;
     }
 
     /**
@@ -129,6 +140,7 @@ public class AgentEngine {
                                 session.getExecution().getTotalCompletionTokens(),
                                 elapsed);
                         eventBus.publish(completedEvent);
+                        notifyUsageListener(session, finishReason, elapsed);
                         return Flux.just((AgentEvent) completedEvent);
                     } else if (finalState == AgentState.ERROR) {
                         LifecycleEvent.SessionFailed failedEvent = new LifecycleEvent.SessionFailed(
@@ -147,6 +159,21 @@ public class AgentEngine {
                     eventBus.publish(failedEvent);
                     log.error("AgentEngine failed: sessionId={}", session.getSessionId(), e);
                 });
+    }
+
+    /**
+     * Notify the usage listener, never letting accounting failures break
+     * the event stream.
+     */
+    private void notifyUsageListener(AgentSession session, String finishReason, long elapsed) {
+        if (usageListener == null) {
+            return;
+        }
+        try {
+            usageListener.record(session, finishReason, elapsed);
+        } catch (Exception e) {
+            log.warn("Usage listener failed: sessionId={}", session.getSessionId(), e);
+        }
     }
 
     /**

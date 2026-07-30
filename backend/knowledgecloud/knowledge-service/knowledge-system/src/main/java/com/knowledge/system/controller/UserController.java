@@ -1,6 +1,7 @@
 package com.knowledge.system.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.github.xiaoymin.knife4j.annotations.ApiOperationSupport;
 import com.knowledge.core.mp.support.Condition;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
@@ -22,6 +23,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/user")
@@ -116,6 +119,35 @@ public class UserController {
 	public R resetPassword(@ApiParam(value = "userId集合", required = true) @RequestParam String userIds) {
 		boolean temp = userService.resetPassword(userIds);
 		return R.status(temp);
+	}
+
+	/**
+	 * 启用账号
+	 */
+	@PostMapping("/enable")
+	@ApiOperationSupport(order = 10)
+	@ApiOperation(value = "启用账号", notes = "传入userId集合")
+	public R enable(@ApiParam(value = "userId集合", required = true) @RequestParam String userIds) {
+		return R.status(userService.update(Wrappers.<User>update().lambda()
+			.set(User::getStatus, 1)
+			.in(User::getId, Func.toLongList(userIds))));
+	}
+
+	/**
+	 * 禁用账号（不允许禁用自己）
+	 */
+	@PostMapping("/disable")
+	@ApiOperationSupport(order = 11)
+	@ApiOperation(value = "禁用账号", notes = "传入userId集合")
+	public R disable(@ApiParam(value = "userId集合", required = true) @RequestParam String userIds) {
+		List<Long> ids = Func.toLongList(userIds);
+		Long currentUserId = SecurityContextUtil.getUserId();
+		if (currentUserId != null && ids.contains(currentUserId)) {
+			return R.fail("不能禁用当前登录账号");
+		}
+		return R.status(userService.update(Wrappers.<User>update().lambda()
+			.set(User::getStatus, 2)
+			.in(User::getId, ids)));
 	}
 
 	/**

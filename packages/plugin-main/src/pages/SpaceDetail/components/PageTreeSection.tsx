@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { Button, Input, TreeView, cn } from '@kn/ui'
-import { Plus, MoreHorizontal, Star, Trash2, Package, Link, AppWindow } from '@kn/icon'
+import { Plus, MoreHorizontal, Star, Trash2, Package, Link, AppWindow, LocateFixed } from '@kn/icon'
 import { useTranslation, PageEditWindow } from '@kn/common'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@kn/ui'
 import { SiderMenuItemProps } from '../../../pages/components/SiderMenu'
@@ -42,6 +42,13 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
     const { t } = useTranslation()
     // Pages currently opened in floating PageEditWindows (multiple windows cascade)
     const [editWindowPageIds, setEditWindowPageIds] = useState<string[]>([])
+    // Locate request passed to TreeView; token bump re-triggers expand + scroll
+    const [locateTarget, setLocateTarget] = useState<{ id: string; token: number } | null>(null)
+
+    const handleLocateCurrentPage = useCallback(() => {
+        if (!selectedPageId) return
+        setLocateTarget({ id: selectedPageId, token: Date.now() })
+    }, [selectedPageId])
 
     const openEditWindow = useCallback((pageId: string) => {
         // Ignore if this page's window is already open — the impl handles focus
@@ -184,6 +191,16 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
                         className="h-5 w-5 p-0"
                         variant="ghost"
                         size="icon"
+                        disabled={!selectedPageId}
+                        onClick={handleLocateCurrentPage}
+                        title={t('pages.locate') || 'Locate current page'}
+                    >
+                        <LocateFixed className="h-3 w-3" />
+                    </Button>
+                    <Button
+                        className="h-5 w-5 p-0"
+                        variant="ghost"
+                        size="icon"
                         onClick={() => onCreatePage()}
                         title={t('page.create') || 'New page'}
                     >
@@ -202,6 +219,7 @@ export const PageTreeSection: React.FC<PageTreeSectionProps> = ({
                         selectParent={true}
                         className="w-full"
                         elements={elements}
+                        locateTarget={locateTarget}
                         onTreeSelected={onTreeSelected}
                     />
                 ) : !loading ? (
