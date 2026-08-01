@@ -22,6 +22,7 @@
     "@kn/common": "workspace:*",
     "@kn/editor": "workspace:*",
     "@kn/icon": "workspace:*",
+    "@kn/plugin-api": "workspace:*",
     "@kn/ui": "workspace:*",
     "@types/pako": "^2.0.3",
     "ai": "^6.0.9",

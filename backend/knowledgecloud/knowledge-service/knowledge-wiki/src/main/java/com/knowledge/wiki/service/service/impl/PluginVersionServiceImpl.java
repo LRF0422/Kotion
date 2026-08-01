@@ -21,6 +21,7 @@ public class PluginVersionServiceImpl extends AbstractVersionService<Plugin, Plu
         pluginVersion
                 .setVersion(StrUtil.isEmpty(lastVersion) ? "1" : String.valueOf((Integer.parseInt(lastVersion) + 1)));
         pluginVersion.setResourcePath(subject.getResourcePath());
+        pluginVersion.setIntegrity(subject.getIntegrity());
         pluginVersion.setSubjectId(subject.getId());
         pluginVersion.setVersionDescription(subject.getVersionDescs());
         pluginVersion.setStatus(VersionStatus.DRAFT);
@@ -40,6 +41,7 @@ public class PluginVersionServiceImpl extends AbstractVersionService<Plugin, Plu
     @Override
     public void updateDraft(Plugin newValue, PluginVersion oldValue) {
         oldValue.setResourcePath(newValue.getResourcePath());
+        oldValue.setIntegrity(newValue.getIntegrity());
     }
 
 }

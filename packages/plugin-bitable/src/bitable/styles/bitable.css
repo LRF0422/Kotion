@@ -424,7 +424,7 @@
   --rdg-drag-handle-size: 7px;
   background-color: var(--bt-accent-soft);
   border-radius: 1px;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-radius 0.15s ease;
 }
 
 .bitable-data-grid .rdg-cell-drag-handle:hover {

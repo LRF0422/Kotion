@@ -5,9 +5,10 @@ import { TourConfig } from "./tour";
 import { RouteConfig } from "./route";
 import { Services } from "./types";
 import { ServiceRegistry } from "./ServiceRegistry";
+import { PluginMeta, PluginRegistration } from "./global-namespace";
 import { pluginScriptLoader } from "../utils/import-util";
 import { logger } from "../utils/logger";
-import { getAccessToken } from "../utils/auth";
+import { event, PLUGIN_INCOMPATIBLE } from "../event";
 import { Editor } from "@tiptap/core";
 
 export interface PluginSettingsConfig {
@@ -109,12 +110,20 @@ export class KPlugin<T extends PluginConfig> {
 
 }
 
+export interface PluginManagerOptions {
+    /** Maps a plugin's resourcePath to the (public, no-auth) download URL */
+    resolveUrl: (resourcePath: string) => string
+    /** The plugin API version the host was built with (from @kn/plugin-api) */
+    hostApiVersion: string
+}
+
 export class PluginManager {
 
     plugins: KPlugin<any>[] = []
     _initialPlugins: KPlugin<any>[] = []
     private _serviceRegistry: ServiceRegistry = new ServiceRegistry()
-    _pluginStore: (path: string) => string
+    private _resolveUrl: (resourcePath: string) => string
+    private _hostApiVersion: string
     _init: boolean = false
 
     // Version counter that increments whenever plugins change.
@@ -134,8 +143,9 @@ export class PluginManager {
     private _cacheTours: TourConfig[] | null = null
     private _pluginMap: Map<string, KPlugin<any>> = new Map()
 
-    constructor(pluginStore: (path: string) => string, initalPlugins: KPlugin<any>[]) {
-        this._pluginStore = pluginStore
+    constructor(options: PluginManagerOptions, initalPlugins: KPlugin<any>[]) {
+        this._resolveUrl = options.resolveUrl
+        this._hostApiVersion = options.hostApiVersion
         this._initialPlugins = initalPlugins
         this._buildPluginMap(initalPlugins)
         logger.debug('Initial plugins loaded:', this._initialPlugins);
@@ -213,6 +223,64 @@ export class PluginManager {
         return true
     }
 
+    /**
+     * Build the script URL for a remote plugin. Publishing produces a new
+     * resourcePath (new file name), so the extra `v` parameter is only a
+     * second line of defence against stale HTTP caches.
+     */
+    private _buildPluginUrl(plugin: any): string {
+        return this._resolveUrl(plugin.resourcePath)
+            + '&cache=true'
+            + '&v=' + (plugin.id ?? plugin.version ?? '')
+    }
+
+    /**
+     * Version handshake: a plugin built against a different MAJOR plugin-api
+     * version than the host is skipped. Legacy bundles without metadata are
+     * allowed through with a warning.
+     */
+    private _checkApiCompat(meta: PluginMeta | undefined, name: string): boolean {
+        const apiVersion = meta?.apiVersion
+        if (!apiVersion) {
+            logger.warn(`Plugin ${name} has no apiVersion metadata (legacy bundle), loading anyway`)
+            return true
+        }
+        const pluginMajor = apiVersion.split('.')[0]
+        const hostMajor = this._hostApiVersion.split('.')[0]
+        if (pluginMajor !== hostMajor) {
+            logger.warn(`Plugin ${name} is incompatible: built against plugin-api ${apiVersion}, host is ${this._hostApiVersion}. Skipping.`)
+            event.emit(PLUGIN_INCOMPATIBLE, { name, apiVersion })
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Extract the KPlugin instance from a load result and sanity-check it
+     * (name present, contract getters accessible) before activation.
+     */
+    private _extractPlugin(registration: PluginRegistration): KPlugin<any> | null {
+        const plugin = Object.values(registration.exports)
+            .find((value): value is KPlugin<any> => value instanceof KPlugin)
+        if (!plugin) {
+            logger.error('No KPlugin instance found in plugin exports')
+            return null
+        }
+        try {
+            if (!plugin.name) {
+                logger.error('Plugin must have a non-empty name')
+                return null
+            }
+            // Contract smoke test: getters must be accessible
+            void plugin.routes
+            void plugin.editorExtensions
+        } catch (error) {
+            logger.error('Plugin contract getters are not accessible:', error)
+            return null
+        }
+        return plugin
+    }
+
     public async init(remotePlugins: any[]) {
         logger.info('Initializing remote plugins:', remotePlugins);
         logger.info('Current init status:', this._init);
@@ -247,11 +315,11 @@ export class PluginManager {
 
             const loadResults = await Promise.allSettled(remotePlugins.map(async (plugin) => {
                 try {
-                    const path = this._pluginStore(plugin.resourcePath) + "&cache=true&Authorization=" + getAccessToken()
-                    const result = await pluginScriptLoader.load(path, plugin.pluginKey, plugin.name, {
-                        bustCache: isReinit
+                    const path = this._buildPluginUrl(plugin)
+                    const registration = await pluginScriptLoader.load(path, plugin.pluginKey, plugin.name, {
+                        integrity: plugin.integrity || undefined
                     })
-                    return result
+                    return { plugin, registration }
                 } catch (error) {
                     logger.error(`Failed to load plugin ${plugin.name}:`, error)
                     throw error
@@ -259,16 +327,18 @@ export class PluginManager {
             }))
             console.log('Load results:', loadResults);
 
-            const successfulPlugins = loadResults
-                .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
-                .map(result => Object.values(result.value)[0] as KPlugin<any>)
-                .filter(plugin => {
-                    if (!plugin || !plugin.name) {
-                        logger.warn('Invalid plugin detected, skipping')
-                        return false
-                    }
-                    return true
-                })
+            const successfulPlugins: KPlugin<any>[] = []
+            for (const result of loadResults) {
+                if (result.status !== 'fulfilled') continue
+                const { plugin, registration } = result.value
+                if (!this._checkApiCompat(registration.meta, plugin.name)) continue
+                const instance = this._extractPlugin(registration)
+                if (!instance) {
+                    logger.warn(`Invalid plugin ${plugin.name} detected, skipping`)
+                    continue
+                }
+                successfulPlugins.push(instance)
+            }
 
             this.plugins = [...this._initialPlugins, ...successfulPlugins]
             this._buildPluginMap(successfulPlugins)
@@ -334,20 +404,23 @@ export class PluginManager {
             }
 
             // Use bustCache to ensure we get the latest version of the plugin script
-            const path = this._pluginStore(plugin.resourcePath) + "&cache=true"
-            const pluginInstance = await pluginScriptLoader.load(path, plugin.pluginKey, plugin.name, {
-                bustCache: true
+            const path = this._buildPluginUrl(plugin)
+            const registration = await pluginScriptLoader.load(path, plugin.pluginKey, plugin.name, {
+                bustCache: true,
+                integrity: plugin.integrity || undefined
             })
 
-            if (!pluginInstance) {
+            if (!registration) {
                 logger.error(`Failed to load plugin instance for ${plugin.name}`)
                 return false
             }
 
-            const pluginKey = Object.keys(pluginInstance)[0]
-            const loadedPlugin = Object.values(pluginInstance)[0] as KPlugin<any>
+            if (!this._checkApiCompat(registration.meta, plugin.name)) {
+                return false
+            }
 
-            if (!loadedPlugin || !loadedPlugin.name) {
+            const loadedPlugin = this._extractPlugin(registration)
+            if (!loadedPlugin) {
                 logger.error(`Invalid plugin structure for ${plugin.name}`)
                 return false
             }
@@ -356,8 +429,8 @@ export class PluginManager {
             this._pluginMap.set(loadedPlugin.name, loadedPlugin)
 
             // Merge services via ServiceRegistry if available
-            if (pluginInstance[pluginKey]?.services) {
-                this._serviceRegistry.registerAll(pluginInstance[pluginKey].services)
+            if (loadedPlugin.services) {
+                this._serviceRegistry.registerAll(loadedPlugin.services)
             }
 
             logger.info(`Plugin ${loadedPlugin.name} installed successfully`)
@@ -642,13 +715,17 @@ export class PluginManager {
                 // Construct the plugin URL (same logic as init)
                 const pluginUrl = plugin.resourcePath.startsWith('http')
                     ? plugin.resourcePath
-                    : this._pluginStore(plugin.resourcePath) + "&cache=true";
+                    : this._buildPluginUrl(plugin);
 
                 // Load the plugin script
-                const loadedPlugin = await pluginScriptLoader.load(pluginUrl, plugin.pluginKey, plugin.name);
+                const registration = await pluginScriptLoader.load(pluginUrl, plugin.pluginKey, plugin.name);
 
-                // Extract the KPlugin instance
-                const pluginInstance = Object.values(loadedPlugin)[0] as KPlugin<any>;
+                // Version handshake before extracting the KPlugin instance
+                if (!this._checkApiCompat(registration.meta, plugin.name)) {
+                    return null;
+                }
+
+                const pluginInstance = this._extractPlugin(registration);
 
                 return pluginInstance;
             } catch (error) {

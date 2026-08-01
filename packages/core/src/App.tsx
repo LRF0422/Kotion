@@ -27,6 +27,7 @@ import { Loader2, Eye, EyeOff } from "@kn/icon"
 import { ErrorPage } from "./components/ErrorPage";
 import { PluginErrorBoundary } from "./components/PluginErrorBoundary";
 import ReactDOM from "react-dom";
+import { PLUGIN_API_VERSION } from "@kn/plugin-api";
 
 const { createBrowserRouter,
     createRoutesFromElements, Route, RouterProvider, Provider,
@@ -52,13 +53,18 @@ const reslove = (config: common.RouteConfig) => {
 
 
 
-window.ui = ui
-window.common = common
-window.core = core
-window.icon = icon
-window.editor = editor
-window.React = React
-window.ReactDOM = ReactDOM
+// Install window.__KN__ (frozen namespace with shared libs + plugin registry)
+// plus the legacy window.ui/common/... globals for old plugin bundles.
+common.setupGlobalNamespace({
+    React,
+    ReactDOM,
+    ui,
+    common,
+    core,
+    icon,
+    editor,
+    hostApiVersion: PLUGIN_API_VERSION,
+})
 
 // ---------------------------------------------------------------------------
 // Session-expired dialog (rendered imperatively when token expires)
@@ -255,7 +261,13 @@ export const App: React.FC<AppProps> = (props) => {
     const { plugins = [] } = props
     const [router, setRouter] = useSafeState<any>()
     const { usePath } = core.useUploadFile()
-    const pluginManager = useMemo(() => new common.PluginManager(usePath, plugins), [])
+    const pluginManager = useMemo(() => new common.PluginManager({
+        // Plugin artifacts are served from the public (no-auth) plugin endpoint
+        // so script tags need no Authorization query param and SRI/CORS work.
+        resolveUrl: (resourcePath: string) => usePath(resourcePath)
+            .replace('/oss/endpoint/download', '/oss/endpoint/public/plugin'),
+        hostApiVersion: PLUGIN_API_VERSION,
+    }, plugins), [])
     const [pluginsReady, setPluginsReady] = useState(false)
     const [refreshFlag, setRefreshFlag] = useState(0)
 

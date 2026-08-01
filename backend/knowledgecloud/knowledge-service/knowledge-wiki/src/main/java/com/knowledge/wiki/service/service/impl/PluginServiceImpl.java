@@ -51,6 +51,8 @@ public class PluginServiceImpl extends AbstractSubjectService<PluginMapper, Plug
                 .selectAs(Plugin::getDescription, PluginVersion::getDescription)
                 .selectAs(PluginVersion::getSubjectId, PluginVersion::getSubjectId)
                 .select(PluginVersion::getResourcePath, PluginVersion::getResourcePath)
+                .selectAs(PluginVersion::getIntegrity, PluginVersion::getIntegrity)
+                .selectAs(PluginVersion::getVersion, PluginVersion::getVersion)
                 .selectAs(PluginVersion::getId, PluginVersion::getId)
                 .selectAs(PluginVersion::getActiveVersionId, PluginVersion::getActiveVersionId)
                 .selectAs(PluginVersion::getVersionDescription, PluginVersion::getVersionDescription)

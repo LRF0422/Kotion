@@ -16,6 +16,11 @@ import lombok.EqualsAndHashCode;
 public class PluginVersion extends BaseVersion {
 
     private String resourcePath;
+    /**
+     * Subresource Integrity hash of the plugin artifact (e.g. sha384-xxx),
+     * submitted by the publisher together with resourcePath.
+     */
+    private String integrity;
     @TableField(typeHandler = VersionDescListTypeHandler.class)
     private List<VersionDesc> versionDescription;
 

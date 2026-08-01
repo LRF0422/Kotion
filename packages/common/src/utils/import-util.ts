@@ -1,3 +1,5 @@
+import type { KnGlobalNamespace, PluginRegistration } from "../core/global-namespace"
+
 // Extend Window interface to include custom __KN__ property
 declare global {
     interface Window {
@@ -5,7 +7,8 @@ declare global {
         common: any,
         core: any,
         icon: any,
-        editor: any
+        editor: any,
+        __KN__?: KnGlobalNamespace
     }
 }
 
@@ -19,6 +22,12 @@ export interface LoadOptions {
      * Override the default script-load timeout (30 000 ms).
      */
     timeout?: number
+    /**
+     * Subresource Integrity hash (e.g. "sha384-xxx"). When provided, the
+     * script tag is created with `integrity` + `crossorigin="anonymous"` so
+     * the browser verifies the artifact before executing it.
+     */
+    integrity?: string
 }
 
 /**
@@ -34,8 +43,8 @@ export interface LoadOptions {
  *   causes the next `load()` to append `_t=Date.now()` to the URL.
  */
 export class PluginScriptLoader {
-    private cache = new Map<string, any>()
-    private pendingLoads = new Map<string, Promise<any>>()
+    private cache = new Map<string, PluginRegistration>()
+    private pendingLoads = new Map<string, Promise<PluginRegistration>>()
     private defaultTimeout = 30_000
     /** URLs that have been explicitly invalidated; the next load() will bust the browser cache. */
     private invalidatedUrls = new Set<string>()
@@ -48,7 +57,7 @@ export class PluginScriptLoader {
      * @param name        Human-readable plugin name (for error messages).
      * @param options     Optional load configuration.
      */
-    async load(url: string, packageName: string, name: string, options?: LoadOptions): Promise<any> {
+    async load(url: string, packageName: string, name: string, options?: LoadOptions): Promise<PluginRegistration> {
         // Return cached value immediately unless busting cache
         if (!options?.bustCache && !this.invalidatedUrls.has(url) && this.cache.has(url)) {
             return this.cache.get(url)!
@@ -71,7 +80,7 @@ export class PluginScriptLoader {
         }
     }
 
-    private _doLoad(url: string, packageName: string, name: string, options?: LoadOptions): Promise<any> {
+    private _doLoad(url: string, packageName: string, name: string, options?: LoadOptions): Promise<PluginRegistration> {
         const shouldBust = options?.bustCache || this.invalidatedUrls.has(url)
         // Clear the invalidated flag
         this.invalidatedUrls.delete(url)
@@ -83,9 +92,14 @@ export class PluginScriptLoader {
 
         const timeout = options?.timeout ?? this.defaultTimeout
 
-        return new Promise<any>((resolve, reject) => {
+        return new Promise<PluginRegistration>((resolve, reject) => {
             const script = document.createElement('script')
             script.setAttribute('src', fetchUrl)
+            // Subresource Integrity: let the browser verify the artifact hash
+            if (options?.integrity) {
+                script.integrity = options.integrity
+                script.crossOrigin = 'anonymous'
+            }
             document.head.appendChild(script)
 
             // Timeout guard
@@ -97,14 +111,20 @@ export class PluginScriptLoader {
             const onLoad = () => {
                 cleanup()
                 document.head.removeChild(script)
-                const Com = (window as any)[packageName]
-                if (!Com) {
+                // New bundles register themselves via window.__KN__.definePlugin;
+                // legacy bundles only expose their exports on window[packageName].
+                const registration: PluginRegistration | undefined =
+                    window.__KN__?.getPlugin?.(packageName)
+                    ?? ((window as any)[packageName]
+                        ? { exports: (window as any)[packageName], meta: {} }
+                        : undefined)
+                if (!registration) {
                     reject(new Error(`Plugin ${packageName} not found in window scope`))
                     return
                 }
                 // Always cache under the original URL key (without timestamp)
-                this.cache.set(url, Com)
-                resolve(Com)
+                this.cache.set(url, registration)
+                resolve(registration)
             }
 
             const onError = (error: Event | ErrorEvent) => {
@@ -172,7 +192,7 @@ export const importScript = (() => {
     loader.clearCache = () => { pluginScriptLoader.clearCache() }
     loader.clearCacheByUrl = (url: string) => { pluginScriptLoader.clearCacheByUrl(url) }
     return loader as {
-        (url: string, packageName: string, name: string, options?: LoadOptions): Promise<any>
+        (url: string, packageName: string, name: string, options?: LoadOptions): Promise<PluginRegistration>
         clearCache: () => void
         clearCacheByUrl: (url: string) => void
     }

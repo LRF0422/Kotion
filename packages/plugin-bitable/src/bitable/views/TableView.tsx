@@ -13,6 +13,23 @@ import { debounce } from "lodash";
 import { useTableColumns, GroupHeaderRow, AddRowBar } from "./table";
 import type { GroupedRow } from "./table";
 
+/**
+ * Rows beyond this count get a height-capped viewport so react-data-grid can
+ * actually virtualize. An auto-height grid makes rdg's viewport equal to its
+ * content, so every row and cell lands in the DOM — Safari's layout cost on
+ * such a subtree inside the editor makes the whole page janky.
+ */
+const VIRTUALIZED_THRESHOLD = 30;
+
+/** Grid style is constant — kept out of render to preserve prop identity. */
+const GRID_STYLE: React.CSSProperties = {
+    height: "100%",
+    minHeight: 400,
+    border: "none",
+};
+
+const rowKeyGetter = (row: any) => row.id;
+
 interface TableViewProps {
     view: ViewConfig;
     fields: FieldConfig[];
@@ -33,7 +50,7 @@ interface TableViewProps {
     groups?: Map<string, RecordData[]>;
 }
 
-export const TableView: React.FC<TableViewProps> = (props) => {
+const TableViewComponent: React.FC<TableViewProps> = (props) => {
     const {
         view,
         fields,
@@ -67,13 +84,12 @@ export const TableView: React.FC<TableViewProps> = (props) => {
     // --- Filter data by search text ---
     const filteredData = useMemo(() => {
         if (!searchText) return data;
+        const keyword = searchText.toLowerCase();
         return data.filter((record) =>
             fields.some((field) => {
                 const value = record[field.id];
                 if (value === null || value === undefined) return false;
-                return String(value)
-                    .toLowerCase()
-                    .includes(searchText.toLowerCase());
+                return String(value).toLowerCase().includes(keyword);
             })
         );
     }, [data, searchText, fields]);
@@ -104,9 +120,16 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         return rows;
     }, [isGrouped, filteredData, groupedData, collapsedGroups]);
 
-    // --- Virtual scrolling threshold ---
-    const VIRTUALIZED_THRESHOLD = 500;
-    const enableVirtualization = filteredData.length > VIRTUALIZED_THRESHOLD;
+    // --- Bounded viewport: required for rdg virtualization to kick in ---
+    const rows = isGrouped ? flatRows : filteredData;
+    const boundedViewport = rows.length > VIRTUALIZED_THRESHOLD;
+    const containerStyle = useMemo<React.CSSProperties>(
+        () => ({
+            height: boundedViewport ? "calc(100dvh - 300px)" : "auto",
+            minHeight: boundedViewport ? 400 : "auto",
+        }),
+        [boundedViewport]
+    );
 
     // --- Column definitions via hook ---
     const columns = useTableColumns({
@@ -159,15 +182,46 @@ export const TableView: React.FC<TableViewProps> = (props) => {
     }, [isGrouped, flatRows, fields]);
 
     // --- Selection handlers ---
-    const handleDeleteSelected = () => {
+    const handleDeleteSelected = useCallback(() => {
         onDeleteRecord(Array.from(selectedRows));
         setSelectedRows(new Set());
-    };
+    }, [onDeleteRecord, selectedRows]);
 
-    const handleDuplicateSelected = () => {
+    const handleDuplicateSelected = useCallback(() => {
         onDuplicateRecord?.(Array.from(selectedRows));
         setSelectedRows(new Set());
-    };
+    }, [onDuplicateRecord, selectedRows]);
+
+    // --- Grid callbacks (stable identity keeps rdg from re-rendering rows) ---
+    const handleRowsChange = useCallback(
+        (updatedRows: any, changes: any) => {
+            if (changes.indexes.length > 0) {
+                const updatesMap = new Map<string, Partial<RecordData>>();
+                changes.indexes.forEach((index: number) => {
+                    const row = updatedRows[index];
+                    if (row && !row._isGroupHeader) {
+                        updatesMap.set(row.id, row);
+                    }
+                });
+                if (updatesMap.size > 0) {
+                    onBatchUpdateRecords(updatesMap);
+                }
+            }
+        },
+        [onBatchUpdateRecords]
+    );
+
+    const handleColumnResize = useCallback(
+        (column: any, width: number) => {
+            const w = Math.round(
+                typeof width === "number" ? width : parseFloat(width)
+            );
+            if (editable && column?.key && !Number.isNaN(w)) {
+                persistColumnWidth(column.key, w);
+            }
+        },
+        [editable, persistColumnWidth]
+    );
 
     // --- Group toggle ---
     const toggleGroup = useCallback((groupKey: string) => {
@@ -207,6 +261,20 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         return undefined;
     }, []);
 
+    const gridRenderers = useMemo(
+        () => (isGrouped ? { renderRow: renderGroupRow as any } : undefined),
+        [isGrouped, renderGroupRow]
+    );
+
+    const gridClassName = useMemo(
+        () =>
+            cn(
+                "bitable-data-grid",
+                resolvedTheme === "dark" ? "rdg-dark" : "rdg-light"
+            ),
+        [resolvedTheme]
+    );
+
     return (
         <div className="bitable-table-view">
             {/* Selection action bar */}
@@ -239,69 +307,25 @@ export const TableView: React.FC<TableViewProps> = (props) => {
             )}
 
             {/* Data grid — single grid for both grouped and non-grouped */}
-            <div
-                className="bitable-grid-container"
-                style={{
-                    height: enableVirtualization
-                        ? "calc(100dvh - 300px)"
-                        : "auto",
-                    minHeight: enableVirtualization ? 400 : "auto",
-                }}
-            >
+            <div className="bitable-grid-container" style={containerStyle}>
                 <DataGrid
                     columns={columns}
-                    rows={isGrouped ? flatRows : filteredData}
-                    rowKeyGetter={(row: any) => row.id}
+                    rows={rows}
+                    rowKeyGetter={rowKeyGetter}
                     selectedRows={selectedRows}
                     onSelectedRowsChange={setSelectedRows as any}
-                    onRowsChange={(rows: any, changes: any) => {
-                        if (changes.indexes.length > 0) {
-                            const updatesMap = new Map<
-                                string,
-                                Partial<RecordData>
-                            >();
-                            changes.indexes.forEach((index: number) => {
-                                const row = rows[index];
-                                if (row && !row._isGroupHeader) {
-                                    updatesMap.set(row.id, row);
-                                }
-                            });
-                            if (updatesMap.size > 0) {
-                                onBatchUpdateRecords(updatesMap);
-                            }
-                        }
-                    }}
+                    onRowsChange={handleRowsChange}
                     onFill={isGrouped ? groupedFill : handleFill}
-                    onColumnResize={(column: any, width: number) => {
-                        const w = Math.round(
-                            typeof width === "number"
-                                ? width
-                                : parseFloat(width)
-                        );
-                        if (editable && column?.key && !Number.isNaN(w)) {
-                            persistColumnWidth(column.key, w);
-                        }
-                    }}
+                    onColumnResize={handleColumnResize}
                     bottomSummaryRows={
                         hasSummary || editable
                             ? (summaryRows as any)
                             : undefined
                     }
-                    renderers={
-                        isGrouped
-                            ? { renderRow: renderGroupRow as any }
-                            : undefined
-                    }
+                    renderers={gridRenderers}
                     rowClass={isGrouped ? (getRowClass as any) : undefined}
-                    className={cn(
-                        "bitable-data-grid",
-                        resolvedTheme === "dark" ? "rdg-dark" : "rdg-light"
-                    )}
-                    style={{
-                        height: "100%",
-                        minHeight: 400,
-                        border: "none",
-                    }}
+                    className={gridClassName}
+                    style={GRID_STYLE}
                     rowHeight={40}
                     headerRowHeight={36}
                 />
@@ -317,3 +341,9 @@ export const TableView: React.FC<TableViewProps> = (props) => {
         </div>
     );
 };
+
+/**
+ * Memoized: the grid is the most expensive subtree in bitable, so unrelated
+ * BitableView state (dialogs, record drawer, toolbar) must not re-render it.
+ */
+export const TableView = React.memo(TableViewComponent);

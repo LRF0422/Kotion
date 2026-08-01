@@ -12,6 +12,9 @@ export const PLUGIN_CHANGED = "PLUGIN_CHANGED"
 /** Emitted after Layout successfully initializes plugins from the server */
 export const PLUGIN_INIT_SUCCESS = "PLUGIN_INIT_SUCCESS"
 
+/** Emitted when a plugin is skipped because its apiVersion major differs from the host's */
+export const PLUGIN_INCOMPATIBLE = "PLUGIN_INCOMPATIBLE"
+
 export const ON_PAGE_REFRESH = "ON_PAGE_REFRESH"
 
 export const ON_FAVORITE_CHANGE = "ON_FAVORITE_CHANGE"

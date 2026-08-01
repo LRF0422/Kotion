@@ -43,6 +43,12 @@ public class Plugin extends BaseSubject {
 
     @TableField(exist = false)
     private String resourcePath;
+    /**
+     * SRI hash of the artifact referenced by resourcePath; carried through to
+     * the version draft the same way resourcePath is.
+     */
+    @TableField(exist = false)
+    private String integrity;
     @TableField(exist = false)
     private List<TagDTO> tags;
     @TableField(exist = false)

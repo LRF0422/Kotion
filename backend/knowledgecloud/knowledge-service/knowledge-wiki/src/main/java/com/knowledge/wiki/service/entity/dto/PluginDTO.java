@@ -26,6 +26,11 @@ public class PluginDTO implements Serializable {
     private boolean publish;
     @NotNull(message = "资源路径不能为空")
     private String resourcePath;
+    /**
+     * Optional SRI hash (e.g. sha384-xxx) of the artifact at resourcePath,
+     * computed by the publisher's CI and submitted with the publish request.
+     */
+    private String integrity;
     private List<String> features;
 
 }

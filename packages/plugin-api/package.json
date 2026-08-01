@@ -1,0 +1,22 @@
+{
+  "name": "@kn/plugin-api",
+  "version": "1.0.0",
+  "description": "Plugin API contract package: versioned host/plugin handshake and shared contract types",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "type": "module",
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "registry": "http://localhost:8081/repository/npm-hosted/"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@kn/common": "workspace:*"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

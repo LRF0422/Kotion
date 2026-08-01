@@ -687,6 +687,9 @@ importers:
       '@kn/icon':
         specifier: workspace:*
         version: link:../icon
+      '@kn/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
       '@kn/ui':
         specifier: workspace:*
         version: link:../ui
@@ -978,40 +981,6 @@ importers:
         specifier: ^3.0.12
         version: 3.0.13(@types/react@18.3.28)
 
-  packages/electron-adapter:
-    dependencies:
-      axios:
-        specifier: ^1.6.7
-        version: 1.13.5
-      electron:
-        specifier: ^28.0.0
-        version: 28.3.3
-      eventemitter3:
-        specifier: ^5.0.1
-        version: 5.0.4
-      fs-extra:
-        specifier: ^11.2.0
-        version: 11.3.3
-      uuid:
-        specifier: ^10.0.0
-        version: 10.0.0
-    devDependencies:
-      '@types/fs-extra':
-        specifier: ^11.0.4
-        version: 11.0.4
-      '@types/node':
-        specifier: ^22.7.4
-        version: 22.19.13
-      '@types/uuid':
-        specifier: ^10.0.0
-        version: 10.0.0
-      rollup:
-        specifier: 4.45.1
-        version: 4.45.1
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-
   packages/eslint-config:
     devDependencies:
       '@typescript-eslint/eslint-plugin':
@@ -1079,6 +1048,12 @@ importers:
       '@kn/rollup-config':
         specifier: workspace:*
         version: link:../rollup-config
+
+  packages/plugin-api:
+    dependencies:
+      '@kn/common':
+        specifier: workspace:*
+        version: link:../common
 
   packages/plugin-bilibili:
     dependencies:
@@ -6079,9 +6054,6 @@ packages:
   '@types/ms@2.1.0':
     resolution: {integrity: sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==}
 
-  '@types/node@18.19.130':
-    resolution: {integrity: sha512-GRaXQx6jGfL8sKfaIDD6OupbIHBr9jv7Jnaml9tB7l4v068PAOXqfcujMMo5PhbIs6ggR1XODELqahT2R8v0fg==}
-
   '@types/node@20.19.35':
     resolution: {integrity: sha512-Uarfe6J91b9HAUXxjvSOdiO2UPOKLm07Q1oh0JHxoZ1y8HoqxDAu3gVrsrOHeiio0kSsoVBt4wFrKOm0dKxVPQ==}
 
@@ -8341,11 +8313,6 @@ packages:
       '@swc/core':
         optional: true
 
-  electron@28.3.3:
-    resolution: {integrity: sha512-ObKMLSPNhomtCOBAxFS8P2DW/4umkh72ouZUlUKzXGtYuPzgr1SYhskhFWgzAsPtUzhL2CzyV2sfbHcEW4CXqw==}
-    engines: {node: '>= 12.20.55'}
-    hasBin: true
-
   electron@33.4.11:
     resolution: {integrity: sha512-xmdAs5QWRkInC7TpXGNvzo/7exojubk+72jn1oJL7keNeIlw7xNglf8TGtJtkR4rWC5FJq0oXiIXPS9BcK2Irg==}
     engines: {node: '>= 12.20.55'}
@@ -8762,9 +8729,6 @@ packages:
 
   eventemitter3@4.0.7:
     resolution: {integrity: sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==}
-
-  eventemitter3@5.0.4:
-    resolution: {integrity: sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==}
 
   eventsource-parser@3.0.6:
     resolution: {integrity: sha512-Vo1ab+QXPzZ4tCa8SwIHJFaSzy4R6SHf7BY79rFBDf0idraZWAkYrDjDj8uWaSm3S2TK+hJ7/t1CEmZ7jXw+pg==}
@@ -13070,9 +13034,6 @@ packages:
     resolution: {integrity: sha512-svtcfoTADIB0nT9nltgjujTi7BzVmwjZClOmskKu/E8FW9BXzg9os8OLr4f8Dlnk0rYWJIWr4wv9eKUXiQvQwQ==}
     peerDependencies:
       react: '>=15.0.0'
-
-  undici-types@5.26.5:
-    resolution: {integrity: sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==}
 
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
@@ -18233,10 +18194,6 @@ snapshots:
 
   '@types/ms@2.1.0': {}
 
-  '@types/node@18.19.130':
-    dependencies:
-      undici-types: 5.26.5
-
   '@types/node@20.19.35':
     dependencies:
       undici-types: 6.21.0
@@ -21768,14 +21725,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@28.3.3:
-    dependencies:
-      '@electron/get': 2.0.3
-      '@types/node': 18.19.130
-      extract-zip: 2.0.1
-    transitivePeerDependencies:
-      - supports-color
-
   electron@33.4.11:
     dependencies:
       '@electron/get': 2.0.3
@@ -22495,8 +22444,6 @@ snapshots:
   eventemitter3@4.0.0: {}
 
   eventemitter3@4.0.7: {}
-
-  eventemitter3@5.0.4: {}
 
   eventsource-parser@3.0.6: {}
 
@@ -27905,8 +27852,6 @@ snapshots:
       invariant: 2.2.4
       react: 19.2.4
       react-lifecycles-compat: 3.0.4
-
-  undici-types@5.26.5: {}
 
   undici-types@6.21.0: {}
 

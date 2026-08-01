@@ -32,6 +32,7 @@ public class PluginVersionVO implements Serializable {
     private Long currentVersionId;
     private String installedVersion;
     private String resourcePath;
+    private String integrity;
     private Long activeVersionId;
     private List<VersionDesc> versionDescription;
     private String version;

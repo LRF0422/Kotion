@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from "react";
+import { useDebounce } from "ahooks";
 import { NodeViewProps, NodeViewWrapper } from "@kn/editor";
 import { useSelector, GlobalState, useTranslation } from "@kn/common";
 import { useResolvedTheme, cn } from "@kn/ui";
@@ -52,6 +53,8 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
     const [excelImportOpen, setExcelImportOpen] = useState(false);
     const [selectedRecord, setSelectedRecord] = useState<RecordData | null>(null);
     const [searchText, setSearchText] = useState("");
+    // Filtering walks every record × field, so keep it off the keystroke path.
+    const debouncedSearchText = useDebounce(searchText, { wait: 200 });
     const [currentViewId, setCurrentViewId] = useState(attrs.currentView);
 
     const actions = useBitableActions(
@@ -78,30 +81,72 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
         [actions.editingViewId, updateAttributes]
     );
 
-    // View routing
-    const viewProps = {
-        view: actions.currentView,
-        fields: attrs.fields,
-        data: actions.processedData,
-        onAddRecord: actions.handleAddRecord,
-        onDuplicateRecord: actions.handleDuplicateRecord,
-        onCreateRecord: actions.handleCreateRecord,
-        onUpdateRecord: actions.handleUpdateRecord,
-        onBatchUpdateRecords: actions.handleBatchUpdateRecords,
-        onDeleteRecord: actions.handleDeleteRecord,
-        onAddField: actions.handleAddField,
-        onUpdateField: actions.handleUpdateField,
-        onDeleteField: actions.handleDeleteField,
-        onUpdateView: actions.handleUpdateView,
-        editable: editor.isEditable,
-        editor: editor,
-        onRecordClick: (record: RecordData) => setSelectedRecord(record),
-    };
+    const handleRecordClick = useCallback((record: RecordData) => {
+        setSelectedRecord(record);
+    }, []);
+
+    const handleCloseRecordDetail = useCallback(() => {
+        setSelectedRecord(null);
+    }, []);
+
+    const recordIds = useMemo(
+        () => actions.processedData.map((r) => r.id),
+        [actions.processedData]
+    );
+
+    const handleNavigateRecord = useCallback(
+        (recordId: string) => {
+            const rec = actions.processedData.find((r) => r.id === recordId);
+            if (rec) setSelectedRecord(rec);
+        },
+        [actions.processedData]
+    );
+
+    // View routing — memoized so the (expensive) view subtrees can bail out of
+    // re-renders triggered by unrelated state such as dialogs or the toolbar.
+    const viewProps = useMemo(
+        () => ({
+            view: actions.currentView,
+            fields: attrs.fields,
+            data: actions.processedData,
+            onAddRecord: actions.handleAddRecord,
+            onDuplicateRecord: actions.handleDuplicateRecord,
+            onCreateRecord: actions.handleCreateRecord,
+            onUpdateRecord: actions.handleUpdateRecord,
+            onBatchUpdateRecords: actions.handleBatchUpdateRecords,
+            onDeleteRecord: actions.handleDeleteRecord,
+            onAddField: actions.handleAddField,
+            onUpdateField: actions.handleUpdateField,
+            onDeleteField: actions.handleDeleteField,
+            onUpdateView: actions.handleUpdateView,
+            editable: editor.isEditable,
+            editor: editor,
+            onRecordClick: handleRecordClick,
+        }),
+        [
+            actions.currentView,
+            attrs.fields,
+            actions.processedData,
+            actions.handleAddRecord,
+            actions.handleDuplicateRecord,
+            actions.handleCreateRecord,
+            actions.handleUpdateRecord,
+            actions.handleBatchUpdateRecords,
+            actions.handleDeleteRecord,
+            actions.handleAddField,
+            actions.handleUpdateField,
+            actions.handleDeleteField,
+            actions.handleUpdateView,
+            editor,
+            editor.isEditable,
+            handleRecordClick,
+        ]
+    );
 
     const renderViewContent = () => {
         switch (actions.currentView?.type) {
             case ViewType.TABLE:
-                return <TableView {...viewProps} searchText={searchText} groups={actions.groupedData} />;
+                return <TableView {...viewProps} searchText={debouncedSearchText} groups={actions.groupedData} />;
             case ViewType.KANBAN:
                 return <KanbanView {...viewProps} />;
             case ViewType.GALLERY:
@@ -122,7 +167,7 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                     />
                 );
             default:
-                return <TableView {...viewProps} searchText={searchText} groups={actions.groupedData} />;
+                return <TableView {...viewProps} searchText={debouncedSearchText} groups={actions.groupedData} />;
         }
     };
 
@@ -218,14 +263,9 @@ export const BitableView: React.FC<NodeViewProps> = (props) => {
                 open={selectedRecord !== null}
                 record={selectedRecord}
                 fields={attrs.fields}
-                recordIds={actions.processedData.map((r) => r.id)}
-                onClose={() => setSelectedRecord(null)}
-                onNavigate={(recordId) => {
-                    const rec = actions.processedData.find(
-                        (r) => r.id === recordId
-                    );
-                    if (rec) setSelectedRecord(rec);
-                }}
+                recordIds={recordIds}
+                onClose={handleCloseRecordDetail}
+                onNavigate={handleNavigateRecord}
                 onUpdateRecord={actions.handleUpdateRecord}
                 editable={editor.isEditable}
             />

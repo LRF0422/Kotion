@@ -60,3 +60,5 @@ knowledge:
       - /knowledge-auth/token/**
       # 分享链接公开访问（免登录解析分享页面）
       - /knowledge-wiki/share/public/**
+      # 公开插件资源端点（前端 <script> 加载插件产物，无法携带 Authorization 头）
+      - /knowledge-resource/oss/endpoint/public/**

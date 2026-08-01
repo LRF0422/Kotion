@@ -6,7 +6,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
-import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, TOGGLE_AI_ASSISTANT, SystemAgentProvider } from "@kn/common"
+import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, PLUGIN_INCOMPATIBLE, TOGGLE_AI_ASSISTANT, SystemAgentProvider } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { useAsyncEffect } from "ahooks"
@@ -97,6 +97,17 @@ export function Layout({ onPluginsReady }: LayoutProps) {
         event.on(PLUGIN_CHANGED, handlePluginChange)
         return () => {
             event.off(PLUGIN_CHANGED, handlePluginChange)
+        }
+    }, [])
+
+    // Surface plugins skipped by the API version handshake to the user
+    useEffect(() => {
+        const handleIncompatible = (payload: { name: string; apiVersion?: string }) => {
+            toast.warning(`插件 ${payload.name} 因 API 版本不兼容已被跳过${payload.apiVersion ? ` (插件 API 版本: ${payload.apiVersion})` : ''}`)
+        }
+        event.on(PLUGIN_INCOMPATIBLE, handleIncompatible)
+        return () => {
+            event.off(PLUGIN_INCOMPATIBLE, handleIncompatible)
         }
     }, [])
 

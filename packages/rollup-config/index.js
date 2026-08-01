@@ -11,6 +11,15 @@ import postcssCascadeLayers from "@csstools/postcss-cascade-layers";
 import { terser } from "rollup-plugin-terser";
 import tailwindcss from "tailwindcss";
 import autoprefixer from "autoprefixer";
+import { createRequire } from "module";
+
+// Build-time plugin API version, read from @kn/plugin-api's package.json
+// (single source of truth for the host/plugin version handshake).
+// Resolved by relative path within the monorepo instead of a package
+// dependency, to avoid the dependency cycle rollup-config -> plugin-api
+// -> common -> rollup-config (which breaks pnpm's node_modules symlinks).
+const require = createRequire(import.meta.url);
+const apiVersion = require("../plugin-api/package.json").version;
 
 export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
   // Ensure only one React instance — externalize react/react-dom, bundle sub-paths (jsx-runtime etc.)
@@ -39,14 +48,20 @@ export const baseConfig = ({ input = "src/index.ts", pkg }) => ({
       sourcemap: true,
       exports: "named",
       globals: {
-        "@kn/common": "common",
-        "@kn/ui": "ui",
-        "@kn/icon": "icon",
-        "@kn/editor": "editor",
-        "@kn/core": "core",
+        "@kn/common": "__KN__.common",
+        "@kn/ui": "__KN__.ui",
+        "@kn/icon": "__KN__.icon",
+        "@kn/editor": "__KN__.editor",
+        "@kn/core": "__KN__.core",
         react: "React",
         "react-dom": "ReactDOM",
       },
+      // Register the bundle in the host's plugin registry with its build-time
+      // apiVersion, so the host can do a version handshake before activation.
+      // Runs inside the UMD factory where `exports` is in scope.
+      outro: `if (typeof window !== 'undefined' && window.__KN__ && window.__KN__.definePlugin) {
+  window.__KN__.definePlugin(${JSON.stringify(pkg.name)}, exports, { apiVersion: ${JSON.stringify(apiVersion)}, packageName: ${JSON.stringify(pkg.name)} });
+}`,
       inlineDynamicImports: true,
     },
   ],
@@ -124,7 +139,11 @@ export default function bundleStats(pkg) {
           fileSizes[fileName] = sizeKB + " KB";
           if (isPluginPkg(pkg)) {
             // Note: Auto-upload disabled in build. Use separate deploy step.
-            // Uncomment and configure environment variables for deployment
+            // Uncomment and configure environment variables for deployment.
+            // IMPORTANT: when publishing, compute the artifact's SRI hash
+            // (e.g. `sha384-` + base64(sha384(content))) and submit it as
+            // PluginDTO.integrity alongside resourcePath so the host can
+            // enforce Subresource Integrity when loading the plugin.
             /*
             console.log("Uploading plugin artifact:", pkg.name);
             const formData = new FormData();
@@ -147,6 +166,7 @@ export default function bundleStats(pkg) {
                     body: JSON.stringify({
                       pluginKey: pkg.name,
                       resourcePath: body.data.name,
+                      // integrity: "sha384-" + crypto.createHash("sha384").update(content).digest("base64"),
                       publish: true,
                     }),
                   },

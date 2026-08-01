@@ -1,6 +1,7 @@
 export * from "./core/editor"
 export * from "./core/route"
 export * from "./core/PluginManager"
+export * from "./core/global-namespace"
 export * from "./core/AppContext"
 export * from "./core/ServiceRegistry"
 export * from "./core/menu"

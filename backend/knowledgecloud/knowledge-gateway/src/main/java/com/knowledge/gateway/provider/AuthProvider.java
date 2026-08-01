@@ -47,6 +47,8 @@ public class AuthProvider {
 		DEFAULT_SKIP_URL.add("/storage/deduct/**");
 		DEFAULT_SKIP_URL.add("/error/**");
 		DEFAULT_SKIP_URL.add("/assets/**");
+		// 公开插件资源端点（前端 <script> 加载插件产物，无法携带 Authorization 头）
+		DEFAULT_SKIP_URL.add("/oss/endpoint/public/**");
 	}
 
 	/**

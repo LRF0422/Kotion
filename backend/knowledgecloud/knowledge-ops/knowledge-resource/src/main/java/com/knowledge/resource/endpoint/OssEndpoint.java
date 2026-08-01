@@ -189,6 +189,29 @@ public class OssEndpoint {
 		inputStream.close();
 	}
 
+	/**
+	 * 公开插件产物下载（免鉴权，网关放行 /oss/endpoint/public/**）。
+	 * 仅允许 .js 文件，拒绝路径穿越；响应头满足 SRI 校验所需的 CORS 要求。
+	 *
+	 * @param fileName 存储桶对象名称（插件 resourcePath）
+	 */
+	@GetMapping("/public/plugin")
+	@SneakyThrows
+	public void downloadPlugin(@RequestParam("fileName") String fileName, HttpServletResponse response) {
+		if (StringUtil.isBlank(fileName) || !fileName.endsWith(".js") || fileName.contains("..")) {
+			response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+			return;
+		}
+		response.setHeader("Content-Type", "application/javascript;charset=utf-8");
+		// 发布即换文件名（resourcePath 唯一），因此可长期缓存
+		response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+		// SRI 校验要求脚本以 crossorigin=anonymous 加载，需开放 CORS
+		response.setHeader("Access-Control-Allow-Origin", "*");
+		InputStream inputStream = ossClient.downloadFile(fileName);
+		IoUtil.copy(inputStream, response.getOutputStream());
+		inputStream.close();
+	}
+
 	@GetMapping("/fileInfo")
 	public R<List<KnowledgeFile>> fileInfo(@RequestParam("bucket") String bucket) {
 		return R.data(ossClient.getFiles(bucket));

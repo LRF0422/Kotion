@@ -5,6 +5,7 @@
 export interface EventMap {
   PLUGIN_CHANGED: { source: 'install' | 'uninstall' | 'update' | 'init' | 'refresh' | 'enable' | 'disable' | 'delete' | 'bulk' }
   PLUGIN_INIT_SUCCESS: undefined
+  PLUGIN_INCOMPATIBLE: { name: string; apiVersion?: string }
   ON_PAGE_REFRESH: undefined
   ON_FAVORITE_CHANGE: undefined
   ON_MESSAGE: any
