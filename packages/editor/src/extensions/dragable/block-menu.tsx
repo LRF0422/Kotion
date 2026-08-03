@@ -1,8 +1,10 @@
 import React, { useCallback, useRef, useState } from 'react'
 import { Editor } from '@tiptap/core'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@kn/ui'
-import { Plus, Trash2 } from '@kn/icon'
+import { ArrowDown, ArrowUp, Plus, Trash2 } from '@kn/icon'
 import { ActiveNode } from '../../utilities/select-node-by-dom'
+import { findNodeByBlockId } from '../../utilities/node'
+import { resolveBlockMove } from '../block-operations/block-operations'
 
 export interface BlockMenuItem {
     icon?: React.ReactNode
@@ -88,6 +90,23 @@ export const DragHandle: React.FC<DragHandleProps> = ({
         })
     }
 
+    // Resolved against the live state so the items are greyed out for the
+    // first / last block of a parent instead of failing silently on click.
+    const canMoveUp = !!resolveBlockMove(editor.state, pos, 'up')
+    const canMoveDown = !!resolveBlockMove(editor.state, pos, 'down')
+
+    const handleMove = (direction: 'up' | 'down') => {
+        // `pos` was captured when the handle was pinned to this block and goes
+        // stale as soon as the document shifts — and the handle keeps pointing
+        // at the old block until the next mousemove. Re-resolving by blockId
+        // (only on click, never per render) keeps repeated moves on the same
+        // block. Blocks without an id fall back to the captured position.
+        const blockId = (node.attrs?.id ?? node.attrs?.blockId) as string | undefined
+        const livePos = blockId ? findNodeByBlockId(editor.state, blockId)?.pos ?? pos : pos
+
+        editor.commands.moveBlockAtPos(livePos, direction)
+    }
+
     return (
         <>
             <div
@@ -113,6 +132,15 @@ export const DragHandle: React.FC<DragHandleProps> = ({
                             </DropdownMenuItem>
                         ))}
                         {items.length > 0 && <DropdownMenuSeparator />}
+                        <DropdownMenuItem disabled={!canMoveUp} onClick={() => handleMove('up')}>
+                            <ArrowUp className="h-4 w-4 mr-2" />
+                            Move up
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled={!canMoveDown} onClick={() => handleMove('down')}>
+                            <ArrowDown className="h-4 w-4 mr-2" />
+                            Move down
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={handleDelete} className="text-destructive">
                             <Trash2 className="h-4 w-4 mr-2" />
                             Delete

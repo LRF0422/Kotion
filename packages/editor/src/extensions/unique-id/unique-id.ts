@@ -17,11 +17,13 @@ export interface UniqueIDOptions {
 
 export const UniqueID = Extension.create<UniqueIDOptions>({
   name: "uniqueID",
-  priority: 1000,
+  // Must run before other extensions that depend on the id attribute being
+  // present (BlockRank priority 900, DirtyTracker priority 50).
+  priority: 10000,
 
   addOptions() {
     return {
-      attributeName: "blockId",
+      attributeName: "id",
       types: [],
       generateID: () => uuidv4(),
       filterTransaction: null
@@ -53,11 +55,26 @@ export const UniqueID = Extension.create<UniqueIDOptions>({
       }
     ];
   },
-  // check initial content for missing ids
+
+  // Check initial content for missing ids AND remove duplicate-id blocks.
+  //
+  // Missing ids: nodes that were inserted without an id (e.g. setContent
+  // from REST content before the extension could assign one).
+  //
+  // Duplicate ids: a known consequence of the Yjs seeding race condition in
+  // CollaborationEditor — when REST content is seeded into a Y.Doc that is
+  // about to receive server-synced content, the merged CRDT keeps both copies,
+  // each carrying the same blockId. The duplicates are TOP-LEVEL blocks (the
+  // entire page content tree was duplicated). Deleting all but the first
+  // occurrence of each blockId cleans up the Y.Doc — the deletion propagates
+  // through y-prosemirror to the collaboration server, healing the room for
+  // all connected clients.
   onCreate() {
     const { view, state } = this.editor;
     const { tr, doc } = state;
     const { types, attributeName, generateID } = this.options;
+
+    // ── Pass 1: assign missing ids ──
     const nodesWithoutId = findChildren(doc, node => {
       return (
         types.includes(node.type.name) && node.attrs[attributeName] === null
@@ -71,7 +88,36 @@ export const UniqueID = Extension.create<UniqueIDOptions>({
       });
     });
 
-    view.dispatch(tr);
+    // ── Pass 2: delete duplicate top-level blocks ──
+    // Walk doc's direct children (top-level blocks). If a blockId was already
+    // seen, the block is a duplicate created by the Yjs seeding race and must
+    // be removed. Using `doc.forEach` (not `findChildren`) ensures we only
+    // look at depth-0 children — nested duplicates are removed with their
+    // parent. Deleting from end-to-start keeps earlier positions valid.
+    const seenIds = new Set<string>();
+    const positionsToDelete: { from: number; to: number }[] = [];
+    const docAfterPass1 = tr.doc;
+    docAfterPass1.forEach((node, offset) => {
+      if (!types.includes(node.type.name)) return;
+      const id = node.attrs[attributeName] as string | null;
+      if (id === null) return;
+      if (seenIds.has(id)) {
+        positionsToDelete.push({ from: offset, to: offset + node.nodeSize });
+      } else {
+        seenIds.add(id);
+      }
+    });
+
+    // Delete in reverse document order so earlier positions stay valid.
+    positionsToDelete.sort((a, b) => b.from - a.from);
+    for (const { from, to } of positionsToDelete) {
+      tr.delete(from, to);
+    }
+
+    if (tr.steps.length) {
+      tr.setMeta("addToHistory", false);
+      view.dispatch(tr);
+    }
   },
 
   addProseMirrorPlugins() {

@@ -52,7 +52,7 @@ import {
     type PageEditWindowProps,
 } from "@kn/common";
 import { ArrowUpRight, Check, CloudOff, FileText, LoaderCircle, Maximize2, Minus, Pencil, X } from "@kn/icon";
-import { cn, Button } from "@kn/ui";
+import { cn, Button, FlatEmoji } from "@kn/ui";
 
 /** Incremental save endpoint — same contract as the main PageEditor. */
 const PATCH_PAGE_BLOCKS: API = {
@@ -65,7 +65,7 @@ const PATCH_PAGE_BLOCKS: API = {
 interface PageInfoLike {
     id: string;
     title: string;
-    icon?: { icon: string };
+    icon?: { type?: string; icon?: string };
     spaceId: string;
     /** JSON string of page content */
     content?: string;
@@ -221,6 +221,8 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
     const [syncTimedOut, setSyncTimedOut] = useState(false);
     const [provider, setProvider] = useState<TiptapCollabProvider | undefined>(undefined);
     const [minimized, setMinimized] = useState(false);
+    // Live emoji from the editor's title node (see the sync effect below).
+    const [docIcon, setDocIcon] = useState<string | null>(null);
     // Set while the close animation plays, just before the parent unmounts us.
     const [closing, setClosing] = useState(false);
     // Geometry to hand back on restore, captured the moment we collapse.
@@ -354,6 +356,36 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
         if ((e.target as HTMLElement).closest('button')) return;
         handleRestore();
     }, [handleRestore]);
+
+    // ---- Keep the header/pill icon in sync with the editor doc ----
+    // The page's emoji lives on the title node (`firstChild.attrs.icon`, see
+    // PageHeader), and `getPage()` only returns the last persisted copy — which
+    // is missing or stale while the window is open, leaving the collapsed pill
+    // with the generic file fallback. Read it straight from the doc and refresh
+    // on every `docChanged` transaction (focus/blur meta transactions are
+    // filtered out — see `Tiptap transaction listener filtering practice`).
+    useEffect(() => {
+        if (!editorInstance || !contentReady) return;
+        const ed = editorInstance;
+
+        const readIcon = () => {
+            const node = ed.state.doc.firstChild;
+            if (!node || node.type.name !== 'title') return;
+            const iconAttr = (node.attrs as any)?.icon;
+            // IMAGE icons store a file name, which isn't renderable as a glyph.
+            const next = iconAttr?.type === 'IMAGE' ? null : iconAttr?.icon || null;
+            setDocIcon((prev) => (prev === next ? prev : next));
+        };
+
+        readIcon();
+
+        const onTx = ({ transaction }: { transaction: any }) => {
+            if (!transaction.docChanged) return;
+            readIcon();
+        };
+        ed.on('transaction', onTx);
+        return () => { ed.off('transaction', onTx); };
+    }, [editorInstance, contentReady]);
 
     // ---- Load the target page (always fresh: editing needs latest content) ----
     useEffect(() => {
@@ -543,8 +575,10 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
                 ? { icon: <Pencil className="h-3 w-3" />, text: t('statusEditing'), className: 'text-muted-foreground' }
                 : { icon: <Check className="h-3 w-3" />, text: t('statusSaved'), className: 'text-muted-foreground' };
 
-    // IMAGE icons store a file name; only emoji text renders inline in the header.
-    const icon = page?.icon?.type === 'IMAGE' ? null : page?.icon?.icon || null;
+    // Prefer the doc's emoji; the page metadata copy covers the window's first
+    // frames, before the editor is content-ready.
+    // IMAGE icons store a file name, which isn't renderable as a glyph.
+    const icon = docIcon ?? (page?.icon?.type === 'IMAGE' ? null : page?.icon?.icon || null);
 
     const window_ = (
         <div
@@ -580,8 +614,10 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
                 onDoubleClick={minimized ? undefined : handleMinimize}
                 title={minimized ? t('restore') : undefined}
             >
+                {/* Flat (Twemoji) rendering, same as the sidebar and page header —
+                    the native glyph would look different on every platform. */}
                 {icon ? (
-                    <span className="text-base leading-none flex-shrink-0">{icon}</span>
+                    <FlatEmoji emoji={icon} size={16} className="flex-shrink-0" />
                 ) : (
                     <FileText className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                 )}

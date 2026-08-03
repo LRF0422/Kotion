@@ -145,6 +145,31 @@ export const findNodeByBlockId = (
 };
 
 /**
+ * Find ALL nodes matching a blockId (not just the first). Duplicate blockIds
+ * can appear when a Yjs seeding race condition merges REST content on top of
+ * server-synced content — every duplicate is a separate Yjs node that happens
+ * to share the same id attribute. `findNodeByBlockId` stops at the first match
+ * and would silently leave the others behind, so deletion and other
+ * id-keyed mutations must use this variant when they need to be exhaustive.
+ */
+export const findAllNodesByBlockId = (
+  state: EditorState,
+  blockId: string,
+): { node: Node; pos: number }[] => {
+  const results: { node: Node; pos: number }[] = [];
+
+  state.doc.nodesBetween(0, state.doc.content.size, (node, p) => {
+    const id = (node.attrs.id ?? node.attrs.blockId) as string | undefined;
+    if (id === blockId) {
+      results.push({ node, pos: p });
+    }
+    return false;
+  });
+
+  return results;
+};
+
+/**
  * Find multiple nodes by their blockIds in a single document traversal.
  * Returns a map of blockId → { node, pos } for all found nodes.
  */

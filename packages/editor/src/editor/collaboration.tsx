@@ -409,27 +409,35 @@ export const CollaborationEditor = forwardRef<
 
     (async () => {
       // Reflect the server's state before deciding whether to seed.
-      await waitForProviderSync(provider);
+      const didSync = await waitForProviderSync(provider);
       if (cancelled) return;
 
-      const restContent = contentRef.current;
-      // Only seed when the collaborative doc has no content of its own yet.
-      if (restContent && isYDocEmpty(provider.document)) {
-        try {
-          const exts = extensionsRef.current as AnyExtension[];
-          const processed = rewriteUnknownContent(
-            restContent as JSONContent,
-            getSchema(exts),
-            { fallbackToParagraph: true },
-          ).json;
-          // Re-check emptiness right before writing in case sync landed during
-          // the await above.
-          if (processed && isYDocEmpty(provider.document)) {
-            const seededDoc = TiptapTransformer.toYdoc(processed, COLLAB_FIELD, exts);
-            Y.applyUpdate(provider.document, Y.encodeStateAsUpdate(seededDoc));
+      // Only seed from REST content when sync actually completed. On timeout
+      // the Y.Doc may simply not have received the server state yet — seeding
+      // now would duplicate every block once sync finally lands (the merged
+      // CRDT keeps both the seeded nodes and the server-synced nodes). Skip
+      // seeding and mount the editor on whatever state the doc has; if sync
+      // arrives later the Y.Doc populates naturally.
+      if (didSync) {
+        const restContent = contentRef.current;
+        // Only seed when the collaborative doc has no content of its own yet.
+        if (restContent && isYDocEmpty(provider.document)) {
+          try {
+            const exts = extensionsRef.current as AnyExtension[];
+            const processed = rewriteUnknownContent(
+              restContent as JSONContent,
+              getSchema(exts),
+              { fallbackToParagraph: true },
+            ).json;
+            // Re-check emptiness right before writing in case sync landed during
+            // the await above.
+            if (processed && isYDocEmpty(provider.document)) {
+              const seededDoc = TiptapTransformer.toYdoc(processed, COLLAB_FIELD, exts);
+              Y.applyUpdate(provider.document, Y.encodeStateAsUpdate(seededDoc));
+            }
+          } catch (e) {
+            logger.error("[CollaborationEditor] failed to seed Y.Doc from REST content", e);
           }
-        } catch (e) {
-          logger.error("[CollaborationEditor] failed to seed Y.Doc from REST content", e);
         }
       }
 
