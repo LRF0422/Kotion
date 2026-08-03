@@ -33,9 +33,10 @@ export const setPageEditWindowImpl = (component: React.ComponentType<PageEditWin
 
 /**
  * Draggable floating window for editing a page in place — drag by the header,
- * resize from the corner, multiple windows cascade and click-to-focus. Edits
- * sync live through the page's collaborative Y.Doc room and auto-save through
- * the incremental PATCH endpoint.
+ * resize from the corner, minimize to a pill docked bottom-right, multiple
+ * windows cascade and click-to-focus. Edits sync live through the page's
+ * collaborative Y.Doc room and auto-save through the incremental PATCH
+ * endpoint.
  */
 export const PageEditWindow: React.FC<PageEditWindowProps> = (props) => {
     if (!impl) {

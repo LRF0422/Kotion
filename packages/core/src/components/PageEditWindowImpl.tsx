@@ -14,6 +14,15 @@
  *
  * - Drag by the header bar; resize from the bottom-right corner. Geometry is
  *   mutated directly on the DOM node (no React re-renders while dragging).
+ * - Minimize (header button or double-click the header) collapses the window to
+ *   a compact title pill docked bottom-right; minimized windows queue upward so
+ *   several can sit there at once. The editor stays mounted while collapsed, so
+ *   unsaved edits and the collab connection survive a minimize/restore round
+ *   trip. Click the pill (or its restore button) to bring the window back to
+ *   the geometry it had before.
+ * - Collapse/expand is eased; the editor's box is frozen at a fixed pixel size
+ *   for the duration so a long document isn't re-laid-out on every frame (it
+ *   just gets clipped). Open/close reuse the dialog-in/out keyframes.
  * - Multiple windows can be open at once: they cascade on open, and any
  *   pointerdown inside a window raises it above its siblings (click-to-focus).
  * - Auto-saves via useIncrementalSave; a pending save is flushed on close.
@@ -42,7 +51,7 @@ import {
     type GlobalState,
     type PageEditWindowProps,
 } from "@kn/common";
-import { ArrowUpRight, Check, CloudOff, FileText, LoaderCircle, Pencil, X } from "@kn/icon";
+import { ArrowUpRight, Check, CloudOff, FileText, LoaderCircle, Maximize2, Minus, Pencil, X } from "@kn/icon";
 import { cn, Button } from "@kn/ui";
 
 /** Incremental save endpoint — same contract as the main PageEditor. */
@@ -79,6 +88,8 @@ const MESSAGES = {
         statusSaved: 'Saved',
         statusSaveFailed: 'Save failed',
         statusEditing: 'Editing',
+        minimize: 'Minimize',
+        restore: 'Restore',
     },
     zh: {
         page: '页面',
@@ -90,6 +101,8 @@ const MESSAGES = {
         statusSaved: '已保存',
         statusSaveFailed: '保存失败',
         statusEditing: '编辑中',
+        minimize: '缩小',
+        restore: '还原',
     },
 } as const;
 
@@ -120,6 +133,74 @@ const restack = () => {
     windowStack.forEach((el, i) => { el.style.zIndex = String(BASE_Z + i); });
 };
 
+// ---- Minimized "taskbar" ----
+// Collapsed windows dock bottom-right and queue upward in minimize order. The
+// right offset clears the floating AI button that sits in that corner.
+const HEADER_HEIGHT = 40; // the header's h-10
+const MINIMIZED_WIDTH = 232;
+const MINIMIZED_HEIGHT = HEADER_HEIGHT;
+const MINIMIZED_RIGHT = 96;
+const MINIMIZED_BOTTOM = 16;
+const MINIMIZED_GAP = 8;
+
+// ---- Collapse / expand animation ----
+// Only minimize/restore animates the box: dragging and resizing must stay
+// pinned to the pointer, so the transition is added around the mutation and
+// removed after. Note this inline transition overrides the container's
+// class-based opacity/transform transition while it is attached.
+const ANIM_MS = 220;
+const GEOMETRY_TRANSITION = ['left', 'top', 'width', 'height']
+    .map((prop) => `${prop} ${ANIM_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`)
+    .join(', ');
+/** Matches the dialog-out keyframe duration (0.15s) used on close. */
+const CLOSE_ANIM_MS = 150;
+
+const geometryTimers = new WeakMap<HTMLElement, number>();
+
+/** Apply a geometry change with the collapse easing, then drop the transition. */
+const animateGeometry = (el: HTMLElement, apply: () => void) => {
+    const pending = geometryTimers.get(el);
+    // Re-triggered mid-flight (minimize → restore in quick succession): the
+    // stale timer would strip the transition partway through the new run.
+    if (pending !== undefined) window.clearTimeout(pending);
+    el.style.transition = GEOMETRY_TRANSITION;
+    apply();
+    geometryTimers.set(el, window.setTimeout(() => {
+        el.style.transition = '';
+        geometryTimers.delete(el);
+    }, ANIM_MS + 30));
+};
+
+const minimizedStack: HTMLElement[] = [];
+
+const layoutMinimized = (animate = false) => {
+    const left = Math.max(8, window.innerWidth - MINIMIZED_RIGHT - MINIMIZED_WIDTH);
+    minimizedStack.forEach((el, i) => {
+        const top = Math.max(8, window.innerHeight - MINIMIZED_BOTTOM - (i + 1) * (MINIMIZED_HEIGHT + MINIMIZED_GAP));
+        const apply = () => {
+            el.style.left = `${left}px`;
+            el.style.top = `${top}px`;
+            el.style.width = `${MINIMIZED_WIDTH}px`;
+            el.style.height = `${MINIMIZED_HEIGHT}px`;
+        };
+        // Pills below a restored window slide down into the freed slot.
+        if (animate) animateGeometry(el, apply);
+        else apply();
+    });
+};
+
+// Bottom-anchored pills must follow viewport resizes. Attached once for the
+// lifetime of the module: per-instance listeners would be torn down by the
+// first window to restore, leaving still-minimized siblings mispositioned.
+// Never animated — pills should track the viewport, not lag behind it.
+const onViewportResize = () => layoutMinimized();
+let minimizedResizeBound = false;
+const bindMinimizedResize = () => {
+    if (minimizedResizeBound) return;
+    window.addEventListener('resize', onViewportResize);
+    minimizedResizeBound = true;
+};
+
 const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, onPageMutated }) => {
     const t = useWindowI18n();
     const navigator = useNavigator();
@@ -129,6 +210,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
     const { userInfo } = useSelector((state: GlobalState) => state);
 
     const winRef = useRef<HTMLDivElement>(null);
+    const bodyRef = useRef<HTMLDivElement>(null);
     const [page, setPage] = useState<PageInfoLike | null>(null);
     const [loadError, setLoadError] = useState(false);
     const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
@@ -138,6 +220,11 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
     // mirroring the main PageEditor's fallback.
     const [syncTimedOut, setSyncTimedOut] = useState(false);
     const [provider, setProvider] = useState<TiptapCollabProvider | undefined>(undefined);
+    const [minimized, setMinimized] = useState(false);
+    // Set while the close animation plays, just before the parent unmounts us.
+    const [closing, setClosing] = useState(false);
+    // Geometry to hand back on restore, captured the moment we collapse.
+    const restoreRectRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
     // Keep the latest callback out of effect deps — cache invalidation must
     // not retrigger page loads.
@@ -181,8 +268,92 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
             const idx = el ? windowStack.indexOf(el) : -1;
             if (idx !== -1) windowStack.splice(idx, 1);
             restack();
+            const minIdx = el ? minimizedStack.indexOf(el) : -1;
+            if (minIdx !== -1) {
+                minimizedStack.splice(minIdx, 1);
+                layoutMinimized(true);
+            }
         };
     }, [bringToFront]);
+
+    // ---- Minimize / restore ----
+    // Geometry lives on the DOM node, so collapsing and expanding is a style
+    // mutation here rather than a re-render of the (expensive) editor subtree.
+
+    // While the window's box animates, pin the editor's box to a fixed pixel
+    // size: otherwise every frame reflows the whole document to a new width.
+    // Frozen at the *expanded* size in both directions — collapsing clips it,
+    // expanding reveals it — so the document lays out at most once per toggle.
+    const bodyFreezeTimerRef = useRef<number | null>(null);
+    const freezeBody = useCallback((width: number, height: number) => {
+        const body = bodyRef.current;
+        if (!body) return;
+        if (bodyFreezeTimerRef.current !== null) window.clearTimeout(bodyFreezeTimerRef.current);
+        body.style.flex = '0 0 auto';
+        body.style.width = `${width}px`;
+        body.style.height = `${Math.max(0, height)}px`;
+        bodyFreezeTimerRef.current = window.setTimeout(() => {
+            body.style.flex = '';
+            body.style.width = '';
+            body.style.height = '';
+            bodyFreezeTimerRef.current = null;
+        }, ANIM_MS + 30);
+    }, []);
+
+    useEffect(() => () => {
+        if (bodyFreezeTimerRef.current !== null) window.clearTimeout(bodyFreezeTimerRef.current);
+    }, []);
+
+    useEffect(() => {
+        const el = winRef.current;
+        if (!el) return;
+        const rect = restoreRectRef.current;
+        const idx = minimizedStack.indexOf(el);
+        if (minimized) {
+            if (idx === -1) minimizedStack.push(el);
+            bindMinimizedResize();
+            if (rect) freezeBody(rect.w, rect.h - HEADER_HEIGHT);
+            layoutMinimized(true);
+            return;
+        }
+        if (idx !== -1) minimizedStack.splice(idx, 1);
+        // Also the mount-time run: nothing to expand back to, and no pill of
+        // ours in the taskbar to relayout.
+        if (!rect) return;
+        layoutMinimized(true);
+        // The viewport may have shrunk while we were docked.
+        const w = clamp(rect.w, MIN_WIDTH, Math.max(MIN_WIDTH, window.innerWidth - 16));
+        const h = clamp(rect.h, MIN_HEIGHT, Math.max(MIN_HEIGHT, window.innerHeight - 16));
+        freezeBody(w, h - HEADER_HEIGHT);
+        animateGeometry(el, () => {
+            el.style.width = `${w}px`;
+            el.style.height = `${h}px`;
+            el.style.left = `${clamp(rect.x, DRAG_MARGIN - w, Math.max(0, window.innerWidth - DRAG_MARGIN))}px`;
+            el.style.top = `${clamp(rect.y, 0, Math.max(0, window.innerHeight - 44))}px`;
+        });
+    }, [minimized, freezeBody]);
+
+    const handleMinimize = useCallback(() => {
+        const el = winRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        restoreRectRef.current = { x: rect.left, y: rect.top, w: rect.width, h: rect.height };
+        // The editor is only clipped, not unmounted — drop the caret so
+        // keystrokes can't land in a window the user can no longer see.
+        editorInstance?.commands.blur();
+        setMinimized(true);
+    }, [editorInstance]);
+
+    const handleRestore = useCallback(() => {
+        setMinimized(false);
+        bringToFront();
+    }, [bringToFront]);
+
+    // Clicking anywhere on the collapsed pill restores it, except on its buttons.
+    const onPillClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        if ((e.target as HTMLElement).closest('button')) return;
+        handleRestore();
+    }, [handleRestore]);
 
     // ---- Load the target page (always fresh: editing needs latest content) ----
     useEffect(() => {
@@ -274,34 +445,56 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
     }, [page?.content]);
 
     // ---- Close / navigate ----
-    const handleClose = useCallback(() => {
-        // Flush pending edits. The payload is captured synchronously inside
-        // saveNow (before its first await), so unmounting right after is safe.
+    // Flush pending edits. The payload is captured synchronously inside saveNow
+    // (before its first await), so unmounting right after is safe.
+    const flushAndNotify = useCallback(() => {
         if (dirty) { saveNow().catch(() => { /* stays dirty server-side; nothing to do */ }); }
         onPageMutatedRef.current?.(pageId);
-        onClose();
-    }, [dirty, saveNow, pageId, onClose]);
+    }, [dirty, saveNow, pageId]);
+
+    // The parent owns our mount, so the exit animation runs here and onClose
+    // fires once it finishes.
+    const closeTimer = useRef<number | null>(null);
+
+    const handleClose = useCallback(() => {
+        if (closing) return;
+        flushAndNotify();
+        setClosing(true);
+        closeTimer.current = window.setTimeout(onClose, CLOSE_ANIM_MS);
+    }, [closing, flushAndNotify, onClose]);
+
+    useEffect(() => () => {
+        if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    }, []);
 
     const handleOpenFullPage = useCallback(() => {
         const spaceId = page?.spaceId;
         if (!spaceId) return;
-        handleClose();
+        // The route change replaces the whole view — animating out would only
+        // delay the navigation.
+        flushAndNotify();
+        onClose();
         navigator.go({ to: `/space-detail/${spaceId}/page/edit/${pageId}` });
-    }, [page?.spaceId, pageId, navigator, handleClose]);
+    }, [page?.spaceId, pageId, navigator, flushAndNotify, onClose]);
 
     // ---- Dragging (header) — mutate style directly, no re-renders ----
     const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
 
     const onHeaderPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
         if (e.button !== 0) return;
+        // Collapsed pills are parked by the taskbar layout, not by the user.
+        if (minimized) return;
         // Buttons inside the header must stay clickable, not start a drag.
         if ((e.target as HTMLElement).closest('button')) return;
         const el = winRef.current;
         if (!el) return;
         const rect = el.getBoundingClientRect();
         dragRef.current = { startX: e.clientX, startY: e.clientY, origX: rect.left, origY: rect.top };
+        // A collapse/expand transition may still be attached: the window must
+        // track the pointer exactly, not ease behind it.
+        el.style.transition = '';
         e.currentTarget.setPointerCapture(e.pointerId);
-    }, []);
+    }, [minimized]);
 
     const onHeaderPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
         const d = dragRef.current;
@@ -325,6 +518,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
         if (!el) return;
         e.preventDefault();
         resizeRef.current = { startX: e.clientX, startY: e.clientY, origW: el.offsetWidth, origH: el.offsetHeight };
+        el.style.transition = '';
         e.currentTarget.setPointerCapture(e.pointerId);
     }, []);
 
@@ -358,6 +552,12 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
             className={cn(
                 "fixed flex flex-col overflow-hidden",
                 "rounded-lg border border-border bg-background shadow-2xl",
+                // Enter reuses the Dialog keyframes; exit is a transition rather
+                // than the paired keyframe so the faded-out state holds until
+                // the parent unmounts us (no animation-fill-mode ordering
+                // dependency). Both touch opacity/transform only — GPU-composited.
+                "animate-dialog-in transition-[opacity,transform] duration-150",
+                closing && "pointer-events-none scale-95 opacity-0",
             )}
             style={{ left: initialRect.x, top: initialRect.y, width: initialRect.w, height: initialRect.h, zIndex: BASE_Z }}
             role="dialog"
@@ -366,13 +566,19 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
             // handle) raise this window, even if a child stops propagation.
             onPointerDownCapture={bringToFront}
         >
-            {/* Header — drag handle */}
+            {/* Header — drag handle (collapsed: the taskbar pill itself) */}
             <div
-                className="flex h-10 flex-shrink-0 cursor-move select-none items-center gap-2 border-b border-border bg-muted/40 px-3 touch-none"
+                className={cn(
+                    "flex h-10 flex-shrink-0 select-none items-center gap-2 border-b border-border bg-muted/40 px-3 touch-none",
+                    minimized ? "cursor-pointer border-b-transparent" : "cursor-move",
+                )}
                 onPointerDown={onHeaderPointerDown}
                 onPointerMove={onHeaderPointerMove}
                 onPointerUp={endDrag}
                 onPointerCancel={endDrag}
+                onClick={minimized ? onPillClick : undefined}
+                onDoubleClick={minimized ? undefined : handleMinimize}
+                title={minimized ? t('restore') : undefined}
             >
                 {icon ? (
                     <span className="text-base leading-none flex-shrink-0">{icon}</span>
@@ -384,18 +590,31 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
                 </span>
                 <span className={cn("flex items-center gap-1 text-xs flex-shrink-0", status.className)}>
                     {status.icon}
-                    <span className="hidden sm:inline">{status.text}</span>
+                    {/* The pill is too narrow for the label — icon only there. */}
+                    <span className={cn("hidden", !minimized && "sm:inline")}>{status.text}</span>
                 </span>
+                {!minimized && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 flex-shrink-0"
+                        onClick={handleOpenFullPage}
+                        disabled={!page?.spaceId}
+                        title={t('openFullPage')}
+                        aria-label={t('openFullPage')}
+                    >
+                        <ArrowUpRight className="h-3.5 w-3.5" />
+                    </Button>
+                )}
                 <Button
                     variant="ghost"
                     size="icon"
                     className="h-6 w-6 flex-shrink-0"
-                    onClick={handleOpenFullPage}
-                    disabled={!page?.spaceId}
-                    title={t('openFullPage')}
-                    aria-label={t('openFullPage')}
+                    onClick={minimized ? handleRestore : handleMinimize}
+                    title={minimized ? t('restore') : t('minimize')}
+                    aria-label={minimized ? t('restore') : t('minimize')}
                 >
-                    <ArrowUpRight className="h-3.5 w-3.5" />
+                    {minimized ? <Maximize2 className="h-3 w-3" /> : <Minus className="h-3.5 w-3.5" />}
                 </Button>
                 <Button
                     variant="ghost"
@@ -409,8 +628,16 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
                 </Button>
             </div>
 
-            {/* Body — the embedded collaborative editor */}
-            <div className="min-h-0 flex-1">
+            {/* Body — the embedded collaborative editor. Kept mounted while
+                minimized (flex clips it to zero height) so unsaved edits and
+                the collab connection survive collapsing. */}
+            <div
+                ref={bodyRef}
+                className={cn(
+                    "min-h-0 flex-1 transition-opacity",
+                    minimized ? "opacity-0 duration-150" : "opacity-100 duration-200",
+                )}
+            >
                 {loadError ? (
                     <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
                         <CloudOff className="h-4 w-4" />
@@ -444,18 +671,20 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
             </div>
 
             {/* Resize handle */}
-            <div
-                className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none"
-                onPointerDown={onResizePointerDown}
-                onPointerMove={onResizePointerMove}
-                onPointerUp={endResize}
-                onPointerCancel={endResize}
-                aria-hidden="true"
-            >
-                <svg viewBox="0 0 16 16" className="h-full w-full text-muted-foreground/60">
-                    <path d="M14 6 L6 14 M14 10 L10 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-                </svg>
-            </div>
+            {!minimized && (
+                <div
+                    className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none"
+                    onPointerDown={onResizePointerDown}
+                    onPointerMove={onResizePointerMove}
+                    onPointerUp={endResize}
+                    onPointerCancel={endResize}
+                    aria-hidden="true"
+                >
+                    <svg viewBox="0 0 16 16" className="h-full w-full text-muted-foreground/60">
+                        <path d="M14 6 L6 14 M14 10 L10 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+                    </svg>
+                </div>
+            )}
         </div>
     );
 

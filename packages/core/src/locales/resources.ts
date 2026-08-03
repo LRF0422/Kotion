@@ -32,7 +32,43 @@ export const resources = {
                 "get-started": "马上开始",
                 "doc": "开发者文档",
                 "title": "增强你的体验",
-                "description": "探索可扩展Kotion功能并助您高效工作的插件。"
+                "description": "探索可扩展Kotion功能并助您高效工作的插件。",
+                "heading": "插件市场",
+                "request": "申请插件",
+                "publish": "发布插件",
+                "search-placeholder": "搜索插件…",
+                "clear-search": "清除搜索",
+                "clear-filters": "清除筛选",
+                "featured": "精选推荐",
+                "all-plugins": "全部插件",
+                "results": "搜索结果",
+                "install": "安装",
+                "installed": "已安装",
+                "active": "已启用",
+                "details": "详情",
+                "load-more": "加载更多",
+                "category": {
+                    "all": "全部",
+                    "app": "应用",
+                    "feature": "功能",
+                    "connector": "连接器"
+                },
+                "view": {
+                    "grid": "网格视图",
+                    "list": "列表视图"
+                },
+                "sort": {
+                    "relevance": "相关度",
+                    "popular": "最受欢迎",
+                    "recent": "最新发布",
+                    "rating": "评分最高"
+                },
+                "empty": {
+                    "no-match": "未找到匹配的插件",
+                    "no-match-desc": "试试其他关键词或排序方式",
+                    "none": "暂无插件",
+                    "none-desc": "试试调整分类筛选"
+                }
             },
             "messageBox": {
                 "title": "消息盒子",
@@ -772,7 +808,43 @@ export const resources = {
                 "get-started": "Get Started",
                 "doc": "Developer Docs",
                 "title": "Enhance your Kotion experience",
-                "description": "Discover plugins that extend Kotion's capabilities and help you work more efficiently."
+                "description": "Discover plugins that extend Kotion's capabilities and help you work more efficiently.",
+                "heading": "Plugins",
+                "request": "Request",
+                "publish": "Publish",
+                "search-placeholder": "Search plugins...",
+                "clear-search": "Clear search",
+                "clear-filters": "Clear filters",
+                "featured": "Featured",
+                "all-plugins": "All plugins",
+                "results": "Results",
+                "install": "Install",
+                "installed": "Installed",
+                "active": "Active",
+                "details": "Details",
+                "load-more": "Load more",
+                "category": {
+                    "all": "All",
+                    "app": "App",
+                    "feature": "Feature",
+                    "connector": "Connector"
+                },
+                "view": {
+                    "grid": "Grid view",
+                    "list": "List view"
+                },
+                "sort": {
+                    "relevance": "Relevance",
+                    "popular": "Most Popular",
+                    "recent": "Recently Added",
+                    "rating": "Highest Rated"
+                },
+                "empty": {
+                    "no-match": "No matches for your search",
+                    "no-match-desc": "Try a different keyword or sort option",
+                    "none": "No plugins found",
+                    "none-desc": "Try adjusting your category filter"
+                }
             },
             "messageBox": {
                 "title": "Messages",
