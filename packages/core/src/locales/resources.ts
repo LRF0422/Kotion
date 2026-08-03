@@ -471,6 +471,28 @@ export const resources = {
                     "addTag": "添加标签",
                     "tagPlaceholder": "输入标签，回车添加"
                 },
+                "math": {
+                    "inline": "行内",
+                    "block": "块级",
+                    "help": "语法帮助",
+                    "delete": "删除公式",
+                    "empty": "点击输入公式",
+                    "previewEmpty": "预览区",
+                    "toggleResult": "点击切换计算结果",
+                    "placeholder": "输入 LaTeX，支持多行，例如 \\frac{a}{b}",
+                    "hintInline": "Enter 完成 · Shift+Enter 换行 · Esc 取消 · 输入 \\ 唤起补全",
+                    "hintBlock": "Enter 换行 · Ctrl+Enter 完成 · Esc 取消 · 输入 \\ 唤起补全",
+                    "group": {
+                        "common": "常用",
+                        "multiline": "多行结构",
+                        "greek": "希腊字母",
+                        "operator": "运算符",
+                        "relation": "关系符",
+                        "arrow": "箭头",
+                        "function": "函数",
+                        "notation": "记号"
+                    }
+                },
                 "tooltip": {
                     "undo": "撤销",
                     "redo": "重做",
@@ -1188,6 +1210,28 @@ export const resources = {
                     "updated": "Updated",
                     "addTag": "Add tag",
                     "tagPlaceholder": "Type a tag, press Enter"
+                },
+                "math": {
+                    "inline": "Inline",
+                    "block": "Block",
+                    "help": "Syntax help",
+                    "delete": "Delete formula",
+                    "empty": "Click to enter a formula",
+                    "previewEmpty": "Preview",
+                    "toggleResult": "Click to toggle result",
+                    "placeholder": "Type LaTeX, multi-line supported, e.g. \\frac{a}{b}",
+                    "hintInline": "Enter to finish · Shift+Enter for a new line · Esc to cancel · type \\ for completion",
+                    "hintBlock": "Enter for a new line · Ctrl+Enter to finish · Esc to cancel · type \\ for completion",
+                    "group": {
+                        "common": "Common",
+                        "multiline": "Multi-line",
+                        "greek": "Greek",
+                        "operator": "Operators",
+                        "relation": "Relations",
+                        "arrow": "Arrows",
+                        "function": "Functions",
+                        "notation": "Notation"
+                    }
                 },
                 "tooltip": {
                     "undo": "Undo",

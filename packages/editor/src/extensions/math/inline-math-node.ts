@@ -1,18 +1,26 @@
 import { Content, InputRule, mergeAttributes, Node, PasteRule } from "@tiptap/core";
-import katex from "katex";
+import { NodeSelection, Plugin, PluginKey } from "@tiptap/pm/state";
+import { ReactNodeViewRenderer } from "@tiptap/react";
 import {
   AllVariableUpdateListeners,
   MathVariables,
-  VariableUpdateListeners,
 } from "./latex-evaluation/evaluate-expression";
-import { generateID } from "./util/generate-id";
-import { updateEvaluation } from "./latex-evaluation/update-evaluation";
+import { MathView } from "./math-view";
 import { DEFAULT_OPTIONS, MathExtensionOption, MathExtensionOption as MathExtensionOptions } from "./util/options";
 
 
 declare module '@tiptap/core' {
   interface Storage {
     inlineMath: any;
+  }
+
+  interface Commands<ReturnType> {
+    inlineMath: {
+      /** 插入行内公式，latex 为空时直接进入编辑态 */
+      insertInlineMath: (latex?: string) => ReturnType;
+      /** 插入块级公式，支持多行 latex */
+      insertBlockMath: (latex?: string) => ReturnType;
+    };
   }
 }
 
@@ -62,6 +70,27 @@ export const InlineMathNode = Node.create<MathExtensionOptions>({
 
   addInputRules() {
     const inputRules = [];
+    // `$$` + 空格：插入空的块级公式并直接进入编辑面板，用于多行公式录入
+    inputRules.push(
+      new InputRule({
+        find: /\$\$[ \t]$/,
+        handler: (props) => {
+          props
+            .chain()
+            .insertContentAt(
+              { from: props.range.from, to: props.range.to },
+              [
+                {
+                  type: "inlineMath",
+                  attrs: { latex: "", evaluate: "no", display: "yes" },
+                },
+              ],
+              { updateSelection: true }
+            )
+            .run();
+        },
+      })
+    );
     const blockRegex = getRegexFromOptions("block", this.options);
     if (blockRegex !== undefined) {
       inputRules.push(
@@ -103,7 +132,6 @@ export const InlineMathNode = Node.create<MathExtensionOptions>({
         new InputRule({
           find: new RegExp(inlineRegex, ""),
           handler: (props) => {
-            console.log({ props });
             if (props.match[1]!.length === 0) {
               return;
             }
@@ -235,6 +263,11 @@ export const InlineMathNode = Node.create<MathExtensionOptions>({
           state.doc.nodesBetween(anchor - 1, anchor, (node, pos) => {
             if (node.type.name === this.name) {
               isMention = true;
+              // 多行公式转回文本会丢掉换行，改为选中节点交给用户决定
+              if (typeof node.attrs.latex === "string" && node.attrs.latex.includes("\n")) {
+                tr.setSelection(NodeSelection.create(tr.doc, pos));
+                return;
+              }
               const displayMode = node.attrs.display === "yes";
               const firstDelimiter = getDelimiter(displayMode ? "block" : "inline", "start", this.options);
               let secondDelimiter = getDelimiter(displayMode ? "block" : "inline", "end", this.options);
@@ -248,75 +281,69 @@ export const InlineMathNode = Node.create<MathExtensionOptions>({
   },
 
   addNodeView() {
-    return ({ HTMLAttributes, node, getPos, editor }) => {
-      const outerSpan = document.createElement("span");
-      const span = document.createElement("span");
-      outerSpan.appendChild(span);
-      let latex = "x_1";
-      if ("data-latex" in HTMLAttributes && typeof HTMLAttributes["data-latex"] === "string") {
-        latex = HTMLAttributes["data-latex"];
-      }
-      let displayMode = node.attrs.display === "yes";
-      katex.render(latex, span, {
-        displayMode: displayMode,
-        throwOnError: false,
-        ...(this.options.katexOptions ?? {}),
-      });
+    return ReactNodeViewRenderer(MathView);
+  },
 
-      outerSpan.classList.add("tiptap-math", "latex");
-
-      let showEvalResult = node.attrs.evaluate === "yes";
-      const id = generateID();
-
-      const shouldEvaluate = this.options.evaluation;
-      // Should evaluate (i.e., also register new variables etc.)
-      if (shouldEvaluate) {
-        outerSpan.title = "Click to toggle result";
-        outerSpan.style.cursor = "pointer";
-        const resultSpan = document.createElement("span");
-        outerSpan.append(resultSpan);
-        resultSpan.classList.add("tiptap-math", "result");
-        resultSpan.classList.add("katex");
-        const evalRes = updateEvaluation(latex, id, resultSpan, showEvalResult, this.editor.storage.inlineMath);
-        // On click, update the evaluate attribute (effectively triggering whether the result is shown)
-        outerSpan.addEventListener("click", (ev) => {
-          if (editor.isEditable && typeof getPos === "function") {
-            editor
-              .chain()
-              .command(({ tr }) => {
-                const position = getPos()!;
-                tr.setNodeAttribute(position, "evaluate", !showEvalResult ? "yes" : "no");
-                return true;
-              })
-              .run();
-          }
-          ev.preventDefault();
-          ev.stopPropagation();
-          ev.stopImmediatePropagation();
-        });
-
-        return {
-          dom: outerSpan,
-          destroy: () => {
-            if (evalRes?.variablesUsed) {
-              // De-register listeners
-              for (const v of evalRes.variablesUsed) {
-                let listenersForV: VariableUpdateListeners = this.editor.storage.inlineMath.variableListeners[v];
-                if (listenersForV == undefined) {
-                  listenersForV = [];
-                }
-                this.editor.storage.inlineMath.variableListeners[v] = listenersForV.filter((l) => l.id !== id);
-              }
-            }
-          },
-        };
-      } else {
-        // Should not evaluate math expression (just display them)
-        return {
-          dom: outerSpan,
-        };
-      }
+  addCommands() {
+    return {
+      insertInlineMath:
+        (latex = "") =>
+          ({ commands }) =>
+            commands.insertContent({
+              type: this.name,
+              attrs: { latex, evaluate: "no", display: "no" },
+            }),
+      insertBlockMath:
+        (latex = "") =>
+          ({ commands }) =>
+            commands.insertContent({
+              type: this.name,
+              attrs: { latex, evaluate: "no", display: "yes" },
+            }),
     };
+  },
+
+  addProseMirrorPlugins() {
+    const name = this.name;
+    const options = this.options;
+    return [
+      new Plugin({
+        key: new PluginKey("inlineMathMultilinePaste"),
+        props: {
+          // 整段粘贴的多行公式（如 $$\n\begin{aligned}...\n$$）直接转为块级公式，
+          // 默认的粘贴规则逐行匹配，无法保留换行
+          handlePaste: (view, event) => {
+            const text = event.clipboardData?.getData("text/plain")?.trim();
+            if (!text || !text.includes("\n")) {
+              return false;
+            }
+            const start = getDelimiter("block", "start", options);
+            const end = getDelimiter("block", "end", options);
+            if (
+              !text.startsWith(start) ||
+              !text.endsWith(end) ||
+              text.length <= start.length + end.length
+            ) {
+              return false;
+            }
+            const latex = text.slice(start.length, text.length - end.length).trim();
+            if (!latex) {
+              return false;
+            }
+            const type = view.state.schema.nodes[name];
+            if (!type) {
+              return false;
+            }
+            view.dispatch(
+              view.state.tr
+                .replaceSelectionWith(type.create({ latex, evaluate: "no", display: "yes" }))
+                .scrollIntoView()
+            );
+            return true;
+          },
+        },
+      }),
+    ];
   },
 
   addStorage(): {
