@@ -14,7 +14,6 @@ import {
     DropdownMenuTrigger,
     Input,
     Label,
-    ScrollArea,
     Switch,
     Textarea,
 } from '@kn/ui'
@@ -161,8 +160,8 @@ export const AgentManagerDialog: React.FC<AgentManagerDialogProps> = ({ open, on
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[480px] p-0 gap-0">
-                <DialogHeader className="px-4 pt-3.5 pb-2.5 border-b">
+            <DialogContent className="flex max-h-[85vh] max-w-[480px] flex-col p-0 gap-0">
+                <DialogHeader className="shrink-0 px-4 pt-3.5 pb-2.5 border-b">
                     <DialogTitle className="flex items-center gap-1.5 text-sm">
                         <Bot className="h-4 w-4" />
                         {t('ai.agent.managerTitle', { defaultValue: 'Agent 管理' })}
@@ -175,15 +174,18 @@ export const AgentManagerDialog: React.FC<AgentManagerDialogProps> = ({ open, on
                 </DialogHeader>
 
                 {error && (
-                    <div className="mx-4 mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
+                    <div className="mx-4 mt-2 shrink-0 rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
                         {error}
                     </div>
                 )}
 
                 {editing === null ? (
                     // ── List view ──
-                    <div className="p-3">
-                        <ScrollArea className="max-h-[320px]">
+                    <div className="flex min-h-0 flex-1 flex-col p-3">
+                        {/* Native overflow instead of Radix ScrollArea: its viewport wraps
+                            children in a `display: table` div that sizes to content, which
+                            breaks `truncate` and pushes long text past the dialog width. */}
+                        <div className="min-h-0 flex-1 overflow-y-auto">
                             {loading && agents.length === 0 && (
                                 <div className="py-6 text-center text-[11px] text-muted-foreground">
                                     {t('ai.agent.loading', { defaultValue: '加载中…' })}
@@ -235,11 +237,11 @@ export const AgentManagerDialog: React.FC<AgentManagerDialogProps> = ({ open, on
                                     </div>
                                 ))}
                             </div>
-                        </ScrollArea>
+                        </div>
                         <Button
                             size="sm"
                             variant="outline"
-                            className="mt-2.5 h-7 w-full gap-1 text-[11px]"
+                            className="mt-2.5 h-7 w-full shrink-0 gap-1 text-[11px]"
                             onClick={startCreate}
                         >
                             <Plus className="h-3 w-3" />
@@ -247,9 +249,9 @@ export const AgentManagerDialog: React.FC<AgentManagerDialogProps> = ({ open, on
                         </Button>
                     </div>
                 ) : (
-                    // ── Create / edit form ──
-                    <ScrollArea className="max-h-[420px]">
-                        <div className="space-y-2.5 p-3.5">
+                    // ── Create / edit form: scrollable body + pinned action bar ──
+                    <>
+                        <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3.5">
                             <div className="space-y-1">
                                 <Label className="text-[11px]">
                                     {t('ai.agent.name', { defaultValue: '名称' })} *
@@ -361,7 +363,7 @@ export const AgentManagerDialog: React.FC<AgentManagerDialogProps> = ({ open, on
                                                 onCheckedChange={() => toggleTool(tool.id)}
                                                 className="mt-0.5 h-3 w-3"
                                             />
-                                            <span className="min-w-0">
+                                            <span className="min-w-0 flex-1">
                                                 <span className="block text-[11px] font-medium leading-4">{tool.id}</span>
                                                 {tool.description && (
                                                     <span className="block truncate text-[10px] text-muted-foreground">
@@ -373,39 +375,39 @@ export const AgentManagerDialog: React.FC<AgentManagerDialogProps> = ({ open, on
                                     ))}
                                 </div>
                             </div>
-                            <div className="flex items-center justify-between pt-0.5">
-                                <label className="flex items-center gap-1.5 text-[11px]">
-                                    <Switch
-                                        checked={form.enabled !== false}
-                                        onCheckedChange={(checked) => setForm({ ...form, enabled: checked })}
-                                        className="scale-75"
-                                    />
-                                    {t('ai.agent.enabled', { defaultValue: '启用' })}
-                                </label>
-                                <div className="flex items-center gap-1.5">
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-7 px-2.5 text-[11px]"
-                                        onClick={() => setEditing(null)}
-                                        disabled={saving}
-                                    >
-                                        {t('ai.agent.cancel', { defaultValue: '取消' })}
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        className="h-7 px-3 text-[11px]"
-                                        onClick={handleSave}
-                                        disabled={!formValid || saving}
-                                    >
-                                        {saving
-                                            ? t('ai.agent.saving', { defaultValue: '保存中…' })
-                                            : t('ai.agent.save', { defaultValue: '保存' })}
-                                    </Button>
-                                </div>
+                        </div>
+                        <div className="flex shrink-0 items-center justify-between border-t px-3.5 py-2.5">
+                            <label className="flex items-center gap-1.5 text-[11px]">
+                                <Switch
+                                    checked={form.enabled !== false}
+                                    onCheckedChange={(checked) => setForm({ ...form, enabled: checked })}
+                                    className="scale-75"
+                                />
+                                {t('ai.agent.enabled', { defaultValue: '启用' })}
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2.5 text-[11px]"
+                                    onClick={() => setEditing(null)}
+                                    disabled={saving}
+                                >
+                                    {t('ai.agent.cancel', { defaultValue: '取消' })}
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    className="h-7 px-3 text-[11px]"
+                                    onClick={handleSave}
+                                    disabled={!formValid || saving}
+                                >
+                                    {saving
+                                        ? t('ai.agent.saving', { defaultValue: '保存中…' })
+                                        : t('ai.agent.save', { defaultValue: '保存' })}
+                                </Button>
                             </div>
                         </div>
-                    </ScrollArea>
+                    </>
                 )}
             </DialogContent>
         </Dialog>
