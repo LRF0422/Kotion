@@ -1,9 +1,39 @@
-import { ExtensionWrapper } from "@kn/common";
-import { PageReference } from "./page-reference";
+import { ExtensionWrapper, getPageBridge, event } from "@kn/common";
+import type { Editor } from "@kn/editor";
 import { FilePlus2, Link2, SquareDashedBottom } from "@kn/icon";
 import React from "react";
-import { BlockReference } from "./block-references";
 import { PageLink, PageLinkNode, BlockLink, LinkTrigger, PageFooter } from "../../bidirectional-link";
+
+/**
+ * Create a new page (child or sibling of the current one) and insert a
+ * `pageLinkNode` referencing it. Reuses the same `[[page link]]` pill as the
+ * `关联页面` command so both flows share one surface: hover card, in-place
+ * PageEditWindow editing, jump and backlinks.
+ *
+ * @param kind 'CHILD' creates a sub-page; 'BROTHER' a sibling of the current page.
+ */
+const createAndLinkPage = (editor: Editor, kind: 'CHILD' | 'BROTHER') => {
+    const bridge = getPageBridge()
+    if (!bridge) return
+    const current = bridge.getCurrentPage()
+    if (!current.spaceId || !current.pageId) return
+
+    const parentId = kind === 'CHILD' ? current.pageId : current.parentId
+    bridge.createPage({
+        spaceId: current.spaceId,
+        title: '未命名',
+        parentId,
+    }).then((page) => {
+        // Refresh the sidebar page tree so the new page shows up immediately.
+        event.emit("ON_PAGE_REFRESH")
+        editor.chain().focus().insertContent([
+            { type: 'pageLinkNode', attrs: { pageId: String(page.id), title: page.title } },
+            { type: 'text', text: ' ' },
+        ]).run()
+    }).catch((err) => {
+        console.error('[blockReference] createAndLinkPage failed:', err)
+    })
+}
 
 /**
  * Block Reference Extension
@@ -12,7 +42,7 @@ import { PageLink, PageLinkNode, BlockLink, LinkTrigger, PageFooter } from "../.
  */
 export const BlockReferenceExtension: ExtensionWrapper = {
     name: "blockReference",
-    extendsion: [PageReference, BlockReference, PageLink, PageLinkNode, BlockLink, LinkTrigger],
+    extendsion: [PageLink, PageLinkNode, BlockLink, LinkTrigger],
     pageFooter: PageFooter,
     slashConfig: [
         {
@@ -24,12 +54,7 @@ export const BlockReferenceExtension: ExtensionWrapper = {
             text: "新建同级页面并引用",
             slash: '/createPage',
             action: (editor) => {
-                editor.commands.insertContent({
-                    type: PageReference.name,
-                    attrs: {
-                        type: "BROTHER"
-                    }
-                })
+                createAndLinkPage(editor, 'BROTHER')
             }
         },
         {
@@ -37,12 +62,7 @@ export const BlockReferenceExtension: ExtensionWrapper = {
             text: "新建子页面并引用",
             slash: '/createSubPage',
             action: (editor) => {
-                editor.commands.insertContent({
-                    type: PageReference.name,
-                    attrs: {
-                        type: "CHILD"
-                    }
-                })
+                createAndLinkPage(editor, 'CHILD')
             }
         },
         {

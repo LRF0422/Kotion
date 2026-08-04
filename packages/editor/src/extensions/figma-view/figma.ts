@@ -18,6 +18,10 @@ export const Figma = Node.create({
         return {
             url: {
                 default: null
+            },
+            // Persisted embed height (px), set by the resize grip in the node view
+            height: {
+                default: null
             }
         }
     },

@@ -15,15 +15,6 @@ export const translations = {
             refreshing: 'Refreshing...',
             blockWillUpdate: 'Block content will be updated',
         },
-        pageReference: {
-            untitled: 'Untitled',
-            deleted: 'This page has been deleted',
-            createFailed: 'Failed to create page',
-            loading: 'Loading...',
-            jumpTo: 'Jump to',
-            referenceLabel: 'Page reference',
-            page: 'Page',
-        },
         blockSelector: {
             title: 'Select Block',
             spaces: 'Spaces',
@@ -99,15 +90,6 @@ export const translations = {
             delete: '删除引用',
             refreshing: '刷新中...',
             blockWillUpdate: '块内容将被更新',
-        },
-        pageReference: {
-            untitled: '未命名',
-            deleted: '该页面已被删除',
-            createFailed: '创建页面失败',
-            loading: '加载中...',
-            jumpTo: '跳转到',
-            referenceLabel: '页面引用',
-            page: '页面',
         },
         blockSelector: {
             title: '选择块',
