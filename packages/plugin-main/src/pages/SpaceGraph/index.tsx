@@ -9,7 +9,7 @@ import {
 } from "d3-force";
 import { useApi, useNavigator, useParams, useSearchParams, useTranslation } from "@kn/common";
 import { useResponsive, Button, Input, cn } from "@kn/ui";
-import { Network, Loader2, RefreshCw, Maximize2, X, ZoomIn, ZoomOut, Layers } from "@kn/icon";
+import { Network, Loader2, RefreshCw, Maximize2, X, ZoomIn, ZoomOut, Layers, LocateFixed } from "@kn/icon";
 import { APIS } from "../../api";
 import type { GraphEdge, GraphNode, SimLink, SimNode, ViewTransform } from "./types";
 
@@ -414,6 +414,17 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
         simRef.current?.alpha(0.4).restart();
     }, []);
 
+    // Re-center the viewport on the focused page (useful after panning away).
+    const locateFocus = useCallback(() => {
+        const fid = focusId;
+        if (!fid) return;
+        const node = nodes.find((n) => n.id === fid);
+        if (!node || node.x == null || node.y == null) return;
+        const { w, h } = sizeRef.current;
+        const k = 1.3;
+        setView({ x: w / 2 - node.x * k, y: h / 2 - node.y * k, k });
+    }, [focusId, nodes]);
+
     // --- Render states ---
     if (loading) {
         return (
@@ -480,6 +491,18 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                     placeholder={t("graph.filter")}
                     className="h-9 md:h-7 flex-1 md:flex-none md:w-40 min-w-0 text-xs"
                 />
+                {focusId && (
+                    <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-9 w-9 md:h-7 md:w-7 flex-shrink-0"
+                        onClick={locateFocus}
+                        title={t("graph.locate")}
+                        aria-label={t("graph.locate")}
+                    >
+                        <LocateFixed className="h-4 w-4" />
+                    </Button>
+                )}
                 <Button
                     size="icon"
                     variant="ghost"
