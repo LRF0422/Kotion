@@ -1,5 +1,5 @@
 import { APIS } from "../../api";
-import { DialogDescription, IconSelector, IconPropsProps, cn } from "@kn/ui";
+import { DialogDescription, IconSelector, IconPropsProps } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@kn/ui";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormDescription, FormMessage } from "@kn/ui";
@@ -8,9 +8,9 @@ import { Textarea } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kn/ui";
 import { toast } from "@kn/ui";
-import { useApi, useUploadFile, GlobalState } from "@kn/common";
+import { useApi, GlobalState } from "@kn/common";
 import { zodResolver } from "@kn/ui";
-import { Upload, CheckCircle2, ImageIcon, Users, BookOpen } from "@kn/icon";
+import { CheckCircle2, Users, BookOpen } from "@kn/icon";
 import React, { ReactNode, useState } from "react";
 import { useForm } from "@kn/ui";
 import { useSelector, useTranslation } from "@kn/common";
@@ -23,7 +23,6 @@ export interface SpaceFormProps {
 export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
 
     const { userInfo } = useSelector((state: GlobalState) => state)
-    const { upload, usePath } = useUploadFile()
     const { t } = useTranslation()
     const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -52,7 +51,7 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
             name: "",
             description: "",
             type: "SPACE",
-            cover: "upload/20251022/2c9402c970f95483446ded792b32ac22.png",
+            cover: "",
             nickName: userInfo?.name,
             userId: userInfo?.id
         }
@@ -74,13 +73,6 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
             setIsSubmitting(false)
         }
     }
-
-    const presetCovers: string[] = [
-        "upload/20251022/2c9402c970f95483446ded792b32ac22.png",
-        "upload/20251023/5d372ef092428d58e995d1b910173641.png",
-        "upload/20251023/05508f818232fd72e08caff65669d014.png",
-        "upload/20251024/e409eaacdbab8e9fa9ed6d40181ca911.png"
-    ]
 
     return (
         <Form {...form}>
@@ -204,92 +196,6 @@ export const SpaceForm: React.FC<SpaceFormProps> = (props) => {
                                 </FormControl>
                                 <FormDescription>
                                     {t("creation.icon-help", "Choose an emoji or image as the space icon")}
-                                </FormDescription>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-
-                    <FormField
-                        control={form.control}
-                        name="cover"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>{t("creation.cover", "Cover Image")}</FormLabel>
-                                <FormControl>
-                                    <div className="space-y-3">
-                                        {/* Cover Preview & Upload */}
-                                        <div
-                                            className="relative flex items-center justify-center h-[140px] w-full border-2 border-dashed rounded-lg hover:bg-muted/50 cursor-pointer transition-all group overflow-hidden"
-                                            style={{
-                                                backgroundImage: field.value ? `url('${usePath(field.value)}')` : 'none',
-                                                backgroundSize: 'cover',
-                                                backgroundPosition: 'center'
-                                            }}
-                                            onClick={() => {
-                                                upload().then(res => {
-                                                    field.onChange(res.name)
-                                                })
-                                            }}
-                                        >
-                                            {!field.value ? (
-                                                <div className="text-center space-y-2">
-                                                    <div className="flex justify-center">
-                                                        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                                                            <Upload className="h-5 w-5 text-primary" />
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-sm font-medium">{t("creation.cover-upload", "Upload cover image")}</p>
-                                                        <p className="text-xs text-muted-foreground mt-0.5">{t("creation.cover-browse", "Click to browse")}</p>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                    <div className="text-white text-center space-y-1">
-                                                        <Upload className="h-5 w-5 mx-auto" />
-                                                        <p className="text-sm font-medium">{t("creation.cover-change", "Change cover")}</p>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Preset Covers */}
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                                <ImageIcon className="h-3 w-3" />
-                                                <span>{t("creation.cover-presets", "Or choose from presets")}</span>
-                                            </div>
-                                            <div className="grid grid-cols-4 gap-2">
-                                                {presetCovers.map((cover, index) => (
-                                                    <div
-                                                        key={index}
-                                                        className={cn(
-                                                            "relative h-16 rounded-md cursor-pointer overflow-hidden border-2 transition-all hover:scale-105",
-                                                            field.value === cover
-                                                                ? "border-primary ring-2 ring-primary/20"
-                                                                : "border-transparent hover:border-muted-foreground/30"
-                                                        )}
-                                                        style={{
-                                                            backgroundImage: `url('${usePath(cover)}')`,
-                                                            backgroundSize: 'cover',
-                                                            backgroundPosition: 'center'
-                                                        }}
-                                                        onClick={() => field.onChange(cover)}
-                                                    >
-                                                        {field.value === cover && (
-                                                            <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                                                                <CheckCircle2 className="h-4 w-4 text-primary" />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </FormControl>
-                                <FormDescription>
-                                    {t("creation.cover-help", "A cover image makes your space more recognizable")}
                                 </FormDescription>
                                 <FormMessage />
                             </FormItem>

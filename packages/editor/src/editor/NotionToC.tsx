@@ -1,6 +1,6 @@
 import { useTranslation } from '@kn/common'
 import { cn, useIsMobile, Button, Input, Sheet, SheetContent, SheetTrigger, SheetTitle } from '@kn/ui'
-import { List, Search, X } from '@kn/icon'
+import { List, Search, X, Pin, PinOff } from '@kn/icon'
 import { Editor } from '@tiptap/core'
 import { TextSelection } from '@tiptap/pm/state'
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
@@ -15,6 +15,7 @@ import { ToC, highlightMatch, type TocItem } from './ToC'
  * headings read as indented. The active section's tick is highlighted.
  * Hovering anywhere over the strip fades the ticks out and reveals a
  * compact panel of heading labels; clicking a label scrolls to it.
+ * The pin toggle keeps the panel expanded without hovering.
  */
 
 // Tick length by heading level — shorter = deeper, which reads as indentation.
@@ -29,9 +30,24 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
     const [mobileOpen, setMobileOpen] = useState(false)
     const [tickGap, setTickGap] = useState(8)
     const [searchQuery, setSearchQuery] = useState('')
+    const [pinned, setPinned] = useState(() => {
+        try {
+            return localStorage.getItem('toc-pinned') === 'true'
+        } catch {
+            return false
+        }
+    })
     const rafRef = useRef<number>(0)
+    const tocListRef = useRef<HTMLDivElement>(null)
     const isMobile = useIsMobile()
     const { t } = useTranslation()
+
+    // Persist the pinned state so the user's preference survives page reloads.
+    useEffect(() => {
+        try {
+            localStorage.setItem('toc-pinned', String(pinned))
+        } catch { /* ignore quota / privacy errors */ }
+    }, [pinned])
 
     // Filter the expanded label panel by the search query. The tick strip keeps
     // showing every heading so it stays a faithful overview of the document.
@@ -100,6 +116,25 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
         }
     }, [editor, items])
 
+    // Auto-scroll the TOC list so the active heading stays visible even
+    // when it falls outside the scrollable area of the panel.
+    useEffect(() => {
+        if (!activeId || !tocListRef.current) return
+        const container = tocListRef.current
+        const activeEl = container.querySelector(`[data-toc-item-id="${activeId}"]`) as HTMLElement | null
+        if (!activeEl) return
+
+        const containerRect = container.getBoundingClientRect()
+        const itemRect = activeEl.getBoundingClientRect()
+        const margin = 8
+
+        if (itemRect.top < containerRect.top + margin) {
+            container.scrollTop -= containerRect.top + margin - itemRect.top
+        } else if (itemRect.bottom > containerRect.bottom - margin) {
+            container.scrollTop += itemRect.bottom - (containerRect.bottom - margin)
+        }
+    }, [activeId])
+
     const onItemClick = useCallback(
         (e: React.MouseEvent, item: TocItem) => {
             e.preventDefault()
@@ -165,7 +200,12 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
         >
             {/* Collapsed: tick marks. Fade out while the strip is hovered. */}
             <div
-                className="flex flex-col items-end max-h-full overflow-hidden pr-3 pl-12 py-4 transition-opacity duration-200 group-hover:opacity-0 group-hover:pointer-events-none"
+                className={cn(
+                    'flex flex-col items-end max-h-full overflow-hidden pr-3 pl-12 py-4 transition-opacity duration-200',
+                    pinned
+                        ? 'opacity-0 pointer-events-none'
+                        : 'group-hover:opacity-0 group-hover:pointer-events-none'
+                )}
                 style={{ gap: tickGap }}
             >
                 {items.map(item => (
@@ -182,37 +222,57 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
                 ))}
             </div>
 
-            {/* Expanded: heading labels. Revealed on hover of the strip. */}
+            {/* Expanded: heading labels. Revealed on hover, or always visible when pinned. */}
             <div
                 className={cn(
                     'absolute right-2 top-1/2 -translate-y-1/2 flex flex-col max-h-[70vh]',
-                    'min-w-[200px] max-w-[300px] rounded-lg border bg-background shadow-lg',
-                    'opacity-0 translate-x-2 pointer-events-none transition-all duration-200',
-                    'group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto'
+                    'min-w-[220px] max-w-[300px] rounded-lg border bg-background shadow-lg',
+                    'transition-all duration-200',
+                    pinned
+                        ? 'opacity-100 translate-x-0 pointer-events-auto'
+                        : 'opacity-0 translate-x-2 pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto'
                 )}
             >
-                <div className="relative shrink-0 p-2 border-b">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                    <Input
-                        type="text"
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        placeholder={t('toc.search.placeholder', 'Search headings...')}
-                        aria-label={t('toc.search.placeholder', 'Search headings...')}
-                        className="h-8 pl-7 pr-7 text-xs"
-                    />
-                    {searchQuery && (
+                <div className="shrink-0 p-2 border-b">
+                    <div className="flex items-center gap-1.5">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                            <Input
+                                type="text"
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder={t('toc.search.placeholder', 'Search headings...')}
+                                aria-label={t('toc.search.placeholder', 'Search headings...')}
+                                className="h-8 pl-7 pr-7 text-xs"
+                            />
+                            {searchQuery && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors"
+                                    aria-label={t('toc.search.clear', 'Clear search')}
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            )}
+                        </div>
                         <button
                             type="button"
-                            onClick={() => setSearchQuery('')}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors"
-                            aria-label={t('toc.search.clear', 'Clear search')}
+                            onClick={() => setPinned(!pinned)}
+                            className={cn(
+                                'shrink-0 flex items-center justify-center h-8 w-8 rounded transition-colors',
+                                pinned
+                                    ? 'text-primary bg-primary/10 hover:bg-primary/15'
+                                    : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+                            )}
+                            aria-label={pinned ? t('toc.unpin', 'Unpin outline') : t('toc.pin', 'Pin outline')}
+                            title={pinned ? t('toc.unpin', 'Unpin outline') : t('toc.pin', 'Pin outline')}
                         >
-                            <X className="h-3.5 w-3.5" />
+                            {pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                         </button>
-                    )}
+                    </div>
                 </div>
-                <div className="flex-1 overflow-y-auto py-2">
+                <div ref={tocListRef} className="flex-1 overflow-y-auto py-2">
                     {filteredItems.length === 0 ? (
                         <div className="flex items-center justify-center py-6 px-3 text-xs text-muted-foreground">
                             {t('toc.search.noResults', 'No matching headings')}
@@ -222,6 +282,7 @@ export const NotionToC: React.FC<{ editor: Editor; items: TocItem[]; offsetTop?:
                             <a
                                 key={item.id}
                                 href={`#${item.id}`}
+                                data-toc-item-id={item.id}
                                 onClick={e => onItemClick(e, item)}
                                 className={cn(
                                     'block truncate px-3 py-1 text-sm no-underline transition-colors cursor-pointer',

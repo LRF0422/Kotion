@@ -326,8 +326,8 @@ const TableViewComponent: React.FC<TableViewProps> = (props) => {
                     rowClass={isGrouped ? (getRowClass as any) : undefined}
                     className={gridClassName}
                     style={GRID_STYLE}
-                    rowHeight={40}
-                    headerRowHeight={36}
+                    rowHeight={36}
+                    headerRowHeight={32}
                 />
             </div>
 

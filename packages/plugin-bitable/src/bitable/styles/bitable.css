@@ -5,48 +5,61 @@
  * ========================================================================== */
 
 /* ---------------------------------------------------------------------------
- * Design Tokens (Light)
+ * Design Tokens (Light) — Notion warm-neutral palette
  * ------------------------------------------------------------------------- */
 .bitable {
   /* Colors */
-  --bt-border: #e5e7eb;
-  --bt-border-strong: #d1d5db;
+  --bt-border: rgba(55, 53, 47, 0.09);
+  --bt-border-strong: rgba(55, 53, 47, 0.16);
   --bt-bg: transparent;
-  --bt-bg-header: rgba(249, 250, 251, 0.4);
-  --bt-hover: rgba(243, 244, 246, 0.5);
-  --bt-selected: rgba(59, 130, 246, 0.06);
-  --bt-selected-hover: rgba(59, 130, 246, 0.1);
-  --bt-accent: #3b82f6;
-  --bt-accent-soft: rgba(59, 130, 246, 0.5);
-  --bt-accent-bg: rgba(59, 130, 246, 0.04);
-  --bt-text: #111827;
-  --bt-muted: #6b7280;
-  --bt-danger: #ef4444;
-  --bt-success: #22c55e;
+  --bt-bg-header: rgba(247, 246, 243, 0.6);
+  --bt-hover: rgba(55, 53, 47, 0.04);
+  --bt-selected: rgba(35, 131, 226, 0.07);
+  --bt-selected-hover: rgba(35, 131, 226, 0.11);
+  --bt-accent: #2383e2;
+  --bt-accent-soft: rgba(35, 131, 226, 0.5);
+  --bt-accent-bg: rgba(35, 131, 226, 0.04);
+  --bt-text: #37352f;
+  --bt-muted: rgba(55, 53, 47, 0.65);
+  --bt-faint: rgba(55, 53, 47, 0.45);
+  --bt-danger: #eb5757;
+  --bt-success: #448361;
   --bt-surface: #ffffff;
-  --bt-surface-alt: #f9fafb;
+  --bt-surface-alt: #f7f6f3;
 
   /* Sizing */
   --bt-radius: 6px;
   --bt-radius-sm: 4px;
   --bt-radius-lg: 8px;
-  --bt-cell-h: 40px;
-  --bt-header-h: 36px;
+  --bt-cell-h: 36px;
+  --bt-header-h: 32px;
   --bt-trigger-size: 28px;
   --bt-icon-size: 16px;
   --bt-gap: 1px;
   --bt-drawer-w: 480px;
 
+  /* Typography */
+  --bt-text-xs: 12px;
+  --bt-text-sm: 13px;
+  --bt-text-md: 14px;
+
+  /* Elevation */
+  --bt-shadow-card: 0 1px 2px rgba(15, 15, 15, 0.04);
+  --bt-shadow-popover:
+    rgba(15, 15, 15, 0.05) 0 0 0 1px,
+    rgba(15, 15, 15, 0.1) 0 3px 6px,
+    rgba(15, 15, 15, 0.2) 0 9px 24px;
+
   /* react-data-grid variable passthrough */
   --rdg-background-color: transparent;
-  --rdg-header-background-color: rgba(249, 250, 251, 0.4);
-  --rdg-row-hover-background-color: rgba(243, 244, 246, 0.5);
-  --rdg-row-selected-background-color: rgba(59, 130, 246, 0.06);
-  --rdg-row-selected-hover-background-color: rgba(59, 130, 246, 0.1);
-  --rdg-selection-color: rgba(59, 130, 246, 0.6);
-  --rdg-border-color: #e5e7eb;
-  --rdg-color: #111827;
-  --rdg-header-color: #6b7280;
+  --rdg-header-background-color: rgba(247, 246, 243, 0.6);
+  --rdg-row-hover-background-color: rgba(55, 53, 47, 0.04);
+  --rdg-row-selected-background-color: rgba(35, 131, 226, 0.07);
+  --rdg-row-selected-hover-background-color: rgba(35, 131, 226, 0.11);
+  --rdg-selection-color: rgba(35, 131, 226, 0.5);
+  --rdg-border-color: rgba(55, 53, 47, 0.09);
+  --rdg-color: #37352f;
+  --rdg-header-color: rgba(55, 53, 47, 0.65);
   --rdg-cell-padding-inline: 8px;
   font-size: 14px;
 }
@@ -55,32 +68,39 @@
  * Design Tokens (Dark)
  * ------------------------------------------------------------------------- */
 .bitable--dark {
-  --bt-border: #4a4a4a;
-  --bt-border-strong: #5a5a5a;
+  --bt-border: rgba(255, 255, 255, 0.094);
+  --bt-border-strong: rgba(255, 255, 255, 0.16);
   --bt-bg: transparent;
-  --bt-bg-header: rgba(25, 25, 25, 0.4);
-  --bt-hover: rgba(37, 37, 37, 0.5);
-  --bt-selected: rgba(96, 165, 250, 0.08);
-  --bt-selected-hover: rgba(96, 165, 250, 0.13);
-  --bt-accent: #60a5fa;
-  --bt-accent-soft: rgba(96, 165, 250, 0.6);
-  --bt-accent-bg: rgba(96, 165, 250, 0.06);
-  --bt-text: #ffffff;
-  --bt-muted: #9ca3af;
-  --bt-danger: #f87171;
-  --bt-success: #4ade80;
-  --bt-surface: #1a1a1a;
+  --bt-bg-header: rgba(32, 32, 32, 0.6);
+  --bt-hover: rgba(255, 255, 255, 0.055);
+  --bt-selected: rgba(35, 131, 226, 0.16);
+  --bt-selected-hover: rgba(35, 131, 226, 0.22);
+  --bt-accent: #529cca;
+  --bt-accent-soft: rgba(82, 156, 202, 0.5);
+  --bt-accent-bg: rgba(82, 156, 202, 0.08);
+  --bt-text: rgba(255, 255, 255, 0.81);
+  --bt-muted: rgba(255, 255, 255, 0.46);
+  --bt-faint: rgba(255, 255, 255, 0.32);
+  --bt-danger: #eb5757;
+  --bt-success: #4dab9a;
+  --bt-surface: #191919;
   --bt-surface-alt: #252525;
 
+  --bt-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --bt-shadow-popover:
+    rgba(255, 255, 255, 0.05) 0 0 0 1px,
+    rgba(0, 0, 0, 0.3) 0 3px 6px,
+    rgba(0, 0, 0, 0.5) 0 9px 24px;
+
   --rdg-background-color: transparent;
-  --rdg-header-background-color: rgba(25, 25, 25, 0.4);
-  --rdg-row-hover-background-color: rgba(37, 37, 37, 0.5);
-  --rdg-row-selected-background-color: rgba(96, 165, 250, 0.08);
-  --rdg-row-selected-hover-background-color: rgba(96, 165, 250, 0.13);
-  --rdg-selection-color: rgba(96, 165, 250, 0.7);
-  --rdg-border-color: #4a4a4a;
-  --rdg-color: #ffffff;
-  --rdg-header-color: #9ca3af;
+  --rdg-header-background-color: rgba(32, 32, 32, 0.6);
+  --rdg-row-hover-background-color: rgba(255, 255, 255, 0.055);
+  --rdg-row-selected-background-color: rgba(35, 131, 226, 0.16);
+  --rdg-row-selected-hover-background-color: rgba(35, 131, 226, 0.22);
+  --rdg-selection-color: rgba(82, 156, 202, 0.6);
+  --rdg-border-color: rgba(255, 255, 255, 0.094);
+  --rdg-color: rgba(255, 255, 255, 0.81);
+  --rdg-header-color: rgba(255, 255, 255, 0.46);
 }
 
 /* ---------------------------------------------------------------------------
@@ -120,7 +140,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--bt-border);
 }
 
@@ -136,12 +156,12 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: var(--bt-radius);
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  font-size: 14px;
+  font-size: var(--bt-text-sm);
   color: var(--bt-muted);
   transition: background 0.15s, color 0.15s;
   position: relative;
@@ -156,17 +176,6 @@
   background: var(--bt-surface-alt);
   color: var(--bt-text);
   font-weight: 500;
-}
-
-.bitable-toolbar__tab--active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 8px;
-  right: 8px;
-  height: 2px;
-  background: var(--bt-accent);
-  border-radius: 1px;
 }
 
 .bitable-toolbar__actions {
@@ -200,34 +209,9 @@
   color: var(--bt-accent);
 }
 
-.bitable-toolbar__action--active::after {
-  content: '';
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 14px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--bt-accent);
-}
-
 .bitable-toolbar__action svg {
   width: var(--bt-icon-size);
   height: var(--bt-icon-size);
-}
-
-.bitable-toolbar__search {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--bt-border);
-}
-
-.bitable-toolbar__search-input {
-  width: 256px;
-  height: 32px;
 }
 
 .bitable-toolbar__tabs-scroll {
@@ -289,17 +273,16 @@
 
 .bitable-toolbar__action--primary {
   color: var(--bt-accent);
-  background: var(--bt-accent-bg);
 }
 
 .bitable-toolbar__action--primary:hover {
-  background: var(--bt-accent-soft);
-  color: #fff;
+  background: var(--bt-hover);
+  color: var(--bt-accent);
 }
 
 .bitable-toolbar__action--danger:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.08);
+  color: var(--bt-danger);
+  background: rgba(235, 87, 87, 0.08);
 }
 
 .bitable-toolbar__search-inline {
@@ -376,15 +359,15 @@
   font-size: 14px;
 }
 
-/* Header row */
+/* Header row — single hairline below, no vertical separators */
 .bitable-data-grid .rdg-header-row {
   background-color: var(--bt-bg-header);
   border-bottom: 1px solid var(--bt-border);
 }
 
 .bitable-data-grid .rdg-header-row .rdg-cell {
-  border-right: 1px solid var(--bt-border);
-  border-bottom: 1px solid var(--bt-border);
+  border-right: none;
+  border-bottom: none;
   font-weight: 400;
 }
 
@@ -398,10 +381,10 @@
   background-color: var(--bt-hover);
 }
 
-/* Cells */
+/* Cells — horizontal hairlines come from the row, no vertical grid lines */
 .bitable-data-grid .rdg-cell {
-  border-right: 1px solid var(--bt-border);
-  border-bottom: 1px solid var(--bt-border);
+  border-right: none;
+  border-bottom: none;
   padding: 0 8px;
 }
 
@@ -462,28 +445,21 @@
   height: 100%;
   cursor: pointer;
   user-select: none;
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--bt-bg-header);
   transition: background 0.15s;
 }
 
-.bitable--dark .bitable-group-header-content {
-  background: rgba(255, 255, 255, 0.03);
-}
-
 .bitable-group-header-content:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--bt-hover);
 }
 
-.bitable--dark .bitable-group-header-content:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-/* Add row bar */
+/* Add row bar — Notion "+ New" full-width subtle row */
 .bitable-add-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 6px 12px;
+  font-size: var(--bt-text-sm);
   color: var(--bt-muted);
   cursor: pointer;
   border-bottom: 1px solid var(--bt-border);
@@ -529,7 +505,7 @@
 }
 
 .bitable-selection-bar__action--danger:hover {
-  background: rgba(239, 68, 68, 0.08);
+  background: rgba(235, 87, 87, 0.08);
   color: var(--bt-danger);
 }
 
@@ -555,13 +531,13 @@
 }
 
 .bitable-table-header__icon svg {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
 .bitable-table-header__title {
   font-weight: 400;
-  font-size: 14px;
+  font-size: var(--bt-text-xs);
   color: var(--bt-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -596,8 +572,8 @@
 
 .bitable-table-header__menu {
   margin-left: auto;
-  width: var(--bt-trigger-size);
-  height: var(--bt-trigger-size);
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -622,8 +598,8 @@
 }
 
 .bitable-table-header__add {
-  width: var(--bt-trigger-size);
-  height: var(--bt-trigger-size);
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -767,8 +743,7 @@
 /* Empty cell placeholder */
 .bitable-field-empty {
   font-size: 14px;
-  color: var(--bt-muted);
-  opacity: 0.35;
+  color: var(--bt-faint);
   user-select: none;
 }
 
@@ -780,11 +755,11 @@
 .bitable-tag {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 1px 6px;
+  border-radius: 3px;
   font-size: 12px;
   font-weight: 500;
-  line-height: 1.3;
+  line-height: 1.4;
   white-space: nowrap;
   max-width: 100%;
   overflow: hidden;
@@ -882,9 +857,9 @@
 
 .bitable-progress__track {
   flex: 1;
-  height: 6px;
+  height: 4px;
   background: var(--bt-border);
-  border-radius: 3px;
+  border-radius: 2px;
   overflow: hidden;
   min-width: 40px;
 }
@@ -892,7 +867,7 @@
 .bitable-progress__fill {
   height: 100%;
   background: var(--bt-accent);
-  border-radius: 3px;
+  border-radius: 2px;
   transition: width 0.2s ease;
 }
 
@@ -1019,9 +994,9 @@
   width: max-content;
   min-width: 100%;
   background: var(--bt-surface);
-  border: 1px solid var(--bt-border);
+  border: none;
   border-radius: var(--bt-radius);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--bt-shadow-popover);
   padding: 4px;
   max-height: 200px;
   overflow: auto;
@@ -1067,8 +1042,7 @@
 }
 
 .bitable-text-editor::placeholder {
-  color: var(--bt-muted);
-  opacity: 0.5;
+  color: var(--bt-faint);
 }
 
 .bitable-text-editor:focus {
@@ -1135,7 +1109,7 @@
  * ------------------------------------------------------------------------- */
 .bitable-kanban {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   overflow-x: auto;
   padding-bottom: 16px;
 }
@@ -1176,7 +1150,7 @@
   border-radius: var(--bt-radius);
 }
 
-/* Column */
+/* Column — transparent body, cards float directly on the canvas */
 .bitable-kanban__column {
   flex-shrink: 0;
   width: 288px;
@@ -1187,9 +1161,9 @@
 }
 
 .bitable-kanban__column-body {
-  background: var(--bt-surface-alt);
+  background: transparent;
   border-radius: var(--bt-radius);
-  padding: 12px;
+  padding: 4px 2px;
   min-height: 80px;
 }
 
@@ -1237,7 +1211,7 @@
 }
 
 .bitable-kanban__column-label {
-  font-size: 14px;
+  font-size: var(--bt-text-sm);
   font-weight: 500;
   color: var(--bt-text);
   white-space: nowrap;
@@ -1319,24 +1293,11 @@
   flex-wrap: wrap;
   padding: 8px;
   background: var(--bt-surface);
-  border: 1px solid var(--bt-border);
+  border: none;
   border-radius: var(--bt-radius);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--bt-shadow-popover);
   z-index: 10;
   width: 160px;
-}
-
-.bitable-kanban__color-swatch {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 1px solid var(--bt-border-strong);
-  cursor: pointer;
-  transition: transform 0.15s;
-}
-
-.bitable-kanban__color-swatch:hover {
-  transform: scale(1.15);
 }
 
 /* Cards */
@@ -1364,14 +1325,14 @@
   background: var(--bt-surface);
   border: 1px solid var(--bt-border);
   border-radius: var(--bt-radius);
-  padding: 12px;
+  padding: 8px 10px;
   cursor: pointer;
-  transition: box-shadow 0.15s, border-color 0.15s;
+  box-shadow: var(--bt-shadow-card);
+  transition: border-color 0.15s, box-shadow 0.15s;
   position: relative;
 }
 
 .bitable-kanban__card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   border-color: var(--bt-border-strong);
 }
 
@@ -1457,14 +1418,6 @@
   background: rgba(239, 68, 68, 0.05);
 }
 
-/* Drop indicator (between cards) */
-.bitable-kanban__drop-indicator {
-  height: 2px;
-  background: var(--bt-accent);
-  border-radius: 1px;
-  margin: 2px 0;
-}
-
 /* Empty state */
 .bitable-kanban__empty {
   display: flex;
@@ -1485,18 +1438,18 @@
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border: 1px dashed var(--bt-border-strong);
+  border: none;
   background: transparent;
   color: var(--bt-muted);
   cursor: pointer;
   border-radius: var(--bt-radius-sm);
   font-size: 13px;
-  transition: border-color 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
 .bitable-kanban__empty-add:hover {
-  border-color: var(--bt-accent);
-  color: var(--bt-accent);
+  background: var(--bt-hover);
+  color: var(--bt-text);
 }
 
 /* Quick add */
@@ -1537,10 +1490,9 @@
 
 /* Drag previews */
 .bitable-kanban__card-drag-preview {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--bt-shadow-popover);
   border-radius: var(--bt-radius);
-  transform: rotate(2deg);
-  opacity: 0.9;
+  opacity: 0.95;
 }
 
 .bitable-kanban__column-drag-preview {
@@ -1597,7 +1549,7 @@
   position: absolute;
   inset: -2px;
   border: 2px dashed var(--bt-accent);
-  border-radius: var(--bt-radius-lg);
+  border-radius: var(--bt-radius);
   pointer-events: none;
   z-index: 1;
 }
@@ -1605,16 +1557,16 @@
 /* Card */
 .bitable-gallery__card {
   background: var(--bt-surface);
-  border-radius: var(--bt-radius-lg);
+  border-radius: var(--bt-radius);
   overflow: hidden;
   cursor: pointer;
   transition: box-shadow 0.15s, border-color 0.15s;
   position: relative;
   border: 1px solid var(--bt-border);
+  box-shadow: var(--bt-shadow-card);
 }
 
 .bitable-gallery__card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   border-color: var(--bt-border-strong);
 }
 
@@ -1624,6 +1576,7 @@
   aspect-ratio: 4 / 3;
   background: var(--bt-surface-alt);
   overflow: hidden;
+  border-bottom: 1px solid var(--bt-border);
 }
 
 .bitable-gallery__card-cover {
@@ -1666,7 +1619,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--bt-border-strong);
+  color: var(--bt-faint);
 }
 
 /* Card body */
@@ -1675,7 +1628,7 @@
 }
 
 .bitable-gallery__card-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   margin-bottom: 8px;
   color: var(--bt-text);
@@ -1722,7 +1675,8 @@
   border-radius: var(--bt-radius-sm);
   opacity: 0;
   transition: opacity 0.15s;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--bt-surface);
+  box-shadow: var(--bt-shadow-card);
   border: none;
   color: var(--bt-muted);
   cursor: pointer;
@@ -1758,18 +1712,18 @@
   gap: 4px;
   margin-top: 12px;
   padding: 6px 12px;
-  border: 1px dashed var(--bt-border-strong);
+  border: none;
   background: transparent;
   color: var(--bt-muted);
   cursor: pointer;
   border-radius: var(--bt-radius-sm);
   font-size: 13px;
-  transition: border-color 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
 .bitable-gallery__empty-add:hover {
-  border-color: var(--bt-accent);
-  color: var(--bt-accent);
+  background: var(--bt-hover);
+  color: var(--bt-text);
 }
 
 /* Group sections */
@@ -1801,27 +1755,6 @@
 /* ---------------------------------------------------------------------------
  * Record Detail Drawer (Notion-style side drawer)
  * ------------------------------------------------------------------------- */
-.bitable-drawer__overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.3);
-  z-index: 50;
-}
-
-.bitable-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: var(--bt-drawer-w);
-  max-width: 90vw;
-  background: var(--bt-surface);
-  z-index: 51;
-  display: flex;
-  flex-direction: column;
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
-}
-
 .bitable-drawer__header {
   padding: 16px 24px 12px;
   border-bottom: 1px solid var(--bt-border);
@@ -1837,9 +1770,9 @@
 }
 
 .bitable-drawer__title {
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1.4;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
   color: var(--bt-text);
   outline: none;
   cursor: text;
@@ -1896,7 +1829,7 @@
   gap: 6px;
   padding-top: 2px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 400;
   color: var(--bt-muted);
 }
 
@@ -1965,7 +1898,8 @@
   gap: 4px;
   padding: 2px 8px;
   border-radius: var(--bt-radius-sm);
-  background: var(--bt-surface-alt);
+  background: transparent;
+  border: 1px solid var(--bt-border);
   font-size: 12px;
   color: var(--bt-text);
   cursor: pointer;
@@ -2001,17 +1935,6 @@
   background: var(--bt-hover);
 }
 
-.bitable-chip--add {
-  color: var(--bt-muted);
-  border: 1px dashed var(--bt-border-strong);
-  background: transparent;
-}
-
-.bitable-chip--add:hover {
-  color: var(--bt-text);
-  border-color: var(--bt-accent);
-}
-
 /* ---------------------------------------------------------------------------
  * Field Config Panel
  * ------------------------------------------------------------------------- */
@@ -2031,8 +1954,8 @@
   gap: 8px;
   padding: 8px 12px;
   border-radius: var(--bt-radius-sm);
-  border: 1px solid var(--bt-border);
-  background: var(--bt-surface);
+  border: 1px solid transparent;
+  background: transparent;
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
@@ -2042,7 +1965,8 @@
 
 .bitable-field-config__item--dragging {
   opacity: 0.5;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background: var(--bt-surface);
+  box-shadow: var(--bt-shadow-popover);
 }
 
 .bitable-field-config__item--locked {
@@ -2164,32 +2088,6 @@
   margin: 0 4px;
 }
 
-.bitable-field-config__color-trigger {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-width: 2px;
-  border-radius: var(--bt-radius-sm);
-}
-
-.bitable-field-config__color-swatch {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--bt-radius-sm);
-  border: 2px solid var(--bt-border);
-  cursor: pointer;
-  transition: transform 0.1s;
-}
-
-.bitable-field-config__color-swatch:hover {
-  transform: scale(1.1);
-}
-
-.bitable-field-config__color-swatch--active {
-  border-color: var(--bt-text);
-  box-shadow: 0 0 0 2px var(--bt-surface), 0 0 0 4px var(--bt-text);
-}
-
 .bitable-field-config__type-selector {
   display: flex;
   flex-direction: column;
@@ -2204,7 +2102,6 @@
   height: 32px;
   border-radius: var(--bt-radius-sm);
   background: var(--bt-hover);
-  border: 1px solid var(--bt-border);
 }
 
 .bitable-field-config__type-search-icon {
@@ -2275,8 +2172,8 @@
 }
 
 .bitable-field-config__type-item--selected {
-  background: var(--bt-accent-bg);
-  border-color: var(--bt-accent);
+  background: var(--bt-selected);
+  border-color: transparent;
 }
 
 .bitable-field-config__type-item--selected:hover {
@@ -2318,11 +2215,11 @@
 .bitable-context-menu {
   position: fixed;
   z-index: 60;
-  min-width: 160px;
+  min-width: 180px;
   background: var(--bt-surface);
-  border: 1px solid var(--bt-border);
+  border: none;
   border-radius: var(--bt-radius);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--bt-shadow-popover);
   padding: 4px;
 }
 
@@ -2330,7 +2227,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
+  padding: 4px 8px;
   border-radius: var(--bt-radius-sm);
   font-size: 13px;
   color: var(--bt-text);
@@ -2353,40 +2250,1320 @@
 }
 
 /* ---------------------------------------------------------------------------
- * Bottom Stats
+ * Calendar View
  * ------------------------------------------------------------------------- */
-.bitable-stats {
+.bitable-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--bt-border);
   padding: 12px 16px;
+  gap: 12px;
+}
+.bitable-cal-header__nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.bitable-cal-header__date-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bitable-cal-header__date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bitable-cal-header__date-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--bt-text);
+}
+
+.bitable-cal-header__count {
+  font-size: 11px;
+}
+
+.bitable-cal-header__date-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bitable-cal-header__range {
+  font-size: 12px;
+  color: var(--bt-muted);
+}
+
+.bitable-cal-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bitable-cal-view-switcher {
+  display: inline-flex;
+}
+
+.bitable-cal-view-switcher__btn {
+  border-radius: 0;
+  margin-left: -1px;
+}
+
+.bitable-cal-view-switcher__btn:first-child {
+  border-radius: var(--bt-radius) 0 0 var(--bt-radius);
+  margin-left: 0;
+}
+
+.bitable-cal-view-switcher__btn:last-child {
+  border-radius: 0 var(--bt-radius) var(--bt-radius) 0;
+}
+
+.bitable-cal-today-btn {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--bt-radius);
+  border: 1px solid var(--bt-border);
+  cursor: pointer;
+  width: 48px;
+  height: 48px;
+}
+
+.bitable-cal-today-btn__month {
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  background: var(--bt-accent);
+  color: #fff;
+  line-height: 20px;
+}
+
+.bitable-cal-today-btn__day {
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--bt-text);
+}
+
+.bitable-cal-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bitable-cal-settings__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.bitable-cal-settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Event colors */
+.bitable-cal-event--blue { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+.bitable-cal-event--green { border-color: #bbf7d0; background: #f0fdf4; color: #15803d; }
+.bitable-cal-event--red { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
+.bitable-cal-event--yellow { border-color: #fde68a; background: #fffbeb; color: #b45309; }
+.bitable-cal-event--purple { border-color: #ddd6fe; background: #f5f3ff; color: #6d28d9; }
+.bitable-cal-event--orange { border-color: #fed7aa; background: #fff7ed; color: #c2410c; }
+.bitable-cal-event--gray { border-color: var(--bt-border); background: var(--bt-surface-alt); color: var(--bt-text); }
+.bitable-cal-event--dragging { opacity: 0.4; }
+
+/* Event colors (dark) — translucent variants of the category hues */
+.bitable--dark .bitable-cal-event--blue { border-color: rgba(35, 131, 226, 0.32); background: rgba(35, 131, 226, 0.16); color: #7ab8f5; }
+.bitable--dark .bitable-cal-event--green { border-color: rgba(34, 197, 94, 0.32); background: rgba(34, 197, 94, 0.16); color: #6fd39f; }
+.bitable--dark .bitable-cal-event--red { border-color: rgba(235, 87, 87, 0.32); background: rgba(235, 87, 87, 0.16); color: #f29a94; }
+.bitable--dark .bitable-cal-event--yellow { border-color: rgba(234, 179, 8, 0.3); background: rgba(234, 179, 8, 0.14); color: #eacc6b; }
+.bitable--dark .bitable-cal-event--purple { border-color: rgba(139, 92, 246, 0.32); background: rgba(139, 92, 246, 0.16); color: #bda8f7; }
+.bitable--dark .bitable-cal-event--orange { border-color: rgba(249, 115, 22, 0.32); background: rgba(249, 115, 22, 0.16); color: #f5ab70; }
+
+/* Dot colors */
+.bitable-cal-dot--blue, .bitable-cal-bullet.bitable-cal-dot--blue { background: #3b82f6; }
+.bitable-cal-dot--green, .bitable-cal-bullet.bitable-cal-dot--green { background: #22c55e; }
+.bitable-cal-dot--red, .bitable-cal-bullet.bitable-cal-dot--red { background: #ef4444; }
+.bitable-cal-dot--yellow, .bitable-cal-bullet.bitable-cal-dot--yellow { background: #eab308; }
+.bitable-cal-dot--purple, .bitable-cal-bullet.bitable-cal-dot--purple { background: #8b5cf6; }
+.bitable-cal-dot--orange, .bitable-cal-bullet.bitable-cal-dot--orange { background: #f97316; }
+.bitable-cal-dot--gray, .bitable-cal-bullet.bitable-cal-dot--gray { background: #6b7280; }
+
+/* Month view */
+.bitable-cal-month { }
+
+.bitable-cal-month__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.bitable-cal-month__weekday {
+  text-align: center;
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--bt-muted);
+}
+
+.bitable-cal-month__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.bitable-cal-day-cell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100px;
+  border-top: 1px solid var(--bt-border);
+  border-left: 1px solid var(--bt-border);
+  padding: 4px;
+}
+
+.bitable-cal-day-cell--other {
+  opacity: 0.4;
+}
+
+.bitable-cal-day-cell--sunday {
+  border-left: none;
+}
+
+.bitable-cal-day-cell__num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bt-text);
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.bitable-cal-day-cell__num--today {
+  background: var(--bt-accent);
+  color: #fff;
+}
+
+.bitable-cal-day-cell__events {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.bitable-cal-day-cell__slot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+}
+
+.bitable-cal-day-cell__more {
+  font-size: 11px;
+  color: var(--bt-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  text-align: left;
+}
+
+.bitable-cal-bullet {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.bitable-cal-cell--drop {
+  background: var(--bt-hover);
+}
+
+/* Event badge (month + multi-day rows) */
+.bitable-cal-event {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.bitable-cal-event--first { margin-right: -4px; border-radius: 4px 0 0 4px; border-right: none; }
+.bitable-cal-event--middle { margin: 0 -4px; border-radius: 0; border-left: none; border-right: none; }
+.bitable-cal-event--last { margin-left: -4px; border-radius: 0 4px 4px 0; border-left: none; }
+
+.bitable-cal-event__title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bitable-cal-event__time {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.bitable-cal-event__day-info {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* Week view */
+.bitable-cal-week {
+  display: flex;
+  flex-direction: column;
+}
+
+.bitable-cal-week__header {
+  display: flex;
+  border-bottom: 1px solid var(--bt-border);
+}
+
+.bitable-cal-week__time-col, .bitable-cal-day__time-col {
+  width: 72px;
+  flex-shrink: 0;
+}
+
+.bitable-cal-week__days-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  flex: 1;
+}
+
+.bitable-cal-week__day-header {
+  text-align: center;
+  padding: 8px 0;
+  font-size: 12px;
+  color: var(--bt-muted);
+  border-left: 1px solid var(--bt-border);
+}
+
+.bitable-cal-week__day-num {
+  font-weight: 600;
+  color: var(--bt-text);
+  margin-left: 4px;
+}
+
+.bitable-cal-week__body, .bitable-cal-day__body {
+  display: flex;
+}
+
+.bitable-cal-week__hour, .bitable-cal-day__hour {
+  position: relative;
+}
+
+.bitable-cal-week__hour-label, .bitable-cal-day__hour-label {
+  position: absolute;
+  top: -8px;
+  right: 8px;
+  font-size: 11px;
+  color: var(--bt-muted);
+}
+
+.bitable-cal-week__grid, .bitable-cal-day__grid {
+  position: relative;
+  flex: 1;
+  border-left: 1px solid var(--bt-border);
+  display: grid;
+}
+
+.bitable-cal-week__grid {
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.bitable-cal-week__day-col {
+  position: relative;
+  border-left: 1px solid var(--bt-border);
+}
+
+.bitable-cal-week__hour-cell, .bitable-cal-day__hour-cell {
+  position: relative;
+  border-bottom: 1px solid var(--bt-border);
+}
+
+.bitable-cal-week__hour-line, .bitable-cal-day__hour-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid var(--bt-border);
+}
+
+.bitable-cal-week__slot, .bitable-cal-day__slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 24px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.bitable-cal-week__slot:hover, .bitable-cal-day__slot:hover {
+  background: var(--bt-hover);
+}
+
+.bitable-cal-week__event-wrapper, .bitable-cal-day__event-wrapper {
+  position: absolute;
+  padding: 2px;
+}
+
+.bitable-cal-week-multiday {
+  display: flex;
+  border-bottom: 1px solid var(--bt-border);
+}
+
+.bitable-cal-week-multiday__spacer {
+  width: 72px;
+  flex-shrink: 0;
+}
+
+.bitable-cal-week-multiday__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  flex: 1;
+  border-left: 1px solid var(--bt-border);
+}
+
+.bitable-cal-week-multiday__col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border-left: 1px solid var(--bt-border);
+}
+
+.bitable-cal-week-multiday__empty {
+  height: 24px;
+}
+
+/* Time event block */
+.bitable-cal-time-event {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid;
+  font-size: 12px;
+  cursor: pointer;
+  overflow: hidden;
+  user-select: none;
+}
+
+.bitable-cal-time-event__title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bitable-cal-time-event__time {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+/* Timeline (current time indicator) */
+.bitable-cal-timeline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  border-top: 1px solid var(--bt-accent);
+  pointer-events: none;
+}
+
+.bitable-cal-timeline__dot {
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bt-accent);
+}
+
+.bitable-cal-timeline__label {
+  position: absolute;
+  left: 4px;
+  top: -8px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--bt-accent);
+  background: var(--bt-surface);
+  padding: 0 4px;
+}
+
+/* Day view */
+.bitable-cal-day {
+  display: flex;
+  flex-direction: column;
+}
+
+.bitable-cal-day__header {
+  display: flex;
+  border-bottom: 1px solid var(--bt-border);
+}
+
+.bitable-cal-day__header-label {
+  flex: 1;
+  text-align: center;
+  padding: 8px 0;
+  font-size: 12px;
+  color: var(--bt-muted);
+  border-left: 1px solid var(--bt-border);
+}
+
+.bitable-cal-day__header-num {
+  font-weight: 600;
+  color: var(--bt-text);
+  margin-left: 4px;
+}
+
+.bitable-cal-day__grid {
+  grid-template-columns: 1fr;
+}
+
+.bitable-cal-day-multiday {
+  display: flex;
+  border-bottom: 1px solid var(--bt-border);
+}
+
+.bitable-cal-day-multiday__spacer {
+  width: 72px;
+  flex-shrink: 0;
+}
+
+.bitable-cal-day-multiday__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border-left: 1px solid var(--bt-border);
+  flex: 1;
+}
+
+/* Time slot drop target */
+.bitable-cal-time-slot--drop {
+  background: var(--bt-hover);
+}
+
+/* Agenda view */
+.bitable-cal-agenda { }
+
+.bitable-cal-agenda__list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 16px;
+}
+
+.bitable-cal-agenda-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bitable-cal-agenda-group__header {
+  position: sticky;
+  top: 0;
+  background: var(--bt-surface);
+  padding: 8px 0;
+  z-index: 1;
+}
+
+.bitable-cal-agenda-group__date {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--bt-text);
+}
+
+.bitable-cal-agenda-group__events {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bitable-cal-agenda-card {
+  display: flex;
+  border-radius: var(--bt-radius);
+  border: 1px solid;
+  padding: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.bitable-cal-agenda-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bitable-cal-agenda-card__title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.bitable-cal-agenda-card__day-info {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.bitable-cal-agenda-card__time {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.bitable-cal-agenda__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 80px 0;
+  color: var(--bt-muted);
+}
+
+.bitable-cal-agenda__empty-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.bitable-cal-agenda__empty-text {
+  font-size: 14px;
+}
+
+/* Year view */
+.bitable-cal-year {
+  height: 100%;
+  overflow: auto;
+}
+
+.bitable-cal-year__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  padding: 16px;
+}
+
+.bitable-cal-year-month {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--bt-border);
+  border-radius: var(--bt-radius);
+  overflow: hidden;
+}
+
+.bitable-cal-year-month__name {
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--bt-border);
+  cursor: pointer;
+  color: var(--bt-text);
+}
+
+.bitable-cal-year-month__name:hover {
+  background: var(--bt-hover);
+}
+
+.bitable-cal-year-month__body {
+  padding: 8px;
+}
+
+.bitable-cal-year-month__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+}
+
+.bitable-cal-year-month__weekday {
+  font-size: 10px;
+  color: var(--bt-muted);
+}
+
+.bitable-cal-year-month__days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.bitable-cal-year-month__blank {
+  height: 40px;
+}
+
+.bitable-cal-year-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 44px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.bitable-cal-year-day:hover {
+  background: var(--bt-hover);
+}
+
+.bitable-cal-year-day__num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--bt-text);
+  border-radius: 50%;
+}
+
+.bitable-cal-year-day__num--today {
+  background: var(--bt-accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.bitable-cal-year-day__dots {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.bitable-cal-year-day__more {
+  font-size: 7px;
+  color: var(--bt-muted);
+}
+
+.bitable-cal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Empty state */
+.bitable-cal-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 32px;
+  gap: 8px;
+  color: var(--bt-muted);
+}
+
+.bitable-cal-empty__title {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.bitable-cal-empty__desc {
+  font-size: 14px;
+}
+
+.bitable-cal-empty__config {
+  width: 100%;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* Scroll area */
+.bitable-cal-scroll {
+  width: 100%;
+}
+
+/* ==========================================================================
+ * Timeline (Gantt) View
+ * ========================================================================== */
+
+.bitable-tl {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: 100%;
+}
+
+/* Header */
+.bitable-tl-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--bt-border);
+}
+
+.bitable-tl-header__nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bitable-tl-header__btn {
+  height: var(--bt-trigger-size);
+  width: auto;
+  min-width: var(--bt-trigger-size);
+  padding: 0 4px;
+}
+
+.bitable-tl-header__date {
+  font-size: 14px;
+  font-weight: 500;
+  margin-left: 8px;
+  color: var(--bt-text);
+}
+
+.bitable-tl-header__count {
+  margin-left: 4px;
+}
+
+.bitable-tl-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Scale switcher */
+.bitable-tl-scale-switcher {
+  display: flex;
+  gap: 1px;
+  border-radius: var(--bt-radius);
+  overflow: hidden;
+}
+
+.bitable-tl-scale-switcher__btn {
+  height: var(--bt-trigger-size);
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+/* Settings popover */
+.bitable-tl-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px;
+}
+
+.bitable-tl-settings__title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.bitable-tl-settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Body (sidebar + axis) */
+.bitable-tl-body {
+  display: flex;
+  border: 1px solid var(--bt-border);
+  border-top: none;
+  border-radius: 0 0 var(--bt-radius) var(--bt-radius);
+  overflow: hidden;
+  background: var(--bt-bg);
+  position: relative;
+}
+
+/* Sidebar (task list) */
+.bitable-tl-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--bt-border);
+  background: transparent;
+}
+
+.bitable-tl-sidebar__header {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bt-muted);
+  border-bottom: 1px solid var(--bt-border);
+  background: var(--bt-bg-header);
+}
+
+.bitable-tl-sidebar__body {
+  overflow-y: auto;
+  max-height: 600px;
+}
+
+.bitable-tl-sidebar__group {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--bt-border);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.bitable-tl-sidebar__group:hover {
+  background: var(--bt-hover);
+}
+
+.bitable-tl-sidebar__group-count {
+  color: var(--bt-muted);
+  font-size: 12px;
+}
+
+.bitable-tl-sidebar__row {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--bt-border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.bitable-tl-sidebar__row:hover {
+  background: var(--bt-hover);
+}
+
+.bitable-tl-sidebar__task-name {
+  font-size: 13px;
+  color: var(--bt-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Axis (time grid) */
+.bitable-tl-axis {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.bitable-tl-axis__header {
+  height: 40px;
+  display: flex;
+  border-bottom: 1px solid var(--bt-border);
+  background: var(--bt-bg-header);
+}
+
+.bitable-tl-axis__header-cell {
+  border-right: 1px solid var(--bt-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--bt-muted);
+  flex-shrink: 0;
+}
+
+.bitable-tl-axis__body {
+  position: relative;
+  min-height: 400px;
+}
+
+/* Grid background */
+.bitable-tl-grid {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  pointer-events: none;
+}
+
+.bitable-tl-grid__cell {
+  border-right: 1px solid var(--bt-border);
+  flex-shrink: 0;
+}
+
+.bitable-tl-grid--snap {
+  z-index: 1;
+}
+
+.bitable-tl-grid__cell--snap {
+  border-right: 1px dashed rgba(35, 131, 226, 0.25);
+}
+
+/* Today marker */
+.bitable-tl-today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--bt-accent);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.bitable-tl-today::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bt-accent);
+}
+
+/* Dependency lines */
+.bitable-tl-deps {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Rows */
+.bitable-tl-rows {
+  position: relative;
+}
+
+.bitable-tl-row {
+  height: 48px;
+  border-bottom: 1px solid var(--bt-border);
+  position: relative;
+  padding: 4px 0;
+}
+
+.bitable-tl-row--group-header {
+  height: 36px;
+  border-bottom: 1px solid var(--bt-border);
+}
+
+.bitable-tl-row__bar-wrapper {
+  position: relative;
+}
+
+.bitable-tl-row__bar-wrapper:hover .bitable-tl-tooltip {
+  opacity: 1;
+}
+
+/* Task bar */
+.bitable-tl-bar {
+  position: absolute;
+  top: 8px;
+  height: 32px;
+  border-radius: 4px;
+  box-shadow: var(--bt-shadow-card);
+  cursor: default;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  overflow: hidden;
+  opacity: 0.85;
+  transition: opacity 0.15s, box-shadow 0.15s;
+}
+
+.bitable-tl-bar--editable {
+  cursor: grab;
+}
+
+.bitable-tl-bar--editable:active {
+  cursor: grabbing;
+}
+
+.bitable-tl-bar--dragging {
+  opacity: 0.9;
+  box-shadow: var(--bt-shadow-popover);
+  z-index: 30;
+}
+
+.bitable-tl-bar--critical {
+  box-shadow: 0 0 0 2px rgba(235, 87, 87, 0.5);
+}
+
+.bitable-tl-bar:hover {
+  opacity: 1;
+}
+
+.bitable-tl-bar__handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  transition: background 0.15s;
+}
+
+.bitable-tl-bar__handle:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.bitable-tl-bar__handle--left {
+  left: 0;
+  border-radius: 4px 0 0 4px;
+}
+
+.bitable-tl-bar__handle--right {
+  right: 0;
+  border-radius: 0 4px 4px 0;
+}
+
+.bitable-tl-bar__progress {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.bitable-tl-bar__title {
+  font-size: 12px;
+  color: #fff;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Milestone */
+.bitable-tl-milestone {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
+}
+
+.bitable-tl-milestone:hover {
+  opacity: 1;
+}
+
+.bitable-tl-milestone--critical {
+  box-shadow: 0 0 0 2px rgba(235, 87, 87, 0.5);
+}
+
+.bitable-tl-milestone__icon {
+  transform: rotate(-45deg);
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+/* Tooltip */
+.bitable-tl-tooltip {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  padding: 8px 12px;
+  background: var(--bt-surface);
+  border: none;
+  border-radius: var(--bt-radius);
+  box-shadow: var(--bt-shadow-popover);
+  z-index: 20;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.bitable-tl-tooltip__title {
+  font-weight: 600;
+  color: var(--bt-text);
+  margin-bottom: 4px;
+}
+
+.bitable-tl-tooltip__date {
+  color: var(--bt-muted);
+}
+
+.bitable-tl-tooltip__progress {
+  color: var(--bt-muted);
+}
+
+/* Footer */
+.bitable-tl-footer {
+  padding: 8px 12px;
   font-size: 12px;
   color: var(--bt-muted);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid var(--bt-border);
 }
 
-/* ---------------------------------------------------------------------------
+/* Empty state */
+.bitable-tl-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 32px;
+  gap: 8px;
+  color: var(--bt-muted);
+}
+
+.bitable-tl-empty__title {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.bitable-tl-empty__desc {
+  font-size: 14px;
+}
+
+.bitable-tl-empty__config {
+  width: 100%;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* ==========================================================================
+ * Chart View
+ * ========================================================================== */
+
+.bitable-chart {
+  position: relative;
+  padding: 16px;
+}
+
+.bitable-chart--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--bt-surface);
+  padding: 16px;
+}
+
+.bitable-chart__card {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.bitable-chart__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 8px;
+}
+
+.bitable-chart__title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--bt-text);
+}
+
+.bitable-chart__type-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--bt-muted);
+}
+
+.bitable-chart__desc {
+  font-size: 13px;
+  color: var(--bt-muted);
+  margin-top: 4px;
+}
+
+.bitable-chart__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bitable-chart__stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 8px;
+}
+
+.bitable-chart__stat {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bt-hover);
+  color: var(--bt-muted);
+}
+
+.bitable-chart__body {
+  padding: 0;
+}
+
+/* Empty/error state */
+.bitable-chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 256px;
+  gap: 8px;
+  color: var(--bt-muted);
+}
+
+.bitable-chart-empty__icon {
+  width: 48px;
+  height: 48px;
+  color: var(--bt-faint);
+}
+
+.bitable-chart-empty__text {
+  font-size: 14px;
+}
+
+/* ==========================================================================
  * Form View
- * ------------------------------------------------------------------------- */
+ * ========================================================================== */
+
 .bitable-form {
   height: 100%;
   overflow: auto;
-  background: var(--bt-surface-alt);
   padding: 24px 12px;
+  background: var(--bt-surface-alt);
 }
 
 .bitable-form__card {
   max-width: 576px;
   margin: 0 auto;
-  border-radius: var(--bt-radius-lg);
+  border-radius: var(--bt-radius);
   border: 1px solid var(--bt-border);
   background: var(--bt-surface);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--bt-shadow-card);
 }
 
 .bitable-form__header {
-  padding: 16px 20px;
   border-bottom: 1px solid var(--bt-border);
+  padding: 16px 20px;
 }
 
 .bitable-form__title {
@@ -2395,13 +3572,13 @@
   color: var(--bt-text);
 }
 
-.bitable-form__description {
-  margin-top: 4px;
+.bitable-form__desc {
   font-size: 14px;
   color: var(--bt-muted);
+  margin-top: 4px;
 }
 
-.bitable-form__fields {
+.bitable-form__body {
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -2420,412 +3597,51 @@
   color: var(--bt-text);
 }
 
+.bitable-form__field-desc {
+  font-size: 12px;
+  color: var(--bt-muted);
+}
+
 .bitable-form__footer {
   display: flex;
   align-items: center;
   gap: 12px;
+  border-top: 1px solid var(--bt-border);
   padding: 16px 20px;
-  border-top: 1px solid var(--bt-border);
 }
 
-/* ---------------------------------------------------------------------------
- * Chart View
- * ------------------------------------------------------------------------- */
-.bitable-chart {
-  padding: 16px;
-}
-
-.bitable-chart__config {
-  border-top: 1px solid var(--bt-border);
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.bitable-chart__type-row {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.bitable-chart__type-btn {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--bt-radius-sm);
-  border: 1px solid var(--bt-border);
-  background: var(--bt-surface);
-  cursor: pointer;
-  color: var(--bt-muted);
-  transition: all 0.15s;
-}
-
-.bitable-chart__type-btn:hover {
-  border-color: var(--bt-accent);
-  color: var(--bt-text);
-}
-
-.bitable-chart__type-btn--active {
-  border-color: var(--bt-accent);
-  background: var(--bt-accent-bg);
-  color: var(--bt-accent);
-}
-
-/* ---------------------------------------------------------------------------
- * Scrollbar (hidden for tab strips)
- * ------------------------------------------------------------------------- */
-.bitable-scrollbar-none {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.bitable-scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
-
-/* ---------------------------------------------------------------------------
- * Utilities
- * ------------------------------------------------------------------------- */
-.bitable-empty-state {
-  text-align: center;
-  padding: 32px 16px;
-  color: var(--bt-muted);
-  font-size: 14px;
-}
-
-.bitable-drop-indicator-line {
-  height: 2px;
+.bitable-form__submit {
   background: var(--bt-accent);
-  border-radius: 1px;
-  margin: 1px 0;
+  color: #fff;
+  border: none;
+  border-radius: var(--bt-radius);
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
 }
 
-/* ---------------------------------------------------------------------------
- * Calendar View
- * ------------------------------------------------------------------------- */
-.bitable-cal-header {
+.bitable-form__submit:hover {
+  opacity: 0.9;
+}
+
+.bitable-form__success {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--bt-border);
-  padding: 12px 16px;
-  gap: 12px;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--bt-success);
 }
-.bitable-cal-header__nav {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+
+.bitable-form__success-icon {
+  width: 14px;
+  height: 14px;
 }
-.bitable-cal-header__date-nav { display: flex; flex-direction: column; gap: 2px; }
-.bitable-cal-header__date-row { display: flex; align-items: center; gap: 8px; }
-.bitable-cal-header__date-label { font-size: 16px; font-weight: 600; color: var(--bt-text); }
-.bitable-cal-header__count { font-size: 11px; }
-.bitable-cal-header__date-controls { display: flex; align-items: center; gap: 8px; }
-.bitable-cal-header__range { font-size: 12px; color: var(--bt-muted); }
-.bitable-cal-header__actions { display: flex; align-items: center; gap: 8px; }
-.bitable-cal-view-switcher { display: inline-flex; }
-.bitable-cal-view-switcher__btn { border-radius: 0; margin-left: -1px; }
-.bitable-cal-view-switcher__btn:first-child { border-radius: var(--bt-radius) 0 0 var(--bt-radius); margin-left: 0; }
-.bitable-cal-view-switcher__btn:last-child { border-radius: 0 var(--bt-radius) var(--bt-radius) 0; }
-.bitable-cal-today-btn {
-  display: flex; flex-direction: column; overflow: hidden; border-radius: var(--bt-radius);
-  border: 1px solid var(--bt-border); cursor: pointer; width: 48px; height: 48px;
+
+.bitable-form__empty {
+  font-size: 14px;
+  color: var(--bt-muted);
+  padding: 20px;
+  text-align: center;
 }
-.bitable-cal-today-btn__month { font-size: 9px; font-weight: 700; text-align: center; background: var(--bt-accent); color: #fff; line-height: 20px; }
-.bitable-cal-today-btn__day { font-size: 18px; font-weight: 700; text-align: center; color: var(--bt-text); }
-.bitable-cal-settings { display: flex; flex-direction: column; gap: 12px; }
-.bitable-cal-settings__title { font-size: 14px; font-weight: 600; }
-.bitable-cal-settings__field { display: flex; flex-direction: column; gap: 4px; }
-
-/* Event colors */
-.bitable-cal-event--blue { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
-.bitable-cal-event--green { border-color: #bbf7d0; background: #f0fdf4; color: #15803d; }
-.bitable-cal-event--red { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
-.bitable-cal-event--yellow { border-color: #fde68a; background: #fffbeb; color: #b45309; }
-.bitable-cal-event--purple { border-color: #ddd6fe; background: #f5f3ff; color: #6d28d9; }
-.bitable-cal-event--orange { border-color: #fed7aa; background: #fff7ed; color: #c2410c; }
-.bitable-cal-event--gray { border-color: var(--bt-border); background: var(--bt-surface-alt); color: var(--bt-text); }
-.bitable-cal-event--dragging { opacity: 0.4; }
-
-/* Dot colors */
-.bitable-cal-dot--blue, .bitable-cal-bullet.bitable-cal-dot--blue { background: #3b82f6; }
-.bitable-cal-dot--green, .bitable-cal-bullet.bitable-cal-dot--green { background: #22c55e; }
-.bitable-cal-dot--red, .bitable-cal-bullet.bitable-cal-dot--red { background: #ef4444; }
-.bitable-cal-dot--yellow, .bitable-cal-bullet.bitable-cal-dot--yellow { background: #eab308; }
-.bitable-cal-dot--purple, .bitable-cal-bullet.bitable-cal-dot--purple { background: #8b5cf6; }
-.bitable-cal-dot--orange, .bitable-cal-bullet.bitable-cal-dot--orange { background: #f97316; }
-.bitable-cal-dot--gray, .bitable-cal-bullet.bitable-cal-dot--gray { background: #6b7280; }
-
-/* Month view */
-.bitable-cal-month { }
-.bitable-cal-month__weekdays { display: grid; grid-template-columns: repeat(7, 1fr); }
-.bitable-cal-month__weekday { text-align: center; padding: 8px 0; font-size: 12px; font-weight: 500; color: var(--bt-muted); }
-.bitable-cal-month__grid { display: grid; grid-template-columns: repeat(7, 1fr); }
-.bitable-cal-day-cell { display: flex; flex-direction: column; min-height: 100px; border-top: 1px solid var(--bt-border); border-left: 1px solid var(--bt-border); padding: 4px; }
-.bitable-cal-day-cell--other { opacity: 0.4; }
-.bitable-cal-day-cell--sunday { border-left: none; }
-.bitable-cal-day-cell__num { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; font-size: 12px; font-weight: 600; color: var(--bt-text); cursor: pointer; border-radius: 50%; }
-.bitable-cal-day-cell__num--today { background: var(--bt-accent); color: #fff; }
-.bitable-cal-day-cell__events { display: flex; flex-direction: column; gap: 2px; flex: 1; }
-.bitable-cal-day-cell__slot { display: flex; align-items: center; gap: 4px; min-height: 20px; }
-.bitable-cal-day-cell__more { font-size: 11px; color: var(--bt-muted); background: none; border: none; cursor: pointer; padding: 2px 4px; text-align: left; }
-.bitable-cal-bullet { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.bitable-cal-cell--drop { background: var(--bt-hover); }
-
-/* Event badge (month + multi-day rows) */
-.bitable-cal-event {
-  display: flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 12px; border-radius: 4px; border: 1px solid; cursor: pointer; overflow: hidden; white-space: nowrap; user-select: none;
-}
-.bitable-cal-event--first { margin-right: -4px; border-radius: 4px 0 0 4px; border-right: none; }
-.bitable-cal-event--middle { margin: 0 -4px; border-radius: 0; border-left: none; border-right: none; }
-.bitable-cal-event--last { margin-left: -4px; border-radius: 0 4px 4px 0; border-left: none; }
-.bitable-cal-event__title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-.bitable-cal-event__time { font-size: 11px; opacity: 0.8; }
-.bitable-cal-event__day-info { font-size: 10px; opacity: 0.7; }
-
-/* Week view */
-.bitable-cal-week { display: flex; flex-direction: column; }
-.bitable-cal-week__header { display: flex; border-bottom: 1px solid var(--bt-border); }
-.bitable-cal-week__time-col, .bitable-cal-day__time-col { width: 72px; flex-shrink: 0; }
-.bitable-cal-week__days-header { display: grid; grid-template-columns: repeat(7, 1fr); flex: 1; }
-.bitable-cal-week__day-header { text-align: center; padding: 8px 0; font-size: 12px; color: var(--bt-muted); border-left: 1px solid var(--bt-border); }
-.bitable-cal-week__day-num { font-weight: 600; color: var(--bt-text); margin-left: 4px; }
-.bitable-cal-week__body, .bitable-cal-day__body { display: flex; }
-.bitable-cal-week__hour, .bitable-cal-day__hour { position: relative; }
-.bitable-cal-week__hour-label, .bitable-cal-day__hour-label { position: absolute; top: -8px; right: 8px; font-size: 11px; color: var(--bt-muted); }
-.bitable-cal-week__grid, .bitable-cal-day__grid { position: relative; flex: 1; border-left: 1px solid var(--bt-border); display: grid; }
-.bitable-cal-week__grid { grid-template-columns: repeat(7, 1fr); }
-.bitable-cal-week__day-col { position: relative; border-left: 1px solid var(--bt-border); }
-.bitable-cal-week__hour-cell, .bitable-cal-day__hour-cell { position: relative; border-bottom: 1px solid var(--bt-border); }
-.bitable-cal-week__hour-line, .bitable-cal-day__hour-line { position: absolute; top: 0; left: 0; right: 0; border-bottom: 1px solid var(--bt-border); }
-.bitable-cal-week__slot, .bitable-cal-day__slot { position: absolute; left: 0; right: 0; height: 24px; cursor: pointer; transition: background 0.1s; }
-.bitable-cal-week__slot:hover, .bitable-cal-day__slot:hover { background: var(--bt-hover); }
-.bitable-cal-week__event-wrapper, .bitable-cal-day__event-wrapper { position: absolute; padding: 2px; }
-.bitable-cal-week-multiday { display: flex; border-bottom: 1px solid var(--bt-border); }
-.bitable-cal-week-multiday__spacer { width: 72px; flex-shrink: 0; }
-.bitable-cal-week-multiday__grid { display: grid; grid-template-columns: repeat(7, 1fr); flex: 1; border-left: 1px solid var(--bt-border); }
-.bitable-cal-week-multiday__col { display: flex; flex-direction: column; gap: 4px; padding: 4px; border-left: 1px solid var(--bt-border); }
-.bitable-cal-week-multiday__empty { height: 24px; }
-
-/* Time event block */
-.bitable-cal-time-event {
-  display: flex; flex-direction: column; gap: 2px; padding: 4px 8px; border-radius: 4px; border: 1px solid; font-size: 12px; cursor: pointer; overflow: hidden; user-select: none;
-}
-.bitable-cal-time-event__title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bitable-cal-time-event__time { font-size: 11px; opacity: 0.8; }
-
-/* Timeline (current time indicator) */
-.bitable-cal-timeline { position: absolute; left: 0; right: 0; z-index: 50; border-top: 1px solid var(--bt-accent); pointer-events: none; }
-.bitable-cal-timeline__dot { position: absolute; left: -5px; top: -5px; width: 10px; height: 10px; border-radius: 50%; background: var(--bt-accent); }
-.bitable-cal-timeline__label { position: absolute; left: 4px; top: -8px; font-size: 10px; font-weight: 500; color: var(--bt-accent); background: var(--bt-surface); padding: 0 4px; }
-
-/* Day view */
-.bitable-cal-day { display: flex; flex-direction: column; }
-.bitable-cal-day__header { display: flex; border-bottom: 1px solid var(--bt-border); }
-.bitable-cal-day__header-label { flex: 1; text-align: center; padding: 8px 0; font-size: 12px; color: var(--bt-muted); border-left: 1px solid var(--bt-border); }
-.bitable-cal-day__header-num { font-weight: 600; color: var(--bt-text); margin-left: 4px; }
-.bitable-cal-day__grid { grid-template-columns: 1fr; }
-.bitable-cal-day-multiday { display: flex; border-bottom: 1px solid var(--bt-border); }
-.bitable-cal-day-multiday__spacer { width: 72px; flex-shrink: 0; }
-.bitable-cal-day-multiday__list { display: flex; flex-direction: column; gap: 4px; padding: 4px; border-left: 1px solid var(--bt-border); flex: 1; }
-
-/* Time slot drop target */
-.bitable-cal-time-slot--drop { background: var(--bt-hover); }
-
-/* Agenda view */
-.bitable-cal-agenda { }
-.bitable-cal-agenda__list { display: flex; flex-direction: column; gap: 24px; padding: 16px; }
-.bitable-cal-agenda-group { display: flex; flex-direction: column; gap: 8px; }
-.bitable-cal-agenda-group__header { position: sticky; top: 0; background: var(--bt-surface); padding: 8px 0; z-index: 1; }
-.bitable-cal-agenda-group__date { font-size: 14px; font-weight: 600; color: var(--bt-text); }
-.bitable-cal-agenda-group__events { display: flex; flex-direction: column; gap: 8px; }
-.bitable-cal-agenda-card { display: flex; border-radius: var(--bt-radius); border: 1px solid; padding: 12px; cursor: pointer; user-select: none; }
-.bitable-cal-agenda-card__body { display: flex; flex-direction: column; gap: 4px; }
-.bitable-cal-agenda-card__title { font-size: 14px; font-weight: 500; }
-.bitable-cal-agenda-card__day-info { font-size: 11px; opacity: 0.7; }
-.bitable-cal-agenda-card__time { font-size: 12px; opacity: 0.8; }
-.bitable-cal-agenda__empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 80px 0; color: var(--bt-muted); }
-.bitable-cal-agenda__empty-icon { width: 40px; height: 40px; }
-.bitable-cal-agenda__empty-text { font-size: 14px; }
-
-/* Year view */
-.bitable-cal-year { height: 100%; overflow: auto; }
-.bitable-cal-year__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 16px; }
-.bitable-cal-year-month { display: flex; flex-direction: column; border: 1px solid var(--bt-border); border-radius: var(--bt-radius); overflow: hidden; }
-.bitable-cal-year-month__name { width: 100%; text-align: left; padding: 8px 12px; font-size: 14px; font-weight: 600; background: none; border: none; border-bottom: 1px solid var(--bt-border); cursor: pointer; color: var(--bt-text); }
-.bitable-cal-year-month__name:hover { background: var(--bt-hover); }
-.bitable-cal-year-month__body { padding: 8px; }
-.bitable-cal-year-month__weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; }
-.bitable-cal-year-month__weekday { font-size: 10px; color: var(--bt-muted); }
-.bitable-cal-year-month__days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
-.bitable-cal-year-month__blank { height: 40px; }
-.bitable-cal-year-day { display: flex; flex-direction: column; align-items: center; height: 44px; border: none; background: none; cursor: pointer; padding: 2px; border-radius: 4px; }
-.bitable-cal-year-day:hover { background: var(--bt-hover); }
-.bitable-cal-year-day__num { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; font-size: 12px; font-weight: 500; color: var(--bt-text); border-radius: 50%; }
-.bitable-cal-year-day__num--today { background: var(--bt-accent); color: #fff; font-weight: 700; }
-.bitable-cal-year-day__dots { display: flex; gap: 2px; margin-top: 2px; }
-.bitable-cal-year-day__more { font-size: 7px; color: var(--bt-muted); }
-.bitable-cal-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-
-/* Empty state */
-.bitable-cal-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 32px; gap: 8px; color: var(--bt-muted); }
-.bitable-cal-empty__title { font-size: 16px; font-weight: 500; }
-.bitable-cal-empty__desc { font-size: 14px; }
-.bitable-cal-empty__config { width: 100%; max-width: 300px; display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
-
-/* Scroll area */
-.bitable-cal-scroll { width: 100%; }
-
-/* ==========================================================================
- * Timeline (Gantt) View
- * ========================================================================== */
-
-.bitable-tl { display: flex; flex-direction: column; gap: 0; height: 100%; }
-
-/* Header */
-.bitable-tl-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--bt-border); }
-.bitable-tl-header__nav { display: flex; align-items: center; gap: 4px; }
-.bitable-tl-header__btn { height: var(--bt-trigger-size); width: auto; min-width: var(--bt-trigger-size); padding: 0 4px; }
-.bitable-tl-header__date { font-size: 14px; font-weight: 500; margin-left: 8px; color: var(--bt-text); }
-.bitable-tl-header__count { margin-left: 4px; }
-.bitable-tl-header__actions { display: flex; align-items: center; gap: 4px; }
-
-/* Scale switcher */
-.bitable-tl-scale-switcher { display: flex; gap: 1px; border-radius: var(--bt-radius); overflow: hidden; }
-.bitable-tl-scale-switcher__btn { height: var(--bt-trigger-size); font-size: 12px; padding: 0 8px; }
-
-/* Settings popover */
-.bitable-tl-settings { display: flex; flex-direction: column; gap: 12px; padding: 4px; }
-.bitable-tl-settings__title { font-size: 14px; font-weight: 600; margin: 0; }
-.bitable-tl-settings__field { display: flex; flex-direction: column; gap: 4px; }
-
-/* Body (sidebar + axis) */
-.bitable-tl-body { display: flex; border: 1px solid var(--bt-border); border-top: none; border-radius: 0 0 var(--bt-radius) var(--bt-radius); overflow: hidden; background: var(--bt-bg); position: relative; }
-
-/* Sidebar (task list) */
-.bitable-tl-sidebar { width: 240px; flex-shrink: 0; border-right: 1px solid var(--bt-border); background: var(--bt-hover); }
-.bitable-tl-sidebar__header { height: 40px; display: flex; align-items: center; padding: 0 12px; font-size: 12px; font-weight: 600; color: var(--bt-muted); border-bottom: 1px solid var(--bt-border); background: var(--bt-hover); }
-.bitable-tl-sidebar__body { overflow-y: auto; max-height: 600px; }
-.bitable-tl-sidebar__group { height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 12px; cursor: pointer; border-bottom: 1px solid var(--bt-border); font-size: 13px; font-weight: 500; }
-.bitable-tl-sidebar__group:hover { background: var(--bt-hover); }
-.bitable-tl-sidebar__group-count { color: var(--bt-muted); font-size: 12px; }
-.bitable-tl-sidebar__row { height: 48px; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--bt-border); cursor: pointer; transition: background 0.15s; }
-.bitable-tl-sidebar__row:hover { background: var(--bt-hover); }
-.bitable-tl-sidebar__task-name { font-size: 13px; color: var(--bt-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* Axis (time grid) */
-.bitable-tl-axis { flex: 1; overflow-x: auto; overflow-y: hidden; }
-.bitable-tl-axis__header { height: 40px; display: flex; border-bottom: 1px solid var(--bt-border); background: var(--bt-hover); }
-.bitable-tl-axis__header-cell { border-right: 1px solid var(--bt-border); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; color: var(--bt-muted); flex-shrink: 0; }
-.bitable-tl-axis__body { position: relative; min-height: 400px; }
-
-/* Grid background */
-.bitable-tl-grid { position: absolute; inset: 0; display: flex; pointer-events: none; }
-.bitable-tl-grid__cell { border-right: 1px solid var(--bt-border); flex-shrink: 0; }
-.bitable-tl-grid--snap { z-index: 1; }
-.bitable-tl-grid__cell--snap { border-right: 1px dashed rgba(59, 130, 246, 0.2); }
-
-/* Today marker */
-.bitable-tl-today { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--bt-accent); z-index: 10; pointer-events: none; }
-.bitable-tl-today::before { content: ''; position: absolute; top: -2px; left: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--bt-accent); }
-
-/* Dependency lines */
-.bitable-tl-deps { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
-
-/* Rows */
-.bitable-tl-rows { position: relative; }
-.bitable-tl-row { height: 48px; border-bottom: 1px solid var(--bt-border); position: relative; padding: 4px 0; }
-.bitable-tl-row--group-header { height: 36px; border-bottom: 1px solid var(--bt-border); }
-.bitable-tl-row__bar-wrapper { position: relative; }
-.bitable-tl-row__bar-wrapper:hover .bitable-tl-tooltip { opacity: 1; }
-
-/* Task bar */
-.bitable-tl-bar { position: absolute; top: 8px; height: 32px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); cursor: default; display: flex; align-items: center; padding: 0 8px; overflow: hidden; opacity: 0.85; transition: opacity 0.15s, box-shadow 0.15s; }
-.bitable-tl-bar--editable { cursor: grab; }
-.bitable-tl-bar--editable:active { cursor: grabbing; }
-.bitable-tl-bar--dragging { opacity: 0.9; box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 30; }
-.bitable-tl-bar--critical { box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.5); }
-.bitable-tl-bar:hover { opacity: 1; }
-.bitable-tl-bar__handle { position: absolute; top: 0; bottom: 0; width: 6px; cursor: ew-resize; transition: background 0.15s; }
-.bitable-tl-bar__handle:hover { background: rgba(255,255,255,0.3); }
-.bitable-tl-bar__handle--left { left: 0; border-radius: 4px 0 0 4px; }
-.bitable-tl-bar__handle--right { right: 0; border-radius: 0 4px 4px 0; }
-.bitable-tl-bar__progress { position: absolute; inset: 0; background: rgba(0,0,0,0.2); border-radius: 4px; pointer-events: none; }
-.bitable-tl-bar__title { font-size: 12px; color: #fff; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; z-index: 1; pointer-events: none; }
-
-/* Milestone */
-.bitable-tl-milestone { position: absolute; top: 50%; transform: translateY(-50%) rotate(45deg); width: 24px; height: 24px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0.85; }
-.bitable-tl-milestone:hover { opacity: 1; }
-.bitable-tl-milestone--critical { box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.5); }
-.bitable-tl-milestone__icon { transform: rotate(-45deg); color: #fff; font-size: 10px; font-weight: bold; }
-
-/* Tooltip */
-.bitable-tl-tooltip { position: absolute; top: 100%; left: 0; margin-top: 4px; padding: 8px 12px; background: var(--bt-popover-bg, #fff); border: 1px solid var(--bt-border); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 20; opacity: 0; transition: opacity 0.15s; pointer-events: none; white-space: nowrap; font-size: 12px; }
-.bitable-tl-tooltip__title { font-weight: 600; color: var(--bt-text); margin-bottom: 4px; }
-.bitable-tl-tooltip__date { color: var(--bt-muted); }
-.bitable-tl-tooltip__progress { color: var(--bt-muted); }
-
-/* Footer */
-.bitable-tl-footer { padding: 8px 12px; font-size: 12px; color: var(--bt-muted); display: flex; align-items: center; justify-content: space-between; }
-
-/* Empty state */
-.bitable-tl-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 32px; gap: 8px; color: var(--bt-muted); }
-.bitable-tl-empty__title { font-size: 16px; font-weight: 500; }
-.bitable-tl-empty__desc { font-size: 14px; }
-.bitable-tl-empty__config { width: 100%; max-width: 300px; display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
-
-/* ==========================================================================
- * Chart View
- * ========================================================================== */
-
-.bitable-chart { position: relative; }
-.bitable-chart--fullscreen { position: fixed; inset: 0; z-index: 50; background: var(--bt-bg, #fff); padding: 16px; }
-.bitable-chart__card { border: none; box-shadow: none; background: transparent; }
-.bitable-chart__header { display: flex; align-items: center; justify-content: space-between; padding: 0 0 8px; }
-.bitable-chart__title { font-size: 18px; font-weight: 600; color: var(--bt-text); }
-.bitable-chart__type-label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--bt-muted); }
-.bitable-chart__desc { font-size: 13px; color: var(--bt-muted); margin-top: 4px; }
-.bitable-chart__actions { display: flex; align-items: center; gap: 8px; }
-.bitable-chart__stats { display: flex; align-items: center; gap: 8px; margin-right: 8px; }
-.bitable-chart__stat { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: var(--bt-hover); color: var(--bt-muted); }
-.bitable-chart__body { padding: 0; }
-
-/* Chart type icon grid */
-.bitable-chart-types { display: flex; gap: 2px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--bt-border); }
-.bitable-chart-types__btn { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--bt-radius); border: 1px solid var(--bt-border); background: transparent; cursor: pointer; transition: all 0.15s; color: var(--bt-muted); }
-.bitable-chart-types__btn:hover { background: var(--bt-hover); }
-.bitable-chart-types__btn--active { background: var(--bt-accent); color: #fff; border-color: var(--bt-accent); }
-
-/* Chart config (inline below chart) */
-.bitable-chart-config { border-top: 1px solid var(--bt-border); padding: 12px 0; margin-top: 8px; }
-.bitable-chart-config__row { display: flex; gap: 12px; flex-wrap: wrap; }
-.bitable-chart-config__field { display: flex; flex-direction: column; gap: 4px; min-width: 160px; }
-
-/* Empty/error state */
-.bitable-chart-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 256px; gap: 8px; color: var(--bt-muted); }
-.bitable-chart-empty__icon { width: 48px; height: 48px; opacity: 0.2; }
-.bitable-chart-empty__text { font-size: 14px; }
-
-/* ==========================================================================
- * Form View
- * ========================================================================== */
-
-.bitable-form { height: 100%; overflow: auto; padding: 24px 12px; background: var(--bt-hover); }
-.bitable-form__card { max-width: 576px; margin: 0 auto; border-radius: var(--bt-radius); border: 1px solid var(--bt-border); background: var(--bt-bg, #fff); box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-.bitable-form__header { border-bottom: 1px solid var(--bt-border); padding: 16px 20px; }
-.bitable-form__title { font-size: 18px; font-weight: 600; color: var(--bt-text); }
-.bitable-form__desc { font-size: 14px; color: var(--bt-muted); margin-top: 4px; }
-.bitable-form__body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
-.bitable-form__field { display: flex; flex-direction: column; gap: 6px; }
-.bitable-form__field-label { font-size: 14px; font-weight: 500; color: var(--bt-text); }
-.bitable-form__field-label--required::after { content: ' *'; color: #ef4444; }
-.bitable-form__field-desc { font-size: 12px; color: var(--bt-muted); }
-.bitable-form__footer { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--bt-border); padding: 16px 20px; }
-.bitable-form__submit { background: var(--bt-accent); color: #fff; border: none; border-radius: var(--bt-radius); padding: 8px 20px; font-size: 14px; font-weight: 500; cursor: pointer; transition: opacity 0.15s; }
-.bitable-form__submit:hover { opacity: 0.9; }
-.bitable-form__success { display: flex; align-items: center; gap: 4px; font-size: 14px; color: #16a34a; }
-.bitable-form__success-icon { width: 14px; height: 14px; }
-.bitable-form__empty { font-size: 14px; color: var(--bt-muted); padding: 20px; text-align: center; }

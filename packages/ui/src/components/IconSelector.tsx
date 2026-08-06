@@ -7,6 +7,7 @@ import { CompactEmoji, fetchEmojis } from "emojibase";
 import { ScrollArea } from "./ui/scroll-area";
 import { Input } from "./ui/input";
 import { EmojiPicker, EmojiPickerContent, EmojiPickerSearch } from "./ui/emoji-picker";
+import { FlatEmoji } from "./ui/flat-emoji";
 import type { DateIconConfig } from "./ui/date-icon";
 
 export type IconType = 'IMAGE' | 'EMOJI' | 'DATE'
@@ -68,9 +69,7 @@ export const IconSelector = forwardRef<HTMLDivElement, IconSelectorProps>((props
     const praseIcon = () => {
         if (icon) {
             if (icon.type === 'EMOJI') {
-                return <div className="text-[80px]">
-                    {icon.icon}
-                </div>
+                return <FlatEmoji emoji={icon.icon} size={80} />
             } else {
                 return <img src={icon.icon} width="80px" height="80px"></img>
             }
