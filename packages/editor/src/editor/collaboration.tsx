@@ -15,6 +15,7 @@ import { NotionToC } from "./NotionToC";
 import { cn, useIsMobile, useTheme } from "@kn/ui";
 import { EditorMenu } from "./EditorMenu";
 import { MobileEditorToolbar } from "./MobileEditorToolbar";
+import { EditorStatusBar } from "./EditorStatusBar";
 import { PageHeader } from "./PageHeader";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
@@ -346,6 +347,8 @@ const CollaborationEditorInner = forwardRef<
               )}
             </StyledEditor>
           </div>
+          {/* Bottom status bar: character / word / block counts */}
+          {contentReady && <EditorStatusBar editor={editor} />}
           {/* ToC - Notion-style floating outline on the right edge */}
           {toc && contentReady && (
             <NotionToC editor={editor} items={items} />

@@ -8,8 +8,13 @@ import { Node as PMNode } from '@tiptap/pm/model';
 export const selectionPluginKey = new PluginKey('selection');
 
 /**
- * Get all top-level block nodes within the current selection
- * Excludes text nodes and paragraph nodes for cleaner selection handling
+ * Get all top-level block nodes within the current selection.
+ *
+ * Block nodes (including paragraphs) receive the `.selected-node` decoration so
+ * that the entire block is visually highlighted via the custom Notion-like
+ * overlay, replacing the native browser `::selection` (which is hidden in
+ * `editor.css` / `editor.ts`).
+ *
  * @param selection - The current editor selection
  * @param doc - The ProseMirror document
  * @returns Array of nodes with their positions
@@ -25,8 +30,8 @@ export const getTopLevelNodesFromSelection = (selection: Selection, doc: PMNode)
             // Check if the node is completely within the selection
             const withinSelection = from <= pos && pos + node.nodeSize <= to;
 
-            // Only include block nodes that aren't paragraphs or text
-            if (node && node.type.name !== 'paragraph' && !node.isText && withinSelection) {
+            // Include all block-level nodes (text nodes are skipped via !node.isText)
+            if (node && !node.isText && withinSelection) {
                 nodes.push({ node, pos });
                 // Don't traverse into this node's children
                 return false;

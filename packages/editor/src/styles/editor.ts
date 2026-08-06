@@ -44,6 +44,18 @@ export const StyledEditor = styled.div.attrs({
     font-variant-ligatures: none;
   }
 
+  /*
+   * Only hide the native browser text-selection on blocks that carry the
+   * custom .selected-node decoration (i.e. blocks fully within the
+   * selection). Partial text selection inside a paragraph is NOT a
+   * .selected-node, so the native ::selection stays visible — avoiding
+   * the “no highlight” bug.
+   */
+  .selected-node::selection,
+  .selected-node *::selection {
+    background: transparent;
+  }
+
   .ProseMirror-hideselection *::selection {
     background: transparent;
   }

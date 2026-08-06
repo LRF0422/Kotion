@@ -82,11 +82,16 @@
     color: #f3f4f6 !important;
 }
 
-/* Selection styling when highlight text is selected */
-.highlight::selection {
+/*
+ * Selection styling when highlight text is selected.
+ * Scoped under `.ProseMirror` to raise specificity above the global
+ * `.ProseMirror ::selection { background: transparent; }` rule so that
+ * highlighted text still shows a visible selection color.
+ */
+.ProseMirror .highlight::selection {
     background-color: rgba(59, 130, 246, 0.3);
 }
 
-.dark .highlight::selection {
+.dark .ProseMirror .highlight::selection {
     background-color: rgba(96, 165, 250, 0.3);
 }

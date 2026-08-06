@@ -57,9 +57,13 @@ export const TabBar: React.FC<TabBarProps> = ({
         let count = 0
 
         for (const tab of tabs) {
-            // Use live measurement if available, fall back to cached width
+            // Use live measurement if available, fall back to cached width.
+            // offsetWidth gives the actual layout box (content + padding +
+            // border), matching the real flex footprint.  scrollWidth would
+            // report the full untruncated text, which is larger than the
+            // capped max-w-[180px] and causes tabs to be hidden prematurely.
             const el = tabRefs.current.get(tab.pageId)
-            const tabWidth = el ? el.scrollWidth : (tabWidths.current.get(tab.pageId) ?? 140)
+            const tabWidth = el ? el.offsetWidth : (tabWidths.current.get(tab.pageId) ?? 140)
             // Cache width for future use when element is unmounted
             if (el) tabWidths.current.set(tab.pageId, tabWidth)
             const needed = totalWidth + tabWidth + (count < tabs.length - 1 ? overflowBtnWidth : 0)
@@ -68,8 +72,10 @@ export const TabBar: React.FC<TabBarProps> = ({
             count++
         }
 
-        // If all tabs fit without the overflow button, show all
-        if (count === tabs.length || totalWidth <= containerWidth) {
+        // If the loop completed without breaking, every tab fit (with
+        // overflow reserve for non-last tabs) — show all, no dropdown.
+        // Otherwise show only the tabs that fit + the overflow button.
+        if (count === tabs.length) {
             setVisibleCount(tabs.length)
         } else {
             setVisibleCount(count)
@@ -192,7 +198,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                     <DropdownMenuTrigger asChild>
                         <button
                             className="flex h-full w-9 flex-shrink-0 items-center justify-center border-l bg-muted/30 text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
-                            title={t("pageEditor.tabBar.moreTabs") || `${overflowTabs.length} more tabs`}
+                            title={t("pageEditor.tabBar.moreTabs", "{{count}} more tabs", { count: overflowTabs.length })}
                         >
                             <ChevronDown className="h-4 w-4" />
                         </button>

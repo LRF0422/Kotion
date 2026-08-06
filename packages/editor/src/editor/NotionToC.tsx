@@ -8,8 +8,6 @@ import scrollIntoView from 'scroll-into-view-if-needed'
 import { ToC, highlightMatch, type TocItem } from './ToC'
 
 /**
- * Notion-style floating outline.
- *
  * Renders a column of thin tick marks anchored to the right edge of the
  * viewport — one per heading, length scaled by heading level so deeper
  * headings read as indented. The active section's tick is highlighted.

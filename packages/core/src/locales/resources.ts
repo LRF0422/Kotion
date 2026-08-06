@@ -501,6 +501,11 @@ export const resources = {
                 "presentationHint": "← → 翻页 · Esc 退出",
                 "presentationPrev": "上一页",
                 "presentationNext": "下一页",
+                "statusBar": {
+                    "characters": "字符数",
+                    "words": "词数",
+                    "blocks": "块数"
+                },
                 "meta": {
                     "created": "创建于",
                     "updated": "更新于",
@@ -1277,6 +1282,11 @@ export const resources = {
                 "presentationHint": "← → to navigate · Esc to exit",
                 "presentationPrev": "Previous slide",
                 "presentationNext": "Next slide",
+                "statusBar": {
+                    "characters": "Characters",
+                    "words": "Words",
+                    "blocks": "Blocks"
+                },
                 "meta": {
                     "created": "Created",
                     "updated": "Updated",

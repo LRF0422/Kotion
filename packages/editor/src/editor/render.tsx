@@ -17,6 +17,7 @@ import light, { dark } from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
 import { cn, useTheme } from "@kn/ui";
 import { NotionToC } from "./NotionToC";
+import { EditorStatusBar } from "./EditorStatusBar";
 import { PageHeader } from "./PageHeader";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
@@ -209,6 +210,8 @@ export const EditorRender = forwardRef<
               )}
             </StyledEditor>
           </div>
+          {/* Bottom status bar: character / word / block counts */}
+          {contentReady && <EditorStatusBar editor={editor} />}
           {/* Render bubble menus (e.g., comment read-only popup) */}
           {editor && extensionWrappers?.map((wrapper, idx) => {
             if (!wrapper.bubbleMenu) return null;

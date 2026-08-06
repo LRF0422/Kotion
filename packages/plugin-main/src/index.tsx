@@ -459,7 +459,8 @@ export const DefaultPluginInstance = new DefaultPlugin({
             "closeOthers": "关闭其他",
             "closeRight": "关闭右侧标签",
             "closeAll": "关闭全部",
-            "untitled": "无标题"
+            "untitled": "无标题",
+            "moreTabs": "还有 {{count}} 个标签"
           }
         },
         "graph": {
@@ -1023,7 +1024,8 @@ export const DefaultPluginInstance = new DefaultPlugin({
             "closeOthers": "Close Others",
             "closeRight": "Close Tabs to the Right",
             "closeAll": "Close All",
-            "untitled": "Untitled"
+            "untitled": "Untitled",
+            "moreTabs": "{{count}} more tabs"
           }
         },
         "graph": {
