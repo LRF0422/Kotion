@@ -235,6 +235,9 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     // Hide the bottom tab bar while the soft keyboard is open so it doesn't
     // collide with the editor's keyboard-docked toolbar.
     const { isOpen: keyboardOpen } = useVirtualKeyboard()
+    // Frameless-window drag regions only work in the Electron shell (their CSS
+    // lives in the desktop app); in the browser they'd be invisible click blockers.
+    const isDesktopShell = typeof window !== 'undefined' && typeof (window as any).api !== 'undefined'
 
     return (
         <SystemAgentProvider>
@@ -270,17 +273,16 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
                     <div className={cn(
                         "grid min-h-screen w-full transition-all",
-                        isMobile ? "grid-cols-1" : "grid-cols-[70px_1fr]",
+                        isMobile ? "grid-cols-1" : "grid-cols-[48px_1fr]",
                         !pluginsLoaded && "opacity-0"
                     )} >
-                        {/* Desktop Sidebar */}
+                        {/* Desktop Sidebar: SiYuan-style compact icon rail */}
                         {!isMobile && (
-                            <div className="border-r">
-                                <div className="flex h-full max-h-screen flex-col gap-3 items-center pt-4 electron-sidebar-padding">
-                                    {/* Draggable area for window movement */}
-                                    <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region" />
-                                    <SparklesText className="text-[30px]" sparklesCount={5} text="KN" />
-                                    <div className="flex-1 px-2">
+                            <div className="border-r bg-muted/40">
+                                <div className="flex h-full max-h-screen flex-col items-center pt-3 electron-sidebar-padding">
+                                    {/* Draggable area for window movement (Electron only) */}
+                                    {isDesktopShell && <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region" />}
+                                    <div className="flex-1 w-full px-1">
                                         <SiderMenu />
                                     </div>
                                 </div>
@@ -292,8 +294,8 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                             "flex flex-col w-full relative",
                             isMobile ? "h-[100dvh]" : "h-screen"
                         )}>
-                            {/* Draggable region at the top of main content area */}
-                            {!isMobile && <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region" />}
+                            {/* Draggable region at the top of main content area (Electron only) */}
+                            {!isMobile && isDesktopShell && <div className="absolute top-0 left-0 right-0 h-10 titlebar-drag-region" />}
                             {/* Mobile top app bar */}
                             {isMobile && <MobileAppBar />}
 

@@ -60,11 +60,12 @@ const MenuItem = memo<MenuItemProps>(({ item, isActive, onClick, isMobile }) => 
                     onClick={onClick}
                     data-tour={item.key}
                     className={cn(
-                        "rounded-md flex items-center justify-center p-2 cursor-pointer",
-                        "hover:bg-muted transition-all duration-200 ease-in-out",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        "h-9 w-9 rounded-lg flex items-center justify-center cursor-pointer",
+                        "text-muted-foreground transition-all duration-200 ease-in-out",
+                        "hover:bg-background hover:text-foreground hover:shadow-sm",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         "active:scale-95",
-                        isActive && "bg-muted shadow-sm",
+                        isActive && "bg-background text-foreground shadow-sm border border-border/60",
                         item.className
                     )}
                     aria-label={typeof item.name === 'string' ? item.name : item.key}
@@ -249,14 +250,14 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                 <nav
                     data-tour="sidebar-nav"
                     className={cn(
-                        "flex flex-col pt-2 pb-5 h-full",
+                        "flex flex-col pt-1 pb-4 h-full",
                         isMobile ? "items-stretch px-2" : "items-center"
                     )}
                     aria-label="Main navigation"
                 >
                     {/* Main menu items */}
                     <div className={cn(
-                        "flex flex-col gap-2",
+                        "flex flex-col gap-1.5",
                         isMobile ? "items-stretch" : "items-center"
                     )}>
                         {menus.map((item, index) => {
@@ -276,10 +277,10 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                     {/* Spacer to push bottom items down */}
                     <div className="flex-1" />
 
-                    {/* Bottom section: controls + user avatar */}
-                    <div className="flex flex-col items-center gap-3">
+                    {/* Bottom section: controls + user avatar (compact to fit the narrow rail) */}
+                    <div className="flex flex-col items-center gap-2">
                         <div className={cn(
-                            "flex gap-2",
+                            "flex gap-1.5 [&_button]:h-8 [&_button]:w-8",
                             isMobile ? "flex-row justify-center" : "flex-col items-center"
                         )}>
                             <ModeToggle />
