@@ -5,6 +5,7 @@ import { FileItem, useFileManagerState } from "./FileContext";
 import { FileThumb } from "./FileThumb";
 import { FileActionsMenu } from "./ActionMenu";
 import { getFileActions } from "./fileActions";
+import { formatFileSize } from "../../utils/fileUtils";
 
 export const FileCard: React.FC<FileItem> = React.memo((props) => {
     const ctx = useFileManagerState();
@@ -49,58 +50,78 @@ export const FileCard: React.FC<FileItem> = React.memo((props) => {
             onDoubleClick={handleDoubleClick}
             onContextMenu={() => { if (!checked) selectItem(props, {}, sortedItems); }}
             className={cn(
-                "group relative flex flex-col items-center rounded-xl border p-3 cursor-pointer select-none",
+                "group relative flex cursor-pointer select-none flex-col rounded-lg p-1.5",
                 "transition-colors duration-150",
-                checked
-                    ? "border-primary bg-primary/5 ring-1 ring-primary"
-                    : "border-transparent hover:border-border hover:bg-muted/50",
+                checked ? "bg-primary/5" : "hover:bg-muted/60",
                 loading && "opacity-50 pointer-events-none",
             )}
         >
-            {/* 复选框 —— 触屏/已选常驻,桌面 hover 显示 */}
+            {/* 预览磁贴 */}
             <div
                 className={cn(
-                    "absolute left-2 top-2 z-10 transition-opacity",
-                    checked || isTouch ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                    "relative h-24 w-full overflow-hidden rounded-md",
+                    checked && "ring-2 ring-inset ring-primary/30",
                 )}
-                onClick={(e) => e.stopPropagation()}
             >
-                <Checkbox checked={checked} onCheckedChange={handleCheck} disabled={loading} />
-            </div>
+                <FileThumb file={props} size={40} fill />
 
-            {/* 右上角操作区 */}
-            <div className="absolute right-1.5 top-1.5 z-10 flex items-center gap-0.5">
-                {!isTrash && (
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className={cn(
-                            "h-7 w-7 transition-opacity",
-                            isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                        )}
-                        onClick={handleFavorite}
-                        title={isFavorite ? ctx.t('actions.removeFromFavorites') : ctx.t('actions.addToFavorites')}
-                    >
-                        <StarIcon className={cn("h-4 w-4", isFavorite && "fill-yellow-400 text-yellow-400")} />
-                    </Button>
+                {/* 复选框 —— 触屏/已选常驻,桌面 hover 显示 */}
+                <div
+                    className={cn(
+                        "absolute left-1.5 top-1.5 z-10 transition-opacity",
+                        checked || isTouch ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                    )}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <Checkbox
+                        checked={checked}
+                        onCheckedChange={handleCheck}
+                        disabled={loading}
+                        className="shadow-sm"
+                    />
+                </div>
+
+                {/* 右上角悬浮操作 */}
+                <div className="absolute right-1.5 top-1.5 z-10 flex items-center gap-0.5">
+                    {!isTrash && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                                "h-6 w-6 rounded-md bg-background/80 shadow-sm hover:bg-background transition-opacity",
+                                isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                            )}
+                            onClick={handleFavorite}
+                            title={isFavorite ? ctx.t('actions.removeFromFavorites') : ctx.t('actions.addToFavorites')}
+                        >
+                            <StarIcon className={cn("h-3.5 w-3.5", isFavorite && "fill-yellow-400 text-yellow-400")} />
+                        </Button>
+                    )}
+                    <FileActionsMenu
+                        actions={getFileActions([props], ctx)}
+                        triggerClassName="h-6 w-6 rounded-md bg-background/80 shadow-sm hover:bg-background opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+                    />
+                </div>
+
+                {/* 收藏角标(常驻) */}
+                {isFavorite && !isTrash && (
+                    <div className="absolute bottom-1.5 right-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-background/90 shadow-sm">
+                        <StarIcon className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                    </div>
                 )}
-                <FileActionsMenu
-                    actions={getFileActions([props], ctx)}
-                    triggerClassName="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
-                />
             </div>
 
-            {/* 缩略图 */}
-            <div className="flex h-20 w-full items-center justify-center py-2">
-                <FileThumb file={props} size={64} />
-            </div>
-
-            {/* 文件名 */}
-            <div
-                className="mt-1 line-clamp-2 w-full break-words text-center text-xs leading-snug text-foreground/90"
-                title={name}
-            >
-                {name}
+            {/* 文件名 + 元信息 */}
+            <div className="px-0.5 pt-1.5 text-center">
+                <div
+                    className="line-clamp-2 w-full break-words text-xs leading-snug text-foreground/90"
+                    title={name}
+                >
+                    {name}
+                </div>
+                <div className="mt-0.5 h-4 text-[11px] leading-4 text-muted-foreground">
+                    {props.isFolder ? ctx.t('details.folder') : formatFileSize(props.size || 0)}
+                </div>
             </div>
         </div>
     );
@@ -111,7 +132,7 @@ export const FileCardList: React.FC = React.memo(() => {
 
     return (
         <div className="h-full w-full overflow-auto">
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-2 p-4">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 p-3">
                 {sortedItems.map((it) => (
                     <FileCard key={it.id} {...it} />
                 ))}

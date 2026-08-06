@@ -347,16 +347,22 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             <Input
                                 defaultValue={view === 'search' ? searchKeyword : ''}
                                 onChange={(e) => handleSearchInput(e.target.value)}
-                                className="h-8 w-[150px] pl-8 lg:w-[200px]"
+                                className="h-8 w-[160px] rounded-md border-transparent bg-muted/60 pl-8 shadow-none transition-colors hover:bg-muted focus-visible:border-input focus-visible:bg-background lg:w-[220px]"
                                 placeholder={t('toolbar.searchPlaceholder')}
                             />
                         </div>
 
-                        <div className="flex items-center overflow-hidden rounded-md border">
+                        {/* Notion 风格分段切换 */}
+                        <div className="flex items-center gap-0.5 rounded-md bg-muted/60 p-0.5">
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className={cn("h-8 w-8 rounded-none", viewMode === 'grid' && "bg-accent text-accent-foreground")}
+                                className={cn(
+                                    "h-7 w-7 rounded",
+                                    viewMode === 'grid'
+                                        ? "bg-background text-foreground shadow-sm hover:bg-background"
+                                        : "text-muted-foreground hover:text-foreground",
+                                )}
                                 onClick={() => setViewMode('grid')}
                                 title={t('toolbar.gridView')}
                             >
@@ -365,7 +371,12 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className={cn("h-8 w-8 rounded-none", viewMode === 'list' && "bg-accent text-accent-foreground")}
+                                className={cn(
+                                    "h-7 w-7 rounded",
+                                    viewMode === 'list'
+                                        ? "bg-background text-foreground shadow-sm hover:bg-background"
+                                        : "text-muted-foreground hover:text-foreground",
+                                )}
                                 onClick={() => setViewMode('list')}
                                 title={t('toolbar.listView')}
                             >
@@ -375,7 +386,8 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
 
                         {isTrash ? (
                             <Button
-                                size="sm" variant="outline" className="h-8 gap-1.5"
+                                size="sm" variant="ghost"
+                                className="h-8 gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
                                 onClick={() => askConfirm({
                                     title: t('confirm.emptyTrashTitle'),
                                     description: t('confirm.emptyTrashDescription'),
@@ -384,13 +396,14 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                                 })}
                                 disabled={loading || currentFolderItems.length === 0}
                             >
-                                <Trash2 className="h-4 w-4 text-destructive" />
+                                <Trash2 className="h-4 w-4" />
                                 <span className="hidden md:inline">{t('toolbar.emptyTrash')}</span>
                             </Button>
                         ) : (
                             <>
                                 <Button
-                                    size="sm" variant="outline" className="h-8 gap-1.5"
+                                    size="sm" variant="ghost"
+                                    className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
                                     onClick={() => handleCreateFile('FILE')}
                                     disabled={loading}
                                 >
@@ -432,9 +445,11 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                         onDrop={handleDrop}
                     >
                         {isDragging && canUpload && (
-                            <div className="absolute inset-0 z-40 m-2 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 pointer-events-none">
-                                <div className="flex flex-col items-center gap-2 text-primary">
-                                    <UploadIcon className="h-8 w-8" />
+                            <div className="pointer-events-none absolute inset-0 z-40 m-2 flex items-center justify-center rounded-xl border-2 border-dashed border-primary/50 bg-primary/5">
+                                <div className="flex flex-col items-center gap-3 text-primary">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                                        <UploadIcon className="h-6 w-6" />
+                                    </div>
                                     <span className="text-sm font-medium">{t('toolbar.dropFiles')}</span>
                                 </div>
                             </div>
@@ -443,16 +458,22 @@ export const FileManagerView: React.FC<FileManagerProps> = (props) => {
                         <div className="min-h-0 flex-1 overflow-auto">
                             {loading ? (
                                 viewMode === 'grid' ? (
-                                    <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-2 p-4">
-                                        {[...Array(10)].map((_, i) => <Skeleton key={i} className="h-[132px] rounded-xl" />)}
+                                    <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 p-3">
+                                        {[...Array(10)].map((_, i) => (
+                                            <div key={i} className="flex flex-col rounded-lg p-1.5">
+                                                <Skeleton className="h-24 w-full rounded-md" />
+                                                <Skeleton className="mx-auto mt-2 h-3 w-3/4" />
+                                                <Skeleton className="mx-auto mt-1 h-3 w-1/3" />
+                                            </div>
+                                        ))}
                                     </div>
                                 ) : (
-                                    <div className="flex flex-col">
+                                    <div className="flex flex-col gap-0.5 p-1.5">
                                         {[...Array(10)].map((_, i) => (
-                                            <div key={i} className="flex h-11 items-center gap-3 border-b px-3">
-                                                <Skeleton className="h-5 w-5 rounded" />
+                                            <div key={i} className="flex h-10 items-center gap-2.5 rounded-md px-2">
+                                                <Skeleton className="h-6 w-6 rounded-md" />
                                                 <Skeleton className="h-4 max-w-[240px] flex-1" />
-                                                <Skeleton className="h-4 w-[60px]" />
+                                                <Skeleton className="h-3 w-12" />
                                             </div>
                                         ))}
                                     </div>

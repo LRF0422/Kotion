@@ -35,7 +35,7 @@ const LIBRARY_KEYS: Record<LibraryView, string> = {
 };
 
 const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <div className="px-3 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+    <div className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
         {children}
     </div>
 );
@@ -47,9 +47,9 @@ export const FileSidebar: React.FC<FileSidebarProps> = ({
     const libraryItems: LibraryView[] = ['home', 'recent', 'favorites', 'trash'];
 
     return (
-        <div className="flex h-full flex-col bg-muted/20">
+        <div className="flex h-full flex-col bg-muted/30">
             <SectionLabel>{t('sidebar.library')}</SectionLabel>
-            <div className="px-2 space-y-0.5">
+            <div className="space-y-0.5 px-2">
                 {libraryItems.map((key) => {
                     const active = view === key;
                     return (
@@ -58,8 +58,10 @@ export const FileSidebar: React.FC<FileSidebarProps> = ({
                             variant="ghost"
                             size="sm"
                             className={cn(
-                                "w-full justify-start gap-2 h-9 font-normal",
-                                active && "bg-accent text-accent-foreground font-medium",
+                                "h-8 w-full justify-start gap-2.5 rounded-md px-2.5 text-[13px] font-normal",
+                                active
+                                    ? "bg-accent font-medium text-accent-foreground"
+                                    : "text-foreground/80 hover:text-foreground",
                             )}
                             onClick={() => {
                                 if (key === 'home') onHome();
@@ -67,7 +69,9 @@ export const FileSidebar: React.FC<FileSidebarProps> = ({
                                 onAfterNavigate?.();
                             }}
                         >
-                            {LIBRARY_ICONS[key]}
+                            <span className={cn("flex items-center", active ? "text-foreground" : "text-muted-foreground")}>
+                                {LIBRARY_ICONS[key]}
+                            </span>
                             {t(LIBRARY_KEYS[key])}
                         </Button>
                     );

@@ -27,7 +27,7 @@ const Crumb: React.FC<{
             onClick={() => !isLast && onNavigate(item.id, item.name)}
             disabled={isLast}
             className={cn(
-                "flex items-center gap-1 rounded-md px-1.5 py-1 transition-colors",
+                "flex h-7 items-center gap-1 rounded-md px-1.5 text-[13px] transition-colors",
                 isLast
                     ? "text-foreground font-medium cursor-default"
                     : "text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer",
@@ -52,7 +52,7 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({ items, onNavigate, class
 
     const renderCrumb = (item: BreadcrumbItem, index: number, total: number, offset: number) => (
         <li key={item.id} className="flex items-center">
-            {offset + index > 0 && <ChevronRight className="mx-0.5 h-4 w-4 text-muted-foreground/60" />}
+            {offset + index > 0 && <ChevronRight className="mx-0.5 h-3.5 w-3.5 text-muted-foreground/40" />}
             <Crumb
                 item={item}
                 isFirst={offset + index === 0}
@@ -69,9 +69,9 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({ items, onNavigate, class
 
                 {collapsed && (
                     <li className="flex items-center">
-                        <ChevronRight className="mx-0.5 h-4 w-4 text-muted-foreground/60" />
+                        <ChevronRight className="mx-0.5 h-3.5 w-3.5 text-muted-foreground/40" />
                         <DropdownMenu modal={false}>
-                            <DropdownMenuTrigger className="rounded-md px-1.5 py-1 text-muted-foreground hover:text-foreground hover:bg-accent">
+                            <DropdownMenuTrigger className="flex h-7 items-center rounded-md px-1.5 text-muted-foreground hover:text-foreground hover:bg-accent">
                                 <MoreHorizontal className="h-4 w-4" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start">

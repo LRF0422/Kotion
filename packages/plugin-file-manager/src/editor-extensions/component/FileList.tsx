@@ -52,39 +52,37 @@ const FileListRow: React.FC<FileItem> = React.memo((props) => {
     return (
         <div
             className={cn(
-                "group flex items-center px-2 h-11 border-b cursor-pointer select-none transition-colors duration-150",
-                checked ? "bg-primary/5" : "hover:bg-muted/50",
+                "group flex h-10 items-center rounded-md px-2 cursor-pointer select-none transition-colors duration-100",
+                checked ? "bg-primary/10 hover:bg-primary/10" : "hover:bg-muted/60",
                 loading && "opacity-50 pointer-events-none",
             )}
             onClick={handleClick}
             onDoubleClick={handleDoubleClick}
             onContextMenu={() => { if (!checked) selectItem(props, {}, sortedItems) }}
         >
-            <div className="w-[36px] flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            <div className="flex w-8 flex-shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
                 <div className={cn(checked || isTouch ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
                     <Checkbox checked={checked} onCheckedChange={handleCheck} disabled={loading} />
                 </div>
             </div>
 
-            <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2.5">
-                    <FileThumb file={props} size={22} />
-                    <span className="truncate text-sm" title={name}>{name}</span>
-                    {isFavorite && !isTrash && (
-                        <StarIcon className="h-3.5 w-3.5 flex-shrink-0 fill-yellow-400 text-yellow-400" />
-                    )}
-                </div>
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                <FileThumb file={props} size={24} />
+                <span className="truncate text-sm" title={name}>{name}</span>
+                {isFavorite && !isTrash && (
+                    <StarIcon className="h-3.5 w-3.5 flex-shrink-0 fill-yellow-400 text-yellow-400" />
+                )}
             </div>
 
-            <div className="w-[90px] flex-shrink-0 text-muted-foreground text-sm">
+            <div className="w-20 flex-shrink-0 text-xs text-muted-foreground">
                 {isFolder ? '—' : formatFileSize(size || 0)}
             </div>
 
-            <div className="w-[170px] flex-shrink-0 text-muted-foreground text-sm hidden md:block">
+            <div className="w-44 flex-shrink-0 text-xs text-muted-foreground hidden md:block">
                 {formatDate(updatedAt || createdAt)}
             </div>
 
-            <div className="w-[72px] flex-shrink-0 flex justify-end items-center gap-0.5">
+            <div className="flex w-16 flex-shrink-0 items-center justify-end gap-0.5">
                 {!isTrash && (
                     <Button
                         variant="ghost"
@@ -113,7 +111,11 @@ const SortHeader: React.FC<{ label: string; by: SortBy; className?: string }> = 
     const active = sortBy === by
     return (
         <button
-            className={cn("flex items-center gap-1 hover:text-foreground transition-colors", active && "text-foreground", className)}
+            className={cn(
+                "flex items-center gap-1 rounded px-1 py-0.5 transition-colors hover:text-foreground",
+                active && "text-foreground",
+                className,
+            )}
             onClick={() => setSort(by)}
         >
             {label}
@@ -130,16 +132,16 @@ export const FileListView: React.FC = React.memo(() => {
 
     return (
         <div className="h-full w-full overflow-auto">
-            {/* Header */}
-            <div className="flex items-center px-2 h-9 border-b bg-muted/40 text-xs font-medium text-muted-foreground sticky top-0 z-10">
-                <div className="w-[36px] flex-shrink-0" />
-                <div className="flex-1 min-w-0"><SortHeader label={t('listHeader.name')} by="name" /></div>
-                <div className="w-[90px] flex-shrink-0"><SortHeader label={t('listHeader.size')} by="size" /></div>
-                <div className="w-[170px] flex-shrink-0 hidden md:block"><SortHeader label={t('listHeader.modified')} by="date" /></div>
-                <div className="w-[72px] flex-shrink-0"><span className="sr-only">{t('listHeader.actions')}</span></div>
+            {/* Header —— 与行的列宽/水平留白严格对齐(px-3.5 = p-1.5 + px-2) */}
+            <div className="sticky top-0 z-10 flex h-9 items-center border-b bg-background px-3.5 text-xs font-medium text-muted-foreground">
+                <div className="w-8 flex-shrink-0" />
+                <div className="min-w-0 flex-1"><SortHeader label={t('listHeader.name')} by="name" /></div>
+                <div className="w-20 flex-shrink-0"><SortHeader label={t('listHeader.size')} by="size" /></div>
+                <div className="w-44 flex-shrink-0 hidden md:block"><SortHeader label={t('listHeader.modified')} by="date" /></div>
+                <div className="w-16 flex-shrink-0"><span className="sr-only">{t('listHeader.actions')}</span></div>
             </div>
-            {/* Body */}
-            <div>
+            {/* Body —— Notion 风格无分隔线圆角行 */}
+            <div className="flex flex-col gap-0.5 p-1.5">
                 {sortedItems.map((item) => (
                     <FileListRow key={item.id} {...item} />
                 ))}
