@@ -25,6 +25,12 @@ export const GO_TO_MARKETPLACE = "GO_TO_MARKETPLACE"
 
 export const TOGGLE_AI_ASSISTANT = "TOGGLE_AI_ASSISTANT"
 
+/**
+ * Toggle a side-dock panel by its id. Payload: `{ id, position? }`.
+ * Handled by the dock host; no-op when no dock is mounted (see `dockRuntime`).
+ */
+export const TOGGLE_DOCK_PANEL = "TOGGLE_DOCK_PANEL"
+
 /** Imperatively start a tour by its id. Payload: the tour id string. */
 export const START_TOUR = "START_TOUR"
 

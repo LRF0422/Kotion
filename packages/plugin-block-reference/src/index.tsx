@@ -1,6 +1,7 @@
 
 import { KPlugin, PluginConfig } from "@kn/common";
 import { BlockReferenceExtension } from "./extension/block-reference/index";
+import { backlinksDockPanel } from "./bidirectional-link/components/BacklinksDockPanel";
 
 
 /**
@@ -24,5 +25,12 @@ class BlockReferencePlugin extends KPlugin<BlockReferenceConfig> {
 export const blockReference = new BlockReferencePlugin({
     status: '',
     name: 'blockReference',
-    editorExtension: [BlockReferenceExtension]
+    editorExtension: [BlockReferenceExtension],
+    dockPanels: [backlinksDockPanel],
+    // Only the dock panel title goes through the app's i18n; everything else in
+    // this plugin uses the local table in ./i18n.
+    locales: {
+        zh: { translation: { dock: { backlinks: '反向链接' } } },
+        en: { translation: { dock: { backlinks: 'Backlinks' } } },
+    }
 });

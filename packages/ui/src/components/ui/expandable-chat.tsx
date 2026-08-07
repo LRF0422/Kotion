@@ -10,6 +10,11 @@ import { Textarea } from "./textarea";
 interface ChatContextValue {
   isOpen: boolean;
   toggleChat: () => void;
+  /**
+   * True when the chat fills a host container (e.g. the side dock) instead of
+   * floating. Children use it to drop chrome the host already provides.
+   */
+  embedded: boolean;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -50,6 +55,14 @@ interface ExpandableChatProps extends React.HTMLAttributes<HTMLDivElement> {
   position?: ChatPosition;
   size?: ChatSize;
   icon?: React.ReactNode;
+  /**
+   * Fill the parent instead of floating over the page: no fixed positioning,
+   * no toggle button, always open. For hosts that own the frame themselves,
+   * such as a side dock panel.
+   */
+  embedded?: boolean;
+  /** Embedded mode only: what the children's close affordance should do. */
+  onClose?: () => void;
 }
 
 const ExpandableChat: React.FC<ExpandableChatProps> = ({
@@ -57,6 +70,8 @@ const ExpandableChat: React.FC<ExpandableChatProps> = ({
   position = "bottom-right",
   size = "md",
   icon,
+  embedded = false,
+  onClose,
   children,
   ...props
 }) => {
@@ -67,6 +82,7 @@ const ExpandableChat: React.FC<ExpandableChatProps> = ({
 
   // Close chat when pressing Escape key
   React.useEffect(() => {
+    if (embedded) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && isOpen) {
         setIsOpen(false);
@@ -77,7 +93,7 @@ const ExpandableChat: React.FC<ExpandableChatProps> = ({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, embedded]);
 
   // Focus management when chat opens/closes
   React.useEffect(() => {
@@ -87,8 +103,23 @@ const ExpandableChat: React.FC<ExpandableChatProps> = ({
     }
   }, [isOpen]);
 
+  if (embedded) {
+    return (
+      <ChatContext.Provider
+        value={{ isOpen: true, toggleChat: onClose ?? (() => { }), embedded: true }}
+      >
+        <div
+          className={cn("flex h-full w-full flex-col overflow-hidden bg-background", className)}
+          {...props}
+        >
+          {children}
+        </div>
+      </ChatContext.Provider>
+    );
+  }
+
   return (
-    <ChatContext.Provider value={{ isOpen, toggleChat }}>
+    <ChatContext.Provider value={{ isOpen, toggleChat, embedded: false }}>
       <div
         className={cn(`fixed ${CHAT_POSITIONS[position]} z-50`, className)}
         {...props}

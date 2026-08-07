@@ -31,6 +31,12 @@ interface BacklinksPanelProps {
     pageId?: string | number;
     /** Optional className for styling */
     className?: string;
+    /**
+     * Rendered instead of nothing when the page has no backlinks. The inline
+     * page footer wants to disappear silently; a dock panel needs to explain
+     * itself, so hosts opt in.
+     */
+    emptyFallback?: React.ReactNode;
 }
 
 type FilterKind = 'ALL' | 'NORMAL' | 'MENTION' | 'EMBED';
@@ -195,6 +201,7 @@ const groupBySourcePage = (links: BacklinkVO[]): PageGroup[] => {
 export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
     pageId: pageIdProp,
     className,
+    emptyFallback = null,
 }) => {
     const pageCtx = useContext(PageContext);
     const spaceService = useSpaceService();
@@ -298,7 +305,7 @@ export const BacklinksPanel: React.FC<BacklinksPanelProps> = ({
 
     // Hide panel when there is nothing to show at all.
     if (backlinks.length === 0 && mentions.length === 0) {
-        return null;
+        return <>{emptyFallback}</>;
     }
 
     const allChips: { kind: FilterKind; label: string }[] = [

@@ -17,7 +17,6 @@ import { useUploadFile } from "@kn/common";
 import { LanguageToggle } from "../locales/LanguageToggle";
 import { MessageBox } from "./MessageBox";
 import { Sparkles } from "@kn/icon";
-import { useAIAssistantShortcut } from "../ai/system-agent";
 import { clearTokens } from "@kn/common";
 
 // Memoized menu item component for better performance

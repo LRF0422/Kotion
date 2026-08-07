@@ -4,13 +4,15 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
 import { Separator } from "@kn/ui";
 import { Switch } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@kn/ui";
 import { CollaborationEditor, exportToPDF, useIncrementalSave, TiptapCollabProvider } from "@kn/editor";
 import type { IncrementalPayload } from "@kn/editor";
 import { event, ON_PAGE_REFRESH, ON_FAVORITE_CHANGE } from "../../../event";
 import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, request, getBearerHeader } from "@kn/common";
 import { useNavigator, usePageTabs } from "@kn/common";
 import { setPageBridge, clearPageBridge, type PageBridge } from "@kn/common";
+import { setActiveEditor, clearActiveEditor } from "@kn/common";
+// The host-wide bus, distinct from this plugin's local `event` emitter above.
+import { event as hostEvent, TOGGLE_DOCK_PANEL } from "@kn/common";
 import { GlobalState } from "@kn/common";
 import { Editor } from "@kn/editor";
 import * as Y from "@kn/editor";
@@ -29,7 +31,6 @@ import { toast } from "@kn/ui";
 import { SharePanel } from "../../components/SharePanel";
 import { PageBreadcrumb } from "../../../components/PageBreadcrumb";
 import { TemplateCreator } from "../TemplateCreator";
-import { SpaceGraph } from "../../SpaceGraph";
 import { PageVersionHistory } from "./PageVersionHistory";
 import { PresentationMode } from "./PresentationMode";
 
@@ -220,7 +221,6 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     const spaceService = useService("spaceService")
     const { usePath } = useUploadFile();
     const [editorContentReady, setEditorContentReady] = useState(false)
-    const [graphOpen, setGraphOpen] = useState(false)
     const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
     const [presentationOpen, setPresentationOpen] = useState(false)
 
@@ -411,6 +411,18 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         setPageBridge(bridge)
         return () => clearPageBridge(bridge)
     }, [pageId, spaceId, page, props.active, spaceService, navigator])
+
+    // Publish this tab's editor for views living outside the editor subtree —
+    // dock panels such as the outline. Same rule as the PageBridge above: only
+    // the active tab publishes, so panels always follow the visible document.
+    useEffect(() => {
+        if (props.active === false || !pageId || !editorContentReady) return
+        const instance = editor.current
+        if (!instance) return
+
+        setActiveEditor(instance, { pageId: String(pageId), spaceId: spaceId ? String(spaceId) : undefined })
+        return () => clearActiveEditor(String(pageId))
+    }, [pageId, spaceId, props.active, editorContentReady])
 
     const toggleFavorite = useCallback(async () => {
         if (!pageId || favoriteToggling) return
@@ -864,7 +876,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                                 </div>
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                                onClick={() => setGraphOpen(true)}
+                                onClick={() => hostEvent.emit(TOGGLE_DOCK_PANEL, { id: 'graph' })}
                                 disabled={!pageId || !spaceId}
                             >
                                 <div className="flex flex-row items-center gap-2">
@@ -991,24 +1003,5 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 onClose={() => setPresentationOpen(false)}
             />
         )}
-        <Sheet open={graphOpen} onOpenChange={setGraphOpen}>
-            <SheetContent
-                side="right"
-                className="w-full sm:max-w-[min(1100px,90vw)] p-0 flex flex-col gap-0"
-            >
-                <SheetHeader className="px-4 py-3 border-b text-left">
-                    <SheetTitle>{t('editor.relationGraph', 'Relation graph')}</SheetTitle>
-                </SheetHeader>
-                <div className="flex-1 min-h-0">
-                    {graphOpen && (
-                        <SpaceGraph
-                            focusId={pageId}
-                            currentSpaceId={spaceId}
-                            onNavigate={() => setGraphOpen(false)}
-                        />
-                    )}
-                </div>
-            </SheetContent>
-        </Sheet>
     </div>)
 }

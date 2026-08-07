@@ -11,6 +11,7 @@ export interface EventMap {
   ON_MESSAGE: any
   GO_TO_MARKETPLACE: undefined
   TOGGLE_AI_ASSISTANT: undefined
+  TOGGLE_DOCK_PANEL: { id: string; position?: 'right' | 'left' }
   START_TOUR: string
 }
 

@@ -32,6 +32,30 @@ const clampZoom = (k: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, k));
 const pointerDist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
     Math.hypot(a.x - b.x, a.y - b.y);
 
+/**
+ * Below this *container* width the graph switches to its compact layout. This is
+ * deliberately not a viewport breakpoint: the same component renders full-page
+ * and inside a ~400px side-dock column, where the viewport is still desktop-wide.
+ */
+const COMPACT_WIDTH = 520;
+
+/** Zoom used when centering on a focused page. A narrow column needs less. */
+const focusZoom = (w: number) => (w < COMPACT_WIDTH ? 1 : 1.3);
+
+/**
+ * Force constants scale with the available area. The full-page spacing spreads
+ * 80+ nodes far wider than a dock column can show, so a narrow host gets a
+ * tighter layout instead of a graph that only makes sense when zoomed out.
+ */
+const forceTuning = (w: number, h: number) => {
+    const narrow = Math.min(w, h) < 480;
+    return {
+        linkDistance: narrow ? 40 : 70,
+        charge: narrow ? -110 : -220,
+        collidePad: narrow ? 3 : 6,
+    };
+};
+
 export interface SpaceGraphProps {
     /** Page to focus on. Overrides the `?focus=` URL param (used when embedded in a sheet). */
     focusId?: string | null;
@@ -74,6 +98,9 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
     const [reloadFlag, setReloadFlag] = useState(0);
     // On mobile the legend is hidden by default and toggled via a floating button.
     const [showLegend, setShowLegend] = useState(false);
+    // Set from a ResizeObserver on the canvas, so the layout follows the host
+    // container rather than the viewport (see COMPACT_WIDTH).
+    const [compact, setCompact] = useState(false);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const simRef = useRef<Simulation<SimNode, SimLink> | null>(null);
@@ -92,6 +119,10 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
     // Focus centering: read inside the tick loop; only auto-center once per focus.
     const focusIdRef = useRef<string | null>(focusId);
     const didCenterRef = useRef(false);
+    // Auto-fit plumbing: the simulation's "end" handler calls the latest fitView.
+    // Gated by a flag so a node drag settling doesn't yank the viewport around.
+    const fitRef = useRef<() => void>(() => { });
+    const shouldFitRef = useRef(true);
     useEffect(() => {
         focusIdRef.current = focusId;
         didCenterRef.current = false;
@@ -194,23 +225,32 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
         const el = containerRef.current;
         if (!el || nodes.length === 0) return;
 
+        // Held so the resize handler can retune them in place instead of
+        // rebuilding the whole simulation and losing the current layout.
+        const linkForce = forceLink<SimNode, SimLink>(links).id((d) => d.id).strength(0.4);
+        const chargeForce = forceManyBody<SimNode>();
+        const collideForce = forceCollide<SimNode>();
+
+        const applyTuning = (w: number, h: number) => {
+            const { linkDistance, charge, collidePad } = forceTuning(w, h);
+            linkForce.distance(linkDistance);
+            chargeForce.strength(charge);
+            collideForce.radius((d) => radiusOf(d) + collidePad);
+        };
+
         const start = () => {
             const w = el.clientWidth || 800;
             const h = el.clientHeight || 600;
             sizeRef.current = { w, h };
+            applyTuning(w, h);
 
             simRef.current?.stop();
+            shouldFitRef.current = true;
             const sim = forceSimulation<SimNode>(nodes)
-                .force(
-                    "link",
-                    forceLink<SimNode, SimLink>(links)
-                        .id((d) => d.id)
-                        .distance(70)
-                        .strength(0.4),
-                )
-                .force("charge", forceManyBody().strength(-220))
+                .force("link", linkForce)
+                .force("charge", chargeForce)
                 .force("center", forceCenter(w / 2, h / 2))
-                .force("collide", forceCollide<SimNode>((d) => radiusOf(d) + 6))
+                .force("collide", collideForce)
                 .alpha(1)
                 .alphaDecay(0.045);
 
@@ -225,13 +265,24 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                         const node = nodes.find((n) => n.id === fid);
                         if (node && node.x != null && node.y != null) {
                             const { w, h } = sizeRef.current;
-                            const k = 1.3;
+                            const k = focusZoom(w);
                             setView({ x: w / 2 - node.x * k, y: h / 2 - node.y * k, k });
                             didCenterRef.current = true;
                         }
                     }
                 });
             });
+
+            // Frame the whole graph once the layout settles. Without this the view
+            // is left at identity, which strands most nodes outside a small host.
+            // Skipped when focusing a page (the tick handler owns the viewport) and
+            // after the first settle, so releasing a dragged node doesn't refit.
+            sim.on("end", () => {
+                if (!shouldFitRef.current || focusIdRef.current) return;
+                shouldFitRef.current = false;
+                fitRef.current();
+            });
+
             simRef.current = sim;
         };
 
@@ -240,10 +291,17 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
         const ro = new ResizeObserver(() => {
             const sim = simRef.current;
             if (!sim) return;
-            const w = el.clientWidth || 800;
-            const h = el.clientHeight || 600;
+            const w = el.clientWidth;
+            const h = el.clientHeight;
+            // A collapsing or hidden host reports 0; retuning against the fallback
+            // size would scatter the layout for a panel nobody is looking at.
+            if (w === 0 || h === 0) return;
             sizeRef.current = { w, h };
+            applyTuning(w, h);
             sim.force("center", forceCenter(w / 2, h / 2));
+            // Resizing the host (dragging the dock edge, collapsing the sidebar)
+            // changes what fits, so allow one more auto-fit.
+            shouldFitRef.current = true;
             sim.alpha(0.3).restart();
         });
         ro.observe(el);
@@ -256,6 +314,22 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
             simRef.current = null;
         };
     }, [nodes, links, radiusOf]);
+
+    // --- Compact layout detection (host width, not viewport) ---
+    // Re-attached once the real tree renders, since `containerRef` only exists
+    // past the loading / error / empty branches.
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const measure = () => {
+            const w = el.clientWidth;
+            if (w > 0) setCompact(w < COMPACT_WIDTH);
+        };
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [loading, error, nodes.length]);
 
     // --- Pointer interactions: node drag, background pan ---
     const screenToGraph = useCallback(
@@ -380,10 +454,50 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
         });
     }, []);
 
+    /**
+     * Frame every node in the viewport. This is what "reset view" means for a
+     * force graph: identity puts the layout's origin at the top-left corner,
+     * which in a narrow host leaves most of the graph off-screen.
+     */
+    const fitView = useCallback(() => {
+        const { w, h } = sizeRef.current;
+        if (!w || !h) return;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        let seen = 0;
+        nodes.forEach((n) => {
+            if (n.x == null || n.y == null) return;
+            const r = radiusOf(n);
+            minX = Math.min(minX, n.x - r);
+            maxX = Math.max(maxX, n.x + r);
+            minY = Math.min(minY, n.y - r);
+            maxY = Math.max(maxY, n.y + r);
+            seen++;
+        });
+        if (seen === 0) return;
+        // Leaves room for the labels hanging below each node.
+        const pad = 28;
+        const k = clampZoom(
+            Math.min(
+                (w - pad * 2) / Math.max(1, maxX - minX),
+                (h - pad * 2) / Math.max(1, maxY - minY),
+                // A graph small enough to fit shouldn't be blown up past 1:1.
+                1,
+            ),
+        );
+        setView({
+            x: w / 2 - ((minX + maxX) / 2) * k,
+            y: h / 2 - ((minY + maxY) / 2) * k,
+            k,
+        });
+    }, [nodes, radiusOf]);
+
+    useEffect(() => {
+        fitRef.current = fitView;
+    }, [fitView]);
+
     const resetView = useCallback(() => {
-        setView({ x: 0, y: 0, k: 1 });
-        simRef.current?.alpha(0.5).restart();
-    }, []);
+        fitView();
+    }, [fitView]);
 
     const onNodeClick = useCallback(
         (node: SimNode) => {
@@ -403,6 +517,9 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
 
     // Effective highlight target: live hover wins, else the sticky focused page.
     const hl = hovered ?? focusId;
+    // A narrow canvas can't spare the room for a permanent legend overlay, so it
+    // gets a toggle button instead. Touch hosts do the same regardless of width.
+    const collapsible = compact || isMobile;
     const focusedNode = useMemo(
         () => (focusId ? nodes.find((n) => n.id === focusId) : undefined),
         [focusId, nodes],
@@ -410,9 +527,8 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
 
     const clearFocus = useCallback(() => {
         setFocusId(null);
-        setView({ x: 0, y: 0, k: 1 });
-        simRef.current?.alpha(0.4).restart();
-    }, []);
+        fitView();
+    }, [fitView]);
 
     // Re-center the viewport on the focused page (useful after panning away).
     const locateFocus = useCallback(() => {
@@ -421,7 +537,7 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
         const node = nodes.find((n) => n.id === fid);
         if (!node || node.x == null || node.y == null) return;
         const { w, h } = sizeRef.current;
-        const k = 1.3;
+        const k = focusZoom(w);
         setView({ x: w / 2 - node.x * k, y: h / 2 - node.y * k, k });
     }, [focusId, nodes]);
 
@@ -460,15 +576,32 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
 
     return (
         <div className="h-full w-full flex flex-col overflow-hidden bg-background">
-            {/* Toolbar */}
-            <div className="flex items-center gap-2 px-3 py-2 border-b flex-shrink-0">
-                <Network className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className="hidden md:inline text-sm font-medium">{t("graph.title")}</span>
-                <span className="hidden md:inline text-xs text-muted-foreground">
-                    {t("graph.stats", { nodes: nodes.length, edges: links.length })}
-                </span>
+            {/* Toolbar. Compact hosts stack it into two rows and drop the title +
+                stats, which the host's own panel header already provides. */}
+            <div
+                className={cn(
+                    "flex flex-shrink-0 border-b",
+                    compact
+                        ? "flex-col items-stretch gap-1.5 px-2 py-1.5"
+                        : "items-center gap-2 px-3 py-2",
+                )}
+            >
+                {!compact && (
+                    <>
+                        <Network className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <span className="hidden md:inline text-sm font-medium">{t("graph.title")}</span>
+                        <span className="hidden md:inline text-xs text-muted-foreground">
+                            {t("graph.stats", { nodes: nodes.length, edges: links.length })}
+                        </span>
+                    </>
+                )}
                 {focusId && (
-                    <span className="flex items-center gap-1 text-xs rounded-md border border-border bg-muted/60 text-foreground pl-2 pr-1 py-0.5 max-w-[140px] md:max-w-[200px]">
+                    <span
+                        className={cn(
+                            "flex items-center gap-1 text-xs rounded-md border border-border bg-muted/60 text-foreground pl-2 pr-1 py-0.5",
+                            compact ? "min-w-0" : "max-w-[140px] md:max-w-[200px]",
+                        )}
+                    >
                         <Network className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                         <span className="truncate">
                             {focusedNode?.title || t("graph.untitled")}
@@ -484,43 +617,48 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                         </button>
                     </span>
                 )}
-                <div className="hidden md:block flex-1" />
-                <Input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder={t("graph.filter")}
-                    className="h-9 md:h-7 flex-1 md:flex-none md:w-40 min-w-0 text-xs"
-                />
-                {focusId && (
+                {!compact && <div className="hidden md:block flex-1" />}
+                <div className="flex items-center gap-1 min-w-0">
+                    <Input
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder={t("graph.filter")}
+                        className={cn(
+                            "h-9 md:h-7 min-w-0 text-xs",
+                            compact ? "flex-1" : "flex-1 md:flex-none md:w-40",
+                        )}
+                    />
+                    {focusId && (
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-9 w-9 md:h-7 md:w-7 flex-shrink-0"
+                            onClick={locateFocus}
+                            title={t("graph.locate")}
+                            aria-label={t("graph.locate")}
+                        >
+                            <LocateFixed className="h-4 w-4" />
+                        </Button>
+                    )}
                     <Button
                         size="icon"
                         variant="ghost"
                         className="h-9 w-9 md:h-7 md:w-7 flex-shrink-0"
-                        onClick={locateFocus}
-                        title={t("graph.locate")}
-                        aria-label={t("graph.locate")}
+                        onClick={resetView}
+                        title={t("graph.reset")}
                     >
-                        <LocateFixed className="h-4 w-4" />
+                        <Maximize2 className="h-4 w-4" />
                     </Button>
-                )}
-                <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-9 w-9 md:h-7 md:w-7 flex-shrink-0"
-                    onClick={resetView}
-                    title={t("graph.reset")}
-                >
-                    <Maximize2 className="h-4 w-4" />
-                </Button>
-                <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-9 w-9 md:h-7 md:w-7 flex-shrink-0"
-                    onClick={() => setReloadFlag((f) => f + 1)}
-                    title={t("graph.refresh")}
-                >
-                    <RefreshCw className="h-4 w-4" />
-                </Button>
+                    <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-9 w-9 md:h-7 md:w-7 flex-shrink-0"
+                        onClick={() => setReloadFlag((f) => f + 1)}
+                        title={t("graph.refresh")}
+                    >
+                        <RefreshCw className="h-4 w-4" />
+                    </Button>
+                </div>
             </div>
 
             {/* Canvas */}
@@ -633,7 +771,7 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                                                 paintOrder="stroke"
                                                 className="pointer-events-none select-none"
                                             >
-                                                {(n.title || t("graph.untitled")).slice(0, 18)}
+                                                {(n.title || t("graph.untitled")).slice(0, compact ? 12 : 18)}
                                             </text>
                                             {(isHovered || isFocused) && n.spaceName && (
                                                 <text
@@ -658,13 +796,14 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                     </g>
                 </svg>
 
-                {/* Legend — always shown on desktop; toggled on mobile. */}
-                {legend.length > 0 && (!isMobile || showLegend) && (
+                {/* Legend — pinned open on a wide canvas, toggled when the host is
+                    narrow, where an always-on overlay would cover the graph. */}
+                {legend.length > 0 && (!collapsible || showLegend) && (
                     <div
                         className={cn(
                             "absolute overflow-auto rounded-md border border-border bg-background/95 backdrop-blur-sm px-2.5 py-2 shadow-sm",
-                            isMobile
-                                ? "bottom-2 left-2 right-14 max-h-[35%]"
+                            collapsible
+                                ? "bottom-2 left-2 right-12 max-h-[35%]"
                                 : "top-3 right-3 max-w-[220px] max-h-[40%]",
                         )}
                     >
@@ -685,39 +824,47 @@ export const SpaceGraph: React.FC<SpaceGraphProps> = ({
                     </div>
                 )}
 
-                {/* Floating touch controls (mobile only): zoom + legend toggle.
-                    Wheel-zoom doesn't exist on touch, so these back up pinch-zoom. */}
-                <div className="absolute bottom-2 right-2 flex flex-col gap-1.5 md:hidden">
-                    <Button
-                        size="icon"
-                        variant="outline"
-                        className="h-9 w-9 bg-background/90 backdrop-blur shadow-sm"
-                        onClick={() => zoomBy(1.3)}
-                        title={t("graph.zoomIn")}
-                        aria-label={t("graph.zoomIn")}
-                    >
-                        <ZoomIn className="h-4 w-4" />
-                    </Button>
-                    <Button
-                        size="icon"
-                        variant="outline"
-                        className="h-9 w-9 bg-background/90 backdrop-blur shadow-sm"
-                        onClick={() => zoomBy(1 / 1.3)}
-                        title={t("graph.zoomOut")}
-                        aria-label={t("graph.zoomOut")}
-                    >
-                        <ZoomOut className="h-4 w-4" />
-                    </Button>
-                    {legend.length > 0 && (
+                {/* Floating canvas controls. Zoom buttons back up pinch-zoom on
+                    touch (there is no wheel); the legend toggle appears whenever
+                    the legend is collapsible. */}
+                <div className="absolute bottom-2 right-2 flex flex-col gap-1.5">
+                    {isMobile && (
+                        <>
+                            <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-9 w-9 bg-background/90 backdrop-blur shadow-sm"
+                                onClick={() => zoomBy(1.3)}
+                                title={t("graph.zoomIn")}
+                                aria-label={t("graph.zoomIn")}
+                            >
+                                <ZoomIn className="h-4 w-4" />
+                            </Button>
+                            <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-9 w-9 bg-background/90 backdrop-blur shadow-sm"
+                                onClick={() => zoomBy(1 / 1.3)}
+                                title={t("graph.zoomOut")}
+                                aria-label={t("graph.zoomOut")}
+                            >
+                                <ZoomOut className="h-4 w-4" />
+                            </Button>
+                        </>
+                    )}
+                    {collapsible && legend.length > 0 && (
                         <Button
                             size="icon"
                             variant={showLegend ? "secondary" : "outline"}
-                            className="h-9 w-9 bg-background/90 backdrop-blur shadow-sm"
+                            className={cn(
+                                "bg-background/90 backdrop-blur shadow-sm",
+                                isMobile ? "h-9 w-9" : "h-7 w-7",
+                            )}
                             onClick={() => setShowLegend((s) => !s)}
                             title={t("graph.legend")}
                             aria-label={t("graph.legend")}
                         >
-                            <Layers className="h-4 w-4" />
+                            <Layers className={isMobile ? "h-4 w-4" : "h-3.5 w-3.5"} />
                         </Button>
                     )}
                 </div>

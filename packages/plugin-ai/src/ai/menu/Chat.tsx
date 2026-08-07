@@ -75,8 +75,15 @@ const readModelParams = (): ChatModelParams => {
  * orchestrates the streaming lifecycle; the visual pieces (header, empty
  * state, composer, user-choice card, message bubbles) live in dedicated
  * files under ./chat and ./ so this file stays readable.
+ *
+ * `embedded` drops the floating shell so a host container (the side dock) can
+ * own the frame; `onClose` is what that host's close affordance should do.
  */
-export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => {
+export const ExpandableChatDemo: React.FC<{
+    editor: Editor
+    embedded?: boolean
+    onClose?: () => void
+}> = ({ editor, embedded, onClose }) => {
     // ─── Model / mode preferences (persisted) ─────────────────────
     const [selectedModel, setSelectedModel] = useState<string>(() => {
         try { return localStorage.getItem(MODEL_STORAGE_KEY) || '' } catch { return '' }
@@ -617,6 +624,8 @@ export const ExpandableChatDemo: React.FC<{ editor: Editor }> = ({ editor }) => 
     return (
         <ExpandableChat
             size="lg"
+            embedded={embedded}
+            onClose={onClose}
             icon={
                 <div className="relative flex items-center justify-center">
                     {isLoading && (

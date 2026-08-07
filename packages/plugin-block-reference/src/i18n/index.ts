@@ -41,6 +41,7 @@ export const translations = {
         },
         bidirectionalLink: {
             backlinksTitle: 'Backlinks',
+            noBacklinks: 'No page references this one yet',
             unlinkedMentionsTitle: 'Unlinked mentions',
             refresh: 'Refresh',
             viewGraph: 'View graph',
@@ -117,6 +118,7 @@ export const translations = {
         },
         bidirectionalLink: {
             backlinksTitle: '反向链接',
+            noBacklinks: '还没有页面引用当前页面',
             unlinkedMentionsTitle: '未链接提及',
             refresh: '刷新',
             viewGraph: '查看图谱',

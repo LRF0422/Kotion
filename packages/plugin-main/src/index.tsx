@@ -14,6 +14,7 @@ import { LayoutGrid } from '@kn/icon'
 import "@kn/ui/globals.css"
 import { spaceService } from './service/space-service'
 import { BlockVersionsExtension } from './extensions/block-versions'
+import { mainDockPanels } from './dock'
 // export * from "./service"
 // @ts-ignore
 import pkg from '../package.json'
@@ -116,12 +117,17 @@ export const DefaultPluginInstance = new DefaultPlugin({
     },
   ],
   editorExtension: [BlockVersionsExtension],
+  dockPanels: mainDockPanels,
   services: {
     spaceService: spaceService
   },
   locales: {
     "zh": {
       translation: {
+        dock: {
+          "graph": "关系图谱",
+          "collapse": "收起面板"
+        },
         home: {
           "title": "早上好",
           "create-space": "创建空间",
@@ -687,6 +693,10 @@ export const DefaultPluginInstance = new DefaultPlugin({
     },
     "en": {
       translation: {
+        dock: {
+          "graph": "Relation Graph",
+          "collapse": "Collapse panel"
+        },
         home: {
           "title": "Good morning",
           "create-space": "Create Space",

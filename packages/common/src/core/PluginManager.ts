@@ -1,5 +1,6 @@
 import { isFunction, merge } from "lodash";
 import { ExtensionWrapper } from "./editor";
+import { DockPanelConfig, DockPosition, ResolvedDockPanel } from "./dock";
 import { SiderMenuItemProps } from "./menu";
 import { TourConfig } from "./tour";
 import { RouteConfig } from "./route";
@@ -53,6 +54,12 @@ export interface PluginConfig {
      * Aggregated by PluginManager.resolveTours().
      */
     tours?: TourConfig[]
+    /**
+     * Side-dock panels contributed by this plugin (relation graph, outline, …).
+     * Aggregated by PluginManager.resolveDockPanels(); installing/uninstalling
+     * the plugin adds/removes its rail icon at runtime.
+     */
+    dockPanels?: DockPanelConfig[]
 }
 
 export class KPlugin<T extends PluginConfig> {
@@ -67,6 +74,7 @@ export class KPlugin<T extends PluginConfig> {
     private _services?: Services
     private _settings?: PluginSettingsConfig
     private _tours?: TourConfig[]
+    private _dockPanels?: DockPanelConfig[]
 
     constructor(config: T) {
         this.name = config.name
@@ -78,6 +86,7 @@ export class KPlugin<T extends PluginConfig> {
         this._services = config.services
         this._settings = config.settings
         this._tours = config.tours
+        this._dockPanels = config.dockPanels
     }
 
     get routes(): RouteConfig[] {
@@ -106,6 +115,10 @@ export class KPlugin<T extends PluginConfig> {
 
     get tours(): TourConfig[] {
         return this._tours || []
+    }
+
+    get dockPanels(): DockPanelConfig[] {
+        return this._dockPanels || []
     }
 
 }
@@ -141,7 +154,13 @@ export class PluginManager {
     private _cacheExtensions: ExtensionWrapper[] | null = null
     private _cacheLocales: any | null = null
     private _cacheTours: TourConfig[] | null = null
+    private _cacheDockPanels: ResolvedDockPanel[] | null = null
     private _pluginMap: Map<string, KPlugin<any>> = new Map()
+
+    // Built-in dock panels contributed by the host itself (e.g. the AI agent
+    // panel). Same contract as plugin-contributed panels; they simply cannot be
+    // uninstalled. Keyed by panel id, insertion-ordered.
+    private _coreDockPanels: Map<string, DockPanelConfig> = new Map()
 
     constructor(options: PluginManagerOptions, initalPlugins: KPlugin<any>[]) {
         this._resolveUrl = options.resolveUrl
@@ -185,6 +204,7 @@ export class PluginManager {
         this._cacheExtensions = null
         this._cacheLocales = null
         this._cacheTours = null
+        this._cacheDockPanels = null
         this._version++
         this._changeListeners.forEach(fn => fn())
     }
@@ -614,6 +634,69 @@ export class PluginManager {
 
         this._cacheTours = tours
         return tours
+    }
+
+    /**
+     * Register a built-in dock panel contributed by the host.
+     * Mirrors registerCoreService: same contract as plugin panels, but the host
+     * owns the lifecycle. Re-registering the same id replaces the panel.
+     */
+    registerCoreDockPanel(panel: DockPanelConfig): void {
+        if (!panel?.id) {
+            logger.warn('Core dock panel must have an id, skipping')
+            return
+        }
+        this._coreDockPanels.set(panel.id, panel)
+        logger.debug(`Core dock panel registered: ${panel.id}`)
+        this._notifyChange()
+    }
+
+    /**
+     * Remove a previously registered built-in dock panel.
+     */
+    unregisterCoreDockPanel(id: string): void {
+        if (!this._coreDockPanels.delete(id)) return
+        logger.debug(`Core dock panel unregistered: ${id}`)
+        this._notifyChange()
+    }
+
+    /**
+     * Resolve all dock panels (host built-ins first, then plugin contributions),
+     * de-duplicated by id and sorted by `order` ascending.
+     *
+     * @param position Only return panels for this dock. Omit for all positions.
+     */
+    resolveDockPanels(position?: DockPosition): ResolvedDockPanel[] {
+        if (!this._cacheDockPanels) {
+            const panels: ResolvedDockPanel[] = []
+            const seen = new Set<string>()
+
+            const collect = (panel: DockPanelConfig, source: 'plugin' | 'core', owner: string) => {
+                if (!panel || !panel.id || !panel.component) {
+                    logger.warn(`Invalid dock panel from ${owner}, skipping`)
+                    return
+                }
+                if (seen.has(panel.id)) {
+                    logger.warn(`Dock panel ${panel.id} already registered, skipping duplicate from ${owner}`)
+                    return
+                }
+                seen.add(panel.id)
+                panels.push({ ...panel, source, owner })
+            }
+
+            this._coreDockPanels.forEach(panel => collect(panel, 'core', 'core'))
+            for (const plugin of this.plugins) {
+                for (const panel of plugin.dockPanels) {
+                    collect(panel, 'plugin', plugin.name)
+                }
+            }
+
+            panels.sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
+            this._cacheDockPanels = panels
+        }
+
+        if (!position) return this._cacheDockPanels
+        return this._cacheDockPanels.filter(p => (p.position ?? 'right') === position)
     }
 
     /**

@@ -49,4 +49,8 @@ export type {
     RouteConfig,
     PluginSettingsConfig,
     TourConfig,
+    DockPanelConfig,
+    DockPanelContext,
+    DockPanelProps,
+    DockPosition,
 } from "@kn/common"

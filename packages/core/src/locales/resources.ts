@@ -2,6 +2,9 @@
 export const resources = {
     zh: {
         translation: {
+            "dock": {
+                "agent": "AI 助手"
+            },
             "errorPage": {
                 "title": "哎呀！出错了",
                 "subtitle": "我们遇到了一个意外错误",
@@ -783,6 +786,9 @@ export const resources = {
     },
     en: {
         translation: {
+            "dock": {
+                "agent": "AI Assistant"
+            },
             "errorPage": {
                 "title": "Oops! Something went wrong",
                 "subtitle": "We encountered an unexpected error",

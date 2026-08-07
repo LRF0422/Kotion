@@ -21,6 +21,7 @@ import { merge } from "lodash";
 import { setRequestToast, setSessionExpiredHandler, resetSessionExpiredGuard, useTranslation, useApi, APIS, saveTokens } from "@kn/common"
 import { registerCoreToolFactories } from "./ai/tools/register"
 import { registerOffscreenEditorBridge } from "./ai/offscreen"
+import { AIAssistantPage } from "./pages/AIAssistantPage"
 import { registerPageEditWindow } from "./components/PageEditWindowImpl"
 import { toast, AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel, Button, Input, Label } from "@kn/ui"
 import { Loader2, Eye, EyeOff } from "@kn/icon"
@@ -348,6 +349,9 @@ export const App: React.FC<AppProps> = (props) => {
                 [
                     <Route path='/' element={<Layout onPluginsReady={setPluginsReady} />} errorElement={<ErrorPage />}>
                         {routes}
+                        {/* Standalone agent page: the fallback for entry points
+                            outside a space, where no side dock is mounted. */}
+                        <Route path="/ai-assistant" element={<AIAssistantPage />} />
                         <Route path="/plugin-hub" element={<Shop />}>
                             <Route path="/plugin-hub" element={<Marketplace />} />
                             <Route path="/plugin-hub/:id" element={<PluginDetail />} />

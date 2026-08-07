@@ -1,4 +1,6 @@
 export * from "./core/editor"
+export * from "./core/dock"
+export * from "./core/active-editor"
 export * from "./core/route"
 export * from "./core/PluginManager"
 export * from "./core/global-namespace"

@@ -9,6 +9,7 @@ import { TabbedEditorArea } from "./PageEditor/TabbedEditorArea";
 import { event, ON_FAVORITE_CHANGE, ON_PAGE_REFRESH } from "../../event";
 import { TemplateSelector } from "../../components/TemplateSelector";
 import { SpaceSidebar, GlobalSearchDialog } from "./components";
+import { DockHost } from "../../components/Dock";
 import { useRecentPages } from "./hooks/useRecentPages";
 
 export const SpaceDetail: React.FC = () => {
@@ -306,9 +307,11 @@ export const SpaceDetail: React.FC = () => {
     // --- Layout ---
 
     const collapsedOnTablet = isTablet && treeCollapsed
+    // Third column is the side dock; it collapses to just its icon rail, so `auto`
+    // lets the editor keep every pixel the dock is not using.
     const gridCols = isTablet
-        ? (treeCollapsed ? "grid-cols-[48px_1fr]" : "grid-cols-[240px_1fr]")
-        : "grid-cols-[280px_1fr]"
+        ? (treeCollapsed ? "grid-cols-[48px_1fr_auto]" : "grid-cols-[240px_1fr_auto]")
+        : "grid-cols-[280px_1fr_auto]"
 
     // Shared sidebar props
     const sidebarProps = {
@@ -396,6 +399,9 @@ export const SpaceDetail: React.FC = () => {
                     <Outlet />
                 )}
             </div>
+
+            {/* Side dock: plugin-contributed panels (outline / graph / agent / backlinks) */}
+            <DockHost position="right" spaceId={params.id} pageId={params.pageId} />
 
             {/* Template Selector Dialog */}
             <TemplateSelector

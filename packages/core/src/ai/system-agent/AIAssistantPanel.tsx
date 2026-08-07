@@ -214,8 +214,8 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         <TooltipProvider>
             <div
                 className={cn(
-                    "flex flex-col bg-background border border-border/50 rounded-xl shadow-2xl",
-                    "animate-in fade-in-0 slide-in-from-bottom-4 duration-200"
+                    "flex flex-col bg-background",
+                    "border border-border/50 rounded-xl shadow-2xl animate-in fade-in-0 slide-in-from-bottom-4 duration-200"
                 )}
                 style={{
                     position: 'fixed',
@@ -523,7 +523,7 @@ export const AIAssistantTrigger: React.FC<AIAssistantTriggerProps> = ({
                 </Button>
             </TooltipTrigger>
             <TooltipContent side="right">
-                <span>AI Assistant (Ctrl+K)</span>
+                <span>AI Assistant (Ctrl+Shift+A)</span>
             </TooltipContent>
         </Tooltip>
     )
@@ -531,24 +531,15 @@ export const AIAssistantTrigger: React.FC<AIAssistantTriggerProps> = ({
 
 // ============ Hook for keyboard shortcut ============
 
+/**
+ * @deprecated The agent shortcut is owned by `Layout` (Ctrl+Shift+A) now that the
+ * panel lives in the side dock. Kept only for plugin bundles compiled against the
+ * old export; it binds nothing.
+ */
 export function useAIAssistantShortcut(
-    open: boolean,
-    onOpenChange: (open: boolean) => void
+    _open: boolean,
+    _onOpenChange: (open: boolean) => void
 ) {
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // Ctrl+K or Cmd+K
-            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-                e.preventDefault()
-                onOpenChange(!open)
-            }
-            // Escape to close
-            if (e.key === 'Escape' && open) {
-                onOpenChange(false)
-            }
-        }
-
-        document.addEventListener('keydown', handleKeyDown)
-        return () => document.removeEventListener('keydown', handleKeyDown)
-    }, [open, onOpenChange])
+    // Intentionally empty: binding Ctrl+K here would collide with the space's
+    // global search.
 }

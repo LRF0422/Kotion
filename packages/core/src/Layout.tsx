@@ -6,15 +6,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
-import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, PLUGIN_INCOMPATIBLE, TOGGLE_AI_ASSISTANT, SystemAgentProvider } from "@kn/common"
+import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, PLUGIN_INCOMPATIBLE, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, SystemAgentProvider } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { useAsyncEffect } from "ahooks"
 import { MobilePageHeaderProvider, useMobilePageHeader } from "@kn/common"
-import {
-    AIAssistantPanel,
-    useAIAssistantShortcut
-} from "./ai/system-agent"
 import { OffscreenEditorHost } from "./ai/offscreen"
 
 interface LayoutProps {
@@ -69,19 +65,36 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const { pluginManager } = useContext(AppContext)
     const [pluginsLoaded, setPluginsLoaded] = useState(false)
     const [refreshFlag, setRefreshFlag] = useState(0)
-    const [aiPanelOpen, setAiPanelOpen] = useState(false)
 
-    // AI Assistant keyboard shortcut
-    useAIAssistantShortcut(aiPanelOpen, setAiPanelOpen)
-
-    // Allow other parts of the app (e.g. Home quick actions) to toggle the AI panel
-    useEffect(() => {
-        const handleToggleAi = () => setAiPanelOpen(prev => !prev)
-        event.on(TOGGLE_AI_ASSISTANT, handleToggleAi)
-        return () => {
-            event.off(TOGGLE_AI_ASSISTANT, handleToggleAi)
+    // The agent now lives in the workspace side dock. Entry points outside the
+    // workspace (sidebar menu, mobile tab bar, Home quick actions) still emit
+    // TOGGLE_AI_ASSISTANT; forward it to the dock when one is mounted, and fall
+    // back to the standalone page when there isn't (e.g. on /home).
+    const openAgent = React.useCallback(() => {
+        if (dockRuntime.isMounted('right')) {
+            event.emit(TOGGLE_DOCK_PANEL, { id: 'agent' })
+        } else {
+            navigator.go({ to: '/ai-assistant' })
         }
-    }, [])
+    }, [navigator])
+
+    useEffect(() => {
+        event.on(TOGGLE_AI_ASSISTANT, openAgent)
+        return () => { event.off(TOGGLE_AI_ASSISTANT, openAgent) }
+    }, [openAgent])
+
+    // Ctrl+Shift+A opens the agent. (Ctrl+K is already the space-level global
+    // search, so the old Ctrl+K binding is gone.)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
+                e.preventDefault()
+                openAgent()
+            }
+        }
+        document.addEventListener('keydown', handleKeyDown)
+        return () => document.removeEventListener('keydown', handleKeyDown)
+    }, [openAgent])
 
     const searchParams = new URLSearchParams(window.location.search);
     const requestPluginId = searchParams.get('requestPluginId');
@@ -248,13 +261,6 @@ export function Layout({ onPluginsReady }: LayoutProps) {
 
                     {/* Hidden collaborative editors for off-screen page editing (Chat @-page) */}
                     <OffscreenEditorHost />
-
-                    {/* AI Assistant Panel */}
-                    <AIAssistantPanel
-                        open={aiPanelOpen}
-                        onOpenChange={setAiPanelOpen}
-                        position="bottom-right"
-                    />
 
                     {/* Show loading overlay while plugins are loading */}
                     {!pluginsLoaded && (
