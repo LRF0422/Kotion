@@ -6,6 +6,7 @@ import { TableCell } from "./table-cell";
 import { TableHeader } from "./table-header";
 import { TableRow } from "./table-row";
 import { triggerExcelImport } from "./utilities/excel-import";
+import { createT } from "../../i18n";
 import React from "react";
 
 export * from "./table";
@@ -17,6 +18,8 @@ export * from "./menu";
 export * from "./utilities/excel-import";
 export * from "./utilities/export";
 
+
+const t = createT();
 
 export const TableExtension: ExtensionWrapper = {
     extendsion: [Table.configure({
@@ -32,7 +35,7 @@ export const TableExtension: ExtensionWrapper = {
     slashConfig: [
         {
             icon: <Table2 className="w-4 h-4" />,
-            text: "表格",
+            text: t('slashCommands.table'),
             slash: '/table',
             action: (editor) => {
                 editor.commands.insertTable()
@@ -40,7 +43,7 @@ export const TableExtension: ExtensionWrapper = {
         },
         {
             icon: <Import className="w-4 h-4" />,
-            text: "从Excel导入表格",
+            text: t('slashCommands.importExcel'),
             slash: '/excel',
             action: (editor) => {
                 triggerExcelImport(editor);

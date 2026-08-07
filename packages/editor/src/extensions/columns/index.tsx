@@ -3,11 +3,14 @@ import { Column } from "./column";
 import { ExtensionWrapper } from "@kn/common";
 import { ColumnsBubbleMenu, ColumnsStaticMenu } from "./menu";
 import { IconColumns } from "../../icons";
+import { createT } from "../../i18n";
 import React from "react";
 export * from "./menu";
 import "./style/index.css"
 
 export const ColumnsExtensions = [Columns, Column];
+
+const t = createT();
 
 export const ColumnsExtension: ExtensionWrapper = {
 	name: Column.name,
@@ -21,7 +24,7 @@ export const ColumnsExtension: ExtensionWrapper = {
 	slashConfig: [
 		{
 			icon: <IconColumns />,
-			text: '布局',
+			text: t('slashCommands.columns'),
 			slash: '/columns',
 			action: (editor) => {
 				editor

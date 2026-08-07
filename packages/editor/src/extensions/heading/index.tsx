@@ -2,10 +2,13 @@ import { Heading1, Heading2, Heading3, Heading4 } from "@kn/icon";
 import { ExtensionWrapper } from "@kn/common";
 import { Heading } from "./heading";
 import { HeadingStaticMenu } from "./menu";
+import { createT } from "../../i18n";
 import React from "react";
 
 export * from "./heading";
 export * from "./menu";
+
+const t = createT();
 
 export const HeadingExtension: ExtensionWrapper = {
 	name: Heading.name,
@@ -18,11 +21,11 @@ export const HeadingExtension: ExtensionWrapper = {
 	slashConfig: [
 		{
 			divider: true,
-			title: "标题"
+			title: t('slashCommands.headingGroup')
 		},
 		{
 			icon: <Heading1 className="h-4 w-4" />,
-			text: "标题一",
+			text: t('slashCommands.heading1'),
 			slash: "/h1",
 			action: editor =>
 				editor
@@ -34,7 +37,7 @@ export const HeadingExtension: ExtensionWrapper = {
 
 		{
 			icon: <Heading2 className="h-4 w-4" />,
-			text: "标题二",
+			text: t('slashCommands.heading2'),
 			slash: "/h2",
 			action: editor =>
 				editor
@@ -46,7 +49,7 @@ export const HeadingExtension: ExtensionWrapper = {
 
 		{
 			icon: <Heading3 className="h-4 w-4" />,
-			text: "标题三",
+			text: t('slashCommands.heading3'),
 			slash: "/h3",
 			action: editor =>
 				editor
@@ -58,7 +61,7 @@ export const HeadingExtension: ExtensionWrapper = {
 
 		{
 			icon: <Heading4 className="h-4 w-4" />,
-			text: "标题四",
+			text: t('slashCommands.heading4'),
 			slash: "/h4",
 			action: editor =>
 				editor

@@ -5,11 +5,14 @@ import BuiltInCodeBlock, {
     // CodeBlockOptions
 } from "@tiptap/extension-code-block";
 import { CodeIcon } from "@kn/icon";
+import { createT } from "../../i18n";
 import React from "react";
 
 export * from "./code-block";
 export * from "./menu";
 
+
+const t = createT();
 
 export const CodeblockExtension: ExtensionWrapper = {
     extendsion: CodeBlock,
@@ -21,7 +24,7 @@ export const CodeblockExtension: ExtensionWrapper = {
     },
     slashConfig: [
         {
-            text: 'Code Block',
+            text: t('slashCommands.codeBlock'),
             slash: '/code-block',
             icon: <CodeIcon className="h-4 w-4" />,
             action: (editor) => {

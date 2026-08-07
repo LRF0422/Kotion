@@ -4,30 +4,17 @@ import { FileText } from "@kn/icon"
 import React from "react"
 import { documentTools } from "./tools"
 import { documentExpertSkill } from "./skills"
+import { createT } from "../i18n"
+
+const t = createT();
 
 export const DocumentExtension: ExtensionWrapper = {
     name: DocumentNode.name,
     extendsion: [DocumentNode],
     slashConfig: [
         {
-            text: 'document',
+            text: t('slashCommands.document'),
             slash: '/document',
-            icon: <FileText className="h-4 w-4" />,
-            action: (editor) => {
-                editor.commands.insertDocument()
-            },
-        },
-        {
-            text: 'word',
-            slash: '/word',
-            icon: <FileText className="h-4 w-4" />,
-            action: (editor) => {
-                editor.commands.insertDocument()
-            },
-        },
-        {
-            text: '文档',
-            slash: '/文档',
             icon: <FileText className="h-4 w-4" />,
             action: (editor) => {
                 editor.commands.insertDocument()

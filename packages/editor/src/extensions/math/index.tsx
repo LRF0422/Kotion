@@ -4,6 +4,7 @@ import { InlineMathNode } from "./inline-math-node";
 import { DEFAULT_OPTIONS, MathExtensionOption } from "./util/options";
 import { ExtensionWrapper } from "@kn/common";
 import { Sigma, SquareSigma } from "@kn/icon";
+import { createT } from "../../i18n";
 import React from "react";
 import "katex/dist/katex.min.css";
 
@@ -33,13 +34,15 @@ export { LATEX_SNIPPET_GROUPS, LATEX_COMMANDS } from "./util/latex-snippets";
 export type { LatexSnippet, LatexSnippetGroup, LatexCommand } from "./util/latex-snippets";
 export { renderLatex } from "./util/render-latex";
 
+const t = createT();
+
 export const KnowledgeMathExtension: ExtensionWrapper = {
   name: 'math',
   extendsion: MathExtension.configure({ evaluation: false, katexOptions: { macros: { "\\B": "\\mathbb{B}" } }, delimiters: "dollar" }),
   slashConfig: [
     {
       icon: <Sigma className="h-4 w-4" />,
-      text: '行内公式',
+      text: t('slashCommands.inlineMath'),
       slash: '/math',
       action: (editor) => {
         editor.chain().focus().insertInlineMath().run()
@@ -47,7 +50,7 @@ export const KnowledgeMathExtension: ExtensionWrapper = {
     },
     {
       icon: <SquareSigma className="h-4 w-4" />,
-      text: '块级公式（多行）',
+      text: t('slashCommands.blockMath'),
       slash: '/formula',
       action: (editor) => {
         editor.chain().focus().insertBlockMath().run()

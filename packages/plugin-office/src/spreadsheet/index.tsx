@@ -5,6 +5,9 @@ import React from "react"
 import { triggerExcelFileImport, parseExcelToUniverData } from "./excel-to-univer"
 import { spreadsheetTools } from "./tools"
 import { spreadsheetExpertSkill } from "./skills"
+import { createT } from "../i18n"
+
+const t = createT();
 
 const importExcelAction = async (editor: any) => {
     const file = await triggerExcelFileImport()
@@ -18,7 +21,7 @@ export const SpreadsheetExtension: ExtensionWrapper = {
     extendsion: [SpreadsheetNode],
     slashConfig: [
         {
-            text: 'spreadsheet',
+            text: t('slashCommands.spreadsheet'),
             slash: '/spreadsheet',
             icon: <Sheet className="h-4 w-4" />,
             action: (editor) => {
@@ -26,30 +29,8 @@ export const SpreadsheetExtension: ExtensionWrapper = {
             },
         },
         {
-            text: 'excel',
-            slash: '/excel',
-            icon: <Sheet className="h-4 w-4" />,
-            action: (editor) => {
-                editor.commands.insertSpreadsheet()
-            },
-        },
-        {
-            text: '电子表格',
-            slash: '/电子表格',
-            icon: <Sheet className="h-4 w-4" />,
-            action: (editor) => {
-                editor.commands.insertSpreadsheet()
-            },
-        },
-        {
-            text: 'import-excel',
+            text: t('slashCommands.importExcel'),
             slash: '/import-excel',
-            icon: <Sheet className="h-4 w-4" />,
-            action: importExcelAction,
-        },
-        {
-            text: '导入Excel',
-            slash: '/导入Excel',
             icon: <Sheet className="h-4 w-4" />,
             action: importExcelAction,
         },

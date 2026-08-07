@@ -63,11 +63,20 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         return baseItem;
     }, []);
 
-    const refresh = useCallback(() => setUpdateFlag((prev) => prev + 1), []);
+    /** 静默刷新标记:true 时本次刷新不切换全局 loading,避免列表闪烁 */
+    const silentRefreshRef = useRef(false);
+
+    const refresh = useCallback((opts?: { silent?: boolean }) => {
+        silentRefreshRef.current = opts?.silent === true;
+        setUpdateFlag((prev) => prev + 1);
+    }, []);
 
     const fetchFolderContents = useCallback(
         async (folderId: string | null) => {
-            setLoading(true);
+            // 消费静默标记:仅本次有效;视图/文件夹切换仍展示 loading
+            const silent = silentRefreshRef.current;
+            silentRefreshRef.current = false;
+            if (!silent) setLoading(true);
             setError(null);
 
             try {
@@ -107,7 +116,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                 toast.error(errorMessage);
                 return [];
             } finally {
-                setLoading(false);
+                if (!silent) setLoading(false);
             }
         },
         [reslove, view, searchKeyword]
@@ -122,7 +131,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
                     type: 'FOLDER',
                     repositoryKey: repoKey,
                 });
-                refresh();
+                refresh({ silent: true });
                 toast.success('Folder created successfully');
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : 'Failed to create folder';
@@ -158,7 +167,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
             });
 
             await promise;
-            refresh();
+            refresh({ silent: true });
         },
         [currentFolderId, fileService, refresh]
     );
@@ -168,7 +177,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         if (!ids.length) return;
         try {
             await Promise.all(ids.map((id) => useApi(APIS.TRASH_FILE, { fileId: id })));
-            refresh();
+            refresh({ silent: true });
             toast.success(`Moved ${ids.length} item${ids.length > 1 ? 's' : ''} to trash`);
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to delete';
@@ -184,7 +193,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
             await Promise.all(files.map((f) =>
                 useApi(APIS.MOVE_FILE, null, { sourceId: f.id, targetId: targetFolderId })
             ));
-            refresh();
+            refresh({ silent: true });
             toast.success(`Moved ${files.length} item${files.length > 1 ? 's' : ''}`);
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to move';
@@ -200,7 +209,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
             await Promise.all(files.map((f) =>
                 useApi(APIS.COPY_FILE, { fileId: f.id, targetParentId: currentFolderId })
             ));
-            refresh();
+            refresh({ silent: true });
             toast.success(`Copied ${files.length} item${files.length > 1 ? 's' : ''}`);
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to copy';
@@ -214,7 +223,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
     const renameFile = useCallback(async (file: FileItem, newName: string) => {
         try {
             await useApi(APIS.RENAME_FILE, { fileId: file.id }, { newName });
-            refresh();
+            refresh({ silent: true });
             toast.success(`${file.isFolder ? 'Folder' : 'File'} renamed successfully`);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : `Failed to rename`;
@@ -223,25 +232,33 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         }
     }, [refresh]);
 
-    /** 收藏 / 取消收藏 */
+    /** 收藏 / 取消收藏(乐观更新,避免整表刷新闪烁) */
     const toggleFavorite = useCallback(async (file: FileItem) => {
         const next = !(file.favorite === 1);
+        setCurrentFolderItems((prev) => {
+            // 收藏视图中取消收藏:该项随即不再属于本列表,直接移除
+            if (view === 'favorites' && !next) {
+                return prev.filter((it) => it.id !== file.id);
+            }
+            return prev.map((it) => (it.id === file.id ? { ...it, favorite: next ? 1 : 0 } : it));
+        });
         try {
             await useApi(APIS.TOGGLE_FAVORITE, { fileId: file.id, favorite: next });
-            refresh();
             toast.success(next ? 'Added to favorites' : 'Removed from favorites');
         } catch (err) {
+            // 失败时回滚:重新拉取服务端真实状态
+            refresh({ silent: true });
             const msg = err instanceof Error ? err.message : 'Failed to update favorite';
             toast.error(msg);
         }
-    }, [refresh]);
+    }, [refresh, view]);
 
     /** 回收站:还原 */
     const restoreFiles = useCallback(async (ids: string[]) => {
         if (!ids.length) return;
         try {
             await Promise.all(ids.map((id) => useApi(APIS.RESTORE_FILE, { fileId: id })));
-            refresh();
+            refresh({ silent: true });
             toast.success(`Restored ${ids.length} item${ids.length > 1 ? 's' : ''}`);
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to restore';
@@ -254,7 +271,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
         if (!ids.length) return;
         try {
             await Promise.all(ids.map((id) => useApi(APIS.PURGE_FILE, { fileId: id })));
-            refresh();
+            refresh({ silent: true });
             toast.success(`Permanently deleted ${ids.length} item${ids.length > 1 ? 's' : ''}`);
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to delete permanently';
@@ -266,7 +283,7 @@ export const useFileManager = ({ initialFolderId = '' }: UseFileManagerProps = {
     const emptyTrash = useCallback(async () => {
         try {
             await useApi(APIS.EMPTY_TRASH);
-            refresh();
+            refresh({ silent: true });
             toast.success('Trash emptied');
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to empty trash';

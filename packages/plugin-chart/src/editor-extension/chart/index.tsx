@@ -7,6 +7,7 @@ import type { Editor } from "@kn/editor";
 import type { ChartData, SeriesConfig } from "./chart";
 import { chartSkill } from "./skills/chart-skill";
 import { COLOR_PALETTES } from "./chart-colors";
+import { createT } from "../../i18n";
 
 /**
  * Chart templates with sample data for Agent reference
@@ -263,12 +264,14 @@ const findChartNodes = (editor: Editor) => {
     return nodes;
 };
 
+const t = createT();
+
 export const ChartExtension: ExtensionWrapper = {
     name: Chart.name,
     extendsion: [Chart],
     slashConfig: [
         {
-            text: 'chart',
+            text: t('slashCommands.chart'),
             slash: '/chart',
             icon: <BarChart3 className="h-4 w-4" />,
             action: (editor) => {

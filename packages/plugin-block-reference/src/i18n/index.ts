@@ -3,6 +3,8 @@
  * @module @kn/plugin-block-reference/i18n
  */
 
+import { i18n as i18nInstance } from "@kn/common";
+
 export const translations = {
     en: {
         blockReference: {
@@ -189,4 +191,13 @@ export function t(lang: SupportedLanguage, key: string): string {
     }
 
     return typeof value === 'string' ? value : key;
+}
+
+/**
+ * Create a translator function for use outside React components.
+ * Reads the current language from the i18next instance at call time.
+ */
+export function createT() {
+    const lang: SupportedLanguage = i18nInstance?.language?.startsWith('zh') ? 'zh' : 'en';
+    return (key: string) => t(lang, key);
 }

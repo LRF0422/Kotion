@@ -12,6 +12,7 @@ import scrollIntoView from "scroll-into-view-if-needed";
 
 import { SlashMenuItem } from "./slash";
 import { cn } from "@kn/ui";
+import { createT } from "../../i18n";
 
 interface IProps {
   editor: Editor;
@@ -285,9 +286,9 @@ export const SlashMenuView: React.FC<IProps> = forwardRef((props, ref) => {
         ))
       ) : (
         <div className="px-4 py-8 text-center">
-          <div className="text-muted-foreground text-sm">未找到指令</div>
+          <div className="text-muted-foreground text-sm">{createT()('slashMenu.noResults')}</div>
           <div className="text-muted-foreground/60 text-xs mt-1">
-            请尝试其他关键词
+            {createT()('slashMenu.noResultsHint')}
           </div>
         </div>
       )}

@@ -10,17 +10,18 @@ import { useAttributes } from "@kn/editor";
 import { deleteNode, isNodeActive } from "@kn/editor";
 import { Image as ImageExtension } from "../image";
 import { Toggle } from "@kn/ui";
-import { IconImageAlignCenter, IconImageAlignLeft, IconImageAlignRight, TbFloatLeft, TbFloatRight, Trash2 } from "@kn/icon";
+import { Captions, IconImageAlignCenter, IconImageAlignLeft, IconImageAlignRight, TbFloatLeft, TbFloatRight, Trash2 } from "@kn/icon";
 
 const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
-  const { width: currentWidth, height: currentHeight, align, float } = useAttributes(
+  const { width: currentWidth, height: currentHeight, align, float, caption } = useAttributes(
     editor,
     ImageExtension.name,
     {
       width: 0,
       height: 0,
       align: "left",
-      float: "none"
+      float: "none",
+      caption: null as string | null
     }
   );
 
@@ -83,6 +84,16 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
   const setFloatRight = useMemo(() => setFloat("right"), [setFloat]);
   const setFloatLeft = useMemo(() => setFloat("left"), [setFloat]);
 
+  // 注脚:null = 未启用;切换为 "" 启用(视图会自动聚焦输入框),再次点击移除
+  const toggleCaption = useCallback(() => {
+    editor
+      .chain()
+      .updateAttributes(ImageExtension.name, { caption: caption != null ? null : "" })
+      .setNodeSelection(editor.state.selection.from)
+      .focus()
+      .run();
+  }, [editor, caption]);
+
   const deleteMe = useCallback(() => deleteNodeInner(editor, ImageExtension.name), [
     editor
   ]);
@@ -135,6 +146,10 @@ const _ImageBubbleMenu: React.FC<{ editor: Editor }> = ({ editor }) => {
           onClick={setFloatLeft}
         >
           <TbFloatLeft />
+        </Toggle>
+        <Divider />
+        <Toggle size="sm" pressed={(caption != null) as boolean} onClick={toggleCaption}>
+          <Captions className="h-4 w-4" />
         </Toggle>
         <Divider />
         <Toggle size="sm" pressed={false} onClick={deleteMe}>

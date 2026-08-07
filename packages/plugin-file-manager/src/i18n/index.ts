@@ -147,6 +147,7 @@ export const translations = {
             loading: 'Loading...',
             failedToLoad: 'Failed to load image',
             alt: 'Image',
+            captionPlaceholder: 'Add a caption',
         },
         folderDialog: {
             selectImage: 'Please select an image',
@@ -311,6 +312,7 @@ export const translations = {
             loading: '加载中...',
             failedToLoad: '图片加载失败',
             alt: '图片',
+            captionPlaceholder: '添加注脚',
         },
         folderDialog: {
             selectImage: '请选择图片',

@@ -85,6 +85,13 @@ export const Image = Node.create({
         parseHTML: (element: HTMLElement) => element.getAttribute("data-float") || null,
         renderHTML: (attrs: Record<string, any>) =>
           attrs.float ? { "data-float": attrs.float } : {}
+      },
+      // 注脚(图片说明):null 表示未启用;空字符串表示已启用但尚未填写
+      caption: {
+        default: null as string | null,
+        parseHTML: (element: HTMLElement) => element.getAttribute("data-caption"),
+        renderHTML: (attrs: Record<string, any>) =>
+          attrs.caption ? { "data-caption": attrs.caption } : {}
       }
     };
   },

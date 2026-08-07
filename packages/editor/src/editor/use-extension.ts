@@ -1,6 +1,5 @@
 import { AnyExtension } from "@tiptap/core"
 import { useContext, useMemo } from "react"
-import { Focus } from "../extensions/focus"
 import { TrailingNode } from "../extensions/trailing-node"
 import { Text } from '@tiptap/extension-text'
 import BubbleMenu from "@tiptap/extension-bubble-menu"

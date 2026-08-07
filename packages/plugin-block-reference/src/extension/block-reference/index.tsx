@@ -3,6 +3,7 @@ import type { Editor } from "@kn/editor";
 import { FilePlus2, Link2, SquareDashedBottom } from "@kn/icon";
 import React from "react";
 import { PageLink, PageLinkNode, BlockLink, LinkTrigger, PageFooter } from "../../bidirectional-link";
+import { createT } from "../../i18n";
 
 /**
  * Create a new page (child or sibling of the current one) and insert a
@@ -40,6 +41,8 @@ const createAndLinkPage = (editor: Editor, kind: 'CHILD' | 'BROTHER') => {
  * Provides slash commands for creating and linking page/block references
  * Also provides bidirectional linking with [[ and (( syntax
  */
+const t = createT();
+
 export const BlockReferenceExtension: ExtensionWrapper = {
     name: "blockReference",
     extendsion: [PageLink, PageLinkNode, BlockLink, LinkTrigger],
@@ -47,11 +50,11 @@ export const BlockReferenceExtension: ExtensionWrapper = {
     slashConfig: [
         {
             divider: true,
-            title: "引用"
+            title: t('slashCommands.referenceGroup')
         },
         {
             icon: <FilePlus2 className="h-4 w-4" />,
-            text: "新建同级页面并引用",
+            text: t('slashCommands.createPage'),
             slash: '/createPage',
             action: (editor) => {
                 createAndLinkPage(editor, 'BROTHER')
@@ -59,7 +62,7 @@ export const BlockReferenceExtension: ExtensionWrapper = {
         },
         {
             icon: <FilePlus2 className="h-4 w-4" />,
-            text: "新建子页面并引用",
+            text: t('slashCommands.createSubPage'),
             slash: '/createSubPage',
             action: (editor) => {
                 createAndLinkPage(editor, 'CHILD')
@@ -67,7 +70,7 @@ export const BlockReferenceExtension: ExtensionWrapper = {
         },
         {
             icon: <Link2 className="h-4 w-4" />,
-            text: "关联页面",
+            text: t('slashCommands.linkPage'),
             slash: '/linkPage',
             action: (editor) => {
                 // Insert the [[ trigger text so the inline suggestion flow
@@ -78,7 +81,7 @@ export const BlockReferenceExtension: ExtensionWrapper = {
         },
         {
             icon: <SquareDashedBottom className="h-4 w-4" />,
-            text: "关联块",
+            text: t('slashCommands.linkBlock'),
             slash: '/linkBlock',
             action: (editor) => {
                 // Insert the (( trigger text so the inline suggestion flow
