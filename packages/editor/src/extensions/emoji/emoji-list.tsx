@@ -1,70 +1,59 @@
-import { CompactEmoji } from "emojibase";
 import React, {
     forwardRef,
     useEffect,
     useImperativeHandle,
+    useRef,
     useState,
 } from "react";
+import { cn, FlatEmoji } from "@kn/ui";
+import { createT } from "../../i18n";
+import type { EmojiItem } from "./emoji-data";
 
-interface EmojiProps {
-    items: CompactEmoji[];
-    command: ({ id }: { id: any }) => void;
+interface EmojiListProps {
+    items: EmojiItem[];
+    command: (item: EmojiItem) => void;
 }
 
-export default forwardRef((props: EmojiProps, ref) => {
+/**
+ * ":" 联想的下拉列表，Notion 风格行式布局：
+ * FlatEmoji 图标 + 中文标签，↑↓ 导航、Enter 选中、鼠标 hover 同步高亮。
+ */
+const EmojiList = forwardRef((props: EmojiListProps, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const listRef = useRef<HTMLDivElement>(null);
 
     const selectItem = (index: number) => {
         const item = props.items[index];
-
         if (item) {
-            const storedEmojis = localStorage.getItem("emojis");
-            if (storedEmojis) {
-                const emojis = JSON.parse(storedEmojis) as CompactEmoji[];
-                /* Add the item to the emojis. ensure length of emojis doesn't exceed 5. If it exceeds 5, remove the first emoji. */
-                //insert the emoji at the beginning of the array
-                emojis.unshift(item);
-                localStorage.setItem("emojis", JSON.stringify(emojis.slice(0, 5)));
-            } else {
-                localStorage.setItem("emojis", JSON.stringify([item]));
-            }
-            props.command({ id: item.unicode });
-            // call the command so that it replaces the : with the emoji
+            props.command(item);
         }
-    };
-
-    const upHandler = () => {
-        setSelectedIndex(
-            (selectedIndex + props.items.length - 1) % props.items.length
-        );
-    };
-
-    const downHandler = () => {
-        setSelectedIndex((selectedIndex + 1) % props.items.length);
-    };
-
-    const enterHandler = () => {
-        selectItem(selectedIndex);
     };
 
     useEffect(() => {
         setSelectedIndex(0);
     }, [props.items]);
 
+    // 键盘导航时保持选中行可见
+    useEffect(() => {
+        listRef.current?.children[selectedIndex]?.scrollIntoView({ block: "nearest" });
+    }, [selectedIndex]);
+
     useImperativeHandle(ref, () => ({
         onKeyDown: ({ event }: { event: KeyboardEvent }) => {
-            if (event.key === "ArrowLeft") {
-                upHandler();
+            if (!props.items.length) return false;
+
+            if (event.key === "ArrowUp") {
+                setSelectedIndex((selectedIndex + props.items.length - 1) % props.items.length);
                 return true;
             }
 
-            if (event.key === "ArrowRight") {
-                downHandler();
+            if (event.key === "ArrowDown") {
+                setSelectedIndex((selectedIndex + 1) % props.items.length);
                 return true;
             }
 
             if (event.key === "Enter") {
-                enterHandler();
+                selectItem(selectedIndex);
                 return true;
             }
 
@@ -72,26 +61,38 @@ export default forwardRef((props: EmojiProps, ref) => {
         },
     }));
 
-    if (props.items) {
+    if (!props.items.length) {
         return (
-            <div className=" bg-popover rounded-md shadow-md p-2 flex flex-row flex-wrap text-2x max-w-sm overflow-hidden">
-                {props.items.length ? (
-                    props.items.map((item, index) => (
-                        <div
-                            className={` h-6 w-6 flex items-center justify-center ${index === selectedIndex
-                                ? "border rounded-sm"
-                                : ""
-                                }`}
-                            key={index}
-                            onClick={() => selectItem(index)}
-                        >
-                            {item.unicode}
-                        </div>
-                    ))
-                ) : (
-                    <div className="item">No result</div>
-                )}
+            <div className="w-64 rounded-md border bg-popover px-3 py-2 text-center text-xs text-muted-foreground shadow-md">
+                {createT()("emoji.noResults")}
             </div>
         );
     }
+
+    return (
+        <div
+            ref={listRef}
+            className="max-h-72 w-64 overflow-y-auto rounded-md border bg-popover p-1 shadow-md"
+        >
+            {props.items.map((item, index) => (
+                <button
+                    key={item.unicode}
+                    type="button"
+                    className={cn(
+                        "flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-sm",
+                        index === selectedIndex && "bg-accent"
+                    )}
+                    onMouseEnter={() => setSelectedIndex(index)}
+                    onClick={() => selectItem(index)}
+                >
+                    <FlatEmoji emoji={item.unicode} size={18} className="flex-shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                </button>
+            ))}
+        </div>
+    );
 });
+
+EmojiList.displayName = "EmojiList";
+
+export default EmojiList;

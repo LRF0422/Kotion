@@ -89,9 +89,9 @@ export const ModelParamsPopover: React.FC<ModelParamsPopoverProps> = ({
                     type="button"
                     disabled={disabled}
                     title={t('ai.modelParams.title', { defaultValue: '模型参数' })}
-                    className="relative flex items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 disabled:opacity-50 transition-colors"
+                    className="relative flex shrink-0 items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 disabled:opacity-50 transition-colors"
                 >
-                    <SlidersHorizontal className="h-3 w-3" />
+                    <SlidersHorizontal className="h-3 w-3 shrink-0" />
                     {isCustomized && (
                         <span
                             aria-hidden

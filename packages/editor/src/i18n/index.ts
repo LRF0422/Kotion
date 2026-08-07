@@ -37,6 +37,9 @@ export const translations = {
             includeTime: 'Include time',
             clear: 'Clear',
         },
+        emoji: {
+            noResults: 'No matching emoji',
+        },
     },
     zh: {
         slashCommands: {
@@ -68,6 +71,9 @@ export const translations = {
             tomorrow: '明天',
             includeTime: '包含时间',
             clear: '清除',
+        },
+        emoji: {
+            noResults: '无匹配结果',
         },
     },
 };

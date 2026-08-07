@@ -41,7 +41,7 @@ const ModeToggle: React.FC<ModeToggleProps> = ({ mode, onModeChange, disabled })
         { id: 'agent', label: t('ai.chat.modeAgent', { defaultValue: 'Agent' }), icon: <Bot className="h-3 w-3" />, hint: t('ai.chat.modeAgentHint', { defaultValue: 'Agent 模式 — 可编辑文档' }) },
     ]
     return (
-        <div className="inline-flex items-center p-0.5 rounded-md bg-muted/70 text-[10px] font-medium">
+        <div className="inline-flex shrink-0 items-center p-0.5 rounded-md bg-muted/70 text-[10px] font-medium">
             {modes.map((m) => {
                 const active = mode === m.id
                 return (
@@ -106,11 +106,11 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ model, onModelChange, dis
                 <button
                     type="button"
                     disabled={disabled}
-                    className="flex items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 disabled:opacity-50 transition-colors"
+                    className="flex shrink-0 items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 disabled:opacity-50 transition-colors"
                 >
-                    <Sparkles className="h-3 w-3" />
+                    <Sparkles className="h-3 w-3 shrink-0" />
                     <span className="max-w-[90px] truncate">{displayLabel}</span>
-                    <ChevronDown className="h-2.5 w-2.5" />
+                    <ChevronDown className="h-2.5 w-2.5 shrink-0" />
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[220px]">
@@ -180,11 +180,11 @@ const AgentSelector: React.FC<AgentSelectorProps> = ({ agentId, onAgentChange, d
                     type="button"
                     disabled={disabled}
                     title={t('ai.chat.agentSelectorHint', { defaultValue: '选择自定义 Agent' })}
-                    className="flex items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 disabled:opacity-50 transition-colors"
+                    className="flex shrink-0 items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 disabled:opacity-50 transition-colors"
                 >
-                    <Bot className="h-3 w-3" />
+                    <Bot className="h-3 w-3 shrink-0" />
                     <span className="max-w-[80px] truncate">{displayLabel}</span>
-                    <ChevronDown className="h-2.5 w-2.5" />
+                    <ChevronDown className="h-2.5 w-2.5 shrink-0" />
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[240px]">
@@ -345,50 +345,55 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 rows={1}
                 className="min-h-[44px] max-h-[120px] overflow-y-auto resize-none rounded-xl bg-transparent border-0 px-3 pt-2.5 pb-1 text-[13px] leading-relaxed shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
             />
-            <div className="flex items-center justify-between px-2 pb-1.5 pt-0.5">
-                <div className="flex items-center gap-1.5 min-w-0">
-                    <ModeToggle mode={mode} onModeChange={onModeChange} disabled={isLoading} />
-                    <AgentSelector agentId={agentId} onAgentChange={onAgentChange} disabled={isLoading} />
-                    <ModelSelector model={model} onModelChange={onModelChange} disabled={isLoading} />
-                    <ModelParamsPopover
-                        params={modelParams}
-                        onChange={onModelParamsChange}
-                        disabled={isLoading}
-                    />
+            {/* Toolbar. Wraps rather than overflows: the controls' intrinsic width
+                (~390px) exceeds a side-dock panel, and a nowrap row there clipped
+                the model label and crushed the send button on top of it. `ml-auto`
+                keeps send right-aligned on whichever line it lands on, so a wide
+                floating chat still reads as a single justified row. */}
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 px-2 pb-1.5 pt-0.5">
+                <ModeToggle mode={mode} onModeChange={onModeChange} disabled={isLoading} />
+                <AgentSelector agentId={agentId} onAgentChange={onAgentChange} disabled={isLoading} />
+                <ModelSelector model={model} onModelChange={onModelChange} disabled={isLoading} />
+                <ModelParamsPopover
+                    params={modelParams}
+                    onChange={onModelParamsChange}
+                    disabled={isLoading}
+                />
+                <div className="ml-auto shrink-0">
+                    {isLoading ? (
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="destructive"
+                                        className="h-7 px-2.5 gap-1 rounded-lg"
+                                        onClick={onStop}
+                                    >
+                                        <Square className="h-3 w-3" />
+                                        <span className="text-[10px] font-medium">
+                                            {t('ai.stop', { defaultValue: '停止' })}
+                                        </span>
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                    {t('ai.chat.stopGeneration', { defaultValue: '停止生成' })}
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    ) : (
+                        <Button
+                            type="submit"
+                            size="sm"
+                            aria-label={t('ai.chat.send', { defaultValue: '发送消息' })}
+                            disabled={!isValid}
+                            className="h-7 w-7 p-0 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        >
+                            <Send className="h-3.5 w-3.5" />
+                        </Button>
+                    )}
                 </div>
-                {isLoading ? (
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="destructive"
-                                    className="h-7 px-2.5 gap-1 rounded-lg"
-                                    onClick={onStop}
-                                >
-                                    <Square className="h-3 w-3" />
-                                    <span className="text-[10px] font-medium">
-                                        {t('ai.stop', { defaultValue: '停止' })}
-                                    </span>
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">
-                                {t('ai.chat.stopGeneration', { defaultValue: '停止生成' })}
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                ) : (
-                    <Button
-                        type="submit"
-                        size="sm"
-                        aria-label={t('ai.chat.send', { defaultValue: '发送消息' })}
-                        disabled={!isValid}
-                        className="h-7 w-7 p-0 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                    >
-                        <Send className="h-3.5 w-3.5" />
-                    </Button>
-                )}
             </div>
         </form>
     )

@@ -20,6 +20,11 @@ export function emojiToCodePoints(emoji: string): string {
     return codes.join("-");
 }
 
+/** 由 emoji 字符生成 Twemoji SVG 地址（供编辑器视图层装饰等非 React 场景使用） */
+export function flatEmojiUrl(emoji: string): string {
+    return `${FLAT_EMOJI_CDN}/${emojiToCodePoints(emoji)}.svg`;
+}
+
 export interface FlatEmojiProps extends React.HTMLAttributes<HTMLElement> {
     emoji: string;
     /** 像素尺寸（宽=高）。不传则由 className 控制。 */
@@ -49,7 +54,7 @@ export const FlatEmoji: React.FC<FlatEmojiProps> = ({ emoji, size, className, ..
 
     return (
         <img
-            src={`${FLAT_EMOJI_CDN}/${emojiToCodePoints(emoji)}.svg`}
+            src={flatEmojiUrl(emoji)}
             alt={emoji}
             draggable={false}
             loading="lazy"

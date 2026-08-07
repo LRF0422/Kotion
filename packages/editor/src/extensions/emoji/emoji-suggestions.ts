@@ -1,108 +1,123 @@
-import { ReactRenderer, posToDOMRect } from "@tiptap/react";
-import { CompactEmoji } from "emojibase";
-import { fetchEmojis } from "emojibase";
+import { SuggestionKeyDownProps, SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
+import { ReactRenderer } from "@tiptap/react";
+import { autoUpdate, computePosition, flip, offset, shift } from "@floating-ui/dom";
+import EmojiList from "./emoji-list";
+import { EmojiItem, pushRecentEmoji, searchEmojis } from "./emoji-data";
 
-// import tippy from "tippy.js";
-import emojiList from "./emoji-list";
-import { computePosition, flip } from "@floating-ui/dom";
+type EmojiSuggestionProps = SuggestionProps<EmojiItem, EmojiItem>;
 
-interface QueryProps {
-    query: string;
-}
-
-export default {
-    items: async ({ query }: QueryProps) => {
-        const compactEmojis = await fetchEmojis("zh", { compact: true });
-        if (query !== "") {
-            const results = compactEmojis.filter((emoji: CompactEmoji) => {
-                if (emoji.label.includes(query)) {
-                    return true;
-                } else if (emoji.tags) {
-                    return emoji.tags!.some((tag) => {
-                        /* check if the query is contained in the tag */
-                        return tag.includes(query);
-                    });
-                }
-            });
-            return results.slice(0, 20);
-        } else {
-            const localEmojis = localStorage.getItem("emojis");
-            if (localEmojis) {
-                return JSON.parse(localEmojis);
-            } else {
-                return [];
-            }
-        }
-    },
-
+/**
+ * ":" 触发的 emoji 联想配置。选中后插入纯文本 unicode，
+ * 由 emojiSuggestion extension 注册为 ProseMirror 插件。
+ */
+const emojiSuggestion: Omit<SuggestionOptions<EmojiItem, EmojiItem>, "editor"> = {
     char: ":",
 
-    render: () => {
-        let component: any;
-        let popup: any;
-        let rect: any
+    items: ({ query }) => searchEmojis(query),
 
-        const updatePostition = () => {
-            if (rect) {
-                let virtualElement = {
-                    getBoundingClientRect: () => rect,
-                    getClientRects: () => [rect],
+    command: ({ editor, range, props }) => {
+        pushRecentEmoji(props);
+        editor.chain().focus().deleteRange(range).insertContent(props.unicode).run();
+    },
+
+    // 代码块等 code mark 容器内不触发联想
+    allow: ({ state, range }) => {
+        const $from = state.doc.resolve(range.from);
+        return !$from.parent.type.spec.code;
+    },
+
+    render: () => {
+        let component: ReactRenderer | null = null;
+        let stopAutoUpdate: (() => void) | null = null;
+        let currentRect: DOMRect | null = null;
+
+        const virtualElement = {
+            getBoundingClientRect: () => currentRect ?? new DOMRect(),
+            getClientRects: () => (currentRect ? [currentRect] : []),
+        };
+
+        const updatePosition = () => {
+            if (!component || !currentRect) return;
+            const element = component.element as HTMLElement;
+            computePosition(virtualElement, element, {
+                placement: "bottom-start",
+                strategy: "fixed",
+                middleware: [offset(4), flip(), shift({ padding: 8 })],
+            }).then(({ x, y, strategy }) => {
+                if (!component) return;
+                element.style.position = strategy;
+                element.style.left = `${x}px`;
+                element.style.top = `${y}px`;
+            });
+        };
+
+        /** 幂等清理：Escape 关闭与 onExit 都会走到，重复调用安全 */
+        const teardown = () => {
+            stopAutoUpdate?.();
+            stopAutoUpdate = null;
+            if (component) {
+                const element = component.element as HTMLElement;
+                if (element.isConnected) {
+                    document.body.removeChild(element);
                 }
-                computePosition(virtualElement, component.element as HTMLElement, {
-                    placement: 'bottom-start',
-                    middleware: [flip()],
-                }).then(({ x, y, strategy }) => {
-                    console.log("finished", component.element);
-                    (component.element as HTMLElement).style.zIndex = '1000';
-                    (component.element as HTMLElement).style.position = strategy;
-                    (component.element as HTMLElement).style.left = `${x}px`;
-                    (component.element as HTMLElement).style.top = `${y}px`;
-                })
+                component.destroy();
+                component = null;
             }
+            currentRect = null;
+        };
+
+        const syncRect = (props: EmojiSuggestionProps) => {
+            currentRect = props.clientRect?.() ?? null;
         };
 
         return {
-            onStart: (props: any) => {
-                if (!component || component.element.children.length === 0) {
-                    component = new ReactRenderer(emojiList, {
-                        props,
-                        editor: props.editor
-                    });
-                    component.render()
-                    document.body.appendChild(component.element);
-                }
+            onStart: (props: EmojiSuggestionProps) => {
+                if (!props.editor.isEditable) return;
 
-                const { selection } = props.editor.state
-                const { view } = props.editor
-                const domRect = posToDOMRect(view, selection.from, selection.to)
-                rect = domRect
-                updatePostition()
-            },
+                // 防御：快速重开时确保上一个实例已销毁
+                teardown();
 
-            onUpdate(props: any) {
-                component.updateProps(props);
-                if (!props.clientRect) {
-                    return;
-                }
-                rect = props.clientRect();
-                updatePostition();
-            },
-
-            onKeyDown(props: any) {
-                if (props.event.key === "Escape") {
-                    document.body.removeChild(component.element);
-                    return true;
-                }
-
-                return component.ref?.onKeyDown(props);
-            },
-
-            onExit() {
-                setTimeout(() => {
-                    component.destroy();
-                    document.body.removeChild(component.element);
+                component = new ReactRenderer(EmojiList, {
+                    props,
+                    editor: props.editor,
                 });
+                component.render();
+
+                const element = component.element as HTMLElement;
+                element.style.zIndex = "1000";
+                // ReactRenderer 默认块级容器会撑满宽度，导致 flip/shift 误判漂移；
+                // 收缩为内容宽度并先给出临时位置再计算
+                element.style.width = "max-content";
+                element.style.position = "fixed";
+                element.style.left = "0px";
+                element.style.top = "0px";
+                document.body.appendChild(element);
+
+                syncRect(props);
+                updatePosition();
+
+                // 页面滚动/缩放时跟随光标位置
+                stopAutoUpdate = autoUpdate(virtualElement, element, updatePosition);
+            },
+
+            onUpdate: (props: EmojiSuggestionProps) => {
+                if (!component) return;
+                component.updateProps(props);
+                syncRect(props);
+                updatePosition();
+            },
+
+            onKeyDown: (props: SuggestionKeyDownProps) => {
+                // Escape 由 suggestion 插件原生处理（关闭并回调 onExit），无需拦截
+                if (props.event.key === "Escape") return false;
+                return (component?.ref as any)?.onKeyDown?.(props) ?? false;
+            },
+
+            onExit: () => {
+                teardown();
             },
         };
     },
 };
+
+export default emojiSuggestion;
