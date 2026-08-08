@@ -2,11 +2,9 @@
  * PageFooter Component
  *
  * Mounted once below the editor content (via the `pageFooter` ExtensionWrapper
- * slot). It does two jobs:
- *   1. Renders the BacklinksPanel for the current page.
- *   2. Listens for PAGE_LINK_CLICK events emitted by the PageLink ProseMirror
- *      plugin (which cannot use React hooks) and performs the navigation,
- *      resolving the target page's spaceId on demand.
+ * slot). Listens for PAGE_LINK_CLICK events emitted by the PageLink ProseMirror
+ * plugin (which cannot use React hooks) and performs the navigation, resolving
+ * the target page's spaceId on demand.
  *
  * @module @kn/plugin-block-reference/bidirectional-link/components
  */
@@ -16,7 +14,6 @@ import { createPortal } from "react-dom";
 import { useNavigator, event } from "@kn/common";
 import { FileText, FileX2 } from "@kn/icon";
 import { cn } from "@kn/ui";
-import { BacklinksPanel } from "./BacklinksPanel";
 import { useSpaceService } from "../../hooks";
 import { useI18n } from "../../i18n/use-i18n";
 import { PAGE_LINK_CLICK } from "../extensions/PageLink";
@@ -107,7 +104,6 @@ export const PageFooter: React.FC<{ editor?: any }> = () => {
 
     return (
         <>
-            <BacklinksPanel className="px-4 pb-8" />
             {pending && createPortal(
                 <div
                     ref={tooltipRef}

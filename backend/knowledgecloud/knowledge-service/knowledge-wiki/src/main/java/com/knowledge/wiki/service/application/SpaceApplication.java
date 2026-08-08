@@ -827,7 +827,7 @@ public class SpaceApplication {
 
     public IPage<PageVO> queryRecentPage(QueryPageDTO dto) {
         IPage<PageVO> page = PageConverter.INSTANCE.convertVO(
-                spaceService.getPageService().queryRecentPage(dto.getSearchValue(), dto));
+                spaceService.getPageService().queryRecentPage(dto));
         return page;
     }
 
@@ -862,10 +862,14 @@ public class SpaceApplication {
                 .selectAs(Page::getSpaceId, PageBlockVO::getSpaceId)
                 .selectAs(Space::getName, PageBlockVO::getSpaceName)
                 .selectAs(Page::getTitle, PageBlockVO::getPageTitle)
+                // Exclude trashed/deleted pages so block search results never leak
+                .ne(Page::getStatus, PageStatus.DELETED)
+                .ne(Page::getStatus, PageStatus.TRASH)
                 .like(StrUtil.isNotBlank(dto.getSearchValue()), PageContent::getText, dto.getSearchValue())
                 .eq(StrUtil.isNotBlank(dto.getType()), PageContent::getType, dto.getType())
                 .eq(dto.getSpaceId() != null, Space::getId, dto.getSpaceId())
                 .eq(dto.getPageId() != null, PageContent::getPageId, dto.getPageId())
+                .orderByDesc(PageContent::getUpdateTime)
                 .distinct();
         return this.spaceService.getPageService().getPageContentService()
                 .selectJoinListPage(dto.page(), PageContentVO.class, wrapper);
@@ -1211,7 +1215,8 @@ public class SpaceApplication {
             return new ArrayList<>();
         }
 
-        // Resolve searchable pages first so trashed/deleted pages never leak into results
+        // Resolve searchable pages first so trashed/deleted pages never leak into
+        // results
         Map<Long, Page> pageMap;
         if (pageId != null) {
             Page page = pageService.getById(pageId);

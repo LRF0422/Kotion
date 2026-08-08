@@ -160,6 +160,10 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "untitled": "未命名",
           "preview-error": "预览加载失败",
           "preview-empty": "该页面暂无内容",
+          "content-search": "内容搜索",
+          "search-content": "搜索内容...",
+          "no-content-match": "没有匹配的内容",
+          "content-empty": "输入关键词搜索所有页面内容",
           "greeting": {
             "morning": "早上好",
             "afternoon": "下午好",
@@ -729,6 +733,10 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "untitled": "Untitled",
           "preview-error": "Failed to load preview",
           "preview-empty": "This page is empty",
+          "content-search": "Content",
+          "search-content": "Search content...",
+          "no-content-match": "No matching content",
+          "content-empty": "Type to search across all page content",
           "greeting": {
             "morning": "Good Morning",
             "afternoon": "Good Afternoon",

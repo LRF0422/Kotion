@@ -2,7 +2,7 @@ import { APIS } from "../../api";
 import { Button, Card, CardContent, Dialog, DialogContent, DialogHeader, DialogTitle, Input, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger, cn, useIsMobile } from "@kn/ui";
 import { useApi, useNavigator, useSelector, GlobalState, event, TOGGLE_AI_ASSISTANT, useDebounce } from "@kn/common";
 import { Space } from "../../model/Space";
-import { ArrowRight, BanIcon, Book, Box, FileText, FilePlus, FolderPlus, LayoutGrid, Moon, Network, Plus, SearchIcon, Sparkles, Star, Sun, Sunset, Tag, Users, X } from "@kn/icon";
+import { ArrowRight, BanIcon, Book, Box, FileText, FilePlus, FolderPlus, LayoutGrid, Moon, Network, Plus, SearchIcon, Sparkles, Star, Sun, Sunset, Tag, Users, X, AlignLeft } from "@kn/icon";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CreateSpaceDlg } from "../components/SpaceForm";
 import { PageItemIcon } from "../SpaceDetail/components/PageItemIcon";
@@ -34,6 +34,31 @@ const relativeTime = (value?: string): string => {
     }
 }
 
+/** Build a short snippet centered on the first keyword occurrence */
+function makeSnippet(text: string, keyword: string, radius = 40): string {
+    if (!text) return ''
+    const idx = text.toLowerCase().indexOf(keyword.toLowerCase())
+    if (idx < 0) return text.length > radius * 2 ? text.slice(0, radius * 2) + '…' : text
+    const start = Math.max(0, idx - radius)
+    const end = Math.min(text.length, idx + keyword.length + radius)
+    return (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '')
+}
+
+/** Highlight keyword occurrences inside a snippet */
+const Highlighted: React.FC<{ text: string; keyword: string }> = ({ text, keyword }) => {
+    if (!keyword) return <>{text}</>
+    const parts = text.split(new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
+    return (
+        <>
+            {parts.map((part, i) =>
+                part.toLowerCase() === keyword.toLowerCase()
+                    ? <mark key={i} className="bg-primary/20 text-foreground rounded-[2px] px-0">{part}</mark>
+                    : <React.Fragment key={i}>{part}</React.Fragment>
+            )}
+        </>
+    )
+}
+
 
 export const Home: React.FC = () => {
 
@@ -61,6 +86,13 @@ export const Home: React.FC = () => {
     const debouncedPageQuery = useDebounce(pageQuery, { wait: 400 })
     const [spacesLoading, setSpacesLoading] = useState(true)
     const [pagesLoading, setPagesLoading] = useState(true)
+
+    // Content (block-level) search — cross-space full-text search over
+    // page block contents, debounced and resolved server-side.
+    const [contentQuery, setContentQuery] = useState("")
+    const debouncedContentQuery = useDebounce(contentQuery, { wait: 400 })
+    const [blockResults, setBlockResults] = useState<any[]>([])
+    const [contentLoading, setContentLoading] = useState(false)
 
     // Update current hour every minute to adapt to time changes
     useEffect(() => {
@@ -137,6 +169,28 @@ export const Home: React.FC = () => {
             setPagesLoading(false)
         })
     }, [debouncedPageQuery, flag])
+
+    // Block-level content search — queries the QUERY_BLOCKS endpoint which
+    // joins page_content ↔ page ↔ space and filters out trashed/deleted pages.
+    // Title blocks are excluded since they duplicate the page-title search.
+    useEffect(() => {
+        const kw = debouncedContentQuery.trim()
+        if (!kw) {
+            setBlockResults([])
+            setContentLoading(false)
+            return
+        }
+        setContentLoading(true)
+        useApi(APIS.QUERY_BLOCKS, { searchValue: kw, pageSize: 20 })
+            .then((res) => {
+                const records = (res?.data?.records || []).filter((b: any) => b.type !== 'title' && b.text)
+                setBlockResults(records)
+            })
+            .catch(() => setBlockResults([]))
+            .finally(() => setContentLoading(false))
+    }, [debouncedContentQuery])
+
+    const contentSearching = debouncedContentQuery.trim().length > 0
 
     // Pages edited within the last 7 days — small confidence-building stat.
     const weekEditedCount = recentPages.filter((p: any) => {
@@ -397,319 +451,399 @@ export const Home: React.FC = () => {
                     scannable. */}
                 <section className="flex flex-col shrink-0">
                     <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <div className="flex items-center justify-between px-1">
-                        <TabsList className="h-8 gap-1 bg-transparent p-0">
-                            <TabsTrigger
-                                value="recent"
-                                className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
-                            >
-                                {t("home.recent-pages") || "Recent Pages"}
-                                {displayedPages.length > 0 && (
-                                    <span className="text-[11px] text-muted-foreground/70">{displayedPages.length}</span>
-                                )}
-                            </TabsTrigger>
-                            <TabsTrigger
-                                value="spaces"
-                                className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
-                            >
-                                {t("home.rs") || "Spaces"}
-                                {spaceRows.length > 0 && (
-                                    <span className="text-[11px] text-muted-foreground/70">{spaceRows.length}</span>
-                                )}
-                            </TabsTrigger>
-                            <TabsTrigger
-                                value="favorites"
-                                className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
-                            >
-                                {t("home.favorites") || "Favorites"}
-                                {favoritePages.length > 0 && (
-                                    <span className="text-[11px] text-muted-foreground/70">{favoritePages.length}</span>
-                                )}
-                            </TabsTrigger>
-                        </TabsList>
-                        {activeTab === "spaces" && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 gap-1 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground"
-                                onClick={() => navigator.go({ to: "/all-spaces" })}
-                            >
-                                {t("home.all") || "View all"}
-                                <ArrowRight className="h-3 w-3" />
-                            </Button>
-                        )}
-                    </div>
-
-                    {/* Spaces — recent + team merged into flat list rows; a
-                        tiny "Team" pill marks collaboration spaces. */}
-                    <TabsContent value="spaces" className="mt-3 flex flex-col gap-2">
-                    <div className="px-1">
-                        <Input
-                            className="h-8 max-w-xs text-[13px]"
-                            icon={<SearchIcon className="h-3.5 w-3.5" />}
-                            placeholder={t("home.search-spaces", "Search spaces...")}
-                            value={spaceQuery}
-                            onChange={(e) => setSpaceQuery(e.target.value)}
-                            aria-label={t("home.search-spaces", "Search spaces...")}
-                        />
-                    </div>
-                    {(spacesLoading || loading) ? (
-                        <div className="flex flex-col">
-                            {[...Array(isMobile ? 4 : 5)].map((_, index) => (
-                                <div key={index} className="flex items-center gap-3 px-2 py-2">
-                                    <Skeleton className="h-6 w-6 rounded-md" />
-                                    <Skeleton className="h-4 flex-1 max-w-[50%]" />
-                                    <Skeleton className="h-3 w-16" />
-                                </div>
-                            ))}
+                        <div className="flex items-center justify-between px-1">
+                            <TabsList className="h-8 gap-1 bg-transparent p-0">
+                                <TabsTrigger
+                                    value="recent"
+                                    className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                                >
+                                    {t("home.recent-pages") || "Recent Pages"}
+                                    {displayedPages.length > 0 && (
+                                        <span className="text-[11px] text-muted-foreground/70">{displayedPages.length}</span>
+                                    )}
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="spaces"
+                                    className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                                >
+                                    {t("home.rs") || "Spaces"}
+                                    {spaceRows.length > 0 && (
+                                        <span className="text-[11px] text-muted-foreground/70">{spaceRows.length}</span>
+                                    )}
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="favorites"
+                                    className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                                >
+                                    {t("home.favorites") || "Favorites"}
+                                    {favoritePages.length > 0 && (
+                                        <span className="text-[11px] text-muted-foreground/70">{favoritePages.length}</span>
+                                    )}
+                                </TabsTrigger>
+                                <TabsTrigger
+                                    value="content"
+                                    className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                                >
+                                    {t("home.content-search") || "Content"}
+                                    {blockResults.length > 0 && (
+                                        <span className="text-[11px] text-muted-foreground/70">{blockResults.length}</span>
+                                    )}
+                                </TabsTrigger>
+                            </TabsList>
+                            {activeTab === "spaces" && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 gap-1 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                                    onClick={() => navigator.go({ to: "/all-spaces" })}
+                                >
+                                    {t("home.all") || "View all"}
+                                    <ArrowRight className="h-3 w-3" />
+                                </Button>
+                            )}
                         </div>
-                    ) : spaceRows.length === 0 ? (
-                        spaceSearching ? (
-                            <EmptyBlock
-                                icon={<SearchIcon className="h-5 w-5" />}
-                                title={t("home.no-space-match", "No matching spaces")}
-                            />
-                        ) : (
-                            <EmptyBlock
-                                icon={<Box className="h-5 w-5" />}
-                                title={t("home.no-spaces") || "No spaces yet"}
-                                desc={t("home.no-spaces-hint") || "Create a space to get started"}
-                                action={
-                                    <CreateSpaceDlg
-                                        trigger={
-                                            <Button size="sm" variant="outline" className="mt-2 gap-1.5 h-8 text-xs">
-                                                <Plus className="w-3.5 h-3.5" />{t("home.create-space") || "New Space"}
-                                            </Button>
-                                        }
-                                        callBack={() => setFlag(f => f + 1)}
-                                    />
-                                }
-                            />
-                        )
-                    ) : (
-                        <ul className="flex flex-col">
-                            {spaceRows.map(({ space, isTeam }) => {
-                                return (
-                                    <li
-                                        key={space.id}
-                                        onClick={() => navigator.go({ to: isTeam ? `/space-detail/${space.id}/home` : `/space-detail/${space.id}` })}
-                                        className={cn(
-                                            "group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5",
-                                            "transition-colors duration-100 hover:bg-muted/60"
-                                        )}
-                                    >
-                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
-                                            {space.icon?.icon
-                                                ? <PageItemIcon icon={space.icon} size={16} />
-                                                : isTeam
-                                                    ? <Users className="h-4 w-4" />
-                                                    : <Box className="h-4 w-4" />}
-                                        </span>
-                                        <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
-                                            {space.name}
-                                        </span>
-                                        {isTeam && (
-                                            <span className="shrink-0 rounded bg-muted/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                                {t("home.team-badge") || "Team"}
-                                            </span>
-                                        )}
-                                        <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:flex">
-                                            {isTeam && space.memberCount ? `${space.memberCount} members` : relativeTime(space.updateTime)}
-                                        </span>
-                                    </li>
-                                )
-                            })}
-                        </ul>
-                    )}
-                    </TabsContent>
 
-                    {/* Recent Pages — Notion-style flat list rows: no card, no
+                        {/* Spaces — recent + team merged into flat list rows; a
+                        tiny "Team" pill marks collaboration spaces. */}
+                        <TabsContent value="spaces" className="mt-3 flex flex-col gap-2">
+                            <div className="px-1">
+                                <Input
+                                    className="h-8 max-w-xs text-[13px]"
+                                    icon={<SearchIcon className="h-3.5 w-3.5" />}
+                                    placeholder={t("home.search-spaces", "Search spaces...")}
+                                    value={spaceQuery}
+                                    onChange={(e) => setSpaceQuery(e.target.value)}
+                                    aria-label={t("home.search-spaces", "Search spaces...")}
+                                />
+                            </div>
+                            {(spacesLoading || loading) ? (
+                                <div className="flex flex-col">
+                                    {[...Array(isMobile ? 4 : 5)].map((_, index) => (
+                                        <div key={index} className="flex items-center gap-3 px-2 py-2">
+                                            <Skeleton className="h-6 w-6 rounded-md" />
+                                            <Skeleton className="h-4 flex-1 max-w-[50%]" />
+                                            <Skeleton className="h-3 w-16" />
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : spaceRows.length === 0 ? (
+                                spaceSearching ? (
+                                    <EmptyBlock
+                                        icon={<SearchIcon className="h-5 w-5" />}
+                                        title={t("home.no-space-match", "No matching spaces")}
+                                    />
+                                ) : (
+                                    <EmptyBlock
+                                        icon={<Box className="h-5 w-5" />}
+                                        title={t("home.no-spaces") || "No spaces yet"}
+                                        desc={t("home.no-spaces-hint") || "Create a space to get started"}
+                                        action={
+                                            <CreateSpaceDlg
+                                                trigger={
+                                                    <Button size="sm" variant="outline" className="mt-2 gap-1.5 h-8 text-xs">
+                                                        <Plus className="w-3.5 h-3.5" />{t("home.create-space") || "New Space"}
+                                                    </Button>
+                                                }
+                                                callBack={() => setFlag(f => f + 1)}
+                                            />
+                                        }
+                                    />
+                                )
+                            ) : (
+                                <ul className="flex flex-col">
+                                    {spaceRows.map(({ space, isTeam }) => {
+                                        return (
+                                            <li
+                                                key={space.id}
+                                                onClick={() => navigator.go({ to: isTeam ? `/space-detail/${space.id}/home` : `/space-detail/${space.id}` })}
+                                                className={cn(
+                                                    "group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5",
+                                                    "transition-colors duration-100 hover:bg-muted/60"
+                                                )}
+                                            >
+                                                <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
+                                                    {space.icon?.icon
+                                                        ? <PageItemIcon icon={space.icon} size={16} />
+                                                        : isTeam
+                                                            ? <Users className="h-4 w-4" />
+                                                            : <Box className="h-4 w-4" />}
+                                                </span>
+                                                <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
+                                                    {space.name}
+                                                </span>
+                                                {isTeam && (
+                                                    <span className="shrink-0 rounded bg-muted/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                                        {t("home.team-badge") || "Team"}
+                                                    </span>
+                                                )}
+                                                <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:flex">
+                                                    {isTeam && space.memberCount ? `${space.memberCount} members` : relativeTime(space.updateTime)}
+                                                </span>
+                                            </li>
+                                        )
+                                    })}
+                                </ul>
+                            )}
+                        </TabsContent>
+
+                        {/* Recent Pages — Notion-style flat list rows: no card, no
                         border, just a hover surface, an emoji-style icon and a
                         right-aligned timestamp. */}
-                    <TabsContent value="recent" className="mt-3 flex flex-col gap-2">
-                    <div className="flex flex-col gap-2 px-1">
-                        <Input
-                            className="h-8 max-w-xs text-[13px]"
-                            icon={<SearchIcon className="h-3.5 w-3.5" />}
-                            placeholder={t("home.search-pages", "Search pages...")}
-                            value={pageQuery}
-                            onChange={(e) => setPageQuery(e.target.value)}
-                            aria-label={t("home.search-pages", "Search pages...")}
-                        />
-                        {availableTags.length > 0 && (
-                            <div className="home-hscroll -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-0.5">
-                                <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                                {availableTags.map((tag) => {
-                                    const active = selectedTags.includes(tag)
-                                    return (
-                                        <button
-                                            key={tag}
-                                            type="button"
-                                            onClick={() => toggleTag(tag)}
-                                            className={cn(
-                                                "shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-                                                active
-                                                    ? "bg-primary text-primary-foreground"
-                                                    : "bg-muted/60 text-muted-foreground hover:bg-muted"
-                                            )}
-                                        >
-                                            {tag}
-                                        </button>
-                                    )
-                                })}
-                                {selectedTags.length > 0 && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setSelectedTags([])}
-                                        className="flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
-                                    >
-                                        <X className="h-3 w-3" />
-                                        {t("home.clear-tags", "Clear")}
-                                    </button>
+                        <TabsContent value="recent" className="mt-3 flex flex-col gap-2">
+                            <div className="flex flex-col gap-2 px-1">
+                                <Input
+                                    className="h-8 max-w-xs text-[13px]"
+                                    icon={<SearchIcon className="h-3.5 w-3.5" />}
+                                    placeholder={t("home.search-pages", "Search pages...")}
+                                    value={pageQuery}
+                                    onChange={(e) => setPageQuery(e.target.value)}
+                                    aria-label={t("home.search-pages", "Search pages...")}
+                                />
+                                {availableTags.length > 0 && (
+                                    <div className="home-hscroll -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-0.5">
+                                        <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                                        {availableTags.map((tag) => {
+                                            const active = selectedTags.includes(tag)
+                                            return (
+                                                <button
+                                                    key={tag}
+                                                    type="button"
+                                                    onClick={() => toggleTag(tag)}
+                                                    className={cn(
+                                                        "shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                                                        active
+                                                            ? "bg-primary text-primary-foreground"
+                                                            : "bg-muted/60 text-muted-foreground hover:bg-muted"
+                                                    )}
+                                                >
+                                                    {tag}
+                                                </button>
+                                            )
+                                        })}
+                                        {selectedTags.length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedTags([])}
+                                                className="flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+                                            >
+                                                <X className="h-3 w-3" />
+                                                {t("home.clear-tags", "Clear")}
+                                            </button>
+                                        )}
+                                    </div>
                                 )}
                             </div>
-                        )}
-                    </div>
-                    {pagesLoading ? (
-                        <div className="flex flex-col">
-                            {[...Array(isMobile ? 4 : 5)].map((_, index) => (
-                                <div key={index} className="flex items-center gap-3 px-2 py-2">
-                                    <Skeleton className="h-6 w-6 rounded-md" />
-                                    <Skeleton className="h-4 flex-1 max-w-[50%]" />
-                                    <Skeleton className="h-3 w-16" />
+                            {pagesLoading ? (
+                                <div className="flex flex-col">
+                                    {[...Array(isMobile ? 4 : 5)].map((_, index) => (
+                                        <div key={index} className="flex items-center gap-3 px-2 py-2">
+                                            <Skeleton className="h-6 w-6 rounded-md" />
+                                            <Skeleton className="h-4 flex-1 max-w-[50%]" />
+                                            <Skeleton className="h-3 w-16" />
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                    ) : displayedPages.length === 0 ? (
-                        (pageSearching || selectedTags.length > 0) ? (
-                            <EmptyBlock
-                                icon={<SearchIcon className="h-5 w-5" />}
-                                title={t("home.no-page-match", "No matching pages")}
-                            />
-                        ) : (
-                            <EmptyBlock
-                                icon={<Book className="h-5 w-5" />}
-                                title={t("home.no-recent-pages") || "No recent pages"}
-                                desc={t("home.no-recent-pages-hint") || "Pages you visit will appear here"}
-                            />
-                        )
-                    ) : (
-                        <PagePreviewProvider>
-                        <ul className="flex flex-col">
-                            {displayedPages.map((page: any) => {
-                                return (
-                                    // Hover shows an editor-rendered preview card (desktop only —
-                                    // hover cards don't fit touch interaction).
-                                    <PagePreviewCard
-                                        key={page.id}
-                                        pageId={page.id}
-                                        icon={page.icon}
-                                        disabled={isMobile}
-                                        onOpenPage={() => navigator.go({ to: `/space-detail/${page.spaceId}/page/edit/${page.id}` })}
-                                    >
-                                    <li
-                                        onClick={() => navigator.go({ to: `/space-detail/${page.spaceId}/page/edit/${page.id}` })}
-                                        className={cn(
-                                            "group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5",
-                                            "transition-colors duration-100 hover:bg-muted/60"
-                                        )}
-                                    >
-                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
-                                            {page.icon?.icon ? <PageItemIcon icon={page.icon} size={16} /> : <FileText className="h-4 w-4" />}
-                                        </span>
-                                        <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
-                                            {page.title || "Untitled"}
-                                        </span>
-                                        {Array.isArray(page.tags) && page.tags.length > 0 && (
-                                            <span className="hidden shrink-0 items-center gap-1 md:flex">
-                                                {page.tags.slice(0, 2).map((tg: string) => (
-                                                    <span
-                                                        key={tg}
-                                                        className="rounded bg-muted/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                            ) : displayedPages.length === 0 ? (
+                                (pageSearching || selectedTags.length > 0) ? (
+                                    <EmptyBlock
+                                        icon={<SearchIcon className="h-5 w-5" />}
+                                        title={t("home.no-page-match", "No matching pages")}
+                                    />
+                                ) : (
+                                    <EmptyBlock
+                                        icon={<Book className="h-5 w-5" />}
+                                        title={t("home.no-recent-pages") || "No recent pages"}
+                                        desc={t("home.no-recent-pages-hint") || "Pages you visit will appear here"}
+                                    />
+                                )
+                            ) : (
+                                <PagePreviewProvider>
+                                    <ul className="flex flex-col">
+                                        {displayedPages.map((page: any) => {
+                                            return (
+                                                // Hover shows an editor-rendered preview card (desktop only —
+                                                // hover cards don't fit touch interaction).
+                                                <PagePreviewCard
+                                                    key={page.id}
+                                                    pageId={page.id}
+                                                    icon={page.icon}
+                                                    disabled={isMobile}
+                                                    onOpenPage={() => navigator.go({ to: `/space-detail/${page.spaceId}/page/edit/${page.id}` })}
+                                                >
+                                                    <li
+                                                        onClick={() => navigator.go({ to: `/space-detail/${page.spaceId}/page/edit/${page.id}` })}
+                                                        className={cn(
+                                                            "group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5",
+                                                            "transition-colors duration-100 hover:bg-muted/60"
+                                                        )}
                                                     >
-                                                        {tg}
-                                                    </span>
-                                                ))}
-                                            </span>
-                                        )}
-                                        <span className="hidden shrink-0 items-center gap-1 text-[11px] text-muted-foreground sm:flex">
-                                            {page.updateBy && (
-                                                <span className="max-w-[120px] truncate text-foreground/50">
-                                                    {page.updateBy}
-                                                </span>
-                                            )}
-                                            {page.updateBy && page.updateTime && (
-                                                <span className="text-muted-foreground/40">·</span>
-                                            )}
-                                            <span>
-                                                {relativeTime(page.updateTime) || (t("home.last-update") || "Last update")}
-                                            </span>
-                                        </span>
-                                    </li>
-                                    </PagePreviewCard>
-                                )
-                            })}
-                        </ul>
-                        </PagePreviewProvider>
-                    )}
-                    </TabsContent>
+                                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
+                                                            {page.icon?.icon ? <PageItemIcon icon={page.icon} size={16} /> : <FileText className="h-4 w-4" />}
+                                                        </span>
+                                                        <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
+                                                            {page.title || "Untitled"}
+                                                        </span>
+                                                        {Array.isArray(page.tags) && page.tags.length > 0 && (
+                                                            <span className="hidden shrink-0 items-center gap-1 md:flex">
+                                                                {page.tags.slice(0, 2).map((tg: string) => (
+                                                                    <span
+                                                                        key={tg}
+                                                                        className="rounded bg-muted/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                                                                    >
+                                                                        {tg}
+                                                                    </span>
+                                                                ))}
+                                                            </span>
+                                                        )}
+                                                        <span className="hidden shrink-0 items-center gap-1 text-[11px] text-muted-foreground sm:flex">
+                                                            {page.updateBy && (
+                                                                <span className="max-w-[120px] truncate text-foreground/50">
+                                                                    {page.updateBy}
+                                                                </span>
+                                                            )}
+                                                            {page.updateBy && page.updateTime && (
+                                                                <span className="text-muted-foreground/40">·</span>
+                                                            )}
+                                                            <span>
+                                                                {relativeTime(page.updateTime) || (t("home.last-update") || "Last update")}
+                                                            </span>
+                                                        </span>
+                                                    </li>
+                                                </PagePreviewCard>
+                                            )
+                                        })}
+                                    </ul>
+                                </PagePreviewProvider>
+                            )}
+                        </TabsContent>
 
-                    {/* Favorite Pages — mirrors the recent-pages list layout so
+                        {/* Favorite Pages — mirrors the recent-pages list layout so
                         every tab reads with the same rhythm. */}
-                    <TabsContent value="favorites" className="mt-3 flex flex-col gap-2">
-                    {loading ? (
-                        <div className="flex flex-col">
-                            {[...Array(3)].map((_, index) => (
-                                <div key={index} className="flex items-center gap-3 px-2 py-2">
-                                    <Skeleton className="h-6 w-6 rounded-md" />
-                                    <Skeleton className="h-4 flex-1 max-w-[40%]" />
-                                    <Skeleton className="h-3 w-20" />
+                        <TabsContent value="favorites" className="mt-3 flex flex-col gap-2">
+                            {loading ? (
+                                <div className="flex flex-col">
+                                    {[...Array(3)].map((_, index) => (
+                                        <div key={index} className="flex items-center gap-3 px-2 py-2">
+                                            <Skeleton className="h-6 w-6 rounded-md" />
+                                            <Skeleton className="h-4 flex-1 max-w-[40%]" />
+                                            <Skeleton className="h-3 w-20" />
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                    ) : favoritePages.length === 0 ? (
-                        <EmptyBlock
-                            icon={<Star className="h-5 w-5" />}
-                            title={t("home.no-favorites") || "No favorite pages yet"}
-                            desc={t("home.no-favorites-hint") || "Star pages to add them here"}
-                        />
-                    ) : (
-                        <PagePreviewProvider>
-                        <ul className="flex flex-col">
-                            {favoritePages.map((data: any) => {
-                                return (
-                                    // Same hover preview as the recent list (desktop only).
-                                    <PagePreviewCard
-                                        key={data.id}
-                                        pageId={data.id}
-                                        icon={data.icon}
-                                        disabled={isMobile}
-                                        onOpenPage={() => navigator.go({ to: `/space-detail/${data.spaceId}/page/edit/${data.id}` })}
-                                    >
-                                    <li
-                                        className="group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors duration-100 hover:bg-muted/60"
-                                        onClick={() => navigator.go({ to: `/space-detail/${data.spaceId}/page/edit/${data.id}` })}
-                                    >
-                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
-                                            {data.icon?.icon ? <PageItemIcon icon={data.icon} size={16} /> : <FileText className="h-4 w-4" />}
-                                        </span>
-                                        <span className="flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
-                                            {data.title}
-                                        </span>
-                                        {data.updateTime && (
-                                            <span className="hidden shrink-0 items-center gap-1 text-[11px] text-muted-foreground sm:flex">
-                                                <Star className="h-3 w-3 text-amber-400/80" />
-                                                {relativeTime(data.updateTime)}
-                                            </span>
-                                        )}
-                                    </li>
-                                    </PagePreviewCard>
+                            ) : favoritePages.length === 0 ? (
+                                <EmptyBlock
+                                    icon={<Star className="h-5 w-5" />}
+                                    title={t("home.no-favorites") || "No favorite pages yet"}
+                                    desc={t("home.no-favorites-hint") || "Star pages to add them here"}
+                                />
+                            ) : (
+                                <PagePreviewProvider>
+                                    <ul className="flex flex-col">
+                                        {favoritePages.map((data: any) => {
+                                            return (
+                                                // Same hover preview as the recent list (desktop only).
+                                                <PagePreviewCard
+                                                    key={data.id}
+                                                    pageId={data.id}
+                                                    icon={data.icon}
+                                                    disabled={isMobile}
+                                                    onOpenPage={() => navigator.go({ to: `/space-detail/${data.spaceId}/page/edit/${data.id}` })}
+                                                >
+                                                    <li
+                                                        className="group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors duration-100 hover:bg-muted/60"
+                                                        onClick={() => navigator.go({ to: `/space-detail/${data.spaceId}/page/edit/${data.id}` })}
+                                                    >
+                                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
+                                                            {data.icon?.icon ? <PageItemIcon icon={data.icon} size={16} /> : <FileText className="h-4 w-4" />}
+                                                        </span>
+                                                        <span className="flex-1 truncate text-[13.5px] font-medium text-foreground/90 group-hover:text-foreground">
+                                                            {data.title}
+                                                        </span>
+                                                        {data.updateTime && (
+                                                            <span className="hidden shrink-0 items-center gap-1 text-[11px] text-muted-foreground sm:flex">
+                                                                <Star className="h-3 w-3 text-amber-400/80" />
+                                                                {relativeTime(data.updateTime)}
+                                                            </span>
+                                                        )}
+                                                    </li>
+                                                </PagePreviewCard>
+                                            )
+                                        })}
+                                    </ul>
+                                </PagePreviewProvider>
+                            )}
+                        </TabsContent>
+
+                        {/* Content Search — block-level full-text search across all
+                        spaces. Each hit shows a highlighted snippet with the
+                        containing page title and space name. */}
+                        <TabsContent value="content" className="mt-3 flex flex-col gap-2">
+                            <div className="px-1">
+                                <Input
+                                    className="h-8 max-w-xs text-[13px]"
+                                    icon={<SearchIcon className="h-3.5 w-3.5" />}
+                                    placeholder={t("home.search-content", "Search content...")}
+                                    value={contentQuery}
+                                    onChange={(e) => setContentQuery(e.target.value)}
+                                    aria-label={t("home.search-content", "Search content...")}
+                                />
+                            </div>
+                            {contentLoading ? (
+                                <div className="flex flex-col">
+                                    {[...Array(isMobile ? 4 : 5)].map((_, index) => (
+                                        <div key={index} className="flex items-center gap-3 px-2 py-2">
+                                            <Skeleton className="h-6 w-6 rounded-md" />
+                                            <div className="flex-1">
+                                                <Skeleton className="h-4 max-w-[60%]" />
+                                                <Skeleton className="mt-1 h-3 w-[30%]" />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : blockResults.length === 0 ? (
+                                contentSearching ? (
+                                    <EmptyBlock
+                                        icon={<SearchIcon className="h-5 w-5" />}
+                                        title={t("home.no-content-match", "No matching content")}
+                                    />
+                                ) : (
+                                    <EmptyBlock
+                                        icon={<AlignLeft className="h-5 w-5" />}
+                                        title={t("home.content-search") || "Content Search"}
+                                        desc={t("home.content-empty", "Type to search across all page content")}
+                                    />
                                 )
-                            })}
-                        </ul>
-                        </PagePreviewProvider>
-                    )}
-                    </TabsContent>
+                            ) : (
+                                <ul className="flex flex-col">
+                                    {blockResults.map((block: any) => (
+                                        <li
+                                            key={block.id}
+                                            onClick={() => navigator.go({ to: `/space-detail/${block.spaceId}/page/edit/${block.pageId}` })}
+                                            className={cn(
+                                                "group flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5",
+                                                "transition-colors duration-100 hover:bg-muted/60"
+                                            )}
+                                        >
+                                            <span className="flex h-6 w-6 shrink-0 items-center justify-center leading-none text-muted-foreground">
+                                                <AlignLeft className="h-4 w-4" />
+                                            </span>
+                                            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                                <span className="truncate text-[13.5px] text-foreground/90 group-hover:text-foreground">
+                                                    <Highlighted text={makeSnippet(block.text, debouncedContentQuery.trim())} keyword={debouncedContentQuery.trim()} />
+                                                </span>
+                                                {(block.pageTitle || block.spaceName) && (
+                                                    <span className="truncate text-[11px] text-muted-foreground">
+                                                        {block.pageTitle}
+                                                        {block.pageTitle && block.spaceName && <span className="text-muted-foreground/40"> · </span>}
+                                                        {block.spaceName}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </TabsContent>
                     </Tabs>
                 </section>
 

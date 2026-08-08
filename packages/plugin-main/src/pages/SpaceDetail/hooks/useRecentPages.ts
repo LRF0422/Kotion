@@ -29,8 +29,9 @@ export const useRecentPages = (spaceId: string | undefined) => {
         setLoading(true)
         useApi(APIS.QUERY_RECENT_PAGE, { spaceId, pageSize: MAX_RECENT_ITEMS })
             .then((res) => {
-                if (res?.data && Array.isArray(res.data)) {
-                    setRecentPages(res.data.slice(0, MAX_RECENT_ITEMS))
+                const records = res?.data?.records
+                if (Array.isArray(records)) {
+                    setRecentPages(records.slice(0, MAX_RECENT_ITEMS))
                 } else {
                     // Fallback to localStorage
                     loadFromLocalStorage(spaceId)

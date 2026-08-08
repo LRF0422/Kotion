@@ -3,12 +3,12 @@ package com.knowledge.wiki.service.service;
 import java.util.List;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.knowledge.core.common.base.Pageable;
 import com.knowledge.core.version.service.ISubjectService;
 import com.knowledge.wiki.service.entity.Page;
 import com.knowledge.wiki.service.entity.PageVersion;
 import com.knowledge.wiki.service.entity.dto.UpdateBlockDTO;
 import com.knowledge.wiki.service.entity.dto.BlockPatchItemDTO;
+import com.knowledge.wiki.service.entity.dto.QueryPageDTO;
 import com.knowledge.wiki.service.entity.dto.SaveTemplateDTO;
 import com.knowledge.wiki.service.entity.PageContent;
 import com.knowledge.wiki.service.service.impl.BlockStorageService;
@@ -37,7 +37,7 @@ public interface IPageService extends ISubjectService<Page> {
 
     void delete(Long pageId);
 
-    IPage<Page> queryRecentPage(String rearchValue, Pageable dto);
+    IPage<Page> queryRecentPage(QueryPageDTO dto);
 
     void saveAsTemplate(Long pageId, SaveTemplateDTO dto);
 

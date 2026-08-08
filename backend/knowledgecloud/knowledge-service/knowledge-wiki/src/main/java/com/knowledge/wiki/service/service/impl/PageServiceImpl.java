@@ -2,7 +2,6 @@ package com.knowledge.wiki.service.service.impl;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -18,7 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.knowledge.core.common.base.Pageable;
 import com.knowledge.core.version.VersionStatus;
 import com.knowledge.core.version.service.AbstractSubjectService;
 import com.knowledge.wiki.service.converter.PageConverter;
@@ -33,6 +31,7 @@ import com.knowledge.wiki.service.entity.WikiLink;
 import com.knowledge.wiki.service.entity.enums.PagePermissionEnum;
 import com.knowledge.wiki.service.entity.dto.UpdateBlockDTO;
 import com.knowledge.wiki.service.entity.dto.BlockPatchItemDTO;
+import com.knowledge.wiki.service.entity.dto.QueryPageDTO;
 import com.knowledge.wiki.service.entity.dto.SaveTemplateDTO;
 import com.knowledge.wiki.service.entity.vo.PageBlockVO;
 import com.knowledge.wiki.service.service.IBlockIndexService;
@@ -52,7 +51,6 @@ import com.knowledge.wiki.service.service.IPageVersionService;
 import com.knowledge.wiki.service.service.IWikiLinkService;
 
 import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.lang.tree.Tree;
 import cn.hutool.core.lang.tree.TreeUtil;
 import cn.hutool.core.util.ObjectUtil;
@@ -222,12 +220,14 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     }
 
     @Override
-    public IPage<Page> queryRecentPage(String rearchValue, Pageable dto) {
-        Date current = new Date();
+    public IPage<Page> queryRecentPage(QueryPageDTO dto) {
         return this.lambdaQuery()
-                .like(StrUtil.isNotEmpty(rearchValue), Page::getTitle, rearchValue)
-                .between(Page::getUpdateTime, DateUtil.beginOfDay(DateUtil.offsetDay(current, -7)),
-                        DateUtil.endOfDay(current))
+                .eq(dto.getSpaceId() != null, Page::getSpaceId, dto.getSpaceId())
+                .eq(dto.getStatus() != null, Page::getStatus, dto.getStatus())
+                // Exclude trashed/deleted pages unless explicitly requested
+                .ne(dto.getStatus() == null, Page::getStatus, PageStatus.DELETED)
+                .ne(dto.getStatus() == null, Page::getStatus, PageStatus.TRASH)
+                .like(StrUtil.isNotEmpty(dto.getSearchValue()), Page::getTitle, dto.getSearchValue())
                 .orderByDesc(Page::getUpdateTime)
                 .page(dto.page());
     }
@@ -463,7 +463,8 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     private static final String NODE_TYPE_BLOCK_EMBED = "blockEmbed";
     // Node/mark types actually produced by the editor (plugin-block-reference):
     // - PageReference / BlockReference: atom nodes inserted via the selectors
-    // - pageLink: a MARK on a text node ([[Title]] bidirectional link), not a node type
+    // - pageLink: a MARK on a text node ([[Title]] bidirectional link), not a node
+    // type
     private static final String NODE_TYPE_PAGE_REFERENCE = "PageReference";
     private static final String NODE_TYPE_BLOCK_REFERENCE = "BlockReference";
     private static final String MARK_TYPE_PAGE_LINK = "pageLink";
@@ -645,7 +646,8 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     // ==================== Block-first storage API ====================
 
     @Override
-    public BlockStorageService.PatchResult patchBlocks(Long pageId, java.util.List<BlockPatchItemDTO> changes, java.util.List<String> blockOrder) {
+    public BlockStorageService.PatchResult patchBlocks(Long pageId, java.util.List<BlockPatchItemDTO> changes,
+            java.util.List<String> blockOrder) {
         if (pageId == null) {
             throw WikiException.INVALID_PARAMETER.newException("页面ID不能为空");
         }
