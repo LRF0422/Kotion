@@ -454,6 +454,11 @@ export const resources = {
             "template": {
                 "selectTemplate": "选择一个模板",
                 "personalTemplates": "个人模板",
+                "personalTemplatesDesc": "从模板创建的页面会复制模板的全部内容，之后的修改互不影响",
+                "count": "{{total}} 个模板",
+                "blankPage": "空白页面",
+                "blankPageDesc": "从零开始，不使用任何模板",
+                "unknownAuthor": "未知作者",
                 "search": "搜索模板...",
                 "typeFilter": "模板类型",
                 "allTemplates": "全部模板",
@@ -1238,6 +1243,11 @@ export const resources = {
             "template": {
                 "selectTemplate": "Select a Template",
                 "personalTemplates": "Personal Templates",
+                "personalTemplatesDesc": "A page created from a template copies all of its content; later edits to either side stay independent",
+                "count": "{{total}} templates",
+                "blankPage": "Blank page",
+                "blankPageDesc": "Start from scratch, without a template",
+                "unknownAuthor": "Unknown author",
                 "search": "Search templates...",
                 "typeFilter": "Template type",
                 "allTemplates": "All Templates",

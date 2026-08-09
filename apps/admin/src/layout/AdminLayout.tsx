@@ -47,8 +47,12 @@ import {
   BookOpen,
   LogOut,
   UserCircle,
+  Github,
 } from '@kn/icon'
 import { clearTokens, getAuthUser } from '@/lib/auth'
+import { Button } from '@kn/ui'
+
+const GITHUB_URL = 'https://github.com/LRF0422/knowledge-repo'
 
 interface NavItem {
   title: string
@@ -222,6 +226,15 @@ export const AdminLayout = () => {
             </BreadcrumbList>
           </Breadcrumb>
           <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => window.open(GITHUB_URL, '_blank')}
+              title="GitHub"
+              aria-label="GitHub"
+            >
+              <Github className="h-4 w-4" />
+            </Button>
             <ModeToggle />
           </div>
         </header>

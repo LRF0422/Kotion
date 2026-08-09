@@ -173,7 +173,12 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void saveAsTemplate(Long pageId, SaveTemplateDTO dto) {
-        Page template = copyPage(pageId, "id", "parentId", "spaceId", "ancestors");
+        // The audit fields are ignored on purpose: they are FieldFill.INSERT, and
+        // MyBatis-Plus only fills a field that is null, so carrying the source
+        // page's values over would date the template to when that page was first
+        // written rather than to when it was saved as a template.
+        Page template = copyPage(pageId, "id", "parentId", "spaceId", "ancestors",
+                "createTime", "createUser", "updateTime", "updateUser");
         com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper<Page> update = this.lambdaUpdate()
                 .eq(Page::getId, template.getId())
                 .set(Page::getIsTemplate, true);

@@ -561,7 +561,24 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "cancel": "取消",
           "confirm": "保存",
           "saveSuccess": "模板保存成功",
-          "saveFailed": "模板保存失败"
+          "saveFailed": "模板保存失败",
+          "personalTemplates": "我的模板",
+          "personalTemplatesDesc": "选择一个模板快速创建新页面",
+          "count": "共 {{total}} 个",
+          "search": "搜索模板...",
+          "typeFilter": "类型筛选",
+          "noTemplates": "暂无模板",
+          "noMatch": "没有匹配的模板",
+          "emptyHint": "将任意页面保存为模板，即可在此快速创建新页面",
+          "blankPage": "空白页面",
+          "blankPageDesc": "从零开始创建",
+          "useThis": "使用此模板",
+          "delete": "删除",
+          "unknownAuthor": "未知作者",
+          "preview": "预览",
+          "back": "返回",
+          "previewFailed": "预览加载失败",
+          "previewEmpty": "此模板内容为空"
         },
         "import": {
           "title": "导入"
@@ -1134,7 +1151,24 @@ export const DefaultPluginInstance = new DefaultPlugin({
           "cancel": "Cancel",
           "confirm": "Save",
           "saveSuccess": "Template saved successfully",
-          "saveFailed": "Failed to save template"
+          "saveFailed": "Failed to save template",
+          "personalTemplates": "My Templates",
+          "personalTemplatesDesc": "Select a template to quickly create a new page",
+          "count": "{{total}} total",
+          "search": "Search templates...",
+          "typeFilter": "Type filter",
+          "noTemplates": "No templates",
+          "noMatch": "No matching templates",
+          "emptyHint": "Save any page as a template to quickly create new pages here",
+          "blankPage": "Blank page",
+          "blankPageDesc": "Start from scratch",
+          "useThis": "Use this template",
+          "delete": "Delete",
+          "unknownAuthor": "Unknown author",
+          "preview": "Preview",
+          "back": "Back",
+          "previewFailed": "Failed to load preview",
+          "previewEmpty": "This template is empty"
         },
         "import": {
           "title": "Import"

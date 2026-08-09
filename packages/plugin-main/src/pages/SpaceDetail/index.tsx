@@ -408,6 +408,7 @@ export const SpaceDetail: React.FC = () => {
                 open={visible}
                 onOpenChange={setVisible}
                 onCreateFromTemplate={handleCreateByTemplate}
+                onCreateBlank={() => handleCreatePage(params.pageId || "0")}
             />
 
             {/* Global Search / Command Palette (Ctrl+K) */}

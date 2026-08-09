@@ -33,24 +33,7 @@ import { PageBreadcrumb } from "../../../components/PageBreadcrumb";
 import { TemplateCreator } from "../TemplateCreator";
 import { PageVersionHistory } from "./PageVersionHistory";
 import { PresentationMode } from "./PresentationMode";
-
-// Author display info for the PageHeader metadata row. Cached per user id so
-// switching between pages by the same author never refetches.
-const userBriefCache = new Map<string, { name?: string; avatar?: string } | undefined>()
-async function resolveUserBrief(id?: string | number): Promise<{ name?: string; avatar?: string } | undefined> {
-    if (!id) return undefined
-    const key = String(id)
-    if (userBriefCache.has(key)) return userBriefCache.get(key)
-    try {
-        const res = await useApi(APIS.GET_USER_DETAIL, { id: key })
-        const data = res?.data
-        const brief = data ? { name: data.name || data.realName || data.account, avatar: data.avatar } : undefined
-        userBriefCache.set(key, brief)
-        return brief
-    } catch {
-        return undefined
-    }
-}
+import { resolveUserBrief } from "../../../utils/userBrief";
 
 // Status display configuration for save state
 const getStatusDisplay = (saving: boolean, dirty: boolean, error: Error | null, progress?: { done: number; total: number } | null) => {

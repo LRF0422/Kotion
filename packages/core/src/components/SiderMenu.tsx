@@ -1,5 +1,5 @@
 import { useNavigator } from "@kn/common";
-import { Blocks, LayoutDashboard, Power, Settings, UserRoundPlus } from "@kn/icon";
+import { Blocks, LayoutDashboard, Power, Settings, UserRoundPlus, Github } from "@kn/icon";
 import React, { useContext, useEffect, useMemo, useState, useCallback, memo } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider, useIsMobile, Button } from "@kn/ui";
 import { useLocation } from "react-router-dom";
@@ -18,6 +18,8 @@ import { LanguageToggle } from "../locales/LanguageToggle";
 import { MessageBox } from "./MessageBox";
 import { Sparkles } from "@kn/icon";
 import { clearTokens } from "@kn/common";
+
+const GITHUB_URL = "https://github.com/LRF0422/knowledge-repo";
 
 // Memoized menu item component for better performance
 interface MenuItemProps {
@@ -284,6 +286,16 @@ export const SiderMenu: React.FC<{ size?: 'default' | 'md' | 'mini'; onItemClick
                         )}>
                             <ModeToggle />
                             <LanguageToggle />
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="rounded-full"
+                                onClick={() => window.open(GITHUB_URL, "_blank")}
+                                title="GitHub"
+                                aria-label="GitHub"
+                            >
+                                <Github className="h-[1.2rem] w-[1.2rem]" />
+                            </Button>
                         </div>
                         {userInfoMenu}
                     </div>
