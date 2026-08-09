@@ -273,6 +273,17 @@ public class SpaceController {
         return R.data(spaceApplication.searchBlocks(keyword, pageId, spaceId));
     }
 
+    /**
+     * Reindex all wiki blocks into Redis RediSearch.
+     * POST /knowledge-wiki/space/page/block/search/reindex
+     *
+     * @return number of blocks indexed
+     */
+    @PostMapping("/page/block/search/reindex")
+    public R<Integer> reindexSearch() {
+        return R.data(spaceApplication.reindexSearch());
+    }
+
     @GetMapping("/page/{id}/backlinks")
     public R<List<BacklinkVO>> getPageBacklinks(@PathVariable("id") Long id) {
         return R.data(spaceApplication.getPageBacklinks(id));

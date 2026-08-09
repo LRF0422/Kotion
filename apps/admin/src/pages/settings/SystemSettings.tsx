@@ -17,9 +17,9 @@ import {
   Separator,
   useToast,
 } from '@kn/ui'
-import { Loader2, Save } from '@kn/icon'
+import { Loader2, Save, Database, CheckCircle2 } from '@kn/icon'
 import { PageHeader } from '@/components/PageHeader'
-import { getParamValues, saveParamValues } from '@/api'
+import { getParamValues, saveParamValues, reindexSearch } from '@/api'
 
 const PARAM_KEYS = [
   'system.platformName',
@@ -49,6 +49,8 @@ export const SystemSettings = () => {
   const [maxUploadSize, setMaxUploadSize] = useState('50')
   const [defaultLanguage, setDefaultLanguage] = useState('zh-CN')
   const [wsUrl, setWsUrl] = useState('ws://kotion.top:1234')
+  const [reindexing, setReindexing] = useState(false)
+  const [reindexResult, setReindexResult] = useState<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -93,6 +95,20 @@ export const SystemSettings = () => {
       toast({ title: '保存失败', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleReindex = async () => {
+    setReindexing(true)
+    setReindexResult(null)
+    try {
+      const count = await reindexSearch()
+      setReindexResult(count)
+      toast({ title: '搜索索引重建完成', description: `已索引 ${count} 个块` })
+    } catch (err) {
+      toast({ title: '重建索引失败', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
+    } finally {
+      setReindexing(false)
     }
   }
 
@@ -170,6 +186,41 @@ export const SystemSettings = () => {
                 <Label>单文件上传上限（MB）</Label>
                 <Input value={maxUploadSize} onChange={(e) => setMaxUploadSize(e.target.value)} />
                 <p className="text-xs text-muted-foreground">超出上限的附件将被 OSS 网关拒绝</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="size-4" />
+                搜索索引
+              </CardTitle>
+              <CardDescription>Redis RediSearch 全文索引管理与维护</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  系统使用 Redis RediSearch 加速页面内容的全文检索（支持中英文混合搜索）。
+                  正常情况下索引会随内容编辑自动同步，如遇索引不一致可手动重建。
+                </p>
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>重建搜索索引</Label>
+                  <p className="text-xs text-muted-foreground">扫描全部页面块并重新写入 Redis 搜索索引</p>
+                  {reindexResult !== null && (
+                    <p className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
+                      <CheckCircle2 className="size-3" />
+                      上次结果：已索引 {reindexResult} 个块
+                    </p>
+                  )}
+                </div>
+                <Button onClick={handleReindex} disabled={reindexing} variant="outline">
+                  {reindexing ? <Loader2 className="mr-1 size-4 animate-spin" /> : <Database className="mr-1 size-4" />}
+                  {reindexing ? '重建中…' : '重建索引'}
+                </Button>
               </div>
             </CardContent>
           </Card>

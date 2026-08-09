@@ -137,6 +137,9 @@ public class SpaceApplication {
     private ICollaborationInvitationService collaborationInvitationService;
     @Autowired
     private IPageContentService pageContentService;
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private com.knowledge.wiki.service.search.WikiSearchService wikiSearchService;
 
     /**
      * Front-end base URL used to build share links, e.g. http://localhost:5173
@@ -219,10 +222,18 @@ public class SpaceApplication {
         requireSpaceAdmin(spaceId);
         // Mark all pages of the space as deleted so they disappear from
         // search, graphs and cross-space link lookups.
+        List<Page> pages = pageService.lambdaQuery()
+                .eq(Page::getSpaceId, spaceId)
+                .select(Page::getId)
+                .list();
         pageService.lambdaUpdate()
                 .eq(Page::getSpaceId, spaceId)
                 .set(Page::getStatus, PageStatus.DELETED)
                 .update();
+        // Evict all blocks of deleted pages from search index
+        for (Page page : pages) {
+            wikiSearchService.evictPage(page.getId());
+        }
         spaceService.removeById(spaceId);
         log.info("Space {} deleted by user {}", spaceId, SecurityContextUtil.getUserId());
     }
@@ -696,6 +707,8 @@ public class SpaceApplication {
 
     public void movePageToTrash(Long pageId) {
         spaceService.getPageService().moveToTrash(pageId);
+        // Evict blocks of this page from search index
+        wikiSearchService.evictPage(pageId);
     }
 
     /**
@@ -1207,14 +1220,96 @@ public class SpaceApplication {
     }
 
     /**
-     * Search blocks by content
-     * Note: Implementation pending - currently returns empty list
+     * Search blocks by content.
+     * <p>
+     * Tries Redis RediSearch first (fast path); always falls back to MySQL
+     * LIKE when Redis returns no hits, so results are correct even before the
+     * index is populated or after Redis data loss.
      */
     public List<PageBlockDetailVO> searchBlocks(String keyword, Long pageId, Long spaceId) {
         if (StrUtil.isBlank(keyword)) {
             return new ArrayList<>();
         }
 
+        // --- Phase 1: Try Redis RediSearch (fast path) ---
+        try {
+            List<com.knowledge.wiki.service.entity.vo.SearchHit> hits = wikiSearchService.search(keyword, pageId,
+                    spaceId, 50);
+            if (CollUtil.isNotEmpty(hits)) {
+                return convertSearchHitsToVOs(hits);
+            }
+            // Redis returned empty — fall through to MySQL rather than trusting
+            // the empty result, because the index may not be populated yet.
+        } catch (Exception e) {
+            log.warn("searchBlocks: Redis search failed, falling back to MySQL: {}", e.getMessage());
+        }
+
+        // --- Phase 2: MySQL LIKE fallback ---
+        return searchBlocksViaMysql(keyword, pageId, spaceId);
+    }
+
+    /**
+     * Convert RediSearch hits to PageBlockDetailVO list by fetching full
+     * block content from MySQL.
+     */
+    private List<PageBlockDetailVO> convertSearchHitsToVOs(
+            List<com.knowledge.wiki.service.entity.vo.SearchHit> hits) {
+        // Collect block IDs and fetch full content from MySQL
+        List<String> blockIds = hits.stream()
+                .map(com.knowledge.wiki.service.entity.vo.SearchHit::getBlockId)
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.toList());
+        if (CollUtil.isEmpty(blockIds)) {
+            return new ArrayList<>();
+        }
+
+        List<PageContent> blocks = pageContentService.lambdaQuery()
+                .in(PageContent::getId, blockIds)
+                .list();
+        if (CollUtil.isEmpty(blocks)) {
+            return new ArrayList<>();
+        }
+
+        // Build lookup maps
+        Map<String, PageContent> blockMap = blocks.stream()
+                .collect(Collectors.toMap(PageContent::getId, b -> b, (a, b) -> a));
+        Set<Long> pageIds = blocks.stream()
+                .map(PageContent::getPageId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, Page> pageMap = CollUtil.isNotEmpty(pageIds)
+                ? pageService.listByIds(pageIds).stream()
+                        .collect(Collectors.toMap(Page::getId, p -> p, (a, b) -> a))
+                : new HashMap<>();
+        Map<Long, String> spaceNames = new HashMap<>();
+
+        // Preserve the RediSearch result order (relevance/updateTime)
+        List<PageBlockDetailVO> result = new ArrayList<>();
+        for (com.knowledge.wiki.service.entity.vo.SearchHit hit : hits) {
+            PageContent block = blockMap.get(hit.getBlockId());
+            if (block == null) {
+                continue;
+            }
+            Page page = pageMap.get(block.getPageId());
+            Long blockSpaceId = page != null ? page.getSpaceId() : hit.getSpaceId();
+            String spaceName = null;
+            if (blockSpaceId != null) {
+                spaceName = spaceNames.computeIfAbsent(blockSpaceId, sid -> {
+                    Space space = spaceService.getById(sid);
+                    return space != null ? space.getName() : null;
+                });
+            }
+            result.add(convertToBlockDetailVO(block,
+                    page != null ? page.getTitle() : hit.getPageTitle(),
+                    blockSpaceId, spaceName));
+        }
+        return result;
+    }
+
+    /**
+     * Original MySQL LIKE search — used as fallback when Redis is unavailable.
+     */
+    private List<PageBlockDetailVO> searchBlocksViaMysql(String keyword, Long pageId, Long spaceId) {
         // Resolve searchable pages first so trashed/deleted pages never leak into
         // results
         Map<Long, Page> pageMap;
@@ -1236,8 +1331,16 @@ public class SpaceApplication {
             }
             pageMap = pages.stream().collect(Collectors.toMap(Page::getId, p -> p, (a, b) -> a));
         } else {
-            // No scope given: refuse instead of scanning every tenant page
-            return new ArrayList<>();
+            // Cross-space search: fetch all non-trashed/deleted pages
+            List<Page> pages = pageService.lambdaQuery()
+                    .ne(Page::getStatus, PageStatus.DELETED)
+                    .ne(Page::getStatus, PageStatus.TRASH)
+                    .last("LIMIT 5000")
+                    .list();
+            if (CollUtil.isEmpty(pages)) {
+                return new ArrayList<>();
+            }
+            pageMap = pages.stream().collect(Collectors.toMap(Page::getId, p -> p, (a, b) -> a));
         }
 
         List<PageContent> blocks = pageContentService.lambdaQuery()
@@ -1264,6 +1367,15 @@ public class SpaceApplication {
             }
             return convertToBlockDetailVO(block, page != null ? page.getTitle() : null, blockSpaceId, spaceName);
         }).collect(Collectors.toList());
+    }
+
+    /**
+     * Reindex all wiki blocks into Redis RediSearch.
+     *
+     * @return number of blocks indexed
+     */
+    public int reindexSearch() {
+        return wikiSearchService.reindexAll();
     }
 
     public void saveAsTemplate(TemplateDTO dto) {

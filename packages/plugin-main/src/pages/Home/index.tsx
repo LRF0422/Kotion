@@ -170,8 +170,9 @@ export const Home: React.FC = () => {
         })
     }, [debouncedPageQuery, flag])
 
-    // Block-level content search — queries the QUERY_BLOCKS endpoint which
-    // joins page_content ↔ page ↔ space and filters out trashed/deleted pages.
+    // Block-level content search — uses Redis RediSearch (SEARCH_BLOCKS) for
+    // fast full-text retrieval across all spaces. Falls back to MySQL LIKE
+    // automatically on the backend when Redis is unavailable.
     // Title blocks are excluded since they duplicate the page-title search.
     useEffect(() => {
         const kw = debouncedContentQuery.trim()
@@ -181,9 +182,9 @@ export const Home: React.FC = () => {
             return
         }
         setContentLoading(true)
-        useApi(APIS.QUERY_BLOCKS, { searchValue: kw, pageSize: 20 })
+        useApi(APIS.SEARCH_BLOCKS, { keyword: kw })
             .then((res) => {
-                const records = (res?.data?.records || []).filter((b: any) => b.type !== 'title' && b.text)
+                const records = (res?.data || []).filter((b: any) => b.type !== 'title' && b.text)
                 setBlockResults(records)
             })
             .catch(() => setBlockResults([]))

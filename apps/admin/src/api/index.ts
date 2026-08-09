@@ -477,3 +477,8 @@ export const saveParamValues = async (entries: Record<string, string>, names: Re
     }),
   )
 }
+
+// ---------- 搜索索引（knowledge-wiki） ----------
+
+/** 重建 Redis RediSearch 全文索引，返回已索引的块数量 */
+export const reindexSearch = () => post<number>('/knowledge-wiki/space/page/block/search/reindex')

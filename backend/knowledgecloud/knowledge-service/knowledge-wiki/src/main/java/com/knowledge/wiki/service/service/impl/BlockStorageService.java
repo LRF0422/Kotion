@@ -35,6 +35,7 @@ import com.knowledge.wiki.service.service.IPageSnapshotService;
 import com.knowledge.wiki.service.service.IPageVersionService;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.json.JSONObject;
@@ -70,10 +71,9 @@ public class BlockStorageService {
      * just the atoms -- destroying the paragraph's text.
      * </p>
      */
-    private static final Set<String> INLINE_CONTENT_HOLDER_TYPES =
-            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-                    "paragraph", "heading", "codeBlock"
-            )));
+    private static final Set<String> INLINE_CONTENT_HOLDER_TYPES = Collections
+            .unmodifiableSet(new HashSet<>(Arrays.asList(
+                    "paragraph", "heading", "codeBlock")));
 
     /**
      * Batch size for save/update operations. Larger batches reduce round-trips
@@ -125,6 +125,13 @@ public class BlockStorageService {
     @Autowired
     @Lazy
     private IPageVersionService pageVersionService;
+
+    /**
+     * Search index service for RediSearch sync. Lazy to avoid init cycle.
+     */
+    @Autowired
+    @Lazy
+    private com.knowledge.wiki.service.search.WikiSearchService wikiSearchService;
 
     /** Plain helper (not a Spring bean) that builds block change-log rows. */
     private final BlockChangeRecorder changeRecorder = new BlockChangeRecorder();
@@ -205,7 +212,8 @@ public class BlockStorageService {
      */
     @Transactional(rollbackFor = Exception.class, timeout = 60)
     public void persistFlattenedBlocks(Long pageId, List<PageContent> flatBlocks, Set<String> currentBlockIds) {
-        // Delete blocks no longer present in this page (runs even when flatBlocks is empty)
+        // Delete blocks no longer present in this page (runs even when flatBlocks is
+        // empty)
         deleteRemovedBlocks(pageId, currentBlockIds);
 
         // Upsert the current blocks. Version *history* is no longer recorded
@@ -452,6 +460,53 @@ public class BlockStorageService {
         return root != null ? JSONUtil.toJsonStr(root) : null;
     }
 
+    /**
+     * Walk a serialized page-content tree and replace every block id
+     * (both {@code id} and {@code attrs.id}) with a fresh UUID. Inline
+     * nodes (text, etc.) without a block id are left untouched.
+     * <p>
+     * This is used by {@code copyPage} so that the destination page's blocks
+     * get unique IDs instead of colliding with the source page's blocks.
+     * The {@code batchUpsert} logic queries existing blocks by id only;
+     * without regeneration the copied blocks would be mistaken for the
+     * source page's blocks and silently skipped as "unchanged", resulting
+     * in a page that has the title but no content.
+     * </p>
+     *
+     * @param contentJson the JSON assembled by {@link #assembleTreeJson}
+     * @return JSON string with all block IDs regenerated, or the input if blank
+     */
+    public String regenerateBlockIds(String contentJson) {
+        if (StrUtil.isBlank(contentJson)) {
+            return contentJson;
+        }
+        PageContent root = JSONUtil.toBean(contentJson, PageContent.class);
+        regenerateBlockIdsRecursive(root);
+        return JSONUtil.toJsonStr(root);
+    }
+
+    /**
+     * Recursively assign fresh UUIDs to every block in the tree.
+     */
+    private void regenerateBlockIdsRecursive(PageContent node) {
+        if (node == null) {
+            return;
+        }
+        String blockId = resolveBlockId(node);
+        if (StrUtil.isNotBlank(blockId)) {
+            String newId = IdUtil.fastSimpleUUID();
+            node.setId(newId);
+            if (node.getAttrs() != null) {
+                node.getAttrs().set("id", newId);
+            }
+        }
+        if (CollUtil.isNotEmpty(node.getContent())) {
+            for (PageContent child : node.getContent()) {
+                regenerateBlockIdsRecursive(child);
+            }
+        }
+    }
+
     private void attachChildren(PageContent node, Map<String, List<PageContent>> childrenMap) {
         List<PageContent> children = childrenMap.get(node.getId());
         if (CollUtil.isNotEmpty(children)) {
@@ -475,9 +530,9 @@ public class BlockStorageService {
      * <p>
      * Selection rule, applied in order:
      * <ol>
-     *   <li>title with non-empty heading text wins over an empty title;</li>
-     *   <li>otherwise the most recently updated title wins (latest user intent);</li>
-     *   <li>final tiebreaker: lexically smallest id (deterministic).</li>
+     * <li>title with non-empty heading text wins over an empty title;</li>
+     * <li>otherwise the most recently updated title wins (latest user intent);</li>
+     * <li>final tiebreaker: lexically smallest id (deterministic).</li>
      * </ol>
      * The discarded title rows are kept in the database — this method only
      * filters the assembled JSON returned to clients. A subsequent edit and
@@ -494,7 +549,8 @@ public class BlockStorageService {
         for (PageContent b : rootChildren) {
             if (b != null && "title".equals(b.getType())) {
                 titleCount++;
-                if (titleCount > 1) break;
+                if (titleCount > 1)
+                    break;
             }
         }
         if (titleCount <= 1) {
@@ -524,7 +580,8 @@ public class BlockStorageService {
         final PageContent kept = best;
         List<PageContent> filtered = new ArrayList<>(rootChildren.size());
         for (PageContent b : rootChildren) {
-            if (b == null) continue;
+            if (b == null)
+                continue;
             if ("title".equals(b.getType()) && b != kept) {
                 continue;
             }
@@ -553,7 +610,8 @@ public class BlockStorageService {
         List<PageContent> kept = new ArrayList<>(children.size());
         Map<String, Integer> dupCount = null;
         for (PageContent child : children) {
-            if (child == null) continue;
+            if (child == null)
+                continue;
             String id = child.getId();
             if (StrUtil.isBlank(id)) {
                 kept.add(child);
@@ -565,11 +623,13 @@ public class BlockStorageService {
                 kept.add(child);
                 continue;
             }
-            if (dupCount == null) dupCount = new HashMap<>();
+            if (dupCount == null)
+                dupCount = new HashMap<>();
             dupCount.merge(id, 1, Integer::sum);
             if (preferSurvivor(child, existing)) {
                 int idx = kept.indexOf(existing);
-                if (idx >= 0) kept.set(idx, child);
+                if (idx >= 0)
+                    kept.set(idx, child);
                 byId.put(id, child);
             }
             mutated = true;
@@ -600,9 +660,9 @@ public class BlockStorageService {
      * <p>
      * Keep rule (in order):
      * <ol>
-     *   <li>highest {@code version} wins (latest content);</li>
-     *   <li>otherwise latest {@code updateTime};</li>
-     *   <li>final tiebreaker: lexically smallest row identity (deterministic).</li>
+     * <li>highest {@code version} wins (latest content);</li>
+     * <li>otherwise latest {@code updateTime};</li>
+     * <li>final tiebreaker: lexically smallest row identity (deterministic).</li>
      * </ol>
      * The dropped rows remain in the database — this only filters the
      * read path. The next save's orphan-cleanup pass will eventually
@@ -672,8 +732,10 @@ public class BlockStorageService {
         Integer candVersion = candidate.getVersion();
         Integer curVersion = current.getVersion();
         if (!Objects.equals(candVersion, curVersion)) {
-            if (candVersion == null) return false;
-            if (curVersion == null) return true;
+            if (candVersion == null)
+                return false;
+            if (curVersion == null)
+                return true;
             return candVersion > curVersion;
         }
         java.time.LocalDateTime candUpdated = candidate.getUpdateTime();
@@ -735,7 +797,8 @@ public class BlockStorageService {
             return false;
         }
         for (PageContent inner : title.getContent()) {
-            if (inner == null) continue;
+            if (inner == null)
+                continue;
             if (StrUtil.isNotBlank(inner.getText())) {
                 return true;
             }
@@ -757,19 +820,22 @@ public class BlockStorageService {
      * <p>
      * The patch contains:
      * <ul>
-     *   <li>{@code changes} — only the top-level blocks that were modified or
-     *       removed since the last save;</li>
-     *   <li>{@code blockOrder} — the full ordered list of all top-level
-     *       blockIds in the current document, used to assign correct
-     *       {@code sortOrder} / {@code path} for updated blocks.</li>
+     * <li>{@code changes} — only the top-level blocks that were modified or
+     * removed since the last save;</li>
+     * <li>{@code blockOrder} — the full ordered list of all top-level
+     * blockIds in the current document, used to assign correct
+     * {@code sortOrder} / {@code path} for updated blocks.</li>
      * </ul>
      * </p>
      * <p>
      * Three-tier optimization:
      * <ol>
-     *   <li><b>Tier 1 — Skip unchanged:</b> content hash AND structure match → no DB write</li>
-     *   <li><b>Tier 2 — Structure-only:</b> content hash matches but parentId/sortOrder/path differ → lightweight UPDATE</li>
-     *   <li><b>Tier 3 — Full upsert:</b> content changed or new block → complete INSERT ON DUPLICATE KEY UPDATE</li>
+     * <li><b>Tier 1 — Skip unchanged:</b> content hash AND structure match → no DB
+     * write</li>
+     * <li><b>Tier 2 — Structure-only:</b> content hash matches but
+     * parentId/sortOrder/path differ → lightweight UPDATE</li>
+     * <li><b>Tier 3 — Full upsert:</b> content changed or new block → complete
+     * INSERT ON DUPLICATE KEY UPDATE</li>
      * </ol>
      * </p>
      * <p>
@@ -779,9 +845,9 @@ public class BlockStorageService {
      * (controller) decides whether to return 409.
      * </p>
      *
-     * @param pageId      target page id
-     * @param changes     incremental change items (may be empty)
-     * @param blockOrder  ordered list of all current top-level block ids
+     * @param pageId     target page id
+     * @param changes    incremental change items (may be empty)
+     * @param blockOrder ordered list of all current top-level block ids
      * @return PatchResult with statistics and any detected conflicts
      */
     public PatchResult patchBlocks(Long pageId, List<BlockPatchItemDTO> changes, List<String> blockOrder) {
@@ -871,6 +937,13 @@ public class BlockStorageService {
             blockCacheService.evictBlockCache(id);
         }
 
+        // Sync search index (best-effort, outside transaction)
+        try {
+            wikiSearchService.syncBlocks(pageId, toUpsert, deletedRootIds);
+        } catch (Exception e) {
+            log.warn("patchBlocks: search index sync failed for pageId={}: {}", pageId, e.getMessage());
+        }
+
         log.debug("patchBlocks: pageId={} created={} updated={} deleted={} skipped={} conflicts={}",
                 pageId, result.getCreated(), result.getUpdated(), result.getDeleted(),
                 result.getSkipped(), result.getConflictBlockIds().size());
@@ -887,12 +960,12 @@ public class BlockStorageService {
      * per request batch. A fresh import has no diff history to preserve, so this
      * path:
      * <ul>
-     *   <li>flattens the whole document (CPU work, outside any transaction);</li>
-     *   <li>removes blocks no longer present (orphans), then inserts the new
-     *       blocks in {@link #BATCH_SIZE}-sized <b>independent</b> transactions —
-     *       so no single transaction is large enough to time out;</li>
-     *   <li>seals exactly ONE new ACTIVE {@code PageVersion};</li>
-     *   <li>writes NO per-block {@code wiki_block_version} rows.</li>
+     * <li>flattens the whole document (CPU work, outside any transaction);</li>
+     * <li>removes blocks no longer present (orphans), then inserts the new
+     * blocks in {@link #BATCH_SIZE}-sized <b>independent</b> transactions —
+     * so no single transaction is large enough to time out;</li>
+     * <li>seals exactly ONE new ACTIVE {@code PageVersion};</li>
+     * <li>writes NO per-block {@code wiki_block_version} rows.</li>
      * </ul>
      * Intended to be called only when every change is an upsert of a brand-new
      * block (no {@code prevVersion}) — i.e. a full fresh import — which the
@@ -975,6 +1048,15 @@ public class BlockStorageService {
         blockCacheService.evictAssembledTree(pageId);
         blockCacheService.evictPageCache(pageId);
 
+        // Sync search index — reindex all blocks for this page (best-effort)
+        try {
+            wikiSearchService.syncBlocks(pageId, toUpsert, null);
+            // Remove orphaned blocks that were deleted from MySQL
+            wikiSearchService.removePageOrphans(pageId, allBlockIds);
+        } catch (Exception e) {
+            log.warn("bulkReplaceBlocks: search index sync failed for pageId={}: {}", pageId, e.getMessage());
+        }
+
         PatchResult result = new PatchResult();
         result.setCreated(total);
         Map<String, Integer> versions = new HashMap<>();
@@ -1005,8 +1087,10 @@ public class BlockStorageService {
      * the Spring proxy ({@code self.persistPatch}) so {@code @Transactional}
      * is honored.
      *
-     * <p>All upserts, deletes, orphan cleanup, and change-log recording happen
-     * inside a single atomic transaction.</p>
+     * <p>
+     * All upserts, deletes, orphan cleanup, and change-log recording happen
+     * inside a single atomic transaction.
+     * </p>
      */
     @Transactional(rollbackFor = Exception.class, timeout = 30)
     public PatchResult persistPatch(Long pageId,
@@ -1203,9 +1287,11 @@ public class BlockStorageService {
      * Collect all block ids that belong to the subtree rooted at any of the
      * given root ids. The returned set INCLUDES the root ids themselves.
      *
-     * <p>Single recursive-CTE round-trip over the {@code parent_id} relation
+     * <p>
+     * Single recursive-CTE round-trip over the {@code parent_id} relation
      * (was a per-level BFS = one query per tree depth). Non-existent root ids
-     * simply contribute nothing — the CTE anchor filters by existence.</p>
+     * simply contribute nothing — the CTE anchor filters by existence.
+     * </p>
      */
     private Set<String> collectSubtreeIdsFromDb(Long pageId, Set<String> rootIds) {
         Set<String> result = new HashSet<>();
@@ -1278,16 +1364,19 @@ public class BlockStorageService {
      * Three-tier batch upsert with intelligent change detection.
      * <p>
      * Optimization strategy:
-     * 1. Content hash only covers semantic fields (type, attrs, content, marks, text)
-     *    — NOT structural fields (parentId, sortOrder, path). This avoids false-positive
-     *    "changes" when blocks are merely reordered.
+     * 1. Content hash only covers semantic fields (type, attrs, content, marks,
+     * text)
+     * — NOT structural fields (parentId, sortOrder, path). This avoids
+     * false-positive
+     * "changes" when blocks are merely reordered.
      * 2. Blocks are categorized into three tiers:
-     *    - SKIP: unchanged content AND unchanged structure → no DB write
-     *    - STRUCTURE_ONLY: unchanged content, different structure → lightweight UPDATE
-     *      (only parentId/sortOrder/path, avoids writing large JSON columns)
-     *    - CONTENT_CHANGED or NEW: → full INSERT ... ON DUPLICATE KEY UPDATE
-     * 3. Uses a single multi-value INSERT ON DUPLICATE KEY UPDATE statement instead of
-     *    separate saveBatch + updateBatchById, eliminating multiple round-trips.
+     * - SKIP: unchanged content AND unchanged structure → no DB write
+     * - STRUCTURE_ONLY: unchanged content, different structure → lightweight UPDATE
+     * (only parentId/sortOrder/path, avoids writing large JSON columns)
+     * - CONTENT_CHANGED or NEW: → full INSERT ... ON DUPLICATE KEY UPDATE
+     * 3. Uses a single multi-value INSERT ON DUPLICATE KEY UPDATE statement instead
+     * of
+     * separate saveBatch + updateBatchById, eliminating multiple round-trips.
      * </p>
      */
     private BatchChangeResult batchUpsert(List<PageContent> blocks) {
@@ -1310,7 +1399,8 @@ public class BlockStorageService {
      *
      * @param blocks             blocks to upsert
      * @param clientPrevVersions client's known versions (may be empty)
-     * @param patchResult        if non-null, conflict blockIds and counters are accumulated here
+     * @param patchResult        if non-null, conflict blockIds and counters are
+     *                           accumulated here
      * @return BatchChangeResult for change-log recording
      */
     private BatchChangeResult batchUpsertWithConflictDetection(List<PageContent> blocks,
@@ -1344,7 +1434,8 @@ public class BlockStorageService {
                         new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PageContent>()
                                 .select(PageContent::getId, PageContent::getVersion,
                                         PageContent::getContentHash, PageContent::getParentId,
-                                        PageContent::getSortOrder, PageContent::getPath)
+                                        PageContent::getSortOrder, PageContent::getPath,
+                                        PageContent::getPageId)
                                 .in(PageContent::getId, chunk));
                 for (Map<String, Object> map : existingMaps) {
                     String id = (String) map.get("id");
@@ -1355,13 +1446,15 @@ public class BlockStorageService {
                     Object sortObj = map.get("sort_order");
                     Integer sortOrder = sortObj != null ? ((Number) sortObj).intValue() : 0;
                     String path = (String) map.get("path");
-                    existingInfo.put(id, new ExistingBlockInfo(ver, hash, parentId, sortOrder, path));
+                    Object pageIdObj = map.get("page_id");
+                    Long ownerPageId = pageIdObj != null ? ((Number) pageIdObj).longValue() : null;
+                    existingInfo.put(id, new ExistingBlockInfo(ver, hash, parentId, sortOrder, path, ownerPageId));
                 }
             });
         }
 
         // Three-tier categorization
-        List<PageContent> toFullUpsert = new ArrayList<>();   // new + content-changed
+        List<PageContent> toFullUpsert = new ArrayList<>(); // new + content-changed
         List<PageContent> toStructureUpdate = new ArrayList<>(); // structure-only changes
         int skippedCount = 0;
 
@@ -1369,9 +1462,26 @@ public class BlockStorageService {
             ExistingBlockInfo info = existingInfo.get(block.getId());
 
             if (info != null) {
+                // --- Cross-page id collision guard ---
+                // Block ids are the primary key of wiki_page_block, so a row is
+                // owned by exactly one page. If an incoming block carries an id
+                // that already belongs to a *different* page, writing it would
+                // silently steal the row from its owner (or, when the copy is
+                // byte-identical, be skipped as "unchanged" and leave the target
+                // page with no blocks at all — the template bug). Refuse the
+                // write and log loudly: every copy path must regenerate block ids
+                // (see #regenerateBlockIds).
+                if (info.pageId != null && !Objects.equals(info.pageId, block.getPageId())) {
+                    log.error("batchUpsert: block id={} already belongs to pageId={} but was submitted "
+                            + "for pageId={}; refusing the write. Copy paths must regenerate block ids.",
+                            block.getId(), info.pageId, block.getPageId());
+                    continue;
+                }
+
                 // --- Version conflict detection ---
                 Integer clientVersion = clientPrevVersions != null
-                        ? clientPrevVersions.get(block.getId()) : null;
+                        ? clientPrevVersions.get(block.getId())
+                        : null;
                 if (clientVersion != null && !info.version.equals(clientVersion)) {
                     log.warn("patchBlocks: version conflict for blockId={} db={} client={}",
                             block.getId(), info.version, clientVersion);
@@ -1439,7 +1549,8 @@ public class BlockStorageService {
     // ==================== 3-Tier Strategy Methods ====================
 
     /**
-     * Tier 1: Content hash matches AND structure unchanged — skip entirely (no DB write needed).
+     * Tier 1: Content hash matches AND structure unchanged — skip entirely (no DB
+     * write needed).
      */
     private boolean shouldSkipUnchanged(PageContent block, ExistingBlockInfo existing) {
         boolean contentUnchanged = Objects.equals(block.getContentHash(), existing.contentHash);
@@ -1479,14 +1590,19 @@ public class BlockStorageService {
         final String parentId;
         final Integer sortOrder;
         final String path;
+        /**
+         * Page that currently owns the row — used to detect cross-page id collisions.
+         */
+        final Long pageId;
 
         ExistingBlockInfo(Integer version, String contentHash, String parentId,
-                Integer sortOrder, String path) {
+                Integer sortOrder, String path, Long pageId) {
             this.version = version;
             this.contentHash = contentHash;
             this.parentId = parentId;
             this.sortOrder = sortOrder;
             this.path = path;
+            this.pageId = pageId;
         }
     }
 
@@ -1616,7 +1732,10 @@ public class BlockStorageService {
         private Map<String, Integer> blockVersions;
         /** New ACTIVE PageVersion id sealed by this patch (null if no changes). */
         private Long pageVersionId;
-        /** New ACTIVE PageVersion number (e.g. "3") sealed by this patch (null if no changes). */
+        /**
+         * New ACTIVE PageVersion number (e.g. "3") sealed by this patch (null if no
+         * changes).
+         */
         private String pageVersion;
 
         public PatchResult() {
@@ -1631,22 +1750,69 @@ public class BlockStorageService {
             return conflictBlockIds != null && !conflictBlockIds.isEmpty();
         }
 
-        public int getCreated() { return created; }
-        public void setCreated(int created) { this.created = created; }
-        public int getUpdated() { return updated; }
-        public void setUpdated(int updated) { this.updated = updated; }
-        public int getDeleted() { return deleted; }
-        public void setDeleted(int deleted) { this.deleted = deleted; }
-        public int getSkipped() { return skipped; }
-        public void setSkipped(int skipped) { this.skipped = skipped; }
-        public List<String> getConflictBlockIds() { return conflictBlockIds; }
-        public void setConflictBlockIds(List<String> conflictBlockIds) { this.conflictBlockIds = conflictBlockIds; }
-        public Map<String, Integer> getBlockVersions() { return blockVersions; }
-        public void setBlockVersions(Map<String, Integer> blockVersions) { this.blockVersions = blockVersions; }
-        public Long getPageVersionId() { return pageVersionId; }
-        public void setPageVersionId(Long pageVersionId) { this.pageVersionId = pageVersionId; }
-        public String getPageVersion() { return pageVersion; }
-        public void setPageVersion(String pageVersion) { this.pageVersion = pageVersion; }
+        public int getCreated() {
+            return created;
+        }
+
+        public void setCreated(int created) {
+            this.created = created;
+        }
+
+        public int getUpdated() {
+            return updated;
+        }
+
+        public void setUpdated(int updated) {
+            this.updated = updated;
+        }
+
+        public int getDeleted() {
+            return deleted;
+        }
+
+        public void setDeleted(int deleted) {
+            this.deleted = deleted;
+        }
+
+        public int getSkipped() {
+            return skipped;
+        }
+
+        public void setSkipped(int skipped) {
+            this.skipped = skipped;
+        }
+
+        public List<String> getConflictBlockIds() {
+            return conflictBlockIds;
+        }
+
+        public void setConflictBlockIds(List<String> conflictBlockIds) {
+            this.conflictBlockIds = conflictBlockIds;
+        }
+
+        public Map<String, Integer> getBlockVersions() {
+            return blockVersions;
+        }
+
+        public void setBlockVersions(Map<String, Integer> blockVersions) {
+            this.blockVersions = blockVersions;
+        }
+
+        public Long getPageVersionId() {
+            return pageVersionId;
+        }
+
+        public void setPageVersionId(Long pageVersionId) {
+            this.pageVersionId = pageVersionId;
+        }
+
+        public String getPageVersion() {
+            return pageVersion;
+        }
+
+        public void setPageVersion(String pageVersion) {
+            this.pageVersion = pageVersion;
+        }
 
         @Override
         public String toString() {

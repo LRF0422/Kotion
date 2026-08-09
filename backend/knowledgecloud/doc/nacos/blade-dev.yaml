@@ -22,3 +22,12 @@ blade:
       url: jdbc:mysql://localhost:3306/blade?useSSL=false&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&transformedBitIsBoolean=true&tinyInt1isBit=false&allowMultiQueries=true&rewriteBatchedStatements=true&serverTimezone=GMT%2B8
       username: root
       password: root
+
+# Wiki full-text search (RediSearch) configuration
+knowledge:
+  wiki:
+    search:
+      enabled: true
+      index-name: wiki_block_search
+      key-prefix: "wiki:block:search:"
+      limit: 50

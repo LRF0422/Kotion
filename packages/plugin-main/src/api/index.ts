@@ -163,6 +163,11 @@ export const APIS = {
         url: '/knowledge-wiki/space/page/block/search',
         method: 'GET'
     } as API,
+    /** Reindex all wiki blocks into Redis RediSearch */
+    REINDEX_SEARCH: {
+        url: '/knowledge-wiki/space/page/block/search/reindex',
+        method: 'POST'
+    } as API,
     DELETE_TEMPLATE: {
         url: '/knowledge-wiki/space/page/template/:id',
         method: 'DELETE'

@@ -171,6 +171,7 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void saveAsTemplate(Long pageId, SaveTemplateDTO dto) {
         Page template = copyPage(pageId, "id", "parentId", "spaceId", "ancestors");
         com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper<Page> update = this.lambdaUpdate()
@@ -200,23 +201,46 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
         template.setId(null);
         this.save(template);
         // Content is assembled from the source page's blocks and persisted as the
-        // template's own block rows (the single source of truth). No draft/publish
-        // version is involved anymore.
+        // copy's own block rows (the single source of truth).
+        // Block ids MUST be regenerated: a block row is owned by exactly one page
+        // (its id is the primary key), so reusing the source page's ids would
+        // collide with the source's rows and the write is refused — leaving the
+        // copy with a title but no content.
         String content = blockStorageService.assembleTreeJson(pageId);
-        template.setContent(content);
         if (StrUtil.isNotBlank(content)) {
+            content = blockStorageService.regenerateBlockIds(content);
             blockStorageService.flattenAndSave(template.getId(), content);
         }
+        template.setContent(content);
         return template;
     }
 
     @Override
-    public Page createByTemplate(Long templateId, Long spaceId, Long partenId) {
-        Page page = copyPage(templateId, "id", "spaceId", "parentId", "isTemplate");
+    @Transactional(rollbackFor = Exception.class)
+    public Page createByTemplate(Long templateId, Long spaceId, Long parentId) {
+        Page template = this.getById(templateId);
+        if (template == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        // Build the new page directly rather than via copyPage(): that helper
+        // persists an intermediate row, which forced createPage() down its
+        // "update existing page" branch and left `ancestors` and the audit
+        // timestamps carrying the template's values.
+        Page page = BeanUtil.copyProperties(template, Page.class,
+                "id", "spaceId", "parentId", "ancestors", "isTemplate", "status",
+                "createTime", "createUser", "createDept", "updateTime", "updateUser");
         page.setSpaceId(spaceId);
-        page.setParentId(partenId);
-        createPage(page, true);
-        return page;
+        page.setParentId(parentId == null ? Page.TOP_PAGE_ID : parentId);
+        page.setIsTemplate(false);
+        // The template's blocks are its content. Ids are regenerated so they do
+        // not collide with the template's own rows (see copyPage).
+        String content = blockStorageService.assembleTreeJson(templateId);
+        if (StrUtil.isNotBlank(content)) {
+            page.setContent(blockStorageService.regenerateBlockIds(content));
+        }
+        // createPage() takes the "new page" branch (id == null): it validates the
+        // parent, derives `ancestors` and persists the blocks in one pass.
+        return createPage(page, true);
     }
 
     @Override
