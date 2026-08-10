@@ -4,6 +4,8 @@ import {
     ResolvedDockPanel,
     dockRuntime,
     useTranslation,
+    DOCK_PANEL_RUNNING,
+    event,
 } from "@kn/common"
 import {
     Button,
@@ -34,17 +36,45 @@ export interface DockHostProps {
 const DockRail: React.FC<{
     panels: ResolvedDockPanel[]
     activeId: string | null
+    runningIds: Set<string>
     onToggle: (id: string) => void
     title: (panel: ResolvedDockPanel) => string
     side: 'left' | 'right'
-}> = ({ panels, activeId, onToggle, title, side }) => (
+}> = ({ panels, activeId, runningIds, onToggle, title, side }) => (
     <TooltipProvider delayDuration={300}>
         <div className={cn(
             "flex h-full w-10 flex-shrink-0 flex-col items-center gap-1 bg-muted/40 py-2",
             side === 'right' ? "border-l" : "border-r"
         )}>
+            <style>{`
+                @keyframes dock-icon-pulse {
+                    0%, 100% { transform: scale(1); }
+                    50% { transform: scale(1.18); }
+                }
+                @keyframes dock-glow-breathe {
+                    0%, 100% { opacity: 0.12; transform: scale(0.9); }
+                    50% { opacity: 0.35; transform: scale(1.3); }
+                }
+                @keyframes dock-spark-1 {
+                    0% { opacity: 0; transform: scale(0); }
+                    30% { opacity: 1; transform: translate(5px, -5px) scale(1); }
+                    100% { opacity: 0; transform: translate(8px, -8px) scale(0.2); }
+                }
+                @keyframes dock-spark-2 {
+                    0% { opacity: 0; transform: scale(0); }
+                    30% { opacity: 1; transform: translate(-5px, 4px) scale(1); }
+                    100% { opacity: 0; transform: translate(-8px, 7px) scale(0.2); }
+                }
+                @keyframes dock-spark-3 {
+                    0% { opacity: 0; transform: scale(0); }
+                    30% { opacity: 1; transform: translate(4px, 5px) scale(1); }
+                    100% { opacity: 0; transform: translate(7px, 8px) scale(0.2); }
+                }
+            `}</style>
             {panels.map(panel => {
                 const label = title(panel)
+                const isActive = activeId === panel.id
+                const isRunning = runningIds.has(panel.id)
                 return (
                     <Tooltip key={panel.id}>
                         <TooltipTrigger asChild>
@@ -52,14 +82,55 @@ const DockRail: React.FC<{
                                 variant="ghost"
                                 size="icon"
                                 className={cn(
-                                    "h-7 w-7 text-muted-foreground",
-                                    activeId === panel.id && "bg-accent text-foreground"
+                                    "relative h-7 w-7 text-muted-foreground",
+                                    "transition-colors duration-200",
+                                    isActive && "bg-accent text-foreground",
+                                    isRunning && "text-primary"
                                 )}
                                 aria-label={label}
-                                aria-pressed={activeId === panel.id}
+                                aria-pressed={isActive}
+                                aria-busy={isRunning || undefined}
                                 onClick={() => onToggle(panel.id)}
                             >
-                                {panel.icon}
+                                {/* Running — glow halo that breathes behind the icon */}
+                                {isRunning && (
+                                    <span aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                        <span
+                                            className="h-5 w-5 rounded-full bg-primary/30 blur-[2px]"
+                                            style={{ animation: 'dock-glow-breathe 1.8s ease-in-out infinite' }}
+                                        />
+                                    </span>
+                                )}
+                                {/* Running — sparkle particles emanating outward,
+                                    staggered so there's always one twinkling */}
+                                {isRunning && [0, 1, 2].map(i => (
+                                    <span
+                                        key={i}
+                                        aria-hidden
+                                        className="pointer-events-none absolute left-1/2 top-1/2 h-[3px] w-[3px] rounded-full bg-primary"
+                                        style={{
+                                            marginLeft: '-1.5px',
+                                            marginTop: '-1.5px',
+                                            animation: `dock-spark-${i + 1} 1.8s ease-out infinite`,
+                                            animationDelay: `${i * 0.5}s`,
+                                        }}
+                                    />
+                                ))}
+                                {/* Icon — springs up on activation, pulses gently while running */}
+                                <span
+                                    className={cn(
+                                        "relative z-10 flex items-center justify-center transition-transform duration-200",
+                                        isActive ? "scale-110" : "scale-100",
+                                    )}
+                                    style={{
+                                        transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+                                        ...(isRunning && {
+                                            animation: 'dock-icon-pulse 1.8s ease-in-out infinite',
+                                        }),
+                                    }}
+                                >
+                                    {panel.icon}
+                                </span>
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent side={side === 'right' ? 'left' : 'right'}>{label}</TooltipContent>
@@ -100,10 +171,29 @@ export const DockHost: React.FC<DockHostProps> = ({
         [t]
     )
 
+    // Track which panels are currently running (e.g. the agent streaming a
+    // response) so the rail icon can show a spinning animation. Panels emit
+    // DOCK_PANEL_RUNNING; the host listens and flips the matching id in/out.
+    const [runningIds, setRunningIds] = React.useState<Set<string>>(new Set)
+    React.useEffect(() => {
+        const handler = ({ id, running }: { id: string; running: boolean }) => {
+            setRunningIds(prev => {
+                const next = new Set(prev)
+                if (running) next.add(id)
+                else next.delete(id)
+                return next
+            })
+        }
+        event.on(DOCK_PANEL_RUNNING, handler)
+        return () => { event.off(DOCK_PANEL_RUNNING, handler) }
+    }, [])
+
     const PanelComponent = activePanel?.component
 
-    // Keep the collapsing panel mounted until its width animation finishes, so
-    // closing slides out instead of blinking away. Dropped on transitionend.
+    // Keep the last panel mounted even when collapsed so in-flight work (agent
+    // streams, live sessions) survives a collapse/re-expand cycle. The 0-width
+    // outer viewport clips the content from view, so there is no need to unmount.
+    // Switching to a *different* panel still replaces the old one via the effect.
     const [rendered, setRendered] = React.useState<ResolvedDockPanel | undefined>(activePanel)
     React.useEffect(() => {
         if (activePanel) setRendered(activePanel)
@@ -145,7 +235,9 @@ export const DockHost: React.FC<DockHostProps> = ({
                 style={{ width: activePanel ? width : 0 }}
                 onTransitionEnd={(e) => {
                     if (e.target !== e.currentTarget || e.propertyName !== 'width') return
-                    if (!activePanel) setRendered(undefined)
+                    // Intentionally NOT unmounting here: keeping the panel mounted
+                    // while collapsed lets in-flight agent streams continue running.
+                    // The 0-width viewport already clips the content from view.
                 }}
             >
                 {rendered && RenderedComponent && (
@@ -154,9 +246,12 @@ export const DockHost: React.FC<DockHostProps> = ({
                             "absolute top-0 flex h-full flex-col border-l bg-background",
                             // Anchored to the edge the rail sits on, so the clipped
                             // side is the one facing the document.
-                            position === 'right' ? "right-0" : "left-0"
+                            position === 'right' ? "right-0" : "left-0",
+                            // Hide from AT and pointer events while collapsed.
+                            !activePanel && "pointer-events-none"
                         )}
                         style={{ width }}
+                        aria-hidden={!activePanel}
                     >
                         {/* Drag handle: sits on the panel's outer edge, 4px hit area. */}
                         <div
@@ -190,6 +285,7 @@ export const DockHost: React.FC<DockHostProps> = ({
             <DockRail
                 panels={panels}
                 activeId={activeId}
+                runningIds={runningIds}
                 onToggle={toggle}
                 title={panelTitle}
                 side={position}

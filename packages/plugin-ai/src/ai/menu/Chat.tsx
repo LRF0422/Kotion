@@ -17,6 +17,8 @@ import {
     getOffscreenEditorBridge,
     getPageBridge,
     PageEditWindow,
+    event,
+    DOCK_PANEL_RUNNING,
 } from "@kn/common"
 import type { ChatMode, ChatModelParams, OffscreenEditorHandle } from "@kn/common"
 
@@ -351,6 +353,19 @@ export const ExpandableChatDemo: React.FC<{
     const [input, setInput] = useState("")
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<ChatError | null>(null)
+
+    // Notify the dock rail icon when the agent starts/stops generating so it
+    // can show a running animation. The id matches the panel id registered in
+    // ChatDockPanel ("agent").
+    useEffect(() => {
+        event.emit(DOCK_PANEL_RUNNING, { id: 'agent', running: isLoading })
+    }, [isLoading])
+
+    // Clear the running state when the chat unmounts (e.g. switching panels or
+    // navigating away) so the rail icon doesn't stay stuck in a spinning state.
+    useEffect(() => {
+        return () => { event.emit(DOCK_PANEL_RUNNING, { id: 'agent', running: false }) }
+    }, [])
 
     const buffer = useStreamingBuffer()
 

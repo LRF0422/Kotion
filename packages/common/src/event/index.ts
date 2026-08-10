@@ -31,6 +31,13 @@ export const TOGGLE_AI_ASSISTANT = "TOGGLE_AI_ASSISTANT"
  */
 export const TOGGLE_DOCK_PANEL = "TOGGLE_DOCK_PANEL"
 
+/**
+ * Notify the dock host that a panel is running (or stopped). Payload: `{ id, running }`.
+ * Panels emit this so the rail icon can show a running animation — e.g. the
+ * agent panel emits `running: true` while streaming a response.
+ */
+export const DOCK_PANEL_RUNNING = "DOCK_PANEL_RUNNING"
+
 /** Imperatively start a tour by its id. Payload: the tour id string. */
 export const START_TOUR = "START_TOUR"
 

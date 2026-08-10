@@ -77,10 +77,12 @@ export const Home: React.FC = () => {
     const { t } = useTranslation()
     const { userInfo } = useSelector((state: GlobalState) => state)
 
-    // Search + tag-filter state for the Recent sections. Space/page queries are
-    // debounced and resolved server-side; the page tag filter runs client-side.
+    // Search + tag-filter state for the tab sections. Space/page queries are
+    // debounced and resolved server-side; the page tag filter and the favorites
+    // filter run client-side.
     const [spaceQuery, setSpaceQuery] = useState("")
     const [pageQuery, setPageQuery] = useState("")
+    const [favQuery, setFavQuery] = useState("")
     const [selectedTags, setSelectedTags] = useState<string[]>([])
     const debouncedSpaceQuery = useDebounce(spaceQuery, { wait: 400 })
     const debouncedPageQuery = useDebounce(pageQuery, { wait: 400 })
@@ -223,8 +225,18 @@ export const Home: React.FC = () => {
         )
     }, [recentPages, selectedTags])
 
+    // Favorites load in one shot, so title matching runs client-side with no
+    // debounce — and lets the tab keep the same search-first row rhythm as
+    // the other tabs.
+    const filteredFavorites = useMemo(() => {
+        const q = favQuery.trim().toLowerCase()
+        if (!q) return favoritePages
+        return favoritePages.filter((p: any) => (p.title || "").toLowerCase().includes(q))
+    }, [favoritePages, favQuery])
+
     const spaceSearching = debouncedSpaceQuery.trim().length > 0
     const pageSearching = debouncedPageQuery.trim().length > 0
+    const favSearching = favQuery.trim().length > 0
 
     // Spaces tab rows — recent and team spaces merged into one flat list,
     // deduped by id. While searching, only the server-side matches show.
@@ -477,8 +489,8 @@ export const Home: React.FC = () => {
                                     className="h-7 gap-1.5 rounded-md px-2.5 text-[12px] font-medium data-[state=active]:bg-muted data-[state=active]:shadow-none"
                                 >
                                     {t("home.favorites") || "Favorites"}
-                                    {favoritePages.length > 0 && (
-                                        <span className="text-[11px] text-muted-foreground/70">{favoritePages.length}</span>
+                                    {filteredFavorites.length > 0 && (
+                                        <span className="text-[11px] text-muted-foreground/70">{filteredFavorites.length}</span>
                                     )}
                                 </TabsTrigger>
                                 <TabsTrigger
@@ -721,6 +733,16 @@ export const Home: React.FC = () => {
                         {/* Favorite Pages — mirrors the recent-pages list layout so
                         every tab reads with the same rhythm. */}
                         <TabsContent value="favorites" className="mt-3 flex flex-col gap-2">
+                            <div className="px-1">
+                                <Input
+                                    className="h-8 max-w-xs text-[13px]"
+                                    icon={<SearchIcon className="h-3.5 w-3.5" />}
+                                    placeholder={t("home.search-pages", "Search pages...")}
+                                    value={favQuery}
+                                    onChange={(e) => setFavQuery(e.target.value)}
+                                    aria-label={t("home.search-pages", "Search pages...")}
+                                />
+                            </div>
                             {loading ? (
                                 <div className="flex flex-col">
                                     {[...Array(3)].map((_, index) => (
@@ -731,16 +753,23 @@ export const Home: React.FC = () => {
                                         </div>
                                     ))}
                                 </div>
-                            ) : favoritePages.length === 0 ? (
-                                <EmptyBlock
-                                    icon={<Star className="h-5 w-5" />}
-                                    title={t("home.no-favorites") || "No favorite pages yet"}
-                                    desc={t("home.no-favorites-hint") || "Star pages to add them here"}
-                                />
+                            ) : filteredFavorites.length === 0 ? (
+                                favSearching ? (
+                                    <EmptyBlock
+                                        icon={<SearchIcon className="h-5 w-5" />}
+                                        title={t("home.no-page-match", "No matching pages")}
+                                    />
+                                ) : (
+                                    <EmptyBlock
+                                        icon={<Star className="h-5 w-5" />}
+                                        title={t("home.no-favorites") || "No favorite pages yet"}
+                                        desc={t("home.no-favorites-hint") || "Star pages to add them here"}
+                                    />
+                                )
                             ) : (
                                 <PagePreviewProvider>
                                     <ul className="flex flex-col">
-                                        {favoritePages.map((data: any) => {
+                                        {filteredFavorites.map((data: any) => {
                                             return (
                                                 // Same hover preview as the recent list (desktop only).
                                                 <PagePreviewCard
@@ -892,7 +921,7 @@ const EmptyBlock: React.FC<{
     desc?: string
     action?: React.ReactNode
 }> = ({ icon, title, desc, action }) => (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/50 bg-muted/10 py-12 text-center">
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/50 bg-muted/10 py-8 text-center">
         <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
             {icon}
         </div>
