@@ -15,6 +15,11 @@ import {
 import { ChevronDown, FileText, X } from "@kn/icon"
 import { useTranslation, type PageTab } from "@kn/common"
 
+// Minimum width a tab may shrink to before extra tabs move into the overflow menu.
+const MIN_TAB_WIDTH = 120
+// Width reserved for the overflow dropdown trigger.
+const OVERFLOW_BTN_WIDTH = 36
+
 export interface TabBarProps {
     tabs: PageTab[]
     activePageId?: string
@@ -29,8 +34,9 @@ export interface TabBarProps {
  * Presentational tab strip for open pages. Navigation/keep-alive logic lives in
  * the parent (`TabbedEditorArea`); this just renders and emits intent.
  *
- * When tabs exceed available width, overflowed tabs are collected into a
- * dropdown menu instead of horizontal scrolling.
+ * Tabs stretch to equally fill the bar width (no empty tail); once each tab's
+ * share would drop below a minimum usable width, the extra tabs are collected
+ * into an overflow dropdown instead of horizontal scrolling.
  */
 export const TabBar: React.FC<TabBarProps> = ({
     tabs,
@@ -43,43 +49,24 @@ export const TabBar: React.FC<TabBarProps> = ({
 }) => {
     const { t } = useTranslation()
     const containerRef = useRef<HTMLDivElement>(null)
-    const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map())
-    const tabWidths = useRef<Map<string, number>>(new Map())
     const [visibleCount, setVisibleCount] = useState(tabs.length)
 
+    // Since tabs always fill the bar equally, their widths are container-driven
+    // — no per-tab measurement needed. Fit as many tabs as can keep at least
+    // MIN_TAB_WIDTH each; the rest go into the overflow dropdown.
     const computeVisibleCount = useCallback(() => {
         const container = containerRef.current
         if (!container) return
-        // Reserve space for the overflow button (36px)
-        const overflowBtnWidth = 36
         const containerWidth = container.clientWidth
-        let totalWidth = 0
-        let count = 0
-
-        for (const tab of tabs) {
-            // Use live measurement if available, fall back to cached width.
-            // offsetWidth gives the actual layout box (content + padding +
-            // border), matching the real flex footprint.  scrollWidth would
-            // report the full untruncated text, which is larger than the
-            // capped max-w-[180px] and causes tabs to be hidden prematurely.
-            const el = tabRefs.current.get(tab.pageId)
-            const tabWidth = el ? el.offsetWidth : (tabWidths.current.get(tab.pageId) ?? 140)
-            // Cache width for future use when element is unmounted
-            if (el) tabWidths.current.set(tab.pageId, tabWidth)
-            const needed = totalWidth + tabWidth + (count < tabs.length - 1 ? overflowBtnWidth : 0)
-            if (needed > containerWidth && count > 0) break
-            totalWidth += tabWidth
-            count++
-        }
-
-        // If the loop completed without breaking, every tab fit (with
-        // overflow reserve for non-last tabs) — show all, no dropdown.
-        // Otherwise show only the tabs that fit + the overflow button.
-        if (count === tabs.length) {
+        if (containerWidth <= 0) return
+        const maxFit = Math.max(1, Math.floor(containerWidth / MIN_TAB_WIDTH))
+        if (tabs.length <= maxFit) {
             setVisibleCount(tabs.length)
-        } else {
-            setVisibleCount(count)
+            return
         }
+        // Reserve room for the overflow dropdown button.
+        const fitWithOverflow = Math.max(1, Math.floor((containerWidth - OVERFLOW_BTN_WIDTH) / MIN_TAB_WIDTH))
+        setVisibleCount(Math.min(tabs.length, fitWithOverflow))
     }, [tabs])
 
     useLayoutEffect(() => {
@@ -120,10 +107,6 @@ export const TabBar: React.FC<TabBarProps> = ({
                     <ContextMenu key={tab.pageId}>
                         <ContextMenuTrigger asChild>
                             <div
-                                ref={(el) => {
-                                    if (el) tabRefs.current.set(tab.pageId, el)
-                                    else tabRefs.current.delete(tab.pageId)
-                                }}
                                 role="tab"
                                 aria-selected={isActive}
                                 onClick={() => onActivate(tab.pageId)}
@@ -134,7 +117,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                                     }
                                 }}
                                 className={cn(
-                                    "group flex max-w-[180px] flex-shrink-0 cursor-pointer select-none items-center gap-1.5 border-r px-3 text-sm transition-colors",
+                                    "group flex min-w-0 flex-1 cursor-pointer select-none items-center gap-1.5 border-r px-3 text-sm transition-colors",
                                     isActive
                                         ? "bg-background text-foreground"
                                         : "bg-muted/30 text-muted-foreground hover:bg-muted/60"
