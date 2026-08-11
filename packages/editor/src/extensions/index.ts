@@ -82,5 +82,7 @@ export { SearchExtension, SearchNReplace, SearchStaticMenu, SearchPanel, ON_SEAR
 export { BlockOperationsExtension, BlockOperations } from "./block-operations"
 export { DirtyTracker } from "./dirty-tracker"
 export type { DirtyTrackerStorage, DirtyTrackerOptions, BlockChange, IncrementalPayload } from "./dirty-tracker"
+export { OperationRecorder, getRecordedOperation, rollbackRecordedOperation } from "./operation-recorder"
+export type { OperationRecorderStorage, EditorOperation, EditorOpBlockChange, OperationRollbackResult } from "./operation-recorder"
 export { BlockRank } from "./block-rank"
 export type { BlockRankOptions } from "./block-rank"

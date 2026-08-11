@@ -9,16 +9,20 @@ import { Message, extractBlockReferences } from './chat-types'
 import type { BlockReference } from './chat-types'
 import { CompletedSteps } from './ExecutionStepsDisplay'
 import { BlockReferences } from './BlockReferences'
+import { AgentOperations } from './AgentOperations'
 
 interface MessageBubbleProps {
     message: Message
     /** Reveal a cited block in the editor (wired by the chat surface). */
     onRevealReference?: (ref: BlockReference) => void
+    /** Roll back recorded document operations of a message (wired by the chat surface). */
+    onRollbackOps?: (messageId: string, opIds: string[]) => void
 }
 
 export const MessageBubble = React.memo(function MessageBubble({
     message,
     onRevealReference,
+    onRollbackOps,
 }: MessageBubbleProps) {
     const [, copy] = useCopyToClipboard()
     const [copied, setCopied] = useState(false)
@@ -74,6 +78,13 @@ export const MessageBubble = React.memo(function MessageBubble({
                         {/* Clickable citations to document blocks */}
                         {isAI && blockReferences.length > 0 && (
                             <BlockReferences references={blockReferences} onReveal={onRevealReference} />
+                        )}
+                        {/* Document operations with selective rollback */}
+                        {isAI && message.operations && message.operations.length > 0 && (
+                            <AgentOperations
+                                operations={message.operations}
+                                onRollback={(opIds) => onRollbackOps?.(message.id, opIds)}
+                            />
                         )}
                         {message.stopped && (
                             <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 text-[10px] text-muted-foreground">

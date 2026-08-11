@@ -31,6 +31,17 @@ export {
     createColumnNode,
     createColumnsFromNodes
 } from "./extensions"
+export {
+    OperationRecorder,
+    getRecordedOperation,
+    rollbackRecordedOperation
+} from "./extensions"
+export type {
+    OperationRecorderStorage,
+    EditorOperation,
+    EditorOpBlockChange,
+    OperationRollbackResult
+} from "./extensions"
 export type {
     ColumnPreset,
     ColumnStyle as ColumnStyleAttrs,
