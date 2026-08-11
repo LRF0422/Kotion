@@ -1,19 +1,24 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { StopCircle, AlertCircle, Sparkles, IconCopy } from '@kn/icon'
 import { Streamdown, formatDistanceToNow, useCopyToClipboard } from '@kn/ui'
 import {
     ChatBubble,
     ChatBubbleMessage,
 } from '@kn/ui'
-import { Message } from './chat-types'
+import { Message, extractBlockReferences } from './chat-types'
+import type { BlockReference } from './chat-types'
 import { CompletedSteps } from './ExecutionStepsDisplay'
+import { BlockReferences } from './BlockReferences'
 
 interface MessageBubbleProps {
     message: Message
+    /** Reveal a cited block in the editor (wired by the chat surface). */
+    onRevealReference?: (ref: BlockReference) => void
 }
 
 export const MessageBubble = React.memo(function MessageBubble({
     message,
+    onRevealReference,
 }: MessageBubbleProps) {
     const [, copy] = useCopyToClipboard()
     const [copied, setCopied] = useState(false)
@@ -29,6 +34,9 @@ export const MessageBubble = React.memo(function MessageBubble({
 
     const isAI = message.sender === 'ai'
     const relativeTime = formatDistanceToNow(message.timestamp, { addSuffix: true })
+
+    // Citations produced by the referenceBlocks tool live on the tool tape.
+    const blockReferences = useMemo(() => extractBlockReferences(message.steps), [message.steps])
 
     return (
         <ChatBubble variant={isAI ? 'received' : 'sent'}>
@@ -63,6 +71,10 @@ export const MessageBubble = React.memo(function MessageBubble({
                             </details>
                         )}
                         <Streamdown>{message.content}</Streamdown>
+                        {/* Clickable citations to document blocks */}
+                        {isAI && blockReferences.length > 0 && (
+                            <BlockReferences references={blockReferences} onReveal={onRevealReference} />
+                        )}
                         {message.stopped && (
                             <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-border/50 text-[10px] text-muted-foreground">
                                 <StopCircle className="h-3 w-3" />

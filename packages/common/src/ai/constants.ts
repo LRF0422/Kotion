@@ -76,7 +76,8 @@ export const STANDARD_WORKFLOW = `# WORKFLOW
 6. If creating/modifying column layouts → use insertColumns, getColumnsInfo, updateColumnContent
 7. For cross-page work → searchPages / createPage / insertPageLink / openPage
 8. If large destructive action → askUserChoice to confirm (optionally createCheckpoint first)
-9. Verify the result`
+9. Verify the result
+10. When your final answer refers to specific places in the document → call referenceBlocks with those blockIds so the user gets clickable citations that jump to each block`
 
 /**
  * Language instruction for all agents.
@@ -113,10 +114,19 @@ ${STANDARD_WORKFLOW}
 
 ${LANGUAGE_INSTRUCTION}`
 
+/** Maximum character count for document content injected into ask-mode
+ * system prompts. Prevents very large documents from overflowing the
+ * model's context window while still giving the agent enough to work with. */
+export const MAX_ASK_MODE_CONTENT_CHARS = 20000
+
 /**
  * Ask-mode system prompt — Q&A only, no document editing.
  * Used when the chat is in "ask" mode: the agent receives no tools and
  * must restrict itself to answering questions about the content.
+ *
+ * The full document text is appended at runtime (see use-agent-optimized)
+ * in the "DOCUMENT CONTENT" section so the model can actually read the
+ * article — ask mode ships no tools, so the content must be inline.
  */
 export const ASK_MODE_PROMPT = `You are a helpful knowledge assistant. You answer questions about the user's documents and content.
 
@@ -126,8 +136,8 @@ You are in **Ask mode**. You can only answer questions — you cannot edit, inse
 # GUIDELINES
 
 1. **Answer clearly and concisely** — provide useful, well-structured responses.
-2. **Respect the content** — read and reference document content when answering, but never modify it.
-3. **Be honest** — if you don't know or can't access something, say so.
+2. **Use the document content** — the full text of the current document is provided below in the "DOCUMENT CONTENT" section. Reference it when answering questions about the document.
+3. **Be honest** — if the answer isn't in the document or you don't know, say so.
 
 ${LANGUAGE_INSTRUCTION}`
 

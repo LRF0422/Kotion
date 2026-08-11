@@ -29,6 +29,7 @@ export const ESSENTIAL_TOOLS = [
     'clearDocument',
     // Interaction tools
     'askUserChoice',
+    'referenceBlocks',
     // Structure tools
     'convertBlock',
     'formatText',
@@ -242,6 +243,15 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
         description: '高亮显示文本范围',
         priority: 5,
         tags: ['highlight', 'visual', 'feedback'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'referenceBlocks',
+        category: 'interaction',
+        description: '在回复中引用文档块，渲染为可点击的引用卡片，点击跳转定位',
+        priority: 9,
+        tags: ['reference', 'citation', 'blockId', 'navigation', 'essential'],
         loaded: false,
         source: 'builtin'
     },

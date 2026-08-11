@@ -30,6 +30,59 @@ export const scrollToPosition = (editor: Editor, pos: number, force = false) => 
 }
 
 /**
+ * Locate a block by its stable id inside an arbitrary doc (state doc or a
+ * transaction's mapped doc). Checks `attrs.id` with `attrs.blockId` fallback,
+ * matching the editor's UniqueID conventions.
+ */
+export const findBlockPosById = (
+    doc: any,
+    blockId: string
+): { node: any; pos: number } | null => {
+    let found: { node: any; pos: number } | null = null
+    doc.descendants((node: any, pos: number) => {
+        if (found) return false
+        const id = (node.attrs?.id ?? node.attrs?.blockId) as string | undefined
+        if (id === blockId) {
+            found = { node, pos }
+            return false
+        }
+        return true
+    })
+    return found
+}
+
+/** Briefly flash a block's DOM node so the user's eye lands on it after a jump. */
+const flashBlockDom = (el: HTMLElement) => {
+    // Web Animations API — no stylesheet or doc mutation needed.
+    el.animate?.(
+        [
+            { backgroundColor: 'rgba(99, 102, 241, 0.22)', borderRadius: '4px' },
+            { backgroundColor: 'rgba(99, 102, 241, 0)', borderRadius: '4px' },
+        ],
+        { duration: 1600, easing: 'ease-out' }
+    )
+}
+
+/**
+ * Reveal a block by its stable id: scroll it into view (bypassing the agent
+ * scroll throttle — this is a deliberate user navigation), place the cursor
+ * inside it and flash its DOM node. Returns false when the block no longer
+ * exists (deleted/moved away) so callers can surface a "not found" state.
+ */
+export const revealBlockById = (editor: Editor, blockId: string): boolean => {
+    const found = findBlockPosById(editor.state.doc, blockId)
+    if (!found) return false
+
+    scrollToPosition(editor, found.pos, true)
+
+    const dom = editor.view.nodeDOM(found.pos)
+    if (dom instanceof HTMLElement) {
+        flashBlockDom(dom)
+    }
+    return true
+}
+
+/**
  * Run a (possibly async) mutation with every dispatched transaction tagged
  * with {@link AI_TRANSACTION_META}. Used by the tool layer so ALL AI edits are
  * identifiable downstream without every tool having to set the meta itself.

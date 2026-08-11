@@ -80,6 +80,45 @@ export function classifyError(err: any): ChatError {
     return { type: 'unknown', message: '生成失败，请重试', retryable: true }
 }
 
+// ============ Block Reference Types ============
+
+/** Tool name that produces document-block citations. */
+export const REFERENCE_TOOL_NAME = 'referenceBlocks'
+
+/** A single document-block citation produced by the referenceBlocks tool. */
+export interface BlockReference {
+    blockId: string
+    /** Why the agent cited this block (one-liner from the tool call). */
+    note?: string
+    /** False when the tool couldn't resolve the blockId (deleted/moved). */
+    found?: boolean
+    blockType?: string
+    textPreview?: string
+    error?: string
+}
+
+/**
+ * Collect block references from a message's tool-execution tape. Successful
+ * referenceBlocks calls carry the resolved display metadata in
+ * `result.references`; entries are deduped by blockId, first occurrence wins.
+ */
+export function extractBlockReferences(steps?: ExecutionStep[]): BlockReference[] {
+    if (!steps) return []
+    const seen = new Set<string>()
+    const refs: BlockReference[] = []
+    for (const step of steps) {
+        if (step.toolName !== REFERENCE_TOOL_NAME || step.status !== 'success') continue
+        const list = (step.result as any)?.references
+        if (!Array.isArray(list)) continue
+        for (const ref of list) {
+            if (!ref?.blockId || seen.has(ref.blockId)) continue
+            seen.add(ref.blockId)
+            refs.push(ref)
+        }
+    }
+    return refs
+}
+
 // Helper function to format tool names for display
 export function formatToolName(toolName: string) {
     return toolName

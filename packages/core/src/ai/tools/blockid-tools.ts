@@ -1,29 +1,10 @@
 import type { Editor } from "@kn/editor"
 import { z } from "@kn/ui"
 import type { ToolsRecord } from "@kn/common"
-import { parseMarkdownToNodes, scrollToPosition } from "@kn/common"
+import { parseMarkdownToNodes, scrollToPosition, findBlockPosById } from "@kn/common"
 
-/**
- * Locate a block by its stable id inside an arbitrary doc (state doc or a
- * transaction's mapped doc). Checks `attrs.id` with `attrs.blockId` fallback,
- * matching the editor's UniqueID conventions.
- */
-const findBlockInDoc = (
-    doc: any,
-    blockId: string
-): { node: any; pos: number } | null => {
-    let found: { node: any; pos: number } | null = null
-    doc.descendants((node: any, pos: number) => {
-        if (found) return false
-        const id = (node.attrs?.id ?? node.attrs?.blockId) as string | undefined
-        if (id === blockId) {
-            found = { node, pos }
-            return false
-        }
-        return true
-    })
-    return found
-}
+// Block lookup is shared with the reference/navigation features.
+const findBlockInDoc = findBlockPosById
 
 /** Parse markdown into ProseMirror nodes, dropping any that fail schema validation. */
 const markdownToPmNodes = (editor: Editor, markdown: string): { nodes: any[]; dropped: number } => {

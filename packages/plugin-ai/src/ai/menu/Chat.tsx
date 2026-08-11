@@ -16,6 +16,7 @@ import {
     applySubAgentAnnotations,
     getOffscreenEditorBridge,
     getPageBridge,
+    revealBlockById,
     PageEditWindow,
     event,
     DOCK_PANEL_RUNNING,
@@ -28,7 +29,7 @@ import {
     ExecutionStep, PendingUserChoice, ChatError,
     classifyError,
 } from "./chat-types"
-import type { AnnotationData, Message } from "./chat-types"
+import type { AnnotationData, BlockReference, Message } from "./chat-types"
 import { getHistoryForAI } from "./chat-persistence"
 import type { ChatTargetPage } from "./chat-sessions"
 import { useChatSessions } from "./useChatSessions"
@@ -315,6 +316,46 @@ export const ExpandableChatDemo: React.FC<{
     const handleOpenPageWindow = useCallback(() => {
         if (targetPage) setEditWindowPageId(targetPage.pageId)
     }, [targetPage])
+
+    // ─── Block reference navigation ─────────────────────────────
+    // Set when a citation targets a page that still has to be opened; the
+    // effect below polls until the editor lands on that page, then reveals.
+    const [pendingReveal, setPendingReveal] = useState<{ pageId: string; blockId: string } | null>(null)
+
+    const handleRevealReference = useCallback((ref: BlockReference) => {
+        if (ref.found === false) return
+        // 1. The block lives in the page currently open → jump straight there.
+        if (revealBlockById(editor, ref.blockId)) return
+        // 2. The citation belongs to the @-bound page (edited off-screen) →
+        //    open that page in the main editor, then reveal once it loads.
+        if (targetPage) {
+            const currentPageId = getPageBridge()?.getCurrentPage()?.pageId
+            if (currentPageId !== undefined && String(currentPageId) === targetPage.pageId) return
+            setPendingReveal({ pageId: targetPage.pageId, blockId: ref.blockId })
+            getPageBridge()?.openPage(targetPage.pageId, targetPage.spaceId)
+        }
+    }, [editor, targetPage])
+
+    // Reveal a pending citation once navigation to its page completes.
+    useEffect(() => {
+        if (!pendingReveal) return
+        let tries = 0
+        const timer = setInterval(() => {
+            const currentPageId = getPageBridge()?.getCurrentPage()?.pageId
+            const arrived = currentPageId !== undefined && String(currentPageId) === pendingReveal.pageId
+            if (arrived && revealBlockById(editor, pendingReveal.blockId)) {
+                clearInterval(timer)
+                setPendingReveal(null)
+                return
+            }
+            // ~6s budget: page failed to open or the block is gone.
+            if (++tries >= 20) {
+                clearInterval(timer)
+                setPendingReveal(null)
+            }
+        }, 300)
+        return () => clearInterval(timer)
+    }, [pendingReveal, editor])
 
     // All agent tools bind to whichever editor we hand the hook — the
     // off-screen one when a target page is attached, else the main editor.
@@ -683,7 +724,11 @@ export const ExpandableChatDemo: React.FC<{
                     )}
 
                     {messages.map((message) => (
-                        <MessageBubble key={message.id} message={message} />
+                        <MessageBubble
+                            key={message.id}
+                            message={message}
+                            onRevealReference={handleRevealReference}
+                        />
                     ))}
 
                     {/* Live execution steps */}

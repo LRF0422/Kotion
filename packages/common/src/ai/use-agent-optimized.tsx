@@ -22,10 +22,47 @@ import { AgentHarnessImpl } from "./harness"
 import type { HarnessEvent } from "./harness"
 
 // Shared constants
-import { EDITOR_AGENT_PROMPT, ASK_MODE_PROMPT } from "./constants"
+import { EDITOR_AGENT_PROMPT, ASK_MODE_PROMPT, MAX_ASK_MODE_CONTENT_CHARS } from "./constants"
 
 /** Chat mode: "ask" = Q&A only (read-only), "agent" = can operate the page. */
 export type ChatMode = 'ask' | 'agent'
+
+/**
+ * Extract the document content as markdown-ish text for ask-mode context.
+ *
+ * Uses the tiptap-markdown serializer when available (rich formatting:
+ * headings, lists, bold, code blocks) and falls back to plain text.
+ * The custom `title` node is rendered as a top-level H1 heading.
+ */
+const extractAskModeContent = (editor: Editor): string => {
+    const doc = editor.state.doc
+    const first = doc.firstChild
+    const titleText =
+        first?.type.name === 'title' && first.textContent
+            ? first.textContent
+            : ''
+
+    let body: string
+    const markdownStorage = (editor.storage as any)?.markdown
+    if (markdownStorage?.serializer) {
+        // Serialize the body (everything after the title node, if present)
+        // so the title doesn't appear twice — we prepend it as H1 below.
+        if (first?.type.name === 'title') {
+            const bodyDoc = doc.type.create(
+                doc.attrs,
+                doc.content.cut(first.nodeSize, doc.content.size),
+            )
+            body = markdownStorage.serializer.serialize(bodyDoc)
+        } else {
+            body = markdownStorage.serializer.serialize(doc)
+        }
+    } else {
+        // Fallback: plain text — title text is included automatically.
+        body = editor.getText()
+    }
+
+    return titleText ? `# ${titleText}\n\n${body}` : body
+}
 
 /**
  * User-tunable model parameters that ride along with every chat request.
@@ -166,7 +203,22 @@ export const useEditorAgentOptimized = (
         // prompt so it can only answer questions. In "agent" mode the full
         // capability catalog + editing prompt are used (default behaviour).
         const isAskMode = modeRef.current === 'ask'
-        const systemPrompt = isAskMode ? ASK_MODE_PROMPT : EDITOR_AGENT_PROMPT
+        let systemPrompt = isAskMode ? ASK_MODE_PROMPT : EDITOR_AGENT_PROMPT
+
+        // Ask mode ships no tools, so the agent cannot call getDocumentStructure
+        // or searchInDocument to read the article. Inject the full document text
+        // directly into the system prompt so the model has the content inline.
+        if (isAskMode) {
+            const docContent = extractAskModeContent(editor)
+            if (docContent) {
+                const truncated = docContent.length > MAX_ASK_MODE_CONTENT_CHARS
+                const body = truncated
+                    ? docContent.slice(0, MAX_ASK_MODE_CONTENT_CHARS) +
+                      `\n\n[... document truncated, total ${docContent.length} characters ...]`
+                    : docContent
+                systemPrompt += `\n\n# DOCUMENT CONTENT\n\n${body}`
+            }
+        }
 
         // Build messages array for the backend. The system prompt is static now —
         // skill-specific instructions are assembled server-side from the catalog.
@@ -238,7 +290,7 @@ export const useEditorAgentOptimized = (
         } finally {
             isStreamingRef.current = false
         }
-    }, [resolveTool, getCatalog, onToolExecution, toTextStream, modeRef])
+    }, [resolveTool, getCatalog, onToolExecution, toTextStream, modeRef, editor])
 
     // Continue a session suspended on budget exhaustion: the backend grants a
     // fresh iteration budget and resumes the same session.
