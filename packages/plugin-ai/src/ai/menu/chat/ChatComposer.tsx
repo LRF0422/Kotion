@@ -6,7 +6,7 @@ import React, {
     useRef,
     useState,
 } from 'react'
-import { Send, Square, Sparkles, ChevronDown, Check, MessageCircle, Bot } from '@kn/icon'
+import { Send, Square, Sparkles, ChevronDown, Check, MessageCircle, Bot, FileDiff } from '@kn/icon'
 import {
     Button,
     ChatInput,
@@ -252,6 +252,10 @@ interface ChatComposerProps {
     onRetryPage: () => void
     /** Open the bound page in the floating PageEditWindow. */
     onOpenPageWindow: () => void
+    /** Whether change tracking is active on the target editor. */
+    tracking?: boolean
+    /** Toggle the editor's change tracker; merging happens in the editor. */
+    onToggleTracking?: () => void
 }
 
 /**
@@ -267,6 +271,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
         agentId, onAgentChange,
         modelParams, onModelParamsChange,
         targetPage, currentPage, targetStatus, onPickPage, onClearPage, onRetryPage, onOpenPageWindow,
+        tracking, onToggleTracking,
     },
     ref,
 ) {
@@ -359,6 +364,27 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                     onChange={onModelParamsChange}
                     disabled={isLoading}
                 />
+                {onToggleTracking && (
+                    <button
+                        type="button"
+                        disabled={isLoading}
+                        onClick={onToggleTracking}
+                        title={t('ai.chat.trackingHint', { defaultValue: '跟踪文档变动，可在编辑器中审阅并合并' })}
+                        className={
+                            'flex shrink-0 items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium transition-colors disabled:opacity-50 ' +
+                            (tracking
+                                ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted/70')
+                        }
+                    >
+                        <FileDiff className="h-3 w-3 shrink-0" />
+                        <span>
+                            {tracking
+                                ? t('ai.chat.trackingOn', { defaultValue: '跟踪中' })
+                                : t('ai.chat.trackingOff', { defaultValue: '跟踪变动' })}
+                        </span>
+                    </button>
+                )}
                 <div className="ml-auto shrink-0">
                     {isLoading ? (
                         <TooltipProvider>

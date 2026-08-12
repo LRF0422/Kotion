@@ -514,6 +514,19 @@ export const resources = {
                     "words": "词数",
                     "blocks": "块数"
                 },
+                "tracker": {
+                    "title": "跟踪中",
+                    "count": "{{count}} 项变动",
+                    "acceptAll": "全部保留",
+                    "restoreAll": "全部恢复",
+                    "stop": "停止跟踪（保留现有内容）",
+                    "empty": "暂无变动，文档与基线一致",
+                    "actionInsert": "新增",
+                    "actionUpdate": "修改",
+                    "actionDelete": "删除",
+                    "acceptOne": "保留此变动",
+                    "restoreOne": "恢复此块"
+                },
                 "meta": {
                     "created": "创建于",
                     "updated": "更新于",
@@ -1302,6 +1315,20 @@ export const resources = {
                     "characters": "Characters",
                     "words": "Words",
                     "blocks": "Blocks"
+                },
+                "tracker": {
+                    "title": "Tracking",
+                    "count_one": "{{count}} change",
+                    "count_other": "{{count}} changes",
+                    "acceptAll": "Keep all",
+                    "restoreAll": "Restore all",
+                    "stop": "Stop tracking (keep current content)",
+                    "empty": "No changes — document matches the baseline",
+                    "actionInsert": "Added",
+                    "actionUpdate": "Modified",
+                    "actionDelete": "Deleted",
+                    "acceptOne": "Keep this change",
+                    "restoreOne": "Restore this block"
                 },
                 "meta": {
                     "created": "Created",

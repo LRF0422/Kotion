@@ -75,7 +75,12 @@ export const ai = new AiPlugin({
                     "imagePreview": "Preview",
                     "generatedImage": "AI Generated Image",
                     "imageGenerationFailed": "Image generation failed",
-                    "imageGenerationError": "Image generation error"
+                    "imageGenerationError": "Image generation error",
+                    "chat": {
+                        "trackingHint": "Track document changes; review and merge them in the editor",
+                        "trackingOn": "Tracking",
+                        "trackingOff": "Track changes"
+                    }
                 }
             }
         },
@@ -99,7 +104,12 @@ export const ai = new AiPlugin({
                     "imagePreview": "预览",
                     "generatedImage": "AI生成的图片",
                     "imageGenerationFailed": "图片生成失败",
-                    "imageGenerationError": "图片生成错误"
+                    "imageGenerationError": "图片生成错误",
+                    "chat": {
+                        "trackingHint": "跟踪文档变动，可在编辑器中审阅并合并",
+                        "trackingOn": "跟踪中",
+                        "trackingOff": "跟踪变动"
+                    }
                 }
             }
         }

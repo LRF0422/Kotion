@@ -32,13 +32,11 @@ export {
     createColumnsFromNodes
 } from "./extensions"
 export {
-    OperationRecorder,
-    getRecordedOperation,
-    rollbackRecordedOperation
+    ChangeTracker,
+    changeTrackerPluginKey
 } from "./extensions"
 export type {
-    OperationRecorderStorage,
-    EditorOperation,
+    ChangeTrackerStorage,
     EditorOpBlockChange,
     OperationRollbackResult
 } from "./extensions"

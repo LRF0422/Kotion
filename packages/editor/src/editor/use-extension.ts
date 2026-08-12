@@ -13,7 +13,7 @@ import { Perf } from "../extensions/perf"
 import { UniqueID } from "../extensions/unique-id"
 import { BlockRank } from "../extensions/block-rank"
 import { DirtyTracker } from "../extensions/dirty-tracker"
-import { OperationRecorder } from "../extensions/operation-recorder"
+import { ChangeTracker } from "../extensions/change-tracker"
 import { Doc } from "../extensions"
 import Document from "@tiptap/extension-document";
 import { UndoRedo } from '@tiptap/extensions'
@@ -88,10 +88,10 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean, externalEx
 			blockIdAttribute: 'id',
 			filterTransaction: t => !isChangeOrigin(t)
 		}))
-		// Unified operation log (block-level before/after + selective rollback).
-		// Recording windows are driven by consumers (e.g. the AI chat wraps each
-		// tool call); without a begin/end pair nothing is captured.
-		editorExtensions.push(OperationRecorder)
+		// Change tracker: while a session is enabled (toggled from the chat),
+		// block-level diffs against the session baseline drive the in-editor
+		// highlight + merge UI. Inert otherwise — no baseline, no diffing.
+		editorExtensions.push(ChangeTracker)
 		return [editorExtensions, full] as const
 	}, [ext, withTitle, pluginManager, externalExtensions, pluginVersion])
 }

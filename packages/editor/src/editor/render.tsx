@@ -18,6 +18,7 @@ import { StyledEditor } from "../styles/editor";
 import { cn, useTheme } from "@kn/ui";
 import { NotionToC } from "./NotionToC";
 import { EditorStatusBar } from "./EditorStatusBar";
+import { ChangeTrackerBar } from "./ChangeTrackerBar";
 import { PageHeader } from "./PageHeader";
 import { PageContext, PageContextProps } from "./context";
 import { rewriteUnknownContent } from "./rewriteUnknowContent";
@@ -212,6 +213,8 @@ export const EditorRender = forwardRef<
           </div>
           {/* Bottom status bar: character / word / block counts */}
           {contentReady && <EditorStatusBar editor={editor} />}
+          {/* Change-tracker merge bar (visible only while tracking is on) */}
+          {contentReady && <ChangeTrackerBar editor={editor} />}
           {/* Render bubble menus (e.g., comment read-only popup) */}
           {editor && extensionWrappers?.map((wrapper, idx) => {
             if (!wrapper.bubbleMenu) return null;

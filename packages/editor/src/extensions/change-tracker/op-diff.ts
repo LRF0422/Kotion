@@ -37,7 +37,7 @@ export interface OperationRollbackResult {
 const blockIdOf = (node: ProseMirrorNode): string | undefined =>
     ((node.attrs?.id ?? node.attrs?.blockId) as string | undefined) || undefined
 
-const previewOf = (node: ProseMirrorNode): string => {
+export const previewOf = (node: ProseMirrorNode): string => {
     const text = node.textContent.replace(/\s+/g, ' ').trim()
     return text.length > 60 ? text.slice(0, 60) + '…' : text
 }
@@ -121,7 +121,7 @@ export const diffTopBlocks = (
  * sibling; when the anchor is gone, at the start of the body (after the
  * title node when the schema pins one at the front).
  */
-const resolveInsertPos = (doc: ProseMirrorNode, prevId: string | null | undefined): number => {
+export const resolveInsertPos = (doc: ProseMirrorNode, prevId: string | null | undefined): number => {
     if (prevId) {
         const anchor = indexTopBlocks(doc).get(prevId)
         if (anchor) return anchor.pos + anchor.node.nodeSize
@@ -134,9 +134,9 @@ const resolveInsertPos = (doc: ProseMirrorNode, prevId: string | null | undefine
 /**
  * Invert a set of block changes against the editor's live document in a
  * single transaction — one history entry (Ctrl+Z-able) and one incremental
- * save batch. Every step re-resolves positions against `tr.doc`, so the
- * changes of one op can be reverted independently of later edits; blocks a
- * later edit removed or relocated into a container are skipped and counted.
+ * save batch. Every step re-resolves positions against `tr.doc`, so a subset
+ * of the changes can be reverted independently of the rest; blocks a later
+ * edit removed or relocated into a container are skipped and counted.
  */
 export const applyInverseChanges = (
     editor: Editor,

@@ -7,28 +7,8 @@ export interface Message {
     sender: "user" | "ai"
     timestamp: number
     steps?: ExecutionStep[]
-    /** Document operations the agent performed during this round (rollbackable). */
-    operations?: AgentDocOperationMeta[]
     stopped?: boolean
     error?: boolean
-}
-
-/**
- * Lightweight, persistable description of one document operation recorded by
- * the editor's OperationRecorder while a tool call ran. The block-level
- * before/after snapshots stay in the editor's in-memory log (looked up by
- * `id`); when that payload is gone (editor closed, app reloaded) the op
- * renders as expired and cannot be rolled back.
- */
-export interface AgentDocOperationMeta {
-    id: string
-    toolName: string
-    timestamp: number
-    /** Number of top-level blocks the operation changed. */
-    changeCount: number
-    /** Up to a few text previews of the affected blocks. */
-    previews: string[]
-    reverted?: boolean
 }
 
 export interface ExecutionStep {

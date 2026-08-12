@@ -8,8 +8,8 @@ import {
     ExpandableChatFooter,
     ChatMessageList,
 } from "@kn/ui"
-import { Editor, rollbackRecordedOperation } from "@kn/editor"
-import type { OperationRecorderStorage, OperationRollbackResult } from "@kn/editor"
+import { Editor } from "@kn/editor"
+import type { ChangeTrackerStorage } from "@kn/editor"
 import {
     useEditorAgentOptimized,
     ToolExecutionEvent,
@@ -30,7 +30,7 @@ import {
     ExecutionStep, PendingUserChoice, ChatError,
     classifyError,
 } from "./chat-types"
-import type { AgentDocOperationMeta, AnnotationData, BlockReference, Message } from "./chat-types"
+import type { AnnotationData, BlockReference, Message } from "./chat-types"
 import { getHistoryForAI } from "./chat-persistence"
 import type { ChatTargetPage } from "./chat-sessions"
 import { useChatSessions } from "./useChatSessions"
@@ -72,9 +72,9 @@ const readModelParams = (): ChatModelParams => {
     }
 }
 
-/** The editor's operation-recorder storage, when the extension is mounted. */
-const getOpRecorder = (editor: Editor | null | undefined): OperationRecorderStorage | undefined =>
-    (editor?.storage as any)?.operationRecorder as OperationRecorderStorage | undefined
+/** The editor's change-tracker storage, when the extension is mounted. */
+const getChangeTracker = (editor: Editor | null | undefined): ChangeTrackerStorage | undefined =>
+    (editor?.storage as any)?.changeTracker as ChangeTrackerStorage | undefined
 
 // ─── Chat ──────────────────────────────────────────────────────────
 
@@ -146,15 +146,9 @@ export const ExpandableChatDemo: React.FC<{
     // ─── Execution steps (live tool-call tape) ────────────────────
     const [currentSteps, setCurrentSteps] = useState<ExecutionStep[]>([])
     const stepsRef = useRef<ExecutionStep[]>([])
-    // Document operations recorded on the bound editor during the current
-    // agent round; attached to the finalized AI message for selective rollback.
-    const opsRef = useRef<AgentDocOperationMeta[]>([])
 
     const handleToolExecution = useCallback((event: ToolExecutionEvent) => {
         if (event.status === 'start') {
-            // Open a recording window on the bound editor; `end` below diffs
-            // the two doc snapshots, so read-only tools record nothing.
-            getOpRecorder(agentEditorRef.current)?.begin(event.toolName)
             const newStep: ExecutionStep = {
                 id: `step-${event.timestamp}-${Math.random().toString(36).substr(2, 9)}`,
                 toolName: event.toolName,
@@ -165,20 +159,6 @@ export const ExpandableChatDemo: React.FC<{
             stepsRef.current = [...stepsRef.current, newStep]
             setCurrentSteps([...stepsRef.current])
         } else {
-            const op = getOpRecorder(agentEditorRef.current)?.end(event.toolName)
-            if (op) {
-                const meta: AgentDocOperationMeta = {
-                    id: op.id,
-                    toolName: op.label,
-                    timestamp: op.timestamp,
-                    changeCount: op.changes.length,
-                    previews: op.changes
-                        .slice(0, 3)
-                        .map(c => c.textPreview || c.blockType || '')
-                        .filter(Boolean),
-                }
-                opsRef.current = [...opsRef.current, meta]
-            }
             const updated = stepsRef.current.map(step => {
                 if (step.toolName === event.toolName && step.status === 'running') {
                     return {
@@ -385,10 +365,31 @@ export const ExpandableChatDemo: React.FC<{
     // All agent tools bind to whichever editor we hand the hook — the
     // off-screen one when a target page is attached, else the main editor.
     const agentEditor = (offscreenHandle?.editor as Editor) ?? editor
-    // Mirror for the []-memoized tool-execution callback, which records ops
-    // on whichever editor is bound at the moment the tool runs.
     const agentEditorRef = useRef<Editor>(editor)
     agentEditorRef.current = agentEditor
+
+    // ─── Change tracking ──────────────────────────────────────────
+    // The tracker itself is an editor feature (block highlighting + merge
+    // UI live on the editor surface); the chat only hosts the enable
+    // switch, targeting the same editor the agent tools operate on.
+    // Toggling off keeps the tracked edits (implicit merge).
+    const [tracking, setTracking] = useState(false)
+    useEffect(() => {
+        const storage = getChangeTracker(agentEditor)
+        if (!storage) {
+            setTracking(false)
+            return
+        }
+        setTracking(storage.enabled)
+        return storage.subscribe(() => setTracking(storage.enabled))
+    }, [agentEditor])
+
+    const handleToggleTracking = useCallback(() => {
+        const storage = getChangeTracker(agentEditorRef.current)
+        if (!storage) return
+        if (storage.enabled) storage.stop()
+        else storage.start()
+    }, [])
 
     // ─── Streaming agent ──────────────────────────────────────────
     const { stream, continueStream, stop } = useEditorAgentOptimized(
@@ -455,8 +456,6 @@ export const ExpandableChatDemo: React.FC<{
     const resetTransient = useCallback(() => {
         stepsRef.current = []
         setCurrentSteps([])
-        opsRef.current = []
-        getOpRecorder(agentEditorRef.current)?.cancel()
         setAnnotations([])
         setError(null)
         setSuspendedSessionId(null)
@@ -510,7 +509,6 @@ export const ExpandableChatDemo: React.FC<{
                 sender: "ai",
                 timestamp: Date.now(),
                 steps: [...stepsRef.current],
-                operations: opsRef.current.length > 0 ? [...opsRef.current] : undefined,
             }
             setMessages((prev) => [...prev, aiMessage])
             buffer.reset()
@@ -527,7 +525,6 @@ export const ExpandableChatDemo: React.FC<{
                         sender: "ai",
                         timestamp: Date.now(),
                         steps: [...stepsRef.current],
-                        operations: opsRef.current.length > 0 ? [...opsRef.current] : undefined,
                         stopped: true,
                     }
                     setMessages((prev) => [...prev, aiMessage])
@@ -549,7 +546,6 @@ export const ExpandableChatDemo: React.FC<{
                     sender: "ai",
                     timestamp: Date.now(),
                     steps: [...stepsRef.current],
-                    operations: opsRef.current.length > 0 ? [...opsRef.current] : undefined,
                     error: true,
                 }
                 setMessages((prev) => [...prev, aiMessage])
@@ -578,9 +574,6 @@ export const ExpandableChatDemo: React.FC<{
         lastUserMessageRef.current = messageText
         stepsRef.current = []
         setCurrentSteps([])
-        opsRef.current = []
-        // Drop any recording window left open by an aborted round.
-        getOpRecorder(agentEditorRef.current)?.cancel()
         buffer.reset()
         reasoningRef.current = ''
         setStreamingReasoning('')
@@ -619,8 +612,6 @@ export const ExpandableChatDemo: React.FC<{
         setSuspendedSessionId(null)
         stepsRef.current = []
         setCurrentSteps([])
-        opsRef.current = []
-        getOpRecorder(agentEditorRef.current)?.cancel()
         buffer.reset()
         reasoningRef.current = ''
         setStreamingReasoning('')
@@ -683,34 +674,6 @@ export const ExpandableChatDemo: React.FC<{
         setError(null)
         submitMessage(lastUserMessageRef.current)
     }, [isLoading, submitMessage])
-
-    // ─── Selective rollback of recorded document operations ─────────
-    // Reverts the chosen ops newest-first (anchors of earlier ops then
-    // resolve against a doc that no longer contains later inserts), then
-    // mirrors the reverted flags onto the persisted message meta. Ops whose
-    // snapshot payload expired (editor closed / app reloaded) are untouched.
-    const handleRollbackOps = useCallback((messageId: string, opIds: string[]) => {
-        const message = messages.find(m => m.id === messageId)
-        const targets = (message?.operations ?? [])
-            .filter(o => opIds.includes(o.id) && !o.reverted)
-            .sort((a, b) => b.timestamp - a.timestamp)
-        if (targets.length === 0) return
-        const outcomes = new Map<string, OperationRollbackResult | null>()
-        for (const op of targets) {
-            outcomes.set(op.id, rollbackRecordedOperation(op.id))
-        }
-        setMessages(prev => prev.map(m => {
-            if (m.id !== messageId || !m.operations) return m
-            return {
-                ...m,
-                operations: m.operations.map(o => {
-                    if (!outcomes.has(o.id)) return o
-                    const res = outcomes.get(o.id)
-                    return res && res.applied > 0 ? { ...o, reverted: true } : o
-                }),
-            }
-        }))
-    }, [messages, setMessages])
 
     // ─── Session lifecycle ────────────────────────────────────────
     const handleClearChat = useCallback(() => {
@@ -795,7 +758,6 @@ export const ExpandableChatDemo: React.FC<{
                             key={message.id}
                             message={message}
                             onRevealReference={handleRevealReference}
-                            onRollbackOps={handleRollbackOps}
                         />
                     ))}
 
@@ -919,6 +881,8 @@ export const ExpandableChatDemo: React.FC<{
                     onClearPage={() => setTargetPage(null)}
                     onRetryPage={handleRetryPage}
                     onOpenPageWindow={handleOpenPageWindow}
+                    tracking={tracking}
+                    onToggleTracking={handleToggleTracking}
                 />
             </ExpandableChatFooter>
 
