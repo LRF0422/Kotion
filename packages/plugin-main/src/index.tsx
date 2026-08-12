@@ -509,6 +509,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
         "page": {
           "title": "页面",
           "create": "新建页面",
+          "createSibling": "新建同级页面",
           "copyLink": "复制链接",
           "editInWindow": "小窗编辑",
           "moveToTrash": "移动到回收站"
@@ -1099,6 +1100,7 @@ export const DefaultPluginInstance = new DefaultPlugin({
         "page": {
           "title": "Page",
           "create": "New Page",
+          "createSibling": "New Sibling Page",
           "copyLink": "Copy link",
           "editInWindow": "Edit in window",
           "moveToTrash": "Move to trash"

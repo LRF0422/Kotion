@@ -3,7 +3,7 @@ import {
     Dialog, DialogContent,
     Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator
 } from "@kn/ui"
-import { FileText, Plus, LayoutDashboard, Loader2, AlignLeft } from "@kn/icon"
+import { FileText, Plus, FilePlus2, LayoutDashboard, Loader2, AlignLeft } from "@kn/icon"
 import { useApi, useTranslation } from "@kn/common"
 import { APIS } from "../../../api"
 
@@ -31,6 +31,7 @@ interface GlobalSearchDialogProps {
     pageTree: any[]
     onNavigateToPage: (pageId: string) => void
     onCreatePage: () => void
+    onCreateSiblingPage: () => void
     onGoToPersonalSpace: () => void
 }
 
@@ -88,6 +89,7 @@ export const GlobalSearchDialog: React.FC<GlobalSearchDialogProps> = ({
     pageTree,
     onNavigateToPage,
     onCreatePage,
+    onCreateSiblingPage,
     onGoToPersonalSpace,
 }) => {
     const { t } = useTranslation()
@@ -230,6 +232,16 @@ export const GlobalSearchDialog: React.FC<GlobalSearchDialogProps> = ({
                             >
                                 <Plus className="mr-2" />
                                 <span>{t('page.create') || 'Create Page'}</span>
+                            </CommandItem>
+                            <CommandItem
+                                value="action-create-sibling-page"
+                                onSelect={() => {
+                                    onCreateSiblingPage()
+                                    onOpenChange(false)
+                                }}
+                            >
+                                <FilePlus2 className="mr-2" />
+                                <span>{t('page.createSibling') || 'New Sibling Page'}</span>
                             </CommandItem>
                             <CommandItem
                                 value="action-personal-space"

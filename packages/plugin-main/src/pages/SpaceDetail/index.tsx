@@ -186,6 +186,15 @@ export const SpaceDetail: React.FC = () => {
         })
     }, [params.id, navigator])
 
+    // Create a page at the same level as the current page (i.e. under its parent).
+    // Falls back to the space root when no page is open or the page is not in the tree.
+    const handleCreateSiblingPage = useCallback(() => {
+        const parentId = params.pageId
+            ? findParentIdInTree(pageTree, params.pageId) ?? "0"
+            : "0"
+        handleCreatePage(parentId)
+    }, [params.pageId, pageTree, handleCreatePage])
+
     const handleCreateByTemplate = useCallback((id: string, title?: string) => {
         useApi(APIS.CREATE_OR_SAVE_PAGE, null, {
             templateId: id,
@@ -419,6 +428,7 @@ export const SpaceDetail: React.FC = () => {
                 pageTree={pageTree}
                 onNavigateToPage={handlePageClick}
                 onCreatePage={() => handleCreatePage(params.pageId || "0")}
+                onCreateSiblingPage={handleCreateSiblingPage}
                 onGoToPersonalSpace={handleGoToPersonalSpace}
             />
         </div>
@@ -434,6 +444,21 @@ function findPageInTree(tree: any[], pageId: string): any | null {
         if (node.children) {
             const found = findPageInTree(node.children, pageId)
             if (found) return found
+        }
+    }
+    return null
+}
+
+/**
+ * Helper to find the parent ID of a page in the tree.
+ * Returns "0" for root-level pages, null when the page is not found.
+ */
+function findParentIdInTree(tree: any[], pageId: string, parentId: string = "0"): string | null {
+    for (const node of tree) {
+        if (String(node.id) === String(pageId)) return parentId
+        if (node.children) {
+            const found = findParentIdInTree(node.children, pageId, String(node.id))
+            if (found !== null) return found
         }
     }
     return null
