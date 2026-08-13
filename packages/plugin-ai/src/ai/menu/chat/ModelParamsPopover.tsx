@@ -1,12 +1,12 @@
-import React, { useState } from 'react'
-import { SlidersHorizontal, RotateCcw } from '@kn/icon'
+import React from 'react'
+import { RotateCcw } from '@kn/icon'
 import {
     Button,
     Input,
     Label,
     Popover,
+    PopoverAnchor,
     PopoverContent,
-    PopoverTrigger,
     Slider,
 } from '@kn/ui'
 import { useTranslation } from '@kn/common'
@@ -29,31 +29,37 @@ const MAX_TOKENS_LOWER = 1
 
 // ─── Props ─────────────────────────────────────────────────────────
 
+/** Whether any sampling param diverges from the server defaults. */
+export const isModelParamsCustomized = (params: ChatModelParams): boolean =>
+    params.temperature !== undefined || params.maxTokens !== undefined
+
 interface ModelParamsPopoverProps {
     params: ChatModelParams
     onChange: (params: ChatModelParams) => void
-    disabled?: boolean
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    /** Single element the popover anchors to (the model selector trigger). */
+    children: React.ReactElement
 }
 
 /**
- * Small popover exposed next to the model selector; lets the user tune the
- * sampling params that ride along with every chat request. The trigger shows a
- * subtle indicator dot when any value diverges from the defaults, so it's
- * obvious that customization is active without opening the popover.
+ * Sampling-params panel for chat requests. Owned by the model selector: the
+ * dropdown's footer item opens this popover and the selector's trigger button
+ * doubles as the anchor, so the composer toolbar needs no dedicated icon.
  */
 export const ModelParamsPopover: React.FC<ModelParamsPopoverProps> = ({
     params,
     onChange,
-    disabled,
+    open,
+    onOpenChange,
+    children,
 }) => {
     const { t } = useTranslation()
-    const [open, setOpen] = useState(false)
 
     const temperature = params.temperature ?? DEFAULT_TEMPERATURE
     const maxTokens = params.maxTokens
 
-    const isCustomized =
-        params.temperature !== undefined || params.maxTokens !== undefined
+    const isCustomized = isModelParamsCustomized(params)
 
     const handleTemperatureChange = (value: number[]) => {
         const next = Number(value[0].toFixed(2))
@@ -83,23 +89,8 @@ export const ModelParamsPopover: React.FC<ModelParamsPopoverProps> = ({
     }
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild disabled={disabled}>
-                <button
-                    type="button"
-                    disabled={disabled}
-                    title={t('ai.modelParams.title', { defaultValue: '模型参数' })}
-                    className="relative flex shrink-0 items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 disabled:opacity-50 transition-colors"
-                >
-                    <SlidersHorizontal className="h-3 w-3 shrink-0" />
-                    {isCustomized && (
-                        <span
-                            aria-hidden
-                            className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-primary"
-                        />
-                    )}
-                </button>
-            </PopoverTrigger>
+        <Popover open={open} onOpenChange={onOpenChange}>
+            <PopoverAnchor asChild>{children}</PopoverAnchor>
             <PopoverContent
                 align="start"
                 sideOffset={6}

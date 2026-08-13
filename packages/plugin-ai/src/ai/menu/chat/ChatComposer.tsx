@@ -6,13 +6,14 @@ import React, {
     useRef,
     useState,
 } from 'react'
-import { Send, Square, Sparkles, ChevronDown, Check, MessageCircle, Bot, FileDiff } from '@kn/icon'
+import { Send, Square, Sparkles, ChevronDown, Check, MessageCircle, Bot, FileDiff, SlidersHorizontal } from '@kn/icon'
 import {
     Button,
     ChatInput,
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
     Tooltip,
     TooltipContent,
@@ -23,7 +24,7 @@ import type { AgentDefinition, ChatMode, ChatModelParams, ModelInfo } from '@kn/
 import { fetchModels, listAgentDefinitions, useTranslation } from '@kn/common'
 
 import type { ChatTargetPage } from '../chat-sessions'
-import { ModelParamsPopover } from './ModelParamsPopover'
+import { ModelParamsPopover, isModelParamsCustomized } from './ModelParamsPopover'
 import { PageMentionPicker, TargetPageStatus } from './PageMentionPicker'
 
 // ─── Mode toggle ───────────────────────────────────────────────────
@@ -72,13 +73,24 @@ const ModeToggle: React.FC<ModeToggleProps> = ({ mode, onModeChange, disabled })
 interface ModelSelectorProps {
     model: string
     onModelChange: (model: string) => void
+    modelParams: ChatModelParams
+    onModelParamsChange: (params: ChatModelParams) => void
     disabled?: boolean
 }
 
-const ModelSelector: React.FC<ModelSelectorProps> = ({ model, onModelChange, disabled }) => {
+/**
+ * Model picker. The sampling-params popover is folded into the dropdown
+ * footer (anchored to this trigger) so the composer toolbar stays one icon
+ * lighter; a dot on the trigger still signals customized params.
+ */
+const ModelSelector: React.FC<ModelSelectorProps> = ({
+    model, onModelChange, modelParams, onModelParamsChange, disabled,
+}) => {
     const { t } = useTranslation()
     const [models, setModels] = useState<ModelInfo[]>([])
     const [open, setOpen] = useState(false)
+    // Params popover — opened from the dropdown footer, anchored to the trigger.
+    const [paramsOpen, setParamsOpen] = useState(false)
     const loadedRef = useRef(false)
 
     useEffect(() => {
@@ -99,20 +111,34 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ model, onModelChange, dis
     }, [models])
 
     const displayLabel = model || 'deepseek-chat'
+    const paramsCustomized = isModelParamsCustomized(modelParams)
 
     return (
         <DropdownMenu open={open} onOpenChange={setOpen}>
-            <DropdownMenuTrigger asChild disabled={disabled}>
-                <button
-                    type="button"
-                    disabled={disabled}
-                    className="flex shrink-0 items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 disabled:opacity-50 transition-colors"
-                >
-                    <Sparkles className="h-3 w-3 shrink-0" />
-                    <span className="max-w-[90px] truncate">{displayLabel}</span>
-                    <ChevronDown className="h-2.5 w-2.5 shrink-0" />
-                </button>
-            </DropdownMenuTrigger>
+            <ModelParamsPopover
+                params={modelParams}
+                onChange={onModelParamsChange}
+                open={paramsOpen}
+                onOpenChange={setParamsOpen}
+            >
+                <DropdownMenuTrigger asChild disabled={disabled}>
+                    <button
+                        type="button"
+                        disabled={disabled}
+                        className="relative flex shrink-0 items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 disabled:opacity-50 transition-colors"
+                    >
+                        <Sparkles className="h-3 w-3 shrink-0" />
+                        <span className="max-w-[90px] truncate">{displayLabel}</span>
+                        <ChevronDown className="h-2.5 w-2.5 shrink-0" />
+                        {paramsCustomized && (
+                            <span
+                                aria-hidden
+                                className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-primary"
+                            />
+                        )}
+                    </button>
+                </DropdownMenuTrigger>
+            </ModelParamsPopover>
             <DropdownMenuContent align="start" className="w-[220px]">
                 {models.length === 0 && (
                     <div className="px-2 py-1.5 text-[10px] text-muted-foreground">
@@ -136,6 +162,21 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ model, onModelChange, dis
                         ))}
                     </React.Fragment>
                 ))}
+                {/* Sampling params live here instead of a dedicated toolbar icon. */}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                    disabled={disabled}
+                    onSelect={() => setParamsOpen(true)}
+                    className="flex items-center gap-1.5 text-xs"
+                >
+                    <SlidersHorizontal className="h-3 w-3 shrink-0" />
+                    <span className="truncate">
+                        {t('ai.modelParams.title', { defaultValue: '模型参数' })}
+                    </span>
+                    {paramsCustomized && (
+                        <span aria-hidden className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
+                    )}
+                </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
     )
@@ -173,18 +214,30 @@ const AgentSelector: React.FC<AgentSelectorProps> = ({ agentId, onAgentChange, d
     const selected = agents.find((a) => a.id === agentId)
     const displayLabel = agentId == null ? defaultLabel : (selected?.name || `#${agentId}`)
 
+    // Default agent renders as a bare icon; the label chip only appears once
+    // a custom agent is active, so the common case costs the toolbar ~20px.
+    const isDefault = agentId == null
+
     return (
         <DropdownMenu open={open} onOpenChange={setOpen}>
             <DropdownMenuTrigger asChild disabled={disabled}>
                 <button
                     type="button"
                     disabled={disabled}
-                    title={t('ai.chat.agentSelectorHint', { defaultValue: '选择自定义 Agent' })}
+                    title={
+                        isDefault
+                            ? `${defaultLabel} — ${t('ai.chat.agentSelectorHint', { defaultValue: '选择自定义 Agent' })}`
+                            : t('ai.chat.agentSelectorHint', { defaultValue: '选择自定义 Agent' })
+                    }
                     className="flex shrink-0 items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/70 disabled:opacity-50 transition-colors"
                 >
                     <Bot className="h-3 w-3 shrink-0" />
-                    <span className="max-w-[80px] truncate">{displayLabel}</span>
-                    <ChevronDown className="h-2.5 w-2.5 shrink-0" />
+                    {!isDefault && (
+                        <>
+                            <span className="max-w-[80px] truncate">{displayLabel}</span>
+                            <ChevronDown className="h-2.5 w-2.5 shrink-0" />
+                        </>
+                    )}
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[240px]">
@@ -350,18 +403,19 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                 rows={1}
                 className="min-h-[44px] max-h-[120px] overflow-y-auto resize-none rounded-xl bg-transparent border-0 px-3 pt-2.5 pb-1 text-[13px] leading-relaxed shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
             />
-            {/* Toolbar. Wraps rather than overflows: the controls' intrinsic width
-                (~390px) exceeds a side-dock panel, and a nowrap row there clipped
-                the model label and crushed the send button on top of it. `ml-auto`
-                keeps send right-aligned on whichever line it lands on, so a wide
-                floating chat still reads as a single justified row. */}
+            {/* Toolbar. Secondary controls stay icon-only (agent picker when on
+                the default agent, change-tracking toggle) and sampling params are
+                folded into the model menu, so the row fits one line even in the
+                narrow side dock. `flex-wrap` remains as a safety net; `ml-auto`
+                keeps send right-aligned on whichever line it lands on. */}
             <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 px-2 pb-1.5 pt-0.5">
                 <ModeToggle mode={mode} onModeChange={onModeChange} disabled={isLoading} />
                 <AgentSelector agentId={agentId} onAgentChange={onAgentChange} disabled={isLoading} />
-                <ModelSelector model={model} onModelChange={onModelChange} disabled={isLoading} />
-                <ModelParamsPopover
-                    params={modelParams}
-                    onChange={onModelParamsChange}
+                <ModelSelector
+                    model={model}
+                    onModelChange={onModelChange}
+                    modelParams={modelParams}
+                    onModelParamsChange={onModelParamsChange}
                     disabled={isLoading}
                 />
                 {onToggleTracking && (
@@ -369,20 +423,22 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(f
                         type="button"
                         disabled={isLoading}
                         onClick={onToggleTracking}
-                        title={t('ai.chat.trackingHint', { defaultValue: '跟踪文档变动，可在编辑器中审阅并合并' })}
+                        aria-pressed={tracking}
+                        title={
+                            (tracking
+                                ? t('ai.chat.trackingOn', { defaultValue: '跟踪中' })
+                                : t('ai.chat.trackingOff', { defaultValue: '跟踪变动' })) +
+                            ' — ' +
+                            t('ai.chat.trackingHint', { defaultValue: '跟踪文档变动，可在编辑器中审阅并合并' })
+                        }
                         className={
-                            'flex shrink-0 items-center gap-1 h-5 px-1.5 rounded-md text-[10px] font-medium transition-colors disabled:opacity-50 ' +
+                            'flex shrink-0 items-center h-5 px-1.5 rounded-md transition-colors disabled:opacity-50 ' +
                             (tracking
                                 ? 'bg-primary/10 text-primary hover:bg-primary/20'
                                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/70')
                         }
                     >
                         <FileDiff className="h-3 w-3 shrink-0" />
-                        <span>
-                            {tracking
-                                ? t('ai.chat.trackingOn', { defaultValue: '跟踪中' })
-                                : t('ai.chat.trackingOff', { defaultValue: '跟踪变动' })}
-                        </span>
                     </button>
                 )}
                 <div className="ml-auto shrink-0">

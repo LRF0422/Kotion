@@ -27,7 +27,7 @@ export const resources = {
                 "nav": "底部导航",
                 "profileCenter": "个人中心",
                 "settings": "设置",
-                "appearanceLanguage": "外观 / 语言",
+                "appearanceLanguage": "外观 / 语言",    
                 "logout": "注销账号"
             },
             "marketplace": {
