@@ -20,6 +20,14 @@ public class ToolRegistry {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
+     * Bounded cache of rendered tool-schema JSON, keyed by (capabilities
+     * version, tool-id set). The frontend sends a stable hash of its catalog,
+     * so identical catalogs across turns render once.
+     */
+    private final ConcurrentHashMap<String, String> schemaCache = new ConcurrentHashMap<>();
+    private static final int SCHEMA_CACHE_MAX = 128;
+
+    /**
      * Register a tool.
      */
     public void register(Tool tool) {
@@ -181,6 +189,30 @@ public class ToolRegistry {
     @Deprecated
     public String buildToolsJson(Collection<String> toolIds) {
         return buildToolsJson(toolIds, null);
+    }
+
+    /**
+     * Build the tools JSON array, caching by the frontend's
+     * {@code capabilitiesVersion} + tool-id set. A blank version bypasses the
+     * cache (computed per call).
+     */
+    public String buildToolsJsonCached(String capabilitiesVersion,
+            Collection<String> toolIds, List<ChatTool> frontendTools) {
+        if (capabilitiesVersion == null || capabilitiesVersion.isEmpty()) {
+            return buildToolsJson(toolIds, frontendTools);
+        }
+        String key = capabilitiesVersion + "|"
+                + (toolIds == null ? "*" : new TreeSet<>(toolIds).toString());
+        String cached = schemaCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        String json = buildToolsJson(toolIds, frontendTools);
+        if (schemaCache.size() >= SCHEMA_CACHE_MAX) {
+            schemaCache.clear(); // simple bounded eviction
+        }
+        schemaCache.put(key, json);
+        return json;
     }
 
     // ---- Schema normalization ----

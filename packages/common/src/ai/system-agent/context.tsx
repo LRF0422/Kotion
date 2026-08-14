@@ -18,6 +18,43 @@ import { SYSTEM_AGENT_PROMPT } from '../constants'
 // Re-export ExecutionStep so existing `@kn/common` consumers keep working.
 export type { ExecutionStep }
 
+// ============ Task persistence (refresh resume) ============
+
+const TASK_STORAGE_KEY = 'kn-system-agent-task-id'
+const TASK_TS_STORAGE_KEY = 'kn-system-agent-task-ts'
+const TASK_TTL_MS = 30 * 60 * 1000
+
+/** The last backend taskId, when still within TTL (used to re-attach on mount). */
+export function getStoredSystemAgentTaskId(): string | null {
+    try {
+        const id = localStorage.getItem(TASK_STORAGE_KEY)
+        const tsRaw = localStorage.getItem(TASK_TS_STORAGE_KEY)
+        const ts = tsRaw ? parseInt(tsRaw, 10) : 0
+        if (!id || !ts || Date.now() - ts > TASK_TTL_MS) {
+            localStorage.removeItem(TASK_STORAGE_KEY)
+            localStorage.removeItem(TASK_TS_STORAGE_KEY)
+            return null
+        }
+        return id
+    } catch {
+        return null
+    }
+}
+
+function storeSystemAgentTaskId(id: string): void {
+    try {
+        localStorage.setItem(TASK_STORAGE_KEY, id)
+        localStorage.setItem(TASK_TS_STORAGE_KEY, String(Date.now()))
+    } catch { /* ignore */ }
+}
+
+function clearStoredSystemAgentTaskId(): void {
+    try {
+        localStorage.removeItem(TASK_STORAGE_KEY)
+        localStorage.removeItem(TASK_TS_STORAGE_KEY)
+    } catch { /* ignore */ }
+}
+
 // ============ Sub-agent tree (P6) ============
 
 /**
@@ -270,6 +307,11 @@ export interface SystemAgentContextValue {
         decision: 'approved' | 'rejected',
         opts?: { feedback?: string; editedPlan?: PlanArtifact }
     ) => Promise<void>
+    /**
+     * Re-attach to an in-flight backend task after a refresh: reconstructs the
+     * in-progress text from the server checkpoint and continues streaming.
+     */
+    attach: (taskId: string) => Promise<void>
 }
 
 export interface SystemAgentProviderProps {
@@ -360,6 +402,41 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         }
     }, [streamBuffer.content])
 
+    // Shared annotation folding — extracts session/task ids (persisting the
+    // taskId for refresh resume), captures plan proposals and sub-agent events.
+    const handleAnnotation = useCallback((annotations: any[], notify?: (annotations: any[]) => void) => {
+        for (const ann of annotations) {
+            if (ann && typeof ann === 'object' && 'sessionId' in ann && typeof ann.sessionId === 'string') {
+                sessionIdRef.current = ann.sessionId
+            }
+            if (ann && typeof ann === 'object' && 'taskId' in ann && typeof ann.taskId === 'string') {
+                taskIdRef.current = ann.taskId
+                storeSystemAgentTaskId(ann.taskId)
+            }
+        }
+
+        // Plan mode (P7): capture a proposed plan awaiting approval.
+        let pendingPlanUpdate: SystemAgentState['pendingPlan'] | undefined
+        for (const ann of annotations) {
+            if (ann && ann.type === 'plan_proposed' && ann.plan) {
+                pendingPlanUpdate = { plan: ann.plan, planId: ann.planId }
+            }
+        }
+        if (pendingPlanUpdate !== undefined) {
+            pendingPlanRef.current = pendingPlanUpdate
+        }
+
+        setState(prev => ({
+            ...prev,
+            annotations: [...prev.annotations, ...annotations],
+            sessionId: sessionIdRef.current,
+            taskId: taskIdRef.current,
+            subAgents: applySubAgentAnnotations(prev.subAgents, annotations),
+            pendingPlan: pendingPlanUpdate !== undefined ? pendingPlanUpdate : prev.pendingPlan
+        }))
+        notify?.(annotations)
+    }, [])
+
     // Stream function — drives the unified harness and maps its typed events
     // onto reactive state (text, annotations, session, execution steps).
     const stream = useCallback(async (prompt: string, options?: StreamPromptOptions): Promise<void> => {
@@ -390,38 +467,6 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             subAgents: {},
             pendingPlan: null
         })
-
-        const handleAnnotation = (annotations: any[]) => {
-            // Extract session/task ID from annotations (first SSE event)
-            for (const ann of annotations) {
-                if (ann && typeof ann === 'object' && 'sessionId' in ann && typeof ann.sessionId === 'string') {
-                    sessionIdRef.current = ann.sessionId
-                }
-                if (ann && typeof ann === 'object' && 'taskId' in ann && typeof ann.taskId === 'string') {
-                    taskIdRef.current = ann.taskId
-                }
-            }
-
-            // Plan mode (P7): capture a proposed plan awaiting approval.
-            let pendingPlanUpdate: SystemAgentState['pendingPlan'] | undefined
-            for (const ann of annotations) {
-                if (ann && ann.type === 'plan_proposed' && ann.plan) {
-                    pendingPlanUpdate = { plan: ann.plan, planId: ann.planId }
-                }
-            }
-            if (pendingPlanUpdate !== undefined) {
-                pendingPlanRef.current = pendingPlanUpdate
-            }
-
-            setState(prev => ({
-                ...prev,
-                annotations: [...prev.annotations, ...annotations],
-                sessionId: sessionIdRef.current,
-                subAgents: applySubAgentAnnotations(prev.subAgents, annotations),
-                pendingPlan: pendingPlanUpdate !== undefined ? pendingPlanUpdate : prev.pendingPlan
-            }))
-            options?.onAnnotation?.(annotations)
-        }
 
         try {
             const messages: ChatMessage[] = [{
@@ -493,6 +538,13 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
                         break
                     case 'error':
                         throw new Error(ev.error)
+                    case 'finish':
+                        // Task reached a real terminal state — drop the stored
+                        // handle so a later mount doesn't re-attach a stale task.
+                        if (ev.finishReason !== 'suspended') {
+                            clearStoredSystemAgentTaskId()
+                        }
+                        break
                 }
             }
 
@@ -517,15 +569,122 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             }))
             throw error
         }
-    }, [setEditor, streamBuffer, getCatalog, resolveTool, onToolExecution, defaultOptions])
+    }, [setEditor, streamBuffer, getCatalog, resolveTool, onToolExecution, defaultOptions, handleAnnotation])
 
-    // Stop function
+    // Re-attach to an in-flight backend task after a refresh: reconstructs the
+    // in-progress text from the server checkpoint and continues streaming into
+    // the same state channels as `stream`.
+    const attach = useCallback(async (taskId: string): Promise<void> => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort()
+        }
+        abortControllerRef.current = new AbortController()
+
+        streamBuffer.reset()
+        stepCounterRef.current = 0
+        pendingPlanRef.current = null
+        taskIdRef.current = taskId
+        setState({
+            isGenerating: true,
+            streamingContent: '',
+            error: null,
+            executionSteps: [],
+            activeSkills: Array.from(activeSkillsRef.current),
+            annotations: [],
+            sessionId: sessionIdRef.current,
+            taskId,
+            subAgents: {},
+            pendingPlan: null
+        })
+
+        try {
+            const events = harnessRef.current.attach(
+                taskId,
+                resolveTool,
+                onToolExecution,
+                abortControllerRef.current.signal,
+            )
+
+            for await (const ev of events) {
+                switch (ev.type) {
+                    case 'text-delta':
+                        streamBuffer.append(ev.content)
+                        break
+                    case 'annotation':
+                        handleAnnotation(ev.annotations)
+                        break
+                    case 'session':
+                        handleAnnotation([{
+                            type: 'session-info',
+                            taskId: ev.taskId,
+                            sessionId: ev.sessionId,
+                            conversationId: ev.conversationId,
+                        }])
+                        break
+                    case 'tool-call-start': {
+                        const step: ExecutionStep = {
+                            id: ev.id || `step-${++stepCounterRef.current}`,
+                            toolName: ev.toolName,
+                            args: ev.args,
+                            status: 'running',
+                            timestamp: Date.now(),
+                        }
+                        setState(prev => ({ ...prev, executionSteps: [...prev.executionSteps, step] }))
+                        break
+                    }
+                    case 'tool-call-end':
+                        setState(prev => ({
+                            ...prev,
+                            executionSteps: prev.executionSteps.map(s =>
+                                s.id === ev.id
+                                    ? {
+                                        ...s,
+                                        status: ev.error ? 'error' : 'success',
+                                        result: ev.result,
+                                        error: ev.error,
+                                        duration: ev.durationMs,
+                                    }
+                                    : s
+                            ),
+                        }))
+                        break
+                    case 'finish':
+                        if (ev.finishReason !== 'suspended') {
+                            clearStoredSystemAgentTaskId()
+                        }
+                        break
+                    case 'error':
+                        throw new Error(ev.error)
+                }
+            }
+
+            setState(prev => ({
+                ...prev,
+                isGenerating: false,
+                streamingContent: streamBuffer.getRawContent()
+            }))
+        } catch (error: any) {
+            if (error.name !== 'AbortError') {
+                setState(prev => ({
+                    ...prev,
+                    isGenerating: false,
+                    error: error instanceof Error ? error : new Error(String(error))
+                }))
+            } else {
+                setState(prev => ({ ...prev, isGenerating: false }))
+            }
+        }
+    }, [streamBuffer, resolveTool, onToolExecution, handleAnnotation])
+
+    // Stop function — aborts the local stream AND cancels the backend task so
+    // an abandoned run doesn't keep burning tokens server-side.
     const stop = useCallback(() => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort()
             abortControllerRef.current = null
         }
         setState(prev => ({ ...prev, isGenerating: false }))
+        harnessRef.current.cancelCurrent().catch(() => { /* best-effort */ })
     }, [])
 
     // Skill management — tracked locally; the backend performs progressive
@@ -620,7 +779,8 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         setOnToolExecution,
         setOnUserChoiceRequest,
         setSessionId,
-        resolvePlan
+        resolvePlan,
+        attach
     }), [
         state,
         stream,
@@ -633,7 +793,8 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         setOnToolExecution,
         setOnUserChoiceRequest,
         setSessionId,
-        resolvePlan
+        resolvePlan,
+        attach
     ])
 
     return (

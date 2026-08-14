@@ -29,14 +29,19 @@ agent:
     evict-tool-results-after-iterations: 3
   state:
     backend: jdbc
-    snapshot-interval: 5
+    # Checkpoint after EVERY think iteration — a crash can then only re-run a
+    # single tool round at most.
+    snapshot-interval: 1
   rate-limit:
     enabled: true
     requests-per-minute: 60
+    max-concurrent-sessions: 10
+    task-create-per-minute: 30
   event-store:
     enabled: true
     max-events: 2000
     ttl-hours: 24
+    event-retention-days: 30
   skill:
     web-search:
       enabled: true

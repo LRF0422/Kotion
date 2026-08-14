@@ -73,4 +73,7 @@ public class ChatCompletionRequest {
 
     @ApiModelProperty("Custom agent definition id — when set, the session is assembled from the definition (system prompt / model / tool set / max iterations)")
     private Long agentId;
+
+    @ApiModelProperty("Stable hash of the frontend capability catalog (skills+tools); used to cache tool schema rendering")
+    private String capabilitiesVersion;
 }

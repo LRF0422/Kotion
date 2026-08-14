@@ -10,6 +10,7 @@ export {
     useSystemAgent,
     useSystemAgentAvailable,
     applySubAgentAnnotations,
+    getStoredSystemAgentTaskId,
     type SystemAgentState,
     type SystemAgentContextValue,
     type SystemAgentProviderProps,

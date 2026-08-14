@@ -11,11 +11,11 @@ import com.knowledge.agent.v2.llm.InferenceResponse;
 import com.knowledge.agent.v2.session.AgentSession;
 import com.knowledge.agent.v2.session.ConversationMessage;
 import com.knowledge.agent.v2.tool.ToolCall;
-import com.knowledge.agent.v2.tool.ToolOutcome;
 import com.knowledge.agent.v2.tool.ToolRouter;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -57,44 +57,77 @@ public class ActHandler implements StateHandler {
             return Flux.just(Transition.toError(sessionId, "no_pending_tool_calls"));
         }
 
-        // Convert to V2 ToolCall objects
-        List<ToolCall> calls = pendingCalls.stream()
-                .map(ToolCall::fromInference)
-                .collect(Collectors.toList());
-
-        log.debug("ActHandler: dispatching {} tool(s) for session {}: {}",
-                calls.size(), sessionId,
-                calls.stream().map(ToolCall::getName).collect(Collectors.joining(", ")));
-
-        // Check if any are frontend tools
-        if (toolRouter.hasFrontendCalls(calls, session)) {
-            // Frontend tools: emit dispatch events and suspend
-            Flux<AgentEvent> dispatchEvents = toolRouter.dispatch(calls, session);
-            return Flux.concat(
-                    dispatchEvents,
-                    Flux.just(Transition.toSuspended(sessionId, "frontend_tool_calls")));
+        // Split by routing location. The LLM may mix frontend and backend
+        // tools in one turn; each must be answered by a tool result message or
+        // providers like DeepSeek reject the next request (orphaned
+        // tool_calls).
+        List<ToolCall> backendCalls = new ArrayList<>();
+        List<ToolCall> frontendCalls = new ArrayList<>();
+        List<InferenceResponse.ToolCallData> frontendPending = new ArrayList<>();
+        for (InferenceResponse.ToolCallData tc : pendingCalls) {
+            ToolCall call = ToolCall.fromInference(tc);
+            if (toolRouter.resolveLocation(tc.getName(), session)
+                    == ToolEvent.ToolLocation.FRONTEND) {
+                frontendCalls.add(call);
+                frontendPending.add(tc);
+            } else {
+                backendCalls.add(call);
+            }
         }
 
-        // All backend: dispatch and collect outcomes for OBSERVE
+        log.debug("ActHandler: dispatching {} backend + {} frontend tool(s) for session {}: {}",
+                backendCalls.size(), frontendCalls.size(), sessionId,
+                pendingCalls.stream().map(InferenceResponse.ToolCallData::getName)
+                        .collect(Collectors.joining(", ")));
+
+        if (frontendCalls.isEmpty()) {
+            // All backend: dispatch and collect outcomes for OBSERVE
+            return Flux.concat(
+                    withOutcomeAppending(session, toolRouter.dispatch(backendCalls, session)),
+                    // After all tools execute, clear pending and transition to OBSERVE
+                    Flux.defer(() -> {
+                        session.getExecution().clearPendingToolCalls();
+                        return Flux.just(Transition.toObserve(sessionId));
+                    }));
+        }
+
+        // Frontend tools present (possibly mixed with backend ones):
+        // 1. Execute the backend calls FIRST and append their results, so the
+        //    assistant tool_calls message is fully answered.
+        // 2. Keep ONLY the frontend calls as pending — the suspension
+        //    checkpoint must not re-list already-executed backend tools.
+        // 3. Dispatch the frontend calls and suspend for the client.
+        Flux<AgentEvent> backendExecution = backendCalls.isEmpty()
+                ? Flux.empty()
+                : withOutcomeAppending(session, toolRouter.dispatch(backendCalls, session));
+        Flux<AgentEvent> frontendDispatch = toolRouter.dispatch(frontendCalls, session);
+
         return Flux.concat(
-                toolRouter.dispatch(calls, session)
-                        .doOnNext(event -> {
-                            // When tool completes, append result to conversation
-                            if (event instanceof ToolEvent.ToolCompleted) {
-                                ToolEvent.ToolCompleted completed = (ToolEvent.ToolCompleted) event;
-                                appendToolMessage(session, completed.getToolCallId(),
-                                        completed.getToolName(), completed.getResult());
-                            } else if (event instanceof ToolEvent.ToolFailed) {
-                                ToolEvent.ToolFailed failed = (ToolEvent.ToolFailed) event;
-                                appendToolMessage(session, failed.getToolCallId(),
-                                        failed.getToolName(), failed.getErrorMessage());
-                            }
-                        }),
-                // After all tools execute, clear pending and transition to OBSERVE
+                backendExecution,
                 Flux.defer(() -> {
-                    session.getExecution().clearPendingToolCalls();
-                    return Flux.just(Transition.toObserve(sessionId));
-                }));
+                    session.getExecution().setPendingToolCalls(frontendPending);
+                    return Flux.empty();
+                }),
+                frontendDispatch,
+                Flux.just(Transition.toSuspended(sessionId, "frontend_tool_calls")));
+    }
+
+    /**
+     * Append tool-completed/failed outcomes to the conversation history as
+     * {@code tool} messages so the assistant tool_calls are answered.
+     */
+    private Flux<AgentEvent> withOutcomeAppending(AgentSession session, Flux<AgentEvent> events) {
+        return events.doOnNext(event -> {
+            if (event instanceof ToolEvent.ToolCompleted) {
+                ToolEvent.ToolCompleted completed = (ToolEvent.ToolCompleted) event;
+                appendToolMessage(session, completed.getToolCallId(),
+                        completed.getToolName(), completed.getResult());
+            } else if (event instanceof ToolEvent.ToolFailed) {
+                ToolEvent.ToolFailed failed = (ToolEvent.ToolFailed) event;
+                appendToolMessage(session, failed.getToolCallId(),
+                        failed.getToolName(), failed.getErrorMessage());
+            }
+        });
     }
 
     /**

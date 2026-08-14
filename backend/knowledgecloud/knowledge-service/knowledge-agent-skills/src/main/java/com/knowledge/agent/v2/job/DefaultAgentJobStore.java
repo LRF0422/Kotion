@@ -90,6 +90,20 @@ public class DefaultAgentJobStore implements AgentJobStore {
     }
 
     @Override
+    public AgentJob loadBySessionId(String sessionId) {
+        if (sessionId == null || sessionId.isEmpty()) {
+            return null;
+        }
+        try {
+            AgentTaskEntity entity = taskMapper.selectLatestBySessionId(sessionId);
+            return entity != null ? fromEntity(entity) : null;
+        } catch (Exception e) {
+            log.warn("AgentJobStore loadBySessionId failed for {}: {}", sessionId, e.getMessage());
+            return null;
+        }
+    }
+
+    @Override
     public void delete(String taskId) {
         try {
             redisTemplate.delete(KEY_PREFIX + taskId);
@@ -120,6 +134,19 @@ public class DefaultAgentJobStore implements AgentJobStore {
             log.warn("AgentJobStore listByUser failed for {}: {}", userId, e.getMessage());
         }
         return out;
+    }
+
+    @Override
+    public long countActive(Long tenantId) {
+        if (tenantId == null) {
+            return 0L;
+        }
+        try {
+            return taskMapper.countActiveByTenant(tenantId);
+        } catch (Exception e) {
+            log.warn("AgentJobStore countActive failed for tenant {}: {}", tenantId, e.getMessage());
+            return 0L;
+        }
     }
 
     // ---- Payload mapping ----

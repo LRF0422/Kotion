@@ -14,7 +14,7 @@ const LEGACY_CONVERSATION_KEY = 'agent-conversation-id'
 // ─── Limits ────────────────────────────────────────────────────────
 const MAX_MESSAGES_PER_SESSION = 100
 const MAX_SESSIONS = 50
-/** Backend Agent session TTL (keep in sync with useSessionManager.ts). */
+/** Backend Agent session TTL (sessions expire into a fresh backend session). */
 export const BACKEND_SESSION_TTL_MS = 30 * 60 * 1000
 
 // ─── Types ─────────────────────────────────────────────────────────

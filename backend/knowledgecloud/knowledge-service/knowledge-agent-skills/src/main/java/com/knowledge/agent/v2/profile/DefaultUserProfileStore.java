@@ -19,6 +19,8 @@ public class DefaultUserProfileStore implements UserProfileStore {
 
     private static final String KEY_PREFIX = "agent:profile:";
     private static final long TTL_DAYS = 7;
+    /** Cap declared facts/preferences so the injected prompt stays bounded. */
+    private static final int MAX_DECLARED_ENTRIES = 20;
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -105,6 +107,7 @@ public class DefaultUserProfileStore implements UserProfileStore {
         UserProfile profile = load(userId, tenantId);
         if (!profile.getFacts().contains(fact)) {
             profile.getFacts().add(fact);
+            trimOldest(profile.getFacts());
             save(profile);
         }
     }
@@ -114,7 +117,15 @@ public class DefaultUserProfileStore implements UserProfileStore {
         UserProfile profile = load(userId, tenantId);
         if (!profile.getPreferences().contains(preference)) {
             profile.getPreferences().add(preference);
+            trimOldest(profile.getPreferences());
             save(profile);
+        }
+    }
+
+    /** Keep only the newest {@link #MAX_DECLARED_ENTRIES} entries. */
+    private void trimOldest(java.util.List<String> entries) {
+        while (entries.size() > MAX_DECLARED_ENTRIES) {
+            entries.remove(0);
         }
     }
 

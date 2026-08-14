@@ -59,6 +59,9 @@ public class AgentSession {
      */
     private final List<SkillPayload> skills;
 
+    /** Stable hash of the frontend capability catalog — tool schema cache key. */
+    private final String capabilitiesVersion;
+
     // ---- Mutable execution state ----
     private final ExecutionState execution;
 
@@ -88,6 +91,7 @@ public class AgentSession {
         this.skills = builder.skills != null
                 ? Collections.unmodifiableList(builder.skills)
                 : Collections.emptyList();
+        this.capabilitiesVersion = builder.capabilitiesVersion;
         this.execution = builder.execution != null ? builder.execution : new ExecutionState();
         this.metadata = new java.util.concurrent.ConcurrentHashMap<>();
         if (builder.metadata != null) {
@@ -141,6 +145,10 @@ public class AgentSession {
         return skills;
     }
 
+    public String getCapabilitiesVersion() {
+        return capabilitiesVersion;
+    }
+
     public ExecutionState getExecution() {
         return execution;
     }
@@ -181,6 +189,7 @@ public class AgentSession {
         private Set<String> toolIds;
         private List<ChatTool> frontendTools;
         private List<SkillPayload> skills;
+        private String capabilitiesVersion;
         private ExecutionState execution;
         private Map<String, Object> metadata;
 
@@ -236,6 +245,11 @@ public class AgentSession {
 
         public Builder skills(List<SkillPayload> skills) {
             this.skills = skills;
+            return this;
+        }
+
+        public Builder capabilitiesVersion(String capabilitiesVersion) {
+            this.capabilitiesVersion = capabilitiesVersion;
             return this;
         }
 

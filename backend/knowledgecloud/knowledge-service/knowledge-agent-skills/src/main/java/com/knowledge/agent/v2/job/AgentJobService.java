@@ -1,11 +1,11 @@
 package com.knowledge.agent.v2.job;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.api.dto.ChatCompletionRequest;
 import com.knowledge.agent.store.AgentStateSnapshot;
 import com.knowledge.agent.store.AgentStateStore;
 import com.knowledge.agent.v2.config.AgentProperties;
-import com.knowledge.agent.v2.context.ContextCompactor;
 import com.knowledge.agent.v2.engine.AgentEngine;
 import com.knowledge.agent.v2.engine.AgentState;
 import com.knowledge.agent.v2.event.AgentEvent;
@@ -14,11 +14,11 @@ import com.knowledge.agent.v2.event.LifecycleEvent;
 import com.knowledge.agent.v2.event.ThinkingEvent;
 import com.knowledge.agent.v2.event.ToolEvent;
 import com.knowledge.agent.v2.llm.InferenceResponse;
+import com.knowledge.agent.observability.AgentJobMetrics;
 import com.knowledge.agent.v2.profile.ProfileRecorder;
 import com.knowledge.agent.v2.session.AgentIdentity;
 import com.knowledge.agent.v2.session.AgentSession;
 import com.knowledge.agent.v2.session.AgentSessionFactory;
-import com.knowledge.agent.v2.session.ConversationMessage;
 import com.knowledge.agent.v2.state.SessionSnapshotCodec;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -32,12 +32,12 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -73,6 +73,8 @@ public class AgentJobService {
 
     private static final int REPLAY_BATCH = 2_000;
     private static final long COMPLETED_TTL_MS = 30 * 60_000L;
+    /** assistantText hot-save throttle: persist at most once per interval (per task). */
+    private static final long HOT_SAVE_INTERVAL_MS = 1_000L;
 
     private final AgentEngine engine;
     private final AgentSessionFactory sessionFactory;
@@ -80,11 +82,14 @@ public class AgentJobService {
     private final AgentTaskEventStore eventStore;
     private final AgentProperties properties;
     private final ProfileRecorder profileRecorder;
+    private final AgentJobMetrics metrics;
     private final SessionSnapshotCodec snapshotCodec;
     private final ObjectProvider<AgentStateStore> stateStoreProvider;
     private final ObjectMapper objectMapper;
 
     private final ConcurrentHashMap<String, TaskRun> runs = new ConcurrentHashMap<>();
+    /** Per-tenant task-creation rate counters. */
+    private final ConcurrentHashMap<String, WindowCounter> createCounters = new ConcurrentHashMap<>();
 
     public AgentJobService(AgentEngine engine,
             AgentSessionFactory sessionFactory,
@@ -92,6 +97,7 @@ public class AgentJobService {
             AgentTaskEventStore eventStore,
             AgentProperties properties,
             ProfileRecorder profileRecorder,
+            AgentJobMetrics metrics,
             SessionSnapshotCodec snapshotCodec,
             ObjectProvider<AgentStateStore> stateStoreProvider,
             ObjectMapper objectMapper) {
@@ -101,6 +107,7 @@ public class AgentJobService {
         this.eventStore = eventStore;
         this.properties = properties;
         this.profileRecorder = profileRecorder;
+        this.metrics = metrics;
         this.snapshotCodec = snapshotCodec;
         this.stateStoreProvider = stateStoreProvider;
         this.objectMapper = objectMapper;
@@ -108,8 +115,17 @@ public class AgentJobService {
 
     // ---- Lifecycle ----
 
-    /** Build the session, persist the job, and start the engine in the background. */
+    /**
+     * Build the session, persist the job, and start the engine in the background.
+     *
+     * <p>Quota guards run first: per-tenant creation rate limit and concurrent
+     * task cap (counted from the live runs plus the JDBC-backed store, so the
+     * cap survives a restart).
+     */
     public AgentJob create(ChatCompletionRequest request, AgentIdentity identity) {
+        Long tenantId = identity != null ? identity.getTenantId() : null;
+        enforceCreateQuota(tenantId);
+
         AgentSession session = sessionFactory.build(request, identity);
         AgentJob job = new AgentJob(
                 UUID.randomUUID().toString(),
@@ -121,8 +137,39 @@ public class AgentJobService {
 
         TaskRun run = new TaskRun(job, session);
         runs.put(job.getTaskId(), run);
+        metrics.taskCreated();
         startFresh(run);
         return job;
+    }
+
+    private void enforceCreateQuota(Long tenantId) {
+        AgentProperties.RateLimitConfig rateLimit = properties.getRateLimit();
+        if (!rateLimit.isEnabled()) {
+            return;
+        }
+
+        String key = "tenant:" + (tenantId != null ? tenantId : 0L);
+        WindowCounter counter = createCounters.computeIfAbsent(key,
+                k -> new WindowCounter(Math.max(1, rateLimit.getTaskCreatePerMinute())));
+        if (!counter.tryAcquire()) {
+            throw new IllegalArgumentException("Task creation rate limit exceeded");
+        }
+
+        int maxConcurrent = rateLimit.getMaxConcurrentSessions();
+        if (maxConcurrent > 0 && countActiveByTenant(tenantId) >= maxConcurrent) {
+            throw new IllegalArgumentException(
+                    "Concurrent task limit reached (max " + maxConcurrent + ")");
+        }
+    }
+
+    /** Active (non-terminal) tasks for a tenant: live runs + JDBC-backed count. */
+    long countActiveByTenant(Long tenantId) {
+        long inMemory = runs.values().stream()
+                .filter(r -> r.job.getTenantId() != null && r.job.getTenantId().equals(tenantId)
+                        && !r.job.isTerminal())
+                .count();
+        long stored = jobStore.countActive(tenantId);
+        return Math.max(inMemory, stored);
     }
 
     public AgentJob status(String taskId) {
@@ -131,6 +178,12 @@ public class AgentJobService {
             return run.job;
         }
         return jobStore.load(taskId);
+    }
+
+    /** Diagnostic/test visibility: is an engine execution currently subscribed? */
+    boolean isExecutionActive(String taskId) {
+        TaskRun run = runs.get(taskId);
+        return run != null && run.executionActive.get();
     }
 
     /**
@@ -209,6 +262,10 @@ public class AgentJobService {
     /**
      * Resume a paused job with frontend tool results and/or a fresh iteration
      * budget. Returns the live continuation events (NOT the replay history).
+     *
+     * <p>Re-entrancy guard: only one engine execution per task. A retried
+     * resume (double click, lost response retry) re-streams the live tail
+     * instead of double-subscribing the engine.
      */
     public Flux<TaskEvent> resume(String taskId, List<ToolResult> toolResults, String action) {
         TaskRun run = runs.get(taskId);
@@ -219,15 +276,22 @@ public class AgentJobService {
             return Flux.error(new IllegalStateException("Job not found: " + taskId));
         }
 
-        applyResults(run.session, toolResults, action);
-        synchronized (run.pendingTools) {
-            run.pendingTools.clear();
-        }
-        run.job.setStatus(AgentJobStatus.RUNNING);
-        run.job.setFinishReason(null);
-        jobStore.save(run.job);
+        synchronized (run) {
+            if (run.executionActive.get()) {
+                log.warn("AgentJobService: resume ignored for {} — execution already active", taskId);
+                return run.live.asFlux();
+            }
 
-        return subscribe(engine.resume(run.session), run);
+            applyResults(run.session, toolResults, action);
+            synchronized (run.pendingTools) {
+                run.pendingTools.clear();
+            }
+            run.job.setStatus(AgentJobStatus.RUNNING);
+            run.job.setFinishReason(null);
+            jobStore.save(run.job);
+
+            return subscribe(engine.resume(run.session), run);
+        }
     }
 
     /** Cancel a running/paused job by disposing its engine subscription. */
@@ -242,16 +306,47 @@ public class AgentJobService {
             job.setStatus(AgentJobStatus.CANCELLED);
             job.setFinishReason("cancelled");
             jobStore.save(job);
+            metrics.taskCancelled();
             log.info("AgentJobService: cancelled persisted job {}", taskId);
             return true;
         }
         dispose(run);
+        run.executionActive.set(false);
         run.job.setStatus(AgentJobStatus.CANCELLED);
         run.job.setFinishReason("cancelled");
         jobStore.save(run.job);
+        metrics.taskCancelled();
         run.live.tryEmitComplete();
         log.info("AgentJobService: cancelled job {}", taskId);
         return true;
+    }
+
+    /** Non-terminal task count (live gauge for the admin metrics endpoint). */
+    public long activeCount() {
+        return runs.values().stream().filter(r -> !r.job.isTerminal()).count();
+    }
+
+    /** Tasks currently held in memory (runs map size). */
+    public long runCount() {
+        return runs.size();
+    }
+
+    /**
+     * Resolve a taskId by its agent sessionId — the legacy {@code /chat/resume}
+     * protocol resumes by session. Prefers the live runs; falls back to the
+     * persisted store (most recent task for the session wins).
+     */
+    public String findTaskIdBySession(String sessionId) {
+        if (sessionId == null || sessionId.isEmpty()) {
+            return null;
+        }
+        for (TaskRun run : runs.values()) {
+            if (sessionId.equals(run.job.getSessionId())) {
+                return run.job.getTaskId();
+            }
+        }
+        AgentJob job = jobStore.loadBySessionId(sessionId);
+        return job != null ? job.getTaskId() : null;
     }
 
     // ---- Rebuild / revive ----
@@ -269,10 +364,9 @@ public class AgentJobService {
     private TaskRun ensureLive(String taskId) {
         TaskRun run = runs.get(taskId);
         if (run != null) {
-            Disposable sub = run.subscription.get();
             boolean claimsRunning = run.job.getStatus() == AgentJobStatus.RUNNING
                     || run.job.getStatus() == AgentJobStatus.QUEUED;
-            if (claimsRunning && (sub == null || sub.isDisposed())) {
+            if (claimsRunning && !run.executionActive.get()) {
                 runs.remove(taskId, run);
                 run = null;
             } else {
@@ -304,9 +398,18 @@ public class AgentJobService {
         if (job.getAssistantText() != null) {
             revived.assistantText.append(job.getAssistantText());
         }
-        runs.put(taskId, revived);
+        // Recover text deltas emitted after the last throttled hot-save from
+        // the durable event log so reconnect text is complete.
+        backfillAssistantText(revived, job.getLastSeq());
+        // Concurrent revives race to rebuild the same task: only the winner
+        // keeps its run and starts the engine.
+        TaskRun existing = runs.putIfAbsent(taskId, revived);
+        if (existing != null) {
+            return existing;
+        }
         log.info("AgentJobService: revived job {} from snapshot (seq={}, state={})",
                 taskId, revived.seq.get(), session.getCurrentState());
+        metrics.taskRevived();
         revive(revived);
         return revived;
     }
@@ -327,6 +430,7 @@ public class AgentJobService {
         if (job.getAssistantText() != null) {
             run.assistantText.append(job.getAssistantText());
         }
+        backfillAssistantText(run, job.getLastSeq());
         // Surface the frontend tools this paused task is waiting for.
         List<InferenceResponse.ToolCallData> pending =
                 session.getExecution().getPendingToolCalls();
@@ -339,9 +443,9 @@ public class AgentJobService {
                 run.pendingTools.add(pt);
             }
         }
-        runs.put(taskId, run);
+        runs.putIfAbsent(taskId, run);
         log.info("AgentJobService: restored paused job {} from snapshot", taskId);
-        return run;
+        return runs.get(taskId);
     }
 
     /**
@@ -400,12 +504,19 @@ public class AgentJobService {
     private Flux<TaskEvent> subscribe(Flux<AgentEvent> source, TaskRun run) {
         Sinks.Many<TaskEvent> continuation = Sinks.many().replay().limit(4096);
 
+        run.executionActive.set(true);
         Disposable sub = source
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(
                         ev -> onEvent(run, continuation, ev),
-                        err -> onError(run, continuation, err),
-                        () -> onComplete(run, continuation));
+                        err -> {
+                            run.executionActive.set(false);
+                            onError(run, continuation, err);
+                        },
+                        () -> {
+                            run.executionActive.set(false);
+                            onComplete(run, continuation);
+                        });
         run.subscription.set(sub);
 
         return continuation.asFlux();
@@ -438,10 +549,18 @@ public class AgentJobService {
                     ev.type(), seq, run.job.getTaskId(), e.getMessage());
         }
 
-        // 3. Hot checkpoint (Redis) — cheap enough per event.
+        // 3. Hot checkpoint (Redis), throttled: serializing the WHOLE
+        // accumulated text on every token is O(n²). Persist at most once per
+        // interval, but always on status-relevant (non-delta) events so state
+        // changes never wait for the throttle.
         run.job.setLastSeq(seq);
-        run.job.setAssistantText(run.assistantText.toString());
-        jobStore.saveHot(run.job);
+        boolean statusRelevant = !(ev instanceof ThinkingEvent.ThinkDelta);
+        long now = System.currentTimeMillis();
+        if (statusRelevant || now - run.lastHotSaveAt >= HOT_SAVE_INTERVAL_MS) {
+            run.lastHotSaveAt = now;
+            run.job.setAssistantText(run.assistantText.toString());
+            jobStore.saveHot(run.job);
+        }
 
         // 4. Live sinks.
         TaskEvent te = TaskEvent.live(seq, ev);
@@ -472,9 +591,12 @@ public class AgentJobService {
             profileRecorder.record(run.session, finishReason);
             checkpoint(run);
             if (run.job.getStatus() == AgentJobStatus.COMPLETED) {
+                metrics.taskCompleted();
                 synchronized (run.pendingTools) {
                     run.pendingTools.clear();
                 }
+            } else {
+                metrics.taskSuspended();
             }
         } else if (ev instanceof LifecycleEvent.SessionFailed) {
             LifecycleEvent.SessionFailed failed = (LifecycleEvent.SessionFailed) ev;
@@ -482,6 +604,7 @@ public class AgentJobService {
             run.job.setFinishReason("error:" + failed.getErrorCode());
             run.job.setStatus(AgentJobStatus.FAILED);
             jobStore.save(run.job);
+            metrics.taskFailed();
             checkpoint(run);
         }
     }
@@ -492,6 +615,7 @@ public class AgentJobService {
         run.job.setFinishReason("error");
         run.job.setStatus(AgentJobStatus.FAILED);
         jobStore.save(run.job);
+        metrics.taskFailed();
         continuation.tryEmitError(err);
         run.live.tryEmitComplete();
     }
@@ -509,31 +633,42 @@ public class AgentJobService {
     /**
      * Apply tool results (deduplicated by toolCallId so a retried resume is a
      * no-op for already-applied results) and/or grant a fresh iteration budget.
+     * Delegates to {@link ResumeApplier} for testability.
      */
     private void applyResults(AgentSession session, List<ToolResult> toolResults, String action) {
-        if (toolResults != null && !toolResults.isEmpty()) {
-            Set<String> applied = new HashSet<>();
-            for (ConversationMessage msg : session.getExecution().getMessages()) {
-                if ("tool".equals(msg.getRole()) && msg.getToolCallId() != null) {
-                    applied.add(msg.getToolCallId());
+        ResumeApplier.apply(session, toolResults, action,
+                properties.getContext().getToolResultMaxChars());
+    }
+
+    /**
+     * Recover text deltas emitted after the last throttled hot-save checkpoint
+     * by replaying them from the durable event log — keeps reconnect text
+     * complete even though {@code assistantText} is persisted at most once per
+     * second.
+     */
+    private void backfillAssistantText(TaskRun run, long fromSeq) {
+        if (fromSeq <= 0) {
+            return;
+        }
+        try {
+            List<AgentTaskEventStore.TaskEventRecord> records =
+                    eventStore.replay(run.job.getTaskId(), fromSeq, REPLAY_BATCH);
+            for (AgentTaskEventStore.TaskEventRecord record : records) {
+                if (!"think.delta".equals(record.type)) {
+                    continue;
+                }
+                JsonNode node = objectMapper.readTree(record.payloadJson);
+                if ("text".equals(node.path("type").asText(null))) {
+                    String content = node.path("content").asText(null);
+                    if (content != null) {
+                        run.assistantText.append(content);
+                    }
                 }
             }
-            int maxChars = properties.getContext().getToolResultMaxChars();
-            for (ToolResult tr : toolResults) {
-                if (tr == null || tr.toolCallId == null || !applied.add(tr.toolCallId)) {
-                    continue; // already applied by a previous (retried) resume
-                }
-                ConversationMessage toolMsg = ConversationMessage.toolResult(
-                        tr.toolCallId, tr.toolName,
-                        ContextCompactor.truncateToolResult(tr.result, maxChars));
-                session.getExecution().addMessage(toolMsg);
-            }
+        } catch (Exception e) {
+            log.warn("AgentJobService: assistantText backfill failed for {}: {}",
+                    run.job.getTaskId(), e.getMessage());
         }
-        if ("continue".equalsIgnoreCase(action)) {
-            session.getExecution().setIteration(0);
-        }
-        session.getExecution().setSuspendReason(null);
-        session.getExecution().transitionTo(AgentState.THINK);
     }
 
     /** Snapshot the session now (synchronous encode; store write is async). */
@@ -585,8 +720,7 @@ public class AgentJobService {
             if (!claimsRunning) {
                 continue;
             }
-            Disposable sub = run.subscription.get();
-            if (sub == null || sub.isDisposed()) {
+            if (!run.executionActive.get()) {
                 log.warn("AgentJobService: revive stalled job {}", run.job.getTaskId());
                 revive(run);
             }
@@ -654,10 +788,19 @@ public class AgentJobService {
         /** Replay sink — late subscribers get buffered history; seq filters dedupe. */
         final Sinks.Many<TaskEvent> live = Sinks.many().replay().limit(10_000);
         final AtomicReference<Disposable> subscription = new AtomicReference<>();
+        /**
+         * Whether an engine execution is currently subscribed for this task.
+         * Distinct from subscription disposal: a COMPLETED flux is not
+         * "disposed" but is no longer active, and this flag is what guards
+         * against double subscription.
+         */
+        final AtomicBoolean executionActive = new AtomicBoolean(false);
         final AtomicLong seq = new AtomicLong(0);
         final StringBuffer assistantText = new StringBuffer();
         final List<PendingTool> pendingTools = Collections.synchronizedList(new ArrayList<>());
         final AtomicLong lastActivity = new AtomicLong(System.currentTimeMillis());
+        /** Epoch millis of the last throttled hot-save (text checkpoint cadence). */
+        volatile long lastHotSaveAt;
 
         TaskRun(AgentJob job, AgentSession session) {
             this.job = job;
@@ -666,6 +809,30 @@ public class AgentJobService {
 
         void touch() {
             lastActivity.set(System.currentTimeMillis());
+        }
+    }
+
+    /** Sliding-window per-minute counter (same semantics as the THINK limiter). */
+    private static class WindowCounter {
+        private final int maxPerMinute;
+        private final AtomicInteger count = new AtomicInteger(0);
+        private volatile long windowStartMs = System.currentTimeMillis();
+
+        WindowCounter(int maxPerMinute) {
+            this.maxPerMinute = maxPerMinute;
+        }
+
+        boolean tryAcquire() {
+            long now = System.currentTimeMillis();
+            if (now - windowStartMs > 60_000) {
+                synchronized (this) {
+                    if (now - windowStartMs > 60_000) {
+                        count.set(0);
+                        windowStartMs = now;
+                    }
+                }
+            }
+            return count.incrementAndGet() <= maxPerMinute;
         }
     }
 }

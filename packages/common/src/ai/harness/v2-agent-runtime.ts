@@ -24,6 +24,11 @@ import { authorizedFetch } from '../../utils/session'
 
 const DEFAULT_V2_API_BASE = '/api/knowledge-agent/api/v2/agent'
 
+/** Max automatic reconnects when a stream drops without a terminal event. */
+const MAX_RECONNECTS = 5
+/** Backoff base delay between reconnects (ms). */
+const RECONNECT_BASE_DELAY_MS = 500
+
 export interface V2RuntimeOptions {
     /** V2 API base URL */
     apiBase?: string
@@ -48,9 +53,22 @@ export interface ContinueSessionInput {
  */
 export class V2AgentRuntime {
     private apiBase: string
+    /** The most recent task handle — used to cancel on stop / new turn. */
+    private currentTaskId: string | null = null
 
     constructor(options?: V2RuntimeOptions) {
         this.apiBase = options?.apiBase || DEFAULT_V2_API_BASE
+    }
+
+    /** Cancel the currently-attached task (best-effort, never throws). */
+    async cancelCurrent(signal?: AbortSignal): Promise<void> {
+        const taskId = this.currentTaskId
+        if (!taskId) return
+        try {
+            await this.cancelTask(taskId, signal)
+        } catch {
+            // best-effort — a finished/evicted task just reports "not found"
+        }
     }
 
     /**
@@ -86,8 +104,14 @@ export class V2AgentRuntime {
         if (catalog.tools?.length > 0) body.tools = catalog.tools
         if (catalog.version) body.capabilitiesVersion = catalog.version
 
-        // 1. Create the task (returns immediately).
+        // 1. Abandon any previous task this runtime owns, then create the new
+        //    task (returns immediately).
+        if (this.currentTaskId) {
+            this.cancelTask(this.currentTaskId).catch(() => { /* best-effort */ })
+            this.currentTaskId = null
+        }
         const taskId = await this.createTask(body, signal)
+        this.currentTaskId = taskId
 
         // 2. Stream the task's events (replay + live).
         const stream = await this.openTaskEvents(taskId, 0, signal)
@@ -99,6 +123,7 @@ export class V2AgentRuntime {
      * iteration counter and resumes the same task.
      */
     async *continueSession(input: ContinueSessionInput): AsyncGenerator<HarnessEvent> {
+        this.currentTaskId = input.taskId
         const stream = await this.postResume(
             { taskId: input.taskId, action: 'continue' }, input.signal)
         yield* this.driveLoop(
@@ -134,6 +159,7 @@ export class V2AgentRuntime {
         onToolExecution: OnToolExecution | undefined,
         signal?: AbortSignal,
     ): AsyncGenerator<HarnessEvent> {
+        this.currentTaskId = taskId
         const state = await this.fetchState(taskId, signal)
         if (!state) {
             yield { type: 'error', error: 'Task not found' }
@@ -246,7 +272,9 @@ export class V2AgentRuntime {
 
     /**
      * Drive a task to completion: consume SSE events, execute any frontend
-     * tools dispatched by the backend, resume with their results, repeat.
+     * tools dispatched by the backend, resume with their results, and — when
+     * the stream drops WITHOUT a terminal event — automatically re-attach from
+     * the last seen seq (the backend task keeps running server-side).
      */
     private async *driveLoop(
         taskId: string,
@@ -256,73 +284,89 @@ export class V2AgentRuntime {
         signal?: AbortSignal,
     ): AsyncGenerator<HarnessEvent> {
         let stream = initialStream
+        let reconnectAttempts = 0
 
         while (true) {
             const result = yield* this.consumeStream(
                 stream, resolveTool, onToolExecution, signal
             )
 
-            if (!result.hasPendingFrontendTools) {
+            if (result.hasPendingFrontendTools) {
+                reconnectAttempts = 0
+
+                const toolResults: ToolResultPayload[] = []
+                for (const pendingTool of result.pendingFrontendTools) {
+                    const toolName = pendingTool.name
+                    const args = parseToolArgs(pendingTool.arguments, toolName)
+
+                    yield { type: 'tool-call-start', id: pendingTool.id, toolName, args }
+
+                    const startTime = Date.now()
+                    const toolDef = resolveTool(toolName)
+                    let toolResult: string
+                    let endEvent: HarnessEvent
+
+                    if (toolDef?.execute) {
+                        try {
+                            const rawResult = await toolDef.execute(args)
+                            toolResult = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult)
+                            endEvent = {
+                                type: 'tool-call-end',
+                                id: pendingTool.id,
+                                toolName,
+                                result: rawResult,
+                                durationMs: Date.now() - startTime,
+                            }
+                        } catch (err: any) {
+                            toolResult = `Error: ${err?.message || err}`
+                            endEvent = {
+                                type: 'tool-call-end',
+                                id: pendingTool.id,
+                                toolName,
+                                error: err?.message || String(err),
+                                durationMs: Date.now() - startTime,
+                            }
+                        }
+                    } else {
+                        const reason = `Tool "${toolName}" not available on frontend`
+                        onToolExecution?.({ toolName, args, status: 'start', timestamp: startTime })
+                        onToolExecution?.({ toolName, args, status: 'error', error: reason, timestamp: startTime, duration: 0 })
+                        toolResult = reason
+                        endEvent = {
+                            type: 'tool-call-end',
+                            id: pendingTool.id,
+                            toolName,
+                            error: reason,
+                            durationMs: 0,
+                        }
+                    }
+
+                    yield endEvent
+                    toolResults.push({
+                        toolCallId: pendingTool.id,
+                        toolName,
+                        result: toolResult,
+                        success: !('error' in endEvent && endEvent.error != null),
+                    })
+                }
+
+                stream = await this.postResume({ taskId, toolResults }, signal)
+                continue
+            }
+
+            // Terminal event seen (session.completed / session.failed) — done.
+            if (result.sawCompletion) {
                 return
             }
 
-            const toolResults: ToolResultPayload[] = []
-            for (const pendingTool of result.pendingFrontendTools) {
-                const toolName = pendingTool.name
-                const args = parseToolArgs(pendingTool.arguments, toolName)
-
-                yield { type: 'tool-call-start', id: pendingTool.id, toolName, args }
-
-                const startTime = Date.now()
-                const toolDef = resolveTool(toolName)
-                let toolResult: string
-                let endEvent: HarnessEvent
-
-                if (toolDef?.execute) {
-                    try {
-                        const rawResult = await toolDef.execute(args)
-                        toolResult = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult)
-                        endEvent = {
-                            type: 'tool-call-end',
-                            id: pendingTool.id,
-                            toolName,
-                            result: rawResult,
-                            durationMs: Date.now() - startTime,
-                        }
-                    } catch (err: any) {
-                        toolResult = `Error: ${err?.message || err}`
-                        endEvent = {
-                            type: 'tool-call-end',
-                            id: pendingTool.id,
-                            toolName,
-                            error: err?.message || String(err),
-                            durationMs: Date.now() - startTime,
-                        }
-                    }
-                } else {
-                    const reason = `Tool "${toolName}" not available on frontend`
-                    onToolExecution?.({ toolName, args, status: 'start', timestamp: startTime })
-                    onToolExecution?.({ toolName, args, status: 'error', error: reason, timestamp: startTime, duration: 0 })
-                    toolResult = reason
-                    endEvent = {
-                        type: 'tool-call-end',
-                        id: pendingTool.id,
-                        toolName,
-                        error: reason,
-                        durationMs: 0,
-                    }
-                }
-
-                yield endEvent
-                toolResults.push({
-                    toolCallId: pendingTool.id,
-                    toolName,
-                    result: toolResult,
-                    success: !('error' in endEvent && endEvent.error != null),
-                })
-            }
-
-            stream = await this.postResume({ taskId, toolResults }, signal)
+            // Stream dropped without a terminal event: the backend task keeps
+            // running — re-attach from the last seen seq (no text duplication,
+            // seq strictly greater). Bounded retries with backoff.
+            if (signal?.aborted) return
+            if (reconnectAttempts >= MAX_RECONNECTS) return
+            reconnectAttempts++
+            await new Promise(r => setTimeout(r, RECONNECT_BASE_DELAY_MS * reconnectAttempts))
+            stream = await this.openTaskEvents(taskId, result.lastSeq, signal)
         }
     }
 
@@ -338,12 +382,14 @@ export class V2AgentRuntime {
     ): AsyncGenerator<HarnessEvent, StreamResult> {
         if (!response.body) {
             yield { type: 'error', error: 'Response body is null' }
-            return { hasPendingFrontendTools: false, pendingFrontendTools: [] }
+            return { hasPendingFrontendTools: false, pendingFrontendTools: [], sawCompletion: false, lastSeq: 0 }
         }
 
         const pendingFrontendTools: PendingFrontendTool[] = []
         let currentTaskId: string | undefined
         let currentSessionId: string | undefined
+        let sawCompletion = false
+        let lastSeq = 0
 
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
@@ -355,7 +401,12 @@ export class V2AgentRuntime {
             while (true) {
                 if (signal?.aborted) {
                     reader.cancel()
-                    return { hasPendingFrontendTools: false, pendingFrontendTools: [] }
+                    return {
+                        hasPendingFrontendTools: false,
+                        pendingFrontendTools: [],
+                        sawCompletion,
+                        lastSeq,
+                    }
                 }
 
                 const { done, value } = await reader.read()
@@ -368,14 +419,27 @@ export class V2AgentRuntime {
                 for (const line of lines) {
                     if (line === '' || line === '\r') {
                         if (currentData) {
-                            const events = this.processV2Event(
-                                currentEvent, currentData, pendingFrontendTools)
-                            for (const ev of events) {
-                                if (ev.type === 'session') {
-                                    currentTaskId = ev.taskId || currentTaskId
-                                    currentSessionId = ev.sessionId || currentSessionId
+                            let data: any = null
+                            try {
+                                data = JSON.parse(currentData)
+                            } catch {
+                                data = null
+                            }
+                            if (data != null) {
+                                if (typeof data.seq === 'number') lastSeq = data.seq
+                                if (currentEvent === 'session.completed'
+                                        || currentEvent === 'session.failed') {
+                                    sawCompletion = true
                                 }
-                                yield ev
+                                const events = this.processV2EventData(
+                                    currentEvent, data, pendingFrontendTools)
+                                for (const ev of events) {
+                                    if (ev.type === 'session') {
+                                        currentTaskId = ev.taskId || currentTaskId
+                                        currentSessionId = ev.sessionId || currentSessionId
+                                    }
+                                    yield ev
+                                }
                             }
                         }
                         currentEvent = ''
@@ -396,13 +460,26 @@ export class V2AgentRuntime {
             }
 
             if (currentData) {
-                const events = this.processV2Event(currentEvent, currentData, pendingFrontendTools)
-                for (const ev of events) {
-                    if (ev.type === 'session') {
-                        currentTaskId = ev.taskId || currentTaskId
-                        currentSessionId = ev.sessionId || currentSessionId
+                let data: any = null
+                try {
+                    data = JSON.parse(currentData)
+                } catch {
+                    data = null
+                }
+                if (data != null) {
+                    if (typeof data.seq === 'number') lastSeq = data.seq
+                    if (currentEvent === 'session.completed'
+                            || currentEvent === 'session.failed') {
+                        sawCompletion = true
                     }
-                    yield ev
+                    const events = this.processV2EventData(currentEvent, data, pendingFrontendTools)
+                    for (const ev of events) {
+                        if (ev.type === 'session') {
+                            currentTaskId = ev.taskId || currentTaskId
+                            currentSessionId = ev.sessionId || currentSessionId
+                        }
+                        yield ev
+                    }
                 }
             }
         } finally {
@@ -414,24 +491,19 @@ export class V2AgentRuntime {
             pendingFrontendTools,
             taskId: currentTaskId,
             sessionId: currentSessionId,
+            sawCompletion,
+            lastSeq,
         }
     }
 
     /**
-     * Process a single V2 named event and produce HarnessEvents.
+     * Process a single parsed V2 named event and produce HarnessEvents.
      */
-    private processV2Event(
+    private processV2EventData(
         eventName: string,
-        dataStr: string,
+        data: any,
         pendingFrontendTools: PendingFrontendTool[],
     ): HarnessEvent[] {
-        let data: any
-        try {
-            data = JSON.parse(dataStr)
-        } catch {
-            return []
-        }
-
         switch (eventName) {
             case 'session.created':
                 return [{
@@ -672,6 +744,10 @@ interface StreamResult {
     pendingFrontendTools: PendingFrontendTool[]
     taskId?: string
     sessionId?: string
+    /** A session.completed / session.failed event was seen (stream ended properly). */
+    sawCompletion: boolean
+    /** Highest event seq seen — the reconnect checkpoint. */
+    lastSeq: number
 }
 
 /** Reconnect state returned by GET /tasks/{id}/state. */

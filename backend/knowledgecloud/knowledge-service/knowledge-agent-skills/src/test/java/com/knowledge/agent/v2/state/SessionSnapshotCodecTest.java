@@ -3,6 +3,7 @@ package com.knowledge.agent.v2.state;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.store.AgentStateSnapshot;
 import com.knowledge.agent.v2.engine.AgentState;
+import com.knowledge.agent.v2.llm.InferenceResponse;
 import com.knowledge.agent.v2.session.AgentIdentity;
 import com.knowledge.agent.v2.session.AgentMode;
 import com.knowledge.agent.v2.session.AgentSession;
@@ -154,5 +155,28 @@ class SessionSnapshotCodecTest {
                 .timestamp(1L)
                 .build();
         assertThat(codec.decode(legacy, "t")).isNull();
+    }
+
+    @Test
+    void roundTripPreservesPendingToolCalls() throws Exception {
+        // Pending (not-yet-executed) tool calls are the suspension checkpoint —
+        // losing them across a restart would strand a paused task forever.
+        AgentSession session = buildSession();
+        session.getExecution().setPendingToolCalls(Arrays.asList(
+                new InferenceResponse.ToolCallData("pc-1", "fe_tool", "{\"a\":1}"),
+                new InferenceResponse.ToolCallData("pc-2", "insert_block", "{\"content\":\"hi\"}")));
+
+        AgentStateSnapshot snapshot = codec.encode(session);
+        AgentSession restored = codec.decode(snapshot, "T");
+
+        assertThat(restored.getExecution().getPendingToolCalls()).hasSize(2);
+        InferenceResponse.ToolCallData first = restored.getExecution().getPendingToolCalls().get(0);
+        assertThat(first.getId()).isEqualTo("pc-1");
+        assertThat(first.getName()).isEqualTo("fe_tool");
+        assertThat(first.getArguments()).isEqualTo("{\"a\":1}");
+        InferenceResponse.ToolCallData second = restored.getExecution().getPendingToolCalls().get(1);
+        assertThat(second.getId()).isEqualTo("pc-2");
+        assertThat(second.getName()).isEqualTo("insert_block");
+        assertThat(second.getArguments()).isEqualTo("{\"content\":\"hi\"}");
     }
 }

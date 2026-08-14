@@ -55,14 +55,18 @@ public class AgentJobController {
     @PostMapping
     public R<JobView> create(@RequestBody ChatCompletionRequest request) {
         AgentIdentity identity = extractIdentity(request);
-        AgentJob job = jobService.create(request, identity);
-        return R.data(toView(job));
+        try {
+            AgentJob job = jobService.create(request, identity);
+            return R.data(toView(job));
+        } catch (IllegalArgumentException e) {
+            return R.fail(e.getMessage());
+        }
     }
 
     @ApiOperation("Get task status")
     @GetMapping("/{taskId}")
     public R<JobView> status(@PathVariable String taskId) {
-        AgentJob job = jobService.status(taskId);
+        AgentJob job = requireOwnedJob(taskId);
         if (job == null) {
             return R.fail("Task not found: " + taskId);
         }
@@ -72,6 +76,9 @@ public class AgentJobController {
     @ApiOperation("Get task reconnect state (status + accumulated text + last seq + pending tools)")
     @GetMapping("/{taskId}/state")
     public R<StateView> state(@PathVariable String taskId) {
+        if (requireOwnedJob(taskId) == null) {
+            return R.fail("Task not found: " + taskId);
+        }
         AgentJobService.TaskState state = jobService.state(taskId);
         if (state == null) {
             return R.fail("Task not found: " + taskId);
@@ -83,12 +90,18 @@ public class AgentJobController {
     @GetMapping(value = "/{taskId}/events")
     public SseEmitter events(@PathVariable String taskId,
             @RequestParam(defaultValue = "0") long afterSeq) {
+        if (requireOwnedJob(taskId) == null) {
+            return deniedEmitter(taskId);
+        }
         return streamToEmitter(taskId, jobService.streamEvents(taskId, afterSeq));
     }
 
     @ApiOperation("Resume a paused task with frontend tool results")
     @PostMapping(value = "/{taskId}/resume")
     public SseEmitter resume(@PathVariable String taskId, @RequestBody ResumeRequest request) {
+        if (requireOwnedJob(taskId) == null) {
+            return deniedEmitter(taskId);
+        }
         List<AgentJobService.ToolResult> results = new ArrayList<>();
         if (request.getToolResults() != null) {
             for (ToolResultPayload tr : request.getToolResults()) {
@@ -106,20 +119,92 @@ public class AgentJobController {
     @ApiOperation("Cancel a task")
     @PostMapping("/{taskId}/cancel")
     public R<Void> cancel(@PathVariable String taskId) {
+        if (requireOwnedJob(taskId) == null) {
+            return R.fail("Task not found: " + taskId);
+        }
         boolean cancelled = jobService.cancel(taskId);
         return cancelled ? R.data(null) : R.fail("Task not found or not cancellable: " + taskId);
     }
 
+    // ---- Authorization ----
+
+    /**
+     * Load a task and verify the caller owns it: the tenant must match and,
+     * when the task carries an owner user, the user must match too. Returns
+     * {@code null} (indistinguishable from "not found") on any mismatch so
+     * task existence is not leaked across tenants.
+     */
+    private AgentJob requireOwnedJob(String taskId) {
+        AgentJob job = jobService.status(taskId);
+        if (job == null) {
+            return null;
+        }
+        Long userId = SecurityContextUtil.getUserId();
+        Long tenantId = parseLong(SecurityContextUtil.getTenantId());
+        if (tenantId != null && job.getTenantId() != null
+                && !tenantId.equals(job.getTenantId())) {
+            log.warn("AgentJobController: cross-tenant access attempt on task {} by user {} tenant {}",
+                    taskId, userId, tenantId);
+            return null;
+        }
+        if (userId != null && job.getUserId() != null
+                && !userId.equals(job.getUserId())) {
+            log.warn("AgentJobController: cross-user access attempt on task {} by user {}", taskId, userId);
+            return null;
+        }
+        return job;
+    }
+
+    /** SSE-shaped denial (session.failed + [DONE]) for unauthorized streaming. */
+    private SseEmitter deniedEmitter(String taskId) {
+        SseEmitter emitter = new SseEmitter(0L);
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("taskId", taskId);
+            payload.put("errorCode", "FORBIDDEN");
+            payload.put("errorMessage", "Task not found or not accessible: " + taskId);
+            emitter.send(SseEmitter.event()
+                    .name("session.failed")
+                    .data(payload, MediaType.APPLICATION_JSON));
+            emitter.send(SseEmitter.event().data("[DONE]"));
+            emitter.complete();
+        } catch (Exception e) {
+            emitter.completeWithError(e);
+        }
+        return emitter;
+    }
+
     // ---- SSE plumbing ----
+
+    /** Transport keepalive cadence (seconds). */
+    private static final long KEEPALIVE_SECONDS = 15;
 
     private SseEmitter streamToEmitter(String taskId,
             reactor.core.publisher.Flux<AgentJobService.TaskEvent> flux) {
         SseEmitter emitter = new SseEmitter(0L); // no timeout — long tasks
         AtomicReference<Disposable> ref = new AtomicReference<>();
+        AtomicReference<Disposable> keepaliveRef = new AtomicReference<>();
 
-        emitter.onCompletion(() -> dispose(ref));
-        emitter.onTimeout(() -> dispose(ref));
-        emitter.onError(e -> dispose(ref));
+        Runnable cleanup = () -> {
+            dispose(ref);
+            dispose(keepaliveRef);
+        };
+        emitter.onCompletion(cleanup);
+        emitter.onTimeout(cleanup);
+        emitter.onError(e -> cleanup.run());
+
+        // Heartbeat: long backend tool executions emit no events for minutes,
+        // which can trip proxy/gateway idle timeouts. SSE comment frames count
+        // as wire traffic and are ignored by the client parser.
+        keepaliveRef.set(reactor.core.publisher.Flux
+                .interval(java.time.Duration.ofSeconds(KEEPALIVE_SECONDS))
+                .subscribe(tick -> {
+                    try {
+                        emitter.send(SseEmitter.event().comment("keepalive"));
+                    } catch (Exception ignored) {
+                        // emitter closed — cleanup disposes this subscription
+                    }
+                }));
 
         Disposable sub = flux.subscribe(
                 te -> sendEvent(emitter, te, taskId),

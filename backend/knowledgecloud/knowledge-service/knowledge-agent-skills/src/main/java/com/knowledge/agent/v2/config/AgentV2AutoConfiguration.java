@@ -1,11 +1,9 @@
 package com.knowledge.agent.v2.config;
 
 import com.knowledge.agent.llm.LlmClientFactory;
-import com.knowledge.agent.store.AgentDefinitionService;
 import com.knowledge.agent.store.AgentStateStore;
 import com.knowledge.agent.tool.ToolRegistry;
 import com.knowledge.agent.v2.context.ContextCompactor;
-import com.knowledge.agent.v2.controller.AgentV2Controller;
 import com.knowledge.agent.v2.engine.AgentEngine;
 import com.knowledge.agent.v2.engine.AgentState;
 import com.knowledge.agent.v2.engine.AgentUsageListener;
@@ -222,19 +220,6 @@ public class AgentV2AutoConfiguration {
 
         return new AgentEngine(handlers, pipeline, eventBus, properties,
                 usageListenerProvider.getIfAvailable());
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public AgentV2Controller agentV2Controller(AgentEngine agentEngine,
-            AgentProperties properties,
-            ObjectProvider<AgentStateStore> stateStoreProvider,
-            SessionSnapshotCodec codec,
-            AgentEventBus eventBus,
-            ObjectProvider<AgentDefinitionService> definitionServiceProvider) {
-        return new AgentV2Controller(agentEngine, properties,
-                stateStoreProvider.getIfAvailable(), codec, eventBus,
-                definitionServiceProvider.getIfAvailable());
     }
 
     // ---- Orchestrator V2 (Phase 3) ----

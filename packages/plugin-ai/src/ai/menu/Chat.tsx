@@ -26,6 +26,7 @@ import type { ChatMode, ChatModelParams, OffscreenEditorHandle } from "@kn/commo
 
 import { SubAgentTree } from "./SubAgentTree"
 import { PlanApprovalCard } from "./PlanApprovalCard"
+import { claimTaskStream, releaseTaskStream } from "./agent-tab-lock"
 import {
     ExecutionStep, PendingUserChoice, ChatError,
     classifyError,
@@ -650,12 +651,13 @@ export const ExpandableChatDemo: React.FC<{
     // ─── Re-attach to an in-flight task after a page refresh ─────
     // If the active chat session still holds a fresh backend taskId, the agent
     // kept running server-side — re-attach and reconstruct/continue its stream.
-    // Mount-only: we only ever re-attach once, from the persisted handle.
+    // Mount-only, and only one tab claims the task stream at a time.
     const reattachRef = useRef(false)
     useEffect(() => {
         if (reattachRef.current) return
         reattachRef.current = true
         if (!backendTaskId) return
+        if (!claimTaskStream(backendTaskId)) return // another tab is handling it
         setSuspendedSessionId(null)
         setSuspendedTaskId(null)
         suspendedTaskIdRef.current = null
@@ -665,11 +667,17 @@ export const ExpandableChatDemo: React.FC<{
         reasoningRef.current = ''
         setStreamingReasoning('')
 
-        void consumeRound(() => attachStream({
-            taskId: backendTaskId,
-            onAnnotation: handleStreamAnnotation,
-            onReasoning: handleStreamReasoning,
-        }))
+        void (async () => {
+            try {
+                await consumeRound(() => attachStream({
+                    taskId: backendTaskId,
+                    onAnnotation: handleStreamAnnotation,
+                    onReasoning: handleStreamReasoning,
+                }))
+            } finally {
+                releaseTaskStream(backendTaskId)
+            }
+        })()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 

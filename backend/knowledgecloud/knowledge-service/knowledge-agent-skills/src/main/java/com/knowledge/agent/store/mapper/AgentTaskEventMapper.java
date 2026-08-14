@@ -3,6 +3,7 @@ package com.knowledge.agent.store.mapper;
 import com.baomidou.mybatisplus.annotation.InterceptorIgnore;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.knowledge.agent.store.entity.AgentTaskEventEntity;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -29,4 +30,8 @@ public interface AgentTaskEventMapper extends BaseMapper<AgentTaskEventEntity> {
 
     @Select("SELECT MAX(seq) FROM agent_task_event WHERE task_id = #{taskId}")
     Long maxSeq(@Param("taskId") String taskId);
+
+    /** Purge cold-tier rows older than the retention cutoff (epoch millis). */
+    @Delete("DELETE FROM agent_task_event WHERE create_time < #{cutoff}")
+    int deleteOlderThan(@Param("cutoff") long cutoff);
 }

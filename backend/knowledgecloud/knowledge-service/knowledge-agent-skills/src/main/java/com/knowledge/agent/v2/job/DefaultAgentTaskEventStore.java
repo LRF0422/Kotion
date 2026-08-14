@@ -3,8 +3,10 @@ package com.knowledge.agent.v2.job;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.store.entity.AgentTaskEventEntity;
 import com.knowledge.agent.store.mapper.AgentTaskEventMapper;
+import com.knowledge.agent.v2.config.AgentProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
@@ -43,15 +45,18 @@ public class DefaultAgentTaskEventStore implements AgentTaskEventStore {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final AgentTaskEventMapper eventMapper;
+    private final AgentProperties properties;
 
     private ThreadPoolExecutor mirrorExecutor;
 
     public DefaultAgentTaskEventStore(StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper,
-            AgentTaskEventMapper eventMapper) {
+            AgentTaskEventMapper eventMapper,
+            AgentProperties properties) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.eventMapper = eventMapper;
+        this.properties = properties;
     }
 
     @PostConstruct
@@ -175,6 +180,28 @@ public class DefaultAgentTaskEventStore implements AgentTaskEventStore {
             log.warn("AgentTaskEventStore JDBC maxSeq failed for {}: {}", taskId, e.getMessage());
         }
         return 0L;
+    }
+
+    /**
+     * Cold-tier retention: purge {@code agent_task_event} rows older than
+     * {@code agent.event-store.event-retention-days}. Runs every 6 hours.
+     */
+    @Scheduled(fixedDelayString = "21600000", initialDelayString = "600000")
+    public void purgeExpired() {
+        int days = properties.getEventStore().getEventRetentionDays();
+        if (days <= 0) {
+            return;
+        }
+        long cutoff = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(days);
+        try {
+            int deleted = eventMapper.deleteOlderThan(cutoff);
+            if (deleted > 0) {
+                log.info("AgentTaskEventStore: purged {} event rows older than {} days",
+                        deleted, days);
+            }
+        } catch (Exception e) {
+            log.warn("AgentTaskEventStore: purge failed: {}", e.getMessage());
+        }
     }
 
     private TaskEventRecord parse(String member) {

@@ -31,7 +31,7 @@ import {
     cn
 } from '@kn/ui'
 import type { Editor } from '@kn/editor'
-import { useSystemAgent, type ExecutionStep } from '@kn/common'
+import { useSystemAgent, getStoredSystemAgentTaskId, type ExecutionStep } from '@kn/common'
 import { SubAgentTree } from './SubAgentTree'
 import { PlanApprovalCard } from './PlanApprovalCard'
 
@@ -90,6 +90,9 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     const inputRef = useRef<HTMLTextAreaElement>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    // Latest agent state for mount-time closures (re-attach finally block).
+    const agentStateRef = useRef(agent.state)
+    agentStateRef.current = agent.state
 
     // Bind editor
     useEffect(() => {
@@ -97,6 +100,40 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
             agent.setEditor(editor)
         }
     }, [agent, editor])
+
+    // Re-attach to an in-flight backend task after a refresh.
+    const reattachedRef = useRef(false)
+    useEffect(() => {
+        if (reattachedRef.current) return
+        reattachedRef.current = true
+        const taskId = getStoredSystemAgentTaskId()
+        if (!taskId) return
+
+        // Seed a placeholder assistant bubble the stream updates.
+        setMessages(prev => prev.length === 0
+            ? [{ id: `msg-${Date.now()}`, role: 'assistant', content: '', timestamp: Date.now(), steps: [] }]
+            : prev)
+
+        void (async () => {
+            try {
+                await agent.attach(taskId)
+            } catch (err) {
+                console.error('Re-attach failed:', err)
+            } finally {
+                const finalContent = agentStateRef.current.streamingContent
+                setMessages(prev => {
+                    const last = prev[prev.length - 1]
+                    if (last?.role === 'assistant') {
+                        return prev.map((m, i) =>
+                            i === prev.length - 1 ? { ...m, content: finalContent } : m
+                        )
+                    }
+                    return prev
+                })
+            }
+        })()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     // Auto scroll to bottom
     useEffect(() => {

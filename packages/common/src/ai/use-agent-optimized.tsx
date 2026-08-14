@@ -368,13 +368,15 @@ export const useEditorAgentOptimized = (
         }
     }, [resolveTool, onToolExecution, toTextStream])
 
-    // Stop current generation
+    // Stop current generation — also cancels the backend task so an abandoned
+    // run doesn't keep burning tokens server-side.
     const stop = useCallback(() => {
         isStreamingRef.current = false
         if (abortControllerRef.current) {
             abortControllerRef.current.abort()
             abortControllerRef.current = null
         }
+        harnessRef.current.cancelCurrent().catch(() => { /* best-effort */ })
     }, [])
 
     // Check if currently generating

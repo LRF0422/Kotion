@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.annotation.InterceptorIgnore;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.knowledge.agent.store.entity.AgentTaskEntity;
 import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 /**
  * MyBatis-Plus mapper for {@link AgentTaskEntity}.
@@ -34,4 +36,17 @@ public interface AgentTaskMapper extends BaseMapper<AgentTaskEntity> {
             "assistant_text = VALUES(assistant_text), " +
             "update_time = VALUES(update_time)")
     void upsertByTaskId(AgentTaskEntity entity);
+
+    /**
+     * Active (non-terminal) task count for a tenant — the cross-restart
+     * concurrency quota signal.
+     */
+    @Select("SELECT COUNT(*) FROM agent_task WHERE tenant_id = #{tenantId} " +
+            "AND status IN ('QUEUED','RUNNING','SUSPENDED','WAITING_TOOLS')")
+    long countActiveByTenant(@Param("tenantId") Long tenantId);
+
+    /** Most recent task for a session (legacy session-based resume). */
+    @Select("SELECT * FROM agent_task WHERE session_id = #{sessionId} " +
+            "ORDER BY create_time DESC LIMIT 1")
+    AgentTaskEntity selectLatestBySessionId(@Param("sessionId") String sessionId);
 }

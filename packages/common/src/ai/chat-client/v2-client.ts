@@ -1,23 +1,13 @@
 /**
- * V2 Chat Client
+ * @deprecated The synchronous {@code /chat} endpoint is superseded by the
+ * durable task API ({@code /api/v2/agent/tasks}). New code should use
+ * {@code V2AgentRuntime} (async tasks with replay/resume) or
+ * {@code streamKnowledgeText} in {@code ai-utils}. Kept for external callers
+ * of the legacy endpoint, which now delegates to the task model server-side.
  *
- * Chat client that communicates with the V2 Agent engine via the semantic
- * SSE endpoint (/api/v2/agent/chat). Yields the same ChatStreamEvent union
- * as the V1 client so the AgentHarness works unchanged.
- *
- * Key differences from V1:
- * - Endpoint: /api/v2/agent/chat (POST)
- * - SSE format: Named events (event: think.delta) instead of OpenAI data-only
- * - Session lifecycle: Explicit session.created / session.completed events
- * - Tool execution: Backend handles tool routing; frontend only handles FRONTEND tools
- *
- * Usage:
- * ```ts
- * const client = new V2ChatClient()
- * for await (const event of client.chat(request)) {
- *   // Same ChatStreamEvent types as V1
- * }
- * ```
+ * V2 Chat Client — communicates with the legacy V2 SSE endpoint
+ * ({@code /api/v2/agent/chat}) using the same ChatStreamEvent union as the
+ * task runtime.
  */
 
 import { parseV2SSEStream } from './v2-sse-parser'

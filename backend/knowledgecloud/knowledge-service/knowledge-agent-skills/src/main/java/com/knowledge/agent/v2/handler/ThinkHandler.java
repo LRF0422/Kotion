@@ -118,8 +118,11 @@ public class ThinkHandler implements StateHandler {
     private InferenceRequest buildRequest(AgentSession session) {
         List<ConversationMessage> messages = session.getExecution().getMessages();
         // Pass frontend tools from the client request so the LLM can invoke them.
-        // toolIds=null means include all registered backend tools.
-        String toolsJson = toolRegistry.buildToolsJson(session.getToolIds().isEmpty() ? null : session.getToolIds(),
+        // toolIds=null means include all registered backend tools. The schema
+        // JSON is cached by the frontend's capabilitiesVersion.
+        String toolsJson = toolRegistry.buildToolsJsonCached(
+                session.getCapabilitiesVersion(),
+                session.getToolIds().isEmpty() ? null : session.getToolIds(),
                 session.getFrontendTools().isEmpty() ? null : session.getFrontendTools());
 
         return InferenceRequest.builder()

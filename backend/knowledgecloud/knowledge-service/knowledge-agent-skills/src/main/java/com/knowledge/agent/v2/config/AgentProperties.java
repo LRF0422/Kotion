@@ -141,6 +141,8 @@ public class AgentProperties {
         private int requestsPerMinute = 60;
         /** Maximum concurrent sessions per tenant. */
         private int maxConcurrentSessions = 10;
+        /** Maximum task creations per minute per tenant. */
+        private int taskCreatePerMinute = 30;
     }
 
     @Data
@@ -151,5 +153,7 @@ public class AgentProperties {
         private int maxEvents = 2000;
         /** Event TTL in hours. */
         private long ttlHours = 24;
+        /** Cold-tier (agent_task_event) retention in days. */
+        private int eventRetentionDays = 30;
     }
 }

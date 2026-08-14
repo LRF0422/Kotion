@@ -102,6 +102,7 @@ public class AgentSessionFactory {
                 .modelName(request.getModel())
                 .frontendTools(frontendTools)
                 .skills(resolution.skills)
+                .capabilitiesVersion(request.getCapabilitiesVersion())
                 .execution(execution);
 
         applyAgentDefinition(request, identity.getTenantId(), builder, execution);

@@ -22,8 +22,14 @@ public interface AgentJobStore {
 
     AgentJob load(String taskId);
 
+    /** Load the most recent job for a session (legacy session-based resume). */
+    AgentJob loadBySessionId(String sessionId);
+
     void delete(String taskId);
 
     /** Most recent jobs for a user (newest first). */
     List<AgentJob> listByUser(Long userId, int limit);
+
+    /** Active (non-terminal) task count for a tenant (concurrency quota). */
+    long countActive(Long tenantId);
 }

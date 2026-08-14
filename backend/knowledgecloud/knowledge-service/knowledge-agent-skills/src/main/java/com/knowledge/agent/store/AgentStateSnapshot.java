@@ -11,15 +11,15 @@ import java.util.Set;
  * Full state snapshot of an agent loop, persisted to disk for crash recovery.
  *
  * <p>
- * Unlike the Redis-backed {@link AgentEventStore} (which is an append-only
- * event
- * log for SSE replay), this captures the <b>mutable working state</b> of the
- * agent loop at a natural commit point — the working message list, iteration
- * counter, activated skills, and recent tool calls. On restart, a snapshot can
- * be loaded to resume the loop from where it left off instead of starting over.
+ * Unlike the durable per-task event log (Redis ZSET + {@code agent_task_event}
+ * mirror, see {@code com.knowledge.agent.v2.job.AgentTaskEventStore}), this
+ * captures the <b>mutable working state</b> of the agent loop at a natural
+ * commit point — the working message list, iteration counter, activated
+ * skills, and pending tool calls. On restart, a snapshot can be loaded to
+ * resume the loop from where it left off instead of starting over.
  *
  * <p>
- * Snapshots are best-effort: if the file is missing or corrupt, the loop simply
+ * Snapshots are best-effort: if the row is missing or corrupt, the loop simply
  * starts fresh. They are never on the critical path of the streaming response.
  */
 @Data

@@ -46,4 +46,9 @@ export class AgentHarnessImpl implements AgentHarness {
     ): AsyncGenerator<HarnessEvent> {
         yield* this.v2Runtime.attach(taskId, resolveTool, onToolExecution, signal)
     }
+
+    /** Cancel the currently-attached backend task (best-effort). */
+    cancelCurrent(signal?: AbortSignal): Promise<void> {
+        return this.v2Runtime.cancelCurrent(signal)
+    }
 }

@@ -1,15 +1,18 @@
 /**
- * Legacy AI text helpers, now backed by the Knowledge Agent V2 backend.
+ * AI text helpers, backed by the Knowledge Agent V2 TASK API.
  *
- * Historically these called DeepSeek directly from the browser with an API key,
- * which never worked in production (no key / CORS). They now delegate to the
- * V2 agent SSE endpoint ({@link V2ChatClient}), so every caller (AI Tools,
- * /ai block, /aicomplete, plugin uploader) shares one working path.
- * Prefer {@link streamKnowledgeText} / {@link V2ChatClient} in new code.
+ * These helpers stream plain text through the async task protocol
+ * (POST /tasks → GET /tasks/{id}/events) instead of the legacy synchronous
+ * /chat endpoint, so inline AI features share the durable, resumable agent
+ * path. Only `text-delta` events are surfaced; an `error` event rejects the
+ * stream.
  */
 
-import { V2ChatClient } from "./chat-client"
+import { parseV2SSEStream } from "./chat-client/v2-sse-parser"
 import type { ChatMessage } from "./chat-client/types"
+import { authorizedFetch } from "../utils/session"
+
+const TASK_API_BASE = "/api/knowledge-agent/api/v2/agent/tasks"
 
 export interface StreamTextOptions {
     /** Abort the underlying request. */
@@ -23,24 +26,48 @@ export interface StreamTextOptions {
 /**
  * Stream plain text from the Knowledge Agent backend given a full message list
  * (enables multi-turn / refine flows). Returns `{ textStream }` — an async
- * iterable of text deltas. Only `text-delta` events are surfaced; an `error`
- * event rejects the stream.
+ * iterable of text deltas.
  */
 export function streamKnowledgeChat(
     messages: ChatMessage[],
     options: Omit<StreamTextOptions, "system"> = {}
 ): { textStream: AsyncGenerator<string> } {
-    const client = new V2ChatClient()
-
-    const request = {
-        model: options.model,
-        messages,
-        stream: true as const,
-        signal: options.signal,
-    }
-
     async function* textStream(): AsyncGenerator<string> {
-        for await (const event of client.chat(request)) {
+        // 1. Create the async task (returns immediately with a taskId).
+        const createResponse = await authorizedFetch(TASK_API_BASE, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                model: options.model,
+                messages,
+                stream: true,
+                temperature: 0.7,
+            }),
+            signal: options.signal,
+        })
+        if (!createResponse.ok) {
+            throw new Error(`Agent API error (${createResponse.status})`)
+        }
+        const json = await createResponse.json().catch(() => ({} as any))
+        const taskId = json?.data?.taskId as string | undefined
+        if (!taskId) {
+            throw new Error("Agent API returned no taskId")
+        }
+
+        // 2. Stream the task's events (replay + live).
+        const response = await authorizedFetch(`${TASK_API_BASE}/${taskId}/events`, {
+            method: "GET",
+            headers: {},
+            signal: options.signal,
+        })
+        if (!response.ok) {
+            throw new Error(`Agent task events error (${response.status})`)
+        }
+        if (!response.body) {
+            throw new Error("Agent task events response body is null")
+        }
+
+        for await (const event of parseV2SSEStream(response.body)) {
             if (event.type === "text-delta") {
                 yield event.content
             } else if (event.type === "error") {
@@ -69,7 +96,7 @@ export function streamKnowledgeText(
 }
 
 /**
- * @deprecated Use {@link streamKnowledgeText} or {@link V2ChatClient}.
+ * @deprecated Use {@link streamKnowledgeText}.
  * Thin backwards-compatible wrapper kept for existing callers; the second
  * argument (previously `tools`) is ignored.
  */
