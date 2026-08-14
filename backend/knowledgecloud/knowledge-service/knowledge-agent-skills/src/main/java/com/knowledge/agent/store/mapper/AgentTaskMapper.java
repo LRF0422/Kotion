@@ -16,9 +16,11 @@ public interface AgentTaskMapper extends BaseMapper<AgentTaskEntity> {
 
     @Insert("INSERT INTO agent_task " +
             "(task_id, session_id, conversation_id, user_id, tenant_id, status, finish_reason, " +
-            "prompt_tokens, completion_tokens, total_tokens, error_message, create_time, update_time) " +
+            "prompt_tokens, completion_tokens, total_tokens, error_message, last_seq, assistant_text, " +
+            "create_time, update_time) " +
             "VALUES (#{taskId}, #{sessionId}, #{conversationId}, #{userId}, #{tenantId}, #{status}, #{finishReason}, " +
-            "#{promptTokens}, #{completionTokens}, #{totalTokens}, #{errorMessage}, #{createTime}, #{updateTime}) " +
+            "#{promptTokens}, #{completionTokens}, #{totalTokens}, #{errorMessage}, #{lastSeq}, #{assistantText}, " +
+            "#{createTime}, #{updateTime}) " +
             "ON DUPLICATE KEY UPDATE " +
             "session_id = VALUES(session_id), " +
             "conversation_id = VALUES(conversation_id), " +
@@ -28,6 +30,8 @@ public interface AgentTaskMapper extends BaseMapper<AgentTaskEntity> {
             "completion_tokens = VALUES(completion_tokens), " +
             "total_tokens = VALUES(total_tokens), " +
             "error_message = VALUES(error_message), " +
+            "last_seq = VALUES(last_seq), " +
+            "assistant_text = VALUES(assistant_text), " +
             "update_time = VALUES(update_time)")
     void upsertByTaskId(AgentTaskEntity entity);
 }

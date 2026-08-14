@@ -9,6 +9,7 @@ import com.knowledge.agent.v2.session.AgentMode;
 import com.knowledge.agent.v2.session.AgentSession;
 import com.knowledge.agent.v2.session.ConversationMessage;
 import com.knowledge.agent.v2.engine.AgentState;
+import com.knowledge.agent.v2.llm.InferenceResponse;
 import com.knowledge.agent.v2.session.ExecutionState;
 import lombok.extern.slf4j.Slf4j;
 
@@ -81,6 +82,16 @@ public class SessionSnapshotCodec {
                 : null;
         payload.lastPromptTokens = execution.getLastPromptTokens();
         payload.activatedSkillNames = execution.getActivatedSkillNames();
+        if (execution.getPendingToolCalls() != null) {
+            payload.pendingToolCalls = new ArrayList<>();
+            for (InferenceResponse.ToolCallData tc : execution.getPendingToolCalls()) {
+                PendingToolCallPayload ptc = new PendingToolCallPayload();
+                ptc.id = tc.getId();
+                ptc.name = tc.getName();
+                ptc.arguments = tc.getArguments();
+                payload.pendingToolCalls.add(ptc);
+            }
+        }
         payload.messages = new ArrayList<>();
         for (ConversationMessage msg : execution.getMessages()) {
             payload.messages.add(MessagePayload.from(msg));
@@ -140,6 +151,13 @@ public class SessionSnapshotCodec {
             }
             execution.setMessages(messages);
         }
+        if (payload.pendingToolCalls != null && !payload.pendingToolCalls.isEmpty()) {
+            List<InferenceResponse.ToolCallData> calls = new ArrayList<>();
+            for (PendingToolCallPayload ptc : payload.pendingToolCalls) {
+                calls.add(new InferenceResponse.ToolCallData(ptc.id, ptc.name, ptc.arguments));
+            }
+            execution.setPendingToolCalls(calls);
+        }
         if (payload.currentState != null) {
             execution.transitionTo(AgentState.valueOf(payload.currentState));
         }
@@ -182,6 +200,7 @@ public class SessionSnapshotCodec {
         public int lastPromptTokens;
         public Set<String> activatedSkillNames;
         public List<MessagePayload> messages;
+        public List<PendingToolCallPayload> pendingToolCalls;
     }
 
     /** Identity minus the auth token. */
@@ -248,5 +267,12 @@ public class SessionSnapshotCodec {
         public String type;
         public String functionName;
         public String functionArguments;
+    }
+
+    /** JSON form of a pending (not-yet-executed) LLM tool call. */
+    public static class PendingToolCallPayload {
+        public String id;
+        public String name;
+        public String arguments;
     }
 }

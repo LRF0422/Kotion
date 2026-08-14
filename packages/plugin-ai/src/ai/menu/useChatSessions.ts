@@ -43,6 +43,8 @@ export interface UseChatSessionsResult {
     renameSession: (id: string, title: string) => void
     /** Clear all messages & backend ids of the active session (keeps the session itself). */
     clearActiveMessages: () => void
+    /** Clear the live task handle once a turn has fully completed. */
+    clearBackendTask: () => void
     /** Page bound to the active session (@-mention), if any. */
     targetPage: ChatTargetPage | undefined
     /** Bind / unbind the active session's target page. */

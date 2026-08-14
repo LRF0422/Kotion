@@ -43,6 +43,12 @@ public class AgentTaskEntity implements Serializable {
 
     private String errorMessage;
 
+    /** Highest durably-logged event seq (reconnect checkpoint). */
+    private Long lastSeq;
+
+    /** Accumulated assistant output (reconnect reconstruction). */
+    private String assistantText;
+
     private Long createTime;
 
     private Long updateTime;

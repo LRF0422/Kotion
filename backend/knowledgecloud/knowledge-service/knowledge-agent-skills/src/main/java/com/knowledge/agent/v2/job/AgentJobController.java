@@ -2,10 +2,8 @@ package com.knowledge.agent.v2.job;
 
 import com.knowledge.agent.api.dto.ChatCompletionRequest;
 import com.knowledge.agent.v2.event.AgentEvent;
-import com.knowledge.agent.v2.event.DelegationEvent;
+import com.knowledge.agent.v2.event.AgentEventSerializer;
 import com.knowledge.agent.v2.event.LifecycleEvent;
-import com.knowledge.agent.v2.event.ThinkingEvent;
-import com.knowledge.agent.v2.event.ToolEvent;
 import com.knowledge.agent.v2.session.AgentIdentity;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.api.R;
@@ -133,17 +131,27 @@ public class AgentJobController {
 
     private void sendEvent(SseEmitter emitter, AgentJobService.TaskEvent te, String taskId) {
         try {
-            AgentEvent event = te.event;
-            Map<String, Object> payload = eventToPayload(event, taskId);
-            payload.put("seq", te.seq);
-            if (payload != null) {
+            boolean terminal = false;
+            if (te.event != null) {
+                AgentEvent event = te.event;
+                Map<String, Object> payload = AgentEventSerializer.toPayload(event, taskId);
+                payload.put("seq", te.seq);
                 emitter.send(SseEmitter.event()
                         .id(String.valueOf(te.seq))
                         .name(event.type())
                         .data(payload, MediaType.APPLICATION_JSON));
+                terminal = event instanceof LifecycleEvent.SessionCompleted
+                        || event instanceof LifecycleEvent.SessionFailed;
+            } else if (te.payloadJson != null) {
+                // Replayed record — the durable payload already embeds seq.
+                emitter.send(SseEmitter.event()
+                        .id(String.valueOf(te.seq))
+                        .name(te.type)
+                        .data(te.payloadJson, MediaType.APPLICATION_JSON));
+                terminal = "session.completed".equals(te.type)
+                        || "session.failed".equals(te.type);
             }
-            if (event instanceof LifecycleEvent.SessionCompleted
-                    || event instanceof LifecycleEvent.SessionFailed) {
+            if (terminal) {
                 emitter.send(SseEmitter.event().data("[DONE]"));
                 emitter.complete();
             }
@@ -182,83 +190,6 @@ public class AgentJobController {
         }
     }
 
-    // ---- Event serialization ----
-
-    private Map<String, Object> eventToPayload(AgentEvent event, String taskId) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("taskId", taskId);
-        payload.put("sessionId", event.getSessionId());
-        payload.put("timestamp", event.getTimestamp());
-
-        if (event instanceof LifecycleEvent.SessionCreated) {
-            LifecycleEvent.SessionCreated e = (LifecycleEvent.SessionCreated) event;
-            payload.put("conversationId", e.getConversationId());
-            payload.put("traceId", e.getTraceId());
-        } else if (event instanceof LifecycleEvent.SessionCompleted) {
-            LifecycleEvent.SessionCompleted e = (LifecycleEvent.SessionCompleted) event;
-            payload.put("finishReason", e.getFinishReason());
-            Map<String, Object> usage = new LinkedHashMap<>();
-            usage.put("prompt", e.getPromptTokens());
-            usage.put("completion", e.getCompletionTokens());
-            payload.put("usage", usage);
-            payload.put("durationMs", e.getDurationMs());
-        } else if (event instanceof LifecycleEvent.SessionFailed) {
-            LifecycleEvent.SessionFailed e = (LifecycleEvent.SessionFailed) event;
-            payload.put("errorCode", e.getErrorCode());
-            payload.put("errorMessage", e.getErrorMessage());
-            payload.put("retriable", e.isRetriable());
-        } else if (event instanceof ThinkingEvent.ThinkStart) {
-            payload.put("iteration", ((ThinkingEvent.ThinkStart) event).getIteration());
-        } else if (event instanceof ThinkingEvent.ThinkDelta) {
-            ThinkingEvent.ThinkDelta e = (ThinkingEvent.ThinkDelta) event;
-            payload.put("type", e.getDeltaType().name().toLowerCase());
-            payload.put("content", e.getContent());
-        } else if (event instanceof ThinkingEvent.ThinkEnd) {
-            ThinkingEvent.ThinkEnd e = (ThinkingEvent.ThinkEnd) event;
-            payload.put("iteration", e.getIteration());
-            payload.put("finishReason", e.getFinishReason());
-        } else if (event instanceof ToolEvent.ToolDispatched) {
-            ToolEvent.ToolDispatched e = (ToolEvent.ToolDispatched) event;
-            payload.put("toolCallId", e.getToolCallId());
-            payload.put("toolName", e.getToolName());
-            payload.put("arguments", e.getArguments());
-            payload.put("location", e.getLocation().name());
-        } else if (event instanceof ToolEvent.ToolCompleted) {
-            ToolEvent.ToolCompleted e = (ToolEvent.ToolCompleted) event;
-            payload.put("toolCallId", e.getToolCallId());
-            payload.put("toolName", e.getToolName());
-            payload.put("result", e.getResult());
-            payload.put("durationMs", e.getDurationMs());
-        } else if (event instanceof ToolEvent.ToolFailed) {
-            ToolEvent.ToolFailed e = (ToolEvent.ToolFailed) event;
-            payload.put("toolCallId", e.getToolCallId());
-            payload.put("toolName", e.getToolName());
-            payload.put("errorCode", e.getErrorCode());
-            payload.put("errorMessage", e.getErrorMessage());
-        } else if (event instanceof DelegationEvent) {
-            DelegationEvent d = (DelegationEvent) event;
-            payload.put("agentId", d.getAgentId());
-            payload.put("parentAgentId", d.getParentAgentId());
-            payload.put("depth", d.getDepth());
-            if (event instanceof DelegationEvent.SubAgentSpawned) {
-                DelegationEvent.SubAgentSpawned e = (DelegationEvent.SubAgentSpawned) event;
-                payload.put("agentName", e.getAgentName());
-                payload.put("taskDescription", e.getTaskDescription());
-            } else if (event instanceof DelegationEvent.SubAgentProgress) {
-                DelegationEvent.SubAgentProgress e = (DelegationEvent.SubAgentProgress) event;
-                payload.put("iteration", e.getIteration());
-                payload.put("status", e.getStatus());
-            } else if (event instanceof DelegationEvent.SubAgentCompleted) {
-                DelegationEvent.SubAgentCompleted e = (DelegationEvent.SubAgentCompleted) event;
-                payload.put("result", e.getResult());
-                payload.put("durationMs", e.getDurationMs());
-                payload.put("success", e.isSuccess());
-            }
-        } else {
-            payload.put("eventType", event.type());
-        }
-        return payload;
-    }
 
     // ---- Identity ----
 

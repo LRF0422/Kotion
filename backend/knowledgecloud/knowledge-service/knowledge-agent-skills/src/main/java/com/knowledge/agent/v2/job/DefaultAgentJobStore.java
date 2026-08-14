@@ -39,16 +39,24 @@ public class DefaultAgentJobStore implements AgentJobStore {
         if (job == null) {
             return;
         }
+        saveHot(job);
+        try {
+            taskMapper.upsertByTaskId(toEntity(job));
+        } catch (Exception e) {
+            log.warn("AgentJobStore JDBC save failed for {}: {}", job.getTaskId(), e.getMessage());
+        }
+    }
+
+    @Override
+    public void saveHot(AgentJob job) {
+        if (job == null) {
+            return;
+        }
         try {
             String json = objectMapper.writeValueAsString(toPayload(job));
             redisTemplate.opsForValue().set(KEY_PREFIX + job.getTaskId(), json, TTL_HOURS, TimeUnit.HOURS);
         } catch (Exception e) {
             log.warn("AgentJobStore Redis save failed for {}: {}", job.getTaskId(), e.getMessage());
-        }
-        try {
-            taskMapper.upsertByTaskId(toEntity(job));
-        } catch (Exception e) {
-            log.warn("AgentJobStore JDBC save failed for {}: {}", job.getTaskId(), e.getMessage());
         }
     }
 
@@ -128,6 +136,8 @@ public class DefaultAgentJobStore implements AgentJobStore {
         p.errorMessage = job.getErrorMessage();
         p.promptTokens = job.getPromptTokens();
         p.completionTokens = job.getCompletionTokens();
+        p.lastSeq = job.getLastSeq();
+        p.assistantText = job.getAssistantText();
         p.createdAt = job.getCreatedAt();
         p.updatedAt = job.getUpdatedAt();
         return p;
@@ -139,6 +149,8 @@ public class DefaultAgentJobStore implements AgentJobStore {
         job.setFinishReason(p.finishReason);
         job.setErrorMessage(p.errorMessage);
         job.addUsage(p.promptTokens, p.completionTokens);
+        job.setLastSeq(p.lastSeq);
+        job.setAssistantText(p.assistantText);
         return job;
     }
 
@@ -150,6 +162,8 @@ public class DefaultAgentJobStore implements AgentJobStore {
         job.setErrorMessage(e.getErrorMessage());
         job.addUsage(e.getPromptTokens() != null ? e.getPromptTokens() : 0,
                 e.getCompletionTokens() != null ? e.getCompletionTokens() : 0);
+        job.setLastSeq(e.getLastSeq() != null ? e.getLastSeq() : 0L);
+        job.setAssistantText(e.getAssistantText());
         return job;
     }
 
@@ -174,6 +188,8 @@ public class DefaultAgentJobStore implements AgentJobStore {
         e.setCompletionTokens(job.getCompletionTokens());
         e.setTotalTokens(job.getPromptTokens() + job.getCompletionTokens());
         e.setErrorMessage(job.getErrorMessage());
+        e.setLastSeq(job.getLastSeq());
+        e.setAssistantText(job.getAssistantText());
         e.setCreateTime(job.getCreatedAt());
         e.setUpdateTime(job.getUpdatedAt());
         return e;
@@ -191,6 +207,8 @@ public class DefaultAgentJobStore implements AgentJobStore {
         public String errorMessage;
         public int promptTokens;
         public int completionTokens;
+        public long lastSeq;
+        public String assistantText;
         public long createdAt;
         public long updatedAt;
     }

@@ -22,9 +22,11 @@
 前端 V2AgentRuntime
    │ (1) POST /agent/tasks → 返回 taskId（立即返回）
    ▼
-AgentJobService（后台任务编排，脱离 HTTP 线程）
+AgentJobService（事件溯源 + 可重建执行器）
+   ├─ 每个事件: seq++ → 先落 AgentTaskEventStore(Redis ZSET + MySQL 镜像) → 再实时推送
    ├─ 状态机: QUEUED→RUNNING→SUSPENDED/WAITING_TOOLS→COMPLETED/FAILED/CANCELLED
-   ├─ 事件回放: 每任务 Sinks.replay().limit(10k) + AgentJobStore(Redis+JDBC)
+   ├─ 检查点: 每次挂起/结束同步快照（含 pendingToolCalls）
+   ├─ ensureLive: 进程重启后从「job + 快照 + 事件日志」重建会话并重启引擎
    └─ 可取消（Disposable）
         │
         ▼
@@ -33,10 +35,25 @@ AgentEngine（保留：状态机 + 拦截器链）
    ├─ 工具路由: 后端 / 前端（保留）
    └─ 会话级 scratchpad（保留）
         │
-        ├──▶ MemoryStore（新增，跨会话）     remember/recall_memory/forget_memory
-        ├──▶ UserProfileStore（新增，画像）   自动记录 + 注入
-        └──▶ SnapshotStore（保留）
+        ├──▶ MemoryStore（跨会话长期记忆）
+        ├──▶ UserProfileStore（画像记录 + 注入）
+        ├──▶ AgentTaskEventStore（新增，事件日志，回放权威）
+        └──▶ SnapshotStore（保留，挂起/边界检查点）
 ```
+
+## 2.1 断点续传的四个架构保证
+
+1. **事件日志先行**：每个事件（带单调 seq）先写入 `agent:taskevents:<taskId>`
+   （Redis ZSET，score=seq）+ MySQL `agent_task_event` 镜像，再推给客户端。
+   回放（`GET /events?afterSeq=N`）从存储读取，与进程内存无关；实时尾部用
+   replay sink + seq 过滤去重，既不丢也不重。
+2. **全量检查点**：会话快照补齐 `pendingToolCalls`（此前缺失，重启后前端工具
+   待执行状态会丢失）；每次挂起/结束时立即落盘，重启后可恢复"在等什么"。
+3. **可重建执行器**：`ensureLive` 在任务应为 RUNNING 但订阅已死时，从
+   `agent_task` + `agent_state_snapshot` + 事件日志重建会话、续接 seq 与累计
+   文本，并把「THINK + 待执行工具」的检查点映射为 ACT（不重复推理）后
+   `engine.resume` 续跑。
+4. **幂等 resume**：按 toolCallId 去重，重试提交不会破坏工具消息配对。
 
 ## 3. 新增后端组件
 
@@ -107,7 +124,9 @@ SSE 事件协议与旧 `/chat` 一致（`session.created`/`think.delta`/`tool.di
 
 ## 8. 后续可做（未在本次落地）
 
-- `AgentEventStore.replayAfter`（Redis 事件回放）接到任务事件流，支持跨进程重启后回放。
+- 事件日志冷热归档策略（当前 Redis TTL 24h + MySQL 永久镜像已可跨 TTL 回放）。
 - 记忆检索引入 embedding/向量库（`MemoryStore` 已预留接口）。
 - 画像的 LLM 蒸馏合并（当前为确定性规则统计）。
 - `/chat` 同步兼容入口改为内部转发到任务模型（当前保留旧逻辑）。
+- 如需更严格的崩溃恢复（减少至多一次重放的工具轮），可把
+  `agent.state.snapshot-interval` 调为 1（每个 THINK 后都检查点，代价是更频繁的快照写）。

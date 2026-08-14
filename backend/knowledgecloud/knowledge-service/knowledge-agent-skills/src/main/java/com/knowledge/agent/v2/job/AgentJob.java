@@ -30,6 +30,12 @@ public class AgentJob {
     private final AtomicInteger promptTokens = new AtomicInteger(0);
     private final AtomicInteger completionTokens = new AtomicInteger(0);
 
+    /** Highest durably-logged event seq (reconnect checkpoint; cache of the event log). */
+    private volatile long lastSeq;
+
+    /** Accumulated assistant output (reconnect reconstruction). */
+    private volatile String assistantText;
+
     public AgentJob(String taskId, String sessionId, String conversationId,
             Long userId, Long tenantId) {
         this.taskId = taskId;
@@ -115,5 +121,21 @@ public class AgentJob {
 
     public boolean isTerminal() {
         return status.isTerminal();
+    }
+
+    public long getLastSeq() {
+        return lastSeq;
+    }
+
+    public void setLastSeq(long lastSeq) {
+        this.lastSeq = lastSeq;
+    }
+
+    public String getAssistantText() {
+        return assistantText;
+    }
+
+    public void setAssistantText(String assistantText) {
+        this.assistantText = assistantText;
     }
 }

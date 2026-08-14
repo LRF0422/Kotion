@@ -553,6 +553,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             activeSkills: [],
             annotations: [],
             sessionId: sessionIdRef.current,
+            taskId: taskIdRef.current,
             subAgents: {},
             pendingPlan: null
         })

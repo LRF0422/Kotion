@@ -10,7 +10,15 @@ import java.util.List;
  */
 public interface AgentJobStore {
 
+    /** Persist to both tiers (Redis + JDBC). Used on status transitions. */
     void save(AgentJob job);
+
+    /**
+     * Persist to the Redis hot tier only — cheap enough to call on every
+     * event (streaming checkpoints: lastSeq + assistantText) without
+     * hammering MySQL.
+     */
+    void saveHot(AgentJob job);
 
     AgentJob load(String taskId);
 
