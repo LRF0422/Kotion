@@ -31,6 +31,8 @@ export interface UseChatSessionsResult {
     /** Backend Agent ids — only provided if still within TTL. */
     backendSessionId: string | undefined
     backendConversationId: string | undefined
+    /** Backend Agent async taskId (live job handle), when still within TTL. */
+    backendTaskId: string | undefined
     /** Create a brand-new empty chat session and switch to it. */
     createSession: () => string
     /** Switch the active chat to the given session id. */
@@ -133,13 +135,18 @@ export function useChatSessions(): UseChatSessionsResult {
 
     // Only expose backend ids while they are fresh; otherwise the caller
     // should start a new backend session.
-    const { backendSessionId, backendConversationId } = useMemo(() => {
+    const { backendSessionId, backendConversationId, backendTaskId } = useMemo(() => {
         if (!activeSession || !isBackendSessionFresh(activeSession)) {
-            return { backendSessionId: undefined, backendConversationId: undefined }
+            return {
+                backendSessionId: undefined,
+                backendConversationId: undefined,
+                backendTaskId: undefined,
+            }
         }
         return {
             backendSessionId: activeSession.backendSessionId,
             backendConversationId: activeSession.backendConversationId,
+            backendTaskId: activeSession.backendTaskId,
         }
     }, [activeSession])
 
@@ -242,7 +249,18 @@ export function useChatSessions(): UseChatSessionsResult {
             title: 'New chat',
             backendSessionId: undefined,
             backendConversationId: undefined,
+            backendTaskId: undefined,
             backendSessionUpdatedAt: undefined,
+            updatedAt: Date.now(),
+        }))
+    }, [activeSessionId, updateMeta])
+
+    // Clear the live task handle once a turn has fully completed (the final
+    // message is persisted), so a later refresh doesn't re-attach a stale task.
+    const clearBackendTask = useCallback(() => {
+        updateMeta(activeSessionId, s => ({
+            ...s,
+            backendTaskId: undefined,
             updatedAt: Date.now(),
         }))
     }, [activeSessionId, updateMeta])
@@ -265,6 +283,7 @@ export function useChatSessions(): UseChatSessionsResult {
             for (const ann of annotations) {
                 let sid: string | undefined
                 let cid: string | undefined
+                let tid: string | undefined
                 if (
                     'type' in ann &&
                     (ann as any).type === 'session-info' &&
@@ -272,15 +291,18 @@ export function useChatSessions(): UseChatSessionsResult {
                 ) {
                     sid = (ann as any).sessionId
                     cid = (ann as any).conversationId
+                    tid = (ann as any).taskId
                 } else if ('sessionId' in ann && typeof (ann as any).sessionId === 'string') {
                     sid = (ann as SessionInfo).sessionId
                     cid = (ann as SessionInfo).conversationId
+                    tid = (ann as any).taskId
                 }
                 if (sid) {
                     updateMeta(activeSessionId, s => ({
                         ...s,
                         backendSessionId: sid,
                         backendConversationId: cid ?? s.backendConversationId,
+                        backendTaskId: tid ?? s.backendTaskId,
                         backendSessionUpdatedAt: Date.now(),
                         updatedAt: Date.now(),
                     }))
@@ -299,11 +321,13 @@ export function useChatSessions(): UseChatSessionsResult {
         setMessages,
         backendSessionId,
         backendConversationId,
+        backendTaskId,
         createSession,
         switchSession,
         deleteSession,
         renameSession,
         clearActiveMessages,
+        clearBackendTask,
         targetPage,
         setTargetPage,
         parseAnnotations,

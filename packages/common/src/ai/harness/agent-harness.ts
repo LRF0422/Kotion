@@ -33,4 +33,17 @@ export class AgentHarnessImpl implements AgentHarness {
     async *continueSession(input: ContinueSessionInput): AsyncGenerator<HarnessEvent> {
         yield* this.v2Runtime.continueSession(input)
     }
+
+    /**
+     * Re-attach to an in-flight task after a refresh/dropped connection.
+     * Reconstructs the in-progress text and continues from the task checkpoint.
+     */
+    async *attach(
+        taskId: string,
+        resolveTool: (name: string) => import('../types').ToolDefinition | undefined,
+        onToolExecution: import('../types').OnToolExecution | undefined,
+        signal: AbortSignal,
+    ): AsyncGenerator<HarnessEvent> {
+        yield* this.v2Runtime.attach(taskId, resolveTool, onToolExecution, signal)
+    }
 }

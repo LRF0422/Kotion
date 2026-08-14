@@ -56,13 +56,27 @@ AgentEngine（保留：状态机 + 拦截器链）
 ```
 POST /api/v2/agent/tasks                 → R<JobView>{ taskId, sessionId, status }
 GET  /api/v2/agent/tasks/{id}            → R<JobView>（轮询状态）
-GET  /api/v2/agent/tasks/{id}/events     → SSE（回放 + 实时）
+GET  /api/v2/agent/tasks/{id}/state      → R<StateView>（status + assistantText + lastSeq + pendingTools）
+GET  /api/v2/agent/tasks/{id}/events?afterSeq=N → SSE（回放 + 实时，仅 seq > N）
 POST /api/v2/agent/tasks/{id}/resume     → SSE（前端工具结果 / action=continue）
 POST /api/v2/agent/tasks/{id}/cancel     → R<Void>
 ```
 
 SSE 事件协议与旧 `/chat` 一致（`session.created`/`think.delta`/`tool.dispatched`/
-`session.completed`…），新增 `taskId` 字段贯穿每个事件载荷。
+`session.completed`…），每个事件载荷携带全局 `seq` 与 `taskId`。
+
+## 4.1 中断续接（刷新/断连后让 agent 续上）
+
+任务在服务端后台持续运行（与连接解耦）。刷新后前端从 `ChatSessionMeta.backendTaskId`
+读取仍在有效期内的任务句柄，走 `V2AgentRuntime.attach(taskId)` 续接：
+
+1. `GET /tasks/{id}/state` 取 `status` + `assistantText`（累计文本）+ `lastSeq` + `pendingTools`。
+2. 按 `status` 分派：
+   - `COMPLETED/FAILED/CANCELLED` → 补写最终结果/错误；
+   - `RUNNING` → 以 `assistantText` 重建进行中文本，再 `GET /events?afterSeq=lastSeq` 只收新事件（避免重放导致前端工具重复执行与文本重复）；
+   - `WAITING_TOOLS` → 执行 `pendingTools` 里的前端工具后 `POST /resume`；
+   - `SUSPENDED` → 展示「继续执行」。
+3. 正常完成一轮时前端清除 `backendTaskId`，预算挂起时保留，从而避免下次刷新重接已结束的旧任务。
 
 ## 5. 记忆与画像
 

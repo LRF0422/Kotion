@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
@@ -28,7 +29,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -38,7 +38,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * <ul>
  *   <li>{@code POST /api/v2/agent/tasks} — create + start a job, returns its id</li>
  *   <li>{@code GET  /api/v2/agent/tasks/{id}} — poll status</li>
- *   <li>{@code GET  /api/v2/agent/tasks/{id}/events} — replay + live SSE event stream</li>
+ *   <li>{@code GET  /api/v2/agent/tasks/{id}/state} — reconnect state (text + seq + pending tools)</li>
+ *   <li>{@code GET  /api/v2/agent/tasks/{id}/events?afterSeq=N} — replay + live SSE (only seq > N)</li>
  *   <li>{@code POST /api/v2/agent/tasks/{id}/resume} — submit frontend tool results</li>
  *   <li>{@code POST /api/v2/agent/tasks/{id}/cancel} — cancel</li>
  * </ul>
@@ -70,10 +71,21 @@ public class AgentJobController {
         return R.data(toView(job));
     }
 
-    @ApiOperation("Stream task events (replay + live)")
+    @ApiOperation("Get task reconnect state (status + accumulated text + last seq + pending tools)")
+    @GetMapping("/{taskId}/state")
+    public R<StateView> state(@PathVariable String taskId) {
+        AgentJobService.TaskState state = jobService.state(taskId);
+        if (state == null) {
+            return R.fail("Task not found: " + taskId);
+        }
+        return R.data(toStateView(state));
+    }
+
+    @ApiOperation("Stream task events (replay + live, optionally after a seq checkpoint)")
     @GetMapping(value = "/{taskId}/events")
-    public SseEmitter events(@PathVariable String taskId) {
-        return streamToEmitter(taskId, jobService.streamEvents(taskId));
+    public SseEmitter events(@PathVariable String taskId,
+            @RequestParam(defaultValue = "0") long afterSeq) {
+        return streamToEmitter(taskId, jobService.streamEvents(taskId, afterSeq));
     }
 
     @ApiOperation("Resume a paused task with frontend tool results")
@@ -102,9 +114,9 @@ public class AgentJobController {
 
     // ---- SSE plumbing ----
 
-    private SseEmitter streamToEmitter(String taskId, reactor.core.publisher.Flux<AgentEvent> flux) {
+    private SseEmitter streamToEmitter(String taskId,
+            reactor.core.publisher.Flux<AgentJobService.TaskEvent> flux) {
         SseEmitter emitter = new SseEmitter(0L); // no timeout — long tasks
-        AtomicLong seq = new AtomicLong(0);
         AtomicReference<Disposable> ref = new AtomicReference<>();
 
         emitter.onCompletion(() -> dispose(ref));
@@ -112,20 +124,21 @@ public class AgentJobController {
         emitter.onError(e -> dispose(ref));
 
         Disposable sub = flux.subscribe(
-                event -> sendEvent(emitter, event, seq, taskId),
-                error -> sendError(emitter, error, taskId, seq),
+                te -> sendEvent(emitter, te, taskId),
+                error -> sendError(emitter, error, taskId),
                 () -> complete(emitter));
         ref.set(sub);
         return emitter;
     }
 
-    private void sendEvent(SseEmitter emitter, AgentEvent event, AtomicLong seq, String taskId) {
+    private void sendEvent(SseEmitter emitter, AgentJobService.TaskEvent te, String taskId) {
         try {
-            long id = seq.incrementAndGet();
+            AgentEvent event = te.event;
             Map<String, Object> payload = eventToPayload(event, taskId);
+            payload.put("seq", te.seq);
             if (payload != null) {
                 emitter.send(SseEmitter.event()
-                        .id(String.valueOf(id))
+                        .id(String.valueOf(te.seq))
                         .name(event.type())
                         .data(payload, MediaType.APPLICATION_JSON));
             }
@@ -139,14 +152,13 @@ public class AgentJobController {
         }
     }
 
-    private void sendError(SseEmitter emitter, Throwable error, String taskId, AtomicLong seq) {
+    private void sendError(SseEmitter emitter, Throwable error, String taskId) {
         try {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("taskId", taskId);
             payload.put("errorCode", "INTERNAL");
             payload.put("errorMessage", error.getMessage());
             emitter.send(SseEmitter.event()
-                    .id(String.valueOf(seq.incrementAndGet()))
                     .name("session.failed")
                     .data(payload, MediaType.APPLICATION_JSON));
             emitter.send(SseEmitter.event().data("[DONE]"));
@@ -293,6 +305,30 @@ public class AgentJobController {
         return view;
     }
 
+    private StateView toStateView(AgentJobService.TaskState state) {
+        StateView view = new StateView();
+        view.setTaskId(state.taskId);
+        view.setSessionId(state.sessionId);
+        view.setConversationId(state.conversationId);
+        view.setStatus(state.status);
+        view.setFinishReason(state.finishReason);
+        view.setErrorMessage(state.errorMessage);
+        view.setPromptTokens(state.promptTokens);
+        view.setCompletionTokens(state.completionTokens);
+        view.setAssistantText(state.assistantText);
+        view.setLastSeq(state.lastSeq);
+        List<PendingToolView> tools = new ArrayList<>();
+        for (AgentJobService.PendingTool pt : state.pendingTools) {
+            PendingToolView v = new PendingToolView();
+            v.setToolCallId(pt.toolCallId);
+            v.setToolName(pt.toolName);
+            v.setArguments(pt.arguments);
+            tools.add(v);
+        }
+        view.setPendingTools(tools);
+        return view;
+    }
+
     @Data
     public static class JobView {
         private String taskId;
@@ -305,6 +341,28 @@ public class AgentJobController {
         private int completionTokens;
         private long createdAt;
         private long updatedAt;
+    }
+
+    @Data
+    public static class StateView {
+        private String taskId;
+        private String sessionId;
+        private String conversationId;
+        private String status;
+        private String finishReason;
+        private String errorMessage;
+        private int promptTokens;
+        private int completionTokens;
+        private String assistantText;
+        private long lastSeq;
+        private List<PendingToolView> pendingTools;
+    }
+
+    @Data
+    public static class PendingToolView {
+        private String toolCallId;
+        private String toolName;
+        private String arguments;
     }
 
     @Data

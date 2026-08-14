@@ -36,6 +36,8 @@ export interface ChatSessionMeta {
     backendSessionId?: string
     /** Backend Agent conversationId. */
     backendConversationId?: string
+    /** Backend Agent async taskId (live job handle, used to re-attach after a refresh). */
+    backendTaskId?: string
     /** Timestamp when the backend session was last seen (used for TTL). */
     backendSessionUpdatedAt?: number
     /** Page this session's agent edits (off-screen) instead of the open document. */

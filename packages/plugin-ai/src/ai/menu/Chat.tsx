@@ -224,10 +224,12 @@ export const ExpandableChatDemo: React.FC<{
         setMessages,
         backendSessionId,
         backendConversationId,
+        backendTaskId,
         createSession,
         switchSession,
         deleteSession,
         clearActiveMessages,
+        clearBackendTask,
         targetPage,
         setTargetPage,
         parseAnnotations,
@@ -392,7 +394,7 @@ export const ExpandableChatDemo: React.FC<{
     }, [])
 
     // ─── Streaming agent ──────────────────────────────────────────
-    const { stream, continueStream, stop } = useEditorAgentOptimized(
+    const { stream, continueStream, attachStream, stop } = useEditorAgentOptimized(
         agentEditor,
         handleToolExecution,
         handleUserChoiceRequest,
@@ -409,6 +411,7 @@ export const ExpandableChatDemo: React.FC<{
     // Session suspended on budget exhaustion — offer a "continue" action.
     const [suspendedSessionId, setSuspendedSessionId] = useState<string | null>(null)
     const [suspendedTaskId, setSuspendedTaskId] = useState<string | null>(null)
+    const suspendedTaskIdRef = useRef<string | null>(null)
     const subAgents = useMemo(
         () => applySubAgentAnnotations({}, annotations as any[]),
         [annotations],
@@ -461,6 +464,7 @@ export const ExpandableChatDemo: React.FC<{
         setError(null)
         setSuspendedSessionId(null)
         setSuspendedTaskId(null)
+        suspendedTaskIdRef.current = null
         buffer.reset()
         reasoningRef.current = ''
         setStreamingReasoning('')
@@ -475,7 +479,10 @@ export const ExpandableChatDemo: React.FC<{
         for (const a of newAnnotations as any[]) {
             if (a?.type === 'agent_suspended' && a.sessionId) {
                 setSuspendedSessionId(String(a.sessionId))
-                if (a.taskId) setSuspendedTaskId(String(a.taskId))
+                if (a.taskId) {
+                    setSuspendedTaskId(String(a.taskId))
+                    suspendedTaskIdRef.current = String(a.taskId)
+                }
             }
         }
     }, [parseAnnotations])
@@ -518,6 +525,10 @@ export const ExpandableChatDemo: React.FC<{
             reasoningRef.current = ''
             setStreamingReasoning('')
             setCurrentSteps([])
+            // Turn finished normally — clear the live task handle so a later
+            // refresh doesn't re-attach a stale task. Budget suspension keeps it.
+            if (!suspendedTaskIdRef.current) clearBackendTask()
+            suspendedTaskIdRef.current = null
         } catch (err: any) {
             if (err?.name === 'AbortError' || err?.message?.includes('abort')) {
                 const currentContent = buffer.getContent()
@@ -563,7 +574,7 @@ export const ExpandableChatDemo: React.FC<{
                 console.error('Failed to flush off-screen edits:', err)
             })
         }
-    }, [buffer, generateMessageId, setMessages])
+    }, [buffer, generateMessageId, setMessages, clearBackendTask])
 
     // ─── Submit ───────────────────────────────────────────
     const submitMessage = useCallback(async (messageText: string) => {
@@ -583,6 +594,8 @@ export const ExpandableChatDemo: React.FC<{
         setAnnotations([])
         setSuspendedSessionId(null)
         setSuspendedTaskId(null)
+        suspendedTaskIdRef.current = null
+        clearBackendTask()
 
         const currentMessages = [...messages, userMessage]
         const historyMessages = getHistoryForAI(currentMessages)
@@ -607,6 +620,7 @@ export const ExpandableChatDemo: React.FC<{
         stream, consumeRound, generateMessageId, messages, buffer,
         backendSessionId, backendConversationId, setMessages,
         handleStreamAnnotation, handleStreamReasoning, targetPage,
+        clearBackendTask,
     ])
 
     // ─── Continue a budget-suspended session ────────────────────
@@ -632,6 +646,32 @@ export const ExpandableChatDemo: React.FC<{
         suspendedTaskId, suspendedSessionId, isLoading, buffer, consumeRound, continueStream,
         handleStreamAnnotation, handleStreamReasoning,
     ])
+
+    // ─── Re-attach to an in-flight task after a page refresh ─────
+    // If the active chat session still holds a fresh backend taskId, the agent
+    // kept running server-side — re-attach and reconstruct/continue its stream.
+    // Mount-only: we only ever re-attach once, from the persisted handle.
+    const reattachRef = useRef(false)
+    useEffect(() => {
+        if (reattachRef.current) return
+        reattachRef.current = true
+        if (!backendTaskId) return
+        setSuspendedSessionId(null)
+        setSuspendedTaskId(null)
+        suspendedTaskIdRef.current = null
+        stepsRef.current = []
+        setCurrentSteps([])
+        buffer.reset()
+        reasoningRef.current = ''
+        setStreamingReasoning('')
+
+        void consumeRound(() => attachStream({
+            taskId: backendTaskId,
+            onAnnotation: handleStreamAnnotation,
+            onReasoning: handleStreamReasoning,
+        }))
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     const handleSend = useCallback(() => {
         const text = input.trim()

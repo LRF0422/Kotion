@@ -90,7 +90,7 @@ export class V2AgentRuntime {
         const taskId = await this.createTask(body, signal)
 
         // 2. Stream the task's events (replay + live).
-        const stream = await this.openTaskEvents(taskId, signal)
+        const stream = await this.openTaskEvents(taskId, 0, signal)
         yield* this.driveLoop(taskId, stream, resolveTool, onToolExecution, signal)
     }
 
@@ -117,6 +117,131 @@ export class V2AgentRuntime {
             const errorText = await response.text().catch(() => 'Unknown error')
             throw new Error(`V2 cancel error (${response.status}): ${errorText}`)
         }
+    }
+
+    /**
+     * Re-attach to an in-flight task after a page refresh / dropped connection.
+     *
+     * Fetches the task's reconnect state (status + accumulated text + last seq
+     * + pending frontend tools), reconstructs the in-progress text, then either
+     * resumes (WAITING_TOOLS), continues streaming from the checkpoint
+     * (RUNNING), surfaces a budget "continue" (SUSPENDED), or finishes
+     * (terminal).
+     */
+    async *attach(
+        taskId: string,
+        resolveTool: (name: string) => ToolDefinition | undefined,
+        onToolExecution: OnToolExecution | undefined,
+        signal?: AbortSignal,
+    ): AsyncGenerator<HarnessEvent> {
+        const state = await this.fetchState(taskId, signal)
+        if (!state) {
+            yield { type: 'error', error: 'Task not found' }
+            return
+        }
+
+        yield {
+            type: 'session',
+            taskId,
+            sessionId: state.sessionId,
+            conversationId: state.conversationId,
+        }
+
+        // Reconstruct the already-streamed text from the server checkpoint.
+        if (state.assistantText) {
+            yield { type: 'text-delta', content: state.assistantText }
+        }
+
+        const status = state.status
+
+        if (status === 'COMPLETED') {
+            yield { type: 'finish', finishReason: state.finishReason || 'stop' }
+            return
+        }
+        if (status === 'FAILED') {
+            yield { type: 'error', error: state.errorMessage || 'Task failed' }
+            return
+        }
+        if (status === 'CANCELLED') {
+            yield { type: 'finish', finishReason: 'cancelled' }
+            return
+        }
+        if (status === 'SUSPENDED') {
+            yield {
+                type: 'annotation',
+                annotations: [{
+                    type: 'agent_suspended',
+                    reason: state.finishReason || 'suspended:iteration_budget_exhausted',
+                    sessionId: state.sessionId,
+                    taskId,
+                }],
+            }
+            yield { type: 'finish', finishReason: 'suspended' }
+            return
+        }
+        if (status === 'WAITING_TOOLS' && state.pendingTools?.length) {
+            // Execute the pending frontend tools, then resume the task.
+            const toolResults: ToolResultPayload[] = []
+            for (const pt of state.pendingTools) {
+                const toolName = pt.toolName
+                const args = parseToolArgs(pt.arguments || '{}', toolName)
+                yield { type: 'tool-call-start', id: pt.toolCallId, toolName, args }
+
+                const startTime = Date.now()
+                const toolDef = resolveTool(toolName)
+                let toolResult: string
+                let endEvent: HarnessEvent
+                if (toolDef?.execute) {
+                    try {
+                        const rawResult = await toolDef.execute(args)
+                        toolResult = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult)
+                        endEvent = {
+                            type: 'tool-call-end',
+                            id: pt.toolCallId,
+                            toolName,
+                            result: rawResult,
+                            durationMs: Date.now() - startTime,
+                        }
+                    } catch (err: any) {
+                        toolResult = `Error: ${err?.message || err}`
+                        endEvent = {
+                            type: 'tool-call-end',
+                            id: pt.toolCallId,
+                            toolName,
+                            error: err?.message || String(err),
+                            durationMs: Date.now() - startTime,
+                        }
+                    }
+                } else {
+                    const reason = `Tool "${toolName}" not available on frontend`
+                    onToolExecution?.({ toolName, args, status: 'start', timestamp: startTime })
+                    onToolExecution?.({ toolName, args, status: 'error', error: reason, timestamp: startTime, duration: 0 })
+                    toolResult = reason
+                    endEvent = {
+                        type: 'tool-call-end',
+                        id: pt.toolCallId,
+                        toolName,
+                        error: reason,
+                        durationMs: 0,
+                    }
+                }
+                yield endEvent
+                toolResults.push({
+                    toolCallId: pt.toolCallId,
+                    toolName,
+                    result: toolResult,
+                    success: !('error' in endEvent && endEvent.error != null),
+                })
+            }
+
+            const stream = await this.postResume({ taskId, toolResults }, signal)
+            yield* this.driveLoop(taskId, stream, resolveTool, onToolExecution, signal)
+            return
+        }
+
+        // RUNNING / QUEUED — stream only new events past the checkpoint.
+        const stream = await this.openTaskEvents(taskId, state.lastSeq ?? 0, signal)
+        yield* this.driveLoop(taskId, stream, resolveTool, onToolExecution, signal)
     }
 
     /**
@@ -481,9 +606,10 @@ export class V2AgentRuntime {
         return taskId
     }
 
-    /** GET /tasks/{id}/events → SSE stream (replay + live). */
-    private async openTaskEvents(taskId: string, signal?: AbortSignal): Promise<Response> {
-        const response = await authorizedFetch(`${this.apiBase}/tasks/${taskId}/events`, {
+    /** GET /tasks/{id}/events?afterSeq=N → SSE stream (replay + live, from checkpoint). */
+    private async openTaskEvents(taskId: string, afterSeq: number = 0, signal?: AbortSignal): Promise<Response> {
+        const query = afterSeq > 0 ? `?afterSeq=${afterSeq}` : ''
+        const response = await authorizedFetch(`${this.apiBase}/tasks/${taskId}/events${query}`, {
             method: 'GET',
             headers: {},
             signal,
@@ -494,6 +620,20 @@ export class V2AgentRuntime {
             throw new Error(`V2 task events error (${response.status}): ${errorText}`)
         }
         return response
+    }
+
+    /** GET /tasks/{id}/state → reconnect state (status + text + lastSeq + pending tools). */
+    private async fetchState(taskId: string, signal?: AbortSignal): Promise<TaskStateData | null> {
+        const response = await authorizedFetch(`${this.apiBase}/tasks/${taskId}/state`, {
+            method: 'GET',
+            headers: {},
+            signal,
+        })
+        if (!response.ok) {
+            return null
+        }
+        const json = await response.json().catch(() => ({} as any))
+        return (json?.data as TaskStateData) || null
     }
 
     /** POST /tasks/{id}/resume → SSE continuation stream. */
@@ -532,4 +672,17 @@ interface StreamResult {
     pendingFrontendTools: PendingFrontendTool[]
     taskId?: string
     sessionId?: string
+}
+
+/** Reconnect state returned by GET /tasks/{id}/state. */
+interface TaskStateData {
+    taskId: string
+    sessionId?: string
+    conversationId?: string
+    status: string
+    finishReason?: string
+    errorMessage?: string
+    assistantText?: string
+    lastSeq?: number
+    pendingTools?: { toolCallId: string; toolName: string; arguments?: string }[]
 }

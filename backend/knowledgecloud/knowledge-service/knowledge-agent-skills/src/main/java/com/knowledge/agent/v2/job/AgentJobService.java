@@ -8,6 +8,8 @@ import com.knowledge.agent.v2.context.ContextCompactor;
 import com.knowledge.agent.v2.engine.AgentEngine;
 import com.knowledge.agent.v2.event.AgentEvent;
 import com.knowledge.agent.v2.event.LifecycleEvent;
+import com.knowledge.agent.v2.event.ThinkingEvent;
+import com.knowledge.agent.v2.event.ToolEvent;
 import com.knowledge.agent.v2.profile.ProfileRecorder;
 import com.knowledge.agent.v2.session.AgentIdentity;
 import com.knowledge.agent.v2.session.AgentSession;
@@ -24,6 +26,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,14 +39,16 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <p>Decouples execution from the HTTP request: {@link #create} builds the
  * session and starts the engine in the background, returning a job handle
- * immediately. Clients then poll {@link #status}, stream {@link #streamEvents}
- * (replay + live), submit frontend tool results via {@link #resume}, or
- * {@link #cancel} the job — all independent of any single connection.
+ * immediately. Clients poll {@link #status}/{@link #state}, stream
+ * {@link #streamEvents} (replay + live, filtered by {@code afterSeq}), submit
+ * frontend tool results via {@link #resume}, or {@link #cancel} — all
+ * independent of any single connection.
  *
- * <p>Each running job owns a {@link Sinks.Many} replay sink so a client that
- * (re)connects after events already fired can still receive the full event
- * history. Jobs are kept in memory for a bounded window and mirrored to
- * {@link AgentJobStore} (Redis + JDBC) on every status change.
+ * <p>Each job owns a monotonic event sequence ({@code seq}) plus the
+ * accumulated assistant text, so a reconnecting client can fetch
+ * {@link #state} (current text + last seq + pending frontend tools) and resume
+ * streaming from exactly where it left off — this is what lets the agent
+ * "续上" after a page refresh or dropped connection.
  */
 @Slf4j
 @Component
@@ -104,14 +110,46 @@ public class AgentJobService {
         return jobStore.load(taskId);
     }
 
-    /** Replay + live event stream for a job (durable across reconnects). */
-    public Flux<AgentEvent> streamEvents(String taskId) {
+    /**
+     * Full reconnect state: status, accumulated assistant text, last emitted
+     * seq, and the frontend tool calls currently awaiting execution.
+     */
+    public TaskState state(String taskId) {
+        TaskRun run = runs.get(taskId);
+        AgentJob job = run != null ? run.job : jobStore.load(taskId);
+        if (job == null) {
+            return null;
+        }
+
+        TaskState st = new TaskState();
+        st.taskId = job.getTaskId();
+        st.sessionId = job.getSessionId();
+        st.conversationId = job.getConversationId();
+        st.status = job.getStatus().name();
+        st.finishReason = job.getFinishReason();
+        st.errorMessage = job.getErrorMessage();
+        st.promptTokens = job.getPromptTokens();
+        st.completionTokens = job.getCompletionTokens();
+        if (run != null) {
+            // Consistent snapshot: seq and accumulated text are read under the
+            // same lock as the emit path so a reconnect never sees a torn view.
+            synchronized (run) {
+                st.assistantText = run.assistantText.toString();
+                st.lastSeq = run.seq.get();
+            }
+            synchronized (run.pendingTools) {
+                st.pendingTools = new ArrayList<>(run.pendingTools);
+            }
+        }
+        return st;
+    }
+
+    /** Replay + live event stream for a job, filtered to events with seq > afterSeq. */
+    public Flux<TaskEvent> streamEvents(String taskId, long afterSeq) {
         TaskRun run = runs.get(taskId);
         if (run != null) {
-            return run.events.asFlux();
+            return run.events.asFlux().filter(te -> te.seq > afterSeq);
         }
-        // Job already evicted from memory: emit a synthetic failure event so the
-        // client knows it can no longer be streamed.
         return Flux.error(new IllegalStateException("Job not found: " + taskId));
     }
 
@@ -119,7 +157,7 @@ public class AgentJobService {
      * Resume a paused job with frontend tool results and/or a fresh iteration
      * budget. Returns the live continuation events (NOT the replay history).
      */
-    public Flux<AgentEvent> resume(String taskId, List<ToolResult> toolResults, String action) {
+    public Flux<TaskEvent> resume(String taskId, List<ToolResult> toolResults, String action) {
         TaskRun run = runs.get(taskId);
         if (run == null) {
             run = restoreFromSnapshot(taskId);
@@ -129,6 +167,9 @@ public class AgentJobService {
         }
 
         applyResults(run.session, toolResults, action);
+        synchronized (run.pendingTools) {
+            run.pendingTools.clear();
+        }
         run.job.setStatus(AgentJobStatus.RUNNING);
         run.job.setFinishReason(null);
         jobStore.save(run.job);
@@ -163,8 +204,8 @@ public class AgentJobService {
      * Subscribe the engine (run or resume) and tee events into the durable
      * replay sink plus a live continuation sink returned to the caller.
      */
-    private Flux<AgentEvent> subscribe(Flux<AgentEvent> source, TaskRun run) {
-        Sinks.Many<AgentEvent> continuation = Sinks.many().multicast()
+    private Flux<TaskEvent> subscribe(Flux<AgentEvent> source, TaskRun run) {
+        Sinks.Many<TaskEvent> continuation = Sinks.many().multicast()
                 .onBackpressureBuffer(1024, false);
 
         Disposable sub = source
@@ -178,10 +219,37 @@ public class AgentJobService {
         return continuation.asFlux();
     }
 
-    private void onEvent(TaskRun run, Sinks.Many<AgentEvent> continuation, AgentEvent ev) {
+    private void onEvent(TaskRun run, Sinks.Many<TaskEvent> continuation, AgentEvent ev) {
         run.touch();
-        run.events.tryEmitNext(ev);
-        continuation.tryEmitNext(ev);
+        long seq;
+        synchronized (run) {
+            seq = run.seq.incrementAndGet();
+            // Accumulate the assistant's streaming text for reconnect reconstruction.
+            if (ev instanceof ThinkingEvent.ThinkDelta) {
+                ThinkingEvent.ThinkDelta delta = (ThinkingEvent.ThinkDelta) ev;
+                if (delta.getDeltaType() == ThinkingEvent.ThinkDelta.DeltaType.TEXT
+                        && delta.getContent() != null) {
+                    run.assistantText.append(delta.getContent());
+                }
+            }
+        }
+        TaskEvent te = new TaskEvent(seq, ev);
+        run.events.tryEmitNext(te);
+        continuation.tryEmitNext(te);
+
+        // Track frontend tool calls that are dispatched to the client.
+        if (ev instanceof ToolEvent.ToolDispatched) {
+            ToolEvent.ToolDispatched dispatched = (ToolEvent.ToolDispatched) ev;
+            if (dispatched.getLocation() == ToolEvent.ToolLocation.FRONTEND) {
+                PendingTool pt = new PendingTool();
+                pt.toolCallId = dispatched.getToolCallId();
+                pt.toolName = dispatched.getToolName();
+                pt.arguments = dispatched.getArguments();
+                synchronized (run.pendingTools) {
+                    run.pendingTools.add(pt);
+                }
+            }
+        }
 
         if (ev instanceof LifecycleEvent.SessionCompleted) {
             LifecycleEvent.SessionCompleted completed = (LifecycleEvent.SessionCompleted) ev;
@@ -191,6 +259,11 @@ public class AgentJobService {
             run.job.setStatus(statusFromFinishReason(finishReason));
             jobStore.save(run.job);
             profileRecorder.record(run.session, finishReason);
+            if (run.job.getStatus() == AgentJobStatus.COMPLETED) {
+                synchronized (run.pendingTools) {
+                    run.pendingTools.clear();
+                }
+            }
         } else if (ev instanceof LifecycleEvent.SessionFailed) {
             LifecycleEvent.SessionFailed failed = (LifecycleEvent.SessionFailed) ev;
             run.job.setErrorMessage(failed.getErrorMessage());
@@ -200,7 +273,7 @@ public class AgentJobService {
         }
     }
 
-    private void onError(TaskRun run, Sinks.Many<AgentEvent> continuation, Throwable err) {
+    private void onError(TaskRun run, Sinks.Many<TaskEvent> continuation, Throwable err) {
         log.error("AgentJobService: job {} failed: {}", run.job.getTaskId(), err.getMessage(), err);
         run.job.setErrorMessage(err.getMessage());
         run.job.setFinishReason("error");
@@ -210,7 +283,7 @@ public class AgentJobService {
         run.events.tryEmitComplete();
     }
 
-    private void onComplete(TaskRun run, Sinks.Many<AgentEvent> continuation) {
+    private void onComplete(TaskRun run, Sinks.Many<TaskEvent> continuation) {
         run.touch();
         run.events.tryEmitComplete();
         continuation.tryEmitComplete();
@@ -300,11 +373,47 @@ public class AgentJobService {
         public boolean success;
     }
 
+    /** A monotonic event within a task's stream (seq + the agent event). */
+    public static class TaskEvent {
+        public final long seq;
+        public final AgentEvent event;
+
+        public TaskEvent(long seq, AgentEvent event) {
+            this.seq = seq;
+            this.event = event;
+        }
+    }
+
+    /** A frontend tool call awaiting client execution. */
+    public static class PendingTool {
+        public String toolCallId;
+        public String toolName;
+        public String arguments;
+    }
+
+    /** Full reconnect state for a task. */
+    public static class TaskState {
+        public String taskId;
+        public String sessionId;
+        public String conversationId;
+        public String status;
+        public String finishReason;
+        public String errorMessage;
+        public int promptTokens;
+        public int completionTokens;
+        public String assistantText;
+        public long lastSeq;
+        public List<PendingTool> pendingTools = Collections.emptyList();
+    }
+
     private static class TaskRun {
         final AgentJob job;
         final AgentSession session;
-        final Sinks.Many<AgentEvent> events = Sinks.many().replay().limit(REPLAY_LIMIT);
+        final Sinks.Many<TaskEvent> events = Sinks.many().replay().limit(REPLAY_LIMIT);
         final AtomicReference<Disposable> subscription = new AtomicReference<>();
+        final AtomicLong seq = new AtomicLong(0);
+        final StringBuffer assistantText = new StringBuffer();
+        final List<PendingTool> pendingTools = Collections.synchronizedList(new ArrayList<>());
         final AtomicLong lastActivity = new AtomicLong(System.currentTimeMillis());
 
         TaskRun(AgentJob job, AgentSession session) {
