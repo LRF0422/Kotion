@@ -1,19 +1,19 @@
 /**
- * V2 Agent Runtime
+ * V2 Agent Runtime — async task model.
  *
- * A fundamentally different execution model from V1:
+ * The backend now exposes a long-running TASK API instead of a single
+ * request-scoped SSE stream:
  *
- * V1: Frontend drives the loop (request → response → execute tools → re-request)
- * V2: Backend drives the loop (one request → full execution stream including all iterations)
+ *   1. POST /api/v2/agent/tasks             → create + start, returns { taskId }
+ *   2. GET  /api/v2/agent/tasks/{id}/events → replay + live SSE event stream
+ *   3. POST /api/v2/agent/tasks/{id}/resume → submit frontend tool results /
+ *                                             budget "continue", returns live stream
+ *   4. POST /api/v2/agent/tasks/{id}/cancel → cancel
  *
- * The V2 runtime:
- * 1. Sends ONE POST to /api/v2/agent/chat
- * 2. Consumes the entire execution as a long-lived SSE stream
- * 3. The backend runs think→act→observe cycles internally
- * 4. Frontend only executes FRONTEND-dispatched tools (editor operations)
- * 5. After executing frontend tools, POSTs results to /resume to continue
- *
- * This yields the same HarnessEvent types so the UI layer works unchanged.
+ * The frontend only executes FRONTEND-dispatched tools (editor operations):
+ * after the engine pauses (SUSPENDED/WAITING_TOOLS), we run them locally and
+ * resume the task with their results. This yields the same HarnessEvent union
+ * so the UI layer works unchanged.
  */
 
 import type { ToolResultPayload } from '../chat-client/v2-client'
@@ -31,8 +31,10 @@ export interface V2RuntimeOptions {
 
 /** Input for {@link V2AgentRuntime.continueSession} — budget-exhaustion resume. */
 export interface ContinueSessionInput {
-    /** The suspended session to grant a fresh iteration budget to. */
-    sessionId: string
+    /** The suspended task to grant a fresh iteration budget to. */
+    taskId: string
+    /** The suspended session (informational; the task is authoritative). */
+    sessionId?: string
     /** Resolve a tool executor by name for frontend tool calls. */
     resolveTool: (name: string) => ToolDefinition | undefined
     /** Abort signal. */
@@ -42,17 +44,7 @@ export interface ContinueSessionInput {
 }
 
 /**
- * V2 Agent Runtime — server-driven execution model.
- *
- * Unlike the V1 harness which loops on the frontend side, this runtime
- * sends a single request and consumes the full execution stream. The
- * backend's AgentEngine handles all iterations internally.
- *
- * For FRONTEND tools (editor operations the backend can't execute):
- * - The engine enters SUSPENDED state and the stream pauses
- * - This runtime executes the tools locally
- * - POSTs results to /resume to continue the execution
- * - Consumes the resumed stream
+ * V2 Agent Runtime — server-driven, async task execution model.
  */
 export class V2AgentRuntime {
     private apiBase: string
@@ -62,7 +54,8 @@ export class V2AgentRuntime {
     }
 
     /**
-     * Run the V2 agent — yields HarnessEvents until execution completes.
+     * Run the V2 agent as an async task — yields HarnessEvents until the task
+     * completes (or pauses for frontend tools, which the drive loop resolves).
      */
     async *run(input: HarnessRunInput): AsyncGenerator<HarnessEvent> {
         const {
@@ -77,7 +70,6 @@ export class V2AgentRuntime {
             onToolExecution,
         } = input
 
-        // Build request body
         const body: Record<string, any> = {
             model,
             messages,
@@ -94,48 +86,61 @@ export class V2AgentRuntime {
         if (catalog.tools?.length > 0) body.tools = catalog.tools
         if (catalog.version) body.capabilitiesVersion = catalog.version
 
-        // Initial request — starts the full execution stream
-        const stream = await this.openStream(body, signal)
-        yield* this.driveLoop(stream, resolveTool, onToolExecution, sessionId, signal)
+        // 1. Create the task (returns immediately).
+        const taskId = await this.createTask(body, signal)
+
+        // 2. Stream the task's events (replay + live).
+        const stream = await this.openTaskEvents(taskId, signal)
+        yield* this.driveLoop(taskId, stream, resolveTool, onToolExecution, signal)
     }
 
     /**
-     * Continue a session suspended on budget exhaustion: the backend resets
-     * the iteration counter and resumes the same session (compacting context
-     * first if needed). Yields HarnessEvents exactly like {@link run}.
+     * Continue a task suspended on budget exhaustion: the backend resets the
+     * iteration counter and resumes the same task.
      */
     async *continueSession(input: ContinueSessionInput): AsyncGenerator<HarnessEvent> {
         const stream = await this.postResume(
-            { sessionId: input.sessionId, action: 'continue' }, input.signal)
+            { taskId: input.taskId, action: 'continue' }, input.signal)
         yield* this.driveLoop(
-            stream, input.resolveTool, input.onToolExecution, input.sessionId, input.signal)
+            input.taskId, stream, input.resolveTool, input.onToolExecution, input.signal)
+    }
+
+    /** Cancel a running/paused task. */
+    async cancelTask(taskId: string, signal?: AbortSignal): Promise<void> {
+        const response = await authorizedFetch(`${this.apiBase}/tasks/${taskId}/cancel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+            signal,
+        })
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unknown error')
+            throw new Error(`V2 cancel error (${response.status}): ${errorText}`)
+        }
     }
 
     /**
-     * Drive a stream to completion: consume SSE events, execute any frontend
+     * Drive a task to completion: consume SSE events, execute any frontend
      * tools dispatched by the backend, resume with their results, repeat.
      */
     private async *driveLoop(
+        taskId: string,
         initialStream: Response,
         resolveTool: (name: string) => ToolDefinition | undefined,
         onToolExecution: OnToolExecution | undefined,
-        sessionId: string | undefined,
         signal?: AbortSignal,
     ): AsyncGenerator<HarnessEvent> {
-        let currentSessionId = sessionId
         let stream = initialStream
 
         while (true) {
             const result = yield* this.consumeStream(
-                stream, resolveTool, onToolExecution, currentSessionId, signal
+                stream, resolveTool, onToolExecution, signal
             )
 
-            // If the stream ended normally (no pending frontend tools), we're done
             if (!result.hasPendingFrontendTools) {
                 return
             }
 
-            // Execute frontend tools locally
             const toolResults: ToolResultPayload[] = []
             for (const pendingTool of result.pendingFrontendTools) {
                 const toolName = pendingTool.name
@@ -170,7 +175,6 @@ export class V2AgentRuntime {
                         }
                     }
                 } else {
-                    // Tool not available on frontend
                     const reason = `Tool "${toolName}" not available on frontend`
                     onToolExecution?.({ toolName, args, status: 'start', timestamp: startTime })
                     onToolExecution?.({ toolName, args, status: 'error', error: reason, timestamp: startTime, duration: 0 })
@@ -193,10 +197,7 @@ export class V2AgentRuntime {
                 })
             }
 
-            // Resume the session with tool results
-            currentSessionId = result.sessionId || currentSessionId
-            stream = await this.postResume(
-                { sessionId: currentSessionId!, toolResults }, signal)
+            stream = await this.postResume({ taskId, toolResults }, signal)
         }
     }
 
@@ -208,17 +209,16 @@ export class V2AgentRuntime {
         response: Response,
         resolveTool: (name: string) => ToolDefinition | undefined,
         onToolExecution: OnToolExecution | undefined,
-        sessionId: string | undefined,
         signal?: AbortSignal,
     ): AsyncGenerator<HarnessEvent, StreamResult> {
         if (!response.body) {
             yield { type: 'error', error: 'Response body is null' }
-            return { hasPendingFrontendTools: false, pendingFrontendTools: [], sessionId }
+            return { hasPendingFrontendTools: false, pendingFrontendTools: [] }
         }
 
         const pendingFrontendTools: PendingFrontendTool[] = []
-        let currentSessionId = sessionId
-        let suspended = false
+        let currentTaskId: string | undefined
+        let currentSessionId: string | undefined
 
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
@@ -230,7 +230,7 @@ export class V2AgentRuntime {
             while (true) {
                 if (signal?.aborted) {
                     reader.cancel()
-                    return { hasPendingFrontendTools: false, pendingFrontendTools: [], sessionId: currentSessionId }
+                    return { hasPendingFrontendTools: false, pendingFrontendTools: [] }
                 }
 
                 const { done, value } = await reader.read()
@@ -242,14 +242,12 @@ export class V2AgentRuntime {
 
                 for (const line of lines) {
                     if (line === '' || line === '\r') {
-                        // Event boundary
                         if (currentData) {
                             const events = this.processV2Event(
-                                currentEvent, currentData,
-                                pendingFrontendTools, currentSessionId
-                            )
+                                currentEvent, currentData, pendingFrontendTools)
                             for (const ev of events) {
                                 if (ev.type === 'session') {
+                                    currentTaskId = ev.taskId || currentTaskId
                                     currentSessionId = ev.sessionId || currentSessionId
                                 }
                                 yield ev
@@ -265,7 +263,6 @@ export class V2AgentRuntime {
                     } else if (line.startsWith('data:')) {
                         const data = line.slice(5).trim()
                         if (data === '[DONE]') {
-                            // Stream terminated
                             break
                         }
                         currentData += data
@@ -273,13 +270,13 @@ export class V2AgentRuntime {
                 }
             }
 
-            // Process remaining buffer
             if (currentData) {
-                const events = this.processV2Event(
-                    currentEvent, currentData,
-                    pendingFrontendTools, currentSessionId
-                )
+                const events = this.processV2Event(currentEvent, currentData, pendingFrontendTools)
                 for (const ev of events) {
+                    if (ev.type === 'session') {
+                        currentTaskId = ev.taskId || currentTaskId
+                        currentSessionId = ev.sessionId || currentSessionId
+                    }
                     yield ev
                 }
             }
@@ -290,6 +287,7 @@ export class V2AgentRuntime {
         return {
             hasPendingFrontendTools: pendingFrontendTools.length > 0,
             pendingFrontendTools,
+            taskId: currentTaskId,
             sessionId: currentSessionId,
         }
     }
@@ -301,7 +299,6 @@ export class V2AgentRuntime {
         eventName: string,
         dataStr: string,
         pendingFrontendTools: PendingFrontendTool[],
-        sessionId: string | undefined,
     ): HarnessEvent[] {
         let data: any
         try {
@@ -314,6 +311,7 @@ export class V2AgentRuntime {
             case 'session.created':
                 return [{
                     type: 'session',
+                    taskId: data.taskId,
                     sessionId: data.sessionId,
                     conversationId: data.conversationId,
                 }]
@@ -335,12 +333,10 @@ export class V2AgentRuntime {
                 return [{ type: 'text-delta', content: data.content || '' }]
 
             case 'think.end':
-                // Internal; no UI event needed
                 return []
 
             case 'tool.dispatched':
                 if (data.location === 'FRONTEND') {
-                    // Collect for local execution after stream ends (SUSPENDED)
                     pendingFrontendTools.push({
                         id: data.toolCallId,
                         name: data.toolName,
@@ -357,7 +353,6 @@ export class V2AgentRuntime {
                         }],
                     }]
                 }
-                // Backend tool — informational
                 return [{
                     type: 'annotation',
                     annotations: [{
@@ -368,41 +363,26 @@ export class V2AgentRuntime {
                 }]
 
             case 'tool.completed':
-                return [{
-                    type: 'annotation',
-                    annotations: [{
-                        type: 'agent_status',
-                        phase: 'thinking',
-                    }],
-                }]
-
             case 'tool.failed':
                 return [{
                     type: 'annotation',
-                    annotations: [{
-                        type: 'agent_status',
-                        phase: 'thinking',
-                    }],
+                    annotations: [{ type: 'agent_status', phase: 'thinking' }],
                 }]
 
             case 'session.completed': {
                 const finishReason: string = data.finishReason || 'stop'
                 if (finishReason.startsWith('suspended')) {
-                    // Frontend tool dispatch — the drive loop resumes
-                    // automatically, so no terminal event is surfaced.
                     if (pendingFrontendTools.length > 0) {
                         return []
                     }
-                    // Budget exhaustion (iteration_budget_exhausted) or other
-                    // suspension without pending tools: surface it so the UI
-                    // can offer a "continue" action for this session.
                     return [
                         {
                             type: 'annotation',
                             annotations: [{
                                 type: 'agent_suspended',
                                 reason: finishReason,
-                                sessionId,
+                                sessionId: data.sessionId,
+                                taskId: data.taskId,
                             }],
                         },
                         {
@@ -437,7 +417,7 @@ export class V2AgentRuntime {
                     annotations: [{
                         type: 'subagent_spawned',
                         agentId: data.agentId || data.taskId,
-                        parentAgentId: data.parentAgentId || sessionId,
+                        parentAgentId: data.parentAgentId || data.sessionId,
                         depth: data.depth ?? 1,
                         agentName: data.agentName,
                         task: data.taskDescription,
@@ -451,7 +431,7 @@ export class V2AgentRuntime {
                     annotations: [{
                         type: 'subagent_status',
                         agentId: data.agentId || data.taskId,
-                        parentAgentId: data.parentAgentId || sessionId,
+                        parentAgentId: data.parentAgentId || data.sessionId,
                         depth: data.depth ?? 1,
                         status: 'running',
                         detail: data.status || `iteration ${data.iteration}`,
@@ -464,7 +444,7 @@ export class V2AgentRuntime {
                     annotations: [{
                         type: 'subagent_finish',
                         agentId: data.agentId || data.taskId,
-                        parentAgentId: data.parentAgentId || sessionId,
+                        parentAgentId: data.parentAgentId || data.sessionId,
                         depth: data.depth ?? 1,
                         status: data.success ? 'completed' : 'error',
                         finishReason: data.success ? 'stop' : 'error',
@@ -472,7 +452,6 @@ export class V2AgentRuntime {
                 }]
 
             case 'state.transition':
-                // Internal engine state — not surfaced
                 return []
 
             default:
@@ -480,41 +459,55 @@ export class V2AgentRuntime {
         }
     }
 
-    /**
-     * Open the initial SSE stream.
-     */
-    private async openStream(body: Record<string, any>, signal?: AbortSignal): Promise<Response> {
-        const response = await authorizedFetch(`${this.apiBase}/chat`, {
+    /** POST /tasks → { taskId }. */
+    private async createTask(body: Record<string, any>, signal?: AbortSignal): Promise<string> {
+        const response = await authorizedFetch(`${this.apiBase}/tasks`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
             signal,
         })
 
         if (!response.ok) {
             const errorText = await response.text().catch(() => 'Unknown error')
-            throw new Error(`V2 Agent API error (${response.status}): ${errorText}`)
+            throw new Error(`V2 task creation error (${response.status}): ${errorText}`)
         }
 
+        const json = await response.json().catch(() => ({} as any))
+        const taskId = json?.data?.taskId as string | undefined
+        if (!taskId) {
+            throw new Error('V2 task creation returned no taskId')
+        }
+        return taskId
+    }
+
+    /** GET /tasks/{id}/events → SSE stream (replay + live). */
+    private async openTaskEvents(taskId: string, signal?: AbortSignal): Promise<Response> {
+        const response = await authorizedFetch(`${this.apiBase}/tasks/${taskId}/events`, {
+            method: 'GET',
+            headers: {},
+            signal,
+        })
+
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unknown error')
+            throw new Error(`V2 task events error (${response.status}): ${errorText}`)
+        }
         return response
     }
 
-    /**
-     * POST to /chat/resume — either frontend tool results or a budget
-     * "continue" action. Returns a new SSE stream for the continued execution.
-     */
+    /** POST /tasks/{id}/resume → SSE continuation stream. */
     private async postResume(
-        body: { sessionId: string; toolResults?: ToolResultPayload[]; action?: string },
+        body: { taskId: string; toolResults?: ToolResultPayload[]; action?: string },
         signal?: AbortSignal
     ): Promise<Response> {
-        const response = await authorizedFetch(`${this.apiBase}/chat/resume`, {
+        const response = await authorizedFetch(`${this.apiBase}/tasks/${body.taskId}/resume`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(body),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                toolResults: body.toolResults,
+                action: body.action,
+            }),
             signal,
         })
 
@@ -522,7 +515,6 @@ export class V2AgentRuntime {
             const errorText = await response.text().catch(() => 'Unknown error')
             throw new Error(`V2 resume error (${response.status}): ${errorText}`)
         }
-
         return response
     }
 }
@@ -538,5 +530,6 @@ interface PendingFrontendTool {
 interface StreamResult {
     hasPendingFrontendTools: boolean
     pendingFrontendTools: PendingFrontendTool[]
-    sessionId: string | undefined
+    taskId?: string
+    sessionId?: string
 }

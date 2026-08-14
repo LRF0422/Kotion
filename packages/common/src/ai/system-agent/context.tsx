@@ -207,6 +207,8 @@ export interface SystemAgentState {
     annotations: any[]
     /** Current session ID */
     sessionId: string | null
+    /** Current async task ID (backend job handle). */
+    taskId: string | null
     /** Sub-agent tree, keyed by agentId (P6). Built from subagent_* annotations. */
     subAgents: Record<string, SubAgentNode>
     /**
@@ -299,6 +301,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         activeSkills: [],
         annotations: [],
         sessionId: null,
+        taskId: null,
         subAgents: {},
         pendingPlan: null
     })
@@ -306,6 +309,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
     // Use ref for activeSkills to avoid stale closure in stream callback
     const activeSkillsRef = useRef<Set<string>>(new Set())
     const sessionIdRef = useRef<string | null>(null)
+    const taskIdRef = useRef<string | null>(null)
     // Mirror of state.pendingPlan for stable access inside callbacks (P7).
     const pendingPlanRef = useRef<{ plan: PlanArtifact; planId?: string } | null>(null)
 
@@ -382,15 +386,19 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             activeSkills: Array.from(activeSkillsRef.current),
             annotations: [],
             sessionId: options?.sessionId || sessionIdRef.current,
+            taskId: taskIdRef.current,
             subAgents: {},
             pendingPlan: null
         })
 
         const handleAnnotation = (annotations: any[]) => {
-            // Extract session ID from annotations (first SSE event)
+            // Extract session/task ID from annotations (first SSE event)
             for (const ann of annotations) {
                 if (ann && typeof ann === 'object' && 'sessionId' in ann && typeof ann.sessionId === 'string') {
                     sessionIdRef.current = ann.sessionId
+                }
+                if (ann && typeof ann === 'object' && 'taskId' in ann && typeof ann.taskId === 'string') {
+                    taskIdRef.current = ann.taskId
                 }
             }
 
@@ -451,6 +459,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
                     case 'session':
                         handleAnnotation([{
                             type: 'session-info',
+                            taskId: ev.taskId,
                             sessionId: ev.sessionId,
                             conversationId: ev.conversationId,
                         }])

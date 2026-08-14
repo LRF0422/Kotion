@@ -1,6 +1,7 @@
 package com.knowledge.agent.v2.session;
 
 import com.knowledge.agent.api.dto.ChatTool;
+import com.knowledge.agent.api.dto.SkillPayload;
 import com.knowledge.agent.v2.engine.AgentState;
 
 import java.util.Collections;
@@ -51,6 +52,13 @@ public class AgentSession {
     /** Frontend tools sent from the client (OpenAI-compatible definitions). */
     private final List<ChatTool> frontendTools;
 
+    /**
+     * Full frontend skill catalog for this session (kept for backend-side
+     * progressive discovery / {@code search_skills} and checkpointed with the
+     * snapshot).
+     */
+    private final List<SkillPayload> skills;
+
     // ---- Mutable execution state ----
     private final ExecutionState execution;
 
@@ -76,6 +84,9 @@ public class AgentSession {
                 : Collections.emptySet();
         this.frontendTools = builder.frontendTools != null
                 ? Collections.unmodifiableList(builder.frontendTools)
+                : Collections.emptyList();
+        this.skills = builder.skills != null
+                ? Collections.unmodifiableList(builder.skills)
                 : Collections.emptyList();
         this.execution = builder.execution != null ? builder.execution : new ExecutionState();
         this.metadata = new java.util.concurrent.ConcurrentHashMap<>();
@@ -126,6 +137,10 @@ public class AgentSession {
         return frontendTools;
     }
 
+    public List<SkillPayload> getSkills() {
+        return skills;
+    }
+
     public ExecutionState getExecution() {
         return execution;
     }
@@ -165,6 +180,7 @@ public class AgentSession {
         private String systemPrompt;
         private Set<String> toolIds;
         private List<ChatTool> frontendTools;
+        private List<SkillPayload> skills;
         private ExecutionState execution;
         private Map<String, Object> metadata;
 
@@ -215,6 +231,11 @@ public class AgentSession {
 
         public Builder frontendTools(List<ChatTool> frontendTools) {
             this.frontendTools = frontendTools;
+            return this;
+        }
+
+        public Builder skills(List<SkillPayload> skills) {
+            this.skills = skills;
             return this;
         }
 

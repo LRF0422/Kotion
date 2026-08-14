@@ -408,6 +408,7 @@ export const ExpandableChatDemo: React.FC<{
     const [annotations, setAnnotations] = useState<AnnotationData[]>([])
     // Session suspended on budget exhaustion — offer a "continue" action.
     const [suspendedSessionId, setSuspendedSessionId] = useState<string | null>(null)
+    const [suspendedTaskId, setSuspendedTaskId] = useState<string | null>(null)
     const subAgents = useMemo(
         () => applySubAgentAnnotations({}, annotations as any[]),
         [annotations],
@@ -459,6 +460,7 @@ export const ExpandableChatDemo: React.FC<{
         setAnnotations([])
         setError(null)
         setSuspendedSessionId(null)
+        setSuspendedTaskId(null)
         buffer.reset()
         reasoningRef.current = ''
         setStreamingReasoning('')
@@ -473,6 +475,7 @@ export const ExpandableChatDemo: React.FC<{
         for (const a of newAnnotations as any[]) {
             if (a?.type === 'agent_suspended' && a.sessionId) {
                 setSuspendedSessionId(String(a.sessionId))
+                if (a.taskId) setSuspendedTaskId(String(a.taskId))
             }
         }
     }, [parseAnnotations])
@@ -579,6 +582,7 @@ export const ExpandableChatDemo: React.FC<{
         setStreamingReasoning('')
         setAnnotations([])
         setSuspendedSessionId(null)
+        setSuspendedTaskId(null)
 
         const currentMessages = [...messages, userMessage]
         const historyMessages = getHistoryForAI(currentMessages)
@@ -607,9 +611,11 @@ export const ExpandableChatDemo: React.FC<{
 
     // ─── Continue a budget-suspended session ────────────────────
     const handleContinueTask = useCallback(async () => {
+        const taskId = suspendedTaskId
         const sessionId = suspendedSessionId
-        if (!sessionId || isLoading) return
+        if (!taskId || isLoading) return
         setSuspendedSessionId(null)
+        setSuspendedTaskId(null)
         stepsRef.current = []
         setCurrentSteps([])
         buffer.reset()
@@ -617,12 +623,13 @@ export const ExpandableChatDemo: React.FC<{
         setStreamingReasoning('')
 
         await consumeRound(() => continueStream({
-            sessionId,
+            taskId,
+            sessionId: sessionId ?? undefined,
             onAnnotation: handleStreamAnnotation,
             onReasoning: handleStreamReasoning,
         }))
     }, [
-        suspendedSessionId, isLoading, buffer, consumeRound, continueStream,
+        suspendedTaskId, suspendedSessionId, isLoading, buffer, consumeRound, continueStream,
         handleStreamAnnotation, handleStreamReasoning,
     ])
 

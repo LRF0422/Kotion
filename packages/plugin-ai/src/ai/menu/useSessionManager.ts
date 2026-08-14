@@ -4,6 +4,7 @@ import type { SessionInfo, AnnotationData } from './chat-types'
 const SESSION_STORAGE_KEY = 'agent-session-id'
 const SESSION_TIMESTAMP_KEY = 'agent-session-timestamp'
 const CONVERSATION_STORAGE_KEY = 'agent-conversation-id'
+const TASK_STORAGE_KEY = 'agent-task-id'
 const SESSION_TTL_MS = 30 * 60 * 1000 // 30 minutes
 
 /**
@@ -17,8 +18,11 @@ export function useSessionManager() {
     const [conversationId, setConversationId] = useState<string | null>(() => {
         return localStorage.getItem(CONVERSATION_STORAGE_KEY)
     })
+    const [taskId, setTaskId] = useState<string | null>(() => {
+        return localStorage.getItem(TASK_STORAGE_KEY)
+    })
 
-    const saveSession = useCallback((sid: string, cid?: string) => {
+    const saveSession = useCallback((sid: string, cid?: string, tid?: string) => {
         localStorage.setItem(SESSION_STORAGE_KEY, sid)
         localStorage.setItem(SESSION_TIMESTAMP_KEY, Date.now().toString())
         setSessionId(sid)
@@ -26,14 +30,20 @@ export function useSessionManager() {
             localStorage.setItem(CONVERSATION_STORAGE_KEY, cid)
             setConversationId(cid)
         }
+        if (tid) {
+            localStorage.setItem(TASK_STORAGE_KEY, tid)
+            setTaskId(tid)
+        }
     }, [])
 
     const clearSession = useCallback(() => {
         localStorage.removeItem(SESSION_STORAGE_KEY)
         localStorage.removeItem(SESSION_TIMESTAMP_KEY)
         localStorage.removeItem(CONVERSATION_STORAGE_KEY)
+        localStorage.removeItem(TASK_STORAGE_KEY)
         setSessionId(null)
         setConversationId(null)
+        setTaskId(null)
     }, [])
 
     /**
@@ -48,12 +58,12 @@ export function useSessionManager() {
         for (const ann of annotations) {
             // Handle new chat-client SessionInfoEvent format
             if ('type' in ann && (ann as any).type === 'session-info' && typeof (ann as any).sessionId === 'string') {
-                saveSession((ann as any).sessionId, (ann as any).conversationId)
+                saveSession((ann as any).sessionId, (ann as any).conversationId, (ann as any).taskId)
                 break
             }
             // Handle original SSE annotation format (sessionId in annotations array)
             if ('sessionId' in ann && typeof ann.sessionId === 'string') {
-                saveSession(ann.sessionId, (ann as SessionInfo).conversationId)
+                saveSession(ann.sessionId, (ann as SessionInfo).conversationId, (ann as any).taskId)
                 break
             }
         }
@@ -62,6 +72,7 @@ export function useSessionManager() {
     return {
         sessionId,
         conversationId,
+        taskId,
         saveSession,
         clearSession,
         parseAnnotations,

@@ -2,6 +2,7 @@ package com.knowledge.agent.v2.state;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.api.dto.ChatTool;
+import com.knowledge.agent.api.dto.SkillPayload;
 import com.knowledge.agent.store.AgentStateSnapshot;
 import com.knowledge.agent.v2.session.AgentIdentity;
 import com.knowledge.agent.v2.session.AgentMode;
@@ -59,6 +60,7 @@ public class SessionSnapshotCodec {
         payload.systemPrompt = session.getSystemPrompt();
         payload.toolIds = new HashSet<>(session.getToolIds());
         payload.frontendTools = session.getFrontendTools();
+        payload.skills = session.getSkills();
         payload.metadata = new LinkedHashMap<>(session.getMetadata());
 
         AgentIdentity identity = session.getIdentity();
@@ -153,6 +155,7 @@ public class SessionSnapshotCodec {
                 .systemPrompt(payload.systemPrompt)
                 .toolIds(payload.toolIds)
                 .frontendTools(payload.frontendTools)
+                .skills(payload.skills)
                 .metadata(payload.metadata)
                 .execution(execution)
                 .build();
@@ -171,6 +174,7 @@ public class SessionSnapshotCodec {
         public String systemPrompt;
         public Set<String> toolIds;
         public List<ChatTool> frontendTools;
+        public List<SkillPayload> skills;
         public Map<String, Object> metadata;
         public IdentityPayload identity;
         public int iteration;

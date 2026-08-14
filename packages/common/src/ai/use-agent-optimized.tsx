@@ -170,6 +170,7 @@ export const useEditorAgentOptimized = (
                     case 'session':
                         callbacks.onAnnotation?.([{
                             type: 'session-info',
+                            taskId: ev.taskId,
                             sessionId: ev.sessionId,
                             conversationId: ev.conversationId,
                         }])
@@ -295,7 +296,8 @@ export const useEditorAgentOptimized = (
     // Continue a session suspended on budget exhaustion: the backend grants a
     // fresh iteration budget and resumes the same session.
     const continueStream = useCallback(async (options: {
-        sessionId: string
+        taskId: string
+        sessionId?: string
         onAnnotation?: (annotations: any[]) => void
         onReasoning?: (content: string) => void
     }) => {
@@ -307,6 +309,7 @@ export const useEditorAgentOptimized = (
         isStreamingRef.current = true
         try {
             const events = harnessRef.current.continueSession({
+                taskId: options.taskId,
                 sessionId: options.sessionId,
                 resolveTool,
                 signal: abortControllerRef.current.signal,

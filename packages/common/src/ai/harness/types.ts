@@ -31,7 +31,7 @@ export type HarnessEvent =
         durationMs: number
     }
     | { type: 'annotation'; annotations: any[] }
-    | { type: 'session'; sessionId?: string; conversationId?: string }
+    | { type: 'session'; taskId?: string; sessionId?: string; conversationId?: string }
     | {
         type: 'finish'
         finishReason?: string
