@@ -517,15 +517,19 @@ export const resources = {
                 "tracker": {
                     "title": "跟踪中",
                     "count": "{{count}} 项变动",
-                    "acceptAll": "全部保留",
-                    "restoreAll": "全部恢复",
+                    "acceptAll": "全部接受",
+                    "rejectAll": "全部拒绝",
                     "stop": "停止跟踪（保留现有内容）",
                     "empty": "暂无变动，文档与基线一致",
                     "actionInsert": "新增",
                     "actionUpdate": "修改",
                     "actionDelete": "删除",
-                    "acceptOne": "保留此变动",
-                    "restoreOne": "恢复此块"
+                    "actionAttrs": "属性",
+                    "actionMove": "移动",
+                    "acceptOne": "接受",
+                    "rejectOne": "拒绝",
+                    "acceptOneHint": "接受此变动（Enter）",
+                    "rejectOneHint": "拒绝此变动（Backspace）"
                 },
                 "meta": {
                     "created": "创建于",
@@ -1320,15 +1324,19 @@ export const resources = {
                     "title": "Tracking",
                     "count_one": "{{count}} change",
                     "count_other": "{{count}} changes",
-                    "acceptAll": "Keep all",
-                    "restoreAll": "Restore all",
+                    "acceptAll": "Accept all",
+                    "rejectAll": "Reject all",
                     "stop": "Stop tracking (keep current content)",
                     "empty": "No changes — document matches the baseline",
                     "actionInsert": "Added",
                     "actionUpdate": "Modified",
                     "actionDelete": "Deleted",
-                    "acceptOne": "Keep this change",
-                    "restoreOne": "Restore this block"
+                    "actionAttrs": "Attributes",
+                    "actionMove": "Moved",
+                    "acceptOne": "Accept",
+                    "rejectOne": "Reject",
+                    "acceptOneHint": "Accept this change (Enter)",
+                    "rejectOneHint": "Reject this change (Backspace)"
                 },
                 "meta": {
                     "created": "Created",

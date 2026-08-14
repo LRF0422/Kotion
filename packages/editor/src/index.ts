@@ -33,12 +33,14 @@ export {
 } from "./extensions"
 export {
     ChangeTracker,
-    changeTrackerPluginKey
+    changeTrackerPluginKey,
+    SuggestionMark
 } from "./extensions"
 export type {
     ChangeTrackerStorage,
-    EditorOpBlockChange,
-    OperationRollbackResult
+    TrackedSuggestion,
+    SuggestionType,
+    TrackerSelection
 } from "./extensions"
 export type {
     ColumnPreset,

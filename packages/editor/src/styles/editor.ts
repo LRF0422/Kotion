@@ -69,50 +69,22 @@ export const StyledEditor = styled.div.attrs({
     box-shadow: 0 0 0 1px #2383E2;
   }
 
-  /* Change tracker: pending block changes awaiting merge. A left stripe via
-     inset box-shadow (no border shift) plus a faint background tint. */
-  .kn-tracked-insert {
-    background-color: rgba(34, 197, 94, 0.07);
-    box-shadow: inset 2px 0 0 0 rgba(34, 197, 94, 0.55);
-    border-radius: 3px;
-  }
-
-  .kn-tracked-update {
-    background-color: rgba(245, 158, 11, 0.07);
-    box-shadow: inset 2px 0 0 0 rgba(245, 158, 11, 0.55);
-    border-radius: 3px;
-  }
-
-  /* Span-level tracked changes (textblock-internal diff). Inserted text is
-     tinted; deleted text stays in place, struck through; both are clickable
-     for the accept/reject popup. */
-  .kn-tracked-ins {
-    background-color: rgba(244, 63, 94, 0.22);
+  /* Change tracker: tracked suggestions (Google Docs style). Insertions are
+     tinted green; deletions stay in place struck through in red. Both are
+     clickable for the accept/reject popup. */
+  .kn-suggestion-insert {
+    background-color: rgba(34, 197, 94, 0.18);
     border-radius: 2px;
     cursor: pointer;
   }
 
-  .kn-tracked-del {
+  .kn-suggestion-delete {
     background-color: rgba(244, 63, 94, 0.14);
     text-decoration: line-through;
     text-decoration-color: rgba(244, 63, 94, 0.7);
-    opacity: 0.65;
     border-radius: 2px;
     cursor: pointer;
     user-select: none;
-  }
-
-  /* Ghost block for a deleted top-level block. */
-  .kn-tracked-del-block {
-    background-color: rgba(244, 63, 94, 0.08);
-    text-decoration: line-through;
-    text-decoration-color: rgba(244, 63, 94, 0.6);
-    opacity: 0.55;
-    border-radius: 3px;
-    padding: 0 2px;
-    cursor: pointer;
-    user-select: none;
-    pointer-events: auto;
   }
 
   iframe {
