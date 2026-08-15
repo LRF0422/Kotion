@@ -24,9 +24,24 @@ public class RemoteToolInvoker {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
+    /** Per-call connect/read timeouts (ms) — a hung remote service must never
+     *  stall the parent agent turn beyond its tool timeout. */
+    private static final int CONNECT_TIMEOUT_MS = 5_000;
+    private static final int READ_TIMEOUT_MS = 30_000;
+
     public RemoteToolInvoker(RestTemplate restTemplate, ObjectMapper objectMapper) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
+        // Apply timeouts to the shared template's request factory. The
+        // factory only exposes setters, so defaults are applied only when the
+        // request factory is the plain JDK one (bean-level custom factories
+        // are left untouched).
+        if (restTemplate.getRequestFactory() instanceof org.springframework.http.client.SimpleClientHttpRequestFactory) {
+            org.springframework.http.client.SimpleClientHttpRequestFactory factory =
+                    (org.springframework.http.client.SimpleClientHttpRequestFactory) restTemplate.getRequestFactory();
+            factory.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            factory.setReadTimeout(READ_TIMEOUT_MS);
+        }
     }
 
     /**
@@ -91,8 +106,11 @@ public class RemoteToolInvoker {
             }
             return ToolResult.error("Empty response from remote service");
         } catch (Exception e) {
+            // Full exception goes to the log only — raw provider errors must
+            // never leak into the LLM context (they may contain host names,
+            // stack traces or internal configuration).
             log.error("Remote tool invocation failed for {}/{}::{}: {}", serviceId, skillId, toolName, e.getMessage());
-            return ToolResult.error("Remote invocation failed: " + e.getMessage());
+            return ToolResult.error("远程服务调用失败（" + serviceId + "）");
         }
     }
 }

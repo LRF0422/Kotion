@@ -42,6 +42,8 @@ class AgentJobServiceResumeGuardTest {
     @BeforeEach
     void setUp() {
         engine = mock(AgentEngine.class);
+        com.knowledge.agent.v2.eventbus.AgentEventBus eventBus =
+                mock(com.knowledge.agent.v2.eventbus.AgentEventBus.class);
         AgentSessionFactory sessionFactory = mock(AgentSessionFactory.class);
         AgentJobStore jobStore = mock(AgentJobStore.class);
         AgentTaskEventStore eventStore = mock(AgentTaskEventStore.class);
@@ -52,7 +54,7 @@ class AgentJobServiceResumeGuardTest {
         ObjectProvider<AgentStateStore> stateStoreProvider = mock(ObjectProvider.class);
         ObjectMapper objectMapper = new ObjectMapper();
 
-        service = new AgentJobService(engine, sessionFactory, jobStore, eventStore,
+        service = new AgentJobService(engine, eventBus, sessionFactory, jobStore, eventStore,
                 properties, profileRecorder, metrics, snapshotCodec, stateStoreProvider, objectMapper);
 
         AgentSession session = AgentSession.builder()

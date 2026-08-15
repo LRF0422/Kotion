@@ -58,7 +58,11 @@ make clean
   - `knowledge-message`: Messaging
   - `knowledge-log`: Logging
 - **knowledge-service-api**: API definitions (interfaces, DTOs, enums)
-  - `knowledge-agent-api`: AI Agent API (ModelProvider, ChatClientFactory, annotations)
+  - `knowledge-agent-api`: AI Agent API (DTOs, annotations, Feign client).
+    > The V2 engine lives in `knowledge-agent-skills` (`com.knowledge.agent.v2`):
+    > reactive state machine (INIT→THINK→ACT→OBSERVE) + durable task model
+    > (`POST /api/v2/agent/tasks`, event-sourced replay/resume). The legacy
+    > `ModelProvider`/`DeepSeekProvider` classes were removed as dead code.
 - **knowledge-tool**: Core frameworks and utilities
   - `knowledge-core-agent`: Agent core framework
   - `knowledge-core-boot`: Spring Boot extensions
@@ -72,10 +76,10 @@ make clean
 ### Key Patterns
 
 - **Annotation-driven Skills**: Use `@Skill`, `@Tool`, `@SkillMethod` annotations in `knowledge-agent-api`
-- **ModelProvider Abstraction**: `ModelProvider` interface in `knowledge-agent-api` for LLM provider integration
-- **SkillExecutor Interface**: Runtime interface for executing skills (renamed from `Skill` to avoid confusion)
-- **AgentTeams**: Support for multi-agent orchestration with roles (SPECIALIST, COORDINATOR, RESEARCHER, ANALYZER, REPORTER)
-- **Session Persistence**: Agent message and tool call storage via `AgentMessageEntity`, `AgentToolCallEntity`
+- **LLM Abstraction**: `LlmClient`/`LlmClientFactory` (OpenAI-compatible providers) + `LlmAdapter`/`ResilientLlmAdapter` (v2 engine); the legacy `ModelProvider`/`DeepSeekProvider` classes were removed as dead code
+- **Multi-agent**: `delegate_task` tool spawns isolated child sessions through the same V2 engine (spawned/output/reasoning/progress/completed events stream to the parent); the old DAG `OrchestratorV2` was removed as dead code
+- **Plan Mode**: `AgentMode.PLAN` gates the tool catalog to read-only tools (hard gate in `ActHandler`), `present_plan` is intercepted into `plan.proposed` + `suspended:plan_approval`, and `POST /tasks/{id}/resume` carries the decision
+- **Session Persistence**: event-sourced task log (Redis ZSET + `agent_task_event` mirror) + JDBC session snapshots (`SessionSnapshotCodec`), not the legacy `AgentMessageEntity`/`AgentToolCallEntity`
 
 ### Technology Stack
 

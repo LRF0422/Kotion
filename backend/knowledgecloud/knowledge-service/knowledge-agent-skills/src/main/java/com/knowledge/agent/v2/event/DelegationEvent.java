@@ -85,6 +85,51 @@ public abstract class DelegationEvent extends AgentEvent {
     }
 
     /**
+     * Emitted for each streamed text delta of a sub-agent, so the frontend
+     * can render live per-node output instead of waiting for completion.
+     */
+    public static class SubAgentOutput extends DelegationEvent {
+        private final String content;
+
+        public SubAgentOutput(String sessionId, String agentId, String parentAgentId,
+                              int depth, String content) {
+            super(sessionId, agentId, parentAgentId, depth);
+            this.content = content;
+        }
+
+        @Override
+        public String type() {
+            return "agent.output";
+        }
+
+        public String getContent() {
+            return content;
+        }
+    }
+
+    /**
+     * Emitted for each streamed reasoning delta of a sub-agent.
+     */
+    public static class SubAgentReasoning extends DelegationEvent {
+        private final String content;
+
+        public SubAgentReasoning(String sessionId, String agentId, String parentAgentId,
+                                 int depth, String content) {
+            super(sessionId, agentId, parentAgentId, depth);
+            this.content = content;
+        }
+
+        @Override
+        public String type() {
+            return "agent.reasoning";
+        }
+
+        public String getContent() {
+            return content;
+        }
+    }
+
+    /**
      * Emitted when a sub-agent completes its task.
      */
     public static class SubAgentCompleted extends DelegationEvent {

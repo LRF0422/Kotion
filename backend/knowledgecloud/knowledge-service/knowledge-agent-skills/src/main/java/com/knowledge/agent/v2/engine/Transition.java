@@ -59,14 +59,6 @@ public class Transition extends AgentEvent {
         return new Transition(sessionId, AgentState.OBSERVE, "tools_executed");
     }
 
-    public static Transition toDelegate(String sessionId) {
-        return new Transition(sessionId, AgentState.DELEGATE, "multi_agent_required");
-    }
-
-    public static Transition toSynthesize(String sessionId) {
-        return new Transition(sessionId, AgentState.SYNTHESIZE, "agents_completed");
-    }
-
     public static Transition toDone(String sessionId, String reason) {
         return new Transition(sessionId, AgentState.DONE, reason);
     }

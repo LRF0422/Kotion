@@ -35,6 +35,24 @@ export class AgentHarnessImpl implements AgentHarness {
     }
 
     /**
+     * Respond to a proposed plan (plan-approval gate): approved resumes the
+     * task in EXECUTE mode with the plan injected; rejected stays in PLAN and
+     * returns the feedback for re-planning.
+     */
+    async *resolvePlan(input: {
+        taskId: string
+        planId: string
+        decision: 'approved' | 'rejected'
+        planJson?: string
+        feedback?: string
+        resolveTool: (name: string) => import('../types').ToolDefinition | undefined
+        signal: AbortSignal
+        onToolExecution?: import('../types').OnToolExecution
+    }): AsyncGenerator<HarnessEvent> {
+        yield* this.v2Runtime.resolvePlan(input)
+    }
+
+    /**
      * Re-attach to an in-flight task after a refresh/dropped connection.
      * Reconstructs the in-progress text and continues from the task checkpoint.
      */

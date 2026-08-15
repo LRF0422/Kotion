@@ -14,7 +14,7 @@ import { resolveInputSchema } from '../utils/tool-wrapper'
 
 /** Feature flag: when true, tools[] is omitted from the catalog (skills-only mode).
  *  All tool schemas travel exclusively inside each SkillPayload.tools field. */
-const SKILLS_ONLY_DEFAULT = process.env.KN_SKILLS_ONLY_CATALOG === 'true'
+const SKILLS_ONLY_DEFAULT = (import.meta as any).env?.KN_SKILLS_ONLY_CATALOG === 'true'
 
 export interface CapabilityCatalog {
     skills: SkillPayload[]

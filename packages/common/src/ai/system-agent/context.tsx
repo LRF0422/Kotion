@@ -11,7 +11,7 @@ import type { ChatMessage, PlanArtifact } from '../chat-client/types'
 import type { OnToolExecution, OnUserChoiceRequest } from '../types'
 import { useCapabilityProviders } from '../use-capability-providers'
 import { AgentHarnessImpl } from '../harness'
-import type { ExecutionStep } from '../harness'
+import type { ExecutionStep, HarnessEvent } from '../harness'
 import { useStreamBuffer } from '../utils/use-stream-buffer'
 import { SYSTEM_AGENT_PROMPT } from '../constants'
 
@@ -122,6 +122,19 @@ export function applySubAgentAnnotations(
     current: Record<string, SubAgentNode>,
     annotations: any[],
 ): Record<string, SubAgentNode> {
+    // Fast path: batches without any sub-agent annotation return the SAME map
+    // reference — React skips the re-render.
+    let hasSubAgentAnnotation = false
+    for (const ann of annotations) {
+        if (ann && typeof ann === 'object' && typeof ann.type === 'string'
+                && (ann.type === 'delegate_start' || ann.type.startsWith('subagent_'))) {
+            hasSubAgentAnnotation = true
+            break
+        }
+    }
+    if (!hasSubAgentAnnotation) {
+        return current
+    }
     let changed = false
     // Work on a shallow clone; nodes are cloned on first touch below.
     const next: Record<string, SubAgentNode> = { ...current }
@@ -312,6 +325,16 @@ export interface SystemAgentContextValue {
      * in-progress text from the server checkpoint and continues streaming.
      */
     attach: (taskId: string) => Promise<void>
+    /**
+     * Continue a session suspended on budget exhaustion with a fresh
+     * iteration budget (same backend task).
+     */
+    continueSession: (taskId: string) => Promise<void>
+    /**
+     * Synchronously read the final streamed content (no React-state race —
+     * the underlying buffer is updated inline during streaming).
+     */
+    getStreamingContent: () => string
 }
 
 export interface SystemAgentProviderProps {
@@ -428,7 +451,10 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
 
         setState(prev => ({
             ...prev,
-            annotations: [...prev.annotations, ...annotations],
+            // Bounded history: a long stream emits one annotation batch per
+            // token, so unbounded growth made this array O(tokens) and forced
+            // re-renders over an ever-growing prefix.
+            annotations: [...prev.annotations, ...annotations].slice(-2000),
             sessionId: sessionIdRef.current,
             taskId: taskIdRef.current,
             subAgents: applySubAgentAnnotations(prev.subAgents, annotations),
@@ -436,6 +462,67 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         }))
         notify?.(annotations)
     }, [])
+
+    // Shared HarnessEvent → state folding (stream / continueSession / resolvePlan).
+    const consumeEvents = useCallback(async (events: AsyncGenerator<HarnessEvent>): Promise<void> => {
+        for await (const ev of events) {
+            switch (ev.type) {
+                case 'text-delta':
+                    streamBuffer.append(ev.content)
+                    break
+                case 'annotation':
+                    handleAnnotation(ev.annotations)
+                    break
+                case 'session':
+                    handleAnnotation([{
+                        type: 'session-info',
+                        taskId: ev.taskId,
+                        sessionId: ev.sessionId,
+                        conversationId: ev.conversationId,
+                    }])
+                    break
+                case 'tool-call-start': {
+                    const step: ExecutionStep = {
+                        id: ev.id || `step-${++stepCounterRef.current}`,
+                        callId: ev.id,
+                        toolName: ev.toolName,
+                        args: ev.args,
+                        status: 'running',
+                        timestamp: Date.now(),
+                    }
+                    setState(prev => ({ ...prev, executionSteps: [...prev.executionSteps, step] }))
+                    break
+                }
+                case 'tool-call-end':
+                    setState(prev => ({
+                        ...prev,
+                        executionSteps: prev.executionSteps.map(s =>
+                            s.id === ev.id
+                                ? {
+                                    ...s,
+                                    status: ev.error ? 'error' : 'success',
+                                    result: ev.result,
+                                    error: ev.error,
+                                    duration: ev.durationMs,
+                                }
+                                : s
+                        ),
+                    }))
+                    break
+                case 'error':
+                    throw new Error(ev.error)
+                case 'finish':
+                    // Task reached a real terminal state — drop the stored
+                    // handle so a later mount doesn't re-attach a stale task.
+                    // Suspended tasks (budget / plan approval) keep it so the
+                    // user can continue or decide.
+                    if (ev.finishReason !== 'suspended') {
+                        clearStoredSystemAgentTaskId()
+                    }
+                    break
+            }
+        }
+    }, [streamBuffer, handleAnnotation])
 
     // Stream function — drives the unified harness and maps its typed events
     // onto reactive state (text, annotations, session, execution steps).
@@ -483,7 +570,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             const events = harnessRef.current.run({
                 messages,
                 model: defaultOptions?.model,
-                catalog: getCatalog(),
+                catalog: getCatalog(activeSkillsRef.current),
                 resolveTool,
                 sessionId: options?.sessionId || sessionIdRef.current || undefined,
                 conversationId: options?.conversationId,
@@ -493,60 +580,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
                 onToolExecution,
             })
 
-            for await (const ev of events) {
-                switch (ev.type) {
-                    case 'text-delta':
-                        streamBuffer.append(ev.content)
-                        break
-                    case 'annotation':
-                        handleAnnotation(ev.annotations)
-                        break
-                    case 'session':
-                        handleAnnotation([{
-                            type: 'session-info',
-                            taskId: ev.taskId,
-                            sessionId: ev.sessionId,
-                            conversationId: ev.conversationId,
-                        }])
-                        break
-                    case 'tool-call-start': {
-                        const step: ExecutionStep = {
-                            id: ev.id || `step-${++stepCounterRef.current}`,
-                            toolName: ev.toolName,
-                            args: ev.args,
-                            status: 'running',
-                            timestamp: Date.now(),
-                        }
-                        setState(prev => ({ ...prev, executionSteps: [...prev.executionSteps, step] }))
-                        break
-                    }
-                    case 'tool-call-end':
-                        setState(prev => ({
-                            ...prev,
-                            executionSteps: prev.executionSteps.map(s =>
-                                s.id === ev.id
-                                    ? {
-                                        ...s,
-                                        status: ev.error ? 'error' : 'success',
-                                        result: ev.result,
-                                        error: ev.error,
-                                        duration: ev.durationMs,
-                                    }
-                                    : s
-                            ),
-                        }))
-                        break
-                    case 'error':
-                        throw new Error(ev.error)
-                    case 'finish':
-                        // Task reached a real terminal state — drop the stored
-                        // handle so a later mount doesn't re-attach a stale task.
-                        if (ev.finishReason !== 'suspended') {
-                            clearStoredSystemAgentTaskId()
-                        }
-                        break
-                }
-            }
+            await consumeEvents(events)
 
             setState(prev => ({
                 ...prev,
@@ -569,7 +603,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             }))
             throw error
         }
-    }, [setEditor, streamBuffer, getCatalog, resolveTool, onToolExecution, defaultOptions, handleAnnotation])
+    }, [setEditor, streamBuffer, getCatalog, resolveTool, onToolExecution, defaultOptions, handleAnnotation, consumeEvents])
 
     // Re-attach to an in-flight backend task after a refresh: reconstructs the
     // in-progress text from the server checkpoint and continues streaming into
@@ -724,7 +758,9 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         setState(prev => ({ ...prev, sessionId }))
     }, [])
 
-    // Plan mode (P7): respond to a pending plan and resume the conversation.
+    // Plan mode (P7): respond to a pending plan via the real approval
+    // protocol (resume the suspended task with the decision). Falls back to a
+    // textual round-trip when the task/plan ids are missing.
     const resolvePlan = useCallback(async (
         decision: 'approved' | 'rejected',
         opts?: { feedback?: string; editedPlan?: PlanArtifact }
@@ -735,16 +771,50 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         setState(prev => ({ ...prev, pendingPlan: null }))
         if (!pending) return
 
-        const sessionId = sessionIdRef.current || undefined
-
-        if (decision === 'rejected') {
-            const fb = opts?.feedback?.trim() || '请重新规划。'
-            // Stay in plan mode and re-plan with the feedback.
-            await stream(`我不同意这个计划。${fb}`, { mode: 'plan', sessionId })
+        const taskId = taskIdRef.current
+        const planId = pending.planId
+        if (taskId && planId) {
+            // Real protocol: resume the suspended task with the decision.
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort()
+            }
+            abortControllerRef.current = new AbortController()
+            const plan = opts?.editedPlan || pending.plan
+            try {
+                const events = harnessRef.current.resolvePlan({
+                    taskId,
+                    planId,
+                    decision,
+                    planJson: JSON.stringify(plan),
+                    feedback: decision === 'rejected'
+                        ? (opts?.feedback?.trim() || '请重新规划。')
+                        : undefined,
+                    resolveTool,
+                    signal: abortControllerRef.current.signal,
+                    onToolExecution,
+                })
+                await consumeEvents(events)
+                setState(prev => ({ ...prev, isGenerating: false }))
+            } catch (error: any) {
+                if (error.name !== 'AbortError') {
+                    setState(prev => ({
+                        ...prev,
+                        isGenerating: false,
+                        error: error instanceof Error ? error : new Error(String(error))
+                    }))
+                    throw error
+                }
+            }
             return
         }
 
-        // Approved / edited: inject the plan and execute it.
+        // Legacy fallback: express the decision as a chat message.
+        const sessionId = sessionIdRef.current || undefined
+        if (decision === 'rejected') {
+            const fb = opts?.feedback?.trim() || '请重新规划。'
+            await stream(`我不同意这个计划。${fb}`, { mode: 'plan', sessionId })
+            return
+        }
         const plan = opts?.editedPlan || pending.plan
         const steps = (plan.steps || [])
             .map((s, i) => `${i + 1}. ${s.action}`)
@@ -755,7 +825,51 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             (plan.summary ? `概述：${plan.summary}\n` : '') +
             (steps ? `步骤：\n${steps}` : '')
         await stream(prompt, { mode: 'execute', sessionId })
-    }, [stream])
+    }, [stream, consumeEvents, resolveTool, onToolExecution])
+
+    /**
+     * Continue a session suspended on budget exhaustion: the backend grants a
+     * fresh iteration budget for the same task.
+     */
+    const continueSession = useCallback(async (taskId: string): Promise<void> => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort()
+        }
+        abortControllerRef.current = new AbortController()
+        streamBuffer.reset()
+        stepCounterRef.current = 0
+        setState(prev => ({
+            ...prev,
+            isGenerating: true,
+            error: null,
+            executionSteps: [],
+            taskId,
+        }))
+        taskIdRef.current = taskId
+        try {
+            const events = harnessRef.current.continueSession({
+                taskId,
+                resolveTool,
+                signal: abortControllerRef.current.signal,
+                onToolExecution,
+            })
+            await consumeEvents(events)
+            setState(prev => ({
+                ...prev,
+                isGenerating: false,
+                streamingContent: streamBuffer.getRawContent()
+            }))
+        } catch (error: any) {
+            if (error.name !== 'AbortError') {
+                setState(prev => ({
+                    ...prev,
+                    isGenerating: false,
+                    error: error instanceof Error ? error : new Error(String(error))
+                }))
+                throw error
+            }
+        }
+    }, [streamBuffer, consumeEvents, resolveTool, onToolExecution])
 
     // Callback setters
     const setOnToolExecution = useCallback((callback: OnToolExecution | undefined) => {
@@ -765,6 +879,10 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
     const setOnUserChoiceRequest = useCallback((callback: OnUserChoiceRequest | undefined) => {
         onUserChoiceRequestRef.current = callback
     }, [])
+
+    // Synchronous final-content accessor (avoids the React-state race in
+    // useQuickAction: the stream buffer is updated inline during streaming).
+    const getStreamingContent = useCallback(() => streamBuffer.getRawContent(), [streamBuffer])
 
     // Memoized context value
     const value = useMemo<SystemAgentContextValue>(() => ({
@@ -780,7 +898,9 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         setOnUserChoiceRequest,
         setSessionId,
         resolvePlan,
-        attach
+        attach,
+        continueSession,
+        getStreamingContent
     }), [
         state,
         stream,
@@ -794,7 +914,9 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
         setOnUserChoiceRequest,
         setSessionId,
         resolvePlan,
-        attach
+        attach,
+        continueSession,
+        getStreamingContent
     ])
 
     return (

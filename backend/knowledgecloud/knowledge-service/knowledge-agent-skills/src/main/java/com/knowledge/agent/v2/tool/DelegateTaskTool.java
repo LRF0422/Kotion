@@ -10,6 +10,7 @@ import com.knowledge.agent.v2.engine.AgentEngine;
 import com.knowledge.agent.v2.engine.AgentState;
 import com.knowledge.agent.v2.event.DelegationEvent;
 import com.knowledge.agent.v2.event.StateEvent;
+import com.knowledge.agent.v2.event.ThinkingEvent;
 import com.knowledge.agent.v2.eventbus.AgentEventBus;
 import com.knowledge.agent.v2.session.AgentIdentity;
 import com.knowledge.agent.v2.session.AgentMode;
@@ -18,12 +19,20 @@ import com.knowledge.agent.v2.session.ConversationMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+
+import reactor.core.Disposable;
 
 /**
  * Backend tool: delegate a self-contained subtask to an isolated sub-agent.
@@ -64,6 +73,12 @@ public class DelegateTaskTool implements Tool {
 
     /** Session metadata key tracking delegation depth (root = 0). */
     public static final String DELEGATE_DEPTH_KEY = "__delegate_depth";
+
+    /**
+     * Session metadata key holding the live child-agent subscriptions spawned
+     * by this tool, so cancelling the parent task cascades to its children.
+     */
+    public static final String CHILD_SUBSCRIPTIONS_KEY = "__child_subscriptions";
 
     private static final String DEFAULT_SUB_AGENT_PROMPT = "你是一个子任务执行 agent。专注完成交给你的单个任务，直接使用可用的工具完成检索、分析或处理，"
             + "不要向用户提问。完成后用最后一条消息输出简洁、自包含的结果报告（含关键事实与引用），"
@@ -176,27 +191,87 @@ public class DelegateTaskTool implements Tool {
                 childDepth, childName, description));
 
         long startMs = System.currentTimeMillis();
-        try {
-            // Blocking is fine: BackendExecutor runs tools on boundedElastic
-            // and applies this tool's timeout override.
-            engine.run(child)
-                    .doOnNext(event -> {
-                        if (event instanceof StateEvent.StateTransition) {
-                            eventBus.publish(new DelegationEvent.SubAgentProgress(
-                                    parentSessionId, child.getSessionId(),
-                                    parentSessionId, childDepth,
-                                    child.getExecution().getIteration(), "running"));
+        String parentAgentId = context.getAgentId() != null ? context.getAgentId() : parentSessionId;
+
+        // Subscribe the child engine on the current (boundedElastic) thread and
+        // wait via a latch instead of blockLast(), so the subscription can be
+        // registered with the parent session for cooperative cancellation: when
+        // the parent task is cancelled, AgentJobService disposes every child
+        // subscription and this wait wakes up immediately.
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<Throwable> childError = new AtomicReference<>();
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        Disposable childSub = engine.run(child)
+                .doOnNext(event -> {
+                    if (event instanceof StateEvent.StateTransition) {
+                        eventBus.publish(new DelegationEvent.SubAgentProgress(
+                                parentSessionId, child.getSessionId(),
+                                parentAgentId, childDepth,
+                                child.getExecution().getIteration(), "running"));
+                    } else if (event instanceof ThinkingEvent.ThinkDelta) {
+                        // Republish the child's streamed tokens under the PARENT
+                        // session id so the frontend sub-agent tree renders live
+                        // per-node output (agent.output / agent.reasoning).
+                        ThinkingEvent.ThinkDelta delta = (ThinkingEvent.ThinkDelta) event;
+                        String content = delta.getContent();
+                        if (content != null && !content.isEmpty()) {
+                            if (delta.getDeltaType() == ThinkingEvent.ThinkDelta.DeltaType.TEXT) {
+                                eventBus.publish(new DelegationEvent.SubAgentOutput(
+                                        parentSessionId, child.getSessionId(), parentAgentId,
+                                        childDepth, content));
+                            } else if (delta.getDeltaType() == ThinkingEvent.ThinkDelta.DeltaType.REASONING) {
+                                eventBus.publish(new DelegationEvent.SubAgentReasoning(
+                                        parentSessionId, child.getSessionId(), parentAgentId,
+                                        childDepth, content));
+                            }
                         }
-                    })
-                    .blockLast();
-        } catch (Exception e) {
+                    }
+                })
+                .doOnCancel(() -> cancelled.set(true))
+                .doOnError(childError::set)
+                .doFinally(sig -> latch.countDown())
+                .subscribe();
+        registerChildSubscription(context, childSub);
+
+        try {
+            boolean finished = latch.await(properties.getEngine().getDelegateTimeoutSeconds(),
+                    TimeUnit.SECONDS);
+            if (!finished) {
+                childSub.dispose();
+                long duration = System.currentTimeMillis() - startMs;
+                log.warn("delegate_task: sub-agent {} timed out after {}ms",
+                        child.getSessionId(), duration);
+                eventBus.publish(new DelegationEvent.SubAgentCompleted(
+                        parentSessionId, child.getSessionId(), parentAgentId,
+                        childDepth, "timeout", duration, false));
+                return ToolResult.error("Sub-agent timed out after "
+                        + properties.getEngine().getDelegateTimeoutSeconds() + "s");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            childSub.dispose();
+            return ToolResult.error("Sub-agent interrupted");
+        } finally {
+            unregisterChildSubscription(context, childSub);
+        }
+
+        if (cancelled.get()) {
+            long duration = System.currentTimeMillis() - startMs;
+            eventBus.publish(new DelegationEvent.SubAgentCompleted(
+                    parentSessionId, child.getSessionId(), parentAgentId,
+                    childDepth, "cancelled", duration, false));
+            return ToolResult.error("Sub-agent cancelled (parent task stopped)");
+        }
+
+        Throwable err = childError.get();
+        if (err != null) {
             long duration = System.currentTimeMillis() - startMs;
             log.warn("delegate_task: sub-agent {} failed after {}ms: {}",
-                    child.getSessionId(), duration, e.getMessage());
+                    child.getSessionId(), duration, err.getMessage());
             eventBus.publish(new DelegationEvent.SubAgentCompleted(
-                    parentSessionId, child.getSessionId(), parentSessionId,
-                    childDepth, e.getMessage(), duration, false));
-            return ToolResult.error("Sub-agent failed: " + e.getMessage());
+                    parentSessionId, child.getSessionId(), parentAgentId,
+                    childDepth, err.getMessage(), duration, false));
+            return ToolResult.error("Sub-agent failed: " + err.getMessage());
         }
 
         long duration = System.currentTimeMillis() - startMs;
@@ -205,7 +280,7 @@ public class DelegateTaskTool implements Tool {
         boolean success = finalState == AgentState.DONE;
 
         eventBus.publish(new DelegationEvent.SubAgentCompleted(
-                parentSessionId, child.getSessionId(), parentSessionId,
+                parentSessionId, child.getSessionId(), parentAgentId,
                 childDepth, result, duration, success));
 
         log.info("delegate_task: sub-agent {} finished state={} iterations={} in {}ms",
@@ -219,6 +294,32 @@ public class DelegateTaskTool implements Tool {
         String report = "[子 agent " + childName + " · " + child.getExecution().getIteration()
                 + " 轮迭代" + (success ? "" : " · 状态 " + finalState) + "]\n" + result;
         return ToolResult.success(report);
+    }
+
+    /** Register a live child-engine subscription with the parent session. */
+    @SuppressWarnings("unchecked")
+    private void registerChildSubscription(ToolContext context, Disposable d) {
+        Map<String, Object> meta = context.getSessionMetadata();
+        if (meta == null) {
+            return;
+        }
+        synchronized (meta) {
+            List<Disposable> subs = (List<Disposable>) meta.computeIfAbsent(
+                    CHILD_SUBSCRIPTIONS_KEY,
+                    k -> Collections.synchronizedList(new ArrayList<Disposable>()));
+            subs.add(d);
+        }
+    }
+
+    private void unregisterChildSubscription(ToolContext context, Disposable d) {
+        Map<String, Object> meta = context.getSessionMetadata();
+        if (meta == null) {
+            return;
+        }
+        Object subs = meta.get(CHILD_SUBSCRIPTIONS_KEY);
+        if (subs instanceof List) {
+            ((List<?>) subs).remove(d);
+        }
     }
 
     // ---- Internals ----

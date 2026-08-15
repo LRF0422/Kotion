@@ -26,9 +26,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *   tool:
  *     timeout-seconds: 180
  *     max-parallel: 5
- *   orchestrator:
- *     enabled: false
- *     fast-path-message-length: 200
  *   context:
  *     max-context-tokens: 60000
  *     compaction-threshold: 0.75
@@ -54,7 +51,6 @@ public class AgentProperties {
     private EngineConfig engine = new EngineConfig();
     private LlmConfig llm = new LlmConfig();
     private ToolConfig tool = new ToolConfig();
-    private OrchestratorConfig orchestrator = new OrchestratorConfig();
     private ContextConfig context = new ContextConfig();
     private StateConfig state = new StateConfig();
     private RateLimitConfig rateLimit = new RateLimitConfig();
@@ -94,16 +90,6 @@ public class AgentProperties {
         private int maxParallel = 5;
         /** Comma-separated tool names always treated as read-only in PLAN mode. */
         private String planReadOnlyTools = "";
-    }
-
-    @Data
-    public static class OrchestratorConfig {
-        /** Whether multi-agent orchestration is enabled. */
-        private boolean enabled = false;
-        /** Messages shorter than this bypass LLM planning (fast-path). */
-        private int fastPathMessageLength = 200;
-        /** Maximum agents in a team plan. */
-        private int maxAgents = 5;
     }
 
     @Data

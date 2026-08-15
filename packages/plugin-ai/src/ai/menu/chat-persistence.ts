@@ -1,42 +1,16 @@
-import { Message, INITIAL_MESSAGES } from './chat-types'
+import type { Message } from './chat-types'
 
-const STORAGE_KEY = 'kn-ai-chat-messages'
-const MAX_PERSISTED = 50
+// NOTE: the legacy loadMessages/saveMessages/clearPersistedMessages (single-
+// session localStorage) were dead code AND collided with the legacy key that
+// the multi-session store migrates away from — removed. Session persistence
+// lives in chat-sessions.ts / useChatSessions.ts.
+
 const MAX_AI_HISTORY = 20
 const MAX_AI_TOKENS = 8000
 
 // Rough token estimate: ~4 chars per token for mixed CJK/English
 function estimateTokens(text: string): number {
     return Math.ceil(text.length / 4)
-}
-
-export function loadMessages(): Message[] {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        if (!raw) return [...INITIAL_MESSAGES]
-        const parsed = JSON.parse(raw) as Message[]
-        if (!Array.isArray(parsed) || parsed.length === 0) return [...INITIAL_MESSAGES]
-        return parsed
-    } catch {
-        return [...INITIAL_MESSAGES]
-    }
-}
-
-export function saveMessages(messages: Message[]): void {
-    try {
-        const toSave = messages.slice(-MAX_PERSISTED)
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
-    } catch {
-        // Storage full or unavailable — silently ignore
-    }
-}
-
-export function clearPersistedMessages(): void {
-    try {
-        localStorage.removeItem(STORAGE_KEY)
-    } catch {
-        // Silently ignore
-    }
 }
 
 /**

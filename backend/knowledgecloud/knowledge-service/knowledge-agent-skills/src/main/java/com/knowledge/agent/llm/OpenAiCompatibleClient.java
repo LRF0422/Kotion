@@ -45,67 +45,84 @@ public class OpenAiCompatibleClient implements LlmClient {
                         headers.set("Authorization", "Bearer " + apiKey);
                     }
                 })
+                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
+                        reactor.netty.http.client.HttpClient.create()
+                                .option(io.netty.channel.ChannelOption.CONNECT_TIMEOUT_MILLIS, 10_000)
+                                .responseTimeout(java.time.Duration.ofMinutes(5))))
                 .build();
+    }
+
+    /**
+     * Provider API failure — carries the HTTP status so resilience layers can
+     * classify retriability instead of string-matching messages.
+     */
+    public static class LlmApiException extends RuntimeException {
+        public LlmApiException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     @Override
     public LlmResponse chat(LlmRequest request) {
+        // Errors are PROPAGATED (never swallowed): callers (ResilientLlmAdapter)
+        // rely on exceptions to trigger retry/backoff. A silent empty response
+        // made retries and circuit-breaking dead code.
+        String requestBody;
         try {
-            String requestBody = buildRequestBody(request, false);
-            String responseBody = webClient.post()
-                    .uri(chatPath)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .onErrorMap(WebClientResponseException.class, e -> {
-                        log.error("LLM chat API error ({} {}): {}", e.getStatusCode(),
-                                e.getStatusText(), e.getResponseBodyAsString());
-                        return e;
-                    })
-                    .block();
+            requestBody = buildRequestBody(request, false);
+        } catch (Exception e) {
+            throw new LlmApiException("Failed to build LLM request: " + e.getMessage(), e);
+        }
+        String responseBody = webClient.post()
+                .uri(chatPath)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(String.class)
+                .onErrorMap(WebClientResponseException.class, e -> {
+                    log.error("LLM chat API error ({} {}): {}", e.getStatusCode(),
+                            e.getStatusText(), e.getResponseBodyAsString());
+                    return new LlmApiException("LLM chat API error (" + e.getStatusCode()
+                            + "): " + e.getResponseBodyAsString(), e);
+                })
+                .block();
 
+        try {
             return parseResponse(responseBody);
         } catch (Exception e) {
-            log.error("LLM chat error for provider {}: {}", providerName, e.getMessage(), e);
-            return LlmResponse.builder()
-                    .content("")
-                    .finishReason("error")
-                    .usage(LlmResponse.Usage.builder().build())
-                    .build();
+            throw new LlmApiException("Failed to parse LLM response: " + e.getMessage(), e);
         }
     }
 
     @Override
     public Flux<StreamChunk> streamChat(LlmRequest request) {
+        // Errors are PROPAGATED (never converted into done("error") chunks):
+        // ResilientLlmAdapter's retryWhen must see the real exception to retry
+        // 429/5xx/connection failures. Mid-stream failures surface to the
+        // adapter, which decides between retry (pre-first-token) and surfacing
+        // the error downstream (post-first-token).
+        String requestBody;
         try {
-            String requestBody = buildRequestBody(request, true);
-            return webClient.post()
-                    .uri(chatPath)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.TEXT_EVENT_STREAM)
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToFlux(String.class)
-                    .filter(line -> line != null && !line.isEmpty() && !"[DONE]".equals(line.trim()))
-                    .flatMap(this::parseStreamChunk)
-                    .onErrorResume(WebClientResponseException.class, e -> {
-                        log.error("LLM stream API error for provider {} ({} {}): {}",
-                                providerName, e.getStatusCode(), e.getStatusText(),
-                                e.getResponseBodyAsString());
-                        return Flux.just(StreamChunk.done("error",
-                                LlmResponse.Usage.builder().build()));
-                    })
-                    .onErrorResume(e -> {
-                        log.error("LLM stream error for provider {}: {}", providerName, e.getMessage(), e);
-                        return Flux.just(StreamChunk.done("error",
-                                LlmResponse.Usage.builder().build()));
-                    });
+            requestBody = buildRequestBody(request, true);
         } catch (Exception e) {
-            log.error("LLM stream init error for provider {}: {}", providerName, e.getMessage(), e);
-            return Flux.just(StreamChunk.done("error",
-                    LlmResponse.Usage.builder().build()));
+            return Flux.error(new LlmApiException("Failed to build LLM request: " + e.getMessage(), e));
         }
+        return webClient.post()
+                .uri(chatPath)
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToFlux(String.class)
+                .filter(line -> line != null && !line.isEmpty() && !"[DONE]".equals(line.trim()))
+                .flatMap(this::parseStreamChunk)
+                .onErrorMap(WebClientResponseException.class, e -> {
+                    log.error("LLM stream API error for provider {} ({} {}): {}",
+                            providerName, e.getStatusCode(), e.getStatusText(),
+                            e.getResponseBodyAsString());
+                    return new LlmApiException("LLM stream API error (" + e.getStatusCode()
+                            + "): " + e.getResponseBodyAsString(), e);
+                });
     }
 
     @Override
@@ -134,7 +151,8 @@ public class OpenAiCompatibleClient implements LlmClient {
         root.put("model", model);
         root.put("stream", stream);
 
-        if (request.getTemperature() > 0) {
+        // >= 0: temperature=0 (deterministic) is a valid, meaningful value.
+        if (request.getTemperature() >= 0) {
             root.put("temperature", request.getTemperature());
         }
         if (request.getMaxTokens() > 0) {

@@ -23,4 +23,7 @@ public class ChatTool {
 
     @ApiModelProperty("Function definition")
     private ChatFunction function;
+
+    @ApiModelProperty("Whether this tool is read-only (safe to expose in PLAN mode)")
+    private Boolean readOnly;
 }

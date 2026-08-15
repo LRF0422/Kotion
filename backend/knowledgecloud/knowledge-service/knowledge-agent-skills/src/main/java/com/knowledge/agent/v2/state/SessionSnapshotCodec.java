@@ -82,6 +82,10 @@ public class SessionSnapshotCodec {
                 : null;
         payload.lastPromptTokens = execution.getLastPromptTokens();
         payload.activatedSkillNames = execution.getActivatedSkillNames();
+        payload.capabilitiesVersion = session.getCapabilitiesVersion();
+        payload.suspendReason = execution.getSuspendReason();
+        payload.totalPromptTokens = execution.getTotalPromptTokens();
+        payload.totalCompletionTokens = execution.getTotalCompletionTokens();
         if (execution.getPendingToolCalls() != null) {
             payload.pendingToolCalls = new ArrayList<>();
             for (InferenceResponse.ToolCallData tc : execution.getPendingToolCalls()) {
@@ -141,6 +145,8 @@ public class SessionSnapshotCodec {
         ExecutionState execution = new ExecutionState();
         execution.setIteration(payload.iteration);
         execution.setLastPromptTokens(payload.lastPromptTokens);
+        execution.setSuspendReason(payload.suspendReason);
+        execution.addTokenUsage(payload.totalPromptTokens, payload.totalCompletionTokens);
         if (payload.activatedSkillNames != null) {
             payload.activatedSkillNames.forEach(execution::activateSkill);
         }
@@ -174,6 +180,7 @@ public class SessionSnapshotCodec {
                 .toolIds(payload.toolIds)
                 .frontendTools(payload.frontendTools)
                 .skills(payload.skills)
+                .capabilitiesVersion(payload.capabilitiesVersion)
                 .metadata(payload.metadata)
                 .execution(execution)
                 .build();
@@ -201,6 +208,10 @@ public class SessionSnapshotCodec {
         public Set<String> activatedSkillNames;
         public List<MessagePayload> messages;
         public List<PendingToolCallPayload> pendingToolCalls;
+        public String capabilitiesVersion;
+        public String suspendReason;
+        public int totalPromptTokens;
+        public int totalCompletionTokens;
     }
 
     /** Identity minus the auth token. */

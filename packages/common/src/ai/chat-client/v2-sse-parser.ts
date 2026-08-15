@@ -273,6 +273,30 @@ function mapV2Event(
                 } as Annotation],
             } as AnnotationStreamEvent]
 
+        case 'agent.output':
+            return [{
+                type: 'annotation',
+                annotations: [{
+                    type: 'subagent_output',
+                    agentId: data.agentId || data.taskId,
+                    parentAgentId: data.parentAgentId || data.sessionId,
+                    depth: data.depth ?? 1,
+                    content: data.content || '',
+                } as Annotation],
+            } as AnnotationStreamEvent]
+
+        case 'agent.reasoning':
+            return [{
+                type: 'annotation',
+                annotations: [{
+                    type: 'subagent_reasoning',
+                    agentId: data.agentId || data.taskId,
+                    parentAgentId: data.parentAgentId || data.sessionId,
+                    depth: data.depth ?? 1,
+                    content: data.content || '',
+                } as Annotation],
+            } as AnnotationStreamEvent]
+
         case 'agent.completed':
             return [{
                 type: 'annotation',
@@ -283,6 +307,42 @@ function mapV2Event(
                     depth: data.depth ?? 1,
                     status: data.success ? 'completed' : 'error',
                     finishReason: data.success ? 'stop' : 'error',
+                    result: data.result,
+                    durationMs: data.durationMs,
+                } as Annotation],
+            } as AnnotationStreamEvent]
+
+        case 'tool.progress':
+            return [{
+                type: 'annotation',
+                annotations: [{
+                    type: 'tool_progress',
+                    toolCallId: data.toolCallId,
+                    toolName: data.toolName,
+                    progress: data.progress,
+                    message: data.message,
+                } as Annotation],
+            } as AnnotationStreamEvent]
+
+        case 'plan.proposed':
+            return [{
+                type: 'annotation',
+                annotations: [{
+                    type: 'plan_proposed',
+                    plan: data.plan,
+                    planId: data.planId,
+                    sessionId: data.sessionId,
+                } as Annotation],
+            } as AnnotationStreamEvent]
+
+        case 'plan.resolved':
+            return [{
+                type: 'annotation',
+                annotations: [{
+                    type: 'plan_resolved',
+                    planId: data.planId,
+                    decision: data.decision,
+                    feedback: data.feedback,
                 } as Annotation],
             } as AnnotationStreamEvent]
 
@@ -301,6 +361,10 @@ function mapV2Event(
 
 /**
  * Normalize V2 finish reasons to the frontend FinishEvent format.
+ * The backend emits compound reasons like {@code suspended:frontend_tool_calls}
+ * and {@code suspended:iteration_budget_exhausted} — both normalize to
+ * {@code tool-calls} (waiting for frontend execution) or {@code suspended}
+ * (budget / plan approval), never a literal {@code suspended:…} string.
  */
 function normalizeV2FinishReason(reason?: string): FinishEvent['finishReason'] {
     if (!reason) return 'stop'
@@ -311,6 +375,12 @@ function normalizeV2FinishReason(reason?: string): FinishEvent['finishReason'] {
         'length': 'length',
         'tool_calls': 'tool-calls',
         'suspended': 'tool-calls', // SUSPENDED = waiting for frontend tool execution
+    }
+    if (reason.startsWith('suspended:frontend_tool_calls')) {
+        return 'tool-calls'
+    }
+    if (reason.startsWith('suspended')) {
+        return 'suspended' as FinishEvent['finishReason']
     }
     return mapping[reason] || (reason as FinishEvent['finishReason'])
 }

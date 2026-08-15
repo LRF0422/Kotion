@@ -13,6 +13,8 @@ export interface Message {
 
 export interface ExecutionStep {
     id: string
+    /** Stable tool-call id from the backend (correlates start/end events). */
+    callId?: string
     toolName: string
     args: any
     result?: any

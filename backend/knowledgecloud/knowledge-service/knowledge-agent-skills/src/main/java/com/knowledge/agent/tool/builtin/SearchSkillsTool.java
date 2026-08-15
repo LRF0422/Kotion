@@ -64,6 +64,11 @@ public class SearchSkillsTool implements Tool {
     }
 
     @Override
+    public boolean isReadOnly() {
+        return true;
+    }
+
+    @Override
     public String getDescription() {
         return "Search for available skills by keyword/domain and optionally activate them. "
                 + "Use this when you need capabilities not currently available. "

@@ -18,10 +18,18 @@ import {
     type Editor,
     type IncrementalPayload,
 } from "@kn/editor"
-import { useApi, useSelector, type GlobalState } from "@kn/common"
+import { useApi, useSelector, getAccessToken, type GlobalState } from "@kn/common"
 
 import { OFFSCREEN_APIS } from "./api"
 import { offscreenSessionManager } from "./session-manager"
+
+/**
+ * Collab WebSocket base URL — env-configurable; falls back to the current
+ * deployment. NEVER hardcode a credential here: the auth token is the user's
+ * OAuth2 access token, not the pageId (pageId-as-token let anyone join any
+ * page's collaboration room).
+ */
+const COLLAB_WS_BASE_URL = (import.meta as any).env?.VITE_COLLABORATION_WS_URL || 'wss://kotion.top:8877/ws'
 
 /** Deterministic cursor colors, same palette as the visible editors. */
 const CURSOR_COLORS = [
@@ -64,9 +72,9 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
     useEffect(() => {
         const doc = new YDoc()
         const collabProvider = new TiptapCollabProvider({
-            baseUrl: 'wss://kotion.top:8877/ws',
+            baseUrl: COLLAB_WS_BASE_URL,
             name: `page:${pageId}`,
-            token: pageId,
+            token: getAccessToken() || '',
             document: doc,
             onSynced: () => setSynced(true),
         })
@@ -170,7 +178,7 @@ const OffscreenSession: React.FC<{ pageId: string }> = ({ pageId }) => {
                 provider={provider}
                 id={pageId}
                 user={collaborationUser}
-                token={pageId}
+                token={getAccessToken() || ''}
                 toc={false}
                 withTitle={true}
                 width="w-full"

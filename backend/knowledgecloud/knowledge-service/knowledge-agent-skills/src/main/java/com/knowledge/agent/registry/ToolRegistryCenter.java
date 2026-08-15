@@ -5,9 +5,12 @@ import com.knowledge.agent.tool.Tool;
 import com.knowledge.agent.tool.ToolContext;
 import com.knowledge.agent.tool.ToolResult;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -38,28 +41,56 @@ public class ToolRegistryCenter {
 
     /**
      * Register remote tools from a service.
+     *
+     * @throws RuntimeException when persistence fails — callers must surface
+     *         the failure instead of silently reporting success.
      */
     public void register(String serviceId, List<RemoteToolRecord> records) {
-        try {
-            // Add service to the set of registered services
-            redisTemplate.opsForSet().add(SERVICE_SET_KEY, serviceId);
+        // Add service to the set of registered services
+        redisTemplate.opsForSet().add(SERVICE_SET_KEY, serviceId);
 
-            for (RemoteToolRecord record : records) {
-                record.setServiceId(serviceId);
-                record.setLastHeartbeat(System.currentTimeMillis());
-                record.setStatus("ACTIVE");
+        for (RemoteToolRecord record : records) {
+            record.setServiceId(serviceId);
+            record.setLastHeartbeat(System.currentTimeMillis());
+            record.setStatus("ACTIVE");
 
-                String json = objectMapper.writeValueAsString(record);
-                String key = KEY_PREFIX + serviceId + ":" + record.getToolId();
-                redisTemplate.opsForValue().set(key, json);
+            String json;
+            try {
+                json = objectMapper.writeValueAsString(record);
+            } catch (IOException e) {
+                throw new IllegalStateException("Failed to serialize tool record "
+                        + record.getToolId(), e);
+            }
+            String key = KEY_PREFIX + serviceId + ":" + record.getToolId();
+            redisTemplate.opsForValue().set(key, json);
 
-                // Update in-memory adapter
-                toolCache.put(record.getToolId(), new RemoteToolAdapter(record));
-                log.info("Registered remote tool: {} from service: {}", record.getToolId(), serviceId);
+            // Update in-memory adapter. Cache is scoped by service so two
+            // services registering the same toolId no longer overwrite each
+            // other's adapter; a name conflict is surfaced as a warning.
+            String cacheKey = serviceId + ":" + record.getToolId();
+            RemoteToolAdapter previous = toolCache.put(cacheKey, new RemoteToolAdapter(record));
+            if (previous != null) {
+                log.warn("Remote tool {} re-registered by service {}", record.getToolId(), serviceId);
+            }
+            log.info("Registered remote tool: {} from service: {}", record.getToolId(), serviceId);
+        }
+    }
+
+    /**
+     * Iterate keys with SCAN (never KEYS) — safe on production Redis with
+     * large key counts.
+     */
+    private List<String> scanKeys(String pattern) {
+        List<String> keys = new ArrayList<>();
+        try (Cursor<String> cursor = redisTemplate.scan(
+                ScanOptions.scanOptions().match(pattern).count(200).build())) {
+            while (cursor.hasNext()) {
+                keys.add(cursor.next());
             }
         } catch (Exception e) {
-            log.error("Failed to register remote tools from service: {}", serviceId, e);
+            log.error("Failed to scan Redis keys for pattern {}: {}", pattern, e.getMessage());
         }
+        return keys;
     }
 
     /**
@@ -73,7 +104,7 @@ public class ToolRegistryCenter {
             // Update all tools belonging to this service
             // skillIds may be skill-level IDs (e.g., "wiki-page"), not tool-level IDs
             // We need to find all tool records for this service and update them
-            Set<String> keys = redisTemplate.keys(KEY_PREFIX + serviceId + ":*");
+            List<String> keys = scanKeys(KEY_PREFIX + serviceId + ":*");
             if (keys != null) {
                 for (String key : keys) {
                     String json = redisTemplate.opsForValue().get(key);
@@ -100,8 +131,8 @@ public class ToolRegistryCenter {
      */
     public void unregister(String serviceId) {
         try {
-            Set<String> keys = redisTemplate.keys(KEY_PREFIX + serviceId + ":*");
-            if (keys != null) {
+            List<String> keys = scanKeys(KEY_PREFIX + serviceId + ":*");
+            if (!keys.isEmpty()) {
                 redisTemplate.delete(keys);
             }
             redisTemplate.opsForSet().remove(SERVICE_SET_KEY, serviceId);
@@ -124,13 +155,11 @@ public class ToolRegistryCenter {
     public List<RemoteToolRecord> getAllRecords() {
         List<RemoteToolRecord> records = new ArrayList<>();
         try {
-            Set<String> keys = redisTemplate.keys(KEY_PREFIX + "*");
-            if (keys != null) {
-                for (String key : keys) {
-                    String json = redisTemplate.opsForValue().get(key);
-                    if (json != null) {
-                        records.add(objectMapper.readValue(json, RemoteToolRecord.class));
-                    }
+            List<String> keys = scanKeys(KEY_PREFIX + "*");
+            for (String key : keys) {
+                String json = redisTemplate.opsForValue().get(key);
+                if (json != null) {
+                    records.add(objectMapper.readValue(json, RemoteToolRecord.class));
                 }
             }
         } catch (Exception e) {
@@ -148,10 +177,16 @@ public class ToolRegistryCenter {
     }
 
     /**
-     * Get a remote tool adapter by tool ID.
+     * Get a remote tool adapter by tool ID (first registered service wins on
+     * a name collision — surfaced as a warning at registration time).
      */
     public RemoteToolAdapter getToolAdapter(String toolId) {
-        return toolCache.get(toolId);
+        for (RemoteToolAdapter adapter : toolCache.values()) {
+            if (toolId.equals(adapter.getId())) {
+                return adapter;
+            }
+        }
+        return null;
     }
 
     /**
@@ -159,6 +194,17 @@ public class ToolRegistryCenter {
      */
     public Collection<RemoteToolAdapter> getAllToolAdapters() {
         return Collections.unmodifiableCollection(toolCache.values());
+    }
+
+    /** Adapters belonging to a single service (batch-scoped re-wiring). */
+    public List<RemoteToolAdapter> getAdaptersForService(String serviceId) {
+        List<RemoteToolAdapter> result = new ArrayList<>();
+        for (Map.Entry<String, RemoteToolAdapter> entry : toolCache.entrySet()) {
+            if (serviceId.equals(entry.getValue().getServiceId())) {
+                result.add(entry.getValue());
+            }
+        }
+        return result;
     }
 
     /**

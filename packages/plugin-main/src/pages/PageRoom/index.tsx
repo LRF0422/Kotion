@@ -3,7 +3,7 @@ import { Badge } from "@kn/ui";
 import { Button } from "@kn/ui";
 import { Separator } from "@kn/ui";
 import { CollaborationEditor } from "@kn/editor";
-import { useApi } from "@kn/common";
+import { useApi, getAccessToken } from "@kn/common";
 import { useNavigator } from "@kn/common";
 import { GlobalState } from "@kn/common";
 import { TiptapCollabProvider } from "@kn/editor";
@@ -56,9 +56,10 @@ export const PageRoom: React.FC = () => {
     const provider = useMemo(() => {
         const doc = new Y.Doc()
         return new TiptapCollabProvider({
-            baseUrl: 'ws://www.simple-platform.cn:1234',
+            baseUrl: (import.meta as any).env?.VITE_COLLABORATION_WS_URL || 'ws://www.simple-platform.cn:1234',
             name: params.pageId as string,
-            token: params.pageId as string,
+            // Auth token is the user's access token — never the pageId.
+            token: getAccessToken() || '',
             document: doc,
             onAwarenessUpdate: ({ states }) => {
                 const users = states.map((state) => ({ clientId: state.clientId, user: state.user }));

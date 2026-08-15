@@ -1,10 +1,24 @@
 package com.knowledge.agent.tool;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
 /**
  * JSON schema definition for LLM tool-calling.
- * Utility class for building tool parameter schemas.
+ *
+ * <p>Built with Jackson typed nodes: the previous hand-concatenated JSON only
+ * escaped quotes/backslashes (breaking on newlines, control characters and
+ * non-ASCII sequences) and silently dropped the {@code items} type of array
+ * properties. Jackson guarantees well-formed, properly escaped output.
  */
 public final class ToolDefinition {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private ToolDefinition() {
     }
@@ -12,29 +26,22 @@ public final class ToolDefinition {
     /**
      * Build a simple object schema with properties.
      */
-    public static String objectSchema(java.util.Map<String, PropertyDef> properties, java.util.List<String> required) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\"type\":\"object\",\"properties\":{");
-        boolean first = true;
-        for (java.util.Map.Entry<String, PropertyDef> entry : properties.entrySet()) {
-            if (!first)
-                sb.append(",");
-            first = false;
-            sb.append("\"").append(entry.getKey()).append("\":");
-            sb.append(entry.getValue().toJson());
-        }
-        sb.append("}");
-        if (required != null && !required.isEmpty()) {
-            sb.append(",\"required\":[");
-            for (int i = 0; i < required.size(); i++) {
-                if (i > 0)
-                    sb.append(",");
-                sb.append("\"").append(required.get(i)).append("\"");
+    public static String objectSchema(Map<String, PropertyDef> properties, List<String> required) {
+        ObjectNode root = MAPPER.createObjectNode();
+        root.put("type", "object");
+        ObjectNode props = root.putObject("properties");
+        if (properties != null) {
+            for (Map.Entry<String, PropertyDef> entry : properties.entrySet()) {
+                props.set(entry.getKey(), entry.getValue().toNode());
             }
-            sb.append("]");
         }
-        sb.append("}");
-        return sb.toString();
+        if (required != null && !required.isEmpty()) {
+            ArrayNode req = root.putArray("required");
+            for (String r : required) {
+                req.add(r);
+            }
+        }
+        return root.toString();
     }
 
     /**
@@ -43,60 +50,58 @@ public final class ToolDefinition {
     public static class PropertyDef {
         private final String type;
         private final String description;
-        private final String enumValues; // JSON array string or null
+        private final List<String> enumValues;
+        private final String itemType;
 
-        private PropertyDef(String type, String description, String enumValues) {
+        private PropertyDef(String type, String description, List<String> enumValues, String itemType) {
             this.type = type;
             this.description = description;
             this.enumValues = enumValues;
+            this.itemType = itemType;
         }
 
         public static PropertyDef string(String description) {
-            return new PropertyDef("string", description, null);
+            return new PropertyDef("string", description, null, null);
         }
 
         public static PropertyDef string(String description, String... enumValues) {
-            StringBuilder sb = new StringBuilder("[");
-            for (int i = 0; i < enumValues.length; i++) {
-                if (i > 0)
-                    sb.append(",");
-                sb.append("\"").append(enumValues[i]).append("\"");
-            }
-            sb.append("]");
-            return new PropertyDef("string", description, sb.toString());
+            return new PropertyDef("string", description,
+                    enumValues != null ? Arrays.asList(enumValues) : null, null);
         }
 
         public static PropertyDef number(String description) {
-            return new PropertyDef("number", description, null);
+            return new PropertyDef("number", description, null, null);
         }
 
         public static PropertyDef bool(String description) {
-            return new PropertyDef("boolean", description, null);
+            return new PropertyDef("boolean", description, null, null);
         }
 
         public static PropertyDef array(String description, String itemType) {
-            return new PropertyDef("array", description, null);
+            return new PropertyDef("array", description, null, itemType);
         }
 
         public static PropertyDef object(String description) {
-            return new PropertyDef("object", description, null);
+            return new PropertyDef("object", description, null, null);
         }
 
-        public String toJson() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("{\"type\":\"").append(type).append("\"");
+        ObjectNode toNode() {
+            ObjectNode node = MAPPER.createObjectNode();
+            node.put("type", type);
             if (description != null) {
-                sb.append(",\"description\":\"").append(escape(description)).append("\"");
+                node.put("description", description);
             }
             if (enumValues != null) {
-                sb.append(",\"enum\":").append(enumValues);
+                ArrayNode arr = node.putArray("enum");
+                for (String v : enumValues) {
+                    arr.add(v);
+                }
             }
-            sb.append("}");
-            return sb.toString();
-        }
-
-        private String escape(String s) {
-            return s.replace("\\", "\\\\").replace("\"", "\\\"");
+            if ("array".equals(type) && itemType != null) {
+                ObjectNode items = node.putObject("items");
+                items.put("type", itemType);
+            }
+            return node;
         }
     }
 }

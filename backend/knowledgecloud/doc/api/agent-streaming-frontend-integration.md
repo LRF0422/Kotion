@@ -170,13 +170,39 @@ interface ParameterSchema {
 
 ## 4. 流式协议详解
 
-### 4.1 Data Stream Protocol v2（推荐）
+### 4.1 V2 任务 API · 命名事件 SSE（当前实现，推荐）
 
-**协议选择方式**:
-- 请求头: `Accept: text/plain`
-- 或请求体: `"streamProtocol": "data"`
+> 自 V2 任务模型（`POST /api/v2/agent/tasks` + `GET /tasks/{id}/events`）落地后，
+> **线上协议是标准 SSE 命名事件**：每个事件一个 `event:` 名 + JSON `data:` 负载，
+> 并用 SSE `id:` 携带单调递增的 `seq`（断点续传游标）。下文 4.2 的数字帧协议
+> （`0:/9:/a:/d:/e:/8:`）已废弃，仅历史兼容参考——**其帧码与 Vercel AI SDK
+> Data Stream 规范并不一致，请勿按 AI SDK 码值实现客户端**。
 
-**事件格式**: `{协议码}:{JSON数据}\n`
+| event 名 | 负载要点 | 说明 |
+|---------|---------|------|
+| `session.created` | `taskId, sessionId, conversationId` | 任务建立 |
+| `think.start` | `iteration` | 一轮推理开始 |
+| `think.delta` | `type: "text"\|"reasoning", content` | token 级增量（真流式）|
+| `think.end` | `iteration, finishReason` | 一轮推理结束 |
+| `tool.dispatched` | `toolCallId, toolName, arguments, location: FRONTEND\|BACKEND` | 工具派发；FRONTEND 表示挂起等客户端执行 |
+| `tool.progress` | `toolCallId, toolName, progress, message` | 长工具进度 |
+| `tool.completed` / `tool.failed` | `toolCallId, toolName, result\|errorCode, errorMessage, durationMs` | 后端工具结果；failed 带 `retriable` |
+| `agent.spawned` / `agent.output` / `agent.reasoning` / `agent.progress` / `agent.completed` | `agentId, parentAgentId, depth, …` | 子 agent 生命周期 + 实时输出 |
+| `plan.proposed` / `plan.resolved` | `planId, plan, decision, feedback` | 计划审批闭环 |
+| `session.completed` | `finishReason, usage{prompt,completion}` | 终态；`suspended:frontend_tool_calls`=等前端工具；`suspended:iteration_budget_exhausted`=预算耗尽可续；`suspended:plan_approval`=等计划审批 |
+| `session.failed` | `errorCode, errorMessage, retriable` | 失败终态 |
+| （SSE 注释帧） | `: keepalive` | 心跳，客户端忽略 |
+| `data: [DONE]` | — | 流结束标记 |
+
+**续传**：`GET /api/v2/agent/tasks/{taskId}/events?afterSeq=N` 只回放 `seq > N` 的持久化
+事件并接上实时流；断线重连凭 `GET /tasks/{id}/state`（status/assistantText/lastSeq/
+pendingTools）重建现场。恢复暂停任务：`POST /tasks/{id}/resume`（toolResults / action=
+"continue" / planId+decision+planJson+feedback）。
+
+### 4.2 Data Stream 数字帧（历史/已废弃）
+
+**事件格式**: `{协议码}:{JSON数据}\n`（旧版 `/chat/completions` 使用；当前 V2 任务 API
+不再使用该编码）
 
 | 事件类型 | 协议码 | 格式 | 说明 |
 |---------|--------|------|------|
@@ -186,17 +212,6 @@ interface ParameterSchema {
 | 完成 | `e` | `e:{"finishReason":"stop","usage":{...}}\n` | 流结束，含 token 用量 |
 | 错误 | `d` | `d:{"error":"message"}\n` | 错误信息 |
 | 数据/注解 | `8` | `8:[{...}]\n` | 元数据（团队状态、会话信息等）|
-
-**完整响应示例**:
-```
-8:[{"sessionId":"sess-abc123","conversationId":"conv-456"}]
-0:"你好"
-0:"！"
-0:"我是"
-0:"AI助手"
-0:"。"
-e:{"finishReason":"stop","usage":{"promptTokens":25,"completionTokens":10}}
-```
 
 ### 4.2 SSE 格式（OpenAI 兼容）
 

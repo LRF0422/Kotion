@@ -114,6 +114,14 @@ public class AgentSessionFactory {
             appendToLeadingSystemMessage(session, resolution.promptFragment);
         }
 
+        // PLAN-mode guidance (second read-only defense layer, see §13.3 of the
+        // harness blueprint): make the contract explicit in the system prompt.
+        if (mode == AgentMode.PLAN) {
+            appendToLeadingSystemMessage(session, "[规划模式] 你处于只读规划模式：只能调研、检索与分析，"
+                    + "严禁修改、删除或外发任何内容。完成调研后必须调用 present_plan 提交结构化计划，"
+                    + "等待用户批准后才能执行写操作。");
+        }
+
         // Inject user profile + recalled memory as leading context.
         injectPersonalization(session, identity);
 

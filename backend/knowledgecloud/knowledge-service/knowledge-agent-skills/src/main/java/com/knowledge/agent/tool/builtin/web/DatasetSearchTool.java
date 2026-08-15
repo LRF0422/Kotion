@@ -72,6 +72,11 @@ public class DatasetSearchTool implements Tool {
     }
 
     @Override
+    public boolean isReadOnly() {
+        return true;
+    }
+
+    @Override
     public String getDescription() {
         return "Search curated public datasets from open data hubs (HuggingFace, Kaggle, data.gov). "
                 + "Use this when the user asks for pre-curated datasets rather than arbitrary web pages. "

@@ -6,7 +6,7 @@
  * @module @kn/editor/extensions/sync-block
  */
 
-import { ExtensionWrapper } from "@kn/common";
+import { ExtensionWrapper, getAccessToken } from "@kn/common";
 import { EditorMenu } from "../../editor/EditorMenu";
 import { PageContext } from "../../editor/context";
 import { useEditorExtension } from "../../editor/use-extension";
@@ -186,7 +186,8 @@ export const SyncBlockView: React.FC<NodeViewProps> = React.memo((props) => {
             const newProvider = new TiptapCollabProvider({
                 baseUrl: getBaseUrl(),
                 name: roomKey,
-                token: roomKey,
+                // Auth token is the user's access token — never the room key.
+                token: getAccessToken() || '',
                 document: doc,
                 onSynced: ({ state }) => {
                     setSyncStatus('synced');

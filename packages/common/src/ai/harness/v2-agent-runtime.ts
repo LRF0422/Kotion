@@ -130,6 +130,33 @@ export class V2AgentRuntime {
             input.taskId, stream, input.resolveTool, input.onToolExecution, input.signal)
     }
 
+    /**
+     * Respond to a proposed plan (plan-approval gate): approved flips the
+     * backend session to EXECUTE and injects the (possibly edited) plan;
+     * rejected stays in PLAN and hands the feedback back for re-planning.
+     */
+    async *resolvePlan(input: {
+        taskId: string
+        planId: string
+        decision: 'approved' | 'rejected'
+        planJson?: string
+        feedback?: string
+        resolveTool: (name: string) => ToolDefinition | undefined
+        signal: AbortSignal
+        onToolExecution?: OnToolExecution
+    }): AsyncGenerator<HarnessEvent> {
+        this.currentTaskId = input.taskId
+        const stream = await this.postResume({
+            taskId: input.taskId,
+            planId: input.planId,
+            decision: input.decision,
+            planJson: input.planJson,
+            feedback: input.feedback,
+        }, input.signal)
+        yield* this.driveLoop(
+            input.taskId, stream, input.resolveTool, input.onToolExecution, input.signal)
+    }
+
     /** Cancel a running/paused task. */
     async cancelTask(taskId: string, signal?: AbortSignal): Promise<void> {
         const response = await authorizedFetch(`${this.apiBase}/tasks/${taskId}/cancel`, {
@@ -308,7 +335,7 @@ export class V2AgentRuntime {
 
                     if (toolDef?.execute) {
                         try {
-                            const rawResult = await toolDef.execute(args)
+                            const rawResult = await toolDef.execute(args, pendingTool.id)
                             toolResult = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult)
                             endEvent = {
                                 type: 'tool-call-end',
@@ -606,6 +633,8 @@ export class V2AgentRuntime {
                 return [{
                     type: 'error',
                     error: data.errorMessage || 'Agent session failed',
+                    code: data.errorCode as string | undefined,
+                    retriable: data.retriable as boolean | undefined,
                 }]
 
             case 'agent.spawned':
@@ -635,6 +664,30 @@ export class V2AgentRuntime {
                     }],
                 }]
 
+            case 'agent.output':
+                return [{
+                    type: 'annotation',
+                    annotations: [{
+                        type: 'subagent_output',
+                        agentId: data.agentId || data.taskId,
+                        parentAgentId: data.parentAgentId || data.sessionId,
+                        depth: data.depth ?? 1,
+                        content: data.content || '',
+                    }],
+                }]
+
+            case 'agent.reasoning':
+                return [{
+                    type: 'annotation',
+                    annotations: [{
+                        type: 'subagent_reasoning',
+                        agentId: data.agentId || data.taskId,
+                        parentAgentId: data.parentAgentId || data.sessionId,
+                        depth: data.depth ?? 1,
+                        content: data.content || '',
+                    }],
+                }]
+
             case 'agent.completed':
                 return [{
                     type: 'annotation',
@@ -645,6 +698,42 @@ export class V2AgentRuntime {
                         depth: data.depth ?? 1,
                         status: data.success ? 'completed' : 'error',
                         finishReason: data.success ? 'stop' : 'error',
+                        result: data.result,
+                        durationMs: data.durationMs,
+                    }],
+                }]
+
+            case 'tool.progress':
+                return [{
+                    type: 'annotation',
+                    annotations: [{
+                        type: 'tool_progress',
+                        toolCallId: data.toolCallId,
+                        toolName: data.toolName,
+                        progress: data.progress,
+                        message: data.message,
+                    }],
+                }]
+
+            case 'plan.proposed':
+                return [{
+                    type: 'annotation',
+                    annotations: [{
+                        type: 'plan_proposed',
+                        plan: data.plan,
+                        planId: data.planId,
+                        sessionId: data.sessionId,
+                    }],
+                }]
+
+            case 'plan.resolved':
+                return [{
+                    type: 'annotation',
+                    annotations: [{
+                        type: 'plan_resolved',
+                        planId: data.planId,
+                        decision: data.decision,
+                        feedback: data.feedback,
                     }],
                 }]
 
@@ -710,7 +799,15 @@ export class V2AgentRuntime {
 
     /** POST /tasks/{id}/resume → SSE continuation stream. */
     private async postResume(
-        body: { taskId: string; toolResults?: ToolResultPayload[]; action?: string },
+        body: {
+            taskId: string
+            toolResults?: ToolResultPayload[]
+            action?: string
+            planId?: string
+            decision?: string
+            planJson?: string
+            feedback?: string
+        },
         signal?: AbortSignal
     ): Promise<Response> {
         const response = await authorizedFetch(`${this.apiBase}/tasks/${body.taskId}/resume`, {
@@ -719,6 +816,10 @@ export class V2AgentRuntime {
             body: JSON.stringify({
                 toolResults: body.toolResults,
                 action: body.action,
+                planId: body.planId,
+                decision: body.decision,
+                planJson: body.planJson,
+                feedback: body.feedback,
             }),
             signal,
         })

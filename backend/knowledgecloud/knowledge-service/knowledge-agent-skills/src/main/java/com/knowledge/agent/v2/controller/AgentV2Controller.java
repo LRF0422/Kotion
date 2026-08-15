@@ -6,6 +6,7 @@ import com.knowledge.agent.v2.event.AgentEventSerializer;
 import com.knowledge.agent.v2.event.LifecycleEvent;
 import com.knowledge.agent.v2.job.AgentJob;
 import com.knowledge.agent.v2.job.AgentJobService;
+import com.knowledge.agent.v2.job.ResumeApplier;
 import com.knowledge.agent.v2.session.AgentIdentity;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import io.swagger.annotations.Api;
@@ -88,10 +89,20 @@ public class AgentV2Controller {
                 results.add(r);
             }
         }
-        log.info("V2 resume (task): taskId={}, action={}, toolResults={}",
+        log.info("V2 resume (task): taskId={}, action={}, toolResults={}, decision={}",
                 taskId, request.getAction(),
-                request.getToolResults() != null ? request.getToolResults().size() : 0);
-        return streamToEmitter(taskId, jobService.resume(taskId, results, request.getAction()));
+                request.getToolResults() != null ? request.getToolResults().size() : 0,
+                request.getDecision());
+        ResumeApplier.PlanDecision planDecision = null;
+        if (request.getDecision() != null || request.getPlanId() != null) {
+            planDecision = new ResumeApplier.PlanDecision();
+            planDecision.planId = request.getPlanId();
+            planDecision.decision = request.getDecision();
+            planDecision.planJson = request.getPlanJson();
+            planDecision.feedback = request.getFeedback();
+        }
+        return streamToEmitter(taskId, jobService.resume(taskId, results, request.getAction(),
+                planDecision));
     }
 
     // ---- SSE plumbing (keepalive + shared serializer) ----
@@ -247,6 +258,11 @@ public class AgentV2Controller {
         private List<ToolResultPayload> toolResults;
         /** "continue" = budget-exhaustion resume (no tool results). */
         private String action;
+        /** Plan-approval decision fields (plan mode resume). */
+        private String planId;
+        private String decision;
+        private String planJson;
+        private String feedback;
     }
 
     /** A single tool execution result from the frontend. */

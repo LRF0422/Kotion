@@ -33,10 +33,17 @@ public class RegistrationController {
         log.info("Registering tools from service: {} (count: {})",
                 request.getServiceId(), request.getTools() != null ? request.getTools().size() : 0);
 
-        registryCenter.register(request.getServiceId(), request.getTools());
+        try {
+            registryCenter.register(request.getServiceId(), request.getTools());
+        } catch (RuntimeException e) {
+            log.error("Remote tool registration failed for {}: {}", request.getServiceId(), e.getMessage());
+            return R.fail("Registration failed: " + e.getMessage());
+        }
 
-        // Wire up the invoker on each adapter and register in ToolRegistry
-        for (RemoteToolAdapter adapter : registryCenter.getAllToolAdapters()) {
+        // Wire up the invoker on the adapters of THIS registration batch only
+        // (re-wiring every adapter on every register call was O(n²) churn and
+        // clobbered unrelated services' adapters).
+        for (RemoteToolAdapter adapter : registryCenter.getAdaptersForService(request.getServiceId())) {
             adapter.setInvoker(remoteToolInvoker);
             toolRegistry.register(adapter);
         }

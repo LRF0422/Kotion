@@ -261,6 +261,23 @@ export interface PlanProposedAnnotation {
     planId?: string
 }
 
+/** The user's decision on a proposed plan has been applied. */
+export interface PlanResolvedAnnotation {
+    type: 'plan_resolved'
+    planId?: string
+    decision?: 'approved' | 'rejected'
+    feedback?: string
+}
+
+/** Incremental progress of a long-running backend tool. */
+export interface ToolProgressAnnotation {
+    type: 'tool_progress'
+    toolCallId?: string
+    toolName?: string
+    progress?: number
+    message?: string
+}
+
 /** All annotation types from the spec */
 export type Annotation =
     | AgentStatusAnnotation
@@ -278,6 +295,8 @@ export type Annotation =
     | ContextCompressedAnnotation
     | PlanModeEnteredAnnotation
     | PlanProposedAnnotation
+    | PlanResolvedAnnotation
+    | ToolProgressAnnotation
 
 // ============ Stream Event Types ============
 

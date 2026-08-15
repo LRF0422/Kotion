@@ -52,7 +52,10 @@ public class DefaultLlmAdapter implements LlmAdapter {
 
         LlmRequest v1Request = buildV1Request(request);
 
+        // Offload the blocking HTTP call off the caller's thread (never block
+        // a Netty/engine thread on a provider round-trip).
         return Mono.fromCallable(() -> client.chat(v1Request))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
                 .map(this::convertResponse);
     }
 

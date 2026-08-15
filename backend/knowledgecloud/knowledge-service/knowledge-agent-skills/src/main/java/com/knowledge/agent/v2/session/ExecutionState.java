@@ -29,6 +29,18 @@ public class ExecutionState {
 
     private final AtomicInteger iteration = new AtomicInteger(0);
     private final AtomicReference<AgentState> currentState = new AtomicReference<>(AgentState.INIT);
+    /**
+     * The state the engine left when it entered {@link #currentState} — the
+     * real {@code from} side of the transition. Lets interceptors observe true
+     * transition boundaries (e.g. ACT→OBSERVE) instead of a flattened
+     * from==to pair.
+     */
+    private final AtomicReference<AgentState> lastState = new AtomicReference<>(AgentState.INIT);
+    /**
+     * Child-agent engine subscriptions spawned by delegated tasks, keyed for
+     * cooperative cancellation: disposing the parent must cascade to children.
+     */
+    private final Set<reactor.core.Disposable> childSubscriptions = Collections.synchronizedSet(new LinkedHashSet<>());
     private final Set<String> activatedSkillNames = Collections.synchronizedSet(new LinkedHashSet<>());
     private final List<ConversationMessage> workingMessages = Collections.synchronizedList(new ArrayList<>());
     private final AtomicInteger totalPromptTokens = new AtomicInteger(0);
@@ -68,7 +80,14 @@ public class ExecutionState {
     }
 
     public void transitionTo(AgentState newState) {
+        AgentState previous = currentState.get();
+        lastState.set(previous);
         currentState.set(newState);
+    }
+
+    /** The state that was active before the current one (real transition {@code from}). */
+    public AgentState getLastState() {
+        return lastState.get();
     }
 
     public void activateSkill(String skillName) {
@@ -157,5 +176,35 @@ public class ExecutionState {
 
     public void clearPendingToolCalls() {
         this.pendingToolCalls = null;
+    }
+
+    // ---- Child-agent subscriptions (cooperative cancellation) ----
+
+    public void registerChildSubscription(reactor.core.Disposable disposable) {
+        if (disposable != null) {
+            childSubscriptions.add(disposable);
+        }
+    }
+
+    public void removeChildSubscription(reactor.core.Disposable disposable) {
+        if (disposable != null) {
+            childSubscriptions.remove(disposable);
+        }
+    }
+
+    /** Dispose (cancel) every delegated child-agent execution still running. */
+    public void cancelChildSubscriptions() {
+        synchronized (childSubscriptions) {
+            for (reactor.core.Disposable d : new ArrayList<>(childSubscriptions)) {
+                try {
+                    if (!d.isDisposed()) {
+                        d.dispose();
+                    }
+                } catch (Exception ignored) {
+                    // best-effort cascade
+                }
+            }
+            childSubscriptions.clear();
+        }
     }
 }

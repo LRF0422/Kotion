@@ -292,16 +292,17 @@ export const createInsertTools = (editor: Editor): ToolsRecord => ({
                 const toReplace = replaceAll ? matches : [matches[0]]
                 const sortedMatches = [...toReplace].sort((a, b) => b.from - a.from)
 
+                // Single transaction: the previous per-match dispatch made each
+                // replacement a separate undo step — replacing N occurrences
+                // required N undos. Building one chain keeps it one step.
                 let success = true
+                const chain = editor.chain().focus()
                 for (const match of sortedMatches) {
-                    const result = editor.chain()
-                        .focus()
-                        .setTextSelection({ from: match.from, to: match.to })
+                    chain.setTextSelection({ from: match.from, to: match.to })
                         .insertContent(replaceWith)
-                        .scrollIntoView()
-                        .run()
-                    if (!result) success = false
                 }
+                const result = chain.scrollIntoView().run()
+                if (!result) success = false
 
                 if (!success) {
                     return { error: '替换操作部分失败' }

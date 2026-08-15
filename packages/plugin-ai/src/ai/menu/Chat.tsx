@@ -24,9 +24,9 @@ import {
 } from "@kn/common"
 import type { ChatMode, ChatModelParams, OffscreenEditorHandle } from "@kn/common"
 
-import { SubAgentTree } from "./SubAgentTree"
-import { PlanApprovalCard } from "./PlanApprovalCard"
-import { claimTaskStream, releaseTaskStream } from "./agent-tab-lock"
+import { SubAgentTree } from "@kn/ui"
+import { PlanApprovalCard } from "@kn/ui"
+import { claimTaskStreamAsync, releaseTaskStream } from "./agent-tab-lock"
 import {
     ExecutionStep, PendingUserChoice, ChatError,
     classifyError,
@@ -151,7 +151,8 @@ export const ExpandableChatDemo: React.FC<{
     const handleToolExecution = useCallback((event: ToolExecutionEvent) => {
         if (event.status === 'start') {
             const newStep: ExecutionStep = {
-                id: `step-${event.timestamp}-${Math.random().toString(36).substr(2, 9)}`,
+                id: `step-${event.timestamp}-${Math.random().toString(36).slice(2, 9)}`,
+                callId: event.callId,
                 toolName: event.toolName,
                 args: event.args,
                 status: 'running',
@@ -160,17 +161,20 @@ export const ExpandableChatDemo: React.FC<{
             stepsRef.current = [...stepsRef.current, newStep]
             setCurrentSteps([...stepsRef.current])
         } else {
+            // Correlate by the stable tool-call id when available; fall back to
+            // name+status only for legacy events without a callId.
             const updated = stepsRef.current.map(step => {
-                if (step.toolName === event.toolName && step.status === 'running') {
-                    return {
-                        ...step,
-                        result: event.result,
-                        error: event.error,
-                        status: event.status === 'success' ? 'success' as const : 'error' as const,
-                        duration: event.duration,
-                    }
+                const matched = event.callId
+                    ? step.callId === event.callId
+                    : step.toolName === event.toolName && step.status === 'running'
+                if (!matched) return step
+                return {
+                    ...step,
+                    result: event.result,
+                    error: event.error,
+                    status: event.status === 'success' ? 'success' as const : 'error' as const,
+                    duration: event.duration,
                 }
-                return step
             })
             stepsRef.current = updated
             setCurrentSteps([...updated])
@@ -395,7 +399,7 @@ export const ExpandableChatDemo: React.FC<{
     }, [])
 
     // ─── Streaming agent ──────────────────────────────────────────
-    const { stream, continueStream, attachStream, stop } = useEditorAgentOptimized(
+    const { stream, continueStream, resolvePlan, attachStream, stop } = useEditorAgentOptimized(
         agentEditor,
         handleToolExecution,
         handleUserChoiceRequest,
@@ -417,10 +421,10 @@ export const ExpandableChatDemo: React.FC<{
         () => applySubAgentAnnotations({}, annotations as any[]),
         [annotations],
     )
-    const pendingPlan = useMemo<{ plan: any } | null>(() => {
+    const pendingPlan = useMemo<{ plan: any; planId?: string } | null>(() => {
         for (let i = annotations.length - 1; i >= 0; i--) {
             const a = annotations[i] as any
-            if (a && a.type === 'plan_proposed' && a.plan) return { plan: a.plan }
+            if (a && a.type === 'plan_proposed' && a.plan) return { plan: a.plan, planId: a.planId }
         }
         return null
     }, [annotations])
@@ -657,17 +661,18 @@ export const ExpandableChatDemo: React.FC<{
         if (reattachRef.current) return
         reattachRef.current = true
         if (!backendTaskId) return
-        if (!claimTaskStream(backendTaskId)) return // another tab is handling it
-        setSuspendedSessionId(null)
-        setSuspendedTaskId(null)
-        suspendedTaskIdRef.current = null
-        stepsRef.current = []
-        setCurrentSteps([])
-        buffer.reset()
-        reasoningRef.current = ''
-        setStreamingReasoning('')
-
         void (async () => {
+            const claimed = await claimTaskStreamAsync(backendTaskId)
+            if (!claimed) return // another tab is handling it
+            setSuspendedSessionId(null)
+            setSuspendedTaskId(null)
+            suspendedTaskIdRef.current = null
+            stepsRef.current = []
+            setCurrentSteps([])
+            buffer.reset()
+            reasoningRef.current = ''
+            setStreamingReasoning('')
+
             try {
                 await consumeRound(() => attachStream({
                     taskId: backendTaskId,
@@ -704,25 +709,47 @@ export const ExpandableChatDemo: React.FC<{
         submitMessage(prompt)
     }, [isLoading, submitMessage])
 
-    // Plan approval / rejection
-    const handlePlanDecision = useCallback((decision: 'approved' | 'rejected') => {
+    // Plan approval / rejection — the real approval protocol: resume the
+    // suspended task with the decision (the backend flips EXECUTE and injects
+    // the approved plan, or stays in PLAN with the feedback).
+    const handlePlanDecision = useCallback(async (decision: 'approved' | 'rejected') => {
         if (isLoading) return
         const plan = pendingPlan?.plan
         if (!plan) return
-        if (decision === 'rejected') {
-            submitMessage('我不同意这个计划，请重新规划。')
+        const taskId = suspendedTaskId
+        const planId = pendingPlan?.planId
+        if (!taskId || !planId) {
+            // Legacy fallback when the task/plan ids are missing (e.g. old
+            // backend): express the decision as a chat message.
+            if (decision === 'rejected') {
+                submitMessage('我不同意这个计划，请重新规划。')
+                return
+            }
+            const steps = (plan.steps || [])
+                .map((s: any, i: number) => `${i + 1}. ${s.action}`)
+                .join('\n')
+            submitMessage(
+                `我已批准以下计划，请直接按计划执行，不要再次询问确认：\n` +
+                (plan.title ? `标题：${plan.title}\n` : '') +
+                (plan.summary ? `概述：${plan.summary}\n` : '') +
+                (steps ? `步骤：\n${steps}` : ''))
             return
         }
-        const steps = (plan.steps || [])
-            .map((s: any, i: number) => `${i + 1}. ${s.action}`)
-            .join('\n')
-        const prompt =
-            `我已批准以下计划，请直接按计划执行，不要再次询问确认：\n` +
-            (plan.title ? `标题：${plan.title}\n` : '') +
-            (plan.summary ? `概述：${plan.summary}\n` : '') +
-            (steps ? `步骤：\n${steps}` : '')
-        submitMessage(prompt)
-    }, [isLoading, pendingPlan, submitMessage])
+
+        await consumeRound(async () => {
+            return resolvePlan({
+                taskId,
+                planId,
+                decision,
+                planJson: JSON.stringify(plan),
+                feedback: decision === 'rejected' ? '用户拒绝了该计划' : undefined,
+                onAnnotation: handleStreamAnnotation,
+                onReasoning: handleStreamReasoning,
+            })
+        })
+        setSuspendedTaskId(null)
+        suspendedTaskIdRef.current = null
+    }, [isLoading, pendingPlan, suspendedTaskId, resolvePlan, consumeRound, submitMessage, handleStreamAnnotation, handleStreamReasoning])
 
     const handleRetry = useCallback(() => {
         if (!lastUserMessageRef.current || isLoading) return

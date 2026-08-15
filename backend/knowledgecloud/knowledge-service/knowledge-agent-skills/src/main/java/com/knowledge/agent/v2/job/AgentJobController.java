@@ -113,7 +113,21 @@ public class AgentJobController {
                 results.add(r);
             }
         }
-        return streamToEmitter(taskId, jobService.resume(taskId, results, request.getAction()));
+        return streamToEmitter(taskId, jobService.resume(taskId, results, request.getAction(),
+                toPlanDecision(request)));
+    }
+
+    /** Map the plan-approval fields of the resume payload (may be null). */
+    private static ResumeApplier.PlanDecision toPlanDecision(ResumeRequest request) {
+        if (request.getDecision() == null && request.getPlanId() == null) {
+            return null;
+        }
+        ResumeApplier.PlanDecision d = new ResumeApplier.PlanDecision();
+        d.planId = request.getPlanId();
+        d.decision = request.getDecision();
+        d.planJson = request.getPlanJson();
+        d.feedback = request.getFeedback();
+        return d;
     }
 
     @ApiOperation("Cancel a task")
@@ -384,7 +398,13 @@ public class AgentJobController {
     @Data
     public static class ResumeRequest {
         private List<ToolResultPayload> toolResults;
+        /** "continue" = budget-exhaustion resume (no tool results). */
         private String action;
+        /** Plan-approval decision fields (plan mode resume). */
+        private String planId;
+        private String decision;
+        private String planJson;
+        private String feedback;
     }
 
     @Data

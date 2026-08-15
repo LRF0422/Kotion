@@ -46,6 +46,7 @@ import {
     useSelector,
     useService,
     useTranslation,
+    getAccessToken,
     setPageEditWindowImpl,
     type API,
     type GlobalState,
@@ -405,9 +406,12 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
     useEffect(() => {
         const doc = new YDoc();
         const collabProvider = new TiptapCollabProvider({
-            baseUrl: 'wss://kotion.top:8877/ws',
+            // Env-configurable collab endpoint; auth token is the user's OAuth2
+            // access token — never the pageId (pageId-as-token lets anyone join
+            // any page's collaboration room).
+            baseUrl: (import.meta as any).env?.VITE_COLLABORATION_WS_URL || 'wss://kotion.top:8877/ws',
             name: `page:${pageId}`,
-            token: pageId,
+            token: getAccessToken() || '',
             document: doc,
             onSynced: () => setSynced(true),
         });
@@ -688,7 +692,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
                         className="h-full"
                         id={pageId}
                         user={collaborationUser}
-                        token={pageId}
+                        token={getAccessToken() || ''}
                         toc={false}
                         withTitle={true}
                         width="w-full"

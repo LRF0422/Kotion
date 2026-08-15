@@ -1,14 +1,19 @@
 /**
- * Plan Approval Card (P7) — plugin-ai inline chat copy.
+ * Plan Approval Card (P7)
  *
- * Same component as @kn/core's PlanApprovalCard, duplicated here because
- * plugin-ai cannot import from @kn/core. Renders a proposed plan and lets the
- * user approve (resume execution) or reject (re-plan).
+ * Renders a plan the agent proposed via `present_plan` (surfaced as
+ * `useSystemAgent().state.pendingPlan`) and lets the user approve or reject it.
+ * Approving resumes execution of the plan; rejecting re-plans.
+ *
+ * Prop types are local/structural on purpose — no coupling to `@kn/common`'s
+ * internal type barrel.
  */
 
 import React from 'react'
 import { Sparkles, CheckCircle2, XCircle, AlertTriangle } from '@kn/icon'
-import { Button, Badge, cn } from '@kn/ui'
+import { Button } from '../ui/button'
+import { Badge } from '../ui/badge'
+import { cn } from '../../lib/utils'
 
 interface PlanStepView {
     id?: number
@@ -29,6 +34,7 @@ export interface PlanApprovalCardProps {
     plan: PlanView
     onApprove: () => void
     onReject: () => void
+    /** Disable buttons while a resume request is in flight. */
     disabled?: boolean
     className?: string
 }
@@ -60,7 +66,9 @@ export const PlanApprovalCard: React.FC<PlanApprovalCardProps> = ({
                 </span>
             </div>
 
-            {plan.title && <p className="text-sm font-medium mb-0.5">{plan.title}</p>}
+            {plan.title && (
+                <p className="text-sm font-medium mb-0.5">{plan.title}</p>
+            )}
             {plan.summary && (
                 <p className="text-xs text-muted-foreground mb-2 whitespace-pre-wrap">{plan.summary}</p>
             )}

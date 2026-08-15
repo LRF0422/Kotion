@@ -214,8 +214,11 @@ public class AgentEngine {
             return Flux.just(Transition.toError(session.getSessionId(), "no_handler_for_" + currentState));
         }
 
-        // Execute through the pipeline, collecting events and the transition
-        return pipeline.execute(session, currentState, currentState, handler)
+        // Execute through the pipeline, collecting events and the transition.
+        // Pass the REAL from/to pair (ExecutionState tracks the last state) so
+        // interceptors can observe true transition boundaries (ACT→OBSERVE etc.).
+        AgentState transitionFromState = session.getExecution().getLastState();
+        return pipeline.execute(session, transitionFromState, currentState, handler)
                 .doOnNext(event -> {
                     // Publish non-internal events to the EventBus
                     if (!(event instanceof Transition)) {
@@ -237,7 +240,14 @@ public class AgentEngine {
                             .filter(e -> !(e instanceof Transition));
 
                     if (transition == null) {
-                        // No transition found — emit events and continue
+                        // A handler that completes without a Transition is a stuck
+                        // state — fail loudly instead of silently ending the stream
+                        // without a SessionCompleted/Failed lifecycle event. The raw
+                        // Transition is intentionally NOT emitted (it is internal);
+                        // buildFlux() sees ERROR and emits SessionFailed.
+                        log.error("AgentEngine: handler for state {} completed without a transition — marking session {} ERROR",
+                                currentState, session.getSessionId());
+                        session.getExecution().transitionTo(AgentState.ERROR);
                         return emitted;
                     }
 

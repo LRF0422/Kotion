@@ -1,11 +1,14 @@
 package com.knowledge.agent.v2.handler;
 
+import com.knowledge.agent.api.dto.ChatTool;
+import com.knowledge.agent.tool.ToolRegistry;
 import com.knowledge.agent.v2.config.AgentProperties;
 import com.knowledge.agent.v2.context.ContextCompactor;
 import com.knowledge.agent.v2.engine.AgentState;
 import com.knowledge.agent.v2.engine.StateHandler;
 import com.knowledge.agent.v2.engine.Transition;
 import com.knowledge.agent.v2.event.AgentEvent;
+import com.knowledge.agent.v2.event.PlanEvent;
 import com.knowledge.agent.v2.event.ToolEvent;
 import com.knowledge.agent.v2.llm.InferenceResponse;
 import com.knowledge.agent.v2.session.AgentSession;
@@ -39,10 +42,13 @@ import java.util.stream.Collectors;
 public class ActHandler implements StateHandler {
 
     private final ToolRouter toolRouter;
+    private final ToolRegistry toolRegistry;
     private final AgentProperties.ContextConfig contextConfig;
 
-    public ActHandler(ToolRouter toolRouter, AgentProperties.ContextConfig contextConfig) {
+    public ActHandler(ToolRouter toolRouter, ToolRegistry toolRegistry,
+            AgentProperties.ContextConfig contextConfig) {
         this.toolRouter = toolRouter;
+        this.toolRegistry = toolRegistry;
         this.contextConfig = contextConfig;
     }
 
@@ -61,18 +67,59 @@ public class ActHandler implements StateHandler {
         // tools in one turn; each must be answered by a tool result message or
         // providers like DeepSeek reject the next request (orphaned
         // tool_calls).
+        //
+        // PLAN mode adds a hard read-only gate (last line of defense): any
+        // mutating tool is NEVER executed — it is answered with a
+        // PLAN_MODE_VIOLATION tool message so the LLM can self-correct.
         List<ToolCall> backendCalls = new ArrayList<>();
         List<ToolCall> frontendCalls = new ArrayList<>();
         List<InferenceResponse.ToolCallData> frontendPending = new ArrayList<>();
+        List<AgentEvent> guardEvents = new ArrayList<>();
+        InferenceResponse.ToolCallData planCall = null;
         for (InferenceResponse.ToolCallData tc : pendingCalls) {
+            if ("present_plan".equals(tc.getName())) {
+                planCall = tc; // intercepted below — never executes normally
+                continue;
+            }
+            ToolEvent.ToolLocation location = toolRouter.resolveLocation(tc.getName(), session);
+            if (session.isPlanMode() && !isReadOnly(tc.getName(), location, session)) {
+                String violation = "plan 模式下禁止执行写操作工具 " + tc.getName()
+                        + "。请改用只读工具调研，或调用 present_plan 提交计划等待批准。";
+                guardEvents.add(new ToolEvent.ToolFailed(sessionId, tc.getId(), tc.getName(),
+                        "PLAN_MODE_VIOLATION", violation, false, 0));
+                appendToolMessage(session, tc.getId(), tc.getName(), "[已拦截] " + violation);
+                continue;
+            }
             ToolCall call = ToolCall.fromInference(tc);
-            if (toolRouter.resolveLocation(tc.getName(), session)
-                    == ToolEvent.ToolLocation.FRONTEND) {
+            if (location == ToolEvent.ToolLocation.FRONTEND) {
                 frontendCalls.add(call);
                 frontendPending.add(tc);
             } else {
                 backendCalls.add(call);
             }
+        }
+
+        // present_plan interception — the plan-approval gate (human in the loop).
+        // Execute any read-only backend calls collected in the same round first
+        // (their results must be answered), then emit plan.proposed and suspend.
+        // The present_plan call itself stays pending and is answered by the
+        // resume decision (approved/rejected) in ResumeApplier.
+        if (planCall != null) {
+            final InferenceResponse.ToolCallData finalPlanCall = planCall;
+            Flux<AgentEvent> prefix = backendCalls.isEmpty()
+                    ? Flux.empty()
+                    : withOutcomeAppending(session, toolRouter.dispatch(backendCalls, session));
+            return Flux.concat(
+                    prefix,
+                    Flux.fromIterable(guardEvents),
+                    Flux.just((AgentEvent) new PlanEvent.PlanProposed(
+                            sessionId, finalPlanCall.getId(), finalPlanCall.getArguments())),
+                    Flux.defer(() -> {
+                        List<InferenceResponse.ToolCallData> remaining = new ArrayList<>();
+                        remaining.add(finalPlanCall);
+                        session.getExecution().setPendingToolCalls(remaining);
+                        return Flux.just(Transition.toSuspended(sessionId, "plan_approval"));
+                    }));
         }
 
         log.debug("ActHandler: dispatching {} backend + {} frontend tool(s) for session {}: {}",
@@ -83,6 +130,7 @@ public class ActHandler implements StateHandler {
         if (frontendCalls.isEmpty()) {
             // All backend: dispatch and collect outcomes for OBSERVE
             return Flux.concat(
+                    Flux.fromIterable(guardEvents),
                     withOutcomeAppending(session, toolRouter.dispatch(backendCalls, session)),
                     // After all tools execute, clear pending and transition to OBSERVE
                     Flux.defer(() -> {
@@ -103,6 +151,7 @@ public class ActHandler implements StateHandler {
         Flux<AgentEvent> frontendDispatch = toolRouter.dispatch(frontendCalls, session);
 
         return Flux.concat(
+                Flux.fromIterable(guardEvents),
                 backendExecution,
                 Flux.defer(() -> {
                     session.getExecution().setPendingToolCalls(frontendPending);
@@ -110,6 +159,25 @@ public class ActHandler implements StateHandler {
                 }),
                 frontendDispatch,
                 Flux.just(Transition.toSuspended(sessionId, "frontend_tool_calls")));
+    }
+
+    /**
+     * PLAN-mode read-only check: backend tools consult the registry's
+     * {@code isReadOnly} descriptor; frontend tools consult the {@code readOnly}
+     * flag shipped in the client's catalog. Unknown tools are never trusted.
+     */
+    private boolean isReadOnly(String toolName, ToolEvent.ToolLocation location, AgentSession session) {
+        if (location == ToolEvent.ToolLocation.FRONTEND) {
+            if (session.getFrontendTools() != null) {
+                for (ChatTool ft : session.getFrontendTools()) {
+                    if (ft.getFunction() != null && toolName.equals(ft.getFunction().getName())) {
+                        return Boolean.TRUE.equals(ft.getReadOnly());
+                    }
+                }
+            }
+            return false;
+        }
+        return toolRegistry.isReadOnlyTool(toolName);
     }
 
     /**

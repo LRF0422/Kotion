@@ -77,6 +77,7 @@ public class AgentJobService {
     private static final long HOT_SAVE_INTERVAL_MS = 1_000L;
 
     private final AgentEngine engine;
+    private final com.knowledge.agent.v2.eventbus.AgentEventBus eventBus;
     private final AgentSessionFactory sessionFactory;
     private final AgentJobStore jobStore;
     private final AgentTaskEventStore eventStore;
@@ -92,6 +93,7 @@ public class AgentJobService {
     private final ConcurrentHashMap<String, WindowCounter> createCounters = new ConcurrentHashMap<>();
 
     public AgentJobService(AgentEngine engine,
+            com.knowledge.agent.v2.eventbus.AgentEventBus eventBus,
             AgentSessionFactory sessionFactory,
             AgentJobStore jobStore,
             AgentTaskEventStore eventStore,
@@ -102,6 +104,7 @@ public class AgentJobService {
             ObjectProvider<AgentStateStore> stateStoreProvider,
             ObjectMapper objectMapper) {
         this.engine = engine;
+        this.eventBus = eventBus;
         this.sessionFactory = sessionFactory;
         this.jobStore = jobStore;
         this.eventStore = eventStore;
@@ -242,16 +245,30 @@ public class AgentJobService {
     public Flux<TaskEvent> streamEvents(String taskId, long afterSeq) {
         TaskRun run = ensureLive(taskId);
 
-        List<AgentTaskEventStore.TaskEventRecord> records =
-                eventStore.replay(taskId, afterSeq, REPLAY_BATCH);
-        long replayMax = afterSeq;
-        List<TaskEvent> replayed = new ArrayList<>(records.size());
-        for (AgentTaskEventStore.TaskEventRecord record : records) {
-            replayed.add(TaskEvent.replayed(record.seq, record.type, record.payloadJson));
-            replayMax = record.seq;
+        // Page through the durable log until exhausted — a single replay call
+        // was capped at REPLAY_BATCH, which truncated history for long tasks
+        // whose live run had already been evicted.
+        List<TaskEvent> replayed = new ArrayList<>();
+        long cursor = afterSeq;
+        while (true) {
+            List<AgentTaskEventStore.TaskEventRecord> records =
+                    eventStore.replay(taskId, cursor, REPLAY_BATCH);
+            if (records == null || records.isEmpty()) {
+                break;
+            }
+            for (AgentTaskEventStore.TaskEventRecord record : records) {
+                if (record.seq <= cursor) {
+                    continue; // dedup against the watermark
+                }
+                replayed.add(TaskEvent.replayed(record.seq, record.type, record.payloadJson));
+                cursor = record.seq;
+            }
+            if (records.size() < REPLAY_BATCH) {
+                break; // store exhausted
+            }
         }
 
-        final long watermark = replayMax;
+        final long watermark = cursor;
         Flux<TaskEvent> live = run != null
                 ? run.live.asFlux().filter(te -> te.seq > watermark)
                 : Flux.empty();
@@ -268,6 +285,15 @@ public class AgentJobService {
      * instead of double-subscribing the engine.
      */
     public Flux<TaskEvent> resume(String taskId, List<ToolResult> toolResults, String action) {
+        return resume(taskId, toolResults, action, null);
+    }
+
+    /**
+     * Resume a paused job with frontend tool results, a fresh iteration budget
+     * (action=continue) and/or a plan-approval decision.
+     */
+    public Flux<TaskEvent> resume(String taskId, List<ToolResult> toolResults, String action,
+            ResumeApplier.PlanDecision planDecision) {
         TaskRun run = runs.get(taskId);
         if (run == null) {
             run = restorePaused(taskId);
@@ -282,7 +308,7 @@ public class AgentJobService {
                 return run.live.asFlux();
             }
 
-            applyResults(run.session, toolResults, action);
+            applyResults(run.session, toolResults, action, planDecision);
             synchronized (run.pendingTools) {
                 run.pendingTools.clear();
             }
@@ -290,7 +316,19 @@ public class AgentJobService {
             run.job.setFinishReason(null);
             jobStore.save(run.job);
 
-            return subscribe(engine.resume(run.session), run);
+            // Emit the plan resolution before the engine continuation so the
+            // client can close the pending-plan card deterministically.
+            Flux<com.knowledge.agent.v2.event.AgentEvent> source = engine.resume(run.session);
+            if (planDecision != null && planDecision.decision != null && planDecision.planId != null) {
+                source = Flux.concat(
+                        Flux.just((com.knowledge.agent.v2.event.AgentEvent)
+                                new com.knowledge.agent.v2.event.PlanEvent.PlanResolved(
+                                        run.session.getSessionId(), planDecision.planId,
+                                        planDecision.planJson,
+                                        planDecision.decision, planDecision.feedback)),
+                        source);
+            }
+            return subscribe(source, run);
         }
     }
 
@@ -311,6 +349,8 @@ public class AgentJobService {
             return true;
         }
         dispose(run);
+        // Cascade the cancellation into any delegated child agents still running.
+        cancelChildWork(run);
         run.executionActive.set(false);
         run.job.setStatus(AgentJobStatus.CANCELLED);
         run.job.setFinishReason("cancelled");
@@ -504,13 +544,37 @@ public class AgentJobService {
     private Flux<TaskEvent> subscribe(Flux<AgentEvent> source, TaskRun run) {
         Sinks.Many<TaskEvent> continuation = Sinks.many().replay().limit(4096);
 
+        // Merge sub-agent lifecycle events (agent.spawned/output/reasoning/
+        // progress/completed) published on the event bus under THIS session id
+        // into the task stream. Without this merge the events had zero
+        // subscribers and the sub-agent tree never reached the client.
+        // takeUntilOther completes the merged flux when the engine finishes.
+        Flux<AgentEvent> shared = source.share();
+        Flux<AgentEvent> delegation = eventBus != null
+                ? eventBus.subscribeSession(run.session.getSessionId())
+                : Flux.empty();
+        if (delegation == null) {
+            delegation = Flux.empty(); // defensive: bus implementations may return null
+        }
+        Flux<AgentEvent> merged = Flux.merge(shared, delegation)
+                .takeUntilOther(shared.ignoreElements());
+
         run.executionActive.set(true);
-        Disposable sub = source
+        Disposable sub = merged
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(
-                        ev -> onEvent(run, continuation, ev),
+                        ev -> {
+                            // MDC visibility for logs emitted on this worker thread.
+                            org.slf4j.MDC.put("traceId", run.session.getTraceId());
+                            try {
+                                onEvent(run, continuation, ev);
+                            } finally {
+                                org.slf4j.MDC.remove("traceId");
+                            }
+                        },
                         err -> {
                             run.executionActive.set(false);
+                            cancelChildWork(run);
                             onError(run, continuation, err);
                         },
                         () -> {
@@ -632,12 +696,13 @@ public class AgentJobService {
 
     /**
      * Apply tool results (deduplicated by toolCallId so a retried resume is a
-     * no-op for already-applied results) and/or grant a fresh iteration budget.
-     * Delegates to {@link ResumeApplier} for testability.
+     * no-op for already-applied results), a fresh iteration budget and/or a
+     * plan-approval decision. Delegates to {@link ResumeApplier} for testability.
      */
-    private void applyResults(AgentSession session, List<ToolResult> toolResults, String action) {
+    private void applyResults(AgentSession session, List<ToolResult> toolResults, String action,
+            ResumeApplier.PlanDecision planDecision) {
         ResumeApplier.apply(session, toolResults, action,
-                properties.getContext().getToolResultMaxChars());
+                properties.getContext().getToolResultMaxChars(), planDecision);
     }
 
     /**
@@ -703,6 +768,31 @@ public class AgentJobService {
         Disposable sub = run.subscription.get();
         if (sub != null && !sub.isDisposed()) {
             sub.dispose();
+        }
+    }
+
+    /**
+     * Cooperative cancellation of delegated work: disposes child-engine
+     * subscriptions tracked by the engine (ExecutionState) and by
+     * {@code DelegateTaskTool} (session metadata).
+     */
+    private void cancelChildWork(TaskRun run) {
+        run.session.getExecution().cancelChildSubscriptions();
+        Object subs = run.session.getMetadata().get(
+                com.knowledge.agent.v2.tool.DelegateTaskTool.CHILD_SUBSCRIPTIONS_KEY);
+        if (subs instanceof List) {
+            synchronized (subs) {
+                for (Object o : (List<?>) subs) {
+                    if (o instanceof Disposable) {
+                        try {
+                            ((Disposable) o).dispose();
+                        } catch (Exception ignored) {
+                            // best-effort cascade
+                        }
+                    }
+                }
+                ((List<?>) subs).clear();
+            }
         }
     }
 

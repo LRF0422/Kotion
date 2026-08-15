@@ -46,6 +46,17 @@ public interface Tool {
     }
 
     /**
+     * Whether this tool is read-only (no side effects). Read-only tools remain
+     * available in PLAN mode; mutating tools are hard-gated by the engine when
+     * the session runs in {@code AgentMode.PLAN}.
+     *
+     * @return true when the tool never mutates external state
+     */
+    default boolean isReadOnly() {
+        return false;
+    }
+
+    /**
      * Optional per-tool timeout override in seconds. When non-null, the
      * executor uses this instead of the global {@code agent.tool.timeout-seconds}.
      * Long-running tools (e.g. {@code delegate_task}, which runs a full

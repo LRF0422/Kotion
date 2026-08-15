@@ -68,6 +68,11 @@ export interface ToolExecutionEvent {
     error?: string
     timestamp: number
     duration?: number
+    /**
+     * Stable tool-call id from the LLM/backend (toolCallId). Lets consumers
+     * correlate start/end events even when the same tool runs concurrently.
+     */
+    callId?: string
 }
 
 export type OnToolExecution = (event: ToolExecutionEvent) => void
@@ -94,7 +99,13 @@ export type OnUserChoiceRequest = (request: UserChoiceRequest) => Promise<string
 export interface ToolDefinition {
     description: string
     inputSchema: any  // Using any to avoid conflicts with AI library's schema types
-    execute: (args: any) => Promise<any>
+    /**
+     * Execute the tool. The optional second argument is the stable tool-call
+     * id assigned by the backend — executors that surface {@link OnToolExecution}
+     * events should include it so start/end events correlate even when the
+     * same tool runs concurrently.
+     */
+    execute: (args: any, callId?: string) => Promise<any>
     // Allow additional properties that might be required by AI library
     [key: string]: any
 }

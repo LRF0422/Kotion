@@ -1,5 +1,6 @@
 
 export * from "./components"
+export * from "./components/ai"
 export * from "./lib/utils"
 export { useIsMobile, MOBILE_BREAKPOINT } from "./hooks/use-mobile"
 export { useResponsive } from "./hooks/use-responsive"

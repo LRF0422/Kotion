@@ -9,12 +9,20 @@ import reactor.core.publisher.Sinks;
  */
 public class AgentChannel {
 
+    /**
+     * Bounded per-channel buffer: an unbounded buffer let one slow/disconnected
+     * subscriber grow memory without limit until the 5-minute cleanup ran.
+     * When the buffer is full the OLDEST buffered message is dropped — channel
+     * traffic is progress reporting, not durable state.
+     */
+    private static final int BUFFER_SIZE = 256;
+
     private final String channelId;
     private final Sinks.Many<AgentMessage> sink;
 
     public AgentChannel(String channelId) {
         this.channelId = channelId;
-        this.sink = Sinks.many().multicast().onBackpressureBuffer();
+        this.sink = Sinks.many().multicast().onBackpressureBuffer(BUFFER_SIZE, false);
     }
 
     /**

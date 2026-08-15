@@ -273,7 +273,15 @@ class AgentError { AgentErrorCode code; String message; boolean retriable; Strin
 
 ### 5.1 保持现有事件类型
 
-`StreamEvent` 子类与 `DataStreamEncoder` 的 `0:/8:/9:/a:/d:/e:/g:` 帧编码**全部保留**。新增能力一律以「可选字段」承载，旧前端忽略即可。
+> **落地状态（更新）**：V2 任务 API 已取代旧的 `/chat/completions` 路径，线上协议是
+> **命名事件 SSE**（`session.created / think.delta / tool.dispatched / agent.spawned / plan.proposed /
+> session.completed[failed]`，SSE `id:` 携带 `seq`），详见
+> `doc/api/agent-streaming-frontend-integration.md` §4.1。`DataStreamEncoder` 的 `0:/8:/9:/a:/d:/e:/g:`
+> 帧编码已成为死代码（其 `d:`/`8:` 码值与 Vercel AI SDK Data Stream 规范并不一致），
+> **不再作为 wire 契约**，仅保留于 v1 历史模块。本蓝图其余设计点以此为准推进。
+>
+> `StreamEvent` 子类与 `DataStreamEncoder` 的帧编码保留仅为 v1 兼容；新增能力一律以
+> 命名事件 + 可选字段承载，旧前端忽略即可。
 
 ### 5.2 事件序列号（为续传铺路）
 

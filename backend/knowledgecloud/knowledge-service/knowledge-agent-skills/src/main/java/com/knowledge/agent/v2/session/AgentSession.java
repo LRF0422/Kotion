@@ -42,7 +42,12 @@ public class AgentSession {
     private final String conversationId;
     private final String traceId;
     private final AgentIdentity identity;
-    private final AgentMode mode;
+    /**
+     * Effective run mode. Volatile (not final): plan approval flips PLAN →
+     * EXECUTE at resume time, and the change must be visible to the engine
+     * thread and persist into session snapshots.
+     */
+    private volatile AgentMode mode;
 
     // ---- Configuration (immutable snapshot) ----
     private final int maxIterations;
@@ -119,6 +124,13 @@ public class AgentSession {
 
     public AgentMode getMode() {
         return mode;
+    }
+
+    /** Switch the effective run mode (plan approval/rejection flips it). */
+    public void setMode(AgentMode mode) {
+        if (mode != null) {
+            this.mode = mode;
+        }
     }
 
     public int getMaxIterations() {

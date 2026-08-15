@@ -28,6 +28,14 @@ public interface AgentTaskEventMapper extends BaseMapper<AgentTaskEventEntity> {
                                       @Param("afterSeq") long afterSeq,
                                       @Param("limit") int limit);
 
+    /** Gap-fill range query: rows in (afterSeq, endSeq] — bridges the hot ring buffer. */
+    @Select("SELECT * FROM agent_task_event WHERE task_id = #{taskId} AND seq > #{afterSeq} " +
+            "AND seq <= #{endSeq} ORDER BY seq ASC LIMIT #{limit}")
+    List<AgentTaskEventEntity> replayRange(@Param("taskId") String taskId,
+                                           @Param("afterSeq") long afterSeq,
+                                           @Param("endSeq") long endSeq,
+                                           @Param("limit") int limit);
+
     @Select("SELECT MAX(seq) FROM agent_task_event WHERE task_id = #{taskId}")
     Long maxSeq(@Param("taskId") String taskId);
 

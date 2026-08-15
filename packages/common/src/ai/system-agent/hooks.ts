@@ -82,14 +82,14 @@ export function useSystemAgentStream(options: UseSystemAgentStreamOptions = {}):
         }
     }, [agent.state.streamingContent])
 
-    // Track execution steps
+    // Track execution steps. onToolExecution is NOT re-invoked here: tool
+    // executions are already reported by the wrapped tool executors in the
+    // provider — re-emitting the latest step here double-fired the callback
+    // for every step.
     useEffect(() => {
         setSteps(agent.state.executionSteps)
-        if (onToolExecution && agent.state.executionSteps.length > 0) {
-            const latestStep = agent.state.executionSteps[agent.state.executionSteps.length - 1]
-            onToolExecution(latestStep)
-        }
-    }, [agent.state.executionSteps, onToolExecution])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [agent.state.executionSteps])
 
     const stream = useCallback(async (prompt: string, streamOptions?: Omit<StreamPromptOptions, 'editor'>) => {
         contentRef.current = ''
@@ -234,7 +234,9 @@ export function useQuickAction(options: QuickActionOptions) {
 
         try {
             await agent.stream(prompt)
-            setContent(agent.state.streamingContent)
+            // Read the buffer synchronously — the state mirror is synced via a
+            // RAF effect and could still hold stale content here.
+            setContent(agent.getStreamingContent())
         } catch (err) {
             setError(err instanceof Error ? err : new Error(String(err)))
         } finally {

@@ -7,7 +7,7 @@ import { Skeleton } from "@kn/ui";
 import { CollaborationEditor, exportToPDF, useIncrementalSave, TiptapCollabProvider } from "@kn/editor";
 import type { IncrementalPayload } from "@kn/editor";
 import { event, ON_PAGE_REFRESH, ON_FAVORITE_CHANGE } from "../../../event";
-import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, request, getBearerHeader } from "@kn/common";
+import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, request, getBearerHeader, getAccessToken } from "@kn/common";
 import { useNavigator, usePageTabs } from "@kn/common";
 import { setPageBridge, clearPageBridge, type PageBridge } from "@kn/common";
 import { setActiveEditor, clearActiveEditor } from "@kn/common";
@@ -250,9 +250,12 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
 
         const doc = new Y.Doc();
         const collabProvider = new TiptapCollabProvider({
-            baseUrl: 'wss://kotion.top:8877/ws',
+            // Env-configurable collab endpoint; auth token is the user's
+            // OAuth2 access token — never the pageId (pageId-as-token lets
+            // anyone join any page's collaboration room).
+            baseUrl: (import.meta as any).env?.VITE_COLLABORATION_WS_URL || 'wss://kotion.top:8877/ws',
             name: `page:${deferredPageId}`,
-            token: deferredPageId as string,
+            token: getAccessToken() || '',
             document: doc,
             onAwarenessUpdate: ({ states }) => {
                 const updatedUsers = states
@@ -963,7 +966,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                     className="h-full"
                     id={pageId as string}
                     user={collaborationUser}
-                    token={pageId as string}
+                    token={getAccessToken() || ''}
                     toc={showToc}
                     fullWidth={fullWidth}
                     withTitle={true}

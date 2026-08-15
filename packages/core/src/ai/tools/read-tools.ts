@@ -56,12 +56,24 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
             let charCount = 0
             let nodeCount = 0
 
+            // Context window is a PREFIX decoration: it must not consume the
+            // chunk budget. Walk the context span first (uncounted), then the
+            // real [from, from+chunkSize) span, counting only the latter — the
+            // old code counted context chars toward the budget AND reported a
+            // hasMore based on the un-shifted from, so each page returned less
+            // real content than requested and could misreport "more available".
             let actualFrom = from
+            let contextPrefix: any[] = []
             if (includeContext) {
                 actualFrom = Math.max(0, from - CONTEXT_WINDOW)
+                editor.state.doc.nodesBetween(actualFrom, from, (node, pos) => {
+                    const nodeInfo = buildNodeInfo(node, pos, true)
+                    contextPrefix.push(nodeInfo)
+                    return true
+                })
             }
 
-            editor.state.doc.nodesBetween(actualFrom, maxPos, (node, pos) => {
+            editor.state.doc.nodesBetween(from, maxPos, (node, pos) => {
                 if (nodeCount >= MAX_NODES_PER_READ) {
                     return false
                 }
@@ -79,14 +91,17 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
                 return true
             })
 
+            const contextNodes = includeContext
+                ? contextPrefix.map(n => ({ ...n, isContext: true }))
+                : []
             return {
                 success: true,
-                nodes: result,
-                count: result.length,
+                nodes: [...contextNodes, ...result],
+                count: contextNodes.length + result.length,
                 from: actualFrom,
-                to: Math.min(actualFrom + charCount, docSize - 2),
+                to: Math.min(from + charCount, docSize - 2),
                 charCount,
-                hasMore: (from + effectiveChunkSize) < (docSize - 2)
+                hasMore: (from + charCount) < (docSize - 2)
             }
         }
     },

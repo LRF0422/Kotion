@@ -120,10 +120,30 @@ public class ThinkHandler implements StateHandler {
         // Pass frontend tools from the client request so the LLM can invoke them.
         // toolIds=null means include all registered backend tools. The schema
         // JSON is cached by the frontend's capabilitiesVersion.
+        //
+        // PLAN mode (first read-only defense layer): the catalog shipped to the
+        // LLM contains ONLY read-only tools — mutating tools are invisible to
+        // the model, so it cannot even ask for them.
+        java.util.Collection<String> backendIds = session.getToolIds().isEmpty()
+                ? null : session.getToolIds();
+        java.util.List<com.knowledge.agent.api.dto.ChatTool> frontendTools = session.getFrontendTools().isEmpty()
+                ? null : session.getFrontendTools();
+        if (session.isPlanMode()) {
+            backendIds = toolRegistry.getReadOnlyToolIds();
+            if (frontendTools != null) {
+                java.util.List<com.knowledge.agent.api.dto.ChatTool> readOnlyFrontend = new java.util.ArrayList<>();
+                for (com.knowledge.agent.api.dto.ChatTool ft : frontendTools) {
+                    if (Boolean.TRUE.equals(ft.getReadOnly())) {
+                        readOnlyFrontend.add(ft);
+                    }
+                }
+                frontendTools = readOnlyFrontend.isEmpty() ? null : readOnlyFrontend;
+            }
+        }
         String toolsJson = toolRegistry.buildToolsJsonCached(
                 session.getCapabilitiesVersion(),
-                session.getToolIds().isEmpty() ? null : session.getToolIds(),
-                session.getFrontendTools().isEmpty() ? null : session.getFrontendTools());
+                backendIds,
+                frontendTools);
 
         return InferenceRequest.builder()
                 .model(session.getModelName())

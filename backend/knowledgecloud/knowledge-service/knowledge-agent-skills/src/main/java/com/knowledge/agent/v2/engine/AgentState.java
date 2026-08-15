@@ -6,11 +6,10 @@ package com.knowledge.agent.v2.engine;
  * <p>The state machine follows the "Perceive-Think-Act" cycle:
  * <pre>
  *   INIT → THINK → ACT → OBSERVE → THINK → ... → DONE
- *                    ↓                            ↗
- *                DELEGATE → SYNTHESIZE ──────────
- *                    ↓
- *                SUSPENDED (waiting for frontend)
+ *       ↘ ACT ──(frontend tools / plan approval)──▶ SUSPENDED
  * </pre>
+ * <p>Multi-agent delegation runs INSIDE the ACT state as the
+ * {@code delegate_task} backend tool — there is no separate DELEGATE state.
  *
  * <p>Terminal states: {@link #DONE}, {@link #ERROR}, {@link #SUSPENDED}.
  * {@code SUSPENDED} is a soft-terminal: the session can be resumed by the
@@ -40,16 +39,6 @@ public enum AgentState {
     OBSERVE,
 
     /**
-     * Delegating work to one or more sub-agents.
-     */
-    DELEGATE,
-
-    /**
-     * Synthesizing results from multiple sub-agents into a final response.
-     */
-    SYNTHESIZE,
-
-    /**
      * Normal completion — the agent produced a final response.
      */
     DONE,
@@ -77,7 +66,6 @@ public enum AgentState {
      * Whether this state represents an active processing phase.
      */
     public boolean isActive() {
-        return this == THINK || this == ACT || this == OBSERVE
-                || this == DELEGATE || this == SYNTHESIZE;
+        return this == THINK || this == ACT || this == OBSERVE;
     }
 }

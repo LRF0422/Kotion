@@ -35,7 +35,19 @@ public class ResilientLlmAdapter implements LlmAdapter {
 
     @Override
     public Flux<LlmChunk> streamInfer(InferenceRequest request) {
+        // First-token guard: once ANY business token reached the client, a
+        // retry would re-stream the whole response and duplicate text. From
+        // that point failures propagate downstream (the engine surfaces them
+        // as an error event) instead of silently re-invoking the LLM.
+        java.util.concurrent.atomic.AtomicBoolean tokenEmitted =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
         return delegate.streamInfer(request)
+                .doOnNext(chunk -> {
+                    if (chunk.getType() == LlmChunk.ChunkType.TEXT_DELTA
+                            || chunk.getType() == LlmChunk.ChunkType.REASONING_DELTA) {
+                        tokenEmitted.set(true);
+                    }
+                })
                 // Idle timeout: if no chunk arrives within the window, fail
                 .timeout(Duration.ofSeconds(config.getIdleTimeoutSeconds()))
                 // Overall timeout for the entire stream
@@ -44,9 +56,9 @@ public class ResilientLlmAdapter implements LlmAdapter {
                 .onErrorMap(TimeoutException.class, e ->
                         new LlmTimeoutException("LLM stream idle timeout after "
                                 + config.getIdleTimeoutSeconds() + "s", e))
-                // Retry only on connection/transient errors (not on timeout after first token)
+                // Retry only on transient errors BEFORE the first token.
                 .retryWhen(Retry.backoff(config.getMaxRetries(), Duration.ofMillis(500))
-                        .filter(this::isRetriable)
+                        .filter(t -> !tokenEmitted.get() && isRetriable(t))
                         .doBeforeRetry(signal ->
                                 log.warn("LLM stream retry #{}: {}",
                                         signal.totalRetries() + 1, signal.failure().getMessage()))
@@ -78,11 +90,24 @@ public class ResilientLlmAdapter implements LlmAdapter {
 
     /**
      * Determine if an error is retriable (transient).
-     * Connection errors and 5xx responses are retriable; 4xx and timeouts are not.
+     * 429/5xx and connection failures are retriable; 4xx and timeouts are not.
+     * The classification prefers the typed exception (thrown by
+     * {@code OpenAiCompatibleClient} since the error-propagation fix) and only
+     * falls back to message matching for legacy providers.
      */
     private boolean isRetriable(Throwable t) {
         if (t instanceof LlmTimeoutException) {
             return false; // Don't retry timeouts
+        }
+        if (t instanceof org.springframework.web.reactive.function.client.WebClientResponseException) {
+            org.springframework.http.HttpStatus status =
+                    ((org.springframework.web.reactive.function.client.WebClientResponseException) t).getStatusCode();
+            return status == org.springframework.http.HttpStatus.TOO_MANY_REQUESTS
+                    || (status != null && status.is5xxServerError());
+        }
+        if (t instanceof com.knowledge.agent.llm.OpenAiCompatibleClient.LlmApiException) {
+            return t.getCause() instanceof org.springframework.web.reactive.function.client.WebClientResponseException
+                    && isRetriable(t.getCause());
         }
         // Connection refused, reset, etc. are retriable
         String msg = t.getMessage();

@@ -1,5 +1,6 @@
 package com.knowledge.agent.v2.handler;
 
+import com.knowledge.agent.tool.ToolRegistry;
 import com.knowledge.agent.v2.config.AgentProperties;
 import com.knowledge.agent.v2.engine.AgentState;
 import com.knowledge.agent.v2.engine.Transition;
@@ -39,8 +40,9 @@ class ActHandlerMixedToolsTest {
     @BeforeEach
     void setUp() {
         toolRouter = mock(ToolRouter.class);
+        ToolRegistry toolRegistry = mock(ToolRegistry.class);
         AgentProperties properties = new AgentProperties();
-        handler = new ActHandler(toolRouter, properties.getContext());
+        handler = new ActHandler(toolRouter, toolRegistry, properties.getContext());
         session = AgentSession.builder()
                 .sessionId("s1")
                 .conversationId("c1")

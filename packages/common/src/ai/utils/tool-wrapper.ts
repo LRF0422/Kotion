@@ -42,18 +42,19 @@ export const wrapToolWithCallback = (
 
     return {
         ...tool,
-        execute: async (args: any) => {
+        execute: async (args: any, callId?: string) => {
             const startTime = Date.now()
 
             onToolExecution({
                 toolName,
                 args,
                 status: 'start',
-                timestamp: startTime
+                timestamp: startTime,
+                callId,
             })
 
             try {
-                const result = await tool.execute(args)
+                const result = await tool.execute(args, callId)
 
                 onToolExecution({
                     toolName,
@@ -61,7 +62,8 @@ export const wrapToolWithCallback = (
                     status: 'success',
                     result,
                     timestamp: startTime,
-                    duration: Date.now() - startTime
+                    duration: Date.now() - startTime,
+                    callId,
                 })
 
                 return result
@@ -72,7 +74,8 @@ export const wrapToolWithCallback = (
                     status: 'error',
                     error: error instanceof Error ? error.message : String(error),
                     timestamp: startTime,
-                    duration: Date.now() - startTime
+                    duration: Date.now() - startTime,
+                    callId,
                 })
                 throw error
             }

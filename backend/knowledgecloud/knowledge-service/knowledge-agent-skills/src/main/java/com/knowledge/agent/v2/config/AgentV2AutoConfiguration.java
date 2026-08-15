@@ -26,8 +26,6 @@ import com.knowledge.agent.v2.llm.LlmAdapter;
 import com.knowledge.agent.v2.llm.ResilientLlmAdapter;
 import com.knowledge.agent.v2.pipeline.AgentInterceptor;
 import com.knowledge.agent.v2.pipeline.InterceptorPipeline;
-import com.knowledge.agent.v2.orchestrator.DAGScheduler;
-import com.knowledge.agent.v2.orchestrator.OrchestratorV2;
 import com.knowledge.agent.v2.tool.BackendExecutor;
 import com.knowledge.agent.v2.tool.CustomAgentResolver;
 import com.knowledge.agent.v2.tool.DelegateTaskTool;
@@ -192,8 +190,9 @@ public class AgentV2AutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = "actHandler")
-    public StateHandler actHandler(ToolRouter toolRouter, AgentProperties properties) {
-        return new ActHandler(toolRouter, properties.getContext());
+    public StateHandler actHandler(ToolRouter toolRouter, ToolRegistry toolRegistry,
+            AgentProperties properties) {
+        return new ActHandler(toolRouter, toolRegistry, properties.getContext());
     }
 
     @Bean
@@ -222,22 +221,7 @@ public class AgentV2AutoConfiguration {
                 usageListenerProvider.getIfAvailable());
     }
 
-    // ---- Orchestrator V2 (Phase 3) ----
-
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnProperty(prefix = "agent.orchestrator", name = "enabled", havingValue = "true")
-    public DAGScheduler dagScheduler(AgentEngine agentEngine) {
-        return new DAGScheduler(agentEngine);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnProperty(prefix = "agent.orchestrator", name = "enabled", havingValue = "true")
-    public OrchestratorV2 orchestratorV2(DAGScheduler dagScheduler,
-            LlmAdapter llmAdapter,
-            AgentEventBus eventBus,
-            AgentProperties properties) {
-        return new OrchestratorV2(dagScheduler, llmAdapter, eventBus, properties.getOrchestrator());
-    }
+    // NOTE: the former OrchestratorV2 / DAGScheduler beans (Phase 3) were
+    // removed — the DAG orchestrator was dead code with no handler wiring and
+    // no result handoff. Multi-agent execution goes through DelegateTaskTool.
 }

@@ -36,8 +36,12 @@ export interface CapabilityProviders {
     skillRegistry: ReturnType<typeof getSkillRegistry>
     /** Bumped whenever the catalog changes; use to trigger re-renders. */
     version: number
-    /** Build (or return cached) capability catalog for the current providers. */
-    getCatalog: () => CapabilityCatalog
+    /**
+     * Build (or return cached) capability catalog for the current providers.
+     * Pass an optional active-skill set to ship only the skills the user has
+     * toggled on (the catalog is the activation surface).
+     */
+    getCatalog: (activeSkills?: Set<string>) => CapabilityCatalog
     /** Resolve a tool executor (wrapped with execution tracking) by name. */
     resolveTool: (name: string) => ToolDefinition | undefined
     /** All executable tools (unwrapped). */
@@ -173,11 +177,19 @@ export function useCapabilityProviders(
     }, [allTools, onToolExecution])
 
     // Rebuild the capability catalog whenever providers change (cached via ref).
-    const getCatalog = useCallback((): CapabilityCatalog => {
+    const getCatalog = useCallback((activeSkills?: Set<string>): CapabilityCatalog => {
         if (!catalogRef.current) {
             catalogRef.current = collectCapabilityCatalog(skillProvider, toolProvider)
         }
-        return catalogRef.current
+        if (!activeSkills || activeSkills.size === 0) {
+            return catalogRef.current
+        }
+        // Skill activation lives in the catalog: only toggled-on skills (and
+        // their tool payloads) are shipped to the backend.
+        return {
+            ...catalogRef.current,
+            skills: catalogRef.current.skills.filter(s => activeSkills.has(s.name)),
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [skillProvider, toolProvider, version])
 

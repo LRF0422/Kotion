@@ -59,4 +59,9 @@ public class PresentPlanTool implements Tool {
     public boolean isFrontend() {
         return false;
     }
+
+    @Override
+    public boolean isReadOnly() {
+        return true;
+    }
 }

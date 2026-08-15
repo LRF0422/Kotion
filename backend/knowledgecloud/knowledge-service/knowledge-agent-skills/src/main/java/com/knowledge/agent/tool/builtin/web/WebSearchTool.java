@@ -54,6 +54,10 @@ public class WebSearchTool implements Tool {
     public String getId() {
         return "web_search";
     }
+    @Override
+    public boolean isReadOnly() {
+        return true;
+    }
 
     @Override
     public String getDescription() {

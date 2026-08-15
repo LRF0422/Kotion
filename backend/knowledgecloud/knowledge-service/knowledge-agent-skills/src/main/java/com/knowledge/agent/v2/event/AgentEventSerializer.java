@@ -1,5 +1,7 @@
 package com.knowledge.agent.v2.event;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -88,10 +90,47 @@ public final class AgentEventSerializer {
                 payload.put("result", e.getResult());
                 payload.put("durationMs", e.getDurationMs());
                 payload.put("success", e.isSuccess());
+            } else if (event instanceof DelegationEvent.SubAgentOutput) {
+                DelegationEvent.SubAgentOutput e = (DelegationEvent.SubAgentOutput) event;
+                payload.put("content", e.getContent());
+            } else if (event instanceof DelegationEvent.SubAgentReasoning) {
+                DelegationEvent.SubAgentReasoning e = (DelegationEvent.SubAgentReasoning) event;
+                payload.put("content", e.getContent());
+            }
+        } else if (event instanceof PlanEvent) {
+            PlanEvent p = (PlanEvent) event;
+            payload.put("planId", p.getToolCallId());
+            Object plan = safeParsePlan(p.getPlanJson());
+            if (plan != null) {
+                payload.put("plan", plan);
+            }
+            if (event instanceof PlanEvent.PlanResolved) {
+                PlanEvent.PlanResolved e = (PlanEvent.PlanResolved) event;
+                payload.put("decision", e.getDecision());
+                if (e.getFeedback() != null) {
+                    payload.put("feedback", e.getFeedback());
+                }
             }
         } else {
             payload.put("eventType", event.type());
         }
         return payload;
+    }
+
+    /**
+     * Parse a plan artifact JSON into a structured object for the wire; falls
+     * back to the raw string so a malformed plan never breaks serialization.
+     */
+    private static final ObjectMapper PLAN_MAPPER = new ObjectMapper();
+
+    private static Object safeParsePlan(String planJson) {
+        if (planJson == null || planJson.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return PLAN_MAPPER.readValue(planJson, Object.class);
+        } catch (Exception e) {
+            return planJson;
+        }
     }
 }

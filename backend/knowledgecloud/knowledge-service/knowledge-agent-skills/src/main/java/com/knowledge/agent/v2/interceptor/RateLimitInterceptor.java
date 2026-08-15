@@ -2,6 +2,7 @@ package com.knowledge.agent.v2.interceptor;
 
 import com.knowledge.agent.v2.config.AgentProperties;
 import com.knowledge.agent.v2.engine.AgentState;
+import com.knowledge.agent.v2.engine.Transition;
 import com.knowledge.agent.v2.event.AgentEvent;
 import com.knowledge.agent.v2.event.SystemEvent;
 import com.knowledge.agent.v2.pipeline.AgentInterceptor;
@@ -59,7 +60,12 @@ public class RateLimitInterceptor implements AgentInterceptor {
             log.warn("Rate limited: tenant={}, session={}", tenantKey, session.getSessionId());
             SystemEvent.RateLimited rateLimitEvent = new SystemEvent.RateLimited(
                     session.getSessionId(), tenantKey, config.getRequestsPerMinute());
-            return Flux.just(rateLimitEvent);
+            // MUST emit a Transition: a short-circuited handler without one used
+            // to make the engine complete silently, and the job reconciler then
+            // revived the RUNNING job every 15s → endless rate-limit churn.
+            // Suspending cleanly lets the client retry once the window resets.
+            Transition suspend = Transition.toSuspended(session.getSessionId(), "rate_limited");
+            return Flux.just(rateLimitEvent, suspend);
         }
 
         return chain.proceed(session);

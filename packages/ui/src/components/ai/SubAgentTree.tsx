@@ -1,17 +1,20 @@
 /**
- * Sub-Agent Tree (P6) — plugin-ai inline chat copy.
+ * Sub-Agent Tree (P6)
  *
- * Same component as @kn/core's SubAgentTree, duplicated here because plugin-ai
- * depends on @kn/common/@kn/ui/@kn/icon but NOT @kn/core. Renders the live
- * sub-agent tree derived from `subagent_*` annotations.
+ * Renders the live sub-agent tree built by the system agent from `subagent_*`
+ * annotations (`useSystemAgent().state.subAgents`). Each delegated sub-agent
+ * gets a collapsible card showing its status, reasoning, tool steps, streaming
+ * output and token usage. Tolerant of parallel interleaving — nodes are keyed
+ * by agentId.
  *
- * Prop types are local/structural so this has no coupling to @kn/common's
- * internal type barrel (a `Record<string, SubAgentNode>` passes structurally).
+ * Prop types are local/structural on purpose so this component has no coupling
+ * to `@kn/common`'s internal type barrel.
  */
 
 import React, { useMemo, useState } from 'react'
 import { Loader2, CheckCircle2, XCircle, AlertTriangle, Sparkles } from '@kn/icon'
-import { Badge, cn } from '@kn/ui'
+import { Badge } from '../ui/badge'
+import { cn } from '../../lib/utils'
 
 type StepStatus = 'running' | 'success' | 'error'
 
@@ -34,6 +37,10 @@ interface SubAgentNodeView {
     steps: SubAgentStepView[]
     usage?: { promptTokens: number; completionTokens: number }
     error?: string
+    /** Custom agent name from AgentSpec.name (orchestrator-spawned agents). */
+    agentName?: string
+    /** The agent's task description from AgentSpec.description. */
+    description?: string
 }
 
 export interface SubAgentTreeProps {
@@ -81,6 +88,7 @@ function currentActivity(node: SubAgentNodeView): string | null {
 }
 
 function SubAgentCard({ node, indent, parentLabel }: { node: SubAgentNodeView; indent: number; parentLabel: string }) {
+    // Auto-expand while running, collapse once done (user can toggle).
     const [open, setOpen] = useState(node.status === 'running' || node.status === 'spawned')
 
     const activity = currentActivity(node)
@@ -105,8 +113,8 @@ function SubAgentCard({ node, indent, parentLabel }: { node: SubAgentNodeView; i
                     </span>
                     <Sparkles className="h-3 w-3 text-indigo-400 shrink-0" />
                     <StatusIcon status={node.status} />
-                    <span className="font-medium truncate max-w-[160px]" title={node.task}>
-                        {node.task || node.agentId}
+                    <span className="font-medium truncate max-w-[160px]" title={node.agentName || node.task || node.agentId}>
+                        {node.agentName || node.task || node.agentId}
                     </span>
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
                         {statusLabel(node.status)}
@@ -118,6 +126,12 @@ function SubAgentCard({ node, indent, parentLabel }: { node: SubAgentNodeView; i
                     )}
                 </button>
 
+                {/* Agent description subtitle (from AgentSpec.description). */}
+                {node.description && (
+                    <div className="ml-5 text-[10px] text-muted-foreground truncate" title={node.description}>
+                        {node.description}
+                    </div>
+                )}
                 {/* Inline progress + reporting target — always visible, no expand needed. */}
                 {activity && (
                     <div className="ml-5 text-[10px] text-muted-foreground truncate" title={activity}>
@@ -172,17 +186,20 @@ function parentLabelFor(node: SubAgentNodeView, subAgents: Record<string, SubAge
     const pid = node.parentAgentId
     const parent = pid ? subAgents[pid] : undefined
     if (!parent) return '主 Agent'
-    const t = (parent.task || parent.agentId || '').trim()
+    const t = (parent.agentName || parent.task || parent.agentId || '').trim()
     if (!t) return '主 Agent'
     return t.length > 20 ? `${t.slice(0, 20)}…` : t
 }
 
 export const SubAgentTree: React.FC<SubAgentTreeProps> = ({ subAgents, className }) => {
+    // Order nodes so each parent is immediately followed by its children
+    // (depth-first). Roots = parentAgentId null/unknown.
     const ordered = useMemo(() => {
         const nodes = Object.values(subAgents)
         const byParent = new Map<string | null, SubAgentNodeView[]>()
         const ids = new Set(nodes.map(n => n.agentId))
         for (const n of nodes) {
+            // Treat a parent we never saw as a root so nothing is dropped.
             const parent = n.parentAgentId && ids.has(n.parentAgentId) ? n.parentAgentId : null
             const arr = byParent.get(parent) || []
             arr.push(n)

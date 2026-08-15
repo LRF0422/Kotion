@@ -1,9 +1,12 @@
 import { generateText } from "@kn/common";
 import { logger } from "@kn/common";
 
-// API Configuration - should be moved to environment variables
+// API Configuration — the key MUST come from the build environment.
+// A hardcoded fallback key was previously shipped in the client bundle (leaked
+// credential); it has been removed. Builds without VITE_AI_IMAGE_API_KEY now
+// fail fast with a clear error instead of silently using a leaked secret.
 const AI_IMAGE_API_ENDPOINT = "https://open.bigmodel.cn/api/paas/v4/images/generations";
-const AI_IMAGE_API_KEY = process.env.VITE_AI_IMAGE_API_KEY || '400719e8d18a04f9f92702e84b2d36bd.Olz5beCB8EV8mrrG';
+const AI_IMAGE_API_KEY = (import.meta as any).env?.VITE_AI_IMAGE_API_KEY || '';
 const AI_IMAGE_MODEL = "cogview-3-plus";
 
 interface AIImageResponse {

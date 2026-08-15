@@ -37,7 +37,7 @@ export type HarnessEvent =
         finishReason?: string
         usage?: { promptTokens: number; completionTokens: number }
     }
-    | { type: 'error'; error: string }
+    | { type: 'error'; error: string; code?: string; retriable?: boolean }
 
 // ============ Run Input ============
 
@@ -91,6 +91,8 @@ export interface AgentHarness {
  */
 export interface ExecutionStep {
     id: string
+    /** Stable tool-call id from the backend (correlates start/end events). */
+    callId?: string
     toolName: string
     args: any
     result?: any

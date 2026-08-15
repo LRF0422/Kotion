@@ -142,18 +142,43 @@ public class DefaultAgentTaskEventStore implements AgentTaskEventStore {
             log.warn("AgentTaskEventStore Redis replay failed for {}: {}", taskId, e.getMessage());
         }
 
-        // Cold fallback: JDBC when the hot tier has nothing (Redis TTL evicted).
-        if (out.isEmpty()) {
+        // Gap fill: the hot tier is a ring buffer — when the checkpoint
+        // (afterSeq) predates the oldest retained record, fetch the missing
+        // span from the cold (JDBC) tier and merge, so reconnect replay is
+        // contiguous. Full cold fallback when the hot tier is empty.
+        boolean needGapFill = out.isEmpty();
+        long oldestRetained = Long.MAX_VALUE;
+        if (!out.isEmpty()) {
+            oldestRetained = out.get(0).seq;
+            needGapFill = afterSeq + 1 < oldestRetained;
+        }
+        if (needGapFill) {
             try {
-                List<AgentTaskEventEntity> rows = eventMapper.replay(taskId, afterSeq, cap);
+                long gapStart = out.isEmpty() ? afterSeq : afterSeq + 1;
+                long gapEnd = out.isEmpty() ? Long.MAX_VALUE : oldestRetained - 1;
+                List<AgentTaskEventEntity> rows = eventMapper.replayRange(
+                        taskId, gapStart, gapEnd, cap);
+                List<TaskEventRecord> merged = new ArrayList<>();
                 for (AgentTaskEventEntity row : rows) {
-                    out.add(new TaskEventRecord(
+                    merged.add(new TaskEventRecord(
                             row.getSeq() != null ? row.getSeq() : 0L,
                             row.getEventType(),
                             row.getPayload()));
                 }
+                merged.addAll(out);
+                // Deduplicate by seq (a row may exist in both tiers).
+                java.util.Set<Long> seen = new java.util.HashSet<>();
+                List<TaskEventRecord> deduped = new ArrayList<>();
+                for (TaskEventRecord rec : merged) {
+                    if (seen.add(rec.seq)) {
+                        deduped.add(rec);
+                    }
+                }
+                deduped.sort(java.util.Comparator.comparingLong(rec -> rec.seq));
+                out = deduped;
             } catch (Exception e) {
-                log.warn("AgentTaskEventStore JDBC replay failed for {}: {}", taskId, e.getMessage());
+                log.warn("AgentTaskEventStore JDBC gap-fill replay failed for {}: {}",
+                        taskId, e.getMessage());
             }
         }
         return out;

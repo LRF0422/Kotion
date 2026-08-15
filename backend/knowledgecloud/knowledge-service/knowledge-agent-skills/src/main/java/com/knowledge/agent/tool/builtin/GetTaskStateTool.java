@@ -25,6 +25,11 @@ public class GetTaskStateTool implements Tool {
     }
 
     @Override
+    public boolean isReadOnly() {
+        return true;
+    }
+
+    @Override
     public String getDescription() {
         return "读取你之前通过 update_task_state 记录的任务状态笔记（目标、计划、进度、注意事项）。"
                 + "在上下文被压缩或任务恢复后，用它找回权威的任务状态。";

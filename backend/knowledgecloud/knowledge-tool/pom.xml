@@ -203,6 +203,18 @@
                     <compilerArgs>
                         <arg>-parameters</arg>
                     </compilerArgs>
+                    <!-- Deterministic Lombok processing: without these paths some
+                         modules compiled with classpath-detected Lombok and others
+                         silently without it (missing getters/constructors). -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <!-- knowledge-tool is a standalone pom without the root
+                                 project's properties; pin the version explicitly -->
+                            <version>1.18.38</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
             <plugin>

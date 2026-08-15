@@ -46,6 +46,11 @@ public class WebFetchTool implements Tool {
     }
 
     @Override
+    public boolean isReadOnly() {
+        return true;
+    }
+
+    @Override
     public String getDescription() {
         return "Fetch and extract text content from a URL. Returns the page title and main text content.";
     }

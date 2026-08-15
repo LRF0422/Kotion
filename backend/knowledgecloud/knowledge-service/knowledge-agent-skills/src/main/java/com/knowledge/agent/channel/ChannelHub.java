@@ -28,11 +28,26 @@ public class ChannelHub {
     private final Map<String, Long> channelCreationTimes = new ConcurrentHashMap<>();
 
     /**
-     * Create or get a channel for the given ID.
+     * Create or get a channel for the given ID. When the channel already
+     * exists its creation time is NOT refreshed — but when a channel was
+     * evicted by cleanup and is re-created, the timestamp must restart, or a
+     * brand-new channel can be evicted immediately by the stale timestamp.
      */
     public AgentChannel create(String channelId) {
-        channelCreationTimes.putIfAbsent(channelId, System.currentTimeMillis());
-        return channels.computeIfAbsent(channelId, AgentChannel::new);
+        AgentChannel existing = channels.get(channelId);
+        if (existing != null) {
+            return existing;
+        }
+        synchronized (this) {
+            AgentChannel current = channels.get(channelId);
+            if (current != null) {
+                return current;
+            }
+            AgentChannel created = new AgentChannel(channelId);
+            channels.put(channelId, created);
+            channelCreationTimes.put(channelId, System.currentTimeMillis());
+            return created;
+        }
     }
 
     /**

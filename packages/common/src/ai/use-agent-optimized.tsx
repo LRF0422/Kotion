@@ -332,6 +332,50 @@ export const useEditorAgentOptimized = (
         }
     }, [resolveTool, onToolExecution, toTextStream])
 
+    // Respond to a proposed plan (plan-approval gate).
+    const resolvePlan = useCallback(async (options: {
+        taskId: string
+        planId: string
+        decision: 'approved' | 'rejected'
+        planJson?: string
+        feedback?: string
+        onAnnotation?: (annotations: any[]) => void
+        onReasoning?: (content: string) => void
+    }) => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort()
+        }
+        abortControllerRef.current = new AbortController()
+
+        isStreamingRef.current = true
+        try {
+            const events = harnessRef.current.resolvePlan({
+                taskId: options.taskId,
+                planId: options.planId,
+                decision: options.decision,
+                planJson: options.planJson,
+                feedback: options.feedback,
+                resolveTool,
+                signal: abortControllerRef.current.signal,
+                onToolExecution,
+            })
+
+            const textStream = toTextStream(events, {
+                onAnnotation: options.onAnnotation,
+                onReasoning: options.onReasoning,
+            })
+
+            return { textStream }
+        } catch (error: any) {
+            if (error.name === 'AbortError') {
+                return { textStream: async function* () { /* empty */ }() }
+            }
+            throw error
+        } finally {
+            isStreamingRef.current = false
+        }
+    }, [resolveTool, onToolExecution, toTextStream])
+
     // Re-attach to an in-flight task after a refresh/dropped connection.
     const attachStream = useCallback(async (options: {
         taskId: string
@@ -387,6 +431,7 @@ export const useEditorAgentOptimized = (
     return {
         stream,
         continueStream,
+        resolvePlan,
         attachStream,
         stop,
         isGenerating,

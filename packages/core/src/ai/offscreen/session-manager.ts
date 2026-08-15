@@ -15,6 +15,8 @@ import type { OffscreenEditorHandle } from "@kn/common"
 const IDLE_TIMEOUT_MS = 60_000
 /** Max simultaneously mounted sessions; idle ones beyond this are LRU-evicted. */
 const MAX_SESSIONS = 3
+/** Acquire wait cap — readiness must arrive within this window or the caller errors. */
+const ACQUIRE_TIMEOUT_MS = 15_000
 
 interface Waiter {
     resolve: (handle: OffscreenEditorHandle) => void
@@ -53,16 +55,22 @@ const clearIdleTimer = (record: SessionRecord): void => {
     }
 }
 
-/** Flush (best effort) then drop the session; the host unmounts its editor. */
+/** Flush (best effort) THEN drop the session; the host unmounts its editor. */
 const destroySession = async (pageId: string): Promise<void> => {
     const record = sessions.get(pageId)
     if (!record) return
     clearIdleTimer(record)
-    sessions.delete(pageId)
+    // Flush FIRST: previously the record was deleted before the await, so a
+    // re-acquire during the flush installed a NEW record whose refCount was
+    // then decremented by the old handle's release — a refCount leak.
     try {
         await record.flush?.()
     } catch { /* stays dirty server-side; the collab doc still has the edits */ }
-    notify()
+    // Only drop when the map still holds THIS record (re-acquire race guard).
+    if (sessions.get(pageId) === record) {
+        sessions.delete(pageId)
+        notify()
+    }
 }
 
 const scheduleIdleDestroy = (record: SessionRecord): void => {
@@ -145,7 +153,27 @@ export const offscreenSessionManager = {
             return Promise.resolve(buildHandle(record))
         }
         return new Promise<OffscreenEditorHandle>((resolve, reject) => {
-            record!.waiters.push({ resolve, reject })
+            // Bounded wait: a host that never reaches readiness (page load
+            // failure without markError, dead WS, etc.) used to leave the
+            // caller's promise pending forever. Time out and surface an error.
+            const timeout = setTimeout(() => {
+                const idx = record.waiters.findIndex(w => w.reject === reject)
+                if (idx >= 0) {
+                    record.waiters.splice(idx, 1)
+                    record.refCount = Math.max(0, record.refCount - 1)
+                    if (record.refCount <= 0) scheduleIdleDestroy(record)
+                }
+                reject(new Error('Offscreen editor session timed out waiting for readiness'))
+            }, ACQUIRE_TIMEOUT_MS)
+            const wrappedResolve = (handle: OffscreenEditorHandle) => {
+                clearTimeout(timeout)
+                resolve(handle)
+            }
+            const wrappedReject = (err: Error) => {
+                clearTimeout(timeout)
+                reject(err)
+            }
+            record!.waiters.push({ resolve: wrappedResolve, reject: wrappedReject })
         })
     },
 

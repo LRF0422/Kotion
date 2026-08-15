@@ -72,6 +72,27 @@ public class ToolRegistry {
     }
 
     /**
+     * Whether a registered tool is read-only (safe in PLAN mode).
+     */
+    public boolean isReadOnlyTool(String toolId) {
+        Tool tool = tools.get(toolId);
+        return tool != null && tool.isReadOnly();
+    }
+
+    /**
+     * IDs of all registered read-only backend tools — the PLAN-mode catalog.
+     */
+    public Set<String> getReadOnlyToolIds() {
+        Set<String> result = new LinkedHashSet<>();
+        for (Map.Entry<String, Tool> entry : tools.entrySet()) {
+            if (entry.getValue().isReadOnly()) {
+                result.add(entry.getKey());
+            }
+        }
+        return result;
+    }
+
+    /**
      * Get all frontend tool IDs.
      */
     public Set<String> getFrontendToolIds() {
