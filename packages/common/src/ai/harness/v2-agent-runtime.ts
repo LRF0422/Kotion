@@ -28,6 +28,8 @@ const DEFAULT_V2_API_BASE = '/api/knowledge-agent/api/v2/agent'
 const MAX_RECONNECTS = 5
 /** Backoff base delay between reconnects (ms). */
 const RECONNECT_BASE_DELAY_MS = 500
+/** Hard cap on a single frontend tool execution — prevents a hung tool from stalling the agent loop. */
+const TOOL_EXEC_TIMEOUT_MS = 120_000
 
 export interface V2RuntimeOptions {
     /** V2 API base URL */
@@ -234,8 +236,12 @@ export class V2AgentRuntime {
         }
         if (status === 'WAITING_TOOLS' && state.pendingTools?.length) {
             // Execute the pending frontend tools, then resume the task.
+            // Dedup by toolCallId (backend now dedups too; belt and braces).
             const toolResults: ToolResultPayload[] = []
+            const seen = new Set<string>()
             for (const pt of state.pendingTools) {
+                if (seen.has(pt.toolCallId)) continue
+                seen.add(pt.toolCallId)
                 const toolName = pt.toolName
                 const args = parseToolArgs(pt.arguments || '{}', toolName)
                 yield { type: 'tool-call-start', id: pt.toolCallId, toolName, args }
@@ -246,7 +252,13 @@ export class V2AgentRuntime {
                 let endEvent: HarnessEvent
                 if (toolDef?.execute) {
                     try {
-                        const rawResult = await toolDef.execute(args)
+                        // Bounded execution — a hung tool must not stall reattach.
+                        const rawResult = await Promise.race([
+                            toolDef.execute(args, pt.toolCallId),
+                            new Promise<never>((_, reject) => setTimeout(
+                                () => reject(new Error(`Tool "${toolName}" timed out after ${TOOL_EXEC_TIMEOUT_MS}ms`)),
+                                TOOL_EXEC_TIMEOUT_MS)),
+                        ])
                         toolResult = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult)
                         endEvent = {
                             type: 'tool-call-end',
@@ -312,6 +324,10 @@ export class V2AgentRuntime {
     ): AsyncGenerator<HarnessEvent> {
         let stream = initialStream
         let reconnectAttempts = 0
+        // Tool-call ids already executed in THIS drive session — a duplicated
+        // dispatch event (or a re-delivered history) must never re-execute a
+        // side-effecting tool (this loop used to re-run inserts forever).
+        const executedToolIds = new Set<string>()
 
         while (true) {
             const result = yield* this.consumeStream(
@@ -323,6 +339,10 @@ export class V2AgentRuntime {
 
                 const toolResults: ToolResultPayload[] = []
                 for (const pendingTool of result.pendingFrontendTools) {
+                    if (executedToolIds.has(pendingTool.id)) {
+                        continue // duplicate dispatch — already executed
+                    }
+                    executedToolIds.add(pendingTool.id)
                     const toolName = pendingTool.name
                     const args = parseToolArgs(pendingTool.arguments, toolName)
 
@@ -335,7 +355,14 @@ export class V2AgentRuntime {
 
                     if (toolDef?.execute) {
                         try {
-                            const rawResult = await toolDef.execute(args, pendingTool.id)
+                            // Bounded execution: a hung editor/plugin tool must
+                            // never stall the agent loop indefinitely.
+                            const rawResult = await Promise.race([
+                                toolDef.execute(args, pendingTool.id),
+                                new Promise<never>((_, reject) => setTimeout(
+                                    () => reject(new Error(`Tool "${toolName}" timed out after ${TOOL_EXEC_TIMEOUT_MS}ms`)),
+                                    TOOL_EXEC_TIMEOUT_MS)),
+                            ])
                             toolResult = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult)
                             endEvent = {
                                 type: 'tool-call-end',
@@ -453,7 +480,16 @@ export class V2AgentRuntime {
                                 data = null
                             }
                             if (data != null) {
-                                if (typeof data.seq === 'number') lastSeq = data.seq
+                                if (typeof data.seq === 'number') {
+                                    // Overlap guard: replay and live can share a
+                                    // boundary event; never process a seq twice.
+                                    if (data.seq <= lastSeq) {
+                                        currentEvent = ''
+                                        currentData = ''
+                                        continue
+                                    }
+                                    lastSeq = data.seq
+                                }
                                 if (currentEvent === 'session.completed'
                                         || currentEvent === 'session.failed') {
                                     sawCompletion = true
@@ -561,13 +597,17 @@ export class V2AgentRuntime {
 
             case 'tool.dispatched':
                 if (data.location === 'FRONTEND') {
-                    pendingFrontendTools.push({
-                        id: data.toolCallId,
-                        name: data.toolName,
-                        arguments: typeof data.arguments === 'string'
-                            ? data.arguments
-                            : JSON.stringify(data.arguments || {}),
-                    })
+                    // Dedup by toolCallId: a duplicated dispatch event must not
+                    // queue the same side-effecting tool twice.
+                    if (!pendingFrontendTools.some(pt => pt.id === data.toolCallId)) {
+                        pendingFrontendTools.push({
+                            id: data.toolCallId,
+                            name: data.toolName,
+                            arguments: typeof data.arguments === 'string'
+                                ? data.arguments
+                                : JSON.stringify(data.arguments || {}),
+                        })
+                    }
                     return [{
                         type: 'annotation',
                         annotations: [{

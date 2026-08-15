@@ -304,8 +304,12 @@ public class AgentJobService {
 
         synchronized (run) {
             if (run.executionActive.get()) {
-                log.warn("AgentJobService: resume ignored for {} — execution already active", taskId);
-                return run.live.asFlux();
+                log.warn("AgentJobService: resume re-entrant for {} — returning live continuation", taskId);
+                // Return the ACTIVE continuation, never the full live replay:
+                // re-delivering history re-accumulated pending frontend tools on
+                // the client and produced a re-execute→resume loop.
+                Sinks.Many<TaskEvent> active = run.continuation.get();
+                return active != null ? active.asFlux() : Flux.empty();
             }
 
             applyResults(run.session, toolResults, action, planDecision);
@@ -543,18 +547,24 @@ public class AgentJobService {
      */
     private Flux<TaskEvent> subscribe(Flux<AgentEvent> source, TaskRun run) {
         Sinks.Many<TaskEvent> continuation = Sinks.many().replay().limit(4096);
+        run.continuation.set(continuation);
 
-        // Merge sub-agent lifecycle events (agent.spawned/output/reasoning/
-        // progress/completed) published on the event bus under THIS session id
-        // into the task stream. Without this merge the events had zero
-        // subscribers and the sub-agent tree never reached the client.
+        // Merge ONLY sub-agent lifecycle events (agent.spawned/output/
+        // reasoning/progress/completed) published by DelegateTaskTool on the
+        // event bus under this session id. CRITICAL: the engine ALSO publishes
+        // every one of its own events to the bus — merging the unfiltered bus
+        // delivered each engine event TWICE (once from the engine flux, once
+        // from the bus), which duplicated every token/tool event on the wire
+        // and made the client re-execute frontend tools in a resume loop.
         // takeUntilOther completes the merged flux when the engine finishes.
         Flux<AgentEvent> shared = source.share();
-        Flux<AgentEvent> delegation = eventBus != null
-                ? eventBus.subscribeSession(run.session.getSessionId())
-                : Flux.empty();
-        if (delegation == null) {
-            delegation = Flux.empty(); // defensive: bus implementations may return null
+        Flux<AgentEvent> delegation = Flux.empty();
+        if (eventBus != null) {
+            Flux<AgentEvent> busStream = eventBus.subscribeSession(run.session.getSessionId());
+            if (busStream != null) { // defensive: bus implementations may return null
+                delegation = busStream.filter(
+                        ev -> ev instanceof com.knowledge.agent.v2.event.DelegationEvent);
+            }
         }
         Flux<AgentEvent> merged = Flux.merge(shared, delegation)
                 .takeUntilOther(shared.ignoreElements());
@@ -640,7 +650,18 @@ public class AgentJobService {
                 pt.toolName = dispatched.getToolName();
                 pt.arguments = dispatched.getArguments();
                 synchronized (run.pendingTools) {
-                    run.pendingTools.add(pt);
+                    // Dedup by toolCallId: a duplicated dispatch event must not
+                    // surface the same tool twice on reconnect/resume.
+                    boolean exists = false;
+                    for (PendingTool p : run.pendingTools) {
+                        if (p.toolCallId != null && p.toolCallId.equals(pt.toolCallId)) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (!exists) {
+                        run.pendingTools.add(pt);
+                    }
                 }
             }
         }
@@ -877,6 +898,13 @@ public class AgentJobService {
         final AgentSession session;
         /** Replay sink — late subscribers get buffered history; seq filters dedupe. */
         final Sinks.Many<TaskEvent> live = Sinks.many().replay().limit(10_000);
+        /**
+         * The ACTIVE engine continuation (per subscription). A re-entrant
+         * resume (client retry while the engine is running) must return THIS
+         * stream — replaying {@code live} re-delivered the whole task history
+         * and drove the client into a re-execute→resume loop.
+         */
+        final AtomicReference<Sinks.Many<TaskEvent>> continuation = new AtomicReference<>();
         final AtomicReference<Disposable> subscription = new AtomicReference<>();
         /**
          * Whether an engine execution is currently subscribed for this task.
