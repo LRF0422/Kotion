@@ -71,6 +71,15 @@ public class LlmResponse {
         private int completionTokens = 0;
         @Builder.Default
         private int totalTokens = 0;
+        /**
+         * Prompt tokens served from the provider's context cache (DeepSeek
+         * reports these as {@code prompt_cache_hit_tokens}). High values mean
+         * the request prefix was stable — the key cost-saving signal.
+         */
+        @Builder.Default
+        private int promptCacheHitTokens = 0;
+        @Builder.Default
+        private int promptCacheMissTokens = 0;
     }
 
     /**

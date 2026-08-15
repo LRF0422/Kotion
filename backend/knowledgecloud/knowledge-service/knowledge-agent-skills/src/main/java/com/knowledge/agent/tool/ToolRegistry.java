@@ -142,8 +142,15 @@ public class ToolRegistry {
         try {
             List<Map<String, Object>> toolsList = new ArrayList<>();
 
-            // 1. Add registered backend tools
-            for (Map.Entry<String, Tool> entry : tools.entrySet()) {
+            // 1. Add registered backend tools — SORTED BY ID. The tools array is
+            // part of every request's prompt prefix; the provider's context
+            // cache only hits when the prefix is byte-identical across turns.
+            // Iterating a ConcurrentHashMap directly produced an unspecified
+            // order that could change between requests/restarts and silently
+            // defeat prompt caching for the whole conversation.
+            List<Map.Entry<String, Tool>> sortedEntries = new ArrayList<>(tools.entrySet());
+            sortedEntries.sort(Map.Entry.comparingByKey());
+            for (Map.Entry<String, Tool> entry : sortedEntries) {
                 if (entry.getValue().isFrontend()) {
                     continue; // Skip frontend-registered tools — they go via frontendTools
                 }
@@ -165,9 +172,15 @@ public class ToolRegistry {
                 toolsList.add(toolDef);
             }
 
-            // 2. Add frontend tools from the request
+            // 2. Add frontend tools from the request — sorted by name for the
+            // same prefix-stability guarantee as the backend tools above.
             if (frontendTools != null) {
-                for (ChatTool ft : frontendTools) {
+                List<ChatTool> sortedFrontend = new ArrayList<>(frontendTools);
+                sortedFrontend.sort(Comparator.comparing(ft ->
+                        ft.getFunction() != null && ft.getFunction().getName() != null
+                                ? ft.getFunction().getName()
+                                : ""));
+                for (ChatTool ft : sortedFrontend) {
                     if (ft.getFunction() == null) {
                         continue;
                     }

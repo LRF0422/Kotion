@@ -4,6 +4,45 @@
  */
 
 /**
+ * Host-injected environment access for plugin bundles.
+ *
+ * Plugin UMD bundles are NOT built by Vite, so `import.meta.env` is neither
+ * replaced at build time nor available in a classic-script UMD context. The
+ * host (the Vite app) instead publishes its build-time env on
+ * `window.__KN__.env`; plugins read it through this helper.
+ *
+ * Resolution order:
+ *  1. `window.__KN__.env` (host-injected — authoritative for plugins)
+ *  2. `import.meta.env` (build-time replacement for ESM consumers)
+ *  3. `process.env` (node / polyfilled environments)
+ */
+export function getAppEnv(key: string): string | undefined {
+    const g = globalThis as any
+    const read = (env: any): string | undefined => {
+        if (!env || !(key in env)) return undefined
+        const v = env[key]
+        return typeof v === 'string' ? v : v == null ? undefined : String(v)
+    }
+
+    try {
+        const fromKn = read(g.__KN__?.env)
+        if (fromKn !== undefined) return fromKn
+    } catch { /* ignore */ }
+
+    try {
+        const fromMeta = read((import.meta as any)?.env)
+        if (fromMeta !== undefined) return fromMeta
+    } catch { /* import.meta unavailable in classic scripts */ }
+
+    try {
+        const fromProcess = read(g.process?.env)
+        if (fromProcess !== undefined) return fromProcess
+    } catch { /* ignore */ }
+
+    return undefined
+}
+
+/**
  * Safely gets an environment variable with a fallback value
  * @param key The environment variable key (without VITE_ prefix if using VITE_ variables)
  * @param fallback The fallback value if the environment variable is not set

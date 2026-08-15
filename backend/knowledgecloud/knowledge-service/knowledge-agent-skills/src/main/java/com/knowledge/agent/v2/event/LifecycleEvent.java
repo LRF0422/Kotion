@@ -44,14 +44,24 @@ public abstract class LifecycleEvent extends AgentEvent {
         private final int promptTokens;
         private final int completionTokens;
         private final long durationMs;
+        private final int promptCacheHitTokens;
+        private final int promptCacheMissTokens;
 
         public SessionCompleted(String sessionId, String finishReason,
                                 int promptTokens, int completionTokens, long durationMs) {
+            this(sessionId, finishReason, promptTokens, completionTokens, durationMs, 0, 0);
+        }
+
+        public SessionCompleted(String sessionId, String finishReason,
+                                int promptTokens, int completionTokens, long durationMs,
+                                int promptCacheHitTokens, int promptCacheMissTokens) {
             super(sessionId);
             this.finishReason = finishReason;
             this.promptTokens = promptTokens;
             this.completionTokens = completionTokens;
             this.durationMs = durationMs;
+            this.promptCacheHitTokens = promptCacheHitTokens;
+            this.promptCacheMissTokens = promptCacheMissTokens;
         }
 
         @Override
@@ -73,6 +83,14 @@ public abstract class LifecycleEvent extends AgentEvent {
 
         public long getDurationMs() {
             return durationMs;
+        }
+
+        public int getPromptCacheHitTokens() {
+            return promptCacheHitTokens;
+        }
+
+        public int getPromptCacheMissTokens() {
+            return promptCacheMissTokens;
         }
     }
 

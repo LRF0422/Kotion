@@ -259,8 +259,17 @@ public class AgentSessionFactory {
             log.debug("AgentSessionFactory: memory injection skipped: {}", e.getMessage());
         }
 
-        for (String block : blocks) {
-            insertAfterLeadingSystem(session, block);
+        // Prompt-cache friendly placement: these blocks change between turns
+        // (interaction counts, tool-usage ranks, memories). Inserting them right
+        // after the system prompt would mutate the request PREFIX every turn and
+        // defeat the provider's context cache for the whole conversation — so
+        // they are appended as a TRAILING system message instead. The stable
+        // prefix (system prompt + tool catalog + history) stays byte-identical
+        // and cache hits are preserved; only the volatile tail misses.
+        if (!blocks.isEmpty()) {
+            List<ConversationMessage> messages = session.getExecution().getMessages();
+            messages.add(ConversationMessage.system(String.join("\n\n", blocks)));
+            session.getExecution().setMessages(messages);
         }
     }
 

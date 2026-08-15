@@ -70,14 +70,25 @@ public abstract class ThinkingEvent extends AgentEvent {
         private final int promptTokens;
         private final int completionTokens;
         private final long latencyMs;
+        private final int promptCacheHitTokens;
+        private final int promptCacheMissTokens;
 
         public ThinkEnd(String sessionId, int iteration, String finishReason,
                         int promptTokens, int completionTokens, long latencyMs) {
+            this(sessionId, iteration, finishReason, promptTokens, completionTokens,
+                    latencyMs, 0, 0);
+        }
+
+        public ThinkEnd(String sessionId, int iteration, String finishReason,
+                        int promptTokens, int completionTokens, long latencyMs,
+                        int promptCacheHitTokens, int promptCacheMissTokens) {
             super(sessionId, iteration);
             this.finishReason = finishReason;
             this.promptTokens = promptTokens;
             this.completionTokens = completionTokens;
             this.latencyMs = latencyMs;
+            this.promptCacheHitTokens = promptCacheHitTokens;
+            this.promptCacheMissTokens = promptCacheMissTokens;
         }
 
         @Override
@@ -99,6 +110,14 @@ public abstract class ThinkingEvent extends AgentEvent {
 
         public long getLatencyMs() {
             return latencyMs;
+        }
+
+        public int getPromptCacheHitTokens() {
+            return promptCacheHitTokens;
+        }
+
+        public int getPromptCacheMissTokens() {
+            return promptCacheMissTokens;
         }
     }
 }

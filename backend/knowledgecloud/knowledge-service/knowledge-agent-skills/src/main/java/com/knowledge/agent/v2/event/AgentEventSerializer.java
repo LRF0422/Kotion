@@ -37,6 +37,8 @@ public final class AgentEventSerializer {
             Map<String, Object> usage = new LinkedHashMap<>();
             usage.put("prompt", e.getPromptTokens());
             usage.put("completion", e.getCompletionTokens());
+            usage.put("cacheHit", e.getPromptCacheHitTokens());
+            usage.put("cacheMiss", e.getPromptCacheMissTokens());
             payload.put("usage", usage);
             payload.put("durationMs", e.getDurationMs());
         } else if (event instanceof LifecycleEvent.SessionFailed) {
@@ -54,6 +56,10 @@ public final class AgentEventSerializer {
             ThinkingEvent.ThinkEnd e = (ThinkingEvent.ThinkEnd) event;
             payload.put("iteration", e.getIteration());
             payload.put("finishReason", e.getFinishReason());
+            payload.put("promptTokens", e.getPromptTokens());
+            payload.put("completionTokens", e.getCompletionTokens());
+            payload.put("cacheHitTokens", e.getPromptCacheHitTokens());
+            payload.put("cacheMissTokens", e.getPromptCacheMissTokens());
         } else if (event instanceof ToolEvent.ToolDispatched) {
             ToolEvent.ToolDispatched e = (ToolEvent.ToolDispatched) event;
             payload.put("toolCallId", e.getToolCallId());

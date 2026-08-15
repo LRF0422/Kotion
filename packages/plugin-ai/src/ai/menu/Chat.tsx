@@ -453,6 +453,13 @@ export const ExpandableChatDemo: React.FC<{
     const [streamingReasoning, setStreamingReasoning] = useState<string>('')
     const reasoningRef = useRef<string>('')
 
+    // Final token accounting of the last round — shows the provider's
+    // context-cache hit/miss so users can see the cost saving.
+    const [lastUsage, setLastUsage] = useState<{ promptTokens: number; completionTokens: number; cacheHitTokens?: number; cacheMissTokens?: number } | null>(null)
+    const handleUsage = useCallback((usage: { promptTokens: number; completionTokens: number; cacheHitTokens?: number; cacheMissTokens?: number } | undefined) => {
+        if (usage) setLastUsage(usage)
+    }, [])
+
     const lastUserMessageRef = useRef<string>("")
     const composerRef = useRef<HTMLTextAreaElement>(null)
 
@@ -470,6 +477,7 @@ export const ExpandableChatDemo: React.FC<{
         setSuspendedSessionId(null)
         setSuspendedTaskId(null)
         suspendedTaskIdRef.current = null
+        setLastUsage(null)
         buffer.reset()
         reasoningRef.current = ''
         setStreamingReasoning('')
@@ -620,11 +628,12 @@ export const ExpandableChatDemo: React.FC<{
             conversationId: backendConversationId,
             onAnnotation: handleStreamAnnotation,
             onReasoning: handleStreamReasoning,
+            onUsage: handleUsage,
         }))
     }, [
         stream, consumeRound, generateMessageId, messages, buffer,
         backendSessionId, backendConversationId, setMessages,
-        handleStreamAnnotation, handleStreamReasoning, targetPage,
+        handleStreamAnnotation, handleStreamReasoning, handleUsage, targetPage,
         clearBackendTask,
     ])
 
@@ -646,10 +655,11 @@ export const ExpandableChatDemo: React.FC<{
             sessionId: sessionId ?? undefined,
             onAnnotation: handleStreamAnnotation,
             onReasoning: handleStreamReasoning,
+            onUsage: handleUsage,
         }))
     }, [
         suspendedTaskId, suspendedSessionId, isLoading, buffer, consumeRound, continueStream,
-        handleStreamAnnotation, handleStreamReasoning,
+        handleStreamAnnotation, handleStreamReasoning, handleUsage,
     ])
 
     // ─── Re-attach to an in-flight task after a page refresh ─────
@@ -678,6 +688,7 @@ export const ExpandableChatDemo: React.FC<{
                     taskId: backendTaskId,
                     onAnnotation: handleStreamAnnotation,
                     onReasoning: handleStreamReasoning,
+                    onUsage: handleUsage,
                 }))
             } finally {
                 releaseTaskStream(backendTaskId)
@@ -745,11 +756,12 @@ export const ExpandableChatDemo: React.FC<{
                 feedback: decision === 'rejected' ? '用户拒绝了该计划' : undefined,
                 onAnnotation: handleStreamAnnotation,
                 onReasoning: handleStreamReasoning,
+                onUsage: handleUsage,
             })
         })
         setSuspendedTaskId(null)
         suspendedTaskIdRef.current = null
-    }, [isLoading, pendingPlan, suspendedTaskId, resolvePlan, consumeRound, submitMessage, handleStreamAnnotation, handleStreamReasoning])
+    }, [isLoading, pendingPlan, suspendedTaskId, resolvePlan, consumeRound, submitMessage, handleStreamAnnotation, handleStreamReasoning, handleUsage])
 
     const handleRetry = useCallback(() => {
         if (!lastUserMessageRef.current || isLoading) return
@@ -900,6 +912,13 @@ export const ExpandableChatDemo: React.FC<{
                                 onApprove={() => handlePlanDecision('approved')}
                                 onReject={() => handlePlanDecision('rejected')}
                             />
+                        </div>
+                    )}
+
+                    {/* Provider context-cache accounting for the last round */}
+                    {lastUsage && !isLoading && lastUsage.cacheHitTokens != null && (
+                        <div className="mx-2 my-1 text-right text-[11px] text-muted-foreground/70">
+                            ⚡ 缓存命中 {lastUsage.cacheHitTokens.toLocaleString()} tokens · 未命中 {(lastUsage.cacheMissTokens ?? 0).toLocaleString()} · 输出 {lastUsage.completionTokens.toLocaleString()}
                         </div>
                     )}
 

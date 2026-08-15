@@ -235,6 +235,8 @@ function mapV2Event(
                 usage: data.usage ? {
                     promptTokens: data.usage.prompt ?? 0,
                     completionTokens: data.usage.completion ?? 0,
+                    cacheHitTokens: data.usage.cacheHit,
+                    cacheMissTokens: data.usage.cacheMiss,
                 } : undefined,
             } as FinishEvent]
 

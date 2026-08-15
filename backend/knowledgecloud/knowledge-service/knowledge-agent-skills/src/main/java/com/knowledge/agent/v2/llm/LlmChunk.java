@@ -30,6 +30,8 @@ public class LlmChunk {
     private final String finishReason;
     private final int promptTokens;
     private final int completionTokens;
+    private final int promptCacheHitTokens;
+    private final int promptCacheMissTokens;
 
     private LlmChunk(Builder builder) {
         this.type = builder.type;
@@ -39,6 +41,8 @@ public class LlmChunk {
         this.finishReason = builder.finishReason;
         this.promptTokens = builder.promptTokens;
         this.completionTokens = builder.completionTokens;
+        this.promptCacheHitTokens = builder.promptCacheHitTokens;
+        this.promptCacheMissTokens = builder.promptCacheMissTokens;
     }
 
     public ChunkType getType() { return type; }
@@ -48,6 +52,8 @@ public class LlmChunk {
     public String getFinishReason() { return finishReason; }
     public int getPromptTokens() { return promptTokens; }
     public int getCompletionTokens() { return completionTokens; }
+    public int getPromptCacheHitTokens() { return promptCacheHitTokens; }
+    public int getPromptCacheMissTokens() { return promptCacheMissTokens; }
 
     public boolean isFinish() { return type == ChunkType.FINISH; }
 
@@ -89,8 +95,15 @@ public class LlmChunk {
     }
 
     public static LlmChunk finish(String reason, int promptTokens, int completionTokens) {
+        return finish(reason, promptTokens, completionTokens, 0, 0);
+    }
+
+    public static LlmChunk finish(String reason, int promptTokens, int completionTokens,
+            int promptCacheHitTokens, int promptCacheMissTokens) {
         return new Builder().type(ChunkType.FINISH).finishReason(reason)
-                .promptTokens(promptTokens).completionTokens(completionTokens).build();
+                .promptTokens(promptTokens).completionTokens(completionTokens)
+                .promptCacheHitTokens(promptCacheHitTokens)
+                .promptCacheMissTokens(promptCacheMissTokens).build();
     }
 
     public static Builder builder() { return new Builder(); }
@@ -103,6 +116,8 @@ public class LlmChunk {
         private String finishReason;
         private int promptTokens;
         private int completionTokens;
+        private int promptCacheHitTokens;
+        private int promptCacheMissTokens;
 
         public Builder type(ChunkType type) { this.type = type; return this; }
         public Builder textDelta(String textDelta) { this.textDelta = textDelta; return this; }
@@ -111,6 +126,8 @@ public class LlmChunk {
         public Builder finishReason(String finishReason) { this.finishReason = finishReason; return this; }
         public Builder promptTokens(int promptTokens) { this.promptTokens = promptTokens; return this; }
         public Builder completionTokens(int completionTokens) { this.completionTokens = completionTokens; return this; }
+        public Builder promptCacheHitTokens(int promptCacheHitTokens) { this.promptCacheHitTokens = promptCacheHitTokens; return this; }
+        public Builder promptCacheMissTokens(int promptCacheMissTokens) { this.promptCacheMissTokens = promptCacheMissTokens; return this; }
 
         public LlmChunk build() { return new LlmChunk(this); }
     }

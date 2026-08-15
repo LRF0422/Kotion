@@ -16,6 +16,8 @@ public class InferenceResponse {
     private final String finishReason;
     private final int promptTokens;
     private final int completionTokens;
+    private final int promptCacheHitTokens;
+    private final int promptCacheMissTokens;
 
     private InferenceResponse(Builder builder) {
         this.content = builder.content;
@@ -24,6 +26,8 @@ public class InferenceResponse {
         this.finishReason = builder.finishReason != null ? builder.finishReason : "stop";
         this.promptTokens = builder.promptTokens;
         this.completionTokens = builder.completionTokens;
+        this.promptCacheHitTokens = builder.promptCacheHitTokens;
+        this.promptCacheMissTokens = builder.promptCacheMissTokens;
     }
 
     public String getContent() { return content; }
@@ -32,6 +36,8 @@ public class InferenceResponse {
     public String getFinishReason() { return finishReason; }
     public int getPromptTokens() { return promptTokens; }
     public int getCompletionTokens() { return completionTokens; }
+    public int getPromptCacheHitTokens() { return promptCacheHitTokens; }
+    public int getPromptCacheMissTokens() { return promptCacheMissTokens; }
 
     public boolean hasToolCalls() {
         return toolCalls != null && !toolCalls.isEmpty();
@@ -65,6 +71,8 @@ public class InferenceResponse {
         private String finishReason;
         private int promptTokens;
         private int completionTokens;
+        private int promptCacheHitTokens;
+        private int promptCacheMissTokens;
 
         public Builder content(String content) { this.content = content; return this; }
         public Builder reasoningContent(String reasoningContent) { this.reasoningContent = reasoningContent; return this; }
@@ -72,6 +80,8 @@ public class InferenceResponse {
         public Builder finishReason(String finishReason) { this.finishReason = finishReason; return this; }
         public Builder promptTokens(int promptTokens) { this.promptTokens = promptTokens; return this; }
         public Builder completionTokens(int completionTokens) { this.completionTokens = completionTokens; return this; }
+        public Builder promptCacheHitTokens(int promptCacheHitTokens) { this.promptCacheHitTokens = promptCacheHitTokens; return this; }
+        public Builder promptCacheMissTokens(int promptCacheMissTokens) { this.promptCacheMissTokens = promptCacheMissTokens; return this; }
 
         public InferenceResponse build() { return new InferenceResponse(this); }
     }

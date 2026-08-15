@@ -1,5 +1,5 @@
 import { CollaborationEditor } from "@kn/editor";
-import { GlobalState, getAccessToken } from "@kn/common";
+import { GlobalState, getAccessToken, getAppEnv } from "@kn/common";
 import { TiptapCollabProvider } from "@kn/editor";
 import { deepEqual } from "@kn/common";
 import React, { useMemo, useRef, useState } from "react";
@@ -20,7 +20,7 @@ export const JournalEditor: React.FC = () => {
     const provider = useMemo(() => {
         const doc = new Y.Doc()
         return new TiptapCollabProvider({
-            baseUrl: (import.meta as any).env?.VITE_COLLABORATION_WS_URL || 'ws://www.simple-platform.cn:1234',
+            baseUrl: getAppEnv('VITE_COLLABORATION_WS_URL') || 'ws://www.simple-platform.cn:1234',
             name: params.pageId as string,
             // Auth token is the user's access token — never the pageId.
             token: getAccessToken() || '',

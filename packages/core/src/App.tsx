@@ -65,6 +65,9 @@ common.setupGlobalNamespace({
     icon,
     editor,
     hostApiVersion: PLUGIN_API_VERSION,
+    // Publish the host's build-time env so plugin UMD bundles can read VITE_*
+    // variables at runtime via @kn/common's getAppEnv().
+    env: { ...(import.meta as any).env },
 })
 
 // ---------------------------------------------------------------------------

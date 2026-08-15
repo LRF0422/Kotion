@@ -373,13 +373,19 @@ public class OpenAiCompatibleClient implements LlmClient {
             builder.finishReason(finishReason != null ? finishReason.asText() : "stop");
         }
 
-        // Usage
+        // Usage — including the provider's context-cache accounting
+        // (prompt_cache_hit_tokens / prompt_cache_miss_tokens), the direct
+        // signal for how many prompt tokens were served from cache.
         JsonNode usage = root.get("usage");
         if (usage != null) {
             builder.usage(LlmResponse.Usage.builder()
                     .promptTokens(usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0)
                     .completionTokens(usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0)
                     .totalTokens(usage.has("total_tokens") ? usage.get("total_tokens").asInt() : 0)
+                    .promptCacheHitTokens(usage.has("prompt_cache_hit_tokens")
+                            ? usage.get("prompt_cache_hit_tokens").asInt() : 0)
+                    .promptCacheMissTokens(usage.has("prompt_cache_miss_tokens")
+                            ? usage.get("prompt_cache_miss_tokens").asInt() : 0)
                     .build());
         } else {
             builder.usage(LlmResponse.Usage.builder().build());
@@ -455,6 +461,10 @@ public class OpenAiCompatibleClient implements LlmClient {
                                         usageNode.has("completion_tokens") ? usageNode.get("completion_tokens").asInt()
                                                 : 0)
                                 .totalTokens(usageNode.has("total_tokens") ? usageNode.get("total_tokens").asInt() : 0)
+                                .promptCacheHitTokens(usageNode.has("prompt_cache_hit_tokens")
+                                        ? usageNode.get("prompt_cache_hit_tokens").asInt() : 0)
+                                .promptCacheMissTokens(usageNode.has("prompt_cache_miss_tokens")
+                                        ? usageNode.get("prompt_cache_miss_tokens").asInt() : 0)
                                 .build();
                     }
                     chunks.add(StreamChunk.done(reason, usage));

@@ -47,6 +47,7 @@ import {
     useService,
     useTranslation,
     getAccessToken,
+    getAppEnv,
     setPageEditWindowImpl,
     type API,
     type GlobalState,
@@ -409,7 +410,7 @@ const PageEditWindowImpl: React.FC<PageEditWindowProps> = ({ pageId, onClose, on
             // Env-configurable collab endpoint; auth token is the user's OAuth2
             // access token — never the pageId (pageId-as-token lets anyone join
             // any page's collaboration room).
-            baseUrl: (import.meta as any).env?.VITE_COLLABORATION_WS_URL || 'wss://kotion.top:8877/ws',
+            baseUrl: getAppEnv('VITE_COLLABORATION_WS_URL') || 'wss://kotion.top:8877/ws',
             name: `page:${pageId}`,
             token: getAccessToken() || '',
             document: doc,

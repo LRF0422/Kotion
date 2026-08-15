@@ -18,7 +18,7 @@ import {
     type Editor,
     type IncrementalPayload,
 } from "@kn/editor"
-import { useApi, useSelector, getAccessToken, type GlobalState } from "@kn/common"
+import { useApi, useSelector, getAccessToken, getAppEnv, type GlobalState } from "@kn/common"
 
 import { OFFSCREEN_APIS } from "./api"
 import { offscreenSessionManager } from "./session-manager"
@@ -29,7 +29,7 @@ import { offscreenSessionManager } from "./session-manager"
  * OAuth2 access token, not the pageId (pageId-as-token let anyone join any
  * page's collaboration room).
  */
-const COLLAB_WS_BASE_URL = (import.meta as any).env?.VITE_COLLABORATION_WS_URL || 'wss://kotion.top:8877/ws'
+const COLLAB_WS_BASE_URL = getAppEnv('VITE_COLLABORATION_WS_URL') || 'wss://kotion.top:8877/ws'
 
 /** Deterministic cursor colors, same palette as the visible editors. */
 const CURSOR_COLORS = [

@@ -7,7 +7,7 @@ import { Skeleton } from "@kn/ui";
 import { CollaborationEditor, exportToPDF, useIncrementalSave, TiptapCollabProvider } from "@kn/editor";
 import type { IncrementalPayload } from "@kn/editor";
 import { event, ON_PAGE_REFRESH, ON_FAVORITE_CHANGE } from "../../../event";
-import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, request, getBearerHeader, getAccessToken } from "@kn/common";
+import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, request, getBearerHeader, getAccessToken, getAppEnv } from "@kn/common";
 import { useNavigator, usePageTabs } from "@kn/common";
 import { setPageBridge, clearPageBridge, type PageBridge } from "@kn/common";
 import { setActiveEditor, clearActiveEditor } from "@kn/common";
@@ -253,7 +253,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             // Env-configurable collab endpoint; auth token is the user's
             // OAuth2 access token — never the pageId (pageId-as-token lets
             // anyone join any page's collaboration room).
-            baseUrl: (import.meta as any).env?.VITE_COLLABORATION_WS_URL || 'wss://kotion.top:8877/ws',
+            baseUrl: getAppEnv('VITE_COLLABORATION_WS_URL') || 'wss://kotion.top:8877/ws',
             name: `page:${deferredPageId}`,
             token: getAccessToken() || '',
             document: doc,

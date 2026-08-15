@@ -19,7 +19,7 @@ import { useCapabilityProviders } from "./use-capability-providers"
 
 // Unified agent runtime core
 import { AgentHarnessImpl } from "./harness"
-import type { HarnessEvent } from "./harness"
+import type { HarnessEvent, UsageInfo } from "./harness"
 
 // Shared constants
 import { EDITOR_AGENT_PROMPT, ASK_MODE_PROMPT, MAX_ASK_MODE_CONTENT_CHARS } from "./constants"
@@ -153,6 +153,7 @@ export const useEditorAgentOptimized = (
         callbacks: {
             onAnnotation?: (annotations: any[]) => void
             onReasoning?: (content: string) => void
+            onUsage?: (usage: UsageInfo | undefined) => void
         }
     ): AsyncGenerator<string> => {
         return (async function* (): AsyncGenerator<string> {
@@ -175,6 +176,9 @@ export const useEditorAgentOptimized = (
                             conversationId: ev.conversationId,
                         }])
                         break
+                    case 'finish':
+                        callbacks.onUsage?.(ev.usage)
+                        break
                     case 'error':
                         throw new Error(ev.error)
                     // tool-call-start / tool-call-end already drive
@@ -193,6 +197,8 @@ export const useEditorAgentOptimized = (
         onAnnotation?: (annotations: any[]) => void
         /** Callback for reasoning/thinking content from reasoning models (e.g. deepseek-reasoner) */
         onReasoning?: (content: string) => void
+        /** Final token accounting (incl. cache hit/miss) when the run finishes. */
+        onUsage?: (usage: UsageInfo | undefined) => void
     }) => {
         // Abort any previous stream
         if (abortControllerRef.current) {
@@ -280,6 +286,7 @@ export const useEditorAgentOptimized = (
             const textStream = toTextStream(events, {
                 onAnnotation: options.onAnnotation,
                 onReasoning: options.onReasoning,
+                onUsage: options.onUsage,
             })
 
             return { textStream }
@@ -300,6 +307,7 @@ export const useEditorAgentOptimized = (
         sessionId?: string
         onAnnotation?: (annotations: any[]) => void
         onReasoning?: (content: string) => void
+        onUsage?: (usage: UsageInfo | undefined) => void
     }) => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort()
@@ -319,6 +327,7 @@ export const useEditorAgentOptimized = (
             const textStream = toTextStream(events, {
                 onAnnotation: options.onAnnotation,
                 onReasoning: options.onReasoning,
+                onUsage: options.onUsage,
             })
 
             return { textStream }
@@ -341,6 +350,7 @@ export const useEditorAgentOptimized = (
         feedback?: string
         onAnnotation?: (annotations: any[]) => void
         onReasoning?: (content: string) => void
+        onUsage?: (usage: UsageInfo | undefined) => void
     }) => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort()
@@ -363,6 +373,7 @@ export const useEditorAgentOptimized = (
             const textStream = toTextStream(events, {
                 onAnnotation: options.onAnnotation,
                 onReasoning: options.onReasoning,
+                onUsage: options.onUsage,
             })
 
             return { textStream }
@@ -381,6 +392,7 @@ export const useEditorAgentOptimized = (
         taskId: string
         onAnnotation?: (annotations: any[]) => void
         onReasoning?: (content: string) => void
+        onUsage?: (usage: UsageInfo | undefined) => void
     }) => {
         if (abortControllerRef.current) {
             abortControllerRef.current.abort()
@@ -399,6 +411,7 @@ export const useEditorAgentOptimized = (
             const textStream = toTextStream(events, {
                 onAnnotation: options.onAnnotation,
                 onReasoning: options.onReasoning,
+                onUsage: options.onUsage,
             })
 
             return { textStream }

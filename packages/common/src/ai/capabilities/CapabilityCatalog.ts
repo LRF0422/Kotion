@@ -56,6 +56,7 @@ export function collectCapabilityCatalog(
     // is embedded in the skills that reference it (SkillPayload.tools).
     const tools: ToolPayload[] = skillsOnly ? [] : toolProvider.getAllMetadata()
         .filter(meta => meta.source === 'builtin')
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
         .map(meta => {
             const executable = executableTools[meta.name]
             const parameters = executable
@@ -72,7 +73,14 @@ export function collectCapabilityCatalog(
             }
         })
 
-    const skills: SkillPayload[] = skillProvider.getAllSkills().map(skill => {
+    // Deterministic ordering: the catalog becomes part of every request's
+    // prompt prefix, and provider context caches (DeepSeek etc.) only hit when
+    // the prefix is byte-identical across turns. Sort skills/tools by name so
+    // registration order can never reorder (and thus evict) the cached prefix.
+    const sortedSkills = skillProvider.getAllSkills()
+        .slice()
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    const skills: SkillPayload[] = sortedSkills.map(skill => {
         // User-installed skills are stored as `source: 'plugin'` with a `user:` pluginName
         // prefix; surface them to the backend as a distinct `user` source.
         const isUserInstalled = skill.source === 'plugin' &&
@@ -85,7 +93,7 @@ export function collectCapabilityCatalog(
         const referencedNames = [
             ...(skill.requiredTools ?? []),
             ...(skill.optionalTools ?? []),
-        ]
+        ].sort((a, b) => a.localeCompare(b))
         const seen = new Set<string>()
         const skillTools: ToolPayload[] = []
         for (const name of referencedNames) {

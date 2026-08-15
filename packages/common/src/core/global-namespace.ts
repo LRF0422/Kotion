@@ -36,6 +36,12 @@ export interface KnGlobalNamespace {
     editor: any
     /** The plugin API version the running host was built with. */
     hostApiVersion: string
+    /**
+     * Host build-time env (Vite import.meta.env), published so plugin UMD
+     * bundles — which cannot see import.meta.env themselves — can read
+     * VITE_* variables at runtime via {@code getAppEnv}.
+     */
+    env?: Record<string, string | boolean | undefined>
     /** Called by plugin bundles (rollup outro) to register their exports. */
     definePlugin: (packageName: string, exports: Record<string, unknown>, meta?: PluginMeta) => void
     /** Retrieve a previously registered plugin bundle. */
@@ -51,6 +57,8 @@ export interface SetupGlobalNamespaceOptions {
     icon: any
     editor: any
     hostApiVersion: string
+    /** Host build-time env published to plugins (see KnGlobalNamespace.env). */
+    env?: Record<string, string | boolean | undefined>
 }
 
 /**
@@ -72,6 +80,7 @@ export function setupGlobalNamespace(opts: SetupGlobalNamespaceOptions): KnGloba
         icon: opts.icon,
         editor: opts.editor,
         hostApiVersion: opts.hostApiVersion,
+        env: opts.env ?? {},
         definePlugin: (packageName, exports, meta) => {
             registry.set(packageName, { exports, meta: meta ?? {} })
         },

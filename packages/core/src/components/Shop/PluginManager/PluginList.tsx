@@ -226,17 +226,25 @@ export const PluginList: React.FC<PluginListProps> = (props) => {
     }, [selectedPlugins, processedPlugins, pluginManager, props.onRefresh, t]);
 
     const handleBulkEnable = useCallback(
-        () => runBulk(APIS.ENABLE_PLUGIN, 'pluginManager.bulkEnableSuccess', p => pluginManager?.installPlugin(p as any)),
+        // installPlugin resolves Promise<boolean>; runBulk expects Promise<void>
+        // — fire-and-forget keeps the bulk loop's void contract.
+        () => runBulk(APIS.ENABLE_PLUGIN, 'pluginManager.bulkEnableSuccess', p => {
+            void pluginManager?.installPlugin(p as any)
+        }),
         [runBulk, pluginManager]
     );
 
     const handleBulkDisable = useCallback(
-        () => runBulk(APIS.DISABLE_PLUGIN, 'pluginManager.bulkDisableSuccess', p => pluginManager?.uninstallPlugin(p.name)),
+        () => runBulk(APIS.DISABLE_PLUGIN, 'pluginManager.bulkDisableSuccess', p => {
+            void pluginManager?.uninstallPlugin(p.name)
+        }),
         [runBulk, pluginManager]
     );
 
     const handleBulkDelete = useCallback(
-        () => runBulk(APIS.DELETE_INSTALLED_PLUGIN, 'pluginManager.bulkDeleteSuccess', p => pluginManager?.uninstallPlugin(p.name)),
+        () => runBulk(APIS.DELETE_INSTALLED_PLUGIN, 'pluginManager.bulkDeleteSuccess', p => {
+            void pluginManager?.uninstallPlugin(p.name)
+        }),
         [runBulk, pluginManager]
     );
 

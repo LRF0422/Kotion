@@ -68,6 +68,12 @@ public class ThinkHandler implements StateHandler {
         Flux<AgentEvent> liveDeltas = llmAdapter.streamInfer(request)
                 .handle((chunk, sink) -> {
                     accumulator.feed(chunk);
+                    if (chunk.getType() == LlmChunk.ChunkType.FINISH) {
+                        // Per-iteration provider cache accounting → session totals.
+                        session.getExecution().addCacheUsage(
+                                chunk.getPromptCacheHitTokens(),
+                                chunk.getPromptCacheMissTokens());
+                    }
                     AgentEvent delta = chunkToDelta(chunk, sessionId, iteration);
                     if (delta != null) {
                         sink.next(delta);
@@ -88,10 +94,11 @@ public class ThinkHandler implements StateHandler {
                 session.getExecution().setLastPromptTokens(response.getPromptTokens());
             }
 
-            // Emit ThinkEnd event
+            // Emit ThinkEnd event (includes this iteration's cache accounting)
             ThinkingEvent.ThinkEnd endEvent = new ThinkingEvent.ThinkEnd(
                     sessionId, iteration, response.getFinishReason(),
-                    response.getPromptTokens(), response.getCompletionTokens(), latencyMs);
+                    response.getPromptTokens(), response.getCompletionTokens(), latencyMs,
+                    response.getPromptCacheHitTokens(), response.getPromptCacheMissTokens());
 
             if (response.hasToolCalls()) {
                 // Store tool calls in execution state for ActHandler
@@ -208,6 +215,8 @@ public class ThinkHandler implements StateHandler {
         private String finishReason = "stop";
         private int promptTokens = 0;
         private int completionTokens = 0;
+        private int promptCacheHitTokens = 0;
+        private int promptCacheMissTokens = 0;
 
         void feed(LlmChunk chunk) {
             switch (chunk.getType()) {
@@ -226,6 +235,8 @@ public class ThinkHandler implements StateHandler {
                     finishReason = chunk.getFinishReason();
                     promptTokens = chunk.getPromptTokens();
                     completionTokens = chunk.getCompletionTokens();
+                    promptCacheHitTokens = chunk.getPromptCacheHitTokens();
+                    promptCacheMissTokens = chunk.getPromptCacheMissTokens();
                     break;
             }
         }
@@ -263,6 +274,8 @@ public class ThinkHandler implements StateHandler {
                     .finishReason(finishReason)
                     .promptTokens(promptTokens)
                     .completionTokens(completionTokens)
+                    .promptCacheHitTokens(promptCacheHitTokens)
+                    .promptCacheMissTokens(promptCacheMissTokens)
                     .build();
         }
     }

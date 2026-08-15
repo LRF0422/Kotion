@@ -612,20 +612,14 @@ export class V2AgentRuntime {
                         {
                             type: 'finish',
                             finishReason: 'suspended',
-                            usage: data.usage ? {
-                                promptTokens: data.usage.prompt ?? 0,
-                                completionTokens: data.usage.completion ?? 0,
-                            } : undefined,
+                            usage: mapUsage(data.usage),
                         },
                     ]
                 }
                 return [{
                     type: 'finish',
                     finishReason,
-                    usage: data.usage ? {
-                        promptTokens: data.usage.prompt ?? 0,
-                        completionTokens: data.usage.completion ?? 0,
-                    } : undefined,
+                    usage: mapUsage(data.usage),
                 }]
             }
 
@@ -833,6 +827,28 @@ export class V2AgentRuntime {
 }
 
 // ---- Internal types ----
+
+/** Normalize the backend usage payload (incl. context-cache accounting). */
+function mapUsage(data: any): {
+    promptTokens: number
+    completionTokens: number
+    cacheHitTokens?: number
+    cacheMissTokens?: number
+} | undefined {
+    if (!data) return undefined
+    const usage = {
+        promptTokens: data.prompt ?? 0,
+        completionTokens: data.completion ?? 0,
+    } as {
+        promptTokens: number
+        completionTokens: number
+        cacheHitTokens?: number
+        cacheMissTokens?: number
+    }
+    if (typeof data.cacheHit === 'number') usage.cacheHitTokens = data.cacheHit
+    if (typeof data.cacheMiss === 'number') usage.cacheMissTokens = data.cacheMiss
+    return usage
+}
 
 interface PendingFrontendTool {
     id: string

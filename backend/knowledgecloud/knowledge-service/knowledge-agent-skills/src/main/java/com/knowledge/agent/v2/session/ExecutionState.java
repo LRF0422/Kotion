@@ -46,6 +46,12 @@ public class ExecutionState {
     private final AtomicInteger totalPromptTokens = new AtomicInteger(0);
     private final AtomicInteger totalCompletionTokens = new AtomicInteger(0);
     /**
+     * Provider context-cache accounting accumulated across iterations — the
+     * cost-observability signal for how many prompt tokens hit the cache.
+     */
+    private final AtomicInteger totalPromptCacheHitTokens = new AtomicInteger(0);
+    private final AtomicInteger totalPromptCacheMissTokens = new AtomicInteger(0);
+    /**
      * Prompt token count reported by the provider for the MOST RECENT
      * inference call — the authoritative measure of the current context
      * size. 0 until the first usage report arrives.
@@ -134,6 +140,23 @@ public class ExecutionState {
 
     public int getTotalPromptTokens() {
         return totalPromptTokens.get();
+    }
+
+    public void addCacheUsage(int promptCacheHitTokens, int promptCacheMissTokens) {
+        if (promptCacheHitTokens > 0) {
+            totalPromptCacheHitTokens.addAndGet(promptCacheHitTokens);
+        }
+        if (promptCacheMissTokens > 0) {
+            totalPromptCacheMissTokens.addAndGet(promptCacheMissTokens);
+        }
+    }
+
+    public int getTotalPromptCacheHitTokens() {
+        return totalPromptCacheHitTokens.get();
+    }
+
+    public int getTotalPromptCacheMissTokens() {
+        return totalPromptCacheMissTokens.get();
     }
 
     public int getTotalCompletionTokens() {

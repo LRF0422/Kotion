@@ -138,7 +138,9 @@ public class AgentEngine {
                                 finishReason,
                                 session.getExecution().getTotalPromptTokens(),
                                 session.getExecution().getTotalCompletionTokens(),
-                                elapsed);
+                                elapsed,
+                                session.getExecution().getTotalPromptCacheHitTokens(),
+                                session.getExecution().getTotalPromptCacheMissTokens());
                         eventBus.publish(completedEvent);
                         notifyUsageListener(session, finishReason, elapsed);
                         return Flux.just((AgentEvent) completedEvent);

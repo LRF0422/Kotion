@@ -8,5 +8,5 @@
 export { AgentHarnessImpl } from './agent-harness'
 export { V2AgentRuntime } from './v2-agent-runtime'
 export type { ContinueSessionInput } from './v2-agent-runtime'
-export type { AgentHarness, HarnessEvent, HarnessRunInput, ExecutionStep } from './types'
+export type { AgentHarness, HarnessEvent, HarnessRunInput, ExecutionStep, UsageInfo } from './types'
 export { parseToolArgs } from './tool-loop'

@@ -35,9 +35,21 @@ export type HarnessEvent =
     | {
         type: 'finish'
         finishReason?: string
-        usage?: { promptTokens: number; completionTokens: number }
+        usage?: UsageInfo
     }
     | { type: 'error'; error: string; code?: string; retriable?: boolean }
+
+// ============ Usage ============
+
+/** Token accounting for a finished run, including provider cache signals. */
+export interface UsageInfo {
+    promptTokens: number
+    completionTokens: number
+    /** Prompt tokens served from the provider's context cache (cost saving). */
+    cacheHitTokens?: number
+    /** Prompt tokens that missed the cache (billed at full price). */
+    cacheMissTokens?: number
+}
 
 // ============ Run Input ============
 

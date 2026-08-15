@@ -108,7 +108,9 @@ public class DefaultLlmAdapter implements LlmAdapter {
             return LlmChunk.finish(
                     chunk.getFinishReason() != null ? chunk.getFinishReason() : "stop",
                     usage != null ? usage.getPromptTokens() : 0,
-                    usage != null ? usage.getCompletionTokens() : 0);
+                    usage != null ? usage.getCompletionTokens() : 0,
+                    usage != null ? usage.getPromptCacheHitTokens() : 0,
+                    usage != null ? usage.getPromptCacheMissTokens() : 0);
         }
 
         // Text content delta

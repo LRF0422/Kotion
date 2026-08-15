@@ -183,13 +183,13 @@ interface ParameterSchema {
 | `session.created` | `taskId, sessionId, conversationId` | 任务建立 |
 | `think.start` | `iteration` | 一轮推理开始 |
 | `think.delta` | `type: "text"\|"reasoning", content` | token 级增量（真流式）|
-| `think.end` | `iteration, finishReason` | 一轮推理结束 |
+| `think.end` | `iteration, finishReason, promptTokens, completionTokens, cacheHitTokens, cacheMissTokens` | 一轮推理结束（含本轮缓存统计） |
 | `tool.dispatched` | `toolCallId, toolName, arguments, location: FRONTEND\|BACKEND` | 工具派发；FRONTEND 表示挂起等客户端执行 |
 | `tool.progress` | `toolCallId, toolName, progress, message` | 长工具进度 |
 | `tool.completed` / `tool.failed` | `toolCallId, toolName, result\|errorCode, errorMessage, durationMs` | 后端工具结果；failed 带 `retriable` |
 | `agent.spawned` / `agent.output` / `agent.reasoning` / `agent.progress` / `agent.completed` | `agentId, parentAgentId, depth, …` | 子 agent 生命周期 + 实时输出 |
 | `plan.proposed` / `plan.resolved` | `planId, plan, decision, feedback` | 计划审批闭环 |
-| `session.completed` | `finishReason, usage{prompt,completion}` | 终态；`suspended:frontend_tool_calls`=等前端工具；`suspended:iteration_budget_exhausted`=预算耗尽可续；`suspended:plan_approval`=等计划审批 |
+| `session.completed` | `finishReason, usage{prompt,completion,cacheHit,cacheMiss}` | 终态；`suspended:frontend_tool_calls`=等前端工具；`suspended:iteration_budget_exhausted`=预算耗尽可续；`suspended:plan_approval`=等计划审批。`usage.cacheHit/cacheMiss` 为提供商上下文缓存的命中/未命中 prompt token 数（DeepSeek 等自动缓存，前缀稳定即可命中） |
 | `session.failed` | `errorCode, errorMessage, retriable` | 失败终态 |
 | （SSE 注释帧） | `: keepalive` | 心跳，客户端忽略 |
 | `data: [DONE]` | — | 流结束标记 |
