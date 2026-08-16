@@ -51,6 +51,8 @@ class ThinkHandlerContextLimitTest {
                 .doesNotContain(AgentState.DONE);
         // Output truncation alone must not invalidate the prompt-cache prefix.
         assertThat(session.getExecution().isCompactNextThink()).isFalse();
+        // Automatic continuation must not consume the iteration budget.
+        assertThat(session.getExecution().getIteration()).isZero();
         assertThat(session.getExecution().getMessages())
                 .anyMatch(m -> "assistant".equals(m.getRole()) && "partial answer".equals(m.getContent()))
                 .anyMatch(m -> "user".equals(m.getRole()) && m.getContent().contains("系统续写指令"));
@@ -68,5 +70,7 @@ class ThinkHandlerContextLimitTest {
                 .map(e -> ((Transition) e).getNextState()))
                 .containsExactly(AgentState.THINK);
         assertThat(session.getExecution().isCompactNextThink()).isTrue();
+        // Context-error retry stays in the same iteration.
+        assertThat(session.getExecution().getIteration()).isZero();
     }
 }

@@ -134,7 +134,12 @@ public class ThinkHandler implements StateHandler {
                 session.getExecution().addMessage(ConversationMessage.user(
                         "[系统续写指令] 你上一次输出因长度限制被截断，请从断点处继续，"
                                 + "不要重复已经生成的内容，也不要重新开始。"));
-                log.info("ThinkHandler: session {} hit output length limit; continuing after compaction",
+                // Do not consume the engine iteration budget for automatic
+                // continuation. Otherwise a long answer made of several
+                // max_tokens segments suspends with "iteration budget exhausted"
+                // and requires a manual continue click.
+                session.getExecution().setIteration(Math.max(0, iteration - 1));
+                log.info("ThinkHandler: session {} hit output length limit; continuing in the same iteration",
                         sessionId);
                 return Flux.just(endEvent, Transition.toThink(sessionId));
             }
@@ -152,6 +157,10 @@ public class ThinkHandler implements StateHandler {
                         log.warn("ThinkHandler: context-length error in session {}; "
                                 + "forcing compaction and retrying", sessionId);
                         session.getExecution().setCompactNextThink(true);
+                        // Context retry belongs to the same logical iteration;
+                        // do not let automatic compaction retries exhaust the
+                        // user-visible iteration budget.
+                        session.getExecution().setIteration(Math.max(0, iteration - 1));
                         ThinkingEvent.ThinkEnd retryEnd = new ThinkingEvent.ThinkEnd(
                                 sessionId, iteration, "context_length_retry",
                                 0, 0, System.currentTimeMillis() - startTimeMs, 0, 0);
