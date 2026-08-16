@@ -6,7 +6,7 @@ import com.knowledge.agent.api.dto.ChatCompletionRequest;
 import com.knowledge.agent.store.AgentStateSnapshot;
 import com.knowledge.agent.store.AgentStateStore;
 import com.knowledge.agent.v2.config.AgentProperties;
-import com.knowledge.agent.v2.engine.AgentEngine;
+import com.knowledge.agent.v3.AgentLoop;
 import com.knowledge.agent.v2.engine.AgentState;
 import com.knowledge.agent.v2.event.AgentEvent;
 import com.knowledge.agent.v2.event.AgentEventSerializer;
@@ -83,7 +83,7 @@ public class AgentJobService {
     /** assistantText hot-save throttle: persist at most once per interval (per task). */
     private static final long HOT_SAVE_INTERVAL_MS = 1_000L;
 
-    private final AgentEngine engine;
+    private final AgentLoop loop;
     private final com.knowledge.agent.v2.eventbus.AgentEventBus eventBus;
     /** Optional Redis lease used for multi-instance fencing. Null in tests. */
     @Autowired(required = false)
@@ -102,7 +102,7 @@ public class AgentJobService {
     /** Per-tenant task-creation rate counters. */
     private final ConcurrentHashMap<String, WindowCounter> createCounters = new ConcurrentHashMap<>();
 
-    public AgentJobService(AgentEngine engine,
+    public AgentJobService(AgentLoop loop,
             com.knowledge.agent.v2.eventbus.AgentEventBus eventBus,
             AgentSessionFactory sessionFactory,
             AgentJobStore jobStore,
@@ -113,7 +113,7 @@ public class AgentJobService {
             SessionSnapshotCodec snapshotCodec,
             ObjectProvider<AgentStateStore> stateStoreProvider,
             ObjectMapper objectMapper) {
-        this.engine = engine;
+        this.loop = loop;
         this.eventBus = eventBus;
         this.sessionFactory = sessionFactory;
         this.jobStore = jobStore;
@@ -494,7 +494,7 @@ public class AgentJobService {
 
             // Emit the plan resolution before the engine continuation so the
             // client can close the pending-plan card deterministically.
-            Flux<com.knowledge.agent.v2.event.AgentEvent> source = engine.resume(run.session);
+            Flux<com.knowledge.agent.v2.event.AgentEvent> source = loop.resume(run.session);
             if (planDecision != null && planDecision.decision != null && planDecision.planId != null) {
                 source = Flux.concat(
                         Flux.just((com.knowledge.agent.v2.event.AgentEvent)
@@ -543,6 +543,25 @@ public class AgentJobService {
         run.live.tryEmitComplete();
         log.info("AgentJobService: cancelled job {}", taskId);
         return true;
+    }
+
+    /** V3 invariant: cancel every active task in a conversation before create. */
+    public int cancelActiveByConversation(String conversationId, Long userId, Long tenantId) {
+        if (conversationId == null || conversationId.isEmpty()) {
+            return 0;
+        }
+        int cancelled = 0;
+        for (AgentJob active : jobStore.listActiveByConversation(conversationId, userId, tenantId)) {
+            try {
+                if (cancel(active.getTaskId())) {
+                    cancelled++;
+                }
+            } catch (Exception e) {
+                log.warn("AgentJobService: failed to auto-cancel conversation task {}: {}",
+                        active.getTaskId(), e.getMessage());
+            }
+        }
+        return cancelled;
     }
 
     /** Non-terminal task count (live gauge for the admin metrics endpoint). */
@@ -732,13 +751,13 @@ public class AgentJobService {
     private void startFresh(TaskRun run) {
         run.job.setStatus(AgentJobStatus.RUNNING);
         jobStore.save(run.job);
-        subscribe(engine.run(run.session), run);
+        subscribe(loop.run(run.session), run);
     }
 
     private void revive(TaskRun run) {
         run.job.setStatus(AgentJobStatus.RUNNING);
         jobStore.save(run.job);
-        subscribe(engine.resume(run.session), run);
+        subscribe(loop.resume(run.session), run);
     }
 
     /**

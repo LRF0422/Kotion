@@ -627,7 +627,7 @@ export const ExpandableChatDemo: React.FC<{
             prompt,
             messages: history,
             sessionId: backendSessionId,
-            conversationId: backendConversationId,
+            conversationId: backendConversationId || activeSessionId,
             onAnnotation: handleStreamAnnotation,
             onReasoning: handleStreamReasoning,
             onUsage: handleUsage,

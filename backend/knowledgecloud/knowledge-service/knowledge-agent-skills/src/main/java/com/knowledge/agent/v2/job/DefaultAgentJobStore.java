@@ -137,6 +137,25 @@ public class DefaultAgentJobStore implements AgentJobStore {
     }
 
     @Override
+    public List<AgentJob> listActiveByConversation(String conversationId, Long userId, Long tenantId) {
+        List<AgentJob> out = new ArrayList<>();
+        if (conversationId == null || conversationId.isEmpty()) {
+            return out;
+        }
+        try {
+            List<AgentTaskEntity> rows = taskMapper.selectActiveByConversation(
+                    conversationId, userId, tenantId, 20);
+            for (AgentTaskEntity entity : rows) {
+                out.add(fromEntity(entity));
+            }
+        } catch (Exception e) {
+            log.warn("AgentJobStore listActiveByConversation failed for {}: {}",
+                    conversationId, e.getMessage());
+        }
+        return out;
+    }
+
+    @Override
     public List<AgentJob> listStaleRunning(Long tenantId, long cutoffMs, int limit) {
         List<AgentJob> out = new ArrayList<>();
         if (tenantId == null) {

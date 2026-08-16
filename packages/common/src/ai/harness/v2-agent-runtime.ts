@@ -22,7 +22,7 @@ import type { OnToolExecution, ToolDefinition } from '../types'
 import { parseToolArgs } from './tool-loop'
 import { authorizedFetch } from '../../utils/session'
 
-const DEFAULT_V2_API_BASE = '/api/knowledge-agent/api/v2/agent'
+const DEFAULT_V2_API_BASE = '/api/knowledge-agent/api/v3/agent/tasks'
 
 /** Max automatic reconnects when a stream drops without a terminal event. */
 const MAX_RECONNECTS = 5
@@ -101,18 +101,26 @@ export class V2AgentRuntime {
         if (input.maxTokens != null) body.maxTokens = input.maxTokens
         if (input.toolChoice) body.toolChoice = input.toolChoice
         if (sessionId) body.sessionId = sessionId
-        if (conversationId) body.conversationId = conversationId
+        if (conversationId) {
+            body.conversationId = conversationId
+        } else {
+            // V3 requires a stable conversation key for single-active-task
+            // enforcement. Fall back to the session id, then an instance UUID.
+            body.conversationId = sessionId || `conv-${crypto.randomUUID()}`
+        }
         if (mode) body.mode = mode
         if (input.agentId != null) body.agentId = input.agentId
         if (catalog.skills?.length > 0) body.skills = catalog.skills
         if (catalog.tools?.length > 0) body.tools = catalog.tools
         if (catalog.version) body.capabilitiesVersion = catalog.version
 
-        // 1. Abandon any previous task this runtime owns, then create the new
-        //    task (returns immediately).
+        // 1. Abandon any previous task this runtime owns and WAIT for the
+        //    cancel to persist before creating the new one. Fire-and-forget
+        //    cancellation raced the backend concurrent-task quota.
         if (this.currentTaskId) {
-            this.cancelTask(this.currentTaskId).catch(() => { /* best-effort */ })
+            const previous = this.currentTaskId
             this.currentTaskId = null
+            await this.cancelTask(previous).catch(() => { /* best-effort */ })
         }
         const taskId = await this.createTask(body, signal)
         this.currentTaskId = taskId

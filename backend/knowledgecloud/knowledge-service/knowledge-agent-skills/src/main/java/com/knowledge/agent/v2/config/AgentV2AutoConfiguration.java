@@ -3,6 +3,8 @@ package com.knowledge.agent.v2.config;
 import com.knowledge.agent.llm.LlmClientFactory;
 import com.knowledge.agent.store.AgentStateStore;
 import com.knowledge.agent.tool.ToolRegistry;
+import com.knowledge.agent.v3.AgentLoop;
+import com.knowledge.agent.v3.NativeAgentLoop;
 import com.knowledge.agent.v2.context.ContextCompactor;
 import com.knowledge.agent.v2.engine.AgentEngine;
 import com.knowledge.agent.v2.engine.AgentState;
@@ -204,6 +206,25 @@ public class AgentV2AutoConfiguration {
     @ConditionalOnMissingBean(name = "observeHandler")
     public StateHandler observeHandler() {
         return new ObserveHandler();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public AgentLoop agentLoop(AgentEventBus eventBus,
+            InterceptorPipeline pipeline,
+            AgentProperties properties,
+            StateHandler initHandler,
+            StateHandler thinkHandler,
+            StateHandler actHandler,
+            StateHandler observeHandler,
+            ObjectProvider<AgentUsageListener> usageListenerProvider) {
+        Map<AgentState, StateHandler> handlers = new EnumMap<>(AgentState.class);
+        handlers.put(AgentState.INIT, initHandler);
+        handlers.put(AgentState.THINK, thinkHandler);
+        handlers.put(AgentState.ACT, actHandler);
+        handlers.put(AgentState.OBSERVE, observeHandler);
+        return new NativeAgentLoop(handlers, pipeline, eventBus, properties,
+                usageListenerProvider.getIfAvailable());
     }
 
     @Bean

@@ -34,6 +34,11 @@ public interface AgentJobStore {
     /** Active (non-terminal) task count for a tenant (concurrency quota). */
     long countActive(Long tenantId);
 
+    /** Active jobs in a conversation (used by V3 single-active-task rule). */
+    default List<AgentJob> listActiveByConversation(String conversationId, Long userId, Long tenantId) {
+        return Collections.emptyList();
+    }
+
     /**
      * RUNNING/QUEUED jobs whose update_time is older than {@code cutoffMs}.
      * Used by the reconciler to fail stale DB rows that no live executor owns.

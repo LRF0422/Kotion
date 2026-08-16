@@ -5,6 +5,7 @@ import com.knowledge.agent.api.dto.ChatCompletionRequest;
 import com.knowledge.agent.observability.AgentJobMetrics;
 import com.knowledge.agent.store.AgentStateStore;
 import com.knowledge.agent.v2.config.AgentProperties;
+import com.knowledge.agent.v3.AgentLoop;
 import com.knowledge.agent.v2.engine.AgentEngine;
 import com.knowledge.agent.v2.profile.ProfileRecorder;
 import com.knowledge.agent.v2.session.AgentIdentity;
@@ -34,7 +35,7 @@ import static org.mockito.Mockito.when;
  */
 class AgentJobServiceResumeGuardTest {
 
-    private AgentEngine engine;
+    private AgentLoop loop;
     private AgentJobService service;
     private AgentSessionFactory sessionFactory;
     private AgentProperties properties;
@@ -42,7 +43,7 @@ class AgentJobServiceResumeGuardTest {
     @SuppressWarnings("unchecked")
     @BeforeEach
     void setUp() {
-        engine = mock(AgentEngine.class);
+        loop = mock(AgentLoop.class);
         com.knowledge.agent.v2.eventbus.AgentEventBus eventBus =
                 mock(com.knowledge.agent.v2.eventbus.AgentEventBus.class);
         sessionFactory = mock(AgentSessionFactory.class);
@@ -55,7 +56,7 @@ class AgentJobServiceResumeGuardTest {
         ObjectProvider<AgentStateStore> stateStoreProvider = mock(ObjectProvider.class);
         ObjectMapper objectMapper = new ObjectMapper();
 
-        service = new AgentJobService(engine, eventBus, sessionFactory, jobStore, eventStore,
+        service = new AgentJobService(loop, eventBus, sessionFactory, jobStore, eventStore,
                 properties, profileRecorder, metrics, snapshotCodec, stateStoreProvider, objectMapper);
 
         AgentSession session = AgentSession.builder()
@@ -75,8 +76,8 @@ class AgentJobServiceResumeGuardTest {
 
         // The initial run completes immediately (no events) so the task settles
         // into an idle state; resumes then own the engine subscription.
-        when(engine.run(any())).thenReturn(Flux.empty());
-        when(engine.resume(any())).thenReturn(Flux.never());
+        when(loop.run(any())).thenReturn(Flux.empty());
+        when(loop.resume(any())).thenReturn(Flux.never());
         when(stateStoreProvider.getIfAvailable()).thenReturn(null);
     }
 
@@ -94,12 +95,12 @@ class AgentJobServiceResumeGuardTest {
 
         // First resume: engine.resume subscribed exactly once.
         service.resume(job.getTaskId(), new ArrayList<>(), "continue");
-        verify(engine, times(1)).resume(any());
+        verify(loop, times(1)).resume(any());
 
         // Retried resume while execution is active: no second subscription.
         assertThat(service.isExecutionActive(job.getTaskId())).isTrue();
         service.resume(job.getTaskId(), new ArrayList<>(), "continue");
-        verify(engine, times(1)).resume(any());
+        verify(loop, times(1)).resume(any());
 
         service.cancel(job.getTaskId());
     }

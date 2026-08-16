@@ -72,3 +72,6 @@ export * from "./utils"
 
 // System Agent - Logic (context + hooks, no UI)
 export * from "./system-agent"
+
+// V3 agent SDK (new architecture)
+export * from './v3'
