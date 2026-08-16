@@ -449,7 +449,12 @@ public class AgentJobService {
                 return Flux.error(new IllegalStateException(
                         "Task is not resumable (status=" + current + ")"));
             }
-            if (current == AgentJobStatus.WAITING_TOOLS && !hasToolResults && !hasPlanDecision) {
+            // A retried resume may legitimately carry no NEW results because
+            // every pending frontend tool was already answered in the session.
+            boolean allPendingAnswered = current == AgentJobStatus.WAITING_TOOLS
+                    && allPendingToolsAnswered(run.session);
+            if (current == AgentJobStatus.WAITING_TOOLS
+                    && !hasToolResults && !hasPlanDecision && !allPendingAnswered) {
                 return Flux.error(new IllegalStateException(
                         "Task is waiting for frontend tool results"));
             }
@@ -921,6 +926,29 @@ public class AgentJobService {
         continuation.tryEmitComplete();
         log.info("AgentJobService: job {} finished status={} finishReason={}",
                 run.job.getTaskId(), run.job.getStatus(), run.job.getFinishReason());
+    }
+
+    // ---- Resume helpers ----
+
+    /** True when every pending frontend tool call already has a tool message. */
+    private boolean allPendingToolsAnswered(AgentSession session) {
+        List<InferenceResponse.ToolCallData> pending = session.getExecution().getPendingToolCalls();
+        if (pending == null || pending.isEmpty()) {
+            return false;
+        }
+        java.util.Set<String> answered = new java.util.HashSet<>();
+        for (com.knowledge.agent.v2.session.ConversationMessage msg
+                : session.getExecution().getMessages()) {
+            if ("tool".equals(msg.getRole()) && msg.getToolCallId() != null) {
+                answered.add(msg.getToolCallId());
+            }
+        }
+        for (InferenceResponse.ToolCallData tool : pending) {
+            if (tool.getId() == null || !answered.contains(tool.getId())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // ---- Resume helpers ----

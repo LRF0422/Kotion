@@ -55,7 +55,27 @@ class ThinkHandlerContextLimitTest {
         assertThat(session.getExecution().getIteration()).isZero();
         assertThat(session.getExecution().getMessages())
                 .anyMatch(m -> "assistant".equals(m.getRole()) && "partial answer".equals(m.getContent()))
-                .anyMatch(m -> "user".equals(m.getRole()) && m.getContent().contains("系统续写指令"));
+                .noneMatch(m -> "user".equals(m.getRole()) && m.getContent().contains("系统续写指令"));
+        // The continuation must NOT create a new user turn.
+        assertThat(session.getExecution().getMessages()
+                .get(session.getExecution().getMessages().size() - 1).getRole())
+                .isEqualTo("assistant");
+    }
+
+    @Test
+    void repeatedLengthSegmentStopsInsteadOfLooping() {
+        when(llmAdapter.streamInfer(any())).thenReturn(
+                Flux.just(LlmChunk.textDelta("long repeated answer"), LlmChunk.finish("length", 100, 50)),
+                Flux.just(LlmChunk.textDelta("long repeated answer"), LlmChunk.finish("length", 100, 50)));
+
+        List<AgentEvent> first = handler.handle(session, AgentState.THINK).collectList().block();
+        List<AgentEvent> second = handler.handle(session, AgentState.THINK).collectList().block();
+
+        assertThat(first).isNotNull();
+        assertThat(first.stream().filter(e -> e instanceof Transition)
+                .map(e -> ((Transition) e).getNextState())).contains(AgentState.THINK);
+        assertThat(second.stream().filter(e -> e instanceof Transition)
+                .map(e -> ((Transition) e).getNextState())).contains(AgentState.DONE);
     }
 
     @Test

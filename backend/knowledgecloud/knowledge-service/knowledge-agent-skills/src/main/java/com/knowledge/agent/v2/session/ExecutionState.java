@@ -65,6 +65,8 @@ public class ExecutionState {
     private volatile String suspendReason;
     /** When true, the next THINK must compact context before inference. */
     private volatile boolean compactNextThink;
+    /** Last no-tool assistant text, used to stop length-continuation loops. */
+    private volatile String lastAssistantContent;
     private volatile String errorCode = "INTERNAL";
     private volatile String errorMessage;
     private volatile boolean errorRetriable;
@@ -190,6 +192,14 @@ public class ExecutionState {
 
     public void setCompactNextThink(boolean compactNextThink) {
         this.compactNextThink = compactNextThink;
+    }
+
+    public String getLastAssistantContent() {
+        return lastAssistantContent;
+    }
+
+    public void setLastAssistantContent(String lastAssistantContent) {
+        this.lastAssistantContent = lastAssistantContent;
     }
 
     public String getErrorCode() {

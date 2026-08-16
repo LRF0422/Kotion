@@ -96,6 +96,7 @@ public class SessionSnapshotCodec {
         payload.capabilitiesVersion = session.getCapabilitiesVersion();
         payload.suspendReason = execution.getSuspendReason();
         payload.compactNextThink = execution.isCompactNextThink();
+        payload.lastAssistantContent = execution.getLastAssistantContent();
         payload.totalPromptTokens = execution.getTotalPromptTokens();
         payload.totalCompletionTokens = execution.getTotalCompletionTokens();
         if (execution.getPendingToolCalls() != null) {
@@ -159,6 +160,7 @@ public class SessionSnapshotCodec {
         execution.setLastPromptTokens(payload.lastPromptTokens);
         execution.setSuspendReason(payload.suspendReason);
         execution.setCompactNextThink(payload.compactNextThink);
+        execution.setLastAssistantContent(payload.lastAssistantContent);
         execution.addTokenUsage(payload.totalPromptTokens, payload.totalCompletionTokens);
         if (payload.activatedSkillNames != null) {
             payload.activatedSkillNames.forEach(execution::activateSkill);
@@ -230,6 +232,7 @@ public class SessionSnapshotCodec {
         public String capabilitiesVersion;
         public String suspendReason;
         public boolean compactNextThink;
+        public String lastAssistantContent;
         public int totalPromptTokens;
         public int totalCompletionTokens;
     }

@@ -384,7 +384,11 @@ export class V2AgentRuntime {
         // Tool-call ids already executed in THIS drive session — a duplicated
         // dispatch event (or a re-delivered history) must never re-execute a
         // side-effecting tool (this loop used to re-run inserts forever).
-        const executedToolIds = new Set<string>()
+        // Keep the prior RESULT as well: if a replay delivers the same
+        // tool.dispatched event again, resume still needs a non-empty
+        // toolResults payload or the backend rejects it with
+        // "Task is waiting for frontend tool results".
+        const executedToolResults = new Map<string, ToolResultPayload>()
 
         while (true) {
             const result = yield* this.consumeStream(
@@ -396,10 +400,11 @@ export class V2AgentRuntime {
 
                 const toolResults: ToolResultPayload[] = []
                 for (const pendingTool of result.pendingFrontendTools) {
-                    if (executedToolIds.has(pendingTool.id)) {
-                        continue // duplicate dispatch — already executed
+                    const previous = executedToolResults.get(pendingTool.id)
+                    if (previous) {
+                        toolResults.push(previous)
+                        continue // duplicate dispatch — reuse the prior result
                     }
-                    executedToolIds.add(pendingTool.id)
                     const toolName = pendingTool.name
                     const args = parseToolArgs(pendingTool.arguments, toolName)
 
@@ -443,12 +448,14 @@ export class V2AgentRuntime {
                     }
 
                     yield endEvent
-                    toolResults.push({
+                    const payload: ToolResultPayload = {
                         toolCallId: pendingTool.id,
                         toolName,
                         result: toolResult,
                         success: !('error' in endEvent && endEvent.error != null),
-                    })
+                    }
+                    executedToolResults.set(pendingTool.id, payload)
+                    toolResults.push(payload)
                 }
 
                 stream = await this.postResume({ taskId, toolResults }, signal)

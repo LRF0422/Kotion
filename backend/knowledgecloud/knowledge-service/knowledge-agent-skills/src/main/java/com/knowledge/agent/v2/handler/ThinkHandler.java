@@ -104,8 +104,12 @@ public class ThinkHandler implements StateHandler {
                 // Store tool calls in execution state for ActHandler
                 session.getExecution().setPendingToolCalls(response.getToolCalls());
 
-                // Store the assistant message with tool calls
-                appendAssistantMessage(session, response);
+                // If a length-truncated text answer is immediately followed by
+                // tool calls, merge them into ONE assistant message instead of
+                // creating consecutive assistant messages.
+                appendOrMergeAssistant(session, response,
+                        session.getExecution().getLastAssistantContent() != null);
+                session.getExecution().setLastAssistantContent(null);
 
                 return Flux.just(endEvent, Transition.toAct(sessionId));
             }
@@ -116,35 +120,48 @@ public class ThinkHandler implements StateHandler {
                     && !response.getContent().trim().isEmpty())
                     || (response.getReasoningContent() != null
                     && !response.getReasoningContent().trim().isEmpty());
-            if (hasText) {
-                appendAssistantMessage(session, response);
-            }
 
             // "length" means the model hit max_tokens / output budget before
             // finishing. Do NOT treat that as a successful terminal DONE:
-            // force one context compaction and continue the same task.
+            // continue the same task.
             if ("length".equalsIgnoreCase(response.getFinishReason())) {
                 if (!hasText) {
                     return Flux.just(endEvent, Transition.toDone(sessionId, "length"));
                 }
-                // Output-token truncation does NOT mean the prompt context is
-                // full. Keep the prefix untouched so the provider context
-                // cache can keep hitting; the normal threshold check will
-                // compact on the next THINK if the prompt is actually large.
-                session.getExecution().addMessage(ConversationMessage.user(
-                        "[系统续写指令] 你上一次输出因长度限制被截断，请从断点处继续，"
-                                + "不要重复已经生成的内容，也不要重新开始。"));
-                // Do not consume the engine iteration budget for automatic
-                // continuation. Otherwise a long answer made of several
-                // max_tokens segments suspends with "iteration budget exhausted"
-                // and requires a manual continue click.
+
+                String current = response.getContent() != null
+                        ? response.getContent().trim()
+                        : "";
+                String previous = session.getExecution().getLastAssistantContent();
+
+                // Repetition guard: if the continuation restarts the previous
+                // block instead of appending new text, stop and keep the first
+                // copy rather than paying for the same output repeatedly.
+                if (previous != null && isRepetition(current, previous)) {
+                    log.warn("ThinkHandler: repetition detected in session {} — stopping length continuation",
+                            sessionId);
+                    return Flux.just(endEvent, Transition.toDone(sessionId, "repetition_guard"));
+                }
+
+                // Merge into the SAME assistant message. Do NOT append a user
+                // continuation turn: that made some models restart the whole
+                // answer. The prompt prefix stays stable for context cache hits.
+                String merged = appendOrMergeAssistant(session, response, previous != null);
+                session.getExecution().setLastAssistantContent(merged);
+
+                // Output continuation belongs to the same logical iteration.
                 session.getExecution().setIteration(Math.max(0, iteration - 1));
-                log.info("ThinkHandler: session {} hit output length limit; continuing in the same iteration",
+                log.info("ThinkHandler: session {} hit output length limit; continuing the same assistant message",
                         sessionId);
                 return Flux.just(endEvent, Transition.toThink(sessionId));
             }
 
-            // Normal completion — agent is done.
+            // Normal completion — persist the final assistant message.
+            if (hasText) {
+                String merged = appendOrMergeAssistant(session, response,
+                        session.getExecution().getLastAssistantContent() != null);
+                session.getExecution().setLastAssistantContent(merged);
+            }
             return Flux.just(endEvent, Transition.toDone(sessionId, "stop"));
         });
 
@@ -191,6 +208,28 @@ public class ThinkHandler implements StateHandler {
                 return true;
             }
             cursor = cursor.getCause();
+        }
+        return false;
+    }
+
+    private boolean isRepetition(String current, String previous) {
+        if (previous == null || previous.trim().isEmpty()) {
+            return false;
+        }
+        String a = current.replaceAll("\\s+", "");
+        String b = previous.replaceAll("\\s+", "");
+        if (a.isEmpty() || b.isEmpty()) {
+            return false;
+        }
+        if (a.equals(b)) {
+            return true;
+        }
+        // The model restarted and emitted the previous block plus a little more.
+        if (a.length() >= b.length() && a.startsWith(b) && a.length() - b.length() < 200) {
+            return true;
+        }
+        if (b.length() >= a.length() && b.startsWith(a) && b.length() - a.length() < 200) {
+            return true;
         }
         return false;
     }
@@ -322,7 +361,16 @@ public class ThinkHandler implements StateHandler {
         }
     }
 
-    private void appendAssistantMessage(AgentSession session, InferenceResponse response) {
+    /**
+     * Append an assistant message, or merge into the previous length-truncated
+     * assistant message when this is an automatic continuation.
+     *
+     * <p>The merge is the root fix for repeated output: the provider sees ONE
+     * continuously-growing assistant message and the same stable prompt prefix,
+     * so it can both continue correctly and keep hitting the context cache.
+     */
+    private String appendOrMergeAssistant(AgentSession session, InferenceResponse response,
+            boolean continuation) {
         List<ConversationMessage.ToolCallInfo> toolCalls = new ArrayList<>();
         if (response.getToolCalls() != null) {
             for (InferenceResponse.ToolCallData tc : response.getToolCalls()) {
@@ -331,14 +379,50 @@ public class ThinkHandler implements StateHandler {
             }
         }
 
+        String incoming = response.getContent() != null ? response.getContent() : "";
+        String incomingReasoning = response.getReasoningContent() != null
+                ? response.getReasoningContent() : "";
+        List<ConversationMessage> messages = session.getExecution().getMessages();
+
+        if (continuation) {
+            int last = lastAssistantWithoutToolCallsIndex(messages);
+            if (last >= 0) {
+                ConversationMessage previous = messages.get(last);
+                String merged = (previous.getContent() != null ? previous.getContent() : "")
+                        + incoming;
+                String mergedReasoning =
+                        (previous.getReasoningContent() != null ? previous.getReasoningContent() : "")
+                                + incomingReasoning;
+                messages.set(last, ConversationMessage.builder()
+                        .role("assistant")
+                        .content(merged)
+                        .reasoningContent(mergedReasoning)
+                        .toolCalls(toolCalls.isEmpty() ? null : toolCalls)
+                        .build());
+                session.getExecution().setMessages(messages);
+                return merged;
+            }
+        }
+
         ConversationMessage assistantMsg = ConversationMessage.builder()
                 .role("assistant")
-                .content(response.getContent())
-                .reasoningContent(response.getReasoningContent())
+                .content(incoming)
+                .reasoningContent(incomingReasoning)
                 .toolCalls(toolCalls.isEmpty() ? null : toolCalls)
                 .build();
-
         session.getExecution().addMessage(assistantMsg);
+        return incoming;
+    }
+
+    private int lastAssistantWithoutToolCallsIndex(List<ConversationMessage> messages) {
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ConversationMessage msg = messages.get(i);
+            if ("assistant".equals(msg.getRole())
+                    && (msg.getToolCalls() == null || msg.getToolCalls().isEmpty())) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**
