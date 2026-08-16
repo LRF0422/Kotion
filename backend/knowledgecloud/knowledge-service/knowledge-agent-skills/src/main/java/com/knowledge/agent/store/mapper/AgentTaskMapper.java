@@ -48,6 +48,15 @@ public interface AgentTaskMapper extends BaseMapper<AgentTaskEntity> {
             "AND status IN ('QUEUED','RUNNING','SUSPENDED','WAITING_TOOLS')")
     long countActiveByTenant(@Param("tenantId") Long tenantId);
 
+    /** Active tasks for one user, oldest first (quota auto-eviction). */
+    @Select("SELECT * FROM agent_task WHERE user_id = #{userId} " +
+            "AND tenant_id = #{tenantId} " +
+            "AND status IN ('QUEUED','RUNNING','WAITING_TOOLS','SUSPENDED') " +
+            "ORDER BY update_time ASC LIMIT #{limit}")
+    List<AgentTaskEntity> selectActiveByUser(@Param("userId") Long userId,
+                                              @Param("tenantId") Long tenantId,
+                                              @Param("limit") int limit);
+
     /** Active tasks in one conversation, oldest first (V3 auto-cancel). */
     @Select("SELECT * FROM agent_task WHERE conversation_id = #{conversationId} " +
             "AND user_id = #{userId} AND tenant_id = #{tenantId} " +

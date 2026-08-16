@@ -34,6 +34,11 @@ public interface AgentJobStore {
     /** Active (non-terminal) task count for a tenant (concurrency quota). */
     long countActive(Long tenantId);
 
+    /** Active jobs for one user, oldest first (used for quota auto-eviction). */
+    default List<AgentJob> listActiveByUser(Long userId, Long tenantId, int limit) {
+        return Collections.emptyList();
+    }
+
     /** Active jobs in a conversation (used by V3 single-active-task rule). */
     default List<AgentJob> listActiveByConversation(String conversationId, Long userId, Long tenantId) {
         return Collections.emptyList();

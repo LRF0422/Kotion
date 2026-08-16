@@ -39,7 +39,7 @@ agent:
   rate-limit:
     enabled: true
     requests-per-minute: 60
-    max-concurrent-sessions: 10
+    max-concurrent-sessions: 0  # 0 = unlimited concurrent tasks
     task-create-per-minute: 30
   event-store:
     enabled: true

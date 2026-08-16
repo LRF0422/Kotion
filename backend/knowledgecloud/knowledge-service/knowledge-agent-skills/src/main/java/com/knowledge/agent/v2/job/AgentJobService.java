@@ -219,7 +219,7 @@ public class AgentJobService {
      */
     public AgentJob create(ChatCompletionRequest request, AgentIdentity identity) {
         Long tenantId = identity != null ? identity.getTenantId() : null;
-        enforceCreateQuota(tenantId);
+        enforceCreateQuota(tenantId, identity != null ? identity.getUserId() : null);
 
         AgentSession session = sessionFactory.build(request, identity);
         AgentJob job = new AgentJob(
@@ -247,7 +247,7 @@ public class AgentJobService {
      */
     public AgentJob createChild(AgentSession session, String parentTaskId) {
         Long tenantId = session.getIdentity() != null ? session.getIdentity().getTenantId() : null;
-        enforceCreateQuota(tenantId);
+        enforceCreateQuota(tenantId, session.getIdentity() != null ? session.getIdentity().getUserId() : null);
 
         AgentJob job = new AgentJob(
                 UUID.randomUUID().toString(),
@@ -268,7 +268,7 @@ public class AgentJobService {
         return job;
     }
 
-    private void enforceCreateQuota(Long tenantId) {
+    private void enforceCreateQuota(Long tenantId, Long userId) {
         AgentProperties.RateLimitConfig rateLimit = properties.getRateLimit();
         if (!rateLimit.isEnabled()) {
             return;
@@ -284,9 +284,42 @@ public class AgentJobService {
         int maxConcurrent = rateLimit.getMaxConcurrentSessions();
         if (maxConcurrent > 0) {
             sweepStaleTenant(tenantId);
+            evictOldestUserTasks(userId, tenantId, maxConcurrent);
             if (countActiveByTenant(tenantId) >= maxConcurrent) {
                 throw new IllegalArgumentException(
                         "Concurrent task limit reached (max " + maxConcurrent + ")");
+            }
+        }
+    }
+
+    /**
+     * If the tenant is at quota, cancel this user's oldest active tasks to make
+     * room for the new chat. This makes "clear chat then send" work even when an
+     * older task was created with a server-generated conversation id.
+     */
+    private void evictOldestUserTasks(Long userId, Long tenantId, int maxConcurrent) {
+        if (userId == null || tenantId == null) {
+            return;
+        }
+        int guard = 0;
+        while (countActiveByTenant(tenantId) >= maxConcurrent && guard++ < maxConcurrent) {
+            List<AgentJob> candidates = jobStore.listActiveByUser(userId, tenantId, 10);
+            boolean cancelledAny = false;
+            for (AgentJob job : candidates) {
+                if (countActiveByTenant(tenantId) < maxConcurrent) {
+                    break;
+                }
+                try {
+                    if (cancel(job.getTaskId())) {
+                        cancelledAny = true;
+                    }
+                } catch (Exception e) {
+                    log.warn("AgentJobService: failed to evict old task {}: {}",
+                            job.getTaskId(), e.getMessage());
+                }
+            }
+            if (!cancelledAny) {
+                break;
             }
         }
     }
@@ -513,7 +546,7 @@ public class AgentJobService {
         TaskRun run = runs.get(taskId);
         if (run == null) {
             // Another instance owns the active lease: it must cancel the task.
-            if (!isLeaseOwner(taskId)) {
+            if (hasLease(taskId) && !isLeaseOwner(taskId)) {
                 log.info("AgentJobService: cancel {} refused — fenced by another instance", taskId);
                 return false;
             }

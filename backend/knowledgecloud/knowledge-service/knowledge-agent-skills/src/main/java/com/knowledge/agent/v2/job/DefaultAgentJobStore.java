@@ -137,6 +137,24 @@ public class DefaultAgentJobStore implements AgentJobStore {
     }
 
     @Override
+    public List<AgentJob> listActiveByUser(Long userId, Long tenantId, int limit) {
+        List<AgentJob> out = new ArrayList<>();
+        if (userId == null || tenantId == null) {
+            return out;
+        }
+        try {
+            List<AgentTaskEntity> rows = taskMapper.selectActiveByUser(
+                    userId, tenantId, Math.max(1, Math.min(limit, 100)));
+            for (AgentTaskEntity entity : rows) {
+                out.add(fromEntity(entity));
+            }
+        } catch (Exception e) {
+            log.warn("AgentJobStore listActiveByUser failed for u={}: {}", userId, e.getMessage());
+        }
+        return out;
+    }
+
+    @Override
     public List<AgentJob> listActiveByConversation(String conversationId, Long userId, Long tenantId) {
         List<AgentJob> out = new ArrayList<>();
         if (conversationId == null || conversationId.isEmpty()) {

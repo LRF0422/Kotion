@@ -22,7 +22,7 @@ import type { OnToolExecution, ToolDefinition } from '../types'
 import { parseToolArgs } from './tool-loop'
 import { authorizedFetch } from '../../utils/session'
 
-const DEFAULT_V2_API_BASE = '/api/knowledge-agent/api/v3/agent/tasks'
+const DEFAULT_V2_API_BASE = '/api/knowledge-agent/api/v3/agent'
 
 /** Max automatic reconnects when a stream drops without a terminal event. */
 const MAX_RECONNECTS = 5

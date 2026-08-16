@@ -133,8 +133,8 @@ public class AgentProperties {
         private boolean enabled = true;
         /** Maximum requests per minute per tenant. */
         private int requestsPerMinute = 60;
-        /** Maximum concurrent sessions per tenant. */
-        private int maxConcurrentSessions = 10;
+        /** Maximum concurrent sessions per tenant. 0 = unlimited. */
+        private int maxConcurrentSessions = 0;
         /** Maximum task creations per minute per tenant. */
         private int taskCreatePerMinute = 30;
     }
