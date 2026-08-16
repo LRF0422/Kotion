@@ -86,7 +86,7 @@ public class DefaultMemoryStore implements MemoryStore {
 
     @Override
     public void remember(MemoryEntry entry) {
-        if (entry == null || entry.getContent() == null || entry.getContent().isBlank()) {
+        if (entry == null || entry.getContent() == null || entry.getContent().trim().isEmpty()) {
             return;
         }
         long now = System.currentTimeMillis();
@@ -238,7 +238,7 @@ public class DefaultMemoryStore implements MemoryStore {
         m.setContent(e.getContent());
         m.setImportance(e.getImportance() != null ? e.getImportance() : 0);
         if (e.getTags() != null && !e.getTags().isEmpty()) {
-            m.setTags(List.of(e.getTags().split(",")));
+            m.setTags(java.util.Arrays.asList(e.getTags().split(",")));
         }
         m.setCreateTime(e.getCreateTime() != null ? e.getCreateTime() : 0L);
         m.setUpdateTime(e.getUpdateTime() != null ? e.getUpdateTime() : 0L);

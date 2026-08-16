@@ -16,6 +16,14 @@ import { resolveInputSchema } from '../utils/tool-wrapper'
  *  All tool schemas travel exclusively inside each SkillPayload.tools field. */
 const SKILLS_ONLY_DEFAULT = (import.meta as any).env?.KN_SKILLS_ONLY_CATALOG === 'true'
 
+/** Tool categories that never mutate the document and are safe in PLAN mode. */
+const READ_ONLY_CATEGORIES = new Set(['document-read', 'discovery', 'interaction'])
+
+function isReadOnlyTool(meta: { category: string } | undefined, executable: any): boolean {
+    if (executable?.readOnly === true) return true
+    return !!meta && READ_ONLY_CATEGORIES.has(meta.category)
+}
+
 export interface CapabilityCatalog {
     skills: SkillPayload[]
     tools: ToolPayload[]
@@ -70,6 +78,7 @@ export function collectCapabilityCatalog(
                     description: meta.description,
                     parameters,
                 },
+                readOnly: isReadOnlyTool(meta, executable),
             }
         })
 
@@ -109,6 +118,7 @@ export function collectCapabilityCatalog(
                     description: meta?.description ?? executable.description ?? '',
                     parameters: resolveInputSchema(executable.inputSchema),
                 },
+                readOnly: isReadOnlyTool(meta, executable),
             })
         }
 
@@ -122,6 +132,7 @@ export function collectCapabilityCatalog(
         if (skillTools.length > 0) payload.tools = skillTools
         if (skill.systemPromptFragment) payload.systemPromptFragment = skill.systemPromptFragment
         if (skill.tags) payload.tags = skill.tags
+        if (skill.domain) payload.domain = skill.domain
         if (skill.pluginName) payload.pluginName = skill.pluginName
         return payload
     })

@@ -124,7 +124,6 @@
     ">= 0.5%",
     "Safari >= 14",
     "iOS >= 14",
-    "not dead",
-    "not op_mini all"
+    "not ie <= 11"
   ]
 }

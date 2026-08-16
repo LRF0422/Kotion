@@ -118,8 +118,52 @@ public class ThinkHandler implements StateHandler {
                 .onErrorResume(e -> {
                     log.error("ThinkHandler: LLM error in session {}: {}",
                             sessionId, e.getMessage(), e);
+                    recordError(session, e);
                     return Flux.just(Transition.toError(sessionId, "llm_error: " + e.getMessage()));
                 });
+    }
+
+    /**
+     * Preserve a machine-readable error classification so the engine can emit
+     * session.failed with a useful code/retriable flag instead of INTERNAL.
+     */
+    private void recordError(AgentSession session, Throwable e) {
+        if (e instanceof com.knowledge.agent.v2.llm.ResilientLlmAdapter.LlmTimeoutException) {
+            session.getExecution().setError("LLM_TIMEOUT", e.getMessage(), true);
+            return;
+        }
+        if (e instanceof com.knowledge.agent.v2.llm.ResilientLlmAdapter.LlmExhaustedException) {
+            session.getExecution().setError("LLM_RETRIES_EXHAUSTED", e.getMessage(), false);
+            return;
+        }
+        Throwable cause = e;
+        while (cause != null) {
+            if (cause instanceof org.springframework.web.reactive.function.client.WebClientResponseException) {
+                org.springframework.http.HttpStatus status =
+                        ((org.springframework.web.reactive.function.client.WebClientResponseException) cause).getStatusCode();
+                if (status == org.springframework.http.HttpStatus.TOO_MANY_REQUESTS) {
+                    session.getExecution().setError("LLM_RATE_LIMIT", e.getMessage(), true);
+                    return;
+                }
+                if (status != null && status.is5xxServerError()) {
+                    session.getExecution().setError("LLM_UPSTREAM", e.getMessage(), true);
+                    return;
+                }
+                if (status != null && status.is4xxClientError()) {
+                    session.getExecution().setError("LLM_INVALID_REQUEST", e.getMessage(), false);
+                    return;
+                }
+            }
+            cause = cause.getCause();
+        }
+        String msg = e.getMessage() != null ? e.getMessage() : "";
+        if (msg.contains("429")) {
+            session.getExecution().setError("LLM_RATE_LIMIT", msg, true);
+        } else if (msg.contains("502") || msg.contains("503") || msg.contains("connection")) {
+            session.getExecution().setError("LLM_UPSTREAM", msg, true);
+        } else {
+            session.getExecution().setError("LLM_ERROR", msg, false);
+        }
     }
 
     private InferenceRequest buildRequest(AgentSession session) {
@@ -135,7 +179,16 @@ public class ThinkHandler implements StateHandler {
                 ? null : session.getToolIds();
         java.util.List<com.knowledge.agent.api.dto.ChatTool> frontendTools = session.getFrontendTools().isEmpty()
                 ? null : session.getFrontendTools();
-        if (session.isPlanMode()) {
+        String toolChoice = session.getToolChoice() != null ? session.getToolChoice() : "auto";
+        String toolsJson;
+        if ("none".equalsIgnoreCase(toolChoice)) {
+            // Explicit no-tool mode (frontend ask mode). Do not render any tool
+            // schema — an empty backend tool-id set historically meant "all
+            // registered tools", which leaked server tools into read-only chat.
+            toolsJson = "[]";
+            backendIds = java.util.Collections.emptyList();
+            frontendTools = null;
+        } else if (session.isPlanMode()) {
             backendIds = toolRegistry.getReadOnlyToolIds();
             if (frontendTools != null) {
                 java.util.List<com.knowledge.agent.api.dto.ChatTool> readOnlyFrontend = new java.util.ArrayList<>();
@@ -146,17 +199,26 @@ public class ThinkHandler implements StateHandler {
                 }
                 frontendTools = readOnlyFrontend.isEmpty() ? null : readOnlyFrontend;
             }
+            toolsJson = toolRegistry.buildToolsJsonCached(
+                    session.getCapabilitiesVersion(),
+                    backendIds,
+                    frontendTools);
+        } else {
+            toolsJson = toolRegistry.buildToolsJsonCached(
+                    session.getCapabilitiesVersion(),
+                    backendIds,
+                    frontendTools);
         }
-        String toolsJson = toolRegistry.buildToolsJsonCached(
-                session.getCapabilitiesVersion(),
-                backendIds,
-                frontendTools);
 
         return InferenceRequest.builder()
                 .model(session.getModelName())
                 .messages(messages)
+                .temperature(session.getTemperature() != null
+                        ? session.getTemperature() : 0.7)
+                .maxTokens(session.getMaxTokens() != null
+                        ? session.getMaxTokens() : 4096)
                 .toolsJson(toolsJson)
-                .toolChoice("auto")
+                .toolChoice(toolChoice)
                 .stream(true)
                 .build();
     }

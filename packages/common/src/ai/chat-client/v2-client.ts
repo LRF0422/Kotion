@@ -155,6 +155,10 @@ export class V2ChatClient {
             body.mode = request.mode
         }
 
+        if (request.toolChoice) {
+            body.toolChoice = request.toolChoice
+        }
+
         if (request.data) {
             body.data = request.data
         }

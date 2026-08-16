@@ -59,6 +59,9 @@ public class SessionSnapshotCodec {
         payload.maxIterations = session.getMaxIterations();
         payload.modelName = session.getModelName();
         payload.systemPrompt = session.getSystemPrompt();
+        payload.temperature = session.getTemperature();
+        payload.maxTokens = session.getMaxTokens();
+        payload.toolChoice = session.getToolChoice();
         payload.toolIds = new HashSet<>(session.getToolIds());
         payload.frontendTools = session.getFrontendTools();
         payload.skills = session.getSkills();
@@ -177,6 +180,9 @@ public class SessionSnapshotCodec {
                 .maxIterations(payload.maxIterations)
                 .modelName(payload.modelName)
                 .systemPrompt(payload.systemPrompt)
+                .temperature(payload.temperature)
+                .maxTokens(payload.maxTokens)
+                .toolChoice(payload.toolChoice)
                 .toolIds(payload.toolIds)
                 .frontendTools(payload.frontendTools)
                 .skills(payload.skills)
@@ -197,6 +203,9 @@ public class SessionSnapshotCodec {
         public int maxIterations;
         public String modelName;
         public String systemPrompt;
+        public Double temperature;
+        public Integer maxTokens;
+        public String toolChoice;
         public Set<String> toolIds;
         public List<ChatTool> frontendTools;
         public List<SkillPayload> skills;

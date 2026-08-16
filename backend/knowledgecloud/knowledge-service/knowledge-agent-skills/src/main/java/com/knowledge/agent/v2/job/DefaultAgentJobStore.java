@@ -178,6 +178,8 @@ public class DefaultAgentJobStore implements AgentJobStore {
         job.addUsage(p.promptTokens, p.completionTokens);
         job.setLastSeq(p.lastSeq);
         job.setAssistantText(p.assistantText);
+        job.setCreatedAt(p.createdAt);
+        job.setUpdatedAt(p.updatedAt);
         return job;
     }
 
@@ -191,6 +193,8 @@ public class DefaultAgentJobStore implements AgentJobStore {
                 e.getCompletionTokens() != null ? e.getCompletionTokens() : 0);
         job.setLastSeq(e.getLastSeq() != null ? e.getLastSeq() : 0L);
         job.setAssistantText(e.getAssistantText());
+        job.setCreatedAt(e.getCreateTime() != null ? e.getCreateTime() : 0L);
+        job.setUpdatedAt(e.getUpdateTime() != null ? e.getUpdateTime() : 0L);
         return job;
     }
 

@@ -236,7 +236,8 @@ public class ToolRegistry {
             return buildToolsJson(toolIds, frontendTools);
         }
         String key = capabilitiesVersion + "|"
-                + (toolIds == null ? "*" : new TreeSet<>(toolIds).toString());
+                + (toolIds == null ? "*" : new TreeSet<>(toolIds).toString())
+                + "|frontend:" + frontendToolsKey(frontendTools);
         String cached = schemaCache.get(key);
         if (cached != null) {
             return cached;
@@ -247,6 +248,38 @@ public class ToolRegistry {
         }
         schemaCache.put(key, json);
         return json;
+    }
+
+    /**
+     * Render the frontend tool list into a stable cache-key fragment. The
+     * previous key ignored {@code frontendTools} entirely, so two requests
+     * sharing a capabilities version but shipping different skill subsets
+     * could reuse a stale tools JSON payload.
+     */
+    private String frontendToolsKey(List<ChatTool> frontendTools) {
+        if (frontendTools == null || frontendTools.isEmpty()) {
+            return "-";
+        }
+        List<ChatTool> sorted = new ArrayList<>(frontendTools);
+        sorted.sort(Comparator.comparing(ft ->
+                ft.getFunction() != null && ft.getFunction().getName() != null
+                        ? ft.getFunction().getName()
+                        : ""));
+        StringBuilder sb = new StringBuilder();
+        for (ChatTool ft : sorted) {
+            if (ft.getFunction() == null || ft.getFunction().getName() == null) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append(',');
+            }
+            sb.append(ft.getFunction().getName())
+                    .append(':').append(Boolean.TRUE.equals(ft.getReadOnly()))
+                    .append(':').append(ft.getFunction().getParameters() != null
+                            ? ft.getFunction().getParameters().toString()
+                            : "{}");
+        }
+        return sb.toString();
     }
 
     // ---- Schema normalization ----

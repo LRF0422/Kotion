@@ -48,7 +48,7 @@ public class GetTaskStateTool implements Tool {
         }
 
         Object state = metadata.get(ContextCompactor.TASK_STATE_METADATA_KEY);
-        if (state == null || state.toString().isBlank()) {
+        if (state == null || state.toString().trim().isEmpty()) {
             return ToolResult.success("尚未记录任何任务状态。可调用 update_task_state 记录。");
         }
         return ToolResult.success(state.toString());

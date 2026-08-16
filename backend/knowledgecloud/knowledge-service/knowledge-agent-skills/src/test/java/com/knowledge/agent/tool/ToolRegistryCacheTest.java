@@ -1,5 +1,7 @@
 package com.knowledge.agent.tool;
 
+import com.knowledge.agent.api.dto.ChatFunction;
+import com.knowledge.agent.api.dto.ChatTool;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,6 +56,26 @@ class ToolRegistryCacheTest {
 
         assertThat(a).isNotBlank();
         assertThat(b).isEqualTo(a);
+    }
+
+    @Test
+    void frontendToolListParticipatesInCacheKey() {
+        ToolRegistry registry = registryWithOneTool();
+
+        String withoutFrontend = registry.buildToolsJsonCached("v1", null, null);
+        ChatTool frontend = ChatTool.builder()
+                .type("function")
+                .function(ChatFunction.builder()
+                        .name("fe_tool")
+                        .description("Frontend tool")
+                        .build())
+                .readOnly(true)
+                .build();
+        String withFrontend = registry.buildToolsJsonCached(
+                "v1", null, java.util.Collections.singletonList(frontend));
+
+        assertThat(withFrontend).isNotEqualTo(withoutFrontend);
+        assertThat(withFrontend).contains("fe_tool");
     }
 
     @Test

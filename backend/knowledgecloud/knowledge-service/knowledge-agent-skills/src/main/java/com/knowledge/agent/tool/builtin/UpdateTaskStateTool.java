@@ -70,14 +70,14 @@ public class UpdateTaskStateTool implements Tool {
         }
 
         try {
-            JsonNode incoming = (args == null || args.isBlank())
+            JsonNode incoming = (args == null || args.trim().isEmpty())
                     ? objectMapper.createObjectNode()
                     : objectMapper.readTree(args);
 
             // Load existing state (stored as a JSON string) for partial merge
             ObjectNode state;
             Object existing = metadata.get(ContextCompactor.TASK_STATE_METADATA_KEY);
-            if (existing instanceof String && !((String) existing).isBlank()) {
+            if (existing instanceof String && !((String) existing).trim().isEmpty()) {
                 JsonNode parsed = objectMapper.readTree((String) existing);
                 state = parsed.isObject() ? (ObjectNode) parsed : objectMapper.createObjectNode();
             } else {
@@ -87,7 +87,7 @@ public class UpdateTaskStateTool implements Tool {
             boolean changed = false;
             for (String field : new String[] { "goal", "plan", "progress", "notes" }) {
                 JsonNode value = incoming.get(field);
-                if (value != null && value.isTextual() && !value.asText().isBlank()) {
+                if (value != null && value.isTextual() && !value.asText().trim().isEmpty()) {
                     state.put(field, value.asText());
                     changed = true;
                 }

@@ -48,9 +48,9 @@ public class ForgetMemoryTool implements Tool {
             return ToolResult.error("Memory is unavailable without a user identity.");
         }
         try {
-            JsonNode node = objectMapper.readTree(args != null && !args.isBlank() ? args : "{}");
+            JsonNode node = objectMapper.readTree(args != null && !args.trim().isEmpty() ? args : "{}");
             String memoryId = node.path("memory_id").asText(null);
-            if (memoryId == null || memoryId.isBlank()) {
+            if (memoryId == null || memoryId.trim().isEmpty()) {
                 return ToolResult.error("Missing required argument: memory_id");
             }
             boolean removed = memoryStore.forget(

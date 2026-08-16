@@ -188,6 +188,19 @@ export const useEditorAgentOptimized = (
         })()
     }, [])
 
+    // Wrap a generated text stream so the refs are cleared when the consumer
+    // actually finishes (not when stream() returns the lazy generator).
+    const withLifecycle = useCallback((source: AsyncGenerator<string>): AsyncGenerator<string> => {
+        return (async function* (): AsyncGenerator<string> {
+            try {
+                yield* source
+            } finally {
+                isStreamingRef.current = false
+                abortControllerRef.current = null
+            }
+        })()
+    }, [])
+
     // Stream with abort support and history messages
     const stream = useCallback(async (options: {
         prompt: string
@@ -279,6 +292,7 @@ export const useEditorAgentOptimized = (
                 signal,
                 onToolExecution,
                 agentId: agentIdRef.current,
+                toolChoice: isAskMode ? 'none' : undefined,
                 temperature: params?.temperature,
                 maxTokens: params?.maxTokens,
             })
@@ -289,16 +303,18 @@ export const useEditorAgentOptimized = (
                 onUsage: options.onUsage,
             })
 
-            return { textStream }
+            return { textStream: withLifecycle(textStream) }
         } catch (error: any) {
             if (error.name === 'AbortError') {
+                isStreamingRef.current = false
+                abortControllerRef.current = null
                 return { textStream: async function* () { /* empty */ }() }
             }
-            throw error
-        } finally {
             isStreamingRef.current = false
+            abortControllerRef.current = null
+            throw error
         }
-    }, [resolveTool, getCatalog, onToolExecution, toTextStream, modeRef, editor])
+    }, [resolveTool, getCatalog, onToolExecution, toTextStream, withLifecycle, modeRef, editor])
 
     // Continue a session suspended on budget exhaustion: the backend grants a
     // fresh iteration budget and resumes the same session.
@@ -330,16 +346,18 @@ export const useEditorAgentOptimized = (
                 onUsage: options.onUsage,
             })
 
-            return { textStream }
+            return { textStream: withLifecycle(textStream) }
         } catch (error: any) {
             if (error.name === 'AbortError') {
+                isStreamingRef.current = false
+                abortControllerRef.current = null
                 return { textStream: async function* () { /* empty */ }() }
             }
-            throw error
-        } finally {
             isStreamingRef.current = false
+            abortControllerRef.current = null
+            throw error
         }
-    }, [resolveTool, onToolExecution, toTextStream])
+    }, [resolveTool, onToolExecution, toTextStream, withLifecycle])
 
     // Respond to a proposed plan (plan-approval gate).
     const resolvePlan = useCallback(async (options: {
@@ -376,16 +394,18 @@ export const useEditorAgentOptimized = (
                 onUsage: options.onUsage,
             })
 
-            return { textStream }
+            return { textStream: withLifecycle(textStream) }
         } catch (error: any) {
             if (error.name === 'AbortError') {
+                isStreamingRef.current = false
+                abortControllerRef.current = null
                 return { textStream: async function* () { /* empty */ }() }
             }
-            throw error
-        } finally {
             isStreamingRef.current = false
+            abortControllerRef.current = null
+            throw error
         }
-    }, [resolveTool, onToolExecution, toTextStream])
+    }, [resolveTool, onToolExecution, toTextStream, withLifecycle])
 
     // Re-attach to an in-flight task after a refresh/dropped connection.
     const attachStream = useCallback(async (options: {
@@ -414,16 +434,18 @@ export const useEditorAgentOptimized = (
                 onUsage: options.onUsage,
             })
 
-            return { textStream }
+            return { textStream: withLifecycle(textStream) }
         } catch (error: any) {
             if (error.name === 'AbortError') {
+                isStreamingRef.current = false
+                abortControllerRef.current = null
                 return { textStream: async function* () { /* empty */ }() }
             }
-            throw error
-        } finally {
             isStreamingRef.current = false
+            abortControllerRef.current = null
+            throw error
         }
-    }, [resolveTool, onToolExecution, toTextStream])
+    }, [resolveTool, onToolExecution, toTextStream, withLifecycle])
 
     // Stop current generation — also cancels the backend task so an abandoned
     // run doesn't keep burning tokens server-side.
@@ -438,7 +460,9 @@ export const useEditorAgentOptimized = (
 
     // Check if currently generating
     const isGenerating = useCallback(() => {
-        return abortControllerRef.current !== null && !abortControllerRef.current.signal.aborted
+        return isStreamingRef.current
+            && abortControllerRef.current !== null
+            && !abortControllerRef.current.signal.aborted
     }, [])
 
     return {

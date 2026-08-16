@@ -77,6 +77,11 @@ public final class ResumeApplier {
         if (planDecision != null && planDecision.decision != null) {
             applyPlanDecision(session, planDecision, maxChars);
         }
+        // A successful resume consumes the pause reason. Any tool calls that
+        // were awaiting client execution are no longer pending: tool results
+        // have been appended above, a continue action implies budget-only
+        // suspension, and a plan decision answers present_plan explicitly.
+        session.getExecution().clearPendingToolCalls();
         session.getExecution().setSuspendReason(null);
         session.getExecution().transitionTo(AgentState.THINK);
     }

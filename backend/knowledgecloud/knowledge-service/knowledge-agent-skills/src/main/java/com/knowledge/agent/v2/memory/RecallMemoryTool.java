@@ -51,7 +51,7 @@ public class RecallMemoryTool implements Tool {
             return ToolResult.error("Memory is unavailable without a user identity.");
         }
         try {
-            JsonNode node = objectMapper.readTree(args != null && !args.isBlank() ? args : "{}");
+            JsonNode node = objectMapper.readTree(args != null && !args.trim().isEmpty() ? args : "{}");
             String query = node.path("query").asText("");
             int limit = node.path("limit").asInt(5);
             if (limit <= 0) {

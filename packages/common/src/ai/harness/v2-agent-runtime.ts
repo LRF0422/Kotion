@@ -98,6 +98,7 @@ export class V2AgentRuntime {
         }
 
         if (input.maxTokens != null) body.maxTokens = input.maxTokens
+        if (input.toolChoice) body.toolChoice = input.toolChoice
         if (sessionId) body.sessionId = sessionId
         if (conversationId) body.conversationId = conversationId
         if (mode) body.mode = mode
@@ -115,9 +116,18 @@ export class V2AgentRuntime {
         const taskId = await this.createTask(body, signal)
         this.currentTaskId = taskId
 
-        // 2. Stream the task's events (replay + live).
-        const stream = await this.openTaskEvents(taskId, 0, signal)
-        yield* this.driveLoop(taskId, stream, resolveTool, onToolExecution, signal)
+        // 2. Stream the task's events (replay + live). If opening the stream
+        //    fails after the task was created, cancel it so it does not keep
+        //    running server-side without a client.
+        try {
+            const stream = await this.openTaskEvents(taskId, 0, signal)
+            yield* this.driveLoop(taskId, stream, resolveTool, onToolExecution, signal)
+        } catch (err) {
+            if (this.currentTaskId === taskId) {
+                this.cancelTask(taskId).catch(() => { /* best-effort */ })
+            }
+            throw err
+        }
     }
 
     /**
@@ -172,6 +182,52 @@ export class V2AgentRuntime {
             throw new Error(`V2 cancel error (${response.status}): ${errorText}`)
         }
     }
+
+    /**
+     * Execute one frontend tool with a bounded timeout. The timer is always
+     * cleared after the race; tools that ignore cancellation may still finish
+     * in the background, but their late result can no longer leak into this
+     * run and the agent is explicitly told the call timed out.
+     */
+    private async executeFrontendTool(
+        toolDef: ToolDefinition,
+        args: Record<string, unknown>,
+        callId: string,
+        toolName: string,
+    ): Promise<{
+        result: string
+        rawResult?: unknown
+        error?: string
+        durationMs: number
+    }> {
+        const startTime = Date.now()
+        let timeoutId: ReturnType<typeof setTimeout> | undefined
+        try {
+            const rawResult = await Promise.race([
+                toolDef.execute(args, callId),
+                new Promise<never>((_, reject) => {
+                    timeoutId = setTimeout(
+                        () => reject(new Error(`Tool "${toolName}" timed out after ${TOOL_EXEC_TIMEOUT_MS}ms`)),
+                        TOOL_EXEC_TIMEOUT_MS,
+                    )
+                }),
+            ])
+            return {
+                result: typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult),
+                rawResult,
+                durationMs: Date.now() - startTime,
+            }
+        } catch (err: any) {
+            return {
+                result: `Error: ${err?.message || err}`,
+                error: err?.message || String(err),
+                durationMs: Date.now() - startTime,
+            }
+        } finally {
+            if (timeoutId !== undefined) clearTimeout(timeoutId)
+        }
+    }
+
 
     /**
      * Re-attach to an in-flight task after a page refresh / dropped connection.
@@ -251,32 +307,23 @@ export class V2AgentRuntime {
                 let toolResult: string
                 let endEvent: HarnessEvent
                 if (toolDef?.execute) {
-                    try {
-                        // Bounded execution — a hung tool must not stall reattach.
-                        const rawResult = await Promise.race([
-                            toolDef.execute(args, pt.toolCallId),
-                            new Promise<never>((_, reject) => setTimeout(
-                                () => reject(new Error(`Tool "${toolName}" timed out after ${TOOL_EXEC_TIMEOUT_MS}ms`)),
-                                TOOL_EXEC_TIMEOUT_MS)),
-                        ])
-                        toolResult = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult)
-                        endEvent = {
+                    const outcome = await this.executeFrontendTool(toolDef, args, pt.toolCallId, toolName)
+                    toolResult = outcome.result
+                    endEvent = outcome.error
+                        ? {
                             type: 'tool-call-end',
                             id: pt.toolCallId,
                             toolName,
-                            result: rawResult,
-                            durationMs: Date.now() - startTime,
+                            error: outcome.error,
+                            durationMs: outcome.durationMs,
                         }
-                    } catch (err: any) {
-                        toolResult = `Error: ${err?.message || err}`
-                        endEvent = {
+                        : {
                             type: 'tool-call-end',
                             id: pt.toolCallId,
                             toolName,
-                            error: err?.message || String(err),
-                            durationMs: Date.now() - startTime,
+                            result: outcome.rawResult,
+                            durationMs: outcome.durationMs,
                         }
-                    }
                 } else {
                     const reason = `Tool "${toolName}" not available on frontend`
                     onToolExecution?.({ toolName, args, status: 'start', timestamp: startTime })
@@ -354,33 +401,23 @@ export class V2AgentRuntime {
                     let endEvent: HarnessEvent
 
                     if (toolDef?.execute) {
-                        try {
-                            // Bounded execution: a hung editor/plugin tool must
-                            // never stall the agent loop indefinitely.
-                            const rawResult = await Promise.race([
-                                toolDef.execute(args, pendingTool.id),
-                                new Promise<never>((_, reject) => setTimeout(
-                                    () => reject(new Error(`Tool "${toolName}" timed out after ${TOOL_EXEC_TIMEOUT_MS}ms`)),
-                                    TOOL_EXEC_TIMEOUT_MS)),
-                            ])
-                            toolResult = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult)
-                            endEvent = {
+                        const outcome = await this.executeFrontendTool(toolDef, args, pendingTool.id, toolName)
+                        toolResult = outcome.result
+                        endEvent = outcome.error
+                            ? {
                                 type: 'tool-call-end',
                                 id: pendingTool.id,
                                 toolName,
-                                result: rawResult,
-                                durationMs: Date.now() - startTime,
+                                error: outcome.error,
+                                durationMs: outcome.durationMs,
                             }
-                        } catch (err: any) {
-                            toolResult = `Error: ${err?.message || err}`
-                            endEvent = {
+                            : {
                                 type: 'tool-call-end',
                                 id: pendingTool.id,
                                 toolName,
-                                error: err?.message || String(err),
-                                durationMs: Date.now() - startTime,
+                                result: outcome.rawResult,
+                                durationMs: outcome.durationMs,
                             }
-                        }
                     } else {
                         const reason = `Tool "${toolName}" not available on frontend`
                         onToolExecution?.({ toolName, args, status: 'start', timestamp: startTime })
@@ -416,8 +453,12 @@ export class V2AgentRuntime {
             // Stream dropped without a terminal event: the backend task keeps
             // running — re-attach from the last seen seq (no text duplication,
             // seq strictly greater). Bounded retries with backoff.
-            if (signal?.aborted) return
-            if (reconnectAttempts >= MAX_RECONNECTS) return
+            if (signal?.aborted) {
+                throw new DOMException('The agent stream was aborted', 'AbortError')
+            }
+            if (reconnectAttempts >= MAX_RECONNECTS) {
+                throw new Error('Agent stream reconnect attempts exhausted')
+            }
             reconnectAttempts++
             await new Promise(r => setTimeout(r, RECONNECT_BASE_DELAY_MS * reconnectAttempts))
             stream = await this.openTaskEvents(taskId, result.lastSeq, signal)

@@ -72,6 +72,8 @@ export interface HarnessRunInput {
     maxSteps?: number
     /** Run mode: 'plan' (read-only research → plan → approval) or 'execute' (default). */
     mode?: 'plan' | 'execute'
+    /** OpenAI tool_choice. Use 'none' to force a no-tool response (ask mode). */
+    toolChoice?: 'auto' | 'none' | 'required' | string
     /** Per-yield SSE inactivity timeout in ms (default 10 minutes). */
     inactivityTimeoutMs?: number
     /** Custom agent definition id — backend applies its prompt/model/tool set. */

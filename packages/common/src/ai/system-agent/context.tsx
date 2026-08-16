@@ -375,8 +375,21 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
     const activeSkillsRef = useRef<Set<string>>(new Set())
     const sessionIdRef = useRef<string | null>(null)
     const taskIdRef = useRef<string | null>(null)
+    const taskIdRefreshAtRef = useRef(0)
     // Mirror of state.pendingPlan for stable access inside callbacks (P7).
     const pendingPlanRef = useRef<{ plan: PlanArtifact; planId?: string } | null>(null)
+
+    // Refresh the task-id TTL while a long stream is still producing events.
+    // Writing localStorage on every token would be wasteful; 10s is enough to
+    // keep the 30-minute TTL fresh for tasks that stream for a long time.
+    const refreshStoredTaskId = useCallback(() => {
+        const taskId = taskIdRef.current
+        if (!taskId) return
+        const now = Date.now()
+        if (now - taskIdRefreshAtRef.current < 10_000) return
+        taskIdRefreshAtRef.current = now
+        storeSystemAgentTaskId(taskId)
+    }, [])
 
     // Shared streaming buffer
     const streamBuffer = useStreamBuffer()
@@ -466,6 +479,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
     // Shared HarnessEvent → state folding (stream / continueSession / resolvePlan).
     const consumeEvents = useCallback(async (events: AsyncGenerator<HarnessEvent>): Promise<void> => {
         for await (const ev of events) {
+            refreshStoredTaskId()
             switch (ev.type) {
                 case 'text-delta':
                     streamBuffer.append(ev.content)
@@ -522,7 +536,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
                     break
             }
         }
-    }, [streamBuffer, handleAnnotation])
+    }, [streamBuffer, handleAnnotation, refreshStoredTaskId])
 
     // Stream function — drives the unified harness and maps its typed events
     // onto reactive state (text, annotations, session, execution steps).
@@ -640,6 +654,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
             )
 
             for await (const ev of events) {
+                refreshStoredTaskId()
                 switch (ev.type) {
                     case 'text-delta':
                         streamBuffer.append(ev.content)
@@ -708,7 +723,7 @@ export const SystemAgentProvider: React.FC<SystemAgentProviderProps> = ({
                 setState(prev => ({ ...prev, isGenerating: false }))
             }
         }
-    }, [streamBuffer, resolveTool, onToolExecution, handleAnnotation])
+    }, [streamBuffer, resolveTool, onToolExecution, handleAnnotation, refreshStoredTaskId])
 
     // Stop function — aborts the local stream AND cancels the backend task so
     // an abandoned run doesn't keep burning tokens server-side.

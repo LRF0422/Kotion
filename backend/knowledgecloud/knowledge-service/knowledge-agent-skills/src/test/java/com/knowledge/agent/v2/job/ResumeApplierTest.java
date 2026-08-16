@@ -1,6 +1,7 @@
 package com.knowledge.agent.v2.job;
 
 import com.knowledge.agent.v2.engine.AgentState;
+import com.knowledge.agent.v2.llm.InferenceResponse;
 import com.knowledge.agent.v2.session.AgentSession;
 import com.knowledge.agent.v2.session.ConversationMessage;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,8 @@ class ResumeApplierTest {
                 ConversationMessage.toolResult("c1", "fe_tool", "already applied"))));
         session.getExecution().setIteration(12);
         session.getExecution().setSuspendReason("frontend_tool_calls");
+        session.getExecution().setPendingToolCalls(Arrays.asList(
+                new InferenceResponse.ToolCallData("c2", "fe_tool2", "{}")));
         session.getExecution().transitionTo(AgentState.SUSPENDED);
         return session;
     }
@@ -68,6 +71,8 @@ class ResumeApplierTest {
         assertThat(session.getExecution().getSuspendReason()).isNull();
         assertThat(session.getExecution().getCurrentState()).isEqualTo(AgentState.THINK);
         assertThat(session.getExecution().getIteration()).isEqualTo(12);
+        // Tool-result resume consumes the suspension checkpoint.
+        assertThat(session.getExecution().getPendingToolCalls()).isNull();
     }
 
     @Test

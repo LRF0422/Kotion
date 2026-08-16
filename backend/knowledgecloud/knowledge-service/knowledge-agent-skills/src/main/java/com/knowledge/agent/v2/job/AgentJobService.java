@@ -312,6 +312,23 @@ public class AgentJobService {
                 return active != null ? active.asFlux() : Flux.empty();
             }
 
+            AgentJobStatus current = run.job.getStatus();
+            boolean hasToolResults = toolResults != null && !toolResults.isEmpty();
+            boolean hasPlanDecision = planDecision != null && planDecision.decision != null;
+            boolean hasContinue = "continue".equalsIgnoreCase(action);
+            if (!current.isPaused()) {
+                return Flux.error(new IllegalStateException(
+                        "Task is not resumable (status=" + current + ")"));
+            }
+            if (current == AgentJobStatus.WAITING_TOOLS && !hasToolResults && !hasPlanDecision) {
+                return Flux.error(new IllegalStateException(
+                        "Task is waiting for frontend tool results"));
+            }
+            if (current == AgentJobStatus.SUSPENDED && !hasContinue && !hasPlanDecision) {
+                return Flux.error(new IllegalStateException(
+                        "Suspended task requires action=continue or a plan decision"));
+            }
+
             applyResults(run.session, toolResults, action, planDecision);
             synchronized (run.pendingTools) {
                 run.pendingTools.clear();
@@ -319,6 +336,11 @@ public class AgentJobService {
             run.job.setStatus(AgentJobStatus.RUNNING);
             run.job.setFinishReason(null);
             jobStore.save(run.job);
+            // Persist the resume mutation BEFORE starting the engine. The store
+            // write is asynchronous, but encoding happens synchronously here;
+            // this closes the previous window where a crash immediately after
+            // resume replayed a stale suspension checkpoint.
+            checkpoint(run);
 
             // Emit the plan resolution before the engine continuation so the
             // client can close the pending-plan card deterministically.
@@ -669,11 +691,16 @@ public class AgentJobService {
         if (ev instanceof LifecycleEvent.SessionCompleted) {
             LifecycleEvent.SessionCompleted completed = (LifecycleEvent.SessionCompleted) ev;
             String finishReason = completed.getFinishReason();
-            run.job.addUsage(completed.getPromptTokens(), completed.getCompletionTokens());
+            run.job.setUsage(completed.getPromptTokens(), completed.getCompletionTokens());
             run.job.setFinishReason(finishReason);
             run.job.setStatus(statusFromFinishReason(finishReason));
             jobStore.save(run.job);
-            profileRecorder.record(run.session, finishReason);
+            if (run.job.getStatus() == AgentJobStatus.COMPLETED) {
+                // Profile signals are recorded once per session, at terminal
+                // completion. Recording on every SUSPENDED resume would add the
+                // session's cumulative totals multiple times.
+                profileRecorder.record(run.session, finishReason);
+            }
             checkpoint(run);
             if (run.job.getStatus() == AgentJobStatus.COMPLETED) {
                 metrics.taskCompleted();

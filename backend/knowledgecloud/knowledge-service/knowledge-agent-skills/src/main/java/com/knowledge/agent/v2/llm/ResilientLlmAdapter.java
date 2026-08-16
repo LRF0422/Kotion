@@ -41,17 +41,42 @@ public class ResilientLlmAdapter implements LlmAdapter {
         // as an error event) instead of silently re-invoking the LLM.
         java.util.concurrent.atomic.AtomicBoolean tokenEmitted =
                 new java.util.concurrent.atomic.AtomicBoolean(false);
-        return delegate.streamInfer(request)
-                .doOnNext(chunk -> {
-                    if (chunk.getType() == LlmChunk.ChunkType.TEXT_DELTA
-                            || chunk.getType() == LlmChunk.ChunkType.REASONING_DELTA) {
-                        tokenEmitted.set(true);
-                    }
-                })
+
+        // Overall timeout implemented with takeUntilOther + a trailing error.
+        // Reactor's take(Duration) completes normally at the deadline, which
+        // made a truncated response look like a successful finish.
+        Flux<LlmChunk> stream = Flux.defer(() -> {
+            java.util.concurrent.atomic.AtomicBoolean timedOut =
+                    new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.concurrent.atomic.AtomicBoolean sourceCompleted =
+                    new java.util.concurrent.atomic.AtomicBoolean(false);
+
+            Flux<LlmChunk> source = delegate.streamInfer(request)
+                    .doOnNext(chunk -> {
+                        if (chunk.getType() == LlmChunk.ChunkType.TEXT_DELTA
+                                || chunk.getType() == LlmChunk.ChunkType.REASONING_DELTA) {
+                            tokenEmitted.set(true);
+                        }
+                    })
+                    .doOnComplete(() -> sourceCompleted.set(true));
+
+            Mono<Long> timeout = Mono.delay(Duration.ofSeconds(config.getTimeoutSeconds()))
+                    .doOnNext(tick -> timedOut.set(true));
+
+            return source.takeUntilOther(timeout)
+                    .concatWith(Flux.defer(() -> {
+                        if (timedOut.get() && !sourceCompleted.get()) {
+                            return Mono.error(new LlmTimeoutException(
+                                    "LLM stream overall timeout after "
+                                            + config.getTimeoutSeconds() + "s", null));
+                        }
+                        return Mono.empty();
+                    }));
+        });
+
+        return stream
                 // Idle timeout: if no chunk arrives within the window, fail
                 .timeout(Duration.ofSeconds(config.getIdleTimeoutSeconds()))
-                // Overall timeout for the entire stream
-                .take(Duration.ofSeconds(config.getTimeoutSeconds()))
                 // Map timeout to a descriptive error
                 .onErrorMap(TimeoutException.class, e ->
                         new LlmTimeoutException("LLM stream idle timeout after "

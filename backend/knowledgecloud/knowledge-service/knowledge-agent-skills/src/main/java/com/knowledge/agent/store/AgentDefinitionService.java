@@ -130,7 +130,7 @@ public class AgentDefinitionService implements CustomAgentResolver {
      * empty set (= all backend tools).
      */
     public Set<String> parseToolIds(String toolIdsJson) {
-        if (toolIdsJson == null || toolIdsJson.isBlank()) {
+        if (toolIdsJson == null || toolIdsJson.trim().isEmpty()) {
             return Collections.emptySet();
         }
         try {
@@ -146,10 +146,10 @@ public class AgentDefinitionService implements CustomAgentResolver {
     // ---- Internals ----
 
     private void validate(AgentDefinitionEntity entity) {
-        if (entity.getName() == null || entity.getName().isBlank()) {
+        if (entity.getName() == null || entity.getName().trim().isEmpty()) {
             throw new IllegalArgumentException("Agent name is required");
         }
-        if (entity.getSystemPrompt() == null || entity.getSystemPrompt().isBlank()) {
+        if (entity.getSystemPrompt() == null || entity.getSystemPrompt().trim().isEmpty()) {
             throw new IllegalArgumentException("System prompt is required");
         }
         if (entity.getName().length() > 64) {

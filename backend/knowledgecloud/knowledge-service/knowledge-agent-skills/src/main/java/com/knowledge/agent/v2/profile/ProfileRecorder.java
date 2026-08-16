@@ -94,7 +94,7 @@ public class ProfileRecorder {
         String lastUser = null;
         for (int i = messages.size() - 1; i >= 0; i--) {
             ConversationMessage m = messages.get(i);
-            if ("user".equals(m.getRole()) && m.getContent() != null && !m.getContent().isBlank()) {
+            if ("user".equals(m.getRole()) && m.getContent() != null && !m.getContent().trim().isEmpty()) {
                 lastUser = m.getContent();
                 break;
             }

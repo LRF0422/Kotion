@@ -84,16 +84,20 @@ class AgentJobServiceResumeGuardTest {
         AgentIdentity identity = AgentIdentity.builder().userId(1L).tenantId(1L).build();
         AgentJob job = service.create(ChatCompletionRequest.builder().build(), identity);
 
-        // Wait until the initial (empty) execution settles.
+        // Wait until the initial (empty) execution settles, then simulate the
+        // paused state a real engine reaches after a budget suspension.
         awaitTrue(() -> !service.isExecutionActive(job.getTaskId()), 2000);
+        AgentJob created = service.status(job.getTaskId());
+        created.setStatus(AgentJobStatus.SUSPENDED);
+        created.setFinishReason("suspended:iteration_budget_exhausted");
 
         // First resume: engine.resume subscribed exactly once.
-        service.resume(job.getTaskId(), new ArrayList<>(), null);
+        service.resume(job.getTaskId(), new ArrayList<>(), "continue");
         verify(engine, times(1)).resume(any());
 
         // Retried resume while execution is active: no second subscription.
         assertThat(service.isExecutionActive(job.getTaskId())).isTrue();
-        service.resume(job.getTaskId(), new ArrayList<>(), null);
+        service.resume(job.getTaskId(), new ArrayList<>(), "continue");
         verify(engine, times(1)).resume(any());
 
         service.cancel(job.getTaskId());

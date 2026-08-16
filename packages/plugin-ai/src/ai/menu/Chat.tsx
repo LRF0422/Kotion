@@ -235,6 +235,7 @@ export const ExpandableChatDemo: React.FC<{
         deleteSession,
         clearActiveMessages,
         clearBackendTask,
+        refreshBackendSession,
         targetPage,
         setTargetPage,
         parseAnnotations,
@@ -518,6 +519,7 @@ export const ExpandableChatDemo: React.FC<{
 
             for await (const part of textStream) {
                 buffer.append(part)
+                refreshBackendSession()
             }
 
             // Force-flush + yield a frame so React commits the streaming
@@ -587,7 +589,7 @@ export const ExpandableChatDemo: React.FC<{
                 console.error('Failed to flush off-screen edits:', err)
             })
         }
-    }, [buffer, generateMessageId, setMessages, clearBackendTask])
+    }, [buffer, generateMessageId, setMessages, clearBackendTask, refreshBackendSession])
 
     // ─── Submit ───────────────────────────────────────────
     const submitMessage = useCallback(async (messageText: string) => {

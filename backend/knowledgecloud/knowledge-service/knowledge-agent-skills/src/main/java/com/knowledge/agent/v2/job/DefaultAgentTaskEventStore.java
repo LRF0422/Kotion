@@ -38,14 +38,16 @@ import java.util.concurrent.TimeUnit;
 public class DefaultAgentTaskEventStore implements AgentTaskEventStore {
 
     private static final String KEY_PREFIX = "agent:taskevents:";
-    private static final long TTL_HOURS = 24;
-    private static final int MAX_EVENTS = 10_000;
+    private static final int DEFAULT_MAX_EVENTS = 10_000;
+    private static final long DEFAULT_TTL_HOURS = 24;
     private static final int REPLAY_BATCH = 2_000;
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final AgentTaskEventMapper eventMapper;
     private final AgentProperties properties;
+    private final int maxEvents;
+    private final long ttlHours;
 
     private ThreadPoolExecutor mirrorExecutor;
 
@@ -57,6 +59,12 @@ public class DefaultAgentTaskEventStore implements AgentTaskEventStore {
         this.objectMapper = objectMapper;
         this.eventMapper = eventMapper;
         this.properties = properties;
+        this.maxEvents = properties.getEventStore().getMaxEvents() > 0
+                ? properties.getEventStore().getMaxEvents()
+                : DEFAULT_MAX_EVENTS;
+        this.ttlHours = properties.getEventStore().getTtlHours() > 0
+                ? properties.getEventStore().getTtlHours()
+                : DEFAULT_TTL_HOURS;
     }
 
     @PostConstruct
@@ -92,9 +100,9 @@ public class DefaultAgentTaskEventStore implements AgentTaskEventStore {
 
             String key = KEY_PREFIX + taskId;
             redisTemplate.opsForZSet().add(key, member, seq);
-            // Ring buffer: keep the newest MAX_EVENTS.
-            redisTemplate.opsForZSet().removeRange(key, 0, -(MAX_EVENTS + 1));
-            redisTemplate.expire(key, TTL_HOURS, TimeUnit.HOURS);
+            // Ring buffer: keep the newest maxEvents.
+            redisTemplate.opsForZSet().removeRange(key, 0, -(maxEvents + 1));
+            redisTemplate.expire(key, ttlHours, TimeUnit.HOURS);
         } catch (Exception e) {
             log.warn("AgentTaskEventStore Redis append failed for {} seq {}: {}",
                     taskId, seq, e.getMessage());

@@ -63,6 +63,9 @@ public class ExecutionState {
      * completion event tell the frontend WHY the session paused.
      */
     private volatile String suspendReason;
+    private volatile String errorCode = "INTERNAL";
+    private volatile String errorMessage;
+    private volatile boolean errorRetriable;
     private final long startTimeMs = System.currentTimeMillis();
     private volatile List<InferenceResponse.ToolCallData> pendingToolCalls;
 
@@ -177,6 +180,26 @@ public class ExecutionState {
 
     public void setSuspendReason(String suspendReason) {
         this.suspendReason = suspendReason;
+    }
+
+    public String getErrorCode() {
+        return errorCode;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public boolean isErrorRetriable() {
+        return errorRetriable;
+    }
+
+    public void setError(String code, String message, boolean retriable) {
+        if (code != null && code.trim().length() > 0) {
+            this.errorCode = code;
+        }
+        this.errorMessage = message;
+        this.errorRetriable = retriable;
     }
 
     public long getElapsedMs() {

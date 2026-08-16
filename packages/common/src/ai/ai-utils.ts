@@ -42,6 +42,7 @@ export function streamKnowledgeChat(
                 messages,
                 stream: true,
                 temperature: 0.7,
+                toolChoice: 'none',
             }),
             signal: options.signal,
         })

@@ -143,10 +143,10 @@ public class AgentJobController {
     // ---- Authorization ----
 
     /**
-     * Load a task and verify the caller owns it: the tenant must match and,
-     * when the task carries an owner user, the user must match too. Returns
+     * Load a task and verify the caller owns it. Both tenant and user must be
+     * present and match — a missing security context fails closed. Returns
      * {@code null} (indistinguishable from "not found") on any mismatch so
-     * task existence is not leaked across tenants.
+     * task existence is not leaked across tenants/users.
      */
     private AgentJob requireOwnedJob(String taskId) {
         AgentJob job = jobService.status(taskId);
@@ -155,15 +155,15 @@ public class AgentJobController {
         }
         Long userId = SecurityContextUtil.getUserId();
         Long tenantId = parseLong(SecurityContextUtil.getTenantId());
-        if (tenantId != null && job.getTenantId() != null
-                && !tenantId.equals(job.getTenantId())) {
-            log.warn("AgentJobController: cross-tenant access attempt on task {} by user {} tenant {}",
+        if (tenantId == null || job.getTenantId() == null
+                || !tenantId.equals(job.getTenantId())) {
+            log.warn("AgentJobController: tenant mismatch/missing on task {} by user {} tenant {}",
                     taskId, userId, tenantId);
             return null;
         }
-        if (userId != null && job.getUserId() != null
-                && !userId.equals(job.getUserId())) {
-            log.warn("AgentJobController: cross-user access attempt on task {} by user {}", taskId, userId);
+        if (userId == null || job.getUserId() == null
+                || !userId.equals(job.getUserId())) {
+            log.warn("AgentJobController: user mismatch/missing on task {} by user {}", taskId, userId);
             return null;
         }
         return job;
@@ -293,12 +293,11 @@ public class AgentJobController {
     // ---- Identity ----
 
     private AgentIdentity extractIdentity(ChatCompletionRequest request) {
-        Long userId = request.getUserId();
-        if (userId == null || userId == -1L) {
-            userId = SecurityContextUtil.getUserId();
-        }
+        // Identity is ALWAYS derived from the authenticated security context.
+        // A client-supplied userId must never be able to attribute a task to
+        // another user or trigger that user's profile/memory injection.
         return AgentIdentity.builder()
-                .userId(userId)
+                .userId(SecurityContextUtil.getUserId())
                 .tenantId(parseLong(SecurityContextUtil.getTenantId()))
                 .userName(SecurityContextUtil.getUserName())
                 .account(SecurityContextUtil.getUserAccount())

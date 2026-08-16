@@ -157,6 +157,7 @@ export interface Skill {
     optionalTools?: string[]     // 可选工具
     systemPromptFragment?: string // 专用 System Prompt 片段
     tags?: string[]
+    domain?: string
     source: 'builtin' | 'plugin'
     pluginName?: string
 }

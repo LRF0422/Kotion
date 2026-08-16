@@ -100,6 +100,11 @@ public class AgentSessionFactory {
                 .mode(mode)
                 .maxIterations(properties.getEngine().getMaxIterations())
                 .modelName(request.getModel())
+                .temperature(request.getTemperature())
+                .maxTokens(request.getMaxTokens())
+                .toolChoice(request.getToolChoice() instanceof String
+                        ? (String) request.getToolChoice()
+                        : null)
                 .frontendTools(frontendTools)
                 .skills(resolution.skills)
                 .capabilitiesVersion(request.getCapabilitiesVersion())

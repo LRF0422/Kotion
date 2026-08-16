@@ -45,6 +45,8 @@ export interface UseChatSessionsResult {
     clearActiveMessages: () => void
     /** Clear the live task handle once a turn has fully completed. */
     clearBackendTask: () => void
+    /** Refresh the backend-session TTL while a long stream is still active. */
+    refreshBackendSession: () => void
     /** Page bound to the active session (@-mention), if any. */
     targetPage: ChatTargetPage | undefined
     /** Bind / unbind the active session's target page. */
@@ -257,6 +259,22 @@ export function useChatSessions(): UseChatSessionsResult {
         }))
     }, [activeSessionId, updateMeta])
 
+    // Refresh the backend-session TTL while a long stream is still active.
+    const backendSessionRefreshAtRef = useRef(0)
+    const refreshBackendSession = useCallback(() => {
+        const active = activeSession
+        if (!active || !active.backendSessionId) return
+        const now = Date.now()
+        if (now - backendSessionRefreshAtRef.current < 10_000) return
+        backendSessionRefreshAtRef.current = now
+        updateMeta(activeSessionId, s => ({
+            ...s,
+            backendSessionUpdatedAt: now,
+            updatedAt: now,
+        }))
+    }, [activeSession, activeSessionId, updateMeta])
+
+
     // Clear the live task handle once a turn has fully completed (the final
     // message is persisted), so a later refresh doesn't re-attach a stale task.
     const clearBackendTask = useCallback(() => {
@@ -330,6 +348,7 @@ export function useChatSessions(): UseChatSessionsResult {
         renameSession,
         clearActiveMessages,
         clearBackendTask,
+        refreshBackendSession,
         targetPage,
         setTargetPage,
         parseAnnotations,

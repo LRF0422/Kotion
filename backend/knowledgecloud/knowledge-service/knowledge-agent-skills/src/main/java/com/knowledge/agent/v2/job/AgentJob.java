@@ -21,7 +21,7 @@ public class AgentJob {
     private final String conversationId;
     private final Long userId;
     private final Long tenantId;
-    private final long createdAt;
+    private long createdAt;
 
     private volatile AgentJobStatus status = AgentJobStatus.QUEUED;
     private volatile String finishReason;
@@ -71,6 +71,12 @@ public class AgentJob {
         return createdAt;
     }
 
+    public void setCreatedAt(long createdAt) {
+        if (createdAt > 0) {
+            this.createdAt = createdAt;
+        }
+    }
+
     public AgentJobStatus getStatus() {
         return status;
     }
@@ -102,6 +108,12 @@ public class AgentJob {
         return updatedAt;
     }
 
+    public void setUpdatedAt(long updatedAt) {
+        if (updatedAt > 0) {
+            this.updatedAt = updatedAt;
+        }
+    }
+
     public int getPromptTokens() {
         return promptTokens.get();
     }
@@ -117,6 +129,16 @@ public class AgentJob {
         if (completion > 0) {
             completionTokens.addAndGet(completion);
         }
+    }
+
+    /**
+     * Set the CUMULATIVE usage reported by a session. Sessions are resumed
+     * multiple times and the engine always reports totals since session start,
+     * so {@link #addUsage} would double-count each suspension.
+     */
+    public void setUsage(int prompt, int completion) {
+        promptTokens.set(Math.max(0, prompt));
+        completionTokens.set(Math.max(0, completion));
     }
 
     public boolean isTerminal() {

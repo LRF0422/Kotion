@@ -154,12 +154,19 @@ export function refreshAccessToken(): Promise<string | null> {
  * The original request body/signal are preserved on retry.
  */
 export async function authorizedFetch(url: string, init: RequestInit = {}): Promise<Response> {
+    // AI streaming callers still pass relative `/api/...` URLs. On desktop the
+    // renderer runs on the `app://` origin, so resolve those against the cloud
+    // API base instead of letting them hit `app://api/...`.
+    const resolvedUrl = isDesktop && url.startsWith('/api')
+        ? new URL(url, API_BASE_URL).toString()
+        : url
+
     const request = (token: string | null): Promise<Response> => {
         const headers = new Headers(init.headers as HeadersInit | undefined)
         if (token) {
             headers.set('Authorization', `Bearer ${token}`)
         }
-        return fetch(url, { ...init, headers })
+        return fetch(resolvedUrl, { ...init, headers })
     }
 
     let response = await request(getAccessToken())

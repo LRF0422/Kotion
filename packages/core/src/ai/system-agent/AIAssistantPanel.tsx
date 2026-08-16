@@ -109,10 +109,24 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         const taskId = getStoredSystemAgentTaskId()
         if (!taskId) return
 
-        // Seed a placeholder assistant bubble the stream updates.
-        setMessages(prev => prev.length === 0
-            ? [{ id: `msg-${Date.now()}`, role: 'assistant', content: '', timestamp: Date.now(), steps: [] }]
-            : prev)
+        // Seed a dedicated placeholder assistant bubble the stream updates.
+        // Always append one when the last message is not already an empty
+        // assistant placeholder; otherwise a refresh with prior history used
+        // to overwrite the previous assistant message.
+        const placeholderId = `msg-${Date.now()}`
+        setMessages(prev => {
+            const last = prev[prev.length - 1]
+            if (last?.role === 'assistant' && !last.content && !last.steps?.length) {
+                return prev
+            }
+            return [...prev, {
+                id: placeholderId,
+                role: 'assistant',
+                content: '',
+                timestamp: Date.now(),
+                steps: [],
+            }]
+        })
 
         void (async () => {
             try {
@@ -121,15 +135,9 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                 console.error('Re-attach failed:', err)
             } finally {
                 const finalContent = agentStateRef.current.streamingContent
-                setMessages(prev => {
-                    const last = prev[prev.length - 1]
-                    if (last?.role === 'assistant') {
-                        return prev.map((m, i) =>
-                            i === prev.length - 1 ? { ...m, content: finalContent } : m
-                        )
-                    }
-                    return prev
-                })
+                setMessages(prev => prev.map(m =>
+                    m.id === placeholderId ? { ...m, content: finalContent } : m,
+                ))
             }
         })()
         // eslint-disable-next-line react-hooks/exhaustive-deps

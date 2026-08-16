@@ -203,7 +203,7 @@ public class ContextCompactor {
         String prompt = buildSummaryPrompt(session, seg);
         InferenceRequest request = InferenceRequest.builder()
                 .model(session.getModelName())
-                .messages(List.of(
+                .messages(java.util.Arrays.asList(
                         ConversationMessage.system(
                                 "你是一个上下文压缩助手，负责将 agent 的对话历史压缩为结构化任务状态摘要。"
                                         + "只输出摘要本身，不要输出任何额外解释。"),
@@ -217,7 +217,7 @@ public class ContextCompactor {
         return llmAdapter.infer(request)
                 .map(response -> {
                     String summary = response.getContent();
-                    if (summary == null || summary.isBlank()) {
+                    if (summary == null || summary.trim().isEmpty()) {
                         throw new IllegalStateException("empty summary from LLM");
                     }
                     return assemble(seg, buildAnchorMessage(session, summary));
@@ -235,7 +235,7 @@ public class ContextCompactor {
                     .append(seg.previousSummary).append("\n\n");
         }
         String taskState = readTaskState(session);
-        if (taskState != null && !taskState.isBlank()) {
+        if (taskState != null && !taskState.trim().isEmpty()) {
             sb.append("=== Agent 自己维护的任务状态（权威，优先采信） ===\n")
                     .append(taskState).append("\n\n");
         }
@@ -264,7 +264,7 @@ public class ContextCompactor {
                 .append("\n以下是较早对话内容的结构化摘要（原始消息已移除）：\n\n")
                 .append(summary.trim());
         String taskState = readTaskState(session);
-        if (taskState != null && !taskState.isBlank()) {
+        if (taskState != null && !taskState.trim().isEmpty()) {
             content.append("\n\n=== Agent 维护的任务状态 ===\n").append(taskState);
         }
         return ConversationMessage.system(content.toString());
@@ -398,7 +398,7 @@ public class ContextCompactor {
             } else {
                 log.debug("ContextCompactor: assistant tool_calls group incomplete ({} unanswered), rebuilding",
                         expected.size());
-                boolean hasText = msg.getContent() != null && !msg.getContent().isBlank();
+                boolean hasText = msg.getContent() != null && !msg.getContent().trim().isEmpty();
                 if (hasText) {
                     pass2.add(ConversationMessage.builder()
                             .role("assistant")

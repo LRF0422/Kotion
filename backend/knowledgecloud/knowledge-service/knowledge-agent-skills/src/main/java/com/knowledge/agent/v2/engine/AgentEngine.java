@@ -145,8 +145,13 @@ public class AgentEngine {
                         notifyUsageListener(session, finishReason, elapsed);
                         return Flux.just((AgentEvent) completedEvent);
                     } else if (finalState == AgentState.ERROR) {
+                        String errorCode = session.getExecution().getErrorCode();
+                        String errorMessage = session.getExecution().getErrorMessage();
                         LifecycleEvent.SessionFailed failedEvent = new LifecycleEvent.SessionFailed(
-                                session.getSessionId(), "INTERNAL", "Agent ended in ERROR state", false);
+                                session.getSessionId(),
+                                errorCode != null ? errorCode : "INTERNAL",
+                                errorMessage != null ? errorMessage : "Agent ended in ERROR state",
+                                session.getExecution().isErrorRetriable());
                         eventBus.publish(failedEvent);
                         return Flux.just((AgentEvent) failedEvent);
                     }
@@ -156,8 +161,14 @@ public class AgentEngine {
                             session.getSessionId(), session.getExecution().getIteration(),
                             session.getExecution().getElapsedMs());
                 }).doOnError(e -> {
+                    if (session.getExecution().getErrorMessage() == null) {
+                        session.getExecution().setError("INTERNAL", e.getMessage(), false);
+                    }
                     LifecycleEvent.SessionFailed failedEvent = new LifecycleEvent.SessionFailed(
-                            session.getSessionId(), "INTERNAL", e.getMessage(), false);
+                            session.getSessionId(),
+                            session.getExecution().getErrorCode(),
+                            session.getExecution().getErrorMessage(),
+                            session.getExecution().isErrorRetriable());
                     eventBus.publish(failedEvent);
                     log.error("AgentEngine failed: sessionId={}", session.getSessionId(), e);
                 });
@@ -216,70 +227,68 @@ public class AgentEngine {
             return Flux.just(Transition.toError(session.getSessionId(), "no_handler_for_" + currentState));
         }
 
-        // Execute through the pipeline, collecting events and the transition.
+        // Execute through the pipeline while forwarding non-Transition events
+        // LIVE. The previous windowUntil + collectList() implementation buffered
+        // every THINK stream until the handler emitted its Transition, which made
+        // token streaming indistinguishable from a batch response. The Transition
+        // is captured in a side channel and applied only after the handler flux
+        // completes; all business events pass through immediately.
         // Pass the REAL from/to pair (ExecutionState tracks the last state) so
         // interceptors can observe true transition boundaries (ACT→OBSERVE etc.).
         AgentState transitionFromState = session.getExecution().getLastState();
-        return pipeline.execute(session, transitionFromState, currentState, handler)
+        java.util.concurrent.atomic.AtomicReference<Transition> transitionRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+
+        Flux<AgentEvent> liveEvents = pipeline.execute(session, transitionFromState, currentState, handler)
                 .doOnNext(event -> {
-                    // Publish non-internal events to the EventBus
-                    if (!(event instanceof Transition)) {
+                    if (event instanceof Transition) {
+                        transitionRef.set((Transition) event);
+                    } else {
+                        // Publish non-internal events to the EventBus
                         eventBus.publish(event);
                     }
                 })
-                .windowUntil(event -> event instanceof Transition, true)
-                .concatMap(window -> window.collectList().flatMapMany(events -> {
-                    // Find the transition in this window
-                    Transition transition = null;
-                    for (AgentEvent event : events) {
-                        if (event instanceof Transition) {
-                            transition = (Transition) event;
-                        }
-                    }
+                .filter(event -> !(event instanceof Transition));
 
-                    // Emit non-transition events
-                    Flux<AgentEvent> emitted = Flux.fromIterable(events)
-                            .filter(e -> !(e instanceof Transition));
+        return liveEvents.concatWith(Flux.defer(() -> {
+            Transition transition = transitionRef.get();
+            if (transition == null) {
+                // A handler that completes without a Transition is a stuck
+                // state — fail loudly instead of silently ending the stream
+                // without a SessionCompleted/Failed lifecycle event. The raw
+                // Transition is intentionally NOT emitted (it is internal);
+                // buildFlux() sees ERROR and emits SessionFailed.
+                log.error("AgentEngine: handler for state {} completed without a transition — marking session {} ERROR",
+                        currentState, session.getSessionId());
+                session.getExecution().transitionTo(AgentState.ERROR);
+                return Flux.empty();
+            }
 
-                    if (transition == null) {
-                        // A handler that completes without a Transition is a stuck
-                        // state — fail loudly instead of silently ending the stream
-                        // without a SessionCompleted/Failed lifecycle event. The raw
-                        // Transition is intentionally NOT emitted (it is internal);
-                        // buildFlux() sees ERROR and emits SessionFailed.
-                        log.error("AgentEngine: handler for state {} completed without a transition — marking session {} ERROR",
-                                currentState, session.getSessionId());
-                        session.getExecution().transitionTo(AgentState.ERROR);
-                        return emitted;
-                    }
+            // Apply the transition
+            AgentState nextState = transition.getNextState();
+            AgentState fromState = session.getCurrentState();
+            if (nextState == AgentState.SUSPENDED) {
+                session.getExecution().setSuspendReason(transition.getReason());
+            }
+            session.getExecution().transitionTo(nextState);
 
-                    // Apply the transition
-                    AgentState nextState = transition.getNextState();
-                    AgentState fromState = session.getCurrentState();
-                    if (nextState == AgentState.SUSPENDED) {
-                        session.getExecution().setSuspendReason(transition.getReason());
-                    }
-                    session.getExecution().transitionTo(nextState);
+            // Emit state transition event for observability
+            StateEvent.StateTransition stateTransitionEvent = new StateEvent.StateTransition(
+                    session.getSessionId(), fromState, nextState,
+                    session.getExecution().getIteration());
+            eventBus.publish(stateTransitionEvent);
 
-                    // Emit state transition event for observability
-                    StateEvent.StateTransition stateTransitionEvent = new StateEvent.StateTransition(
-                            session.getSessionId(), fromState, nextState,
-                            session.getExecution().getIteration());
-                    eventBus.publish(stateTransitionEvent);
+            log.debug("AgentEngine: {} → {} (reason: {})",
+                    fromState, nextState, transition.getReason());
 
-                    log.debug("AgentEngine: {} → {} (reason: {})",
-                            fromState, nextState, transition.getReason());
+            if (nextState.isTerminal()) {
+                return Flux.just((AgentEvent) stateTransitionEvent);
+            }
 
-                    if (nextState.isTerminal()) {
-                        // Terminal state: emit remaining events + transition event and complete
-                        return Flux.concat(emitted, Flux.just(stateTransitionEvent));
-                    }
-
-                    // Non-terminal: emit events then recurse
-                    return Flux.concat(
-                            emitted,
-                            Flux.just(stateTransitionEvent),
-                            Flux.defer(() -> executeState(session)));
-                }));
+            // Non-terminal: emit the observability transition, then recurse.
+            return Flux.concat(
+                    Flux.just((AgentEvent) stateTransitionEvent),
+                    Flux.defer(() -> executeState(session)));
+        }));
     }
 }

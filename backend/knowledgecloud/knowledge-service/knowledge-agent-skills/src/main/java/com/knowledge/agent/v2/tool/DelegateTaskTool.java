@@ -147,7 +147,7 @@ public class DelegateTaskTool implements Tool {
         } catch (Exception e) {
             return ToolResult.error("Invalid arguments: " + e.getMessage());
         }
-        if (description == null || description.isBlank()) {
+        if (description == null || description.trim().isEmpty()) {
             return ToolResult.error("Missing required argument: description");
         }
 
@@ -161,7 +161,7 @@ public class DelegateTaskTool implements Tool {
 
         // Optional custom agent assembly
         CustomAgentResolver.CustomAgentSpec spec = null;
-        if (agentName != null && !agentName.isBlank()) {
+        if (agentName != null && !agentName.trim().isEmpty()) {
             CustomAgentResolver resolver = resolverProvider.getIfAvailable();
             if (resolver == null) {
                 return ToolResult.error("Custom agents are not available; call without agent_name.");
@@ -377,7 +377,7 @@ public class DelegateTaskTool implements Tool {
                 .build();
 
         StringBuilder task = new StringBuilder(description.trim());
-        if (expectedOutput != null && !expectedOutput.isBlank()) {
+        if (expectedOutput != null && !expectedOutput.trim().isEmpty()) {
             task.append("\n\n期望产出：").append(expectedOutput.trim());
         }
         child.getExecution().addMessage(ConversationMessage.user(task.toString()));
@@ -392,7 +392,7 @@ public class DelegateTaskTool implements Tool {
         for (int i = messages.size() - 1; i >= 0; i--) {
             ConversationMessage msg = messages.get(i);
             if ("assistant".equals(msg.getRole())
-                    && msg.getContent() != null && !msg.getContent().isBlank()) {
+                    && msg.getContent() != null && !msg.getContent().trim().isEmpty()) {
                 return msg.getContent();
             }
         }

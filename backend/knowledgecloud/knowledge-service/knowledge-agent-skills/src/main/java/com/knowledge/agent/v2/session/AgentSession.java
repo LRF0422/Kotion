@@ -54,6 +54,12 @@ public class AgentSession {
     private final String modelName;
     private final String systemPrompt;
     private final Set<String> toolIds;
+    /** Sampling temperature requested by the client; null = provider default. */
+    private final Double temperature;
+    /** Max response tokens requested by the client; null = provider default. */
+    private final Integer maxTokens;
+    /** OpenAI tool_choice value: auto (default), none, required, or a function name. */
+    private final String toolChoice;
     /** Frontend tools sent from the client (OpenAI-compatible definitions). */
     private final List<ChatTool> frontendTools;
 
@@ -87,6 +93,9 @@ public class AgentSession {
         this.maxIterations = builder.maxIterations > 0 ? builder.maxIterations : 20;
         this.modelName = builder.modelName;
         this.systemPrompt = builder.systemPrompt;
+        this.temperature = builder.temperature;
+        this.maxTokens = builder.maxTokens;
+        this.toolChoice = builder.toolChoice != null ? builder.toolChoice : "auto";
         this.toolIds = builder.toolIds != null
                 ? Collections.unmodifiableSet(builder.toolIds)
                 : Collections.emptySet();
@@ -139,6 +148,18 @@ public class AgentSession {
 
     public String getModelName() {
         return modelName;
+    }
+
+    public Double getTemperature() {
+        return temperature;
+    }
+
+    public Integer getMaxTokens() {
+        return maxTokens;
+    }
+
+    public String getToolChoice() {
+        return toolChoice;
     }
 
     public String getSystemPrompt() {
@@ -198,6 +219,9 @@ public class AgentSession {
         private int maxIterations;
         private String modelName;
         private String systemPrompt;
+        private Double temperature;
+        private Integer maxTokens;
+        private String toolChoice;
         private Set<String> toolIds;
         private List<ChatTool> frontendTools;
         private List<SkillPayload> skills;
@@ -237,6 +261,21 @@ public class AgentSession {
 
         public Builder modelName(String modelName) {
             this.modelName = modelName;
+            return this;
+        }
+
+        public Builder temperature(Double temperature) {
+            this.temperature = temperature;
+            return this;
+        }
+
+        public Builder maxTokens(Integer maxTokens) {
+            this.maxTokens = maxTokens;
+            return this;
+        }
+
+        public Builder toolChoice(String toolChoice) {
+            this.toolChoice = toolChoice;
             return this;
         }
 

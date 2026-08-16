@@ -59,6 +59,12 @@ public class AgentV2Controller {
         } catch (IllegalArgumentException e) {
             return errorEmitter("INVALID_REQUEST", e.getMessage());
         }
+        // The synchronous compatibility endpoint streams immediately. Re-check
+        // ownership against the security context before opening the stream.
+        AgentJob owned = jobService.status(job.getTaskId());
+        if (owned == null || !ownedByCurrentUser(owned)) {
+            return errorEmitter("FORBIDDEN", "Task not accessible");
+        }
         log.info("V2 chat (task): taskId={}, sessionId={}, model={}, messages={}",
                 job.getTaskId(), job.getSessionId(), job.getConversationId(),
                 request.getMessages() != null ? request.getMessages().size() : 0);
@@ -215,12 +221,9 @@ public class AgentV2Controller {
     // ---- Identity / ownership ----
 
     private AgentIdentity extractIdentity(ChatCompletionRequest request) {
-        Long userId = request.getUserId();
-        if (userId == null || userId == -1L) {
-            userId = SecurityContextUtil.getUserId();
-        }
+        // Identity is always derived from the authenticated security context.
         return AgentIdentity.builder()
-                .userId(userId)
+                .userId(SecurityContextUtil.getUserId())
                 .tenantId(parseLong(SecurityContextUtil.getTenantId()))
                 .userName(SecurityContextUtil.getUserName())
                 .account(SecurityContextUtil.getUserAccount())
@@ -232,10 +235,10 @@ public class AgentV2Controller {
     private boolean ownedByCurrentUser(AgentJob job) {
         Long userId = SecurityContextUtil.getUserId();
         Long tenantId = parseLong(SecurityContextUtil.getTenantId());
-        if (tenantId != null && job.getTenantId() != null && !tenantId.equals(job.getTenantId())) {
+        if (tenantId == null || job.getTenantId() == null || !tenantId.equals(job.getTenantId())) {
             return false;
         }
-        return userId == null || job.getUserId() == null || userId.equals(job.getUserId());
+        return userId != null && job.getUserId() != null && userId.equals(job.getUserId());
     }
 
     private Long parseLong(String val) {

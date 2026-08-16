@@ -59,6 +59,7 @@ export interface SkillPayload {
     tools?: ToolPayload[]
     systemPromptFragment?: string
     tags?: string[]
+    domain?: string
     source: 'builtin' | 'plugin' | 'user'
     pluginName?: string
 }
@@ -76,6 +77,8 @@ export interface ToolPayload {
         description: string
         parameters: any // JSON Schema
     }
+    /** Whether this tool only reads document/editor state (safe in PLAN mode). */
+    readOnly?: boolean
 }
 
 // ============ Chat Request Types ============
@@ -118,6 +121,8 @@ export interface ChatRequest {
     data?: Record<string, any>
     /** Run mode: 'plan' (read-only research → plan → approval) or 'execute' (default). */
     mode?: 'plan' | 'execute'
+    /** OpenAI tool_choice. Use 'none' to force a no-tool response. */
+    toolChoice?: 'auto' | 'none' | 'required' | string
     /** Abort signal for the fetch request (not sent to backend) */
     signal?: AbortSignal
 }

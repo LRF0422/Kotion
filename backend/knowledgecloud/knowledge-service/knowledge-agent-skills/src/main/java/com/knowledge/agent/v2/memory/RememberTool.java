@@ -62,9 +62,9 @@ public class RememberTool implements Tool {
             return ToolResult.error("Memory is unavailable without a user identity.");
         }
         try {
-            JsonNode node = objectMapper.readTree(args != null && !args.isBlank() ? args : "{}");
+            JsonNode node = objectMapper.readTree(args != null && !args.trim().isEmpty() ? args : "{}");
             String content = node.path("content").asText(null);
-            if (content == null || content.isBlank()) {
+            if (content == null || content.trim().isEmpty()) {
                 return ToolResult.error("Missing required argument: content");
             }
 
