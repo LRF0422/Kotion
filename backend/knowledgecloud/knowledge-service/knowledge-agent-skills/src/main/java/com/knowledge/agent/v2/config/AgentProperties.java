@@ -111,6 +111,12 @@ public class AgentProperties {
         private int toolResultMaxChars = 8000;
         /** Tool results older than this many iterations are evicted first (L1). */
         private int evictToolResultsAfterIterations = 3;
+        /** Model used for L2 summarization; empty/null = follow the session model. */
+        private String compactionModel;
+        /** Max output tokens for one L2 summarization call. */
+        private int summaryMaxTokens = 1024;
+        /** Max rendered middle-segment characters sent to the L2 summarizer. */
+        private int summaryPromptMaxChars = 20_000;
     }
 
     @Data

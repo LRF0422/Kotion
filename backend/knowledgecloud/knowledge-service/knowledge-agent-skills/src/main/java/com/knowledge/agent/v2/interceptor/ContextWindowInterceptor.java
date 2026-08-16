@@ -48,8 +48,14 @@ public class ContextWindowInterceptor implements AgentInterceptor {
     @Override
     public Flux<AgentEvent> intercept(AgentSession session, AgentState from, AgentState to,
             InterceptorChain chain) {
-        if (!compactor.shouldCompact(session)) {
+        boolean forced = session.getExecution().isCompactNextThink();
+        if (!forced && !compactor.shouldCompact(session)) {
             return chain.proceed(session);
+        }
+        // Consume the forced-compaction request exactly once. If compaction
+        // fails below we proceed uncompacted instead of retrying forever.
+        if (forced) {
+            session.getExecution().setCompactNextThink(false);
         }
 
         int before = session.getExecution().getMessageCount();
@@ -57,7 +63,7 @@ public class ContextWindowInterceptor implements AgentInterceptor {
         log.info("ContextWindow: session {} compacting before THINK (lastPromptTokens={}, messages={})",
                 session.getSessionId(), lastPromptTokens, before);
 
-        return compactor.compact(session)
+        return compactor.compact(session, forced)
                 .doOnNext(compacted -> {
                     session.getExecution().setMessages(compacted);
                     log.info("ContextWindow: session {} compacted {} -> {} messages",

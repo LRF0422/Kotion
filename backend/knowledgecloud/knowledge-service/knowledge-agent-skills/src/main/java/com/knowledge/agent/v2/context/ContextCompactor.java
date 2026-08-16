@@ -107,6 +107,15 @@ public class ContextCompactor {
      * {@code ExecutionState.setMessages} — {@code getMessages()} returns a copy).
      */
     public Mono<List<ConversationMessage>> compact(AgentSession session) {
+        return compact(session, false);
+    }
+
+    /**
+     * @param urgent when true, a provider context-length error forced this
+     *               compaction — evict old tool results aggressively before
+     *               attempting the LLM summary.
+     */
+    public Mono<List<ConversationMessage>> compact(AgentSession session, boolean urgent) {
         List<ConversationMessage> messages = cleanupOrphanedToolMessages(session.getExecution().getMessages());
 
         // Calibrate the chars/4 estimator against the real token count so the
@@ -114,8 +123,9 @@ public class ContextCompactor {
         int lastPromptTokens = session.getExecution().getLastPromptTokens();
         double calibration = calibrationRatio(lastPromptTokens, messages);
 
-        // L1: evict bulky tool results outside the recent tool-call rounds
-        List<ConversationMessage> afterL1 = evictOldToolResults(messages, false);
+        // L1: evict bulky tool results outside the recent tool-call rounds.
+        // Urgent compactions also evict small old results before the LLM call.
+        List<ConversationMessage> afterL1 = evictOldToolResults(messages, urgent);
         int estimated = (int) (estimateTokens(afterL1) * calibration);
         if (estimated <= threshold()) {
             log.info("ContextCompactor: session {} L1 eviction sufficient (est {} tokens <= threshold {})",
@@ -201,8 +211,15 @@ public class ContextCompactor {
         }
 
         String prompt = buildSummaryPrompt(session, seg);
+        String compactionModel = config.getCompactionModel() != null
+                && !config.getCompactionModel().trim().isEmpty()
+                ? config.getCompactionModel().trim()
+                : session.getModelName();
+        int summaryMaxTokens = config.getSummaryMaxTokens() > 0
+                ? config.getSummaryMaxTokens()
+                : 1024;
         InferenceRequest request = InferenceRequest.builder()
-                .model(session.getModelName())
+                .model(compactionModel)
                 .messages(java.util.Arrays.asList(
                         ConversationMessage.system(
                                 "你是一个上下文压缩助手，负责将 agent 的对话历史压缩为结构化任务状态摘要。"
@@ -210,7 +227,7 @@ public class ContextCompactor {
                         ConversationMessage.user(prompt)))
                 .toolChoice("none")
                 .temperature(0.2)
-                .maxTokens(2048)
+                .maxTokens(summaryMaxTokens)
                 .stream(false)
                 .build();
 
@@ -239,22 +256,33 @@ public class ContextCompactor {
             sb.append("=== Agent 自己维护的任务状态（权威，优先采信） ===\n")
                     .append(taskState).append("\n\n");
         }
+        int maxChars = config.getSummaryPromptMaxChars() > 0
+                ? config.getSummaryPromptMaxChars()
+                : 20_000;
         sb.append("=== 待压缩的对话片段 ===\n");
+        int used = 0;
         for (ConversationMessage msg : seg.middle) {
             String content = msg.getContent() != null ? msg.getContent() : "";
             if (content.length() > SUMMARY_INPUT_MSG_MAX_CHARS) {
                 content = content.substring(0, SUMMARY_INPUT_MSG_MAX_CHARS) + "…[截断]";
             }
-            sb.append(msg.getRole());
+            StringBuilder line = new StringBuilder();
+            line.append(msg.getRole());
             if (msg.getName() != null) {
-                sb.append('(').append(msg.getName()).append(')');
+                line.append('(').append(msg.getName()).append(')');
             }
-            sb.append(": ").append(content).append('\n');
+            line.append(": ").append(content).append('\n');
             if (msg.getToolCalls() != null) {
                 for (ConversationMessage.ToolCallInfo tc : msg.getToolCalls()) {
-                    sb.append("  -> 调用工具 ").append(tc.getFunctionName()).append('\n');
+                    line.append("  -> 调用工具 ").append(tc.getFunctionName()).append('\n');
                 }
             }
+            if (used + line.length() > maxChars && used > 0) {
+                sb.append("…[其余 ").append(seg.middle.size()).append(" 条中间消息已省略]");
+                break;
+            }
+            sb.append(line);
+            used += line.length();
         }
         return sb.toString();
     }

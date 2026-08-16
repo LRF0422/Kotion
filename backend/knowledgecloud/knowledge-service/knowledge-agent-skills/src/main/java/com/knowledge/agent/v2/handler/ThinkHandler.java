@@ -110,17 +110,80 @@ public class ThinkHandler implements StateHandler {
                 return Flux.just(endEvent, Transition.toAct(sessionId));
             }
 
-            // No tool calls — agent is done
+            // No tool calls. Persist the final/partial assistant text into the
+            // working history so snapshots and continuation requests have it.
+            boolean hasText = (response.getContent() != null
+                    && !response.getContent().trim().isEmpty())
+                    || (response.getReasoningContent() != null
+                    && !response.getReasoningContent().trim().isEmpty());
+            if (hasText) {
+                appendAssistantMessage(session, response);
+            }
+
+            // "length" means the model hit max_tokens / output budget before
+            // finishing. Do NOT treat that as a successful terminal DONE:
+            // force one context compaction and continue the same task.
+            if ("length".equalsIgnoreCase(response.getFinishReason())) {
+                if (!hasText) {
+                    return Flux.just(endEvent, Transition.toDone(sessionId, "length"));
+                }
+                // Output-token truncation does NOT mean the prompt context is
+                // full. Keep the prefix untouched so the provider context
+                // cache can keep hitting; the normal threshold check will
+                // compact on the next THINK if the prompt is actually large.
+                session.getExecution().addMessage(ConversationMessage.user(
+                        "[系统续写指令] 你上一次输出因长度限制被截断，请从断点处继续，"
+                                + "不要重复已经生成的内容，也不要重新开始。"));
+                log.info("ThinkHandler: session {} hit output length limit; continuing after compaction",
+                        sessionId);
+                return Flux.just(endEvent, Transition.toThink(sessionId));
+            }
+
+            // Normal completion — agent is done.
             return Flux.just(endEvent, Transition.toDone(sessionId, "stop"));
         });
 
         return Flux.concat(Flux.just(startEvent), liveDeltas, tail)
                 .onErrorResume(e -> {
+                    // Provider rejected the request because the assembled prompt
+                    // exceeded the model context window. Instead of failing the
+                    // whole task, compact once and retry the same THINK.
+                    if (isContextLengthError(e)) {
+                        log.warn("ThinkHandler: context-length error in session {}; "
+                                + "forcing compaction and retrying", sessionId);
+                        session.getExecution().setCompactNextThink(true);
+                        ThinkingEvent.ThinkEnd retryEnd = new ThinkingEvent.ThinkEnd(
+                                sessionId, iteration, "context_length_retry",
+                                0, 0, System.currentTimeMillis() - startTimeMs, 0, 0);
+                        return Flux.just(retryEnd, Transition.toThink(sessionId));
+                    }
                     log.error("ThinkHandler: LLM error in session {}: {}",
                             sessionId, e.getMessage(), e);
                     recordError(session, e);
                     return Flux.just(Transition.toError(sessionId, "llm_error: " + e.getMessage()));
                 });
+    }
+
+    /** True when the provider rejected the prompt as too long for its context. */
+    private boolean isContextLengthError(Throwable e) {
+        Throwable cursor = e;
+        while (cursor != null) {
+            String msg = cursor.getMessage() != null
+                    ? cursor.getMessage().toLowerCase(java.util.Locale.ROOT)
+                    : "";
+            if (msg.contains("context length")
+                    || msg.contains("maximum context")
+                    || msg.contains("context_length_exceeded")
+                    || msg.contains("too many tokens")
+                    || msg.contains("max context")
+                    || msg.contains("input length")
+                    || msg.contains("上下文长度")
+                    || msg.contains("超过上下文")) {
+                return true;
+            }
+            cursor = cursor.getCause();
+        }
+        return false;
     }
 
     /**
@@ -252,16 +315,18 @@ public class ThinkHandler implements StateHandler {
 
     private void appendAssistantMessage(AgentSession session, InferenceResponse response) {
         List<ConversationMessage.ToolCallInfo> toolCalls = new ArrayList<>();
-        for (InferenceResponse.ToolCallData tc : response.getToolCalls()) {
-            toolCalls.add(new ConversationMessage.ToolCallInfo(
-                    tc.getId(), "function", tc.getName(), tc.getArguments()));
+        if (response.getToolCalls() != null) {
+            for (InferenceResponse.ToolCallData tc : response.getToolCalls()) {
+                toolCalls.add(new ConversationMessage.ToolCallInfo(
+                        tc.getId(), "function", tc.getName(), tc.getArguments()));
+            }
         }
 
         ConversationMessage assistantMsg = ConversationMessage.builder()
                 .role("assistant")
                 .content(response.getContent())
                 .reasoningContent(response.getReasoningContent())
-                .toolCalls(toolCalls)
+                .toolCalls(toolCalls.isEmpty() ? null : toolCalls)
                 .build();
 
         session.getExecution().addMessage(assistantMsg);

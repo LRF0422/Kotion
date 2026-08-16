@@ -27,6 +27,10 @@ agent:
     keep-recent-messages: 8
     tool-result-max-chars: 8000
     evict-tool-results-after-iterations: 3
+    # Optional cheaper model for L2 summarization; empty = follow session model.
+    compaction-model:
+    summary-max-tokens: 1024
+    summary-prompt-max-chars: 20000
   state:
     backend: jdbc
     # Checkpoint after EVERY think iteration — a crash can then only re-run a

@@ -63,6 +63,8 @@ public class ExecutionState {
      * completion event tell the frontend WHY the session paused.
      */
     private volatile String suspendReason;
+    /** When true, the next THINK must compact context before inference. */
+    private volatile boolean compactNextThink;
     private volatile String errorCode = "INTERNAL";
     private volatile String errorMessage;
     private volatile boolean errorRetriable;
@@ -180,6 +182,14 @@ public class ExecutionState {
 
     public void setSuspendReason(String suspendReason) {
         this.suspendReason = suspendReason;
+    }
+
+    public boolean isCompactNextThink() {
+        return compactNextThink;
+    }
+
+    public void setCompactNextThink(boolean compactNextThink) {
+        this.compactNextThink = compactNextThink;
     }
 
     public String getErrorCode() {
