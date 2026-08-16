@@ -130,19 +130,94 @@ public abstract class DelegationEvent extends AgentEvent {
     }
 
     /**
+     * Emitted when a sub-agent dispatches a backend tool call.
+     */
+    public static class SubAgentToolCall extends DelegationEvent {
+        private final String toolCallId;
+        private final String toolName;
+        private final String arguments;
+
+        public SubAgentToolCall(String sessionId, String agentId, String parentAgentId,
+                                int depth, String toolCallId, String toolName, String arguments) {
+            super(sessionId, agentId, parentAgentId, depth);
+            this.toolCallId = toolCallId;
+            this.toolName = toolName;
+            this.arguments = arguments;
+        }
+
+        @Override
+        public String type() {
+            return "agent.tool_call";
+        }
+
+        public String getToolCallId() {
+            return toolCallId;
+        }
+
+        public String getToolName() {
+            return toolName;
+        }
+
+        public String getArguments() {
+            return arguments;
+        }
+    }
+
+    /**
+     * Emitted when a sub-agent tool call completes or fails.
+     */
+    public static class SubAgentToolResult extends DelegationEvent {
+        private final String toolCallId;
+        private final String result;
+        private final String error;
+
+        public SubAgentToolResult(String sessionId, String agentId, String parentAgentId,
+                                  int depth, String toolCallId, String result, String error) {
+            super(sessionId, agentId, parentAgentId, depth);
+            this.toolCallId = toolCallId;
+            this.result = result;
+            this.error = error;
+        }
+
+        @Override
+        public String type() {
+            return "agent.tool_result";
+        }
+
+        public String getToolCallId() {
+            return toolCallId;
+        }
+
+        public String getResult() {
+            return result;
+        }
+
+        public String getError() {
+            return error;
+        }
+    }
+
+    /**
      * Emitted when a sub-agent completes its task.
      */
     public static class SubAgentCompleted extends DelegationEvent {
         private final String result;
+        private final String error;
         private final long durationMs;
         private final boolean success;
+        private final int promptTokens;
+        private final int completionTokens;
 
         public SubAgentCompleted(String sessionId, String agentId, String parentAgentId,
-                                 int depth, String result, long durationMs, boolean success) {
+                                 int depth, String result, String error, long durationMs,
+                                 boolean success, int promptTokens, int completionTokens) {
             super(sessionId, agentId, parentAgentId, depth);
             this.result = result;
+            this.error = error;
             this.durationMs = durationMs;
             this.success = success;
+            this.promptTokens = promptTokens;
+            this.completionTokens = completionTokens;
         }
 
         @Override
@@ -154,12 +229,24 @@ public abstract class DelegationEvent extends AgentEvent {
             return result;
         }
 
+        public String getError() {
+            return error;
+        }
+
         public long getDurationMs() {
             return durationMs;
         }
 
         public boolean isSuccess() {
             return success;
+        }
+
+        public int getPromptTokens() {
+            return promptTokens;
+        }
+
+        public int getCompletionTokens() {
+            return completionTokens;
         }
     }
 }

@@ -65,7 +65,15 @@ public class SessionSnapshotCodec {
         payload.toolIds = new HashSet<>(session.getToolIds());
         payload.frontendTools = session.getFrontendTools();
         payload.skills = session.getSkills();
-        payload.metadata = new LinkedHashMap<>(session.getMetadata());
+        payload.metadata = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : session.getMetadata().entrySet()) {
+            // Runtime-only handles must never be serialized into the snapshot.
+            if (com.knowledge.agent.v2.tool.DelegateTaskTool.DELEGATION_SINK_KEY.equals(entry.getKey())
+                    || com.knowledge.agent.v2.tool.DelegateTaskTool.CHILD_SUBSCRIPTIONS_KEY.equals(entry.getKey())) {
+                continue;
+            }
+            payload.metadata.put(entry.getKey(), entry.getValue());
+        }
 
         AgentIdentity identity = session.getIdentity();
         if (identity != null) {

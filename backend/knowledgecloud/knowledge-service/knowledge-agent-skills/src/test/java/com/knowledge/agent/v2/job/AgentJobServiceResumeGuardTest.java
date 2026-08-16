@@ -36,6 +36,7 @@ class AgentJobServiceResumeGuardTest {
 
     private AgentEngine engine;
     private AgentJobService service;
+    private AgentSessionFactory sessionFactory;
     private AgentProperties properties;
 
     @SuppressWarnings("unchecked")
@@ -44,7 +45,7 @@ class AgentJobServiceResumeGuardTest {
         engine = mock(AgentEngine.class);
         com.knowledge.agent.v2.eventbus.AgentEventBus eventBus =
                 mock(com.knowledge.agent.v2.eventbus.AgentEventBus.class);
-        AgentSessionFactory sessionFactory = mock(AgentSessionFactory.class);
+        sessionFactory = mock(AgentSessionFactory.class);
         AgentJobStore jobStore = mock(AgentJobStore.class);
         AgentTaskEventStore eventStore = mock(AgentTaskEventStore.class);
         properties = new AgentProperties();
@@ -101,6 +102,19 @@ class AgentJobServiceResumeGuardTest {
         verify(engine, times(1)).resume(any());
 
         service.cancel(job.getTaskId());
+    }
+
+    @Test
+    void createChildLinksParentTaskAndStartsJob() throws Exception {
+        AgentIdentity identity = AgentIdentity.builder().userId(1L).tenantId(1L).build();
+        AgentSession childSession = sessionFactory.build(ChatCompletionRequest.builder().build(), identity);
+
+        AgentJob child = service.createChild(childSession, "parent-task");
+
+        assertThat(child.getParentTaskId()).isEqualTo("parent-task");
+        assertThat(child.getSessionId()).isEqualTo(childSession.getSessionId());
+        awaitTrue(() -> service.isExecutionActive(child.getTaskId()), 2000);
+        service.cancel(child.getTaskId());
     }
 
     @Test

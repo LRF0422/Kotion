@@ -66,6 +66,8 @@ public class AgentProperties {
         private int maxDelegateDepth = 3;
         /** Timeout for a delegated sub-agent run (seconds). */
         private int delegateTimeoutSeconds = 600;
+        /** Distributed task lease TTL for multi-instance fencing (seconds). */
+        private int leaseTtlSeconds = 30;
     }
 
     @Data

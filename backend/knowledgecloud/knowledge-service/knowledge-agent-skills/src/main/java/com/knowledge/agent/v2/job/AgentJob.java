@@ -19,6 +19,7 @@ public class AgentJob {
     private final String taskId;
     private final String sessionId;
     private final String conversationId;
+    private final String parentTaskId;
     private final Long userId;
     private final Long tenantId;
     private long createdAt;
@@ -38,9 +39,15 @@ public class AgentJob {
 
     public AgentJob(String taskId, String sessionId, String conversationId,
             Long userId, Long tenantId) {
+        this(taskId, sessionId, conversationId, userId, tenantId, null);
+    }
+
+    public AgentJob(String taskId, String sessionId, String conversationId,
+            Long userId, Long tenantId, String parentTaskId) {
         this.taskId = taskId;
         this.sessionId = sessionId;
         this.conversationId = conversationId;
+        this.parentTaskId = parentTaskId;
         this.userId = userId;
         this.tenantId = tenantId;
         this.createdAt = System.currentTimeMillis();
@@ -57,6 +64,10 @@ public class AgentJob {
 
     public String getConversationId() {
         return conversationId;
+    }
+
+    public String getParentTaskId() {
+        return parentTaskId;
     }
 
     public Long getUserId() {

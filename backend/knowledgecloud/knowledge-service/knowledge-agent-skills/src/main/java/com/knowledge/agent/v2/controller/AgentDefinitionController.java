@@ -84,6 +84,7 @@ public class AgentDefinitionController {
     @PostMapping
     public R<AgentDefinitionView> create(@RequestBody AgentDefinitionRequest request) {
         try {
+            validateToolIds(request.getToolIds());
             AgentDefinitionEntity created = definitionService.create(
                     toEntity(request), currentTenantId(), SecurityContextUtil.getUserId());
             return R.data(toView(created));
@@ -97,6 +98,8 @@ public class AgentDefinitionController {
     public R<AgentDefinitionView> update(@PathVariable Long id,
             @RequestBody AgentDefinitionRequest request) {
         try {
+            requireOwner(id);
+            validateToolIds(request.getToolIds());
             AgentDefinitionEntity updated = definitionService.update(
                     id, toEntity(request), currentTenantId());
             return R.data(toView(updated));
@@ -109,6 +112,7 @@ public class AgentDefinitionController {
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
         try {
+            requireOwner(id);
             definitionService.delete(id, currentTenantId());
             return R.data(null);
         } catch (IllegalArgumentException e) {
@@ -152,6 +156,32 @@ public class AgentDefinitionController {
         view.setCreateTime(entity.getCreateTime());
         view.setUpdateTime(entity.getUpdateTime());
         return view;
+    }
+
+    /** Definitions are shared in a tenant, but only the creator may edit/delete. */
+    private void requireOwner(Long id) {
+        Long tenantId = currentTenantId();
+        AgentDefinitionEntity existing = definitionService.get(id, tenantId);
+        if (existing == null) {
+            throw new IllegalArgumentException("Agent definition not found: " + id);
+        }
+        Long currentUserId = SecurityContextUtil.getUserId();
+        if (existing.getUserId() != null && currentUserId != null
+                && !existing.getUserId().equals(currentUserId)) {
+            throw new IllegalArgumentException("Only the creator can modify this agent definition");
+        }
+    }
+
+    /** Reject unknown tool ids before persisting them. */
+    private void validateToolIds(java.util.List<String> toolIds) {
+        if (toolIds == null || toolIds.isEmpty()) {
+            return;
+        }
+        for (String toolId : toolIds) {
+            if (toolRegistry.get(toolId) == null) {
+                throw new IllegalArgumentException("Unknown backend tool: " + toolId);
+            }
+        }
     }
 
     private Long currentTenantId() {

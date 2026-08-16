@@ -156,6 +156,7 @@ public class DefaultAgentJobStore implements AgentJobStore {
         p.taskId = job.getTaskId();
         p.sessionId = job.getSessionId();
         p.conversationId = job.getConversationId();
+        p.parentTaskId = job.getParentTaskId();
         p.userId = job.getUserId();
         p.tenantId = job.getTenantId();
         p.status = job.getStatus().name();
@@ -171,7 +172,8 @@ public class DefaultAgentJobStore implements AgentJobStore {
     }
 
     private AgentJob fromPayload(JobPayload p) {
-        AgentJob job = new AgentJob(p.taskId, p.sessionId, p.conversationId, p.userId, p.tenantId);
+        AgentJob job = new AgentJob(p.taskId, p.sessionId, p.conversationId, p.userId, p.tenantId,
+                p.parentTaskId);
         job.setStatus(safeStatus(p.status));
         job.setFinishReason(p.finishReason);
         job.setErrorMessage(p.errorMessage);
@@ -185,7 +187,7 @@ public class DefaultAgentJobStore implements AgentJobStore {
 
     private AgentJob fromEntity(AgentTaskEntity e) {
         AgentJob job = new AgentJob(e.getTaskId(), e.getSessionId(), e.getConversationId(),
-                e.getUserId(), e.getTenantId());
+                e.getUserId(), e.getTenantId(), e.getParentTaskId());
         job.setStatus(safeStatus(e.getStatus()));
         job.setFinishReason(e.getFinishReason());
         job.setErrorMessage(e.getErrorMessage());
@@ -211,6 +213,7 @@ public class DefaultAgentJobStore implements AgentJobStore {
         e.setTaskId(job.getTaskId());
         e.setSessionId(job.getSessionId());
         e.setConversationId(job.getConversationId());
+        e.setParentTaskId(job.getParentTaskId());
         e.setUserId(job.getUserId());
         e.setTenantId(job.getTenantId());
         e.setStatus(job.getStatus().name());
@@ -231,6 +234,7 @@ public class DefaultAgentJobStore implements AgentJobStore {
         public String taskId;
         public String sessionId;
         public String conversationId;
+        public String parentTaskId;
         public Long userId;
         public Long tenantId;
         public String status;

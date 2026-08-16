@@ -220,6 +220,21 @@ class DelegateTaskToolTest {
     }
 
     @Test
+    void nonDoneChildIsReportedAsFailure() {
+        when(engine.run(any(AgentSession.class))).thenAnswer(inv -> {
+            AgentSession child = inv.getArgument(0);
+            child.getExecution().addMessage(ConversationMessage.assistant("partial report"));
+            child.getExecution().transitionTo(AgentState.SUSPENDED);
+            return Flux.empty();
+        });
+
+        ToolResult result = tool.execute(contextWithDepth(null), "{\"description\":\"task\"}");
+
+        assertThat(result.isSuccess()).isFalse();
+        assertThat(result.getError()).contains("SUSPENDED");
+    }
+
+    @Test
     void reportsSubAgentFailure() {
         when(engine.run(any(AgentSession.class)))
                 .thenReturn(Flux.error(new RuntimeException("boom")));

@@ -17,15 +17,16 @@ import org.apache.ibatis.annotations.Select;
 public interface AgentTaskMapper extends BaseMapper<AgentTaskEntity> {
 
     @Insert("INSERT INTO agent_task " +
-            "(task_id, session_id, conversation_id, user_id, tenant_id, status, finish_reason, " +
+            "(task_id, session_id, conversation_id, parent_task_id, user_id, tenant_id, status, finish_reason, " +
             "prompt_tokens, completion_tokens, total_tokens, error_message, last_seq, assistant_text, " +
             "create_time, update_time) " +
-            "VALUES (#{taskId}, #{sessionId}, #{conversationId}, #{userId}, #{tenantId}, #{status}, #{finishReason}, " +
+            "VALUES (#{taskId}, #{sessionId}, #{conversationId}, #{parentTaskId}, #{userId}, #{tenantId}, #{status}, #{finishReason}, " +
             "#{promptTokens}, #{completionTokens}, #{totalTokens}, #{errorMessage}, #{lastSeq}, #{assistantText}, " +
             "#{createTime}, #{updateTime}) " +
             "ON DUPLICATE KEY UPDATE " +
             "session_id = VALUES(session_id), " +
             "conversation_id = VALUES(conversation_id), " +
+            "parent_task_id = VALUES(parent_task_id), " +
             "status = VALUES(status), " +
             "finish_reason = VALUES(finish_reason), " +
             "prompt_tokens = VALUES(prompt_tokens), " +

@@ -119,6 +119,20 @@ public class JdbcAgentStateStore implements AgentStateStore {
     }
 
     @Override
+    public void saveNow(String sessionId, AgentStateSnapshot snapshot) {
+        if (sessionId == null || sessionId.isEmpty() || snapshot == null) {
+            return;
+        }
+        try {
+            byte[] json = objectMapper.writeValueAsBytes(snapshot);
+            doSaveBytes(sessionId, json);
+        } catch (Exception e) {
+            log.warn("JdbcAgentStateStore: synchronous snapshot save failed for sessionId={}: {}",
+                    sessionId, e.getMessage());
+        }
+    }
+
+    @Override
     public void saveBytes(String sessionId, byte[] jsonBytes) {
         if (sessionId == null || sessionId.isEmpty() || jsonBytes == null) {
             return;

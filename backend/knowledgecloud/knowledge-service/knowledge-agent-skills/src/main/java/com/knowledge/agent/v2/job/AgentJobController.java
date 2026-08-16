@@ -324,6 +324,7 @@ public class AgentJobController {
         view.setTaskId(job.getTaskId());
         view.setSessionId(job.getSessionId());
         view.setConversationId(job.getConversationId());
+        view.setParentTaskId(job.getParentTaskId());
         view.setStatus(job.getStatus().name());
         view.setFinishReason(job.getFinishReason());
         view.setErrorMessage(job.getErrorMessage());
@@ -346,6 +347,36 @@ public class AgentJobController {
         view.setCompletionTokens(state.completionTokens);
         view.setAssistantText(state.assistantText);
         view.setLastSeq(state.lastSeq);
+        List<SubAgentStateView> subAgents = new ArrayList<>();
+        for (AgentJobService.SubAgentState sa : state.subAgents) {
+            SubAgentStateView v = new SubAgentStateView();
+            v.setAgentId(sa.agentId);
+            v.setParentAgentId(sa.parentAgentId);
+            v.setDepth(sa.depth);
+            v.setAgentName(sa.agentName);
+            v.setTask(sa.task);
+            v.setStatus(sa.status);
+            v.setError(sa.error);
+            v.setStreamingContent(sa.streamingContent);
+            v.setReasoningContent(sa.reasoningContent);
+            v.setPromptTokens(sa.promptTokens);
+            v.setCompletionTokens(sa.completionTokens);
+            v.setDurationMs(sa.durationMs);
+            List<SubAgentToolStepView> stepViews = new ArrayList<>();
+            for (AgentJobService.SubAgentToolStep step : sa.steps) {
+                SubAgentToolStepView sv = new SubAgentToolStepView();
+                sv.setId(step.id);
+                sv.setToolName(step.toolName);
+                sv.setArgs(step.args);
+                sv.setStatus(step.status);
+                sv.setResult(step.result);
+                sv.setError(step.error);
+                stepViews.add(sv);
+            }
+            v.setSteps(stepViews);
+            subAgents.add(v);
+        }
+        view.setSubAgents(subAgents);
         List<PendingToolView> tools = new ArrayList<>();
         for (AgentJobService.PendingTool pt : state.pendingTools) {
             PendingToolView v = new PendingToolView();
@@ -363,6 +394,7 @@ public class AgentJobController {
         private String taskId;
         private String sessionId;
         private String conversationId;
+        private String parentTaskId;
         private String status;
         private String finishReason;
         private String errorMessage;
@@ -385,6 +417,7 @@ public class AgentJobController {
         private String assistantText;
         private long lastSeq;
         private List<PendingToolView> pendingTools;
+        private List<SubAgentStateView> subAgents;
     }
 
     @Data
@@ -392,6 +425,33 @@ public class AgentJobController {
         private String toolCallId;
         private String toolName;
         private String arguments;
+    }
+
+    @Data
+    public static class SubAgentStateView {
+        private String agentId;
+        private String parentAgentId;
+        private int depth;
+        private String agentName;
+        private String task;
+        private String status;
+        private String error;
+        private String streamingContent;
+        private String reasoningContent;
+        private int promptTokens;
+        private int completionTokens;
+        private long durationMs;
+        private List<SubAgentToolStepView> steps;
+    }
+
+    @Data
+    public static class SubAgentToolStepView {
+        private String id;
+        private String toolName;
+        private String args;
+        private String status;
+        private String result;
+        private String error;
     }
 
     @Data

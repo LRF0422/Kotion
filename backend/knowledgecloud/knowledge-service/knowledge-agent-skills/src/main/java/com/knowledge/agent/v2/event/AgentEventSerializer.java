@@ -94,14 +94,29 @@ public final class AgentEventSerializer {
             } else if (event instanceof DelegationEvent.SubAgentCompleted) {
                 DelegationEvent.SubAgentCompleted e = (DelegationEvent.SubAgentCompleted) event;
                 payload.put("result", e.getResult());
+                payload.put("error", e.getError());
                 payload.put("durationMs", e.getDurationMs());
                 payload.put("success", e.isSuccess());
+                Map<String, Object> usage = new LinkedHashMap<>();
+                usage.put("prompt", e.getPromptTokens());
+                usage.put("completion", e.getCompletionTokens());
+                payload.put("usage", usage);
             } else if (event instanceof DelegationEvent.SubAgentOutput) {
                 DelegationEvent.SubAgentOutput e = (DelegationEvent.SubAgentOutput) event;
                 payload.put("content", e.getContent());
             } else if (event instanceof DelegationEvent.SubAgentReasoning) {
                 DelegationEvent.SubAgentReasoning e = (DelegationEvent.SubAgentReasoning) event;
                 payload.put("content", e.getContent());
+            } else if (event instanceof DelegationEvent.SubAgentToolCall) {
+                DelegationEvent.SubAgentToolCall e = (DelegationEvent.SubAgentToolCall) event;
+                payload.put("toolCallId", e.getToolCallId());
+                payload.put("toolName", e.getToolName());
+                payload.put("arguments", e.getArguments());
+            } else if (event instanceof DelegationEvent.SubAgentToolResult) {
+                DelegationEvent.SubAgentToolResult e = (DelegationEvent.SubAgentToolResult) event;
+                payload.put("toolCallId", e.getToolCallId());
+                payload.put("result", e.getResult());
+                payload.put("error", e.getError());
             }
         } else if (event instanceof PlanEvent) {
             PlanEvent p = (PlanEvent) event;

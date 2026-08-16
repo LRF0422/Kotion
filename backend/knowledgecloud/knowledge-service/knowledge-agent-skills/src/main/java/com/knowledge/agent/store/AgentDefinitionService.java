@@ -31,6 +31,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AgentDefinitionService implements CustomAgentResolver {
 
+    private static final int MAX_DEFINITION_ITERATIONS = 100;
+    /** Sentinel making a corrupted tool-id JSON fail closed instead of "all tools". */
+    private static final Set<String> INVALID_TOOL_SET =
+            Collections.singleton("__invalid_tool_ids__");
+
     private final AgentDefinitionMapper mapper;
     private final ObjectMapper objectMapper;
 
@@ -116,12 +121,21 @@ public class AgentDefinitionService implements CustomAgentResolver {
      * Convert an entity to the engine-facing spec, parsing the tool id JSON.
      */
     public CustomAgentSpec toSpec(AgentDefinitionEntity entity) {
+        Set<String> toolIds;
+        try {
+            toolIds = parseToolIdsStrict(entity.getToolIds());
+        } catch (IllegalArgumentException e) {
+            // Corrupted legacy rows must never become "all backend tools".
+            log.error("AgentDefinition: corrupted tool_ids for agent {}: {}",
+                    entity.getName(), e.getMessage());
+            toolIds = INVALID_TOOL_SET;
+        }
         return new CustomAgentSpec(
                 entity.getName(),
                 entity.getDescription(),
                 entity.getSystemPrompt(),
                 entity.getModelName(),
-                parseToolIds(entity.getToolIds()),
+                toolIds,
                 entity.getMaxIterations());
     }
 
@@ -130,6 +144,16 @@ public class AgentDefinitionService implements CustomAgentResolver {
      * empty set (= all backend tools).
      */
     public Set<String> parseToolIds(String toolIdsJson) {
+        try {
+            return parseToolIdsStrict(toolIdsJson);
+        } catch (IllegalArgumentException e) {
+            log.warn("AgentDefinition: invalid tool_ids JSON '{}': {}", toolIdsJson, e.getMessage());
+            return Collections.emptySet();
+        }
+    }
+
+    /** Strict parser used for create/update validation and engine assembly. */
+    public Set<String> parseToolIdsStrict(String toolIdsJson) {
         if (toolIdsJson == null || toolIdsJson.trim().isEmpty()) {
             return Collections.emptySet();
         }
@@ -138,8 +162,7 @@ public class AgentDefinitionService implements CustomAgentResolver {
             });
             return new LinkedHashSet<>(ids);
         } catch (Exception e) {
-            log.warn("AgentDefinition: invalid tool_ids JSON '{}': {}", toolIdsJson, e.getMessage());
-            return Collections.emptySet();
+            throw new IllegalArgumentException("Invalid tool_ids JSON: " + e.getMessage());
         }
     }
 
@@ -157,6 +180,14 @@ public class AgentDefinitionService implements CustomAgentResolver {
         }
         if (entity.getMaxIterations() != null && entity.getMaxIterations() < 1) {
             throw new IllegalArgumentException("maxIterations must be >= 1");
+        }
+        if (entity.getMaxIterations() != null
+                && entity.getMaxIterations() > MAX_DEFINITION_ITERATIONS) {
+            throw new IllegalArgumentException(
+                    "maxIterations must be <= " + MAX_DEFINITION_ITERATIONS);
+        }
+        if (entity.getToolIds() != null && !entity.getToolIds().trim().isEmpty()) {
+            parseToolIdsStrict(entity.getToolIds());
         }
     }
 

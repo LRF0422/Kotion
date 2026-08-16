@@ -35,6 +35,18 @@ public interface AgentStateStore {
     void saveBytes(String sessionId, byte[] jsonBytes);
 
     /**
+     * Persist a state snapshot synchronously. Used at critical commit points
+     * (resume, sub-agent spawn/completion) where a crash immediately after
+     * the call must not roll back to the previous checkpoint.
+     *
+     * <p>Default implementation delegates to {@link #save(String, AgentStateSnapshot)}
+     * so existing best-effort implementations remain compatible.
+     */
+    default void saveNow(String sessionId, AgentStateSnapshot snapshot) {
+        save(sessionId, snapshot);
+    }
+
+    /**
      * Load the persisted state snapshot for the given session.
      *
      * @param sessionId the session ID

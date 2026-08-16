@@ -21,6 +21,7 @@ import com.knowledge.agent.v2.interceptor.PlanModeGuardInterceptor;
 import com.knowledge.agent.v2.interceptor.RateLimitInterceptor;
 import com.knowledge.agent.v2.interceptor.SnapshotInterceptor;
 import com.knowledge.agent.v2.interceptor.TracingInterceptor;
+import com.knowledge.agent.v2.job.AgentJobService;
 import com.knowledge.agent.v2.llm.DefaultLlmAdapter;
 import com.knowledge.agent.v2.llm.LlmAdapter;
 import com.knowledge.agent.v2.llm.ResilientLlmAdapter;
@@ -152,8 +153,12 @@ public class AgentV2AutoConfiguration {
     public DelegateTaskTool delegateTaskTool(ObjectProvider<AgentEngine> engineProvider,
             AgentEventBus eventBus,
             AgentProperties properties,
-            ObjectProvider<CustomAgentResolver> resolverProvider) {
-        return new DelegateTaskTool(engineProvider, eventBus, properties, resolverProvider);
+            ObjectProvider<CustomAgentResolver> resolverProvider,
+            ObjectProvider<AgentStateStore> stateStoreProvider,
+            SessionSnapshotCodec snapshotCodec,
+            ObjectProvider<AgentJobService> jobServiceProvider) {
+        return new DelegateTaskTool(engineProvider, eventBus, properties, resolverProvider,
+                stateStoreProvider, snapshotCodec, jobServiceProvider);
     }
 
     @Bean

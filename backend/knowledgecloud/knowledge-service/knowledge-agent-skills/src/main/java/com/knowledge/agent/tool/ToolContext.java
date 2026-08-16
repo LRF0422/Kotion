@@ -27,6 +27,12 @@ public class ToolContext {
     private String token;
     private String sessionId;
     private String conversationId;
+    /** Current tool-call id (set by the V2 backend executor). */
+    private String toolCallId;
+    /** Owning durable task id (set by AgentJobService). */
+    private String taskId;
+    /** Owning V2 AgentSession, when executed by the V2 engine (opaque here). */
+    private Object ownerSession;
 
     /**
      * User's display name (from JWT / SecurityContext).
@@ -142,6 +148,7 @@ public class ToolContext {
                 .token(this.token)
                 .sessionId(this.sessionId)
                 .conversationId(this.conversationId)
+                .toolCallId(this.toolCallId)
                 .userName(this.userName)
                 .account(this.account)
                 .tenantIdStr(this.tenantIdStr)

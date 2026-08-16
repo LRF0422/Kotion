@@ -57,7 +57,7 @@ public class BackendExecutor {
                     "Unknown tool: " + call.getName(), 0));
         }
 
-        ToolContext context = buildToolContext(session);
+        ToolContext context = buildToolContext(session, call);
 
         if (tool instanceof AsyncTool) {
             return executeAsync((AsyncTool) tool, call, context);
@@ -111,6 +111,8 @@ public class BackendExecutor {
         long startMs = System.currentTimeMillis();
         long timeoutSeconds = resolveTimeout(asyncTool);
         StringBuilder resultHolder = new StringBuilder();
+        java.util.concurrent.atomic.AtomicReference<String> errorHolder =
+                new java.util.concurrent.atomic.AtomicReference<>();
 
         return asyncTool.executeAsync(context, call.getArguments())
                 .doOnNext(ev -> {
@@ -118,10 +120,20 @@ public class BackendExecutor {
                         Object result = ((com.knowledge.agent.core.engine.StreamEvent.ToolResultEvent) ev).getResult();
                         resultHolder.setLength(0);
                         resultHolder.append(result != null ? result.toString() : "");
+                    } else if (ev instanceof com.knowledge.agent.core.engine.StreamEvent.ErrorEvent) {
+                        com.knowledge.agent.core.engine.StreamEvent.ErrorEvent error =
+                                (com.knowledge.agent.core.engine.StreamEvent.ErrorEvent) ev;
+                        errorHolder.set(error.getError() != null ? error.getError()
+                                : "Async tool " + call.getName() + " failed");
                     }
                 })
                 .then(Mono.defer(() -> {
                     long duration = System.currentTimeMillis() - startMs;
+                    String error = errorHolder.get();
+                    if (error != null) {
+                        return Mono.just(ToolOutcome.error(
+                                call.getId(), call.getName(), error, duration));
+                    }
                     String output = resultHolder.toString();
                     return Mono.just(ToolOutcome.success(call.getId(), call.getName(), output, duration));
                 }))
@@ -150,11 +162,21 @@ public class BackendExecutor {
     /**
      * Build a V1-compatible ToolContext from the V2 AgentSession.
      */
-    private ToolContext buildToolContext(AgentSession session) {
+    private ToolContext buildToolContext(AgentSession session, ToolCall call) {
+        Object depth = session.getMetadata().get(com.knowledge.agent.v2.tool.DelegateTaskTool.DELEGATE_DEPTH_KEY);
+        Object agentId = session.getMetadata().get("agentId");
         ToolContext.ToolContextBuilder builder = ToolContext.builder()
                 .sessionId(session.getSessionId())
                 .conversationId(session.getConversationId())
+                .toolCallId(call.getId())
+                .taskId(session.getMetadata().get(com.knowledge.agent.v2.tool.DelegateTaskTool.TASK_ID_KEY) != null
+                        ? session.getMetadata().get(com.knowledge.agent.v2.tool.DelegateTaskTool.TASK_ID_KEY).toString()
+                        : null)
+                .ownerSession(session)
                 .modelName(session.getModelName())
+                .delegateDepth(depth instanceof Number ? ((Number) depth).intValue() : 0)
+                .agentId(agentId != null ? agentId.toString() : null)
+                .mode(com.knowledge.agent.api.dto.AgentMode.valueOf(session.getMode().name()))
                 // Live metadata reference — lets scratchpad tools
                 // (update_task_state / get_task_state) mutate session state.
                 .sessionMetadata(session.getMetadata());

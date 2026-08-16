@@ -27,6 +27,9 @@ public class AgentTaskEntity implements Serializable {
 
     private String conversationId;
 
+    /** Parent task id when this task is a sub-agent delegation. */
+    private String parentTaskId;
+
     private Long userId;
 
     private Long tenantId;

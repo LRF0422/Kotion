@@ -223,6 +223,9 @@ export function applySubAgentAnnotations(
                 n.status = ann.status === 'error' ? 'error' : 'completed'
                 n.endedAt = Date.now()
                 if (ann.usage) n.usage = ann.usage
+                if (n.status === 'error') {
+                    n.error = ann.error || ann.finishReason || ann.result || n.error || 'Sub-agent failed'
+                }
                 break
             }
             default:

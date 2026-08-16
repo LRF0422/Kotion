@@ -263,6 +263,16 @@ export class V2AgentRuntime {
             yield { type: 'text-delta', content: state.assistantText }
         }
 
+        // Rebuild the sub-agent tree from the server-side summary. Without
+        // this, refresh/attach would only see delegation events emitted after
+        // the checkpoint and lose every earlier node/task/tool step.
+        if (state.subAgents?.length) {
+            yield {
+                type: 'annotation',
+                annotations: state.subAgents.flatMap(sa => this.subAgentStateAnnotations(sa)),
+            }
+        }
+
         const status = state.status
 
         if (status === 'COMPLETED') {
@@ -600,6 +610,82 @@ export class V2AgentRuntime {
         }
     }
 
+    /** Convert one server-side sub-agent summary row into UI annotations. */
+    private subAgentStateAnnotations(sa: SubAgentStateData): any[] {
+        const annotations: any[] = [{
+            type: 'subagent_spawned',
+            agentId: sa.agentId,
+            parentAgentId: sa.parentAgentId,
+            depth: sa.depth,
+            agentName: sa.agentName,
+            task: sa.task,
+            description: sa.task,
+        }]
+        if (sa.reasoningContent) {
+            annotations.push({
+                type: 'subagent_reasoning',
+                agentId: sa.agentId,
+                parentAgentId: sa.parentAgentId,
+                depth: sa.depth,
+                content: sa.reasoningContent,
+            })
+        }
+        if (sa.streamingContent) {
+            annotations.push({
+                type: 'subagent_output',
+                agentId: sa.agentId,
+                parentAgentId: sa.parentAgentId,
+                depth: sa.depth,
+                content: sa.streamingContent,
+            })
+        }
+        for (const step of sa.steps || []) {
+            annotations.push({
+                type: 'subagent_tool_call',
+                agentId: sa.agentId,
+                parentAgentId: sa.parentAgentId,
+                depth: sa.depth,
+                toolCallId: step.id,
+                toolName: step.toolName,
+                args: step.args,
+            })
+            if (step.status && step.status !== 'running') {
+                annotations.push({
+                    type: 'subagent_tool_result',
+                    agentId: sa.agentId,
+                    parentAgentId: sa.parentAgentId,
+                    depth: sa.depth,
+                    toolCallId: step.id,
+                    result: step.result,
+                    error: step.error,
+                })
+            }
+        }
+        if (sa.status === 'completed' || sa.status === 'error') {
+            annotations.push({
+                type: 'subagent_finish',
+                agentId: sa.agentId,
+                parentAgentId: sa.parentAgentId,
+                depth: sa.depth,
+                status: sa.status,
+                finishReason: sa.status === 'error' ? 'error' : 'stop',
+                error: sa.error,
+                usage: sa.promptTokens != null || sa.completionTokens != null
+                    ? { promptTokens: sa.promptTokens || 0, completionTokens: sa.completionTokens || 0 }
+                    : undefined,
+            })
+        } else if (sa.status === 'running') {
+            annotations.push({
+                type: 'subagent_status',
+                agentId: sa.agentId,
+                parentAgentId: sa.parentAgentId,
+                depth: sa.depth,
+                status: 'running',
+            })
+        }
+        return annotations
+    }
+
     /**
      * Process a single parsed V2 named event and produce HarnessEvents.
      */
@@ -763,6 +849,34 @@ export class V2AgentRuntime {
                     }],
                 }]
 
+            case 'agent.tool_call':
+                return [{
+                    type: 'annotation',
+                    annotations: [{
+                        type: 'subagent_tool_call',
+                        agentId: data.agentId || data.taskId,
+                        parentAgentId: data.parentAgentId || data.sessionId,
+                        depth: data.depth ?? 1,
+                        toolCallId: data.toolCallId,
+                        toolName: data.toolName,
+                        args: data.arguments,
+                    }],
+                }]
+
+            case 'agent.tool_result':
+                return [{
+                    type: 'annotation',
+                    annotations: [{
+                        type: 'subagent_tool_result',
+                        agentId: data.agentId || data.taskId,
+                        parentAgentId: data.parentAgentId || data.sessionId,
+                        depth: data.depth ?? 1,
+                        toolCallId: data.toolCallId,
+                        result: data.result,
+                        error: data.error,
+                    }],
+                }]
+
             case 'agent.completed':
                 return [{
                     type: 'annotation',
@@ -774,7 +888,12 @@ export class V2AgentRuntime {
                         status: data.success ? 'completed' : 'error',
                         finishReason: data.success ? 'stop' : 'error',
                         result: data.result,
+                        error: data.error || (data.success ? undefined : data.result),
                         durationMs: data.durationMs,
+                        usage: data.usage ? {
+                            promptTokens: data.usage.prompt || 0,
+                            completionTokens: data.usage.completion || 0,
+                        } : undefined,
                     }],
                 }]
 
@@ -959,4 +1078,29 @@ interface TaskStateData {
     assistantText?: string
     lastSeq?: number
     pendingTools?: { toolCallId: string; toolName: string; arguments?: string }[]
+    subAgents?: SubAgentStateData[]
+}
+
+/** Server-side sub-agent summary row returned by GET /tasks/{id}/state. */
+interface SubAgentStateData {
+    agentId: string
+    parentAgentId?: string | null
+    depth?: number
+    agentName?: string
+    task?: string
+    status?: string
+    error?: string
+    streamingContent?: string
+    reasoningContent?: string
+    promptTokens?: number
+    completionTokens?: number
+    durationMs?: number
+    steps?: {
+        id: string
+        toolName?: string
+        args?: string
+        status?: string
+        result?: string
+        error?: string
+    }[]
 }

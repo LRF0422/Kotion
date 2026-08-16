@@ -23,6 +23,9 @@ import com.knowledge.agent.v2.state.SessionSnapshotCodec;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import reactor.core.Disposable;
@@ -30,6 +33,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -73,11 +77,17 @@ public class AgentJobService {
 
     private static final int REPLAY_BATCH = 2_000;
     private static final long COMPLETED_TTL_MS = 30 * 60_000L;
+    private static final String LEASE_KEY_PREFIX = "agent:job:lease:";
+    private static final long LEASE_CHECK_INTERVAL_MS = 2_000L;
+    private static final String INSTANCE_ID = UUID.randomUUID().toString();
     /** assistantText hot-save throttle: persist at most once per interval (per task). */
     private static final long HOT_SAVE_INTERVAL_MS = 1_000L;
 
     private final AgentEngine engine;
     private final com.knowledge.agent.v2.eventbus.AgentEventBus eventBus;
+    /** Optional Redis lease used for multi-instance fencing. Null in tests. */
+    @Autowired(required = false)
+    private StringRedisTemplate leaseRedis;
     private final AgentSessionFactory sessionFactory;
     private final AgentJobStore jobStore;
     private final AgentTaskEventStore eventStore;
@@ -116,6 +126,75 @@ public class AgentJobService {
         this.objectMapper = objectMapper;
     }
 
+    // ---- Distributed lease / fencing ----
+
+    private String leaseKey(String taskId) {
+        return LEASE_KEY_PREFIX + taskId;
+    }
+
+    private long leaseTtlSeconds() {
+        int ttl = properties.getEngine().getLeaseTtlSeconds();
+        return Math.max(5, ttl);
+    }
+
+    /** Acquire the task lease. Fail-safe true when Redis is unavailable. */
+    private boolean tryAcquireLease(String taskId) {
+        if (leaseRedis == null) {
+            return true;
+        }
+        try {
+            Boolean ok = leaseRedis.opsForValue().setIfAbsent(
+                    leaseKey(taskId), INSTANCE_ID, Duration.ofSeconds(leaseTtlSeconds()));
+            return Boolean.TRUE.equals(ok);
+        } catch (Exception e) {
+            log.warn("AgentJobService: Redis lease acquire failed for {}: {}", taskId, e.getMessage());
+            return true;
+        }
+    }
+
+    /** Renew the lease only if this instance still owns it. */
+    private boolean renewLease(String taskId) {
+        if (leaseRedis == null) {
+            return true;
+        }
+        try {
+            Boolean ok = leaseRedis.opsForValue().setIfPresent(
+                    leaseKey(taskId), INSTANCE_ID, Duration.ofSeconds(leaseTtlSeconds()));
+            return Boolean.TRUE.equals(ok);
+        } catch (Exception e) {
+            log.warn("AgentJobService: Redis lease renew failed for {}: {}", taskId, e.getMessage());
+            return true;
+        }
+    }
+
+    private boolean isLeaseOwner(String taskId) {
+        if (leaseRedis == null) {
+            return true;
+        }
+        try {
+            return INSTANCE_ID.equals(leaseRedis.opsForValue().get(leaseKey(taskId)));
+        } catch (Exception e) {
+            log.warn("AgentJobService: Redis lease check failed for {}: {}", taskId, e.getMessage());
+            return true;
+        }
+    }
+
+    private void releaseLease(String taskId) {
+        if (leaseRedis == null) {
+            return;
+        }
+        try {
+            DefaultRedisScript<Long> script = new DefaultRedisScript<>(
+                    "if redis.call('get', KEYS[1]) == ARGV[1] then "
+                            + "return redis.call('del', KEYS[1]) else return 0 end",
+                    Long.class);
+            leaseRedis.execute(script, java.util.Collections.singletonList(leaseKey(taskId)),
+                    INSTANCE_ID);
+        } catch (Exception e) {
+            log.warn("AgentJobService: Redis lease release failed for {}: {}", taskId, e.getMessage());
+        }
+    }
+
     // ---- Lifecycle ----
 
     /**
@@ -136,6 +215,37 @@ public class AgentJobService {
                 session.getConversationId(),
                 identity.getUserId(),
                 identity.getTenantId());
+        if (!tryAcquireLease(job.getTaskId())) {
+            throw new IllegalArgumentException("Task lease unavailable; another instance owns this task");
+        }
+        jobStore.save(job);
+
+        TaskRun run = new TaskRun(job, session);
+        runs.put(job.getTaskId(), run);
+        metrics.taskCreated();
+        startFresh(run);
+        return job;
+    }
+
+    /**
+     * Start a first-class child task for a {@code delegate_task} run. The child
+     * gets its own job/event-log/snapshot/live-sink, exactly like a root task,
+     * and is linked back to the parent via {@code parentTaskId}.
+     */
+    public AgentJob createChild(AgentSession session, String parentTaskId) {
+        Long tenantId = session.getIdentity() != null ? session.getIdentity().getTenantId() : null;
+        enforceCreateQuota(tenantId);
+
+        AgentJob job = new AgentJob(
+                UUID.randomUUID().toString(),
+                session.getSessionId(),
+                session.getConversationId(),
+                session.getIdentity() != null ? session.getIdentity().getUserId() : null,
+                tenantId,
+                parentTaskId);
+        if (!tryAcquireLease(job.getTaskId())) {
+            throw new IllegalArgumentException("Child task lease unavailable; another instance owns this task");
+        }
         jobStore.save(job);
 
         TaskRun run = new TaskRun(job, session);
@@ -178,7 +288,17 @@ public class AgentJobService {
     public AgentJob status(String taskId) {
         TaskRun run = runs.get(taskId);
         if (run != null) {
-            return run.job;
+            if (!isLeaseOwner(taskId)) {
+                if (run.executionActive.get()) {
+                    dispose(run);
+                    cancelChildWork(run);
+                    run.executionActive.set(false);
+                }
+                runs.remove(taskId, run);
+                run = null;
+            } else {
+                return run.job;
+            }
         }
         return jobStore.load(taskId);
     }
@@ -197,6 +317,10 @@ public class AgentJobService {
      */
     public TaskState state(String taskId) {
         TaskRun run = ensureLive(taskId);
+        if (run != null && !isLeaseOwner(taskId)) {
+            runs.remove(taskId, run);
+            run = null;
+        }
         if (run == null) {
             AgentJob job = jobStore.load(taskId);
             if (job != null && (job.getStatus() == AgentJobStatus.WAITING_TOOLS
@@ -229,6 +353,7 @@ public class AgentJobService {
             synchronized (run.pendingTools) {
                 st.pendingTools = new ArrayList<>(run.pendingTools);
             }
+            st.subAgents = new ArrayList<>(run.subAgents.values());
         } else {
             st.assistantText = job.getAssistantText();
             st.lastSeq = job.getLastSeq() > 0 ? job.getLastSeq() : eventStore.maxSeq(taskId);
@@ -301,6 +426,10 @@ public class AgentJobService {
         if (run == null) {
             return Flux.error(new IllegalStateException("Job not found: " + taskId));
         }
+        if (!isLeaseOwner(taskId) && !tryAcquireLease(taskId)) {
+            return Flux.error(new IllegalStateException(
+                    "Task is fenced by another instance: " + taskId));
+        }
 
         synchronized (run) {
             if (run.executionActive.get()) {
@@ -362,14 +491,21 @@ public class AgentJobService {
     public boolean cancel(String taskId) {
         TaskRun run = runs.get(taskId);
         if (run == null) {
+            // Another instance owns the active lease: it must cancel the task.
+            if (!isLeaseOwner(taskId)) {
+                log.info("AgentJobService: cancel {} refused — fenced by another instance", taskId);
+                return false;
+            }
             // Survived a restart — cancel the persisted job directly.
             AgentJob job = jobStore.load(taskId);
             if (job == null || job.isTerminal()) {
+                releaseLease(taskId);
                 return false;
             }
             job.setStatus(AgentJobStatus.CANCELLED);
             job.setFinishReason("cancelled");
             jobStore.save(job);
+            releaseLease(taskId);
             metrics.taskCancelled();
             log.info("AgentJobService: cancelled persisted job {}", taskId);
             return true;
@@ -381,6 +517,7 @@ public class AgentJobService {
         run.job.setStatus(AgentJobStatus.CANCELLED);
         run.job.setFinishReason("cancelled");
         jobStore.save(run.job);
+        releaseLease(taskId);
         metrics.taskCancelled();
         run.live.tryEmitComplete();
         log.info("AgentJobService: cancelled job {}", taskId);
@@ -432,7 +569,16 @@ public class AgentJobService {
         if (run != null) {
             boolean claimsRunning = run.job.getStatus() == AgentJobStatus.RUNNING
                     || run.job.getStatus() == AgentJobStatus.QUEUED;
-            if (claimsRunning && !run.executionActive.get()) {
+            if (!isLeaseOwner(taskId)) {
+                // Lost the fencing lease (partition / another instance revived).
+                if (run.executionActive.get()) {
+                    dispose(run);
+                    cancelChildWork(run);
+                    run.executionActive.set(false);
+                }
+                runs.remove(taskId, run);
+                run = null;
+            } else if (claimsRunning && !run.executionActive.get()) {
                 runs.remove(taskId, run);
                 run = null;
             } else {
@@ -448,6 +594,11 @@ public class AgentJobService {
                 || job.getStatus() == AgentJobStatus.SUSPENDED) {
             return null; // paused jobs wait for an explicit resume()
         }
+        // Only the lease owner may revive a RUNNING/QUEUED job.
+        if (!isLeaseOwner(taskId) && !tryAcquireLease(taskId)) {
+            log.info("AgentJobService: task {} is fenced by another instance", taskId);
+            return null;
+        }
 
         AgentSession session = restoreSession(job);
         if (session == null) {
@@ -456,6 +607,7 @@ public class AgentJobService {
             job.setFinishReason("error:snapshot_unavailable");
             job.setErrorMessage("Session snapshot unavailable for revival");
             jobStore.save(job);
+            releaseLease(taskId);
             return null;
         }
 
@@ -467,6 +619,7 @@ public class AgentJobService {
         // Recover text deltas emitted after the last throttled hot-save from
         // the durable event log so reconnect text is complete.
         backfillAssistantText(revived, job.getLastSeq());
+        rebuildSubAgents(revived);
         // Concurrent revives race to rebuild the same task: only the winner
         // keeps its run and starts the engine.
         TaskRun existing = runs.putIfAbsent(taskId, revived);
@@ -482,8 +635,13 @@ public class AgentJobService {
 
     /** Rebuild a paused job (WAITING_TOOLS / SUSPENDED) from its snapshot. */
     private TaskRun restorePaused(String taskId) {
+        if (!isLeaseOwner(taskId) && !tryAcquireLease(taskId)) {
+            log.info("AgentJobService: paused task {} is fenced by another instance", taskId);
+            return null;
+        }
         AgentJob job = jobStore.load(taskId);
         if (job == null) {
+            releaseLease(taskId);
             return null;
         }
         AgentSession session = restoreSession(job);
@@ -497,6 +655,7 @@ public class AgentJobService {
             run.assistantText.append(job.getAssistantText());
         }
         backfillAssistantText(run, job.getLastSeq());
+        rebuildSubAgents(run);
         // Surface the frontend tools this paused task is waiting for.
         List<InferenceResponse.ToolCallData> pending =
                 session.getExecution().getPendingToolCalls();
@@ -580,14 +739,12 @@ public class AgentJobService {
         // and made the client re-execute frontend tools in a resume loop.
         // takeUntilOther completes the merged flux when the engine finishes.
         Flux<AgentEvent> shared = source.share();
-        Flux<AgentEvent> delegation = Flux.empty();
-        if (eventBus != null) {
-            Flux<AgentEvent> busStream = eventBus.subscribeSession(run.session.getSessionId());
-            if (busStream != null) { // defensive: bus implementations may return null
-                delegation = busStream.filter(
-                        ev -> ev instanceof com.knowledge.agent.v2.event.DelegationEvent);
-            }
-        }
+        // Sub-agent events are published to the task-private unicast sink by
+        // DelegateTaskTool. This keeps delegation traffic out of the global
+        // multicast EventBus, where a slow unrelated subscriber could drop
+        // child output events.
+        Flux<AgentEvent> delegation = run.delegationSink.asFlux()
+                .filter(ev -> ev instanceof com.knowledge.agent.v2.event.DelegationEvent);
         Flux<AgentEvent> merged = Flux.merge(shared, delegation)
                 .takeUntilOther(shared.ignoreElements());
 
@@ -620,6 +777,22 @@ public class AgentJobService {
 
     private void onEvent(TaskRun run, Sinks.Many<TaskEvent> continuation, AgentEvent ev) {
         run.touch();
+
+        // Fencing: stop processing immediately when another instance has taken
+        // over the task lease (network partition / missed renewal).
+        long leaseNow = System.currentTimeMillis();
+        if (leaseNow - run.lastLeaseCheckAt >= LEASE_CHECK_INTERVAL_MS) {
+            run.lastLeaseCheckAt = leaseNow;
+            if (!isLeaseOwner(run.job.getTaskId())) {
+                log.warn("AgentJobService: lease lost for task {} — stopping local execution",
+                        run.job.getTaskId());
+                Disposable sub = run.subscription.get();
+                if (sub != null && !sub.isDisposed()) {
+                    sub.dispose();
+                }
+                return;
+            }
+        }
 
         // 1. Assign seq + accumulate streaming text under the snapshot lock.
         long seq;
@@ -663,7 +836,12 @@ public class AgentJobService {
         run.live.tryEmitNext(te);
         continuation.tryEmitNext(te);
 
-        // 5. Status transitions.
+        // 5. Sub-agent tree summary (used by /state to restore the UI after a refresh).
+        if (ev instanceof com.knowledge.agent.v2.event.DelegationEvent) {
+            updateSubAgent(run, (com.knowledge.agent.v2.event.DelegationEvent) ev);
+        }
+
+        // 6. Status transitions.
         if (ev instanceof ToolEvent.ToolDispatched) {
             ToolEvent.ToolDispatched dispatched = (ToolEvent.ToolDispatched) ev;
             if (dispatched.getLocation() == ToolEvent.ToolLocation.FRONTEND) {
@@ -702,6 +880,9 @@ public class AgentJobService {
                 profileRecorder.record(run.session, finishReason);
             }
             checkpoint(run);
+            if (run.job.isTerminal()) {
+                releaseLease(run.job.getTaskId());
+            }
             if (run.job.getStatus() == AgentJobStatus.COMPLETED) {
                 metrics.taskCompleted();
                 synchronized (run.pendingTools) {
@@ -718,6 +899,7 @@ public class AgentJobService {
             jobStore.save(run.job);
             metrics.taskFailed();
             checkpoint(run);
+            releaseLease(run.job.getTaskId());
         }
     }
 
@@ -728,6 +910,7 @@ public class AgentJobService {
         run.job.setStatus(AgentJobStatus.FAILED);
         jobStore.save(run.job);
         metrics.taskFailed();
+        releaseLease(run.job.getTaskId());
         continuation.tryEmitError(err);
         run.live.tryEmitComplete();
     }
@@ -792,7 +975,7 @@ public class AgentJobService {
         }
         try {
             AgentStateSnapshot snapshot = snapshotCodec.encode(run.session);
-            stateStore.save(run.session.getSessionId(), snapshot);
+            stateStore.saveNow(run.session.getSessionId(), snapshot);
         } catch (Exception e) {
             log.warn("AgentJobService: failed to checkpoint session {}: {}",
                     run.session.getSessionId(), e.getMessage());
@@ -826,6 +1009,22 @@ public class AgentJobService {
      */
     private void cancelChildWork(TaskRun run) {
         run.session.getExecution().cancelChildSubscriptions();
+        Object childTaskIds = run.session.getMetadata().get(
+                com.knowledge.agent.v2.tool.DelegateTaskTool.CHILD_TASK_IDS_KEY);
+        if (childTaskIds instanceof List) {
+            synchronized (childTaskIds) {
+                for (Object o : new ArrayList<>((List<?>) childTaskIds)) {
+                    if (o != null) {
+                        try {
+                            cancel(o.toString());
+                        } catch (Exception e) {
+                            log.warn("AgentJobService: failed to cancel child task {}: {}",
+                                    o, e.getMessage());
+                        }
+                    }
+                }
+            }
+        }
         Object subs = run.session.getMetadata().get(
                 com.knowledge.agent.v2.tool.DelegateTaskTool.CHILD_SUBSCRIPTIONS_KEY);
         if (subs instanceof List) {
@@ -850,19 +1049,202 @@ public class AgentJobService {
         long cutoff = System.currentTimeMillis() - COMPLETED_TTL_MS;
         runs.entrySet().removeIf(e -> {
             TaskRun run = e.getValue();
-            return run.job.isTerminal() && run.lastActivity.get() < cutoff;
+            if (run.job.isTerminal() && run.lastActivity.get() < cutoff) {
+                releaseLease(run.job.getTaskId());
+                return true;
+            }
+            return false;
         });
-        for (TaskRun run : runs.values()) {
-            boolean claimsRunning = run.job.getStatus() == AgentJobStatus.RUNNING
-                    || run.job.getStatus() == AgentJobStatus.QUEUED;
-            if (!claimsRunning) {
+        for (TaskRun run : new ArrayList<>(runs.values())) {
+            if (run.job.isTerminal()) {
                 continue;
             }
-            if (!run.executionActive.get()) {
-                log.warn("AgentJobService: revive stalled job {}", run.job.getTaskId());
+            String taskId = run.job.getTaskId();
+            if (!isLeaseOwner(taskId)) {
+                log.warn("AgentJobService: fencing lease lost for {} — disposing local run", taskId);
+                dispose(run);
+                cancelChildWork(run);
+                run.executionActive.set(false);
+                runs.remove(taskId, run);
+                continue;
+            }
+            if (!renewLease(taskId)) {
+                log.warn("AgentJobService: failed to renew lease for {} — stopping local run", taskId);
+                dispose(run);
+                cancelChildWork(run);
+                run.executionActive.set(false);
+                runs.remove(taskId, run);
+                continue;
+            }
+            boolean claimsRunning = run.job.getStatus() == AgentJobStatus.RUNNING
+                    || run.job.getStatus() == AgentJobStatus.QUEUED;
+            if (claimsRunning && !run.executionActive.get()) {
+                log.warn("AgentJobService: revive stalled job {}", taskId);
                 revive(run);
             }
         }
+    }
+
+    // ---- Sub-agent tree summary (reconnect restore) ----
+
+    /** Rebuild the in-memory sub-agent summary from the durable delegation events. */
+    private void rebuildSubAgents(TaskRun run) {
+        long cursor = 0L;
+        while (true) {
+            List<AgentTaskEventStore.TaskEventRecord> records =
+                    eventStore.replay(run.job.getTaskId(), cursor, REPLAY_BATCH);
+            if (records == null || records.isEmpty()) {
+                break;
+            }
+            for (AgentTaskEventStore.TaskEventRecord record : records) {
+                if (record.seq <= cursor) {
+                    continue;
+                }
+                cursor = record.seq;
+                try {
+                    JsonNode payload = objectMapper.readTree(record.payloadJson);
+                    applySubAgentRecord(run, record.type, payload);
+                } catch (Exception e) {
+                    log.warn("AgentJobService: failed to rebuild sub-agent record seq={} for {}: {}",
+                            record.seq, run.job.getTaskId(), e.getMessage());
+                }
+            }
+            if (records.size() < REPLAY_BATCH) {
+                break;
+            }
+        }
+    }
+
+    private void applySubAgentRecord(TaskRun run, String type, JsonNode p) {
+        if (!"agent.spawned".equals(type) && !"agent.progress".equals(type)
+                && !"agent.output".equals(type) && !"agent.reasoning".equals(type)
+                && !"agent.tool_call".equals(type) && !"agent.tool_result".equals(type)
+                && !"agent.completed".equals(type)) {
+            return;
+        }
+        String agentId = p.path("agentId").asText(null);
+        if (agentId == null || agentId.isEmpty()) {
+            return;
+        }
+        synchronized (run.subAgents) {
+            SubAgentState st = run.subAgents.computeIfAbsent(agentId, id -> {
+                SubAgentState n = new SubAgentState();
+                n.agentId = id;
+                n.parentAgentId = p.path("parentAgentId").asText(null);
+                n.depth = p.path("depth").asInt(1);
+                n.status = "spawned";
+                n.steps = new ArrayList<>();
+                return n;
+            });
+            if (st.parentAgentId == null && p.hasNonNull("parentAgentId")) {
+                st.parentAgentId = p.path("parentAgentId").asText(null);
+            }
+            if (st.depth <= 0 && p.hasNonNull("depth")) {
+                st.depth = p.path("depth").asInt(1);
+            }
+            switch (type) {
+                case "agent.spawned":
+                    st.agentName = p.path("agentName").asText(null);
+                    st.task = p.path("taskDescription").asText(st.task);
+                    st.status = "spawned";
+                    break;
+                case "agent.progress":
+                    st.status = "running";
+                    break;
+                case "agent.output":
+                    st.streamingContent = st.streamingContent == null
+                            ? p.path("content").asText("")
+                            : st.streamingContent + p.path("content").asText("");
+                    if ("spawned".equals(st.status)) {
+                        st.status = "running";
+                    }
+                    break;
+                case "agent.reasoning":
+                    st.reasoningContent = st.reasoningContent == null
+                            ? p.path("content").asText("")
+                            : st.reasoningContent + p.path("content").asText("");
+                    if ("spawned".equals(st.status)) {
+                        st.status = "running";
+                    }
+                    break;
+                case "agent.tool_call": {
+                    SubAgentToolStep step = new SubAgentToolStep();
+                    step.id = p.path("toolCallId").asText(null);
+                    step.toolName = p.path("toolName").asText(null);
+                    step.args = p.path("arguments").asText(null);
+                    step.status = "running";
+                    if (step.id != null) {
+                        st.steps.add(step);
+                    }
+                    st.status = "running";
+                    break;
+                }
+                case "agent.tool_result": {
+                    String callId = p.path("toolCallId").asText(null);
+                    if (callId != null) {
+                        for (SubAgentToolStep step : st.steps) {
+                            if (callId.equals(step.id)) {
+                                step.result = p.path("result").asText(null);
+                                step.error = p.path("error").asText(null);
+                                step.status = step.error != null ? "error" : "success";
+                            }
+                        }
+                    }
+                    break;
+                }
+                case "agent.completed":
+                    st.status = p.path("success").asBoolean(false) ? "completed" : "error";
+                    st.error = p.path("error").asText(null);
+                    if (st.error == null && "error".equals(st.status)) {
+                        st.error = p.path("result").asText("Sub-agent failed");
+                    }
+                    st.durationMs = p.path("durationMs").asLong(0L);
+                    st.promptTokens = p.path("usage").path("prompt").asInt(0);
+                    st.completionTokens = p.path("usage").path("completion").asInt(0);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    /** Fold live delegation events into the same summary shape as /state. */
+    private void updateSubAgent(TaskRun run, com.knowledge.agent.v2.event.DelegationEvent ev) {
+        Map<String, Object> payload = com.knowledge.agent.v2.event.AgentEventSerializer.toPayload(
+                ev, run.job.getTaskId());
+        try {
+            applySubAgentRecord(run, ev.type(), objectMapper.valueToTree(payload));
+        } catch (Exception e) {
+            log.warn("AgentJobService: failed to fold delegation event {} for {}: {}",
+                    ev.type(), run.job.getTaskId(), e.getMessage());
+        }
+    }
+
+    /** One sub-agent node as returned by {@code GET /tasks/{id}/state}. */
+    public static class SubAgentState {
+        public String agentId;
+        public String parentAgentId;
+        public int depth;
+        public String agentName;
+        public String task;
+        public String status;
+        public String error;
+        public String streamingContent;
+        public String reasoningContent;
+        public int promptTokens;
+        public int completionTokens;
+        public long durationMs;
+        public List<SubAgentToolStep> steps = new ArrayList<>();
+    }
+
+    /** One tool execution inside a sub-agent. */
+    public static class SubAgentToolStep {
+        public String id;
+        public String toolName;
+        public String args;
+        public String status;
+        public String result;
+        public String error;
     }
 
     // ---- Types ----
@@ -918,6 +1300,8 @@ public class AgentJobService {
         public String assistantText;
         public long lastSeq;
         public List<PendingTool> pendingTools = Collections.emptyList();
+        /** Restored sub-agent tree summary (for refresh/attach). */
+        public List<SubAgentState> subAgents = Collections.emptyList();
     }
 
     private static class TaskRun {
@@ -943,13 +1327,25 @@ public class AgentJobService {
         final AtomicLong seq = new AtomicLong(0);
         final StringBuffer assistantText = new StringBuffer();
         final List<PendingTool> pendingTools = Collections.synchronizedList(new ArrayList<>());
+        final Map<String, SubAgentState> subAgents = new ConcurrentHashMap<>();
+        /** Per-task delegation sink; avoids contending with the global event bus. */
+        final Sinks.Many<com.knowledge.agent.v2.event.AgentEvent> delegationSink =
+                Sinks.many().multicast().onBackpressureBuffer(65_536, false);
         final AtomicLong lastActivity = new AtomicLong(System.currentTimeMillis());
         /** Epoch millis of the last throttled hot-save (text checkpoint cadence). */
         volatile long lastHotSaveAt;
+        /** Epoch millis of the last Redis fencing-lease check. */
+        volatile long lastLeaseCheckAt;
 
         TaskRun(AgentJob job, AgentSession session) {
             this.job = job;
             this.session = session;
+            session.getMetadata().put(
+                    com.knowledge.agent.v2.tool.DelegateTaskTool.DELEGATION_SINK_KEY,
+                    delegationSink);
+            session.getMetadata().put(
+                    com.knowledge.agent.v2.tool.DelegateTaskTool.TASK_ID_KEY,
+                    job.getTaskId());
         }
 
         void touch() {

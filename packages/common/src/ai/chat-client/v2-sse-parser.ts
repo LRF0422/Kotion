@@ -299,6 +299,34 @@ function mapV2Event(
                 } as Annotation],
             } as AnnotationStreamEvent]
 
+        case 'agent.tool_call':
+            return [{
+                type: 'annotation',
+                annotations: [{
+                    type: 'subagent_tool_call',
+                    agentId: data.agentId || data.taskId,
+                    parentAgentId: data.parentAgentId || data.sessionId,
+                    depth: data.depth ?? 1,
+                    toolCallId: data.toolCallId,
+                    toolName: data.toolName,
+                    args: data.arguments,
+                } as Annotation],
+            } as AnnotationStreamEvent]
+
+        case 'agent.tool_result':
+            return [{
+                type: 'annotation',
+                annotations: [{
+                    type: 'subagent_tool_result',
+                    agentId: data.agentId || data.taskId,
+                    parentAgentId: data.parentAgentId || data.sessionId,
+                    depth: data.depth ?? 1,
+                    toolCallId: data.toolCallId,
+                    result: data.result,
+                    error: data.error,
+                } as Annotation],
+            } as AnnotationStreamEvent]
+
         case 'agent.completed':
             return [{
                 type: 'annotation',
@@ -310,7 +338,12 @@ function mapV2Event(
                     status: data.success ? 'completed' : 'error',
                     finishReason: data.success ? 'stop' : 'error',
                     result: data.result,
+                    error: data.error || (data.success ? undefined : data.result),
                     durationMs: data.durationMs,
+                    usage: data.usage ? {
+                        promptTokens: data.usage.prompt || 0,
+                        completionTokens: data.usage.completion || 0,
+                    } : undefined,
                 } as Annotation],
             } as AnnotationStreamEvent]
 
