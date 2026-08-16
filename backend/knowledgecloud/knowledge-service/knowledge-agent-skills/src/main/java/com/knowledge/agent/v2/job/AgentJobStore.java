@@ -1,5 +1,6 @@
 package com.knowledge.agent.v2.job;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -32,4 +33,12 @@ public interface AgentJobStore {
 
     /** Active (non-terminal) task count for a tenant (concurrency quota). */
     long countActive(Long tenantId);
+
+    /**
+     * RUNNING/QUEUED jobs whose update_time is older than {@code cutoffMs}.
+     * Used by the reconciler to fail stale DB rows that no live executor owns.
+     */
+    default List<AgentJob> listStaleRunning(Long tenantId, long cutoffMs, int limit) {
+        return Collections.emptyList();
+    }
 }

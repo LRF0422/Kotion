@@ -137,6 +137,24 @@ public class DefaultAgentJobStore implements AgentJobStore {
     }
 
     @Override
+    public List<AgentJob> listStaleRunning(Long tenantId, long cutoffMs, int limit) {
+        List<AgentJob> out = new ArrayList<>();
+        if (tenantId == null) {
+            return out;
+        }
+        try {
+            List<AgentTaskEntity> rows = taskMapper.selectStaleRunning(
+                    tenantId, cutoffMs, Math.max(1, Math.min(limit, 500)));
+            for (AgentTaskEntity entity : rows) {
+                out.add(fromEntity(entity));
+            }
+        } catch (Exception e) {
+            log.warn("AgentJobStore listStaleRunning failed for tenant {}: {}", tenantId, e.getMessage());
+        }
+        return out;
+    }
+
+    @Override
     public long countActive(Long tenantId) {
         if (tenantId == null) {
             return 0L;

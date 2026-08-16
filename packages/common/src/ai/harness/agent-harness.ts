@@ -69,4 +69,9 @@ export class AgentHarnessImpl implements AgentHarness {
     cancelCurrent(signal?: AbortSignal): Promise<void> {
         return this.v2Runtime.cancelCurrent(signal)
     }
+
+    /** Cancel an explicit backend task id (best-effort). */
+    cancelTask(taskId: string, signal?: AbortSignal): Promise<void> {
+        return this.v2Runtime.cancelTask(taskId, signal)
+    }
 }

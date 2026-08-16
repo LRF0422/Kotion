@@ -7,6 +7,8 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
+
 /**
  * MyBatis-Plus mapper for {@link AgentTaskEntity}.
  *
@@ -45,6 +47,14 @@ public interface AgentTaskMapper extends BaseMapper<AgentTaskEntity> {
     @Select("SELECT COUNT(*) FROM agent_task WHERE tenant_id = #{tenantId} " +
             "AND status IN ('QUEUED','RUNNING','SUSPENDED','WAITING_TOOLS')")
     long countActiveByTenant(@Param("tenantId") Long tenantId);
+
+    /** RUNNING/QUEUED rows older than the cutoff (stale executor sweep). */
+    @Select("SELECT * FROM agent_task WHERE tenant_id = #{tenantId} " +
+            "AND status IN ('RUNNING','QUEUED') AND update_time < #{cutoffMs} " +
+            "ORDER BY update_time ASC LIMIT #{limit}")
+    List<AgentTaskEntity> selectStaleRunning(@Param("tenantId") Long tenantId,
+                                              @Param("cutoffMs") long cutoffMs,
+                                              @Param("limit") int limit);
 
     /** Most recent task for a session (legacy session-based resume). */
     @Select("SELECT * FROM agent_task WHERE session_id = #{sessionId} " +

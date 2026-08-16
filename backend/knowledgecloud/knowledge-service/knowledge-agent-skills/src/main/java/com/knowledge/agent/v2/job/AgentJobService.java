@@ -167,6 +167,19 @@ public class AgentJobService {
         }
     }
 
+    /** True when a lease key exists for the task (owner may be another instance). */
+    private boolean hasLease(String taskId) {
+        if (leaseRedis == null) {
+            return true; // no Redis fencing: never sweep by lease
+        }
+        try {
+            return leaseRedis.hasKey(leaseKey(taskId));
+        } catch (Exception e) {
+            log.warn("AgentJobService: Redis lease exists check failed for {}: {}", taskId, e.getMessage());
+            return true;
+        }
+    }
+
     private boolean isLeaseOwner(String taskId) {
         if (leaseRedis == null) {
             return true;
@@ -269,9 +282,12 @@ public class AgentJobService {
         }
 
         int maxConcurrent = rateLimit.getMaxConcurrentSessions();
-        if (maxConcurrent > 0 && countActiveByTenant(tenantId) >= maxConcurrent) {
-            throw new IllegalArgumentException(
-                    "Concurrent task limit reached (max " + maxConcurrent + ")");
+        if (maxConcurrent > 0) {
+            sweepStaleTenant(tenantId);
+            if (countActiveByTenant(tenantId) >= maxConcurrent) {
+                throw new IllegalArgumentException(
+                        "Concurrent task limit reached (max " + maxConcurrent + ")");
+            }
         }
     }
 
@@ -1110,6 +1126,51 @@ public class AgentJobService {
                 log.warn("AgentJobService: revive stalled job {}", taskId);
                 revive(run);
             }
+        }
+
+        java.util.Set<Long> tenants = new java.util.HashSet<>();
+        for (TaskRun run : runs.values()) {
+            if (run.job.getTenantId() != null) {
+                tenants.add(run.job.getTenantId());
+            }
+        }
+        for (String key : createCounters.keySet()) {
+            if (key != null && key.startsWith("tenant:")) {
+                try {
+                    tenants.add(Long.parseLong(key.substring("tenant:".length())));
+                } catch (NumberFormatException ignore) {
+                }
+            }
+        }
+        for (Long tenantId : tenants) {
+            sweepStaleTenant(tenantId);
+        }
+    }
+
+    /**
+     * Fail RUNNING/QUEUED rows that no live executor and no Redis lease owns.
+     * Called both periodically and immediately before rejecting a tenant quota,
+     * so a crashed/abandoned task never blocks new chats until the next timer.
+     */
+    private void sweepStaleTenant(Long tenantId) {
+        if (tenantId == null) {
+            return;
+        }
+        long staleCutoff = System.currentTimeMillis() - 60_000L;
+        for (AgentJob stale : jobStore.listStaleRunning(tenantId, staleCutoff, 500)) {
+            if (runs.containsKey(stale.getTaskId())) {
+                continue;
+            }
+            if (hasLease(stale.getTaskId())) {
+                continue; // another live instance still owns this task
+            }
+            stale.setStatus(AgentJobStatus.FAILED);
+            stale.setFinishReason("error:stale_task");
+            stale.setErrorMessage("Task executor disappeared before completion");
+            jobStore.save(stale);
+            metrics.taskFailed();
+            log.warn("AgentJobService: failed stale running task {} (tenant {})",
+                    stale.getTaskId(), tenantId);
         }
     }
 

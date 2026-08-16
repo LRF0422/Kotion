@@ -66,6 +66,7 @@ export class V2AgentRuntime {
     async cancelCurrent(signal?: AbortSignal): Promise<void> {
         const taskId = this.currentTaskId
         if (!taskId) return
+        this.currentTaskId = null
         try {
             await this.cancelTask(taskId, signal)
         } catch {

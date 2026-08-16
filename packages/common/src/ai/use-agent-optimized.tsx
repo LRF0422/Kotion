@@ -448,14 +448,21 @@ export const useEditorAgentOptimized = (
     }, [resolveTool, onToolExecution, toTextStream, withLifecycle])
 
     // Stop current generation — also cancels the backend task so an abandoned
-    // run doesn't keep burning tokens server-side.
-    const stop = useCallback(() => {
+    // run doesn't keep burning tokens server-side. Awaiting is safe and lets
+    // clear/new-session flows wait until the cancel is persisted before
+    // creating a new task (otherwise the concurrent-task quota can reject it).
+    const stop = useCallback(async (): Promise<void> => {
         isStreamingRef.current = false
         if (abortControllerRef.current) {
             abortControllerRef.current.abort()
             abortControllerRef.current = null
         }
-        harnessRef.current.cancelCurrent().catch(() => { /* best-effort */ })
+        await harnessRef.current.cancelCurrent().catch(() => { /* best-effort */ })
+    }, [])
+
+    /** Cancel a known backend task id, e.g. the stored session task after refresh. */
+    const cancelTask = useCallback(async (taskId: string): Promise<void> => {
+        await harnessRef.current.cancelTask(taskId).catch(() => { /* best-effort */ })
     }, [])
 
     // Check if currently generating
@@ -471,6 +478,7 @@ export const useEditorAgentOptimized = (
         resolvePlan,
         attachStream,
         stop,
+        cancelTask,
         isGenerating,
         toolProvider,
         skillProvider,

@@ -400,7 +400,7 @@ export const ExpandableChatDemo: React.FC<{
     }, [])
 
     // ─── Streaming agent ──────────────────────────────────────────
-    const { stream, continueStream, resolvePlan, attachStream, stop } = useEditorAgentOptimized(
+    const { stream, continueStream, resolvePlan, attachStream, stop, cancelTask } = useEditorAgentOptimized(
         agentEditor,
         handleToolExecution,
         handleUserChoiceRequest,
@@ -772,32 +772,40 @@ export const ExpandableChatDemo: React.FC<{
     }, [isLoading, submitMessage])
 
     // ─── Session lifecycle ────────────────────────────────────────
-    const handleClearChat = useCallback(() => {
-        if (isLoading) stop()
+    const handleClearChat = useCallback(async () => {
+        // Always cancel the backend task, even when the UI no longer shows a
+        // loading state. The server may still hold a RUNNING/WAITING task;
+        // clearing only localStorage would leak it and exhaust the tenant's
+        // concurrent-task quota.
+        await stop()
+        if (backendTaskId) await cancelTask(backendTaskId)
         resetTransient()
         clearActiveMessages()
-    }, [isLoading, stop, resetTransient, clearActiveMessages])
+    }, [stop, cancelTask, backendTaskId, resetTransient, clearActiveMessages])
 
-    const handleNewSession = useCallback(() => {
-        if (isLoading) stop()
+    const handleNewSession = useCallback(async () => {
+        await stop()
+        if (backendTaskId) await cancelTask(backendTaskId)
         resetTransient()
         createSession()
-    }, [isLoading, stop, resetTransient, createSession])
+    }, [stop, cancelTask, backendTaskId, resetTransient, createSession])
 
-    const handleSwitchSession = useCallback((id: string) => {
+    const handleSwitchSession = useCallback(async (id: string) => {
         if (id === activeSessionId) return
-        if (isLoading) stop()
+        await stop()
+        if (backendTaskId) await cancelTask(backendTaskId)
         resetTransient()
         switchSession(id)
-    }, [activeSessionId, isLoading, stop, resetTransient, switchSession])
+    }, [activeSessionId, stop, cancelTask, backendTaskId, resetTransient, switchSession])
 
-    const handleDeleteSession = useCallback((id: string) => {
+    const handleDeleteSession = useCallback(async (id: string) => {
         if (id === activeSessionId) {
-            if (isLoading) stop()
+            await stop()
+            if (backendTaskId) await cancelTask(backendTaskId)
             resetTransient()
         }
         deleteSession(id)
-    }, [activeSessionId, isLoading, stop, resetTransient, deleteSession])
+    }, [activeSessionId, stop, cancelTask, backendTaskId, resetTransient, deleteSession])
 
     // ─── Derived UI flags ─────────────────────────────────────────
     const isEmpty = messages.length === 0 && !isLoading
