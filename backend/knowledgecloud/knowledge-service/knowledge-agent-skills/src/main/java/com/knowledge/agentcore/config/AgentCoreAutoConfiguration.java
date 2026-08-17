@@ -2,6 +2,7 @@ package com.knowledge.agentcore.config;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.concurrent.ExecutorService;
@@ -12,11 +13,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * AgentCore wiring — executors only. Components (stores, log, gateway, loop,
- * supervisor, controller) are annotation-scanned beans under
- * {@code com.knowledge.agentcore.*}.
+ * AgentCore wiring.
+ *
+ * <p>The runtime lives in {@code com.knowledge.agentcore} — OUTSIDE the app's
+ * component-scan base package ({@code com.knowledge.agent}, the main class
+ * package). The class is registered via
+ * {@code META-INF/spring.factories} and declares the scan for its own package
+ * tree here, so stores / event log / gateway / loop / supervisor / controllers
+ * are all registered without touching the application class.
  */
 @Configuration
+@ComponentScan(basePackages = "com.knowledge.agentcore")
 @EnableConfigurationProperties(AgentCoreProperties.class)
 public class AgentCoreAutoConfiguration {
 

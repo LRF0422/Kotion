@@ -304,6 +304,15 @@ agent/
 
 ### 14.4 验证
 
-- 后端：`mvn -pl knowledge-service/knowledge-agent-skills -am test` → BUILD SUCCESS，15/15 测试通过。
-- 前端：common tsc 通过；core 中旧栈消费方（AiInlineMenu/AIAssistantPage 等）由 M5 扫尾清理。
+- 后端：`mvn -pl knowledge-service/knowledge-agent-skills -am test` → BUILD SUCCESS，19/19 测试通过
+  （含 EditorAgentControllerMappingTest 回归守卫：URL 契约 + spring.factories 注册）。
+- 前端：common/ui/plugin-ai tsc 通过；core 中旧栈消费方（AiInlineMenu/AIAssistantPage 等）由 M5 扫尾清理。
+
+### 14.5 修复记录：新端点 404（组件扫描）
+
+`com.knowledge.agentcore` 不在应用组件扫描基包（主类包 `com.knowledge.agent`）内，
+导致全部 agentcore Bean（含 EditorAgentController）未注册 → 前端调 `/api/agent/v1/runs` 404。
+修复：`META-INF/spring.factories` 注册 `AgentCoreAutoConfiguration`（沿用 knowledge-core-* 模式），
+并在其上声明 `@ComponentScan("com.knowledge.agentcore")`；Mapper 由全局
+`@MapperScan("com.knowledge.**.mapper.**")` 覆盖，无需改动。部署后重启 agent 服务即生效。
 
