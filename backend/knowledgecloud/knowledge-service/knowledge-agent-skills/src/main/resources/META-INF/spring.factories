@@ -1,6 +1,0 @@
-# AgentCore auto-configuration — the redesigned agent runtime lives in
-# com.knowledge.agentcore, OUTSIDE the app's component-scan base package
-# (com.knowledge.agent). Registered here so Spring Boot loads the runtime
-# configuration; the config class declares its own component scan.
-org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-  com.knowledge.agentcore.config.AgentCoreAutoConfiguration
