@@ -1,8 +1,8 @@
-package com.knowledge.agentcore.checkpoint;
+package com.knowledge.agent.core.checkpoint;
 
-import com.knowledge.agentcore.config.AgentCoreProperties;
-import com.knowledge.agentcore.entity.AgentRunCheckpointEntity;
-import com.knowledge.agentcore.mapper.AgentRunCheckpointMapper;
+import com.knowledge.agent.core.config.AgentCoreProperties;
+import com.knowledge.agent.core.entity.AgentRunCheckpointEntity;
+import com.knowledge.agent.core.mapper.AgentRunCheckpointMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;

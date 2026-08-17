@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.run;
+package com.knowledge.agent.core.run;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

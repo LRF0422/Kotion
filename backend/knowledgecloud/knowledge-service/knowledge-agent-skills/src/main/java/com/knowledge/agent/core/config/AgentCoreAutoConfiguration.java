@@ -1,8 +1,9 @@
-package com.knowledge.agentcore.config;
+package com.knowledge.agent.core.config;
 
+import com.knowledge.core.secure.provider.JwtTokenProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.concurrent.ExecutorService;
@@ -15,24 +16,27 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * AgentCore wiring.
  *
- * <p>The runtime lives in {@code com.knowledge.agentcore} — OUTSIDE the app's
- * component-scan base package ({@code com.knowledge.agent}, the main class
- * package). The class is registered via
- * {@code META-INF/spring.factories} and declares the scan for its own package
- * tree here, so stores / event log / gateway / loop / supervisor / controllers
- * are all registered without touching the application class.
- *
- * <p>{@code com.knowledge.core.secure} is scanned as a fallback too:
- * knowledge-core-secure registers {@code JwtTokenProvider} as a @Component
- * ({@code com.knowledge.core.secure.provider}) but some framework jar versions
- * ship without the matching scan, which fails the boot with "required a bean
- * of type JwtTokenProvider". {@code spring.main.allow-bean-definition-overriding}
- * is enabled by the platform launcher, so duplicates are harmless.
+ * <p>The runtime lives in {@code com.knowledge.agent.core} — INSIDE the agent
+ * module's conventional package tree ({@code com.knowledge.agent}, the app's
+ * component-scan base), so every runtime bean (stores / event log / gateway /
+ * loop / supervisor / controllers) is registered by the application's own
+ * component scan. No spring.factories, no extra @ComponentScan.
  */
 @Configuration
-@ComponentScan(basePackages = { "com.knowledge.agentcore", "com.knowledge.core.secure" })
 @EnableConfigurationProperties(AgentCoreProperties.class)
 public class AgentCoreAutoConfiguration {
+
+    /**
+     * Fallback registration for {@code JwtTokenProvider}: the agent module
+     * never scans or modifies the platform's security packages, but the bean
+     * must exist for the security stack to boot. If the framework already
+     * provides it, this fallback stays inactive.
+     */
+    @Bean
+    @ConditionalOnMissingBean(JwtTokenProvider.class)
+    public JwtTokenProvider jwtTokenProvider() {
+        return new JwtTokenProvider();
+    }
 
     /** One thread per running loop (loops block on LLM streams and resumes). */
     @Bean(name = "agentLoopExecutor", destroyMethod = "shutdown")

@@ -1,7 +1,7 @@
-package com.knowledge.agentcore.delegate;
+package com.knowledge.agent.core.delegate;
 
-import com.knowledge.agentcore.event.EventSubscription;
-import com.knowledge.agentcore.event.RunEvent;
+import com.knowledge.agent.core.event.EventSubscription;
+import com.knowledge.agent.core.event.RunEvent;
 import lombok.Data;
 
 /**

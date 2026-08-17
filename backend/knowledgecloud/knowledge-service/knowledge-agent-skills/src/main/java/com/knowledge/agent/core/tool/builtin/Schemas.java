@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.tool.builtin;
+package com.knowledge.agent.core.tool.builtin;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;

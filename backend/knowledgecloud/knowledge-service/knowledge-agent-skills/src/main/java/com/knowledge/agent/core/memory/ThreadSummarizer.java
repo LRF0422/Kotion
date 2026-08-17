@@ -1,12 +1,12 @@
-package com.knowledge.agentcore.memory;
+package com.knowledge.agent.core.memory;
 
 import com.knowledge.agent.api.dto.ChatMessage;
-import com.knowledge.agentcore.checkpoint.Checkpoint;
-import com.knowledge.agentcore.checkpoint.CheckpointStore;
-import com.knowledge.agentcore.llm.LlmGateway;
-import com.knowledge.agentcore.llm.LlmInferRequest;
-import com.knowledge.agentcore.llm.LlmResult;
-import com.knowledge.agentcore.supervisor.ThreadStore;
+import com.knowledge.agent.core.checkpoint.Checkpoint;
+import com.knowledge.agent.core.checkpoint.CheckpointStore;
+import com.knowledge.agent.core.llm.LlmGateway;
+import com.knowledge.agent.core.llm.LlmInferRequest;
+import com.knowledge.agent.core.llm.LlmResult;
+import com.knowledge.agent.core.supervisor.ThreadStore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

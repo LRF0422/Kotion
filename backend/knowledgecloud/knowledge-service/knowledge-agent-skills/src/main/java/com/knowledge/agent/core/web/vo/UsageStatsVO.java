@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.web.vo;
+package com.knowledge.agent.core.web.vo;
 
 import lombok.Data;
 

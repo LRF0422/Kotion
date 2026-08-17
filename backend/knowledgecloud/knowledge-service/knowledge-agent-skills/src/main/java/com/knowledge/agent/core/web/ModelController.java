@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.web;
+package com.knowledge.agent.core.web;
 
 import com.knowledge.agent.llm.LlmClientFactory;
 import io.swagger.annotations.Api;

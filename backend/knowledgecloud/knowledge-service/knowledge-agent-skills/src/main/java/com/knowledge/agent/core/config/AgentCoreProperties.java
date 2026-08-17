@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.config;
+package com.knowledge.agent.core.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;

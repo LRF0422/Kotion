@@ -1,6 +1,6 @@
-package com.knowledge.agentcore.memory;
+package com.knowledge.agent.core.memory;
 
-import com.knowledge.agentcore.config.AgentCoreProperties;
+import com.knowledge.agent.core.config.AgentCoreProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

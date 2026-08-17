@@ -1,6 +1,6 @@
-package com.knowledge.agentcore.loop;
+package com.knowledge.agent.core.loop;
 
-import com.knowledge.agentcore.run.AgentRun;
+import com.knowledge.agent.core.run.AgentRun;
 
 import java.util.concurrent.Future;
 

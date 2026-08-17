@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.skill;
+package com.knowledge.agent.core.skill;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

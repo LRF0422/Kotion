@@ -1,11 +1,11 @@
-package com.knowledge.agentcore.tool.builtin;
+package com.knowledge.agent.core.tool.builtin;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.knowledge.agentcore.config.AgentCoreProperties;
-import com.knowledge.agentcore.tool.BackendTool;
-import com.knowledge.agentcore.tool.ToolContext;
-import com.knowledge.agentcore.tool.ToolKind;
-import com.knowledge.agentcore.tool.ToolSpec;
+import com.knowledge.agent.core.config.AgentCoreProperties;
+import com.knowledge.agent.core.tool.BackendTool;
+import com.knowledge.agent.core.tool.ToolContext;
+import com.knowledge.agent.core.tool.ToolKind;
+import com.knowledge.agent.core.tool.ToolSpec;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;

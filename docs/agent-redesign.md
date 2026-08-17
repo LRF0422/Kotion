@@ -38,7 +38,7 @@ QUEUED → RUNNING ⇄ WAITING_TOOLS   （等待前端/编辑器工具结果）
         → COMPLETED | FAILED | CANCELLED
 ```
 
-## 3. 后端模块（knowledge-agent-skills 内新包 `com.knowledge.agentcore.*`）
+## 3. 后端模块（knowledge-agent-skills 内新包 `com.knowledge.agent.core.*`，位于应用扫描基包内）
 
 ```
 agentcore/
@@ -249,7 +249,7 @@ agent/
 
 ## 14. 实现记录（2026-08 落地）
 
-### 14.1 后端（knowledge-agent-skills，包 `com.knowledge.agentcore.*`，155 个旧类已删除）
+### 14.1 后端（knowledge-agent-skills，包 `com.knowledge.agent.core.*`，155 个旧类已删除）
 
 | 包 | 内容 | 状态 |
 |---|---|---|
@@ -272,7 +272,7 @@ agent/
 - 迁移：`backend/knowledgecloud/script/migration/V7__agentcore.sql`（agent_run/agent_run_event/
   agent_run_checkpoint/agent_long_memory/agent_thread）。
 - 保留：`com.knowledge.agent.llm.*`（LlmClientFactory）、knowledge-core-agent SDK、
-  agent_model_price 表（实体迁至 agentcore）、旧数据表。
+  agent_model_price 表（实体迁至 agent.core）、旧数据表。
 
 ### 14.2 前端（packages/common/src/ai/agent/）
 
@@ -308,26 +308,21 @@ agent/
   （含 EditorAgentControllerMappingTest 回归守卫：URL 契约 + spring.factories 注册）。
 - 前端：common/ui/plugin-ai tsc 通过；core 中旧栈消费方（AiInlineMenu/AIAssistantPage 等）由 M5 扫尾清理。
 
-### 14.5 修复记录：新端点 404（组件扫描）
+### 14.5 修复记录：组件扫描与包结构（最终方案）
 
-`com.knowledge.agentcore` 不在应用组件扫描基包（主类包 `com.knowledge.agent`）内，
-导致全部 agentcore Bean（含 EditorAgentController）未注册 → 前端调 `/api/agent/v1/runs` 404。
-修复：`META-INF/spring.factories` 注册 `AgentCoreAutoConfiguration`（沿用 knowledge-core-* 模式），
-并在其上声明 `@ComponentScan("com.knowledge.agentcore")`；Mapper 由全局
-`@MapperScan("com.knowledge.**.mapper.**")` 覆盖，无需改动。部署后重启 agent 服务即生效。
+**原则：agent 代码全部放在 agent 模块的包命名空间内（`com.knowledge.agent.core.*`，应用扫描基包
+`com.knowledge.agent` 的子包），由应用自带组件扫描注册；不使用 spring.factories、不加额外
+@ComponentScan、不修改 knowledge-core-* 基础架构模块。**
 
-### 14.6 修复记录：启动报 JwtTokenProvider 缺失
+过程中的两次教训（均已按上述原则收敛）：
+1. 早期曾把包放在 `com.knowledge.agentcore`（扫描基包之外）→ 新端点全部 404；
+   曾用 spring.factories + @ComponentScan 修补，后废弃。
+2. 曾误改 knowledge-core-secure（加 @ComponentScan）试图补齐 JwtTokenProvider → 影响所有服务，已回滚。
 
-`KnowledgeSecurityConfiguration`（knowledge-core-secure，经 spring.factories 注册）构造函数要求
-`JwtTokenProvider` Bean；该 Bean 是 `com.knowledge.core.secure.provider` 下的 `@Component`，
-但整个后端没有任何扫描覆盖这个包（framework 源码将 provider 改成 @Component 时遗漏了扫描声明；
-旧生产 jar 为 @Bean 注册所以旧服务能启动，从当前源码重编译后启动失败）。
+对平台安全栈的唯一依赖：`AgentCoreAutoConfiguration` 中一个 `@ConditionalOnMissingBean` 的
+`JwtTokenProvider` 兜底 @Bean —— 平台已注册时绝不生效，平台缺失时才兜底，不改动平台任何文件。
 
-修复（双保险）：
-1. framework：`SecureConfiguration` 增加 `@ComponentScan("com.knowledge.core.secure")`，惠及所有服务；
-2. agent 侧兜底：`AgentCoreAutoConfiguration` 的扫描扩为
-   `{"com.knowledge.agentcore", "com.knowledge.core.secure"}`，即使构建解析到旧版 secure jar 也能启动
-   （平台启动器已开启 allow-bean-definition-overriding，重复注册无副作用）。
-
-守卫测试：`AgentCoreScanTest`（两处 @ComponentScan 声明）。
+守卫测试：`AgentCoreScanTest`（运行时类必须在 `com.knowledge.agent.*` 内、自动装配不得声明
+@ComponentScan、兜底 Bean 存在且带 @ConditionalOnMissingBean）+ `EditorAgentControllerMappingTest`
+（URL 契约 + 包位置）。
 

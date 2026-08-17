@@ -1,8 +1,8 @@
-package com.knowledge.agentcore.tool;
+package com.knowledge.agent.core.tool;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.knowledge.agentcore.skill.RemoteSkillRegistry;
+import com.knowledge.agent.core.skill.RemoteSkillRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

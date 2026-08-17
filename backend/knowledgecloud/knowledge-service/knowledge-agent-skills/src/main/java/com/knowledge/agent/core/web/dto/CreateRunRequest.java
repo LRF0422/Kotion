@@ -1,7 +1,7 @@
-package com.knowledge.agentcore.web.dto;
+package com.knowledge.agent.core.web.dto;
 
 import com.knowledge.agent.api.dto.ChatMessage;
-import com.knowledge.agentcore.tool.ToolSpec;
+import com.knowledge.agent.core.tool.ToolSpec;
 import lombok.Data;
 
 import java.util.ArrayList;

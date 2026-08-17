@@ -60,7 +60,7 @@ make clean
 - **knowledge-service-api**: API definitions (interfaces, DTOs, enums)
   > `knowledge-agent-api`: ChatMessage/ChatCompletionRequest 等消息 DTO（被 AgentCore 复用）。
 - **knowledge-tool**: Core frameworks and utilities
-  - `knowledge-core-agent`: Agent SDK — 其它微服务用 `@AgentSkill` 注册远程技能（保留）；agent 侧消费端已重写为 `com.knowledge.agentcore.skill.*`
+  - `knowledge-core-agent`: Agent SDK — 其它微服务用 `@AgentSkill` 注册远程技能（保留）；agent 侧消费端已重写为 `com.knowledge.agent.core.skill.*`
   - `knowledge-core-boot`: Spring Boot extensions
   - `knowledge-core-common`: Common utilities
   - `knowledge-core-mybatis`: MyBatis extensions
@@ -71,10 +71,15 @@ make clean
 
 ### AgentCore（从 0 重设计，替代 V1/V2/V3）
 
-`knowledge-service/knowledge-agent-skills` 内新包 `com.knowledge.agentcore.*`；旧包
+`knowledge-service/knowledge-agent-skills` 内新包 `com.knowledge.agent.core.*`（位于应用扫描基包
+`com.knowledge.agent` 之内，由应用自带组件扫描注册，**无 spring.factories、无额外 @ComponentScan**）；旧包
 `com.knowledge.agent.{channel,core,config,observability,registry,store,tool,controller,v2,v3}` 已删除
 （仅保留 `com.knowledge.agent.llm.*` 的 LlmClientFactory 基础设施）。设计文档：
 仓库根 `docs/agent-redesign.md`。
+
+> 注意：不要修改 knowledge-core-* 基础架构模块（组件扫描等机制由平台自行管理）；
+> agent 模块对平台安全栈的依赖只有一个 `@ConditionalOnMissingBean` 的
+> `JwtTokenProvider` 兜底 Bean（见 `AgentCoreAutoConfiguration`），绝不覆盖平台注册。
 
 - **Run（一次执行单元）**：状态机 QUEUED→RUNNING⇄WAITING_TOOLS/SUSPENDED→COMPLETED|FAILED|CANCELLED；
   supervisor 负责生命周期/租约/配额，loop（同步驱动、每 run 一线程）负责执行。

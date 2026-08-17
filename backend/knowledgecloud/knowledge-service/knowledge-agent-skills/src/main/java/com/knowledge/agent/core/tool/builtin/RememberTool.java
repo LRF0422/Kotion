@@ -1,12 +1,12 @@
-package com.knowledge.agentcore.tool.builtin;
+package com.knowledge.agent.core.tool.builtin;
 
-import com.knowledge.agentcore.memory.MemoryEntry;
-import com.knowledge.agentcore.memory.MemoryScope;
-import com.knowledge.agentcore.memory.MemoryStore;
-import com.knowledge.agentcore.tool.BackendTool;
-import com.knowledge.agentcore.tool.ToolContext;
-import com.knowledge.agentcore.tool.ToolKind;
-import com.knowledge.agentcore.tool.ToolSpec;
+import com.knowledge.agent.core.memory.MemoryEntry;
+import com.knowledge.agent.core.memory.MemoryScope;
+import com.knowledge.agent.core.memory.MemoryStore;
+import com.knowledge.agent.core.tool.BackendTool;
+import com.knowledge.agent.core.tool.ToolContext;
+import com.knowledge.agent.core.tool.ToolKind;
+import com.knowledge.agent.core.tool.ToolSpec;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;

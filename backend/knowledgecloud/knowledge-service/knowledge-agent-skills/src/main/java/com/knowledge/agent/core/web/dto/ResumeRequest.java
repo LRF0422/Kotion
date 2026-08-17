@@ -1,6 +1,6 @@
-package com.knowledge.agentcore.web.dto;
+package com.knowledge.agent.core.web.dto;
 
-import com.knowledge.agentcore.loop.ResumePayload;
+import com.knowledge.agent.core.loop.ResumePayload;
 import lombok.Data;
 
 import java.util.ArrayList;

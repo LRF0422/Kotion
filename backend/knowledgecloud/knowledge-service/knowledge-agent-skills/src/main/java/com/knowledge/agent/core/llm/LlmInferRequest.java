@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.llm;
+package com.knowledge.agent.core.llm;
 
 import com.knowledge.agent.api.dto.ChatMessage;
 import lombok.Builder;

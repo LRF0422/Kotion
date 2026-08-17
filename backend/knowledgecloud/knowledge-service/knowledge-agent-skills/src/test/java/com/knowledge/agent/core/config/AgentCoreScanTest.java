@@ -1,38 +1,60 @@
-package com.knowledge.agentcore.config;
+package com.knowledge.agent.core.config;
 
-import com.knowledge.core.secure.config.SecureConfiguration;
+import com.knowledge.agent.core.loop.AgentLoop;
+import com.knowledge.agent.core.supervisor.DefaultRunSupervisor;
+import com.knowledge.core.secure.provider.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 
-import java.util.Arrays;
+import java.lang.reflect.Method;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Guards the two component-scan declarations that keep the agent service
- * bootable:
+ * Guards the two placement rules that keep the agent service bootable:
  * <ul>
- *   <li>{@code com.knowledge.agentcore} — the agent runtime itself (the 404 fix);</li>
- *   <li>{@code com.knowledge.core.secure} — registers {@code JwtTokenProvider}
- *       (the "required a bean of type JwtTokenProvider" boot failure).</li>
+ *   <li>the runtime lives inside {@code com.knowledge.agent.*} (the agent
+ *       module's scan base — the application's own component scan registers
+ *       everything, no spring.factories);</li>
+ *   <li>{@code AgentCoreAutoConfiguration} carries a @ConditionalOnMissingBean
+ *       fallback for {@code JwtTokenProvider} (the platform's security stack
+ *       requires that bean; the agent module must not scan or modify platform
+ *       packages to get it).</li>
  * </ul>
  */
 class AgentCoreScanTest {
 
     @Test
-    void agentCoreAutoConfigurationScansRuntimeAndSecurePackages() {
-        ComponentScan scan = AgentCoreAutoConfiguration.class.getAnnotation(ComponentScan.class);
-        assertNotNull(scan, "AgentCoreAutoConfiguration must declare @ComponentScan");
-        String[] packages = scan.basePackages();
-        assertArrayEquals(new String[] { "com.knowledge.agentcore", "com.knowledge.core.secure" },
-                Arrays.stream(packages).sorted().toArray(String[]::new));
+    void runtimeClassesLiveInsideAgentModulePackage() {
+        for (Class<?> type : new Class<?>[] {
+                AgentLoop.class,
+                DefaultRunSupervisor.class,
+                com.knowledge.agent.core.web.EditorAgentController.class }) {
+            assertTrue(type.getPackage().getName().startsWith("com.knowledge.agent."),
+                    type.getName() + " must live inside com.knowledge.agent.*");
+        }
     }
 
     @Test
-    void secureConfigurationScansItsOwnPackageTree() {
-        ComponentScan scan = SecureConfiguration.class.getAnnotation(ComponentScan.class);
-        assertNotNull(scan, "SecureConfiguration must declare @ComponentScan");
-        assertArrayEquals(new String[] { "com.knowledge.core.secure" }, scan.basePackages());
+    void autoConfigurationDoesNotDeclareComponentScan() {
+        ComponentScan scan = AgentCoreAutoConfiguration.class.getAnnotation(ComponentScan.class);
+        assertFalse(scan != null,
+                "no @ComponentScan needed: com.knowledge.agent.core is inside the app scan base");
+    }
+
+    @Test
+    void autoConfigurationProvidesJwtTokenProviderFallback() throws NoSuchMethodException {
+        Method method = AgentCoreAutoConfiguration.class.getMethod("jwtTokenProvider");
+        Bean bean = method.getAnnotation(Bean.class);
+        assertNotNull(bean, "jwtTokenProvider must be a @Bean method");
+        assertEquals(JwtTokenProvider.class, method.getReturnType());
+        ConditionalOnMissingBean conditional =
+                method.getAnnotation(ConditionalOnMissingBean.class);
+        assertNotNull(conditional, "fallback must be @ConditionalOnMissingBean (never override the framework)");
     }
 }

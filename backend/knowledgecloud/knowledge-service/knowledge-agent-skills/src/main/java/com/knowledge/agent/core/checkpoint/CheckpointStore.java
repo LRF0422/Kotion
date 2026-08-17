@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.checkpoint;
+package com.knowledge.agent.core.checkpoint;
 
 /**
  * Durable checkpoint access — Redis hot (latest) + JDBC cold (latest per run).

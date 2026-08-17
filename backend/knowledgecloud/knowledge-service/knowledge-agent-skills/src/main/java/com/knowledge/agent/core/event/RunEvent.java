@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.event;
+package com.knowledge.agent.core.event;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

@@ -1,8 +1,8 @@
-package com.knowledge.agentcore.mapper;
+package com.knowledge.agent.core.mapper;
 
 import com.baomidou.mybatisplus.annotation.InterceptorIgnore;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.knowledge.agentcore.entity.AgentThreadEntity;
+import com.knowledge.agent.core.entity.AgentThreadEntity;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;

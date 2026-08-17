@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.supervisor;
+package com.knowledge.agent.core.supervisor;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;

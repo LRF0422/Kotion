@@ -1,7 +1,7 @@
-package com.knowledge.agentcore.supervisor;
+package com.knowledge.agent.core.supervisor;
 
 import com.knowledge.agent.api.dto.ChatMessage;
-import com.knowledge.agentcore.tool.ToolSpec;
+import com.knowledge.agent.core.tool.ToolSpec;
 import lombok.Data;
 
 import java.util.ArrayList;

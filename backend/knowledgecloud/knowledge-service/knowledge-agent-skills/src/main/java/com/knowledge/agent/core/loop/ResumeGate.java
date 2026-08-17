@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.loop;
+package com.knowledge.agent.core.loop;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;

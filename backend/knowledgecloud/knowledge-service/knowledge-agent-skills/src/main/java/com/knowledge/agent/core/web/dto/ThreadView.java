@@ -1,6 +1,6 @@
-package com.knowledge.agentcore.web.dto;
+package com.knowledge.agent.core.web.dto;
 
-import com.knowledge.agentcore.entity.AgentThreadEntity;
+import com.knowledge.agent.core.entity.AgentThreadEntity;
 import lombok.Data;
 
 /**

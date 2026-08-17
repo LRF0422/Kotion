@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.run;
+package com.knowledge.agent.core.run;
 
 /**
  * AgentCore run lifecycle.

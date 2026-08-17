@@ -1,10 +1,10 @@
-package com.knowledge.agentcore.web;
+package com.knowledge.agent.core.web;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.knowledge.agentcore.entity.AgentModelPriceEntity;
-import com.knowledge.agentcore.mapper.AgentModelPriceMapper;
-import com.knowledge.agentcore.mapper.AgentRunMapper;
-import com.knowledge.agentcore.web.vo.UsageStatsVO;
+import com.knowledge.agent.core.entity.AgentModelPriceEntity;
+import com.knowledge.agent.core.mapper.AgentModelPriceMapper;
+import com.knowledge.agent.core.mapper.AgentRunMapper;
+import com.knowledge.agent.core.web.vo.UsageStatsVO;
 import com.knowledge.core.tool.api.R;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;

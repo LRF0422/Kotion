@@ -1,7 +1,7 @@
-package com.knowledge.agentcore.supervisor;
+package com.knowledge.agent.core.supervisor;
 
-import com.knowledge.agentcore.entity.AgentThreadEntity;
-import com.knowledge.agentcore.mapper.AgentThreadMapper;
+import com.knowledge.agent.core.entity.AgentThreadEntity;
+import com.knowledge.agent.core.mapper.AgentThreadMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

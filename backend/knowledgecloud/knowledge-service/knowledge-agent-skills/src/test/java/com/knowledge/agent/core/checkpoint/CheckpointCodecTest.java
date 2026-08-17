@@ -1,10 +1,10 @@
-package com.knowledge.agentcore.checkpoint;
+package com.knowledge.agent.core.checkpoint;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.knowledge.agent.api.dto.ChatMessage;
-import com.knowledge.agentcore.run.PendingToolCall;
-import com.knowledge.agentcore.tool.ToolKind;
-import com.knowledge.agentcore.tool.ToolSpec;
+import com.knowledge.agent.core.run.PendingToolCall;
+import com.knowledge.agent.core.tool.ToolKind;
+import com.knowledge.agent.core.tool.ToolSpec;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;

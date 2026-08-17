@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.skill;
+package com.knowledge.agent.core.skill;
 
 import com.knowledge.core.agent.sdk.HeartbeatRequest;
 import com.knowledge.core.agent.sdk.SkillDefinition;

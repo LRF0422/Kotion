@@ -1,11 +1,11 @@
-package com.knowledge.agentcore.llm;
+package com.knowledge.agent.core.llm;
 
 import com.knowledge.agent.llm.LlmClient;
 import com.knowledge.agent.llm.LlmClientFactory;
 import com.knowledge.agent.llm.LlmRequest;
 import com.knowledge.agent.llm.LlmResponse;
 import com.knowledge.agent.llm.StreamChunk;
-import com.knowledge.agentcore.config.AgentCoreProperties;
+import com.knowledge.agent.core.config.AgentCoreProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

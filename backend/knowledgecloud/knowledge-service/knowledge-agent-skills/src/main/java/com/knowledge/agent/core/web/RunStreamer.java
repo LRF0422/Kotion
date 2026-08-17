@@ -1,9 +1,9 @@
-package com.knowledge.agentcore.web;
+package com.knowledge.agent.core.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.knowledge.agentcore.event.EventSubscription;
-import com.knowledge.agentcore.event.RunEvent;
-import com.knowledge.agentcore.event.RunEventLog;
+import com.knowledge.agent.core.event.EventSubscription;
+import com.knowledge.agent.core.event.RunEvent;
+import com.knowledge.agent.core.event.RunEventLog;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;

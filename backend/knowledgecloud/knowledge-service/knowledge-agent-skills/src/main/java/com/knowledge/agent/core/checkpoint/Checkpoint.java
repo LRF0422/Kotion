@@ -1,7 +1,7 @@
-package com.knowledge.agentcore.checkpoint;
+package com.knowledge.agent.core.checkpoint;
 
 import com.knowledge.agent.api.dto.ChatMessage;
-import com.knowledge.agentcore.run.PendingToolCall;
+import com.knowledge.agent.core.run.PendingToolCall;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -48,7 +48,7 @@ public class Checkpoint {
     private Integer maxTokens;
 
     /** Client-declared (editor) tool catalog — persisted for loop recovery. */
-    private List<com.knowledge.agentcore.tool.ToolSpec> clientTools = new ArrayList<>();
+    private List<com.knowledge.agent.core.tool.ToolSpec> clientTools = new ArrayList<>();
 
     /** Full conversation including system prefix and injected memory. */
     private List<ChatMessage> messages = new ArrayList<>();

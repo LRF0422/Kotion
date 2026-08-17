@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.checkpoint;
+package com.knowledge.agent.core.checkpoint;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;

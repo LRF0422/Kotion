@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.tool;
+package com.knowledge.agent.core.tool;
 
 import lombok.Data;
 
@@ -37,7 +37,7 @@ public class ToolContext {
     private int delegateDepth;
 
     /** Client-declared tool catalog of this run (delegate tool subsetting). */
-    private java.util.List<com.knowledge.agentcore.tool.ToolSpec> clientTools;
+    private java.util.List<com.knowledge.agent.core.tool.ToolSpec> clientTools;
 
     /** Working-memory scratchpad holder (read/write). */
     private ScratchpadHolder scratchpad = new ScratchpadHolder();

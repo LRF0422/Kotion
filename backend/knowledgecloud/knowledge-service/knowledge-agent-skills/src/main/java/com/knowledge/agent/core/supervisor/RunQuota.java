@@ -1,7 +1,7 @@
-package com.knowledge.agentcore.supervisor;
+package com.knowledge.agent.core.supervisor;
 
-import com.knowledge.agentcore.config.AgentCoreProperties;
-import com.knowledge.agentcore.mapper.AgentRunMapper;
+import com.knowledge.agent.core.config.AgentCoreProperties;
+import com.knowledge.agent.core.mapper.AgentRunMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;

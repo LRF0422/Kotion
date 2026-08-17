@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.run;
+package com.knowledge.agent.core.run;
 
 /**
  * Durable run state access — Redis hot tier with JDBC cold fallback.

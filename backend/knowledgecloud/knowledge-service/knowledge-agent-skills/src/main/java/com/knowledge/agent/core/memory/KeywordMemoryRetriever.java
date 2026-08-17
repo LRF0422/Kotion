@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.memory;
+package com.knowledge.agent.core.memory;
 
 import org.springframework.stereotype.Component;
 

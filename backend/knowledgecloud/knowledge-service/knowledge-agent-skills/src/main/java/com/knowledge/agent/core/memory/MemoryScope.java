@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.memory;
+package com.knowledge.agent.core.memory;
 
 import java.util.ArrayList;
 import java.util.List;

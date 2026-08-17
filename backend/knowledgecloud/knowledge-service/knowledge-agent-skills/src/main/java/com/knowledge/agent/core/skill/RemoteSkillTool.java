@@ -1,10 +1,10 @@
-package com.knowledge.agentcore.skill;
+package com.knowledge.agent.core.skill;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.knowledge.agentcore.tool.BackendTool;
-import com.knowledge.agentcore.tool.ToolContext;
-import com.knowledge.agentcore.tool.ToolKind;
-import com.knowledge.agentcore.tool.ToolSpec;
+import com.knowledge.agent.core.tool.BackendTool;
+import com.knowledge.agent.core.tool.ToolContext;
+import com.knowledge.agent.core.tool.ToolKind;
+import com.knowledge.agent.core.tool.ToolSpec;
 import com.knowledge.core.launch.constant.TokenConstant;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;

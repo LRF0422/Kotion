@@ -1,8 +1,8 @@
-package com.knowledge.agentcore.run;
+package com.knowledge.agent.core.run;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.knowledge.agentcore.entity.AgentRunEntity;
-import com.knowledge.agentcore.mapper.AgentRunMapper;
+import com.knowledge.agent.core.entity.AgentRunEntity;
+import com.knowledge.agent.core.mapper.AgentRunMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;

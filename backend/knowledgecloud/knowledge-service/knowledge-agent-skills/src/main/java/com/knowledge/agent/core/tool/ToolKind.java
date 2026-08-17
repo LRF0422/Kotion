@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.tool;
+package com.knowledge.agent.core.tool;
 
 /**
  * Tool execution location.

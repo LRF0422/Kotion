@@ -1,8 +1,8 @@
-package com.knowledge.agentcore.mapper;
+package com.knowledge.agent.core.mapper;
 
 import com.baomidou.mybatisplus.annotation.InterceptorIgnore;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.knowledge.agentcore.entity.AgentRunEntity;
+import com.knowledge.agent.core.entity.AgentRunEntity;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -68,7 +68,7 @@ public interface AgentRunMapper extends BaseMapper<AgentRunEntity> {
             "SUM(prompt_tokens + completion_tokens) AS totalTokens, COUNT(*) AS sessions " +
             "FROM agent_run WHERE create_time >= #{startMs} " +
             "GROUP BY FROM_UNIXTIME(create_time / 1000, '%Y-%m-%d') ORDER BY date")
-    List<com.knowledge.agentcore.web.vo.UsageStatsVO.DailyTokens> selectDailyTokens(@Param("startMs") long startMs);
+    List<com.knowledge.agent.core.web.vo.UsageStatsVO.DailyTokens> selectDailyTokens(@Param("startMs") long startMs);
 
     /** Top users by token consumption (name resolved from knowledge_user). */
     @Select("SELECT r.user_id AS userId, MAX(u.user_name) AS userName, COUNT(*) AS sessions, " +
@@ -77,7 +77,7 @@ public interface AgentRunMapper extends BaseMapper<AgentRunEntity> {
             "FROM agent_run r LEFT JOIN knowledge_user u ON u.id = r.user_id " +
             "WHERE r.create_time >= #{startMs} AND r.user_id IS NOT NULL " +
             "GROUP BY r.user_id ORDER BY totalTokens DESC LIMIT #{limit}")
-    List<com.knowledge.agentcore.web.vo.UsageStatsVO.ByUser> selectUsageByUser(@Param("startMs") long startMs,
+    List<com.knowledge.agent.core.web.vo.UsageStatsVO.ByUser> selectUsageByUser(@Param("startMs") long startMs,
                                                                               @Param("limit") int limit);
 
     /** Usage grouped by model with estimated cost from agent_model_price. */
@@ -91,7 +91,7 @@ public interface AgentRunMapper extends BaseMapper<AgentRunEntity> {
             "WHERE r.create_time >= #{startMs} " +
             "GROUP BY r.model, p.prompt_price, p.completion_price, p.currency " +
             "ORDER BY totalTokens DESC")
-    List<com.knowledge.agentcore.web.vo.UsageStatsVO.ByModel> selectUsageByModel(@Param("startMs") long startMs);
+    List<com.knowledge.agent.core.web.vo.UsageStatsVO.ByModel> selectUsageByModel(@Param("startMs") long startMs);
 
     /** Active rows not updated since the cutoff (stale executor sweep). */
     @Select("SELECT * FROM agent_run WHERE status IN ('RUNNING','QUEUED','WAITING_TOOLS','SUSPENDED') " +

@@ -1,17 +1,17 @@
-package com.knowledge.agentcore.web;
+package com.knowledge.agent.core.web;
 
-import com.knowledge.agentcore.loop.ResumePayload;
-import com.knowledge.agentcore.memory.MemoryEntry;
-import com.knowledge.agentcore.memory.MemoryScope;
-import com.knowledge.agentcore.memory.MemoryStore;
-import com.knowledge.agentcore.run.AgentRun;
-import com.knowledge.agentcore.run.RunView;
-import com.knowledge.agentcore.supervisor.CreateRunCommand;
-import com.knowledge.agentcore.supervisor.DefaultRunSupervisor;
-import com.knowledge.agentcore.supervisor.ThreadStore;
-import com.knowledge.agentcore.web.dto.CreateRunRequest;
-import com.knowledge.agentcore.web.dto.ResumeRequest;
-import com.knowledge.agentcore.web.dto.ThreadView;
+import com.knowledge.agent.core.loop.ResumePayload;
+import com.knowledge.agent.core.memory.MemoryEntry;
+import com.knowledge.agent.core.memory.MemoryScope;
+import com.knowledge.agent.core.memory.MemoryStore;
+import com.knowledge.agent.core.run.AgentRun;
+import com.knowledge.agent.core.run.RunView;
+import com.knowledge.agent.core.supervisor.CreateRunCommand;
+import com.knowledge.agent.core.supervisor.DefaultRunSupervisor;
+import com.knowledge.agent.core.supervisor.ThreadStore;
+import com.knowledge.agent.core.web.dto.CreateRunRequest;
+import com.knowledge.agent.core.web.dto.ResumeRequest;
+import com.knowledge.agent.core.web.dto.ThreadView;
 import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.tool.api.R;
 import io.swagger.annotations.Api;
@@ -185,7 +185,7 @@ public class EditorAgentController {
     @ApiOperation("Get thread view (title/summary/active run)")
     @GetMapping("/threads/{threadId}")
     public R<ThreadView> getThread(@PathVariable String threadId) {
-        com.knowledge.agentcore.entity.AgentThreadEntity entity = threadStore.get(threadId);
+        com.knowledge.agent.core.entity.AgentThreadEntity entity = threadStore.get(threadId);
         if (entity == null) {
             return R.fail("会话不存在");
         }

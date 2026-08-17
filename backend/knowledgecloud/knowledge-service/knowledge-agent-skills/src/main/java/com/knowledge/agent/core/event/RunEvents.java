@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.event;
+package com.knowledge.agent.core.event;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

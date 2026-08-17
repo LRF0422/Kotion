@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.entity;
+package com.knowledge.agent.core.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;

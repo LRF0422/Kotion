@@ -1,8 +1,8 @@
-package com.knowledge.agentcore.memory;
+package com.knowledge.agent.core.memory;
 
-import com.knowledge.agentcore.config.AgentCoreProperties;
-import com.knowledge.agentcore.entity.AgentLongMemoryEntity;
-import com.knowledge.agentcore.mapper.AgentLongMemoryMapper;
+import com.knowledge.agent.core.config.AgentCoreProperties;
+import com.knowledge.agent.core.entity.AgentLongMemoryEntity;
+import com.knowledge.agent.core.mapper.AgentLongMemoryMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

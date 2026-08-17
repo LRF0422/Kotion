@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.event;
+package com.knowledge.agent.core.event;
 
 import java.util.List;
 import java.util.Map;

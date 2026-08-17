@@ -1,7 +1,7 @@
-package com.knowledge.agentcore.context;
+package com.knowledge.agent.core.context;
 
 import com.knowledge.agent.api.dto.ChatMessage;
-import com.knowledge.agentcore.run.AgentRun;
+import com.knowledge.agent.core.run.AgentRun;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;

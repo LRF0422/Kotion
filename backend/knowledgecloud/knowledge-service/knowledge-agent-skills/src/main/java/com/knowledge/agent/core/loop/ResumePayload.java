@@ -1,4 +1,4 @@
-package com.knowledge.agentcore.loop;
+package com.knowledge.agent.core.loop;
 
 import lombok.Data;
 

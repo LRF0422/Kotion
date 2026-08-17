@@ -1,6 +1,6 @@
-package com.knowledge.agentcore.memory;
+package com.knowledge.agent.core.memory;
 
-import com.knowledge.agentcore.entity.AgentLongMemoryEntity;
+import com.knowledge.agent.core.entity.AgentLongMemoryEntity;
 import lombok.Data;
 
 import java.util.ArrayList;
