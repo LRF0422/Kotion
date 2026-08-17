@@ -4,6 +4,7 @@ import com.knowledge.agent.core.loop.AgentLoop;
 import com.knowledge.agent.core.supervisor.DefaultRunSupervisor;
 import com.knowledge.core.secure.provider.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
+import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
@@ -56,5 +57,12 @@ class AgentCoreScanTest {
         ConditionalOnMissingBean conditional =
                 method.getAnnotation(ConditionalOnMissingBean.class);
         assertNotNull(conditional, "fallback must be @ConditionalOnMissingBean (never override the framework)");
+    }
+
+    @Test
+    void autoConfigurationDeclaresModuleLocalMapperScan() {
+        MapperScan scan = AgentCoreAutoConfiguration.class.getAnnotation(MapperScan.class);
+        assertNotNull(scan, "the agent module must register its own mappers (framework scan is not guaranteed)");
+        assertEquals("com.knowledge.agent.core.mapper", scan.value()[0]);
     }
 }

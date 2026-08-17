@@ -1,6 +1,7 @@
 package com.knowledge.agent.core.config;
 
 import com.knowledge.core.secure.provider.JwtTokenProvider;
+import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -21,8 +22,15 @@ import java.util.concurrent.atomic.AtomicInteger;
  * component-scan base), so every runtime bean (stores / event log / gateway /
  * loop / supervisor / controllers) is registered by the application's own
  * component scan. No spring.factories, no extra @ComponentScan.
+ *
+ * <p>This configuration also declares the module's own {@code @MapperScan}:
+ * the platform's global scan lives in a framework auto-configuration whose
+ * registration file is missing from the repository source snapshot, so the
+ * agent module registers its mappers itself. When the platform also registers
+ * them, the launcher's bean-definition-overriding makes the duplicate harmless.
  */
 @Configuration
+@MapperScan("com.knowledge.agent.core.mapper")
 @EnableConfigurationProperties(AgentCoreProperties.class)
 public class AgentCoreAutoConfiguration {
 

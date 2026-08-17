@@ -322,6 +322,15 @@ agent/
 对平台安全栈的唯一依赖：`AgentCoreAutoConfiguration` 中一个 `@ConditionalOnMissingBean` 的
 `JwtTokenProvider` 兜底 @Bean —— 平台已注册时绝不生效，平台缺失时才兜底，不改动平台任何文件。
 
+### 14.7 修复记录：Mapper 未注册（AgentRunCheckpointMapper not found）
+
+平台的全局 `@MapperScan("com.knowledge.**.mapper.**")` 声明在 knowledge-core-mybatis 的
+`MybatisPlusConfiguration` 上，但该模块在仓库源码里**没有注册文件**（spring.factories / .imports）——
+生产私服 jar 有、源码快照没有。从源码构建 framework 时全局扫描不生效，agent 的 Mapper 全部未注册。
+修复（不碰 framework）：`AgentCoreAutoConfiguration` 声明模块自身的
+`@MapperScan("com.knowledge.agent.core.mapper")`；与平台全局扫描并存时由启动器的
+bean-definition-overriding 兜底，无副作用。守卫断言已加入 `AgentCoreScanTest`。
+
 守卫测试：`AgentCoreScanTest`（运行时类必须在 `com.knowledge.agent.*` 内、自动装配不得声明
 @ComponentScan、兜底 Bean 存在且带 @ConditionalOnMissingBean）+ `EditorAgentControllerMappingTest`
 （URL 契约 + 包位置）。
