@@ -21,9 +21,16 @@ import java.util.concurrent.atomic.AtomicInteger;
  * {@code META-INF/spring.factories} and declares the scan for its own package
  * tree here, so stores / event log / gateway / loop / supervisor / controllers
  * are all registered without touching the application class.
+ *
+ * <p>{@code com.knowledge.core.secure} is scanned as a fallback too:
+ * knowledge-core-secure registers {@code JwtTokenProvider} as a @Component
+ * ({@code com.knowledge.core.secure.provider}) but some framework jar versions
+ * ship without the matching scan, which fails the boot with "required a bean
+ * of type JwtTokenProvider". {@code spring.main.allow-bean-definition-overriding}
+ * is enabled by the platform launcher, so duplicates are harmless.
  */
 @Configuration
-@ComponentScan(basePackages = "com.knowledge.agentcore")
+@ComponentScan(basePackages = { "com.knowledge.agentcore", "com.knowledge.core.secure" })
 @EnableConfigurationProperties(AgentCoreProperties.class)
 public class AgentCoreAutoConfiguration {
 

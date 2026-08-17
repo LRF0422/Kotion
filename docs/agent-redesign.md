@@ -316,3 +316,18 @@ agent/
 并在其上声明 `@ComponentScan("com.knowledge.agentcore")`；Mapper 由全局
 `@MapperScan("com.knowledge.**.mapper.**")` 覆盖，无需改动。部署后重启 agent 服务即生效。
 
+### 14.6 修复记录：启动报 JwtTokenProvider 缺失
+
+`KnowledgeSecurityConfiguration`（knowledge-core-secure，经 spring.factories 注册）构造函数要求
+`JwtTokenProvider` Bean；该 Bean 是 `com.knowledge.core.secure.provider` 下的 `@Component`，
+但整个后端没有任何扫描覆盖这个包（framework 源码将 provider 改成 @Component 时遗漏了扫描声明；
+旧生产 jar 为 @Bean 注册所以旧服务能启动，从当前源码重编译后启动失败）。
+
+修复（双保险）：
+1. framework：`SecureConfiguration` 增加 `@ComponentScan("com.knowledge.core.secure")`，惠及所有服务；
+2. agent 侧兜底：`AgentCoreAutoConfiguration` 的扫描扩为
+   `{"com.knowledge.agentcore", "com.knowledge.core.secure"}`，即使构建解析到旧版 secure jar 也能启动
+   （平台启动器已开启 allow-bean-definition-overriding，重复注册无副作用）。
+
+守卫测试：`AgentCoreScanTest`（两处 @ComponentScan 声明）。
+
