@@ -1,23 +1,11 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Editor, Plugin, PluginKey, Decoration, DecorationSet } from '@kn/editor'
-import { Sparkles, Send, X, Loader2, CheckCircle2, XCircle, MessageSquare, AlertTriangle } from '@kn/icon'
-import { Button, Badge, Streamdown } from '@kn/ui'
-import { useEditorAgentOptimized, useStreamBuffer, applySubAgentAnnotations, type ToolExecutionEvent, type UserChoiceRequest } from '@kn/common'
-import { SubAgentTree } from './system-agent/SubAgentTree'
+import { Sparkles, Send, X, Loader2, MessageSquare, XCircle } from '@kn/icon'
+import { Button, Streamdown } from '@kn/ui'
+import { streamKnowledgeText } from '@kn/common'
 
 // ─── shared ─────────────────────────────────────────────────────
-
-interface ExecutionStep {
-    id: string
-    toolName: string
-    args: any
-    result?: any
-    error?: string
-    status: 'running' | 'success' | 'error'
-    timestamp: number
-    duration?: number
-}
 
 interface SelectionSnapshot {
     from: number
@@ -27,9 +15,6 @@ interface SelectionSnapshot {
 }
 
 const AI_INLINE_EVENT = 'ai-inline-open'
-
-const formatToolName = (name: string) =>
-    name.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim()
 
 // ─── Virtual selection decoration plugin ────────────────────────
 
@@ -121,31 +106,15 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
     const [open, setOpen] = useState(false)
     const [input, setInput] = useState('')
     const [isLoading, setIsLoading] = useState(false)
-    const [steps, setSteps] = useState<ExecutionStep[]>([])
     const [response, setResponse] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [streamText, setStreamText] = useState<string | null>(null)
-    const [annotations, setAnnotations] = useState<any[]>([])
     const [position, setPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
-
-    // Sub-agent tree (P6) derived from the annotation stream (read-only here —
-    // the inline bubble is single-turn so there is no plan-approval resume).
-    const subAgents = useMemo(() => applySubAgentAnnotations({}, annotations), [annotations])
 
     const selectionRef = useRef<SelectionSnapshot | null>(null)
     const panelRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLTextAreaElement>(null)
-    const stepsRef = useRef<ExecutionStep[]>([])
-
-    // Use shared streaming buffer hook instead of manual RAF management
-    const streamBuffer = useStreamBuffer()
-
-    // Sync streaming buffer content to streamText state
-    useEffect(() => {
-        if (streamBuffer.content) {
-            setStreamText(streamBuffer.content)
-        }
-    }, [streamBuffer.content])
+    const abortRef = useRef<AbortController | null>(null)
 
     // ── register / unregister decoration plugin ──
     useEffect(() => {
@@ -157,44 +126,6 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
             editor.unregisterPlugin(aiSelectionKey)
         }
     }, [editor])
-
-    // ── agent callbacks ──
-    const handleToolExecution = useCallback((event: ToolExecutionEvent) => {
-        if (event.status === 'start') {
-            const newStep: ExecutionStep = {
-                id: `step-${event.timestamp}-${Math.random().toString(36).substr(2, 9)}`,
-                toolName: event.toolName,
-                args: event.args,
-                status: 'running',
-                timestamp: event.timestamp,
-            }
-            stepsRef.current = [...stepsRef.current, newStep]
-            setSteps([...stepsRef.current])
-        } else {
-            const updatedSteps = stepsRef.current.map((step) => {
-                if (step.toolName === event.toolName && step.status === 'running') {
-                    return {
-                        ...step,
-                        result: event.result,
-                        error: event.error,
-                        status: (event.status === 'success' ? 'success' : 'error') as 'success' | 'error',
-                        duration: event.duration,
-                    }
-                }
-                return step
-            })
-            stepsRef.current = updatedSteps
-            setSteps([...updatedSteps])
-        }
-    }, [])
-
-    const handleUserChoiceRequest = useCallback((request: UserChoiceRequest): Promise<string> => {
-        return new Promise((resolve) => {
-            if (request.options.length > 0) resolve(request.options[0].id)
-        })
-    }, [])
-
-    const { stream, stop } = useEditorAgentOptimized(editor, handleToolExecution, handleUserChoiceRequest)
 
     // ── listen for trigger event ──
     useEffect(() => {
@@ -218,11 +149,9 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
             setOpen(true)
             setInput('')
             setIsLoading(false)
-            setSteps([])
             setResponse(null)
             setError(null)
-            stepsRef.current = []
-            resetBuffer()
+            setStreamText(null)
 
             setTimeout(() => inputRef.current?.focus(), 50)
         }
@@ -231,21 +160,17 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
         return () => dom.removeEventListener(AI_INLINE_EVENT, onOpen)
     }, [editor])
 
-    // Reset helper
-    const resetBuffer = useCallback(() => {
-        streamBuffer.reset()
-        setStreamText(null)
-    }, [streamBuffer])
-
     // ── close ──
     const handleClose = useCallback(() => {
-        if (isLoading) stop()
+        abortRef.current?.abort()
         setOpen(false)
         selectionRef.current = null
-        resetBuffer()
+        setStreamText(null)
+        setResponse(null)
+        setError(null)
         // Clear virtual selection highlight
         try { setVirtualSelection(editor, null) } catch { }
-    }, [isLoading, stop, resetBuffer, editor])
+    }, [editor])
 
     // Escape
     useEffect(() => {
@@ -276,45 +201,43 @@ export const AiInlinePanel: React.FC<{ editor: Editor }> = ({ editor }) => {
 
         const selectedText = selectionRef.current?.text || ''
         const prompt = selectedText
-            ? `用户选中了以下文本:
-\`\`\`
-${selectedText}
-\`\`\`
-
-用户指令: ${input.trim()}`
+            ? '用户选中了以下文本:\n```\n' + selectedText + '\n```\n\n用户指令: ' + input.trim()
             : input.trim()
+
+        abortRef.current?.abort()
+        const ac = new AbortController()
+        abortRef.current = ac
 
         setIsLoading(true)
         setError(null)
         setResponse(null)
-        stepsRef.current = []
-        setSteps([])
-        setAnnotations([])
-        resetBuffer()
+        setStreamText('')
 
+        let acc = ''
         try {
-            const { textStream } = await stream({
-                prompt,
-                onAnnotation: (anns: any[]) => setAnnotations(prev => [...prev, ...anns]),
-            })
+            const { textStream } = streamKnowledgeText(prompt, { signal: ac.signal })
             for await (const part of textStream) {
-                streamBuffer.append(part)
+                if (ac.signal.aborted) break
+                acc += part
+                setStreamText(acc)
             }
-            setResponse(streamBuffer.getRawContent())
-            resetBuffer()
+            if (!ac.signal.aborted) {
+                setResponse(acc)
+                setStreamText(null)
+            }
         } catch (err: any) {
-            if (err?.name === 'AbortError' || err?.message?.includes('abort')) {
-                const content = streamBuffer.getRawContent()
-                if (content) setResponse(content)
-                resetBuffer()
+            if (err?.name === 'AbortError' || err?.message?.includes('abort') || ac.signal.aborted) {
+                if (acc) setResponse(acc)
+                setStreamText(null)
             } else {
                 setError(err?.message || '执行失败，请重试')
-                resetBuffer()
+                setStreamText(null)
             }
         } finally {
+            if (abortRef.current === ac) abortRef.current = null
             setIsLoading(false)
         }
-    }, [input, isLoading, stream, resetBuffer, streamBuffer])
+    }, [input, isLoading])
 
     const handleInputKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -381,61 +304,8 @@ ${selectedText}
                 </div>
             </div>
 
-            {/* Scrollable content area — steps + response + error */}
+            {/* Scrollable content area — streaming / response / error */}
             <div className="flex-1 min-h-0 overflow-y-auto">
-                {/* Steps */}
-                {steps.length > 0 && (
-                    <div className="px-3 py-2 border-b border-border/30">
-                        <div className="space-y-1">
-                            {steps.map((step) => (
-                                <div key={step.id} className={`rounded ${step.status === 'error' ? 'bg-red-50/50 dark:bg-red-950/20 p-1.5' : ''}`}>
-                                    <div className="flex items-center gap-2 text-[11px]">
-                                        {step.status === 'running' ? (
-                                            <Loader2 className="h-3 w-3 animate-spin text-indigo-500 shrink-0" />
-                                        ) : step.status === 'success' ? (
-                                            <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
-                                        ) : (
-                                            <XCircle className="h-3 w-3 text-red-500 shrink-0" />
-                                        )}
-                                        <Badge
-                                            variant="outline"
-                                            className="text-[10px] px-1.5 py-0 font-mono border-indigo-200/50 dark:border-indigo-800/50"
-                                        >
-                                            {formatToolName(step.toolName)}
-                                        </Badge>
-                                        {step.duration && (
-                                            <span className={`text-[10px] ${step.status === 'error' ? 'text-red-500' : 'text-muted-foreground'}`}>{step.duration}ms</span>
-                                        )}
-                                    </div>
-                                    {step.status === 'error' && (
-                                        <div className="ml-5 mt-1 space-y-0.5">
-                                            {step.args && Object.keys(step.args).length > 0 && (
-                                                <div className="text-[9px] text-muted-foreground/80 font-mono bg-muted/50 rounded px-1.5 py-0.5 truncate max-w-full">
-                                                    {Object.entries(step.args).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(', ').slice(0, 100)}
-                                                </div>
-                                            )}
-                                            {step.error && (
-                                                <div className="flex items-start gap-1 text-[9px] text-red-500 dark:text-red-400">
-                                                    <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
-                                                    <span className="break-words">{step.error}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Sub-agent tree (P6) */}
-                {Object.keys(subAgents).length > 0 && (
-                    <div className="px-3 py-2 border-b border-border/30">
-                        <SubAgentTree subAgents={subAgents} />
-                    </div>
-                )}
-
-                {/* Streaming / Response */}
                 {(streamText || response) && (
                     <div className="px-3 py-2">
                         <div className="text-xs text-foreground/90">
@@ -446,7 +316,6 @@ ${selectedText}
                     </div>
                 )}
 
-                {/* Error */}
                 {error && (
                     <div className="px-3 py-2">
                         <div className="flex items-center gap-2 text-xs text-red-500">

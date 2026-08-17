@@ -58,13 +58,9 @@ make clean
   - `knowledge-message`: Messaging
   - `knowledge-log`: Logging
 - **knowledge-service-api**: API definitions (interfaces, DTOs, enums)
-  - `knowledge-agent-api`: AI Agent API (DTOs, annotations, Feign client).
-    > The V2 engine lives in `knowledge-agent-skills` (`com.knowledge.agent.v2`):
-    > reactive state machine (INIT→THINK→ACT→OBSERVE) + durable task model
-    > (`POST /api/v2/agent/tasks`, event-sourced replay/resume). The legacy
-    > `ModelProvider`/`DeepSeekProvider` classes were removed as dead code.
+  > `knowledge-agent-api`: ChatMessage/ChatCompletionRequest 等消息 DTO（被 AgentCore 复用）。
 - **knowledge-tool**: Core frameworks and utilities
-  - `knowledge-core-agent`: Agent core framework
+  - `knowledge-core-agent`: Agent SDK — 其它微服务用 `@AgentSkill` 注册远程技能（保留）；agent 侧消费端已重写为 `com.knowledge.agentcore.skill.*`
   - `knowledge-core-boot`: Spring Boot extensions
   - `knowledge-core-common`: Common utilities
   - `knowledge-core-mybatis`: MyBatis extensions
@@ -73,13 +69,40 @@ make clean
 - **knowledge-ops**: Operations services (admin, swagger, resource, develop, report)
 - **knowledge-common**: Shared common code
 
+### AgentCore（从 0 重设计，替代 V1/V2/V3）
+
+`knowledge-service/knowledge-agent-skills` 内新包 `com.knowledge.agentcore.*`；旧包
+`com.knowledge.agent.{channel,core,config,observability,registry,store,tool,controller,v2,v3}` 已删除
+（仅保留 `com.knowledge.agent.llm.*` 的 LlmClientFactory 基础设施）。设计文档：
+仓库根 `docs/agent-redesign.md`。
+
+- **Run（一次执行单元）**：状态机 QUEUED→RUNNING⇄WAITING_TOOLS/SUSPENDED→COMPLETED|FAILED|CANCELLED；
+  supervisor 负责生命周期/租约/配额，loop（同步驱动、每 run 一线程）负责执行。
+- **断点恢复**：事件先落 Redis ZSET 再推流（MySQL `agent_run_event` 异步镜像）；
+  `agent_run_checkpoint` 每轮推理前落快照；租约过期后 reconcile 从快照+事件日志重建 loop。
+- **记忆三层**：工作记忆（checkpoint 内 scratchpad + 工具）、会话记忆（`agent_thread` 摘要，
+  ThreadSummarizer 完成时异步生成）、长期记忆（`agent_long_memory`，页面/空间/用户分级 scope，
+  KeywordMemoryRetriever 打分，MemoryRetriever 接口预留 embedding）。
+- **子 agent**：`delegate` 工具 → 子 run（parent_run_id 关联、独立预算/事件日志）；父 loop 转发子任务的
+  tool.requested（带 subRunId）给客户端并路由结果；sub.spawned/sub.completed/sub.failed 进父日志；取消级联。
+- **Plan 模式**：read-only 工具门禁 + `present_plan` 拦截 → plan.proposed + suspend(plan_approval)。
+- **API**：`/api/agent/v1/**`（EditorAgentController，SSE 事件协议 {seq,type,...}）；管理端
+  `/admin/ai/**` 用量聚合改读 `agent_run`；模型列表 `/api/v1/models` 不变；远程技能注册
+  `/api/v1/skills/*` 契约不变（RemoteSkillController）。
+- **DB 迁移 V7**（`script/migration/V7__agentcore.sql`）：agent_run / agent_run_event /
+  agent_run_checkpoint / agent_long_memory / agent_thread。旧表保留数据不删。
+
 ### Key Patterns
 
-- **Annotation-driven Skills**: Use `@Skill`, `@Tool`, `@SkillMethod` annotations in `knowledge-agent-api`
-- **LLM Abstraction**: `LlmClient`/`LlmClientFactory` (OpenAI-compatible providers) + `LlmAdapter`/`ResilientLlmAdapter` (v2 engine); the legacy `ModelProvider`/`DeepSeekProvider` classes were removed as dead code
-- **Multi-agent**: `delegate_task` tool spawns isolated child sessions through the same V2 engine (spawned/output/reasoning/progress/completed events stream to the parent); the old DAG `OrchestratorV2` was removed as dead code
-- **Plan Mode**: `AgentMode.PLAN` gates the tool catalog to read-only tools (hard gate in `ActHandler`), `present_plan` is intercepted into `plan.proposed` + `suspended:plan_approval`, and `POST /tasks/{id}/resume` carries the decision
-- **Session Persistence**: event-sourced task log (Redis ZSET + `agent_task_event` mirror) + JDBC session snapshots (`SessionSnapshotCodec`), not the legacy `AgentMessageEntity`/`AgentToolCallEntity`
+- **远程技能注册**: 其它微服务用 knowledge-core-agent SDK 的 `@AgentSkill` 注解注册；
+  agent 侧 `RemoteSkillRegistry` Redis 持久化 + 启动恢复 + 心跳保鲜。
+- **LLM Abstraction**: `LlmClient`/`LlmClientFactory`（OpenAI 兼容 provider，`agent.providers.*` 配置）；
+  AgentCore 的 `LlmGateway` 是唯一调用入口（同步驱动 + 流式工具调用累积）。
+- **Multi-agent**: `delegate` 工具创建子 run，父 loop 阻塞等待子终态并聚合结果。
+- **Plan Mode**: mode=plan 时工具门禁只读；`present_plan` 由 loop 拦截为计划审批挂起；
+  `POST /runs/{id}/resume` 携带 {action: approve_plan, planDecision}。
+- **Session Persistence**: 事件溯源（Redis ZSET 热 + MySQL 冷）+ `agent_run_checkpoint` 快照；
+  不再使用旧 `agent_message`/`agent_task_event`（旧表保留备查）。
 
 ### Technology Stack
 

@@ -1,18 +1,14 @@
 /**
- * AI text helpers, backed by the Knowledge Agent V2 TASK API.
+ * AI text helpers — backed by AgentCore (the redesigned agent API).
  *
- * These helpers stream plain text through the async task protocol
- * (POST /tasks → GET /tasks/{id}/events) instead of the legacy synchronous
- * /chat endpoint, so inline AI features share the durable, resumable agent
- * path. Only `text-delta` events are surfaced; an `error` event rejects the
- * stream.
+ * These helpers stream plain text through the new run protocol
+ * (POST /api/agent/v1/runs, then GET /runs/{id}/events) with tools disabled,
+ * so inline AI features share the durable, resumable agent path. Only
+ * text-delta events are surfaced; run.failed rejects the stream.
  */
 
-import { parseV2SSEStream } from "./chat-client/v2-sse-parser"
-import type { ChatMessage } from "./chat-client/types"
-import { authorizedFetch } from "../utils/session"
-
-const TASK_API_BASE = "/api/knowledge-agent/api/v2/agent/tasks"
+import { AgentClient } from './agent'
+import type { AgentChatMessage } from './agent/types'
 
 export interface StreamTextOptions {
     /** Abort the underlying request. */
@@ -23,56 +19,34 @@ export interface StreamTextOptions {
     system?: string
 }
 
+const defaultClient = new AgentClient()
+
 /**
- * Stream plain text from the Knowledge Agent backend given a full message list
- * (enables multi-turn / refine flows). Returns `{ textStream }` — an async
- * iterable of text deltas.
+ * Stream plain text from the AgentCore backend given a full message list
+ * (enables multi-turn / refine flows).
  */
 export function streamKnowledgeChat(
-    messages: ChatMessage[],
-    options: Omit<StreamTextOptions, "system"> = {}
+    messages: AgentChatMessage[],
+    options: Omit<StreamTextOptions, 'system'> = {}
 ): { textStream: AsyncGenerator<string> } {
+    const client = defaultClient
+
     async function* textStream(): AsyncGenerator<string> {
-        // 1. Create the async task (returns immediately with a taskId).
-        const createResponse = await authorizedFetch(TASK_API_BASE, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                model: options.model,
-                messages,
-                stream: true,
-                temperature: 0.7,
-                toolChoice: 'none',
-            }),
-            signal: options.signal,
+        const conversationId = 'inline-' + Math.random().toString(36).slice(2)
+        const run = await client.createRun({
+            conversationId,
+            model: options.model,
+            mode: 'execute',
+            messages,
+            tools: [],
+            skills: [],
+            noTools: true,
         })
-        if (!createResponse.ok) {
-            throw new Error(`Agent API error (${createResponse.status})`)
-        }
-        const json = await createResponse.json().catch(() => ({} as any))
-        const taskId = json?.data?.taskId as string | undefined
-        if (!taskId) {
-            throw new Error("Agent API returned no taskId")
-        }
-
-        // 2. Stream the task's events (replay + live).
-        const response = await authorizedFetch(`${TASK_API_BASE}/${taskId}/events`, {
-            method: "GET",
-            headers: {},
-            signal: options.signal,
-        })
-        if (!response.ok) {
-            throw new Error(`Agent task events error (${response.status})`)
-        }
-        if (!response.body) {
-            throw new Error("Agent task events response body is null")
-        }
-
-        for await (const event of parseV2SSEStream(response.body)) {
-            if (event.type === "text-delta") {
+        for await (const event of client.streamEvents(run.runId, 0, options.signal)) {
+            if (event.type === 'text.delta') {
                 yield event.content
-            } else if (event.type === "error") {
-                throw new Error(event.error)
+            } else if (event.type === 'run.failed') {
+                throw new Error(event.error ?? event.code ?? 'agent failed')
             }
         }
     }
@@ -81,25 +55,24 @@ export function streamKnowledgeChat(
 }
 
 /**
- * Stream plain text from a single prompt (optionally with a system instruction).
- * Thin wrapper over {@link streamKnowledgeChat}; drop-in for the old
- * `generateText().textStream` consumption pattern.
+ * Stream plain text from a single prompt (optionally with a system
+ * instruction). Thin wrapper over streamKnowledgeChat.
  */
 export function streamKnowledgeText(
     prompt: string,
     options: StreamTextOptions = {}
 ): { textStream: AsyncGenerator<string> } {
-    const messages: ChatMessage[] = []
-    if (options.system) messages.push({ role: "system", content: options.system })
-    messages.push({ role: "user", content: prompt })
+    const messages: AgentChatMessage[] = []
+    if (options.system) messages.push({ role: 'system', content: options.system })
+    messages.push({ role: 'user', content: prompt })
 
     return streamKnowledgeChat(messages, { model: options.model, signal: options.signal })
 }
 
 /**
- * @deprecated Use {@link streamKnowledgeText}.
+ * @deprecated Use streamKnowledgeText.
  * Thin backwards-compatible wrapper kept for existing callers; the second
- * argument (previously `tools`) is ignored.
+ * argument (previously tools) is ignored.
  */
 const generateText = (prompt: string, _tools?: any): { textStream: AsyncGenerator<string> } => {
     return streamKnowledgeText(prompt)

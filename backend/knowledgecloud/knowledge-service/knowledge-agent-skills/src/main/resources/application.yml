@@ -6,46 +6,44 @@ agent:
   # usually supplied via Nacos / environment config)
   default-provider: deepseek
   default-model: deepseek-chat
-  # ---- V2 engine (AgentProperties) ----
-  engine:
-    max-iterations: 20
-    streaming-enabled: true
+  # ---- AgentCore runtime (from-0 redesign; replaced the V2 engine config) ----
+  run:
+    max-steps: 24
     max-delegate-depth: 2
     delegate-timeout-seconds: 600
+    waiting-tools-timeout-seconds: 600
   llm:
     timeout-seconds: 120
-    max-retries: 3
     idle-timeout-seconds: 30
   tool:
     timeout-seconds: 180
     max-parallel: 5
-  orchestrator:
-    enabled: false
   context:
     max-context-tokens: 60000
     compaction-threshold: 0.75
     keep-recent-messages: 8
     tool-result-max-chars: 8000
-    evict-tool-results-after-iterations: 3
-    # Optional cheaper model for L2 summarization; empty = follow session model.
+    evict-tool-results-after-steps: 3
+    # Optional cheaper model for L2 summarization; empty = follow the run model.
     compaction-model:
     summary-max-tokens: 1024
     summary-prompt-max-chars: 20000
-  state:
-    backend: jdbc
-    # Checkpoint after EVERY think iteration — a crash can then only re-run a
-    # single tool round at most.
-    snapshot-interval: 1
-  rate-limit:
+  checkpoint:
     enabled: true
-    requests-per-minute: 60
-    max-concurrent-sessions: 0  # 0 = unlimited concurrent tasks
-    task-create-per-minute: 30
-  event-store:
-    enabled: true
-    max-events: 2000
+  event:
     ttl-hours: 24
-    event-retention-days: 30
+    retention-days: 30
+    max-events-per-run: 2000
+  memory:
+    enabled: true
+    top-k: 5
+    hot-ttl-days: 7
+  quota:
+    enabled: true
+    create-per-minute: 30
+    max-concurrent-per-tenant: 0  # 0 = unlimited concurrent tasks
+  lease:
+    ttl-seconds: 30
   skill:
     web-search:
       enabled: true
@@ -58,6 +56,7 @@ agent:
     web-fetch:
       timeout-seconds: 15
       max-content-length: 50000
+    # ---- kept until M3 removes the legacy consumer ----
     dataset-search:
       enabled: true
       provider: huggingface

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Bot, Trash2, X, Plus } from '@kn/icon'
+import { Trash2, X, Plus } from '@kn/icon'
 import {
     Button,
     Tooltip,
@@ -19,8 +19,6 @@ interface ChatHeaderProps {
     onNewSession: () => void
     onDelete: (id: string) => void
     onClear: () => void
-    /** Open the custom agent definitions manager dialog. */
-    onOpenAgentManager: () => void
 }
 
 /**
@@ -35,7 +33,6 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     onNewSession,
     onDelete,
     onClear,
-    onOpenAgentManager,
 }) => {
     const chatContext = useChatContext()
     return (
@@ -49,19 +46,6 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             />
             <div className="flex items-center gap-px shrink-0">
                 <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={onOpenAgentManager}
-                                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                                <Bot className="h-3.5 w-3.5" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">Manage agents</TooltipContent>
-                    </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button

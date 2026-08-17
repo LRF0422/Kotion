@@ -7,7 +7,7 @@ import {
     streamKnowledgeChat,
     parseMarkdownToNodes,
     useTranslation,
-    type ChatMessage,
+    type AgentChatMessage,
 } from "@kn/common";
 import {
     AI_ACTION_MAP,
@@ -94,7 +94,7 @@ export const AiToolsPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const abortRef = useRef<AbortController | null>(null);
     // The running conversation (system + turns). Refine appends to it.
-    const messagesRef = useRef<ChatMessage[]>([]);
+    const messagesRef = useRef<AgentChatMessage[]>([]);
 
     // register / unregister the highlight plugin
     useEffect(() => {
@@ -113,7 +113,7 @@ export const AiToolsPanel: React.FC<{ editor: Editor }> = ({ editor }) => {
     }, []);
 
     /** Stream a message list, accumulating deltas into `result`. */
-    const runMessages = useCallback(async (messages: ChatMessage[]) => {
+    const runMessages = useCallback(async (messages: AgentChatMessage[]) => {
         messagesRef.current = messages;
         abortRef.current?.abort();
         const ac = new AbortController();

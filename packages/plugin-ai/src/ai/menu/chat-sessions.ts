@@ -14,8 +14,6 @@ const LEGACY_CONVERSATION_KEY = 'agent-conversation-id'
 // ─── Limits ────────────────────────────────────────────────────────
 const MAX_MESSAGES_PER_SESSION = 100
 const MAX_SESSIONS = 50
-/** Backend Agent session TTL (sessions expire into a fresh backend session). */
-export const BACKEND_SESSION_TTL_MS = 30 * 60 * 1000
 
 // ─── Types ─────────────────────────────────────────────────────────
 /** A page bound to a chat session via the @-mention picker. */
@@ -32,14 +30,6 @@ export interface ChatSessionMeta {
     title: string
     createdAt: number
     updatedAt: number
-    /** Backend Agent sessionId (if one has been established and is still fresh). */
-    backendSessionId?: string
-    /** Backend Agent conversationId. */
-    backendConversationId?: string
-    /** Backend Agent async taskId (live job handle, used to re-attach after a refresh). */
-    backendTaskId?: string
-    /** Timestamp when the backend session was last seen (used for TTL). */
-    backendSessionUpdatedAt?: number
     /** Page this session's agent edits (off-screen) instead of the open document. */
     targetPage?: ChatTargetPage
 }
@@ -73,11 +63,6 @@ export function deriveTitle(messages: Message[]): string {
     const trimmed = firstUser.content.trim().replace(/\s+/g, ' ')
     if (!trimmed) return 'New chat'
     return trimmed.length > 30 ? `${trimmed.slice(0, 30)}…` : trimmed
-}
-
-export function isBackendSessionFresh(meta: ChatSessionMeta): boolean {
-    if (!meta.backendSessionId || !meta.backendSessionUpdatedAt) return false
-    return Date.now() - meta.backendSessionUpdatedAt < BACKEND_SESSION_TTL_MS
 }
 
 // ─── Index / active session ────────────────────────────────────────
@@ -139,10 +124,6 @@ export function migrateLegacy(): void {
     if (!legacyRaw) return
 
     const legacyMsgs = safeParse<Message[]>(legacyRaw, [])
-    const legacySid = localStorage.getItem(LEGACY_SESSION_KEY) || undefined
-    const legacyCid = localStorage.getItem(LEGACY_CONVERSATION_KEY) || undefined
-    const legacyTsRaw = localStorage.getItem(LEGACY_SESSION_TS_KEY)
-    const legacyTs = legacyTsRaw ? parseInt(legacyTsRaw, 10) : undefined
 
     // Clean legacy keys regardless so we don't re-run migration.
     safeRemove(LEGACY_MESSAGES_KEY)
@@ -159,9 +140,6 @@ export function migrateLegacy(): void {
         title: deriveTitle(legacyMsgs),
         createdAt: now,
         updatedAt: now,
-        backendSessionId: legacySid,
-        backendConversationId: legacyCid,
-        backendSessionUpdatedAt: Number.isFinite(legacyTs) ? (legacyTs as number) : undefined,
     }
     saveSessionMessages(id, legacyMsgs)
     saveIndex([meta])

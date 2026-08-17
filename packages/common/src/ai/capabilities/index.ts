@@ -8,3 +8,4 @@
 
 export { collectCapabilityCatalog } from './CapabilityCatalog'
 export type { CapabilityCatalog } from './CapabilityCatalog'
+export type { SkillPayload, ToolPayload } from './payload-types'

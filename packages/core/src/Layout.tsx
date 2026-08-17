@@ -6,7 +6,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { TourHost } from "./components/Tour/TourHost"
 import { ChevronLeft } from "@kn/icon"
 import { MobileTabBar } from "./components/mobile/MobileTabBar"
-import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, PLUGIN_INCOMPATIBLE, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime, SystemAgentProvider } from "@kn/common"
+import { useApi, APIS, useNavigator, useUploadFile, getAccessToken, clearTokens, useDispatch, AppContext, event, GO_TO_MARKETPLACE, PLUGIN_CHANGED, PLUGIN_INIT_SUCCESS, PLUGIN_INCOMPATIBLE, TOGGLE_AI_ASSISTANT, TOGGLE_DOCK_PANEL, dockRuntime } from "@kn/common"
 import { toast } from "@kn/ui"
 import React from "react"
 import { useAsyncEffect } from "ahooks"
@@ -253,9 +253,8 @@ export function Layout({ onPluginsReady }: LayoutProps) {
     const isDesktopShell = typeof window !== 'undefined' && typeof (window as any).api !== 'undefined'
 
     return (
-        <SystemAgentProvider>
-            <MobilePageHeaderProvider>
-                <div>
+        <MobilePageHeaderProvider>
+            <div>
                     {/* Onboarding / feature tours */}
                     <TourHost />
 
@@ -351,7 +350,6 @@ export function Layout({ onPluginsReady }: LayoutProps) {
                         </AlertDialog>
                     </div>
                 </div>
-            </MobilePageHeaderProvider>
-        </SystemAgentProvider>
+        </MobilePageHeaderProvider>
     )
 }

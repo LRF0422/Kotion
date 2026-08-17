@@ -1,61 +1,54 @@
 /**
- * Plan Approval Card (P7)
+ * Plan Approval Card — AgentCore 版。
  *
- * Renders a plan the agent proposed via `present_plan` (surfaced as
- * `useSystemAgent().state.pendingPlan`) and lets the user approve or reject it.
- * Approving resumes execution of the plan; rejecting re-plans.
- *
- * Prop types are local/structural on purpose — no coupling to `@kn/common`'s
- * internal type barrel.
+ * 展示 agent 在计划模式下提交的计划文本，用户批准（继续执行、开放全部
+ * 工具）或拒绝（附带反馈，agent 重新规划）。
  */
 
-import React from 'react'
-import { Sparkles, CheckCircle2, XCircle, AlertTriangle } from '@kn/icon'
+import React, { useState } from 'react'
+import { Sparkles, CheckCircle2, XCircle } from '@kn/icon'
 import { Button } from '../ui/button'
-import { Badge } from '../ui/badge'
 import { cn } from '../../lib/utils'
 
-interface PlanStepView {
-    id?: number
-    action: string
-    tools?: string[]
-    risk?: 'low' | 'medium' | 'high'
-}
-
-interface PlanView {
-    title?: string
-    summary: string
-    steps: PlanStepView[]
-    openQuestions?: string[]
-    estimatedMutations?: number
-}
-
 export interface PlanApprovalCardProps {
-    plan: PlanView
-    onApprove: () => void
-    onReject: () => void
-    /** Disable buttons while a resume request is in flight. */
-    disabled?: boolean
+    /** 计划文本（present_plan 的参数内容，可能为 JSON 或纯文本）。 */
+    planText: string
+    /** 用户决策回调（批准/拒绝 + 可选反馈）。 */
+    onDecision: (approved: boolean, feedback?: string) => void
     className?: string
 }
 
-const RISK_STYLES: Record<string, string> = {
-    low: 'text-green-600 dark:text-green-400 border-green-300/60',
-    medium: 'text-amber-600 dark:text-amber-400 border-amber-300/60',
-    high: 'text-red-600 dark:text-red-400 border-red-300/60',
-}
-
+/**
+ * 计划审批卡片。
+ */
 export const PlanApprovalCard: React.FC<PlanApprovalCardProps> = ({
-    plan,
-    onApprove,
-    onReject,
-    disabled,
+    planText,
+    onDecision,
     className,
 }) => {
+    const [feedback, setFeedback] = useState('')
+    const [inFlight, setInFlight] = useState(false)
+
+    const decide = (approved: boolean) => {
+        if (inFlight) return
+        setInFlight(true)
+        onDecision(approved, feedback.trim() || undefined)
+    }
+
+    let display = planText
+    try {
+        const parsed = JSON.parse(planText)
+        if (parsed && typeof parsed === 'object') {
+            display = parsed.summary || parsed.plan || JSON.stringify(parsed, null, 2)
+        }
+    } catch {
+        // 纯文本计划，直接展示
+    }
+
     return (
         <div
             className={cn(
-                'border border-blue-200/60 dark:border-blue-800/40 rounded-lg p-3 bg-blue-50/50 dark:bg-blue-950/20',
+                'mt-2 border border-blue-200/60 dark:border-blue-800/40 rounded-lg p-3 bg-blue-50/50 dark:bg-blue-950/20',
                 className
             )}
         >
@@ -66,68 +59,37 @@ export const PlanApprovalCard: React.FC<PlanApprovalCardProps> = ({
                 </span>
             </div>
 
-            {plan.title && (
-                <p className="text-sm font-medium mb-0.5">{plan.title}</p>
-            )}
-            {plan.summary && (
-                <p className="text-xs text-muted-foreground mb-2 whitespace-pre-wrap">{plan.summary}</p>
-            )}
+            <div className="text-xs whitespace-pre-wrap text-foreground/80 max-h-48 overflow-y-auto mb-2">
+                {display}
+            </div>
 
-            <ol className="space-y-1 mb-2">
-                {(plan.steps || []).map((step, i) => (
-                    <li key={step.id ?? i} className="flex items-start gap-1.5 text-xs">
-                        <span className="text-muted-foreground shrink-0">{i + 1}.</span>
-                        <span className="flex-1">
-                            {step.action}
-                            {step.tools && step.tools.length > 0 && (
-                                <span className="ml-1 text-[10px] text-muted-foreground">
-                                    🔧 {step.tools.join(', ')}
-                                </span>
-                            )}
-                        </span>
-                        {step.risk && (
-                            <Badge
-                                variant="outline"
-                                className={cn('text-[9px] px-1 py-0 shrink-0', RISK_STYLES[step.risk])}
-                            >
-                                {step.risk}
-                            </Badge>
-                        )}
-                    </li>
-                ))}
-            </ol>
+            <textarea
+                value={feedback}
+                onChange={e => setFeedback(e.target.value)}
+                placeholder="补充意见（可选），拒绝时会反馈给 agent…"
+                rows={2}
+                className="w-full resize-none text-xs bg-background/60 border border-border/50 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-blue-400/40 mb-2"
+            />
 
-            {plan.openQuestions && plan.openQuestions.length > 0 && (
-                <div className="mb-2 space-y-0.5">
-                    {plan.openQuestions.map((q, i) => (
-                        <div key={i} className="flex items-start gap-1 text-[11px] text-amber-600 dark:text-amber-400">
-                            <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
-                            <span>{q}</span>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {plan.estimatedMutations != null && (
-                <p className="text-[10px] text-muted-foreground mb-2">
-                    预计修改 {plan.estimatedMutations} 处
-                </p>
-            )}
-
-            <div className="flex items-center gap-2 pt-1">
-                <Button size="sm" className="h-7 text-xs gap-1" disabled={disabled} onClick={onApprove}>
-                    <CheckCircle2 className="h-3 w-3" />
+            <div className="flex items-center gap-2">
+                <Button
+                    size="sm"
+                    disabled={inFlight}
+                    className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={() => decide(true)}
+                >
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                     批准并执行
                 </Button>
                 <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 text-xs gap-1"
-                    disabled={disabled}
-                    onClick={onReject}
+                    disabled={inFlight}
+                    className="h-7 text-xs"
+                    onClick={() => decide(false)}
                 >
-                    <XCircle className="h-3 w-3" />
-                    拒绝
+                    <XCircle className="h-3.5 w-3.5 mr-1" />
+                    拒绝，重新规划
                 </Button>
             </div>
         </div>

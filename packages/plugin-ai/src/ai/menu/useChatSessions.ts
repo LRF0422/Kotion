@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 
-import type { AnnotationData, Message, SessionInfo } from './chat-types'
+import type { Message } from './chat-types'
 import {
     ChatSessionMeta,
     ChatTargetPage,
@@ -9,7 +9,6 @@ import {
     deriveTitle,
     generateSessionId,
     getActiveId,
-    isBackendSessionFresh,
     loadIndex,
     loadSessionMessages,
     migrateLegacy,
@@ -28,11 +27,6 @@ export interface UseChatSessionsResult {
     /** Messages of the active session. */
     messages: Message[]
     setMessages: Dispatch<SetStateAction<Message[]>>
-    /** Backend Agent ids — only provided if still within TTL. */
-    backendSessionId: string | undefined
-    backendConversationId: string | undefined
-    /** Backend Agent async taskId (live job handle), when still within TTL. */
-    backendTaskId: string | undefined
     /** Create a brand-new empty chat session and switch to it. */
     createSession: () => string
     /** Switch the active chat to the given session id. */
@@ -41,18 +35,12 @@ export interface UseChatSessionsResult {
     deleteSession: (id: string) => void
     /** Manually rename a session. */
     renameSession: (id: string, title: string) => void
-    /** Clear all messages & backend ids of the active session (keeps the session itself). */
+    /** Clear all messages of the active session (keeps the session itself). */
     clearActiveMessages: () => void
-    /** Clear the live task handle once a turn has fully completed. */
-    clearBackendTask: () => void
-    /** Refresh the backend-session TTL while a long stream is still active. */
-    refreshBackendSession: () => void
     /** Page bound to the active session (@-mention), if any. */
     targetPage: ChatTargetPage | undefined
     /** Bind / unbind the active session's target page. */
     setTargetPage: (page: ChatTargetPage | null) => void
-    /** Absorb backend session/conversation ids emitted in streaming annotations. */
-    parseAnnotations: (annotations: AnnotationData[]) => void
 }
 
 /**
@@ -61,7 +49,6 @@ export interface UseChatSessionsResult {
  * Responsibilities:
  * - Persists a session index + per-session messages in localStorage.
  * - Tracks the active session and exposes its messages.
- * - Maps backend Agent session/conversation ids onto the active chat session.
  * - Migrates legacy single-session storage on first run.
  */
 export function useChatSessions(): UseChatSessionsResult {
@@ -105,10 +92,6 @@ export function useChatSessions(): UseChatSessionsResult {
     // Persist messages + bump session metadata when messages change.
     useEffect(() => {
         if (!activeSessionId) return
-        // Ignore the transient render right after a session switch, where
-        // `activeSessionId` has changed but `messages` still holds the prior
-        // session's snapshot. The effect will fire again once `setMessages`
-        // catches up.
         if (messagesSessionRef.current !== activeSessionId) {
             messagesSessionRef.current = activeSessionId
             return
@@ -136,23 +119,6 @@ export function useChatSessions(): UseChatSessionsResult {
         () => sessions.find(s => s.id === activeSessionId) || null,
         [sessions, activeSessionId],
     )
-
-    // Only expose backend ids while they are fresh; otherwise the caller
-    // should start a new backend session.
-    const { backendSessionId, backendConversationId, backendTaskId } = useMemo(() => {
-        if (!activeSession || !isBackendSessionFresh(activeSession)) {
-            return {
-                backendSessionId: undefined,
-                backendConversationId: undefined,
-                backendTaskId: undefined,
-            }
-        }
-        return {
-            backendSessionId: activeSession.backendSessionId,
-            backendConversationId: activeSession.backendConversationId,
-            backendTaskId: activeSession.backendTaskId,
-        }
-    }, [activeSession])
 
     const updateMeta = useCallback(
         (id: string, patch: (s: ChatSessionMeta) => ChatSessionMeta) => {
@@ -251,36 +217,6 @@ export function useChatSessions(): UseChatSessionsResult {
         updateMeta(activeSessionId, s => ({
             ...s,
             title: 'New chat',
-            backendSessionId: undefined,
-            backendConversationId: undefined,
-            backendTaskId: undefined,
-            backendSessionUpdatedAt: undefined,
-            updatedAt: Date.now(),
-        }))
-    }, [activeSessionId, updateMeta])
-
-    // Refresh the backend-session TTL while a long stream is still active.
-    const backendSessionRefreshAtRef = useRef(0)
-    const refreshBackendSession = useCallback(() => {
-        const active = activeSession
-        if (!active || !active.backendSessionId) return
-        const now = Date.now()
-        if (now - backendSessionRefreshAtRef.current < 10_000) return
-        backendSessionRefreshAtRef.current = now
-        updateMeta(activeSessionId, s => ({
-            ...s,
-            backendSessionUpdatedAt: now,
-            updatedAt: now,
-        }))
-    }, [activeSession, activeSessionId, updateMeta])
-
-
-    // Clear the live task handle once a turn has fully completed (the final
-    // message is persisted), so a later refresh doesn't re-attach a stale task.
-    const clearBackendTask = useCallback(() => {
-        updateMeta(activeSessionId, s => ({
-            ...s,
-            backendTaskId: undefined,
             updatedAt: Date.now(),
         }))
     }, [activeSessionId, updateMeta])
@@ -298,59 +234,18 @@ export function useChatSessions(): UseChatSessionsResult {
         [activeSessionId, updateMeta],
     )
 
-    const parseAnnotations = useCallback(
-        (annotations: AnnotationData[]) => {
-            for (const ann of annotations) {
-                let sid: string | undefined
-                let cid: string | undefined
-                let tid: string | undefined
-                if (
-                    'type' in ann &&
-                    (ann as any).type === 'session-info' &&
-                    typeof (ann as any).sessionId === 'string'
-                ) {
-                    sid = (ann as any).sessionId
-                    cid = (ann as any).conversationId
-                    tid = (ann as any).taskId
-                } else if ('sessionId' in ann && typeof (ann as any).sessionId === 'string') {
-                    sid = (ann as SessionInfo).sessionId
-                    cid = (ann as SessionInfo).conversationId
-                    tid = (ann as any).taskId
-                }
-                if (sid) {
-                    updateMeta(activeSessionId, s => ({
-                        ...s,
-                        backendSessionId: sid,
-                        backendConversationId: cid ?? s.backendConversationId,
-                        backendTaskId: tid ?? s.backendTaskId,
-                        backendSessionUpdatedAt: Date.now(),
-                        updatedAt: Date.now(),
-                    }))
-                    break
-                }
-            }
-        },
-        [activeSessionId, updateMeta],
-    )
-
     return {
         sessions,
         activeSession,
         activeSessionId,
         messages,
         setMessages,
-        backendSessionId,
-        backendConversationId,
-        backendTaskId,
         createSession,
         switchSession,
         deleteSession,
         renameSession,
         clearActiveMessages,
-        clearBackendTask,
-        refreshBackendSession,
         targetPage,
         setTargetPage,
-        parseAnnotations,
     }
 }

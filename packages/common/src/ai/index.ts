@@ -1,5 +1,10 @@
+// AgentCore SDK — 全新 agent 前端（从 0 重设计）。
+export * from "./agent"
+
+// AI text helpers (streamKnowledgeText/streamKnowledgeChat — AgentCore-backed)
 export * from "./ai-utils"
-export * from "./use-agent-optimized"
+
+// Shared types (block/tool/skill/provider + ChatMode/ChatModelParams)
 export * from "./types"
 export { Output } from "ai"
 
@@ -21,47 +26,16 @@ export * from "./page-edit-window-bridge"
 // Providers
 export * from "./providers"
 
+// Capability providers wiring (tools/skills 供应商层，供面板与插件复用)
+export * from "./use-capability-providers"
+
 // Capability catalog collector (replaces progressive discovery on the frontend)
 export * from "./capabilities"
 
-// Chat Client - Backend-driven SSE communication (V2)
-// Explicitly export to avoid conflicts with types.ts re-exports
-export {
-    V2ChatClient,
-    parseV2SSEStream,
-    fetchModels,
-    listAgentDefinitions,
-    createAgentDefinition,
-    updateAgentDefinition,
-    deleteAgentDefinition,
-    fetchAgentTools,
-} from "./chat-client/index"
-export type {
-    AgentDefinition,
-    AgentDefinitionInput,
-    AgentToolInfo,
-} from "./chat-client/agent-definitions"
-export type {
-    ChatStreamEvent,
-    TextDeltaEvent,
-    ReasoningDeltaEvent,
-    ToolCallStreamEvent,
-    ToolResultEvent,
-    AnnotationStreamEvent,
-    SessionInfoEvent,
-    FinishEvent,
-    ErrorEvent,
-    ChatRequest,
-    ChatResponse,
-    ChatClientOptions,
-    ChatMessage,
-    ToolCall,
-    ToolCallDelta,
-    ModelInfo,
-    ModelsResponse,
-} from "./chat-client/types"
+// Model discovery — kept /api/v1/models endpoint
+export * from "./models"
 
-// Discovery
+// Discovery (built-in tool metadata; still used by ToolProvider)
 export * from "./discovery"
 
 // Skills
@@ -69,9 +43,3 @@ export * from "./skills"
 
 // Utils
 export * from "./utils"
-
-// System Agent - Logic (context + hooks, no UI)
-export * from "./system-agent"
-
-// V3 agent SDK (new architecture)
-export * from './v3'

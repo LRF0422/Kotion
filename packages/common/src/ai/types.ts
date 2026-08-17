@@ -179,25 +179,18 @@ export interface ToolProviderState {
     categories: CategoryInfo[]
 }
 
-// ============ Agent Annotation Types ============
-// Annotation types are now defined in @kn/common/ai/chat-client/types.ts
-// and re-exported from this module for backward compatibility.
-// The canonical types live in chat-client/types.ts to avoid circular dependencies.
+// ============ Chat Mode / Model Params ============
 
-export type {
-    Annotation,
-    AgentStatusAnnotation,
-    DelegateStartAnnotation,
-    SubagentStatusAnnotation,
-    SubagentOutputAnnotation,
-    SubagentToolCallAnnotation,
-    SubagentToolResultAnnotation,
-    DelegateResultAnnotation,
-    ContextCompressedAnnotation,
-} from './chat-client/types'
+/** Chat mode: "ask" = Q&A only (read-only), "agent" = can operate the page. */
+export type ChatMode = 'ask' | 'agent'
 
-/** Session info annotation (first SSE event) */
-export interface SessionInfoAnnotation {
-    sessionId: string
-    conversationId?: string
+/**
+ * User-tunable model parameters that ride along with every chat request.
+ * Fields are all optional — an unset value falls back to the backend default.
+ */
+export type ChatModelParams = {
+    /** Sampling temperature (typical range 0.0 – 2.0). */
+    temperature?: number
+    /** Cap on the response length in tokens. */
+    maxTokens?: number
 }

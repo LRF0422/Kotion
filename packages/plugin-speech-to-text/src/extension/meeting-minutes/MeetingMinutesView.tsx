@@ -1,7 +1,7 @@
 import { NodeViewProps, NodeViewWrapper, NodeViewContent, Editor, Node as PMNode } from "@kn/editor";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useMeetingRecorder } from "../../hooks/useMeetingRecorder";
-import { useFileService, useEditorAgentOptimized, useTranslation } from "@kn/common";
+import { useFileService, streamKnowledgeText, useTranslation } from "@kn/common";
 import { Popover, PopoverContent, PopoverTrigger, Calendar, cn, toast, format } from "@kn/ui";
 import {
     Mic, Pause, Play, Square, Sparkles,
@@ -211,8 +211,6 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
 
     const fileService = useFileService();
 
-    // AI streaming agent — MUST be called at the top level (not inside a callback).
-    const { stream } = useEditorAgentOptimized(editor as Editor);
 
     const hasCompletedData = !!(node.attrs.transcript || node.attrs.audioPath || node.attrs.audioUrl);
     const [state, setState] = useState<RecordingState>(() => (hasCompletedData ? 'completed' : 'idle'));
@@ -344,7 +342,7 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
 
             let summaryText = '';
             try {
-                const { textStream } = await stream({ prompt });
+                const { textStream } = streamKnowledgeText(prompt);
                 for await (const part of textStream) {
                     summaryText += part;
                 }
@@ -371,7 +369,7 @@ export const MeetingMinutesView: React.FC<NodeViewProps> = (props) => {
         } finally {
             setIsGeneratingSummary(false);
         }
-    }, [transcript, editor, getPos, stream, m]);
+    }, [transcript, editor, getPos, m]);
 
     // ─── Reset ──────────────────────────────────────────
 

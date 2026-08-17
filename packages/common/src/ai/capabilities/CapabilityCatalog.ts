@@ -7,7 +7,7 @@
  * activation based on the catalog it receives.
  */
 
-import type { SkillPayload, ToolPayload } from '../chat-client/types'
+import type { SkillPayload, ToolPayload } from './payload-types'
 import type { SkillProvider } from '../providers/SkillProvider'
 import type { ToolProvider } from '../providers/ToolProvider'
 import { resolveInputSchema } from '../utils/tool-wrapper'

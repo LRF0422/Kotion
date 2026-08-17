@@ -6,7 +6,7 @@ import {
     streamKnowledgeChat,
     parseMarkdownToNodes,
     useTranslation,
-    type ChatMessage,
+    type AgentChatMessage,
 } from "@kn/common";
 
 const AI_BLOCK_SYSTEM =
@@ -43,7 +43,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
     const [error, setError] = useState<string | null>(null);
 
     const abortRef = useRef<AbortController | null>(null);
-    const messagesRef = useRef<ChatMessage[]>([]);
+    const messagesRef = useRef<AgentChatMessage[]>([]);
     const promptRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => () => abortRef.current?.abort(), []);
@@ -54,7 +54,7 @@ export const AiView: React.FC<NodeViewProps> = (props) => {
         setIsLoading(false);
     }, []);
 
-    const runMessages = useCallback(async (messages: ChatMessage[]) => {
+    const runMessages = useCallback(async (messages: AgentChatMessage[]) => {
         messagesRef.current = messages;
         abortRef.current?.abort();
         const ac = new AbortController();
