@@ -3,9 +3,39 @@
  *
  * Frames are default SSE events whose "data:" payload is one JSON object
  * { seq, type, ...payload }. Comment frames (keepalive) are ignored.
+ *
+ * Wire caveat: the platform's Jackson config serializes Java `long` as a JSON
+ * string to protect JS precision, so `seq` and the token counters arrive as
+ * strings ("44"). Everything downstream compares seq numerically, so events are
+ * normalized here — at the single parse boundary — rather than at each use site.
  */
 
 import type { AgentEvent } from './types'
+
+/** Coerce a wire number (may arrive as a string) to a finite number. */
+export function wireNumber(value: unknown, fallback = 0): number {
+    const parsed = typeof value === 'number' ? value : Number(value)
+    return Number.isFinite(parsed) ? parsed : fallback
+}
+
+/**
+ * Normalize a parsed event payload: seq and usage counters become real numbers.
+ * Returns null when the payload is not a usable event.
+ */
+export function normalizeAgentEvent(raw: unknown): AgentEvent | null {
+    if (!raw || typeof raw !== 'object') return null
+    const event = raw as Record<string, any>
+    if (typeof event.type !== 'string') return null
+    const normalized: Record<string, any> = { ...event, seq: wireNumber(event.seq) }
+    if (normalized.usage && typeof normalized.usage === 'object') {
+        normalized.usage = {
+            ...normalized.usage,
+            promptTokens: wireNumber(normalized.usage.promptTokens),
+            completionTokens: wireNumber(normalized.usage.completionTokens),
+        }
+    }
+    return normalized as AgentEvent
+}
 
 /** Parse one SSE data line into an event or null (comments/empty). */
 export function parseAgentEventFrame(line: string): AgentEvent | null {
@@ -14,7 +44,7 @@ export function parseAgentEventFrame(line: string): AgentEvent | null {
     const data = trimmed.slice(5).trim()
     if (!data) return null
     try {
-        return JSON.parse(data) as AgentEvent
+        return normalizeAgentEvent(JSON.parse(data))
     } catch {
         return null
     }

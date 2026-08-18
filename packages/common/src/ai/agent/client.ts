@@ -6,7 +6,7 @@
  */
 
 import { authorizedFetch } from '../../utils/session'
-import { readSseDataLines } from './events'
+import { normalizeAgentEvent, readSseDataLines, wireNumber } from './events'
 import type {
     AgentEvent,
     CreateRunInput,
@@ -34,6 +34,22 @@ interface ApiResponse<T> {
     msg?: string
 }
 
+/**
+ * Coerce the RunView counters the backend serializes as strings (long fields)
+ * back to numbers, so callers can compare/arithmetic them safely.
+ */
+function normalizeRunView(view: RunView): RunView {
+    if (!view) return view
+    return {
+        ...view,
+        lastSeq: wireNumber(view.lastSeq),
+        promptTokens: wireNumber(view.promptTokens),
+        completionTokens: wireNumber(view.completionTokens),
+        createTime: wireNumber(view.createTime),
+        updateTime: wireNumber(view.updateTime),
+    }
+}
+
 export class AgentClient {
     private readonly apiBase: string
 
@@ -44,14 +60,16 @@ export class AgentClient {
     // ==================== runs ====================
 
     async createRun(input: CreateRunInput): Promise<RunView> {
-        return this.request<RunView>('/runs', {
-            method: 'POST',
-            body: JSON.stringify(input),
-        })
+        return normalizeRunView(
+            await this.request<RunView>('/runs', {
+                method: 'POST',
+                body: JSON.stringify(input),
+            })
+        )
     }
 
     async getRun(runId: string): Promise<RunView> {
-        return this.request<RunView>('/runs/' + encodeURIComponent(runId))
+        return normalizeRunView(await this.request<RunView>('/runs/' + encodeURIComponent(runId)))
     }
 
     async cancelRun(runId: string): Promise<void> {
@@ -70,7 +88,7 @@ export class AgentClient {
      * event, resuming from the last received seq — events are never duplicated.
      */
     async *streamEvents(runId: string, afterSeq = 0, signal?: AbortSignal): AsyncGenerator<AgentEvent> {
-        let cursor = afterSeq
+        let cursor = wireNumber(afterSeq)
         let reconnects = 0
         while (true) {
             const events = this.streamOnce(runId, cursor, signal)
@@ -84,16 +102,25 @@ export class AgentClient {
                         return
                     }
                 }
-                return // clean stream end without terminal event — treat as done
+                // Stream ended without a terminal event. This normally means
+                // an intermediary (nginx / gateway / vite proxy) closed the
+                // connection, NOT that the run is done — the AgentCore protocol
+                // guarantees a terminal event as the last frame. Treat this the
+                // same as a network error and reconnect from the last seq.
             } catch (error) {
                 if (signal?.aborted) throw error
-                if (reconnects >= MAX_RECONNECTS) throw error
-                reconnects += 1
-                const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnects - 1)
-                await new Promise(resolve => setTimeout(resolve, delay))
-                if (receivedAny) {
-                    // continue from the last durable event
-                }
+            }
+            if (signal?.aborted) return
+            if (reconnects >= MAX_RECONNECTS) {
+                throw new Error('Agent stream disconnected after ' + MAX_RECONNECTS + ' reconnect attempts')
+            }
+            reconnects += 1
+            const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnects - 1)
+            await new Promise(resolve => setTimeout(resolve, delay))
+            // Reset reconnect counter when we successfully received events,
+            // indicating the connection was alive for a meaningful period.
+            if (receivedAny) {
+                reconnects = 0
             }
         }
     }
@@ -166,15 +193,18 @@ export class AgentClient {
     }
 
     private async *streamFromBody(body: ReadableStream<Uint8Array>, afterSeq: number): AsyncGenerator<AgentEvent> {
-        let cursor = afterSeq
+        let cursor = wireNumber(afterSeq)
         for await (const payload of readSseDataLines(body)) {
-            let event: AgentEvent
+            let event: AgentEvent | null
             try {
-                event = JSON.parse(payload) as AgentEvent
+                event = normalizeAgentEvent(JSON.parse(payload))
             } catch {
                 continue
             }
-            // Dedupe: replays may overlap the live tail.
+            if (!event) continue
+            // Dedupe: replays may overlap the live tail. seq is normalized to a
+            // number first — comparing the raw wire string would fall back to
+            // lexicographic ordering and silently drop everything past seq 9.
             if (event.seq > cursor) {
                 cursor = event.seq
                 yield event

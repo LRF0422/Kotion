@@ -47,13 +47,15 @@ public class SseStreamingFilter implements GlobalFilter, Ordered {
 
     /**
      * Checks if the request path is likely to produce an SSE response.
-     * Includes the agent task/chat streaming endpoints — these previously fell
-     * through and relied on the global X-Accel-Buffering header alone.
+     * Includes the AgentCore run event stream
+     * ({@code /api/agent/v1/runs/{id}/events},
+     * also served through resume) — these previously fell through and relied on
+     * the global X-Accel-Buffering header alone.
      */
     private boolean isSsePath(String path) {
         return path != null && (path.contains("/chat/completions")
                 || path.contains("/completions")
-                || path.contains("/api/v2/agent")
+                || path.contains("/api/agent/v1/runs")
                 || path.startsWith("/ws/"));
     }
 

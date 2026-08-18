@@ -205,7 +205,13 @@
                     </compilerArgs>
                     <!-- Deterministic Lombok processing: without these paths some
                          modules compiled with classpath-detected Lombok and others
-                         silently without it (missing getters/constructors). -->
+                         silently without it (missing getters/constructors).
+                         NOTE: declaring annotationProcessorPaths disables classpath
+                         processor discovery, so every processor the framework relies
+                         on must be listed here. mica-auto generates each module's
+                         META-INF/spring.factories (+ AutoConfiguration.imports); if it
+                         is missing, none of the framework auto-configurations are
+                         registered and every service fails to boot. -->
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -213,6 +219,16 @@
                             <!-- knowledge-tool is a standalone pom without the root
                                  project's properties; pin the version explicitly -->
                             <version>1.18.38</version>
+                        </path>
+                        <path>
+                            <groupId>net.dreamlu</groupId>
+                            <artifactId>mica-auto</artifactId>
+                            <version>${mica.auto.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-configuration-processor</artifactId>
+                            <version>${spring.boot.version}</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>

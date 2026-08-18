@@ -116,11 +116,11 @@ function reducer(state: EditorAgentState, action: Action): EditorAgentState {
             const toolCalls = state.toolCalls.map(call =>
                 call.callId === action.callId
                     ? ({
-                          ...call,
-                          status: (action.ok ? 'success' : 'error') as ToolCallRecord['status'],
-                          result: action.result,
-                          error: action.error,
-                      } as ToolCallRecord)
+                        ...call,
+                        status: (action.ok ? 'success' : 'error') as ToolCallRecord['status'],
+                        result: action.result,
+                        error: action.error,
+                    } as ToolCallRecord)
                     : call
             )
             const pendingToolIds = state.pendingToolIds.filter(id => id !== action.callId)
@@ -165,12 +165,12 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
                 toolCalls: next.toolCalls.map(call =>
                     call.callId === event.callId
                         ? {
-                              ...call,
-                              status: event.ok ? 'success' : 'error',
-                              result: event.result,
-                              error: event.error,
-                              durationMs: event.durationMs,
-                          }
+                            ...call,
+                            status: event.ok ? 'success' : 'error',
+                            result: event.result,
+                            error: event.error,
+                            durationMs: event.durationMs,
+                        }
                         : call
                 ),
             }
@@ -366,6 +366,15 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                         if (controller.signal.aborted) return
                         dispatch({ type: 'event', event })
                     }
+                    // Resume stream ended without terminal event (proxy cut the
+                    // connection). Fall back to the reconnecting streamEvents so
+                    // the run doesn't appear stuck.
+                    if (!controller.signal.aborted) {
+                        const s = stateRef.current
+                        if (s.runId && s.phase !== 'completed' && s.phase !== 'failed' && s.phase !== 'cancelled') {
+                            startStream(s.runId, s.lastSeq)
+                        }
+                    }
                 } catch (error: any) {
                     if (!controller.signal.aborted) {
                         dispatch({ type: 'error', error: error?.message ?? String(error) })
@@ -373,7 +382,7 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 }
             })()
         },
-        [client]
+        [client, startStream]
     )
 
     const executePendingTools = useCallback(async () => {
