@@ -41,6 +41,9 @@ public class RunView {
 
     private long completionTokens;
 
+    /** Prompt tokens served from the provider's context cache (cache-hit signal). */
+    private long cachedPromptTokens;
+
     /** Accumulated assistant output (reconnect reconstruction). */
     private String assistantText;
 
@@ -68,6 +71,7 @@ public class RunView {
         view.setLastSeq(run.getLastSeq());
         view.setPromptTokens(run.getPromptTokens());
         view.setCompletionTokens(run.getCompletionTokens());
+        view.setCachedPromptTokens(run.getCachedPromptTokens());
         view.setAssistantText(run.getAssistantText());
         if (run.getPendingToolCalls() != null) {
             view.getPendingTools().addAll(run.getPendingToolCalls());

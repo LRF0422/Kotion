@@ -403,6 +403,7 @@ export const ExpandableChatDemo: React.FC<{
                     timestamp: Date.now(),
                     steps,
                     subRuns: agent.state.subRuns.slice(),
+                    usage: agent.state.usage ?? undefined,
                     error: phase === 'failed',
                 }
                 setMessages(prev => [...prev, snapshot])

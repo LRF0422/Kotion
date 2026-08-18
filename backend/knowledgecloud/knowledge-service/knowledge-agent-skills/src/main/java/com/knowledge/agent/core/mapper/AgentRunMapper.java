@@ -20,10 +20,10 @@ public interface AgentRunMapper extends BaseMapper<AgentRunEntity> {
     @Insert("INSERT INTO agent_run " +
             "(run_id, conversation_id, parent_run_id, user_id, tenant_id, model, mode, space_id, page_id, status, " +
             "finish_reason, suspend_reason, error_code, error_message, last_seq, prompt_tokens, " +
-            "completion_tokens, create_time, update_time) " +
+            "completion_tokens, cached_prompt_tokens, create_time, update_time) " +
             "VALUES (#{runId}, #{conversationId}, #{parentRunId}, #{userId}, #{tenantId}, #{model}, #{mode}, #{spaceId}, #{pageId}, #{status}, " +
             "#{finishReason}, #{suspendReason}, #{errorCode}, #{errorMessage}, #{lastSeq}, #{promptTokens}, " +
-            "#{completionTokens}, #{createTime}, #{updateTime}) " +
+            "#{completionTokens}, #{cachedPromptTokens}, #{createTime}, #{updateTime}) " +
             "ON DUPLICATE KEY UPDATE " +
             "conversation_id = VALUES(conversation_id), " +
             "parent_run_id = VALUES(parent_run_id), " +
@@ -37,6 +37,7 @@ public interface AgentRunMapper extends BaseMapper<AgentRunEntity> {
             "last_seq = VALUES(last_seq), " +
             "prompt_tokens = VALUES(prompt_tokens), " +
             "completion_tokens = VALUES(completion_tokens), " +
+            "cached_prompt_tokens = VALUES(cached_prompt_tokens), " +
             "update_time = VALUES(update_time)")
     void upsertByRunId(AgentRunEntity entity);
 

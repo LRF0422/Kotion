@@ -45,6 +45,7 @@ function normalizeRunView(view: RunView): RunView {
         lastSeq: wireNumber(view.lastSeq),
         promptTokens: wireNumber(view.promptTokens),
         completionTokens: wireNumber(view.completionTokens),
+        cachedPromptTokens: wireNumber(view.cachedPromptTokens),
         createTime: wireNumber(view.createTime),
         updateTime: wireNumber(view.updateTime),
     }

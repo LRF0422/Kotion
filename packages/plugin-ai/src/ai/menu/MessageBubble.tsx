@@ -9,6 +9,7 @@ import { Message, extractBlockReferences } from './chat-types'
 import type { BlockReference } from './chat-types'
 import { CompletedSteps } from './ExecutionStepsDisplay'
 import { BlockReferences } from './BlockReferences'
+import { TurnUsageMeta } from './chat/TurnUsageMeta'
 
 interface MessageBubbleProps {
     message: Message
@@ -116,6 +117,9 @@ export const MessageBubble = React.memo(function MessageBubble({
                 {isAI && message.steps && message.steps.length > 0 && (
                     <CompletedSteps steps={message.steps} />
                 )}
+
+                {/* Token usage + model cache hit rate for this turn */}
+                {isAI && !message.error && <TurnUsageMeta usage={message.usage} />}
             </div>
         </ChatBubble>
     )

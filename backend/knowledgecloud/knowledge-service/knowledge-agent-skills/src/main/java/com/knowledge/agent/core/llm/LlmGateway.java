@@ -106,6 +106,7 @@ public class LlmGateway {
                     if (chunk.getUsage() != null) {
                         result.setPromptTokens(chunk.getUsage().getPromptTokens());
                         result.setCompletionTokens(chunk.getUsage().getCompletionTokens());
+                        result.setCachedPromptTokens(chunk.getUsage().getPromptCacheHitTokens());
                     }
                 }
             }
@@ -136,6 +137,7 @@ public class LlmGateway {
             if (response.getUsage() != null) {
                 result.setPromptTokens(response.getUsage().getPromptTokens());
                 result.setCompletionTokens(response.getUsage().getCompletionTokens());
+                result.setCachedPromptTokens(response.getUsage().getPromptCacheHitTokens());
             }
         }
         return result;

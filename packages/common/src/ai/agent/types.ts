@@ -72,6 +72,8 @@ export interface RunView {
     lastSeq: number
     promptTokens: number
     completionTokens: number
+    /** Prompt tokens served from the provider's context cache (subset of promptTokens). */
+    cachedPromptTokens: number
     assistantText?: string
     pendingTools: PendingToolCall[]
     spaceId?: string
@@ -133,6 +135,21 @@ export interface MemoryItem {
 export interface RunUsage {
     promptTokens: number
     completionTokens: number
+    /**
+     * Prompt tokens the provider served from its context cache (subset of
+     * promptTokens) — 0 when the provider reports no cache accounting.
+     */
+    cachedPromptTokens: number
+}
+
+/**
+ * Share of prompt tokens served from the model's context cache (0–1), or null
+ * when the run reported no prompt tokens / no cache accounting at all.
+ */
+export function cacheHitRate(usage?: RunUsage | null): number | null {
+    if (!usage || usage.promptTokens <= 0) return null
+    if (!Number.isFinite(usage.cachedPromptTokens) || usage.cachedPromptTokens <= 0) return null
+    return Math.min(1, usage.cachedPromptTokens / usage.promptTokens)
 }
 
 export type AgentEvent =

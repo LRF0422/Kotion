@@ -63,6 +63,9 @@ public class AgentRunEntity implements Serializable {
 
     private Integer completionTokens;
 
+    /** Prompt tokens served from the provider's context cache. */
+    private Integer cachedPromptTokens;
+
     private Long createTime;
 
     private Long updateTime;

@@ -382,10 +382,8 @@ public class OpenAiCompatibleClient implements LlmClient {
                     .promptTokens(usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0)
                     .completionTokens(usage.has("completion_tokens") ? usage.get("completion_tokens").asInt() : 0)
                     .totalTokens(usage.has("total_tokens") ? usage.get("total_tokens").asInt() : 0)
-                    .promptCacheHitTokens(usage.has("prompt_cache_hit_tokens")
-                            ? usage.get("prompt_cache_hit_tokens").asInt() : 0)
-                    .promptCacheMissTokens(usage.has("prompt_cache_miss_tokens")
-                            ? usage.get("prompt_cache_miss_tokens").asInt() : 0)
+                    .promptCacheHitTokens(cacheHitTokens(usage))
+                    .promptCacheMissTokens(cacheMissTokens(usage))
                     .build());
         } else {
             builder.usage(LlmResponse.Usage.builder().build());
@@ -461,10 +459,8 @@ public class OpenAiCompatibleClient implements LlmClient {
                                         usageNode.has("completion_tokens") ? usageNode.get("completion_tokens").asInt()
                                                 : 0)
                                 .totalTokens(usageNode.has("total_tokens") ? usageNode.get("total_tokens").asInt() : 0)
-                                .promptCacheHitTokens(usageNode.has("prompt_cache_hit_tokens")
-                                        ? usageNode.get("prompt_cache_hit_tokens").asInt() : 0)
-                                .promptCacheMissTokens(usageNode.has("prompt_cache_miss_tokens")
-                                        ? usageNode.get("prompt_cache_miss_tokens").asInt() : 0)
+                                .promptCacheHitTokens(cacheHitTokens(usageNode))
+                                .promptCacheMissTokens(cacheMissTokens(usageNode))
                                 .build();
                     }
                     chunks.add(StreamChunk.done(reason, usage));
@@ -476,5 +472,31 @@ public class OpenAiCompatibleClient implements LlmClient {
             log.warn("Failed to parse stream chunk: {}", line, e);
             return Flux.empty();
         }
+    }
+
+    /**
+     * Prompt tokens served from the provider's context cache. DeepSeek reports
+     * {@code prompt_cache_hit_tokens} at the top level; other OpenAI-compatible
+     * providers nest the same signal under
+     * {@code prompt_tokens_details.cached_tokens}.
+     */
+    private static int cacheHitTokens(JsonNode usage) {
+        if (usage.has("prompt_cache_hit_tokens")) {
+            return usage.get("prompt_cache_hit_tokens").asInt();
+        }
+        JsonNode details = usage.get("prompt_tokens_details");
+        if (details != null && details.has("cached_tokens")) {
+            return details.get("cached_tokens").asInt();
+        }
+        return 0;
+    }
+
+    /** Prompt tokens that missed the cache — derived when not reported. */
+    private static int cacheMissTokens(JsonNode usage) {
+        if (usage.has("prompt_cache_miss_tokens")) {
+            return usage.get("prompt_cache_miss_tokens").asInt();
+        }
+        int prompt = usage.has("prompt_tokens") ? usage.get("prompt_tokens").asInt() : 0;
+        return Math.max(0, prompt - cacheHitTokens(usage));
     }
 }

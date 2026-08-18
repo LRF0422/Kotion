@@ -80,6 +80,9 @@ public class Checkpoint {
 
     private long completionTokens;
 
+    /** Cumulative prompt tokens served from the provider's context cache. */
+    private long cachedPromptTokens;
+
     /** Caller JWT token (forwarded to remote skill callbacks). */
     private String token;
 

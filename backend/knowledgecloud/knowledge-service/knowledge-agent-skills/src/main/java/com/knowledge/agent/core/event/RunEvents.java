@@ -81,9 +81,16 @@ public final class RunEvents {
         return payload("reason", reason, "pendingCallIds", pendingCallIds);
     }
 
-    public static Map<String, Object> runCompleted(String finishReason, long promptTokens, long completionTokens) {
+    /**
+     * Terminal usage report. {@code cachedPromptTokens} is the subset of
+     * {@code promptTokens} served from the provider's context cache — the chat
+     * UI renders it as the run's cache hit rate.
+     */
+    public static Map<String, Object> runCompleted(String finishReason, long promptTokens, long completionTokens,
+                                                   long cachedPromptTokens) {
         return payload("finishReason", finishReason,
-                "usage", payload("promptTokens", promptTokens, "completionTokens", completionTokens));
+                "usage", payload("promptTokens", promptTokens, "completionTokens", completionTokens,
+                        "cachedPromptTokens", cachedPromptTokens));
     }
 
     public static Map<String, Object> runFailed(String code, String error) {

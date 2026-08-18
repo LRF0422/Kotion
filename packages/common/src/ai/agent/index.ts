@@ -23,7 +23,7 @@ export type {
     ToolCallRecord,
     UseEditorAgentOptions,
 } from './use-editor-agent'
-export { TERMINAL_EVENT_TYPES, parseToolArgs } from './types'
+export { TERMINAL_EVENT_TYPES, parseToolArgs, cacheHitRate } from './types'
 export type {
     AgentChatMessage,
     AgentEvent,

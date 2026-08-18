@@ -1,4 +1,4 @@
-import type { SubRunRecord } from '@kn/common'
+import type { SubRunRecord, RunUsage } from '@kn/common'
 
 // Types
 export interface Message {
@@ -11,6 +11,8 @@ export interface Message {
     steps?: ExecutionStep[]
     /** Sub-agent delegation records (AgentCore SubRunRecord). */
     subRuns?: SubRunRecord[]
+    /** Token accounting for the run that produced this AI turn (cache-hit share). */
+    usage?: RunUsage
     stopped?: boolean
     error?: boolean
 }

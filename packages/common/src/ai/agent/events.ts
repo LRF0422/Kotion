@@ -32,6 +32,7 @@ export function normalizeAgentEvent(raw: unknown): AgentEvent | null {
             ...normalized.usage,
             promptTokens: wireNumber(normalized.usage.promptTokens),
             completionTokens: wireNumber(normalized.usage.completionTokens),
+            cachedPromptTokens: wireNumber(normalized.usage.cachedPromptTokens),
         }
     }
     return normalized as AgentEvent

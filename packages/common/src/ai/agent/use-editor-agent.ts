@@ -18,6 +18,7 @@ import type {
     AgentSkillInput,
     AgentToolSpec,
     ResumePayload,
+    RunUsage,
 } from './types'
 import { parseToolArgs } from './types'
 
@@ -61,6 +62,8 @@ export interface EditorAgentState {
     suspendReason: string | null
     error: string | null
     finishReason: string | null
+    /** Token accounting for the finished run (includes the cache-hit share). */
+    usage: RunUsage | null
 }
 
 const initialState: EditorAgentState = {
@@ -77,6 +80,7 @@ const initialState: EditorAgentState = {
     suspendReason: null,
     error: null,
     finishReason: null,
+    usage: null,
 }
 
 type Action =
@@ -215,7 +219,12 @@ function applyEvent(state: EditorAgentState, event: AgentEvent): EditorAgentStat
             }
             return { ...next, phase: event.reason === 'budget' ? 'suspended' : next.phase, suspendReason: event.reason }
         case 'run.completed':
-            return { ...next, phase: 'completed', finishReason: event.finishReason ?? 'stop' }
+            return {
+                ...next,
+                phase: 'completed',
+                finishReason: event.finishReason ?? 'stop',
+                usage: event.usage ?? next.usage,
+            }
         case 'run.failed':
             return { ...next, phase: 'failed', error: event.error ?? event.code ?? 'unknown error' }
         case 'run.cancelled':
@@ -421,7 +430,19 @@ export function useEditorAgent(options: UseEditorAgentOptions): EditorAgentApi {
                 phase: 'streaming',
             })
             if (view.status === 'COMPLETED') {
-                dispatch({ type: 'event', event: { seq: view.lastSeq, type: 'run.completed', finishReason: view.finishReason } })
+                dispatch({
+                    type: 'event',
+                    event: {
+                        seq: view.lastSeq,
+                        type: 'run.completed',
+                        finishReason: view.finishReason,
+                        usage: {
+                            promptTokens: view.promptTokens,
+                            completionTokens: view.completionTokens,
+                            cachedPromptTokens: view.cachedPromptTokens,
+                        },
+                    },
+                })
                 return true
             }
             if (view.status === 'FAILED') {

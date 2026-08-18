@@ -17,6 +17,12 @@ public class LlmResult {
 
     private long completionTokens;
 
+    /**
+     * Prompt tokens served from the provider's context cache (subset of
+     * {@link #promptTokens}) — the cache-hit signal surfaced to the client.
+     */
+    private long cachedPromptTokens;
+
     /** Accumulated visible assistant text. */
     private String text = "";
 

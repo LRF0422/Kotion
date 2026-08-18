@@ -107,6 +107,7 @@ public class DefaultRunStore implements RunStore {
         entity.setLastSeq(run.getLastSeq());
         entity.setPromptTokens((int) run.getPromptTokens());
         entity.setCompletionTokens((int) run.getCompletionTokens());
+        entity.setCachedPromptTokens((int) run.getCachedPromptTokens());
         entity.setCreateTime(run.getCreateTime());
         entity.setUpdateTime(run.getUpdateTime());
         return entity;
@@ -131,6 +132,7 @@ public class DefaultRunStore implements RunStore {
         run.setLastSeq(entity.getLastSeq() != null ? entity.getLastSeq() : 0);
         run.setPromptTokens(entity.getPromptTokens() != null ? entity.getPromptTokens() : 0);
         run.setCompletionTokens(entity.getCompletionTokens() != null ? entity.getCompletionTokens() : 0);
+        run.setCachedPromptTokens(entity.getCachedPromptTokens() != null ? entity.getCachedPromptTokens() : 0);
         run.setCreateTime(entity.getCreateTime());
         run.setUpdateTime(entity.getUpdateTime());
         return run;

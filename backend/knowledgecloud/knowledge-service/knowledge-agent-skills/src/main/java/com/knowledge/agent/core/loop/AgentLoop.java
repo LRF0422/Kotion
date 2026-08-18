@@ -286,8 +286,10 @@ public class AgentLoop implements Runnable {
 
                 checkpoint.setPromptTokens(checkpoint.getPromptTokens() + result.getPromptTokens());
                 checkpoint.setCompletionTokens(checkpoint.getCompletionTokens() + result.getCompletionTokens());
+                checkpoint.setCachedPromptTokens(checkpoint.getCachedPromptTokens() + result.getCachedPromptTokens());
                 run.setPromptTokens(checkpoint.getPromptTokens());
                 run.setCompletionTokens(checkpoint.getCompletionTokens());
+                run.setCachedPromptTokens(checkpoint.getCachedPromptTokens());
 
                 if (isCancelled()) {
                     return;
@@ -660,7 +662,7 @@ public class AgentLoop implements Runnable {
             case COMPLETED:
                 event.setType(RunEvents.RUN_COMPLETED);
                 event.setPayload(RunEvents.runCompleted(child.getFinishReason(),
-                        child.getPromptTokens(), child.getCompletionTokens()));
+                        child.getPromptTokens(), child.getCompletionTokens(), child.getCachedPromptTokens()));
                 break;
             case FAILED:
                 event.setType(RunEvents.RUN_FAILED);
@@ -864,7 +866,8 @@ public class AgentLoop implements Runnable {
         run.setFinishReason(finishReason);
         run.touch();
         emit(RunEvents.RUN_COMPLETED, RunEvents.runCompleted(finishReason,
-                checkpoint.getPromptTokens(), checkpoint.getCompletionTokens()));
+                checkpoint.getPromptTokens(), checkpoint.getCompletionTokens(),
+                checkpoint.getCachedPromptTokens()));
         saveCheckpoint();
         persist();
         saveHot(true);
@@ -989,6 +992,7 @@ public class AgentLoop implements Runnable {
         checkpoint.setScratchpad(scratchpad.read());
         checkpoint.setPromptTokens(checkpoint.getPromptTokens());
         checkpoint.setCompletionTokens(checkpoint.getCompletionTokens());
+        checkpoint.setCachedPromptTokens(checkpoint.getCachedPromptTokens());
         checkpoint.setDelegateDepth(checkpoint.getDelegateDepth());
         checkpoint.setPlanGateOpen(run.isPlanGateOpen());
         checkpoint.setToken(run.getToken());

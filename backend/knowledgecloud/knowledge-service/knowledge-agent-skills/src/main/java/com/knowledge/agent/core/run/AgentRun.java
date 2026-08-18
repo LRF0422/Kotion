@@ -61,6 +61,12 @@ public class AgentRun {
 
     private long completionTokens;
 
+    /**
+     * Cumulative prompt tokens served from the provider's context cache
+     * (subset of {@link #promptTokens}); the chat UI derives the hit rate.
+     */
+    private long cachedPromptTokens;
+
     /** Accumulated assistant output (reconnect reconstruction). */
     private String assistantText;
 
