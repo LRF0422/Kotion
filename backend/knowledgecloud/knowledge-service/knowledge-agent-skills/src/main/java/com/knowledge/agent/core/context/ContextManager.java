@@ -1,8 +1,10 @@
 package com.knowledge.agent.core.context;
 
 import com.knowledge.agent.api.dto.ChatMessage;
+import com.knowledge.agent.core.config.AgentCoreProperties;
 import com.knowledge.agent.core.run.AgentRun;
 import com.knowledge.agent.core.tool.ToolSpec;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -16,8 +18,23 @@ import java.util.List;
  * <p>Compaction (三级压缩: evict → summarize → truncate) plugs in here; the
  * system prefix is always kept stable so provider context caching hits.
  */
+@Slf4j
 @Component
 public class ContextManager {
+
+    private final AgentCoreProperties properties;
+
+    public ContextManager() {
+        this.properties = null; // test-only fallback
+    }
+
+    public ContextManager(AgentCoreProperties properties) {
+        this.properties = properties;
+    }
+
+    private AgentCoreProperties.Context ctx() {
+        return properties != null ? properties.getContext() : new AgentCoreProperties.Context();
+    }
 
     /** Editor-agent base system prompt (the redesign's primary persona). */
     public static final String BASE_SYSTEM_PROMPT =
@@ -176,14 +193,117 @@ public class ContextManager {
     }
 
     /**
-     * Full message list for one inference. The checkpoint's messages already
-     * carry the stable system prefix at index 0 — this hook applies budget
-     * management (三级压缩) and returns the final list to send.
+     * Full message list for one inference. Applies the three-level compaction:
+     * <ol>
+     *   <li>L1 — Evict: replace tool-result bodies older than N steps with a
+     *       one-line placeholder ("[result truncated — N chars]").</li>
+     *   <li>L2 — Truncate oversized recent tool results.</li>
+     *   <li>L3 — Drop: if still over budget, drop the oldest non-system
+     *       non-recent messages entirely.</li>
+     * </ol>
+     * System prefix (index 0) is NEVER touched so the provider's context-cache
+     * prefix stays stable between steps.
      */
     public List<ChatMessage> assemble(List<ChatMessage> checkpointMessages) {
-        // M1: passthrough. Compaction (evict → summarize → truncate) plugs in
-        // here in M3, keeping the system prefix stable.
-        return checkpointMessages != null ? checkpointMessages : new ArrayList<ChatMessage>();
+        if (checkpointMessages == null || checkpointMessages.isEmpty()) {
+            return new ArrayList<>();
+        }
+        AgentCoreProperties.Context config = ctx();
+        int maxTokens = config.getMaxContextTokens();
+        int keepRecent = config.getKeepRecentMessages();
+        int evictAfterSteps = config.getEvictToolResultsAfterSteps();
+        int toolResultMaxChars = config.getToolResultMaxChars();
+
+        // Work on a mutable copy so we don't mutate checkpoint state.
+        List<ChatMessage> messages = new ArrayList<>(checkpointMessages.size());
+        for (ChatMessage msg : checkpointMessages) {
+            messages.add(msg);
+        }
+
+        // ─── L1: Evict old tool results ────────────────────────────────
+        // Walk backwards to find the "recent" boundary (last keepRecent msgs).
+        int recentStart = Math.max(1, messages.size() - keepRecent);
+        // Identify step boundaries by counting assistant messages with tool_calls.
+        int stepsFromEnd = 0;
+        int stepBoundary = messages.size(); // index below which we consider "old"
+        for (int i = messages.size() - 1; i >= 1; i--) {
+            ChatMessage msg = messages.get(i);
+            if ("assistant".equals(msg.getRole()) && msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
+                stepsFromEnd++;
+                if (stepsFromEnd >= evictAfterSteps) {
+                    stepBoundary = i;
+                    break;
+                }
+            }
+        }
+        int evictBefore = Math.min(recentStart, stepBoundary);
+
+        for (int i = 1; i < evictBefore; i++) {
+            ChatMessage msg = messages.get(i);
+            if ("tool".equals(msg.getRole()) && msg.getContent() != null) {
+                int originalLen = msg.getContent().length();
+                if (originalLen > 200) {
+                    // Replace with a compact placeholder preserving the tool_call_id.
+                    messages.set(i, ChatMessage.builder()
+                            .role("tool")
+                            .toolCallId(msg.getToolCallId())
+                            .name(msg.getName())
+                            .content("[已压缩，原始 " + originalLen + " 字符]")
+                            .build());
+                }
+            }
+            // Also strip reasoning_content from old assistant messages (DeepSeek
+            // only requires reasoning_content on the LAST assistant message
+            // before tool_calls, which is always in the recent window).
+            if ("assistant".equals(msg.getRole()) && msg.getReasoningContent() != null) {
+                messages.set(i, ChatMessage.builder()
+                        .role(msg.getRole())
+                        .content(msg.getContent())
+                        .toolCalls(msg.getToolCalls())
+                        .build());
+            }
+        }
+
+        // ─── L2: Truncate oversized recent tool results ───────────────
+        for (int i = evictBefore; i < messages.size(); i++) {
+            ChatMessage msg = messages.get(i);
+            if ("tool".equals(msg.getRole()) && msg.getContent() != null
+                    && msg.getContent().length() > toolResultMaxChars) {
+                String truncated = msg.getContent().substring(0, toolResultMaxChars)
+                        + "\n…[截断，原始 " + msg.getContent().length() + " 字符]";
+                messages.set(i, ChatMessage.builder()
+                        .role("tool")
+                        .toolCallId(msg.getToolCallId())
+                        .name(msg.getName())
+                        .content(truncated)
+                        .build());
+            }
+        }
+
+        // ─── L3: Drop oldest non-system messages if still over budget ─
+        long estimated = estimateTokens(messages, 0);
+        long budget = (long) (maxTokens * 0.9); // leave 10% headroom for tool schemas
+        if (estimated > budget && messages.size() > keepRecent + 1) {
+            // Drop from index 1 forward (skip system) until within budget,
+            // but always preserve the last keepRecent messages.
+            int dropEnd = messages.size() - keepRecent;
+            List<ChatMessage> compacted = new ArrayList<>();
+            compacted.add(messages.get(0)); // system prefix
+            // Add a summary placeholder so the model knows history was trimmed.
+            compacted.add(ChatMessage.builder()
+                    .role("system")
+                    .content("[Earlier conversation (" + (dropEnd - 1)
+                            + " messages) omitted to fit context budget]")
+                    .build());
+            for (int i = dropEnd; i < messages.size(); i++) {
+                compacted.add(messages.get(i));
+            }
+            log.info("Context L3 drop: removed {} messages, {} → {} estimated tokens",
+                    dropEnd - 1, estimated, estimateTokens(compacted, 0));
+            return compacted;
+        }
+
+        return messages;
     }
 
     /**

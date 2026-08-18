@@ -19,6 +19,24 @@ const SKILLS_ONLY_DEFAULT = (import.meta as any).env?.KN_SKILLS_ONLY_CATALOG ===
 /** Tool categories that never mutate the document and are safe in PLAN mode. */
 const READ_ONLY_CATEGORIES = new Set(['document-read', 'discovery', 'interaction'])
 
+/**
+ * Core tools always offered with full schemas regardless of skill claims.
+ * These are the most frequently used tools that justify the per-turn cost.
+ * Everything else goes deferred (schema withheld until first call).
+ */
+const ALWAYS_ON_TOOLS = new Set([
+    'getDocumentStructure',
+    'readChunk',
+    'searchInDocument',
+    'replaceBlockById',
+    'insertAtBlockId',
+    'applyEdits',
+    'deleteBlocks',
+    'updateTitle',
+    'askUserChoice',
+    'referenceBlocks',
+])
+
 function isReadOnlyTool(meta: { category: string } | undefined, executable: any): boolean {
     if (executable?.readOnly === true) return true
     return !!meta && READ_ONLY_CATEGORIES.has(meta.category)
@@ -81,7 +99,14 @@ export function collectCapabilityCatalog(
     // is embedded in the skills that reference it (SkillPayload.tools).
     const tools: ToolPayload[] = skillsOnly ? [] : toolProvider.getAllMetadata()
         .filter(meta => !!executableTools[meta.name])
-        .filter(meta => meta.source === 'builtin' || !claimedByASkill.has(meta.name))
+        .filter(meta => {
+            // Always-on core tools are always offered with full schemas.
+            if (ALWAYS_ON_TOOLS.has(meta.name)) return true
+            // Any tool claimed by a skill goes deferred (schema withheld).
+            if (claimedByASkill.has(meta.name)) return false
+            // Unclaimed tools stay in tools[] (their only route to the backend).
+            return true
+        })
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
         .map(meta => {
             const executable = executableTools[meta.name]
