@@ -34,12 +34,16 @@ export interface CapabilityCatalog {
 /**
  * Build a {@link CapabilityCatalog} from the live providers.
  *
- * Tool catalog: only built-in tools are shipped in the top-level `tools[]`.
- * Plugin tools stay registered in {@link ToolProvider} for frontend execution
- * and are transmitted to the backend **only** inside each `SkillPayload.tools`
- * — every skill carries the full OpenAI-shaped definitions of the tools it
- * references. This keeps the top-level catalog small and scopes plugin tool
- * schemas to the skills that actually use them.
+ * Tool catalog is split by cost:
+ * - top-level `tools[]` — built-in tools, plus any plugin tool no skill claims.
+ *   These are always offered to the model, schemas included.
+ * - `SkillPayload.tools` — plugin tools owned by a skill. The backend registers
+ *   these as *deferred*: callable and routable, but their JSON Schemas are kept
+ *   out of the tool list until the model actually calls one. The skill prompt
+ *   fragment plus a name/description directory is what the model sees first.
+ *
+ * Both halves must reach the backend: a tool present in neither is advertised
+ * by its skill prompt yet rejected with `TOOL_NOT_FOUND` when called.
  *
  * Skill catalog includes all registered skills (built-in, plugin,
  * user-installed). User-installed skills arrive via `skillRegistry.toSkillFormat()`
@@ -55,15 +59,29 @@ export function collectCapabilityCatalog(
     skillsOnly: boolean = SKILLS_ONLY_DEFAULT
 ): CapabilityCatalog {
     const executableTools = toolProvider.getAllTools()
+    const allSkills = skillProvider.getAllSkills()
 
-    // Only built-in tools are sent to the backend, in the standard OpenAI
-    // function-call shape. Plugin tools are executed on the frontend and
-    // reached via skill `requiredTools` references.
+    // Tools any skill claims. Their schemas ride along inside SkillPayload.tools
+    // and are registered as deferred, so keeping them out of tools[] costs
+    // nothing in reachability but saves the schema in every prompt.
+    const claimedByASkill = new Set<string>()
+    for (const skill of allSkills) {
+        for (const name of [...(skill.requiredTools ?? []), ...(skill.optionalTools ?? [])]) {
+            claimedByASkill.add(name)
+        }
+    }
+
+    // Sent in the standard OpenAI function-call shape. A plugin tool no skill
+    // claims still has to be listed here — SkillPayload.tools is its only other
+    // route to the backend, and it has no skill to travel with. Metadata entries
+    // without an instantiated executable (no registered factory) are skipped —
+    // advertising a tool the frontend cannot run is worse than hiding it.
     //
     // When skillsOnly is enabled, tools[] is left empty — every tool schema
     // is embedded in the skills that reference it (SkillPayload.tools).
     const tools: ToolPayload[] = skillsOnly ? [] : toolProvider.getAllMetadata()
-        .filter(meta => meta.source === 'builtin')
+        .filter(meta => !!executableTools[meta.name])
+        .filter(meta => meta.source === 'builtin' || !claimedByASkill.has(meta.name))
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
         .map(meta => {
             const executable = executableTools[meta.name]
@@ -86,7 +104,7 @@ export function collectCapabilityCatalog(
     // prompt prefix, and provider context caches (DeepSeek etc.) only hit when
     // the prefix is byte-identical across turns. Sort skills/tools by name so
     // registration order can never reorder (and thus evict) the cached prefix.
-    const sortedSkills = skillProvider.getAllSkills()
+    const sortedSkills = allSkills
         .slice()
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     const skills: SkillPayload[] = sortedSkills.map(skill => {
@@ -97,8 +115,9 @@ export function collectCapabilityCatalog(
             skill.pluginName.startsWith('user:')
 
         // Embed the full OpenAI-shaped definitions for every tool the skill
-        // references. This is the only path by which plugin tool schemas reach
-        // the backend — they are not present in the top-level `tools[]` array.
+        // references. This is the only path by which claimed plugin tool schemas
+        // reach the backend; it also re-states built-in ones, which the backend
+        // dedupes against `tools[]` so they never become deferred.
         const referencedNames = [
             ...(skill.requiredTools ?? []),
             ...(skill.optionalTools ?? []),

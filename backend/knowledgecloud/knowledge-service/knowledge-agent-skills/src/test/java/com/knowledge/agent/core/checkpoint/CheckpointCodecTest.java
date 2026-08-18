@@ -46,6 +46,8 @@ class CheckpointCodecTest {
         schema.put("type", "object");
         ToolSpec tool = ToolSpec.of("editor.read", "read doc", schema, ToolKind.FRONTEND, true, "client");
         checkpoint.getClientTools().add(tool);
+        checkpoint.getDeferredTools().add(
+                ToolSpec.of("insertChart", "draw chart", schema, ToolKind.FRONTEND, false, "client"));
 
         checkpoint.getPendingToolCalls().add(PendingToolCall.of("c1", "editor.insert", "{\"a\":1}", 1000L));
         checkpoint.getPendingToolCalls().add(PendingToolCall.ofSub("c2", "editor.read", "{}", 1000L, "sub-1", "dcall-1"));
@@ -66,6 +68,10 @@ class CheckpointCodecTest {
         assertEquals("sys", restored.getMessages().get(0).getContent());
         assertEquals(1, restored.getClientTools().size());
         assertEquals("editor.read", restored.getClientTools().get(0).getName());
+        // Deferred tools must survive recovery, or a rebuilt loop would reject
+        // the skill tools it advertised with TOOL_NOT_FOUND.
+        assertEquals(1, restored.getDeferredTools().size());
+        assertEquals("insertChart", restored.getDeferredTools().get(0).getName());
         assertEquals(2, restored.getPendingToolCalls().size());
         assertEquals("sub-1", restored.getPendingToolCalls().get(1).getSubRunId());
         assertEquals("dcall-1", restored.getPendingToolCalls().get(1).getDelegateCallId());

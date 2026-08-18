@@ -24,8 +24,15 @@ public class CreateRunCommand {
     /** Conversation history including the latest user message. */
     private List<ChatMessage> messages = new ArrayList<>();
 
-    /** Client-declared (editor) tools. */
+    /** Client-declared (editor) tools — always offered to the model. */
     private List<ToolSpec> tools = new ArrayList<>();
+
+    /**
+     * Deferred tool catalog contributed by skills: callable, but withheld from
+     * the model's tool list until first use (keeps plugin schemas out of the
+     * prompt). Advertised in the system prompt by name + description.
+     */
+    private List<ToolSpec> skillTools = new ArrayList<>();
 
     /** Skills system-prompt fragments. */
     private List<String> skillFragments = new ArrayList<>();

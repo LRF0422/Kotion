@@ -37,9 +37,8 @@ import type { Editor } from '@kn/editor'
 import {
     useEditorAgent,
     useCapabilityProviders,
+    buildAgentRunInputs,
     type AgentChatMessage,
-    type AgentToolSpec,
-    type AgentSkillInput,
 } from '@kn/common'
 import { SubAgentTree } from './SubAgentTree'
 import { PlanApprovalCard } from './PlanApprovalCard'
@@ -115,18 +114,8 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     // 编辑器工具目录 + 技能片段（保留的供应商层）
     const { allTools, getCatalog } = useCapabilityProviders(editor ?? null)
     const catalog = useMemo(() => getCatalog(), [getCatalog])
-    const toolSpecs = useMemo<AgentToolSpec[]>(() => catalog.tools.map(tool => ({
-        name: tool.function.name,
-        description: tool.function.description,
-        inputSchema: tool.function.parameters,
-        kind: 'frontend' as const,
-        readOnly: tool.readOnly === true,
-        source: 'client' as const,
-    })), [catalog])
-    const skills = useMemo<AgentSkillInput[]>(() => catalog.skills.map(skill => ({
-        name: skill.name,
-        systemPromptFragment: skill.systemPromptFragment,
-    })), [catalog])
+    // tools[] 常驻；技能自带的工具随 skills[] 下发，首次调用前不展开参数结构。
+    const { tools: toolSpecs, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
 
     const agent = useEditorAgent({
         conversationId,

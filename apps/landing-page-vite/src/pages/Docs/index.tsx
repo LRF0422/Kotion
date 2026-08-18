@@ -623,7 +623,7 @@ const AIFeaturesContent: React.FC<{ t: (key: string) => string }> = ({ t }) => (
             {[
                 { category: t("docs.ai-cat-read"), tools: "getDocumentStructure, readChunk, searchInDocument, getNodeAtPosition, getDocumentSize", desc: t("docs.ai-cat-read-desc") },
                 { category: t("docs.ai-cat-write"), tools: "write, insertNear, insertAtEnd, replaceContent, batchInsert, insertAfterBlock, insertSegmentedMarkdown", desc: t("docs.ai-cat-write-desc") },
-                { category: t("docs.ai-cat-delete"), tools: "deleteRange, deleteBySearch, deleteBlock", desc: t("docs.ai-cat-delete-desc") },
+                { category: t("docs.ai-cat-delete"), tools: "deleteText, deleteBlocks, deleteRange, deleteBlocksBetween, clearDocument", desc: t("docs.ai-cat-delete-desc") },
                 { category: t("docs.ai-cat-structure"), tools: "convertBlock, moveBlock, setBlockAlignment, formatText, insertTable, editTable, editTableCell", desc: t("docs.ai-cat-structure-desc") },
                 { category: t("docs.ai-cat-layout"), tools: "insertColumns, getColumnsInfo, updateColumnContent, setColumnsLayout, insertNestedColumns", desc: t("docs.ai-cat-layout-desc") },
                 { category: t("docs.ai-cat-interaction"), tools: "askUserChoice, highlight", desc: t("docs.ai-cat-interaction-desc") },

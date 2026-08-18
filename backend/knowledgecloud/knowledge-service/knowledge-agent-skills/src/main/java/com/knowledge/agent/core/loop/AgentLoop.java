@@ -63,6 +63,15 @@ public class AgentLoop implements Runnable {
 
         List<ToolSpec> clientTools();
 
+        /**
+         * Skill-owned tools registered as deferred: callable, but withheld from
+         * the model's tool list until first use (their JSON Schemas would
+         * otherwise inflate every prompt).
+         */
+        default List<ToolSpec> skillTools() {
+            return java.util.Collections.emptyList();
+        }
+
         List<String> skillFragments();
 
         List<String> memoryLines();
@@ -108,6 +117,15 @@ public class AgentLoop implements Runnable {
 
     private final Map<String, ToolSpec> clientToolSpecs = new HashMap<>();
 
+    /**
+     * Deferred client tools (skill-owned): routable and executable, but absent
+     * from the tools JSON until the model actually calls one, at which point the
+     * spec is promoted into {@link #clientToolSpecs}. Keeps plugin schemas
+     * (chart/mermaid/drawio…) out of every prompt without making them
+     * uncallable.
+     */
+    private final Map<String, ToolSpec> deferredToolSpecs = new java.util.LinkedHashMap<>();
+
     /** Live sub-agent delegations keyed by the parent-side delegate call id. */
     private final Map<String, Delegation> activeDelegations = new java.util.LinkedHashMap<>();
 
@@ -151,6 +169,22 @@ public class AgentLoop implements Runnable {
             for (ToolSpec spec : checkpoint.getClientTools()) {
                 if (spec != null && spec.getName() != null) {
                     clientToolSpecs.put(spec.getName(), spec);
+                }
+            }
+        }
+        // Deferred pool: creation input for a fresh run, checkpoint on recovery.
+        // Anything already activated lives in clientToolSpecs and stays there.
+        if (runInput != null && runInput.skillTools() != null) {
+            for (ToolSpec spec : runInput.skillTools()) {
+                if (spec != null && spec.getName() != null && !clientToolSpecs.containsKey(spec.getName())) {
+                    deferredToolSpecs.put(spec.getName(), spec);
+                }
+            }
+        }
+        if (checkpoint != null && checkpoint.getDeferredTools() != null) {
+            for (ToolSpec spec : checkpoint.getDeferredTools()) {
+                if (spec != null && spec.getName() != null && !clientToolSpecs.containsKey(spec.getName())) {
+                    deferredToolSpecs.put(spec.getName(), spec);
                 }
             }
         }
@@ -294,10 +328,12 @@ public class AgentLoop implements Runnable {
                         } else {
                             backendCalls.add(call);
                         }
-                    } else if (clientToolSpecs.containsKey(call.getName())) {
+                    } else if (clientToolSpecs.containsKey(call.getName())
+                            || deferredToolSpecs.containsKey(call.getName())) {
                         if (planGateBlocksClient(call.getName())) {
                             checkpoint.getMessages().add(blockedMessage(call, "PLAN_MODE_BLOCKED"));
                         } else {
+                            activateDeferred(call.getName());
                             frontendCalls.add(call);
                         }
                     } else {
@@ -367,7 +403,8 @@ public class AgentLoop implements Runnable {
         cp.setToken(run.getToken());
         cp.getMessages().add(contextManager.buildSystemMessage(run,
                 runInput != null ? runInput.skillFragments() : null,
-                runInput != null ? runInput.memoryLines() : null));
+                runInput != null ? runInput.memoryLines() : null,
+                new ArrayList<>(deferredToolSpecs.values())));
         if (runInput != null && runInput.messages() != null) {
             for (ChatMessage message : runInput.messages()) {
                 if (message == null || "system".equalsIgnoreCase(message.getRole())) {
@@ -379,6 +416,7 @@ public class AgentLoop implements Runnable {
         if (runInput != null && runInput.clientTools() != null) {
             cp.setClientTools(new ArrayList<>(runInput.clientTools()));
         }
+        cp.setDeferredTools(new ArrayList<>(deferredToolSpecs.values()));
         if (runInput != null) {
             cp.setTemperature(runInput.temperature());
             cp.setMaxTokens(runInput.maxTokens());
@@ -896,8 +934,33 @@ public class AgentLoop implements Runnable {
         if (!"plan".equalsIgnoreCase(run.getMode()) || run.isPlanGateOpen()) {
             return false;
         }
-        ToolSpec spec = clientToolSpecs.get(toolName);
+        ToolSpec spec = clientSpec(toolName);
         return spec == null || !spec.isReadOnly();
+    }
+
+    /** Looks a client tool up in the active catalog, then in the deferred pool. */
+    private ToolSpec clientSpec(String toolName) {
+        ToolSpec spec = clientToolSpecs.get(toolName);
+        return spec != null ? spec : deferredToolSpecs.get(toolName);
+    }
+
+    /**
+     * Promotes a deferred tool into the active catalog on its first call, so the
+     * model sees its full parameter schema from the next step onwards. No-op for
+     * tools that were never deferred (or are already active).
+     */
+    private void activateDeferred(String toolName) {
+        ToolSpec spec = deferredToolSpecs.remove(toolName);
+        if (spec == null) {
+            return;
+        }
+        clientToolSpecs.put(toolName, spec);
+        if (checkpoint.getClientTools() == null) {
+            checkpoint.setClientTools(new ArrayList<>());
+        }
+        checkpoint.getClientTools().add(spec);
+        checkpoint.setDeferredTools(new ArrayList<>(deferredToolSpecs.values()));
+        log.debug("Run {} activated deferred tool {}", run.getRunId(), toolName);
     }
 
     private ToolContext buildToolContext() {
@@ -914,6 +977,7 @@ public class AgentLoop implements Runnable {
         context.setStep(checkpoint.getNextStep());
         context.setDelegateDepth(checkpoint.getDelegateDepth());
         context.setClientTools(new ArrayList<>(clientToolSpecs.values()));
+        context.setDeferredTools(new ArrayList<>(deferredToolSpecs.values()));
         context.setScratchpad(scratchpad);
         return context;
     }

@@ -39,6 +39,9 @@ public class ToolContext {
     /** Client-declared tool catalog of this run (delegate tool subsetting). */
     private java.util.List<com.knowledge.agent.core.tool.ToolSpec> clientTools;
 
+    /** Deferred (skill-owned) tools of this run — inherited by sub-agents. */
+    private java.util.List<com.knowledge.agent.core.tool.ToolSpec> deferredTools;
+
     /** Working-memory scratchpad holder (read/write). */
     private ScratchpadHolder scratchpad = new ScratchpadHolder();
 

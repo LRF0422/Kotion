@@ -8,6 +8,7 @@ import {
     validateRange,
     calculateChunkSize,
     buildNodeInfo,
+    findTextMatchesInDoc,
 } from "@kn/common"
 
 /**
@@ -107,7 +108,7 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
     },
 
     searchInDocument: {
-        description: '在文档中搜索指定文本，返回精确的 from/to 位置和所在块的 blockId，可直接用于替换或 blockId 寻址编辑',
+        description: '在文档中搜索指定文本，返回精确的 from/to 位置和所在块的 blockId，可直接用于 replaceRange/deleteRange/deleteText 或 blockId 寻址编辑',
         inputSchema: z.object({
             query: z.string().describe("搜索文本"),
             caseSensitive: z.boolean().optional().describe("是否区分大小写"),
@@ -118,65 +119,31 @@ export const createReadTools = (editor: Editor): ToolsRecord => ({
             caseSensitive?: boolean
             limit?: number
         }) => {
-            const results: Array<{
-                from: number
-                to: number
-                text: string
-                context: string
-                blockType: string
-                blockPos: number
-                blockId?: string
-            }> = []
+            if (!query) {
+                return { error: '搜索文本不能为空' }
+            }
 
-            const searchText = caseSensitive ? query : query.toLowerCase()
-
-            editor.state.doc.descendants((node, pos) => {
-                if (results.length >= limit) {
-                    return false
-                }
-
-                if (!node.isTextblock) {
-                    return true
-                }
-
-                const nodeText = caseSensitive ? node.textContent : node.textContent.toLowerCase()
-                const originalText = node.textContent
-                let searchIndex = 0
-
-                // Find all matches within this text block
-                while (searchIndex < nodeText.length && results.length < limit) {
-                    const index = nodeText.indexOf(searchText, searchIndex)
-                    if (index === -1) break
-
-                    // For text blocks, content starts at pos + 1 (after opening tag)
-                    const from = pos + 1 + index
-                    const to = from + query.length
-
-                    const contextStart = Math.max(0, index - 50)
-                    const contextEnd = Math.min(node.textContent.length, index + query.length + 50)
-
-                    results.push({
-                        from,
-                        to,
-                        text: originalText.substring(index, index + query.length),
-                        context: node.textContent.substring(contextStart, contextEnd),
-                        blockType: node.type.name,
-                        blockPos: pos,
-                        blockId: (node.attrs?.id ?? node.attrs?.blockId) as string | undefined
-                    })
-
-                    searchIndex = index + 1 // Continue searching for more matches
-                }
-
-                return true
-            })
+            // findTextMatchesInDoc keeps an exact char→position map per
+            // textblock, so positions stay correct around inline atoms
+            // (images/mentions/hard breaks) and across mark boundaries —
+            // unlike the legacy textContent-index mapping.
+            const results = findTextMatchesInDoc(editor.state.doc, query, { caseSensitive, limit })
+                .map(m => ({
+                    from: m.from,
+                    to: m.to,
+                    text: m.text,
+                    context: m.context,
+                    blockType: m.blockType,
+                    blockPos: m.blockPos,
+                    blockId: m.blockId
+                }))
 
             return {
                 success: true,
                 results,
                 totalFound: results.length,
                 hasMore: results.length >= limit,
-                tip: 'Use from/to for replaceRange, or blockId for replaceBlockById/applyEdits'
+                tip: 'Use from/to for replaceRange/deleteRange, blockId to scope deleteText, or blockId for replaceBlockById/applyEdits'
             }
         }
     }

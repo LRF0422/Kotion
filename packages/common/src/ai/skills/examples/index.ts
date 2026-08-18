@@ -202,7 +202,7 @@ export const writingEnhancementSkill: SerializableSkill = {
     ],
     optionalTools: [
         'insertNear',
-        'deleteBySearch'
+        'deleteText'
     ],
     systemPromptFragment: `## Writing Enhancement Skill Active
 

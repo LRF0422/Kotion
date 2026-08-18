@@ -24,10 +24,10 @@ public class CreateRunRequest {
     /** Conversation history including the latest user message. */
     private List<ChatMessage> messages = new ArrayList<>();
 
-    /** Client-declared (editor) tools. */
+    /** Client-declared (editor) tools — always registered and always offered to the model. */
     private List<ToolSpec> tools = new ArrayList<>();
 
-    /** Skills with system-prompt fragments. */
+    /** Skills with system-prompt fragments (and their deferred tool schemas). */
     private List<SkillInput> skills = new ArrayList<>();
 
     private Double temperature;
@@ -46,5 +46,15 @@ public class CreateRunRequest {
     public static class SkillInput {
         private String name;
         private String systemPromptFragment;
+
+        /**
+         * Tool schemas this skill owns (typically editor plugin tools).
+         *
+         * <p>These are <em>deferred</em>: registered as callable but kept out of
+         * the model's tool list, so their JSON Schemas don't inflate every
+         * prompt. The system prompt advertises them by name + description, and
+         * the first call activates the schema for the remainder of the run.
+         */
+        private List<ToolSpec> tools = new ArrayList<>();
     }
 }

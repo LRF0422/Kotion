@@ -87,6 +87,8 @@ public class Delegator {
         messages.add(ChatMessage.builder().role("user").content(task).build());
         cmd.setMessages(messages);
         cmd.setTools(selectTools(ctx.getClientTools(), args.get("tools")));
+        // Deferred tools stay deferred in the child: same subsetting, same laziness.
+        cmd.setSkillTools(selectTools(ctx.getDeferredTools(), args.get("tools")));
 
         RunView child = supervisor().createChild(cmd, ctx.getRunId(), ctx.getDelegateDepth() + 1);
 

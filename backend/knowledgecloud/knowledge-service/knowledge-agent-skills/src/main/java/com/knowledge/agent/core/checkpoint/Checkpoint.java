@@ -50,6 +50,14 @@ public class Checkpoint {
     /** Client-declared (editor) tool catalog — persisted for loop recovery. */
     private List<com.knowledge.agent.core.tool.ToolSpec> clientTools = new ArrayList<>();
 
+    /**
+     * Deferred (skill-owned) tool catalog — callable but withheld from the
+     * model's tool list until first use. Persisted so a rebuilt loop keeps the
+     * same activation surface; tools already activated have been moved into
+     * {@link #clientTools}.
+     */
+    private List<com.knowledge.agent.core.tool.ToolSpec> deferredTools = new ArrayList<>();
+
     /** Full conversation including system prefix and injected memory. */
     private List<ChatMessage> messages = new ArrayList<>();
 

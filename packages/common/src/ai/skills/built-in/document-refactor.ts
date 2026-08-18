@@ -17,11 +17,12 @@ export const documentRefactorSkill: Skill = {
         'searchInDocument',
         'insertNear',
         'replaceContent',
-        'deleteBySearch',
+        'deleteText',
         'askUserChoice'
     ],
     optionalTools: [
-        'deleteBlock',
+        'deleteBlocks',
+        'deleteBlocksBetween',
         'convertBlock',
         'formatText',
         'write'

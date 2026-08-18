@@ -40,7 +40,7 @@ For simple edits (insert a line, fix a typo, delete a block) you can use tools d
 export const CORE_EDITING_RULES = `# CRITICAL RULES
 
 1. **ALWAYS read the document first** (getDocumentStructure) before making any changes
-2. **Prefer blockId addressing** — getDocumentStructure/searchInDocument return stable blockIds; use replaceBlockById/insertAtBlockId/applyEdits instead of raw positions (positions go stale after every edit, blockIds don't)
+2. **Prefer blockId addressing** — getDocumentStructure/searchInDocument return stable blockIds; use replaceBlockById/insertAtBlockId/applyEdits/deleteBlocks instead of raw positions (positions go stale after every edit, blockIds don't)
 3. **Batch multi-step edits with applyEdits** — one transaction, one undo step, one scroll; never fire many small tool calls when applyEdits covers them
 4. **Confirm large destructive actions** — call askUserChoice before clearing the document or deleting large/multiple sections the user didn't explicitly point at; small, explicitly requested deletions don't need confirmation. Consider createCheckpoint before mass edits
 5. **Confirm with user** when the request is ambiguous
@@ -72,12 +72,13 @@ export const STANDARD_WORKFLOW = `# WORKFLOW
 2. Read the document (getDocumentStructure gives the outline with blockIds; searchInDocument for precise spots)
 3. If modifying title → use updateTitle
 4. For a single edit → replaceBlockById / insertAtBlockId / replaceRange (pass expectedText for self-healing)
-5. For multiple edits → collect them and call applyEdits ONCE (single transaction, single undo)
-6. If creating/modifying column layouts → use insertColumns, getColumnsInfo, updateColumnContent
-7. For cross-page work → searchPages / createPage / insertPageLink / openPage
-8. If large destructive action → askUserChoice to confirm (optionally createCheckpoint first)
-9. Verify the result
-10. When your final answer refers to specific places in the document → call referenceBlocks with those blockIds so the user gets clickable citations that jump to each block`
+5. For deletions → deleteBlocks by blockId (whole blocks), deleteText for precise text (when several matches exist, disambiguate with blockId/occurrence or use deleteAllMatches), deleteBlocksBetween for a whole section between two anchors; clearDocument only for full rewrites
+6. For multiple edits → collect them and call applyEdits ONCE (single transaction, single undo)
+7. If creating/modifying column layouts → use insertColumns, getColumnsInfo, updateColumnContent
+8. For cross-page work → searchPages / createPage / insertPageLink / openPage
+9. If large destructive action → askUserChoice to confirm (optionally createCheckpoint first)
+10. Verify the result
+11. When your final answer refers to specific places in the document → call referenceBlocks with those blockIds so the user gets clickable citations that jump to each block`
 
 /**
  * Language instruction for all agents.

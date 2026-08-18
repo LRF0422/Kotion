@@ -13,6 +13,7 @@ import type { ChangeTrackerStorage } from "@kn/editor"
 import {
     useEditorAgent,
     useCapabilityProviders,
+    buildAgentRunInputs,
     getOffscreenEditorBridge,
     getPageBridge,
     revealBlockById,
@@ -26,8 +27,6 @@ import type {
     OffscreenEditorHandle,
     UserChoiceRequest,
     AgentChatMessage,
-    AgentToolSpec,
-    AgentSkillInput,
     ToolCallRecord,
 } from "@kn/common"
 
@@ -335,18 +334,9 @@ export const ExpandableChatDemo: React.FC<{
         onUserChoiceRequest: handleUserChoiceRequest,
     })
     const catalog = useMemo(() => getCatalog(), [getCatalog])
-    const toolSpecs = useMemo<AgentToolSpec[]>(() => catalog.tools.map(tool => ({
-        name: tool.function.name,
-        description: tool.function.description,
-        inputSchema: tool.function.parameters,
-        kind: 'frontend' as const,
-        readOnly: tool.readOnly === true,
-        source: 'client' as const,
-    })), [catalog])
-    const skills = useMemo<AgentSkillInput[]>(() => catalog.skills.map(skill => ({
-        name: skill.name,
-        systemPromptFragment: skill.systemPromptFragment,
-    })), [catalog])
+    // tools[] carries the always-on schemas; skill-owned tools ride inside
+    // skills[] and stay deferred until the model calls one.
+    const { tools: toolSpecs, skills } = useMemo(() => buildAgentRunInputs(catalog), [catalog])
 
     const agent = useEditorAgent({
         conversationId: activeSessionId,

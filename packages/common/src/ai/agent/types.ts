@@ -36,6 +36,13 @@ export interface AgentToolSpec {
 export interface AgentSkillInput {
     name: string
     systemPromptFragment?: string
+    /**
+     * Tools this skill owns. The backend registers them as *deferred*: callable,
+     * but their schemas stay out of the model's tool list until first use (only
+     * name + description are advertised in the system prompt). Tools that are
+     * also in the run's top-level `tools` are ignored here.
+     */
+    tools?: AgentToolSpec[]
 }
 
 // ============ Runs ============

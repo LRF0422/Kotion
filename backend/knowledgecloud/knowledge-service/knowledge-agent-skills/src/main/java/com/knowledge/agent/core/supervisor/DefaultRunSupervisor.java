@@ -175,7 +175,7 @@ public class DefaultRunSupervisor {
         checkpoint.setPlanGateOpen(run.isPlanGateOpen());
         checkpoint.setDelegateDepth(delegateDepth);
         checkpoint.getMessages().add(contextManager.buildSystemMessage(run,
-                cmd.getSkillFragments(), cmd.getMemoryLines()));
+                cmd.getSkillFragments(), cmd.getMemoryLines(), cmd.getSkillTools()));
         if (cmd.getMessages() != null) {
             for (ChatMessage message : cmd.getMessages()) {
                 if (message != null && !"system".equalsIgnoreCase(message.getRole())) {
@@ -185,6 +185,9 @@ public class DefaultRunSupervisor {
         }
         if (cmd.getTools() != null) {
             checkpoint.setClientTools(new ArrayList<>(cmd.getTools()));
+        }
+        if (cmd.getSkillTools() != null) {
+            checkpoint.setDeferredTools(new ArrayList<>(cmd.getSkillTools()));
         }
         checkpoint.setTemperature(cmd.getTemperature());
         checkpoint.setMaxTokens(cmd.getMaxTokens());
@@ -424,6 +427,11 @@ public class DefaultRunSupervisor {
         @Override
         public List<ToolSpec> clientTools() {
             return cmd.getTools();
+        }
+
+        @Override
+        public List<ToolSpec> skillTools() {
+            return cmd.getSkillTools();
         }
 
         @Override

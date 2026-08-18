@@ -21,7 +21,7 @@ export const writingImprovementSkill: Skill = {
         'insertNear',
         'write',
         'formatText',
-        'deleteBySearch'
+        'deleteText'
     ],
     systemPromptFragment: `## Writing Improvement Skill Active
 

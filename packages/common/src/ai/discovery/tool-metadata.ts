@@ -24,8 +24,9 @@ export const ESSENTIAL_TOOLS = [
     'insertAtBlockId',
     'applyEdits',
     // Delete tools
-    'deleteBySearch',
-    'deleteBlock',
+    'deleteText',
+    'deleteBlocks',
+    'deleteRange',
     'clearDocument',
     // Interaction tools
     'askUserChoice',
@@ -126,20 +127,38 @@ export const BUILTIN_TOOL_METADATA: ToolMetadata[] = [
 
     // ===== Document Delete Tools =====
     {
-        name: 'deleteBySearch',
+        name: 'deleteText',
         category: 'document-delete',
-        description: '搜索并删除匹配的内容，支持文本或整块删除',
-        priority: 8,
-        tags: ['delete', 'search', 'match', 'essential'],
+        description: '精确删除匹配文本（只删文本不动块结构），多处匹配需 blockId/occurrence 定位或 deleteAllMatches',
+        priority: 9,
+        tags: ['delete', 'text', 'search', 'precision', 'essential'],
         loaded: false,
         source: 'builtin'
     },
     {
-        name: 'deleteBlock',
+        name: 'deleteBlocks',
         category: 'document-delete',
-        description: '按块索引删除整个块',
-        priority: 8,
-        tags: ['delete', 'block', 'index', 'essential'],
+        description: '按 blockId 删除一个或多个块，批量单事务、缺失项报错不误删',
+        priority: 9,
+        tags: ['delete', 'block', 'blockId', 'batch', 'essential'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'deleteRange',
+        category: 'document-delete',
+        description: '删除精确位置范围的内容，支持 expectedText 校验与失效自动重定位',
+        priority: 9,
+        tags: ['delete', 'range', 'position', 'precision', 'essential'],
+        loaded: false,
+        source: 'builtin'
+    },
+    {
+        name: 'deleteBlocksBetween',
+        category: 'document-delete',
+        description: '删除两个锚点块之间的连续区域（整节删除）',
+        priority: 7,
+        tags: ['delete', 'block', 'section', 'range', 'blockId'],
         loaded: false,
         source: 'builtin'
     },

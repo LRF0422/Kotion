@@ -9,6 +9,7 @@ import com.knowledge.agent.core.run.RunView;
 import com.knowledge.agent.core.supervisor.CreateRunCommand;
 import com.knowledge.agent.core.supervisor.DefaultRunSupervisor;
 import com.knowledge.agent.core.supervisor.ThreadStore;
+import com.knowledge.agent.core.tool.ToolSpec;
 import com.knowledge.agent.core.web.dto.CreateRunRequest;
 import com.knowledge.agent.core.web.dto.ResumeRequest;
 import com.knowledge.agent.core.web.dto.ThreadView;
@@ -91,11 +92,32 @@ public class EditorAgentController {
         cmd.setTenantId(parseTenantId());
         cmd.setToken(SecurityContextUtil.getToken());
         cmd.setSkillFragments(new ArrayList<>());
+        cmd.setSkillTools(new ArrayList<>());
         if (request.getSkills() != null) {
+            // Skill tools are deduped by name and kept out of `tools` on purpose:
+            // the loop registers them as deferred (callable, but absent from the
+            // model's tool list until first use).
+            java.util.Set<String> seenTools = new java.util.HashSet<>();
+            for (ToolSpec spec : request.getTools() != null ? request.getTools() : new ArrayList<ToolSpec>()) {
+                if (spec != null && spec.getName() != null) {
+                    seenTools.add(spec.getName());
+                }
+            }
             for (CreateRunRequest.SkillInput skill : request.getSkills()) {
-                if (skill != null && skill.getSystemPromptFragment() != null
+                if (skill == null) {
+                    continue;
+                }
+                if (skill.getSystemPromptFragment() != null
                         && !skill.getSystemPromptFragment().trim().isEmpty()) {
                     cmd.getSkillFragments().add(skill.getSystemPromptFragment().trim());
+                }
+                if (skill.getTools() == null) {
+                    continue;
+                }
+                for (ToolSpec spec : skill.getTools()) {
+                    if (spec != null && spec.getName() != null && seenTools.add(spec.getName())) {
+                        cmd.getSkillTools().add(spec);
+                    }
                 }
             }
         }

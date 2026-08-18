@@ -8,4 +8,6 @@
 
 export { collectCapabilityCatalog } from './CapabilityCatalog'
 export type { CapabilityCatalog } from './CapabilityCatalog'
+export { buildAgentRunInputs } from './catalog-to-run-input'
+export type { AgentRunInputs } from './catalog-to-run-input'
 export type { SkillPayload, ToolPayload } from './payload-types'
