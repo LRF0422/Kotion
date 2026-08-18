@@ -50,5 +50,8 @@ export const chatDockPanel: DockPanelConfig = {
     order: 10,
     defaultWidth: 400,
     minWidth: 320,
+    // The chat renders its own header bar (session picker + actions + close),
+    // so the host's generic title bar would just stack a second row on top.
+    hideHeader: true,
     component: ChatDockPanel,
 }

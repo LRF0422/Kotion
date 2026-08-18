@@ -52,6 +52,11 @@ export interface DockPanelConfig {
      * open page returns `!!ctx.pageId`. Called on every context change.
      */
     visible?: (ctx: DockPanelContext) => boolean
+    /**
+     * Panel renders its own complete header (title/close included) inside its
+     * content; the host skips the generic title bar so the two don't stack.
+     */
+    hideHeader?: boolean
     component: ComponentType<DockPanelProps>
 }
 

@@ -203,11 +203,19 @@ export const DockHost: React.FC<DockHostProps> = ({
         return (
             <Sheet open={!!activePanel} onOpenChange={(open) => { if (!open) close() }}>
                 <SheetContent side="right" className="w-full p-0 flex flex-col gap-0">
-                    <SheetHeader className="px-3 py-2 border-b text-left">
-                        <SheetTitle className="text-sm font-medium">
-                            {activePanel ? panelTitle(activePanel) : ''}
+                    {activePanel?.hideHeader ? (
+                        /* Keep the title for Radix a11y, just not visible — the
+                           panel's own header bar takes over on screen. */
+                        <SheetTitle className="sr-only">
+                            {panelTitle(activePanel)}
                         </SheetTitle>
-                    </SheetHeader>
+                    ) : (
+                        <SheetHeader className="px-3 py-2 border-b text-left">
+                            <SheetTitle className="text-sm font-medium">
+                                {activePanel ? panelTitle(activePanel) : ''}
+                            </SheetTitle>
+                        </SheetHeader>
+                    )}
                     <div className="flex-1 min-h-0 overflow-hidden">
                         {PanelComponent && <PanelComponent {...context} close={close} />}
                     </div>
@@ -264,18 +272,22 @@ export const DockHost: React.FC<DockHostProps> = ({
                             )}
                             onMouseDown={startResize}
                         />
-                        <div className="flex h-9 flex-shrink-0 items-center justify-between border-b px-3">
-                            <span className="truncate text-xs font-medium">{panelTitle(rendered)}</span>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-muted-foreground"
-                                aria-label={t('dock.collapse', 'Collapse panel')}
-                                onClick={close}
-                            >
-                                <X className="h-3.5 w-3.5" />
-                            </Button>
-                        </div>
+                        {/* Panels that own their header (hideHeader) skip this
+                            generic bar so their title/actions don't stack twice. */}
+                        {!rendered.hideHeader && (
+                            <div className="flex h-9 flex-shrink-0 items-center justify-between border-b px-3">
+                                <span className="truncate text-xs font-medium">{panelTitle(rendered)}</span>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-muted-foreground"
+                                    aria-label={t('dock.collapse', 'Collapse panel')}
+                                    onClick={close}
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </Button>
+                            </div>
+                        )}
                         <div className="min-h-0 flex-1 overflow-hidden">
                             <RenderedComponent {...context} close={close} />
                         </div>

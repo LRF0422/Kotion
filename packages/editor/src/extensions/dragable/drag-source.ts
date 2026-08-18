@@ -1,5 +1,6 @@
 import { NodeSelection } from '@tiptap/pm/state'
 import { Slice, Fragment } from '@tiptap/pm/model'
+import type { EditorView } from '@tiptap/pm/view'
 import type { DragSharedState } from './dragable'
 
 export interface DragSourceHandlers {
@@ -45,9 +46,9 @@ export function createDragSource(params: {
                 return
             }
 
-            // For non-selectable nodes (paragraphs, headings, etc.) we still
-            // keep `draggedNodeInfo` so the column-drop path works — the
-            // slice is built from the node directly at dragstart.
+            // For nodes declaring `selectable: false` we still keep
+            // `draggedNodeInfo` so the column-drop path works — the slice is
+            // built from the node directly at dragstart.
         },
 
         onGripMouseUp: () => {
@@ -65,10 +66,21 @@ export function createDragSource(params: {
             const info = shared.draggedNodeInfo
             if (!event.dataTransfer || !info || !view) return
 
-            // Non-selectable nodes (paragraphs, headings) can't produce a
-            // NodeSelection so we synthesise a single-node slice manually.
-            const slice = shared.activeSelection && NodeSelection.isSelectable(info.node)
-                ? shared.activeSelection.content()
+            // Re-derive the NodeSelection from `draggedNodeInfo` instead of
+            // trusting `shared.activeSelection`: the live selection can have
+            // been replaced between grip mousedown and dragstart (deferred
+            // post-drop cleanup, a remote collaboration transaction, a menu
+            // stealing focus...), and ProseMirror needs a selection that
+            // really points at the dragged node — see below.
+            const nodeSelection =
+                NodeSelection.isSelectable(info.node) && view.state.doc.nodeAt(info.pos) === info.node
+                    ? NodeSelection.create(view.state.doc, info.pos)
+                    : null
+
+            // Nodes that can't produce a NodeSelection (`selectable: false`)
+            // still need a slice, so synthesise a single-node one manually.
+            const slice = nodeSelection
+                ? nodeSelection.content()
                 : new Slice(Fragment.from(info.node), 0, 0)
 
             event.dataTransfer.effectAllowed = 'copyMove'
@@ -80,7 +92,23 @@ export function createDragSource(params: {
                 event.dataTransfer.setDragImage(shared.activeNode.el, 0, 0)
             }
 
-            view.dragging = { slice, move: true }
+            // `node` is not in prosemirror-view's *public* `dragging` type but
+            // it is what its drop handler keys the source removal on:
+            //
+            //     if (move) { let {node} = dragging
+            //                 if (node) node.replace(tr)   // exact source
+            //                 else tr.deleteSelection() }   // whatever is selected
+            //
+            // Without it, a move-drop deletes the *current* selection — so if
+            // the selection no longer covers the dragged block when the drop
+            // lands, the source survives and the inserted copy becomes a second
+            // block carrying the same blockId (invisible to the incremental
+            // save, and split into a genuinely independent block by UniqueID as
+            // soon as one copy is deleted). Passing `node` also lets the view
+            // remap the source across concurrent doc changes in
+            // `updateDraggedNode`, dropping to `undefined` when it can no longer
+            // be located rather than deleting the wrong node.
+            view.dragging = { slice, move: true, node: nodeSelection ?? undefined } as EditorView['dragging']
         },
     }
 }

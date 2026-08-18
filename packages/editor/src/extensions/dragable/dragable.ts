@@ -121,6 +121,12 @@ export const Dragable = Extension.create<DragableStorage>({
         })
         const hover = createHoverController({ editor, shared, dragSource })
 
+        /**
+         * Pending handle of the deferred post-drop selection cleanup, so a new
+         * drop can cancel the previous one instead of letting two of them race.
+         */
+        let dropCleanupTimer: any = null
+
         const clearSelectedNodeClasses = (view: EditorView) => {
             const root = view.dom as HTMLElement
             for (const cls of SELECTED_NODE_CLASSES) {
@@ -181,7 +187,17 @@ export const Dragable = Extension.create<DragableStorage>({
 
                             // Defer selection cleanup until PM's own drop
                             // transaction has landed (see DROP_CLEAR_DELAY_MS).
-                            setTimeout(() => {
+                            if (dropCleanupTimer) clearTimeout(dropCleanupTimer)
+                            dropCleanupTimer = setTimeout(() => {
+                                dropCleanupTimer = null
+
+                                // A new drag can have started inside the delay
+                                // window (`view.dragging` is set at dragstart and
+                                // cleared right after PM's drop). Resetting the
+                                // selection now would clobber the state that
+                                // drag relies on, so leave it to its own drop.
+                                if (shared.dragging || view.dragging) return
+
                                 if (shared.activeSelection) {
                                     clearSelectedNodeClasses(view)
                                     const noneSelection = new TextSelection(

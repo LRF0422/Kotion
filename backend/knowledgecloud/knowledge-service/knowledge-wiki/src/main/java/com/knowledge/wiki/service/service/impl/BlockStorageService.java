@@ -354,6 +354,14 @@ public class BlockStorageService {
                     cachedRoot.setContent(deduped);
                     mutated = true;
                 }
+                // Entries cached before the identity repair landed can still
+                // carry attrs without an `id`, which makes the editor mint a
+                // fresh one and fork a duplicate row on every load.
+                for (PageContent child : cachedRoot.getContent()) {
+                    if (ensureIdentityAttrs(child)) {
+                        mutated = true;
+                    }
+                }
                 if (mutated) {
                     // Refresh the cache so subsequent hits skip the dedup work.
                     blockCacheService.cacheAssembledTree(pageId, JSONUtil.toJsonStr(cachedRoot));
@@ -445,6 +453,12 @@ public class BlockStorageService {
             attachChildren(child, childrenMap);
         }
 
+        // Project every row's primary key into attrs.id. Runs after the subtrees
+        // are attached so nested rows are covered too.
+        for (PageContent child : rootChildren) {
+            ensureIdentityAttrs(child);
+        }
+
         // Cache the assembled tree
         String treeJson = JSONUtil.toJsonStr(root);
         blockCacheService.cacheAssembledTree(pageId, treeJson);
@@ -496,15 +510,77 @@ public class BlockStorageService {
         if (StrUtil.isNotBlank(blockId)) {
             String newId = IdUtil.fastSimpleUUID();
             node.setId(newId);
-            if (node.getAttrs() != null) {
-                node.getAttrs().set("id", newId);
+            // attrs must carry the id too: it is the only identity the editor
+            // reads, and a node without it gets re-minted (and duplicated) on
+            // every load. Create the object when the source row had none.
+            JSONObject attrs = node.getAttrs();
+            if (attrs == null) {
+                attrs = new JSONObject();
+                node.setAttrs(attrs);
             }
+            attrs.set("id", newId);
         }
         if (CollUtil.isNotEmpty(node.getContent())) {
             for (PageContent child : node.getContent()) {
                 regenerateBlockIdsRecursive(child);
             }
         }
+    }
+
+    /**
+     * Project each block row's primary key into {@code attrs.id}.
+     * <p>
+     * The {@code wiki_page_block.id} column is the authoritative block identity —
+     * upserts and deletes key on it. The editor, however, only ever sees
+     * {@code attrs.id}: the UniqueID extension reads it, and a node arriving
+     * without one is indistinguishable from a brand-new block, so it is assigned
+     * a freshly minted UUID. That mint is then persisted as an <b>additional</b>
+     * row while the original survives untouched — no client knows its id, so no
+     * client can ever delete it, and it re-seeds another duplicate on every
+     * single load. That is the "block multiplies and cannot be deleted, deleting
+     * makes more" corruption.
+     * </p>
+     * <p>
+     * Rows legitimately reach this point without {@code attrs.id}: content
+     * imported or generated without per-node ids, and {@code copyPage} (see
+     * {@link #regenerateBlockIdsRecursive}). Repairing on read pins identity
+     * without needing a data migration.
+     * </p>
+     * <p>
+     * Only nodes that own a row ({@code id} non-blank) are touched; inline nodes
+     * kept inside a parent's content column have no row and are left alone.
+     * </p>
+     *
+     * @param node subtree root to repair, in place
+     * @return true if any node was modified (so callers can refresh the cache)
+     */
+    private boolean ensureIdentityAttrs(PageContent node) {
+        if (node == null) {
+            return false;
+        }
+        boolean mutated = false;
+        String rowId = node.getId();
+        if (StrUtil.isNotBlank(rowId)) {
+            JSONObject attrs = node.getAttrs();
+            if (attrs == null) {
+                attrs = new JSONObject();
+                node.setAttrs(attrs);
+            }
+            // The primary key wins: a divergent attrs.id would make the client
+            // address a row that does not exist.
+            if (!rowId.equals(attrs.getStr("id"))) {
+                attrs.set("id", rowId);
+                mutated = true;
+            }
+        }
+        if (CollUtil.isNotEmpty(node.getContent())) {
+            for (PageContent child : node.getContent()) {
+                if (ensureIdentityAttrs(child)) {
+                    mutated = true;
+                }
+            }
+        }
+        return mutated;
     }
 
     private void attachChildren(PageContent node, Map<String, List<PageContent>> childrenMap) {

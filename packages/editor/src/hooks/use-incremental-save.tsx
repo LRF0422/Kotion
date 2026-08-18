@@ -138,9 +138,15 @@ export function useIncrementalSave(options: UseIncrementalSaveOptions): UseIncre
     // enough: versions are only learned from this session's saves, so the
     // first save after opening an existing page looks identical. Require the
     // baseline at tracking start to have been empty (title block at most).
+    //
+    // `baselineBlockCountRef` alone is not enough either: under collaboration
+    // tracking turns on before the Yjs sync populates the document, so it is 0
+    // even for a page full of content. Re-check the *live* baseline, which the
+    // tracker keeps up to date as synced blocks arrive.
     const isFreshBulkImport =
       payload.changes.length > bulkThreshold &&
       baselineBlockCountRef.current <= 1 &&
+      tracker.committedOrder.length <= 1 &&
       payload.changes.every(c => c.action === 'upsert' && c.prevVersion == null)
 
     let failed = false

@@ -129,24 +129,18 @@ function topIndexAt(doc: ProseMirrorNode, pos: number): number {
 }
 
 /**
- * Add the ids of every top-level block touched by `tr` to `dirtyBlockIds`.
+ * Call `visit` once for every top-level block touched by `tr`.
  *
- * This is the heart of the O(edit-size) tracking: instead of diffing the whole
- * document, we ask `getChangedRanges(tr)` for the (new-doc) position ranges the
+ * This is the heart of the O(edit-size) tracking: instead of walking the
+ * document we ask `getChangedRanges(tr)` for the (new-doc) position ranges the
  * transaction's steps actually altered — O(steps) — and map each range's
- * endpoints to top-level block indices via `topIndexAt`. Only those blocks are
- * marked. A typical keystroke yields one range spanning one block.
- *
- * Newly-inserted blocks have no id yet at insert time (UniqueID assigns ids in a
- * *separate* appended transaction). That appended tx's `setNodeMarkup` step
- * covers the new block's position, so when `apply` runs for it this function
- * marks the block once its id exists — no special-casing needed here.
+ * endpoints to top-level block indices via `topIndexAt`. A typical keystroke
+ * yields one range spanning one block.
  */
-function markChangedTopBlocks(
+function forEachChangedTopBlock(
   tr: Transaction,
   newDoc: ProseMirrorNode,
-  attr: string,
-  dirtyBlockIds: Set<string>,
+  visit: (node: ProseMirrorNode) => void,
 ): void {
   const childCount = newDoc.childCount
   if (childCount === 0) return
@@ -159,11 +153,69 @@ function markChangedTopBlocks(
     if (from > to) { const t = from; from = to; to = t }
     from = Math.max(0, Math.min(from, lastIndex))
     to = Math.max(0, Math.min(to, lastIndex))
-    for (let i = from; i <= to; i++) {
-      const id = resolveBlockId(newDoc.child(i), attr)
-      if (id) dirtyBlockIds.add(id)
-    }
+    for (let i = from; i <= to; i++) visit(newDoc.child(i))
   }
+}
+
+/**
+ * Add the ids of every top-level block touched by `tr` to `dirtyBlockIds`.
+ *
+ * Newly-inserted blocks have no id yet at insert time (UniqueID assigns ids in a
+ * *separate* appended transaction). That appended tx's `setNodeMarkup` step
+ * covers the new block's position, so when `apply` runs for it this function
+ * marks the block once its id exists — no special-casing needed here.
+ */
+function markChangedTopBlocks(
+  tr: Transaction,
+  newDoc: ProseMirrorNode,
+  attr: string,
+  dirtyBlockIds: Set<string>,
+): void {
+  forEachChangedTopBlock(tr, newDoc, node => {
+    const id = resolveBlockId(node, attr)
+    if (id) dirtyBlockIds.add(id)
+  })
+}
+
+/**
+ * Fold the blocks carried by a *remote* (collaboration) transaction into the
+ * committed baseline.
+ *
+ * Content that arrives over Yjs is by definition already persisted by the
+ * client that authored it, so it belongs in the baseline. This is not an
+ * optimisation — it is load-bearing:
+ *
+ *   - The baseline is snapshotted once, when saving turns on. With a
+ *     collaboration provider `onContentReady` fires as soon as the editor
+ *     exists (the Y.Doc is the source of truth, so nothing is loaded through
+ *     `setContent`), which is *before* the Yjs sync populates the document — so
+ *     that snapshot is taken on an empty document.
+ *   - Deletions are derived as "in `committedOrder`, absent from the doc now".
+ *     A block that never made it into `committedOrder` therefore can never
+ *     produce a delete op: the user deletes it, nothing is sent, the row stays
+ *     in the database and the block reappears on the next reload.
+ *   - `committedRanks` has the same problem in the other direction: with no
+ *     baseline rank, *every* synced block looks moved and gets re-upserted on
+ *     the first save, making each save O(document) instead of O(edit).
+ */
+function foldRemoteBlocksIntoBaseline(
+  tr: Transaction,
+  newDoc: ProseMirrorNode,
+  attr: string,
+  storage: DirtyTrackerStorage,
+): void {
+  const known = new Set(storage.committedOrder)
+  let added: string[] | null = null
+  forEachChangedTopBlock(tr, newDoc, node => {
+    const id = resolveBlockId(node, attr)
+    if (!id) return
+    const rank = node.attrs.rank as string | undefined
+    if (rank != null) storage.committedRanks.set(id, rank)
+    if (known.has(id)) return
+    known.add(id)
+    ;(added ??= []).push(id)
+  })
+  if (added) storage.committedOrder = storage.committedOrder.concat(added)
 }
 
 // ─── Extension ───────────────────────────────────────────────────────
@@ -249,9 +301,19 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
       const currentSet = new Set<string>()
       const nodeById = new Map<string, ProseMirrorNode>()
       const upsertIds = new Set<string>(storage.dirtyBlockIds)
+      let duplicateIdCount = 0
       doc.forEach(node => {
         const id = resolveBlockId(node, blockIdAttribute)
         if (!id) return
+        // Two top-level nodes sharing a blockId means the document is already
+        // corrupt (only one of them can ever be persisted, and a delete of
+        // either is invisible here because the id is still present). Keep the
+        // FIRST occurrence so the serialised block is at least deterministic
+        // across saves, and make the corruption loud instead of silent.
+        if (currentSet.has(id)) {
+          duplicateIdCount += 1
+          return
+        }
         currentSet.add(id)
         nodeById.set(id, node)
         const rank = node.attrs.rank as string | undefined
@@ -259,6 +321,12 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
           upsertIds.add(id) // moved (or newly ranked) — rank differs from baseline
         }
       })
+      if (duplicateIdCount > 0) {
+        console.warn(
+          `[dirty-tracker] ${duplicateIdCount} top-level block(s) share a blockId with an earlier block; ` +
+            'only the first occurrence is saved. This indicates a duplicated block in the document.'
+        )
+      }
       const changes: BlockChange[] = []
 
       // Deletions: present in committed order, absent now.
@@ -370,8 +438,12 @@ export const DirtyTracker = Extension.create<DirtyTrackerOptions, DirtyTrackerSt
             if (!storage.initialized) return _value
             if (!tr.docChanged) return _value
             // Only user-origin edits count as dirty; remote/collab edits are
-            // saved by the client that authored them.
-            if (!ext.options.filterTransaction(tr)) return _value
+            // saved by the client that authored them — but they must still join
+            // the committed baseline, or they can never be deleted from here.
+            if (!ext.options.filterTransaction(tr)) {
+              foldRemoteBlocksIntoBaseline(tr, newState.doc, blockIdAttribute, storage)
+              return _value
+            }
 
             markChangedTopBlocks(tr, newState.doc, blockIdAttribute, storage.dirtyBlockIds)
             storage.dirty = true
