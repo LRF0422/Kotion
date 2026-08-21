@@ -140,6 +140,8 @@ public class SpaceApplication {
     @Autowired
     @org.springframework.context.annotation.Lazy
     private com.knowledge.wiki.service.search.WikiSearchService wikiSearchService;
+    @Autowired
+    private com.knowledge.wiki.service.collab.CollabSessionService collabSessionService;
 
     /**
      * Front-end base URL used to build share links, e.g. http://localhost:5173
@@ -957,21 +959,63 @@ public class SpaceApplication {
     /**
      * Apply an incremental block-level patch from the frontend DirtyTracker.
      * Only the modified top-level blocks are persisted; deletions cascade to
-     * descendants. The block storage layer atomically seals the change set
-     * into a brand-new ACTIVE {@code PageVersion} (save = publish), so there
-     * is no separate publish flag or async fan-out.
+     * descendants.
+     * <p>
+     * Persistence and versioning are decoupled: block rows are always written,
+     * but a {@code PageVersion} is only sealed per editing session (or
+     * immediately when {@code dto.checkpoint} is set). See
+     * {@code BlockStorageService#canAbsorbIntoVersion}.
+     * </p>
      *
-     * @return PatchResultDTO with statistics, the new page version, and any
-     *         detected conflicts
+     * @return PatchResultDTO with statistics, the page version this patch landed
+     *         in, and any detected conflicts
      */
     public PatchResultDTO patchPageBlocks(com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto) {
         checkPageWritable(dto.getPageId());
+        boolean checkpoint = Boolean.TRUE.equals(dto.getCheckpoint());
+        long startedAt = System.currentTimeMillis();
         com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result = this.pageService
-                .patchBlocks(dto.getPageId(), dto.getChanges(), dto.getBlockOrder());
+                .patchBlocks(dto.getPageId(), dto.getChanges(), dto.getBlockOrder(), checkpoint);
         syncPageTitleFromPatch(dto, result);
         touchPageUpdateStamp(dto.getPageId(), result);
 
+        logSaveOutcome("patch", dto, result, checkpoint, startedAt);
         return PatchResultDTO.from(result);
+    }
+
+    /**
+     * One structured line per save so the health of the write path is
+     * observable without a debugger.
+     * <p>
+     * Divergence between what the editor holds and what the database holds used
+     * to be completely invisible: a failed or partial save left no trace beyond
+     * a toast on one user's screen. Conflicts are logged at WARN because they
+     * mean a concurrent writer won and someone's edit was silently overwritten.
+     * </p>
+     */
+    private void logSaveOutcome(String path,
+            com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto,
+            com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result,
+            boolean checkpoint,
+            long startedAt) {
+        if (result == null) {
+            return;
+        }
+        long elapsedMs = System.currentTimeMillis() - startedAt;
+        int requested = dto.getChanges() != null ? dto.getChanges().size() : 0;
+        int conflicts = result.getConflictBlockIds() != null ? result.getConflictBlockIds().size() : 0;
+
+        log.info("page.save path={} pageId={} userId={} requested={} created={} updated={} "
+                + "deleted={} skipped={} conflicts={} checkpoint={} version={} elapsedMs={}",
+                path, dto.getPageId(), SecurityContextUtil.getUserId(), requested,
+                result.getCreated(), result.getUpdated(), result.getDeleted(),
+                result.getSkipped(), conflicts, checkpoint, result.getPageVersion(), elapsedMs);
+
+        if (conflicts > 0) {
+            log.warn("page.save.conflict pageId={} userId={} blockIds={} — "
+                    + "a concurrent writer's version was overwritten (last-writer-wins)",
+                    dto.getPageId(), SecurityContextUtil.getUserId(), result.getConflictBlockIds());
+        }
     }
 
     /**
@@ -992,6 +1036,57 @@ public class SpaceApplication {
     }
 
     /**
+     * Authorize joining a page's collaboration room. Called by the collaboration
+     * server (room-server) from its {@code onAuthenticate} hook, forwarding the
+     * client's own access token, so that joining a room requires the same page
+     * permission as reading the page over REST.
+     * <p>
+     * Before this existed the room name was the only thing needed to join a
+     * room, which let anyone with a page id read and write another user's live
+     * document.
+     */
+    public void authorizeCollabRoom(Long pageId) {
+        checkPageReadable(pageId);
+    }
+
+    /**
+     * Arbitrate which client may seed a page's collaborative document from DB
+     * content. See {@link com.knowledge.wiki.service.collab.CollabSessionService}
+     * for why this decision cannot be made client-side.
+     * <p>
+     * Gated on READ, not WRITE: seeding writes into the Y.Doc, never into the
+     * DB, and a read-only viewer opening a page whose content only lives in the
+     * DB needs to seed in order to see anything at all.
+     *
+     * @return {@code true} when the caller may seed
+     */
+    public boolean claimPageSeedRight(Long pageId, String clientId) {
+        checkPageReadable(pageId);
+        return collabSessionService.claimSeedRight(pageId, clientId);
+    }
+
+    /**
+     * Release a seed claim held by {@code clientId} so the next opener does not
+     * have to wait out the claim TTL.
+     */
+    public void releasePageSeedRight(Long pageId, String clientId) {
+        checkPageReadable(pageId);
+        collabSessionService.releaseSeedRight(pageId, clientId);
+    }
+
+    private void checkPageReadable(Long pageId) {
+        if (pageId == null) {
+            throw WikiException.INVALID_PARAMETER.newException();
+        }
+        Page page = pageService.getById(pageId);
+        if (page == null) {
+            throw WikiException.PAGE_NOT_FOUND.newException();
+        }
+        permissionService.checkPagePermission(SecurityContextUtil.getUserId(), page,
+                IPermissionService.PERMISSION_READ);
+    }
+
+    /**
      * Bulk-replace path for a first import / paste of a very large document.
      * Reuses the same request shape as {@link #patchPageBlocks} but routes to the
      * chunked, version-history-free bulk persistence path. Frontend only calls
@@ -999,11 +1094,13 @@ public class SpaceApplication {
      */
     public PatchResultDTO bulkReplacePageBlocks(com.knowledge.wiki.service.entity.dto.PatchPageBlocksDTO dto) {
         checkPageWritable(dto.getPageId());
+        long startedAt = System.currentTimeMillis();
         com.knowledge.wiki.service.service.impl.BlockStorageService.PatchResult result = this.pageService
                 .bulkReplaceBlocks(dto.getPageId(), dto.getChanges());
         syncPageTitleFromPatch(dto, result);
         touchPageUpdateStamp(dto.getPageId(), result);
 
+        logSaveOutcome("bulk", dto, result, true, startedAt);
         return PatchResultDTO.from(result);
     }
 
@@ -1975,6 +2072,24 @@ public class SpaceApplication {
     @Transactional(rollbackFor = Exception.class)
     public PageVersion rollbackPageVersion(Long pageId, Long targetVersionId, String changeSummary) {
         return pageService.getPageVersionService().rollbackToVersion(pageId, targetVersionId, changeSummary);
+    }
+
+    /**
+     * Close the version the current editing session left open, so the state as
+     * of now becomes an explicit restore point.
+     * <p>
+     * Called when the user asks to save rather than on every autosave: autosaves
+     * merge into a single version per session, which is what keeps history
+     * readable, but it also means an unaided user has no way to mark a state
+     * worth returning to.
+     * </p>
+     *
+     * @param pageId page ID
+     * @return the sealed version, or {@code null} when there was nothing open
+     */
+    public PageVersion sealPageVersion(Long pageId) {
+        checkPageWritable(pageId);
+        return pageService.getPageVersionService().sealActiveVersion(pageId);
     }
 
     /**

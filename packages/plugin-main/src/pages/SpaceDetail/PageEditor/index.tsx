@@ -4,8 +4,15 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
 import { Separator } from "@kn/ui";
 import { Switch } from "@kn/ui";
 import { Skeleton } from "@kn/ui";
-import { CollaborationEditor, exportToPDF, useIncrementalSave, TiptapCollabProvider } from "@kn/editor";
-import type { IncrementalPayload } from "@kn/editor";
+import {
+    AlertDialog, AlertDialogAction, AlertDialogContent,
+    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@kn/ui";
+import {
+    CollaborationEditor, exportToPDF, useOpSave, usePageSession, useHostPresence,
+    HOST_AWARENESS_FIELD, HOST_AWARENESS_HOST, TiptapCollabProvider, chooseSeed, toRev,
+} from "@kn/editor";
+import type { ApplyOpsRequest, ApplyOpsResult, BlockStoreRead, PageDocResult, PageSessionState, ReconcileRequest } from "@kn/editor";
 import { event, ON_PAGE_REFRESH, ON_FAVORITE_CHANGE } from "../../../event";
 import { useApi, useService, deepEqual, useUploadFile, parseMarkdownToNodes, useTranslation, request, getBearerHeader, getAccessToken, getAppEnv } from "@kn/common";
 import { useNavigator, usePageTabs } from "@kn/common";
@@ -36,7 +43,20 @@ import { PresentationMode } from "./PresentationMode";
 import { resolveUserBrief } from "../../../utils/userBrief";
 
 // Status display configuration for save state
-const getStatusDisplay = (saving: boolean, dirty: boolean, error: Error | null, progress?: { done: number; total: number } | null) => {
+const getStatusDisplay = (
+    saving: boolean,
+    dirty: boolean,
+    error: Error | null,
+    progress?: { done: number; total: number } | null,
+    // Why this client is not the one saving, when that is the case. A
+    // collaborator showing "Saved" would be claiming credit for a write it never
+    // makes, and "Editing" forever would look broken.
+    notWriting?:
+        | { reason: 'collaborator'; hostName: string | null }
+        | { reason: 'behind' }
+        | { reason: 'waitingForHost'; hostName: string | null }
+        | null,
+) => {
     if (saving) {
         const text = progress ? `Saving ${progress.done}/${progress.total}` : 'Saving';
         return { text, icon: <LoaderCircle className="h-3 w-3 animate-spin text-muted-foreground" />, className: 'text-muted-foreground' };
@@ -44,88 +64,47 @@ const getStatusDisplay = (saving: boolean, dirty: boolean, error: Error | null, 
     if (error) {
         return { text: 'Save failed', icon: <CloudOff className="h-3 w-3 text-destructive" />, className: 'text-destructive' };
     }
+    if (notWriting?.reason === 'waitingForHost') {
+        // The host's connection is gone and the grace period is running. Ranked
+        // above 'collaborator' because "Saved by X" would be a promise nobody is
+        // currently keeping: with the host away, nothing is being persisted.
+        return { text: 'Host disconnected', icon: <CloudOff className="h-3 w-3 text-amber-500" />, className: 'text-amber-600 dark:text-amber-500' };
+    }
+    if (notWriting?.reason === 'behind') {
+        // Writing is suspended because the page moved on without us. Not an
+        // error, but it is emphatically not "Saved" either.
+        return { text: 'Catching up', icon: <CloudOff className="h-3 w-3 text-muted-foreground" />, className: 'text-muted-foreground' };
+    }
+    if (notWriting?.reason === 'collaborator') {
+        const text = notWriting.hostName ? `Saved by ${notWriting.hostName}` : 'Saved by host';
+        return { text, icon: <Check className="h-3 w-3 text-muted-foreground" />, className: 'text-muted-foreground' };
+    }
     if (dirty) {
         return { text: 'Editing', icon: <Pencil className="h-3 w-3 text-muted-foreground" />, className: 'text-muted-foreground' };
     }
     return { text: 'Saved', icon: <Check className="h-3 w-3 text-muted-foreground" />, className: 'text-muted-foreground' };
 };
 
-// Custom hook: wraps useIncrementalSave with the actual PATCH API call
-// Includes prevVersion for optimistic concurrency and applies server
-// version info after each successful save.
-function usePageSave(editor: Editor | null, pageId: string | null, enabled: boolean, onSaved?: () => void) {
-    const { t } = useTranslation()
+// Custom hook: wraps useOpSave and usePageSession with the actual endpoints.
+// The page is persisted by exactly one client — the session host — which submits
+// ops rather than block state.
+function usePageSave(
+    editor: Editor | null,
+    pageId: string | null,
+    enabled: boolean,
+    clientId: string,
+    // How the realtime layer sees the room. Feeds host-departure detection; see
+    // `usePageSession`, which treats it as a hint and never as a verdict.
+    presence: { connected: boolean; hostPresent: boolean; hostSeen: boolean },
+    // Forces every write through reconcile. Set when the collaboration server
+    // never synced, so this client's anchors cannot be trusted.
+    reconcileOnly: boolean,
+    onSaved?: () => void,
+) {
     // Throttle ON_PAGE_REFRESH emissions caused by rapid title typing
     const titleRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    // Throttle conflict warnings — one toast per burst, not one per save.
-    const lastConflictToastRef = useRef(0)
-
-    // Shared post-save logic: apply server-returned version info, surface
-    // version conflicts, and throttle title-refresh notifications. Used by
-    // both handleSave and handleBulkSave.
-    const applySaveResult = useCallback((res: any, hasTitleChange: boolean) => {
-        const data = res?.data
-        if (data?.blockVersions) {
-            const tracker = (editor?.storage as any)?.dirtyTracker
-            if (tracker?.applyServerVersions) {
-                tracker.applyServerVersions(data.blockVersions)
-            }
-        }
-        // Optimistic-concurrency conflicts: the backend applied our (Yjs-merged)
-        // content anyway but flagged the stale prevVersion — tell the user so a
-        // silent last-writer-wins doesn't go unnoticed in non-collab sessions.
-        if (Array.isArray(data?.conflictBlockIds) && data.conflictBlockIds.length > 0) {
-            const now = Date.now()
-            if (now - lastConflictToastRef.current > 5000) {
-                lastConflictToastRef.current = now
-                toast.warning(t('editor.saveConflict', 'Some blocks were modified elsewhere — latest content was kept'))
-            }
-        }
-        if (hasTitleChange) {
-            if (titleRefreshTimerRef.current) {
-                clearTimeout(titleRefreshTimerRef.current)
-            }
-            titleRefreshTimerRef.current = setTimeout(() => {
-                event.emit(ON_PAGE_REFRESH)
-                titleRefreshTimerRef.current = null
-            }, 400)
-        }
-        onSaved?.()
-    }, [editor, t, onSaved])
-
-    const mapChanges = useCallback((payload: IncrementalPayload) =>
-        payload.changes.map(c => ({
-            blockId: c.blockId,
-            action: c.action,
-            type: c.type,
-            content: c.action === 'upsert'
-                ? JSON.stringify({ type: c.type, attrs: c.attrs, content: c.content })
-                : undefined,
-            prevVersion: c.prevVersion,
-        })), [])
-
-    const handleSave = useCallback(async (payload: IncrementalPayload) => {
-        if (!pageId) throw new Error('No pageId')
-        const hasTitleChange = payload.changes.some(c => c.type === 'title')
-        const res = await useApi(APIS.PATCH_PAGE_BLOCKS, { id: pageId }, {
-            pageId,
-            changes: mapChanges(payload),
-        })
-        applySaveResult(res, hasTitleChange)
-    }, [pageId, mapChanges, applySaveResult])
-
-    // Bulk fast path for a first import/paste of a huge document: one POST that
-    // the backend persists in chunked transactions and seals as a single page
-    // version. Applies returned versions so later incremental patches are valid.
-    const handleBulkSave = useCallback(async (payload: IncrementalPayload) => {
-        if (!pageId) throw new Error('No pageId')
-        const hasTitleChange = payload.changes.some(c => c.type === 'title')
-        const res = await useApi(APIS.BULK_PATCH_PAGE_BLOCKS, { id: pageId }, {
-            pageId,
-            changes: mapChanges(payload),
-        })
-        applySaveResult(res, hasTitleChange)
-    }, [pageId, mapChanges, applySaveResult])
+    const onSavedRef = useRef(onSaved)
+    onSavedRef.current = onSaved
 
     useEffect(() => {
         return () => {
@@ -136,34 +115,158 @@ function usePageSave(editor: Editor | null, pageId: string | null, enabled: bool
         }
     }, [])
 
-    // Dismissal-time flush (pagehide): async requests are killed by the
-    // browser at that point, so send the pending patch with `keepalive`.
-    // keepalive bodies are capped (~64KB) — larger payloads fall back to the
-    // normal async request as a best effort.
-    const handleFlush = useCallback((payload: IncrementalPayload) => {
-        if (!pageId) return
-        const body = JSON.stringify({ pageId, changes: mapChanges(payload) })
-        if (body.length > 60_000) {
-            void useApi(APIS.PATCH_PAGE_BLOCKS, { id: pageId }, { pageId, changes: mapChanges(payload) })
-        } else {
-            const base = (request as any)?.defaults?.baseURL ?? '/api'
-            const url = base + APIS.PATCH_PAGE_BLOCKS.url.replace(':id', pageId)
-            void fetch(url, {
-                method: 'PATCH',
-                keepalive: true,
-                headers: { 'Content-Type': 'application/json', ...getBearerHeader() },
-                body,
-            }).catch(() => { /* best effort — page is going away */ })
+    const noteSaved = useCallback((titleChanged: boolean) => {
+        if (titleChanged) {
+            if (titleRefreshTimerRef.current) {
+                clearTimeout(titleRefreshTimerRef.current)
+            }
+            titleRefreshTimerRef.current = setTimeout(() => {
+                event.emit(ON_PAGE_REFRESH)
+                titleRefreshTimerRef.current = null
+            }, 400)
         }
-    }, [pageId, mapChanges])
+        onSavedRef.current?.()
+    }, [])
 
-    return useIncrementalSave({
-        editor,
+    // ---- Session: who is allowed to write this page ----
+
+    const handleClaim = useCallback(async (cid: string): Promise<PageSessionState> => {
+        const res: any = await useApi(APIS.PAGE_SESSION_CLAIM, { id: pageId! }, { clientId: cid })
+        return toSessionState(res?.data)
+    }, [pageId])
+
+    const handleHeartbeat = useCallback(async (cid: string): Promise<PageSessionState> => {
+        const res: any = await useApi(APIS.PAGE_SESSION_HEARTBEAT, { id: pageId! }, { clientId: cid })
+        return toSessionState(res?.data)
+    }, [pageId])
+
+    // Sent from `pagehide` as well as unmount, so it has to survive the page
+    // being dismissed — hence keepalive rather than the normal request path.
+    const handleRelease = useCallback((cid: string) => {
+        if (!pageId) return
+        void keepaliveSend(APIS.PAGE_SESSION_RELEASE.url, 'DELETE', pageId, { clientId: cid })
+    }, [pageId])
+
+    // The final save has to land before the lease goes back, or the server
+    // refuses it as coming from a non-host — the last thing the user typed,
+    // rejected on the way out. Held in a ref because the writer is built below
+    // this point: it needs the session's answer to know whether it may write at
+    // all.
+    const flushNowRef = useRef<(() => Promise<unknown> | null) | null>(null)
+    const handleBeforeRelease = useCallback(() => flushNowRef.current?.() ?? null, [])
+
+    const session = usePageSession({
         enabled,
-        onSave: handleSave,
-        onBulkSave: handleBulkSave,
-        onFlush: handleFlush,
+        clientId,
+        onClaim: handleClaim,
+        onHeartbeat: handleHeartbeat,
+        onRelease: handleRelease,
+        onBeforeRelease: handleBeforeRelease,
+        connected: presence.connected,
+        hostPresent: presence.hostPresent,
+        hostSeen: presence.hostSeen,
     })
+
+    // ---- Writing ----
+
+    const handleApplyOps = useCallback(async (req: ApplyOpsRequest): Promise<ApplyOpsResult> => {
+        if (!pageId) throw new Error('No pageId')
+        const res: any = await useApi(APIS.PAGE_APPLY_OPS, { id: pageId }, req)
+        const data: ApplyOpsResult = res?.data ?? {}
+        // The title lives in a block like any other, so a title edit is just an
+        // op whose node happens to be of type `title`.
+        noteSaved(req.ops.some(op => (op.node as any)?.type === 'title'))
+        return data
+    }, [pageId, noteSaved])
+
+    const handleReconcile = useCallback(async (req: ReconcileRequest): Promise<ApplyOpsResult> => {
+        if (!pageId) throw new Error('No pageId')
+        const res: any = await useApi(APIS.PAGE_RECONCILE, { id: pageId }, req)
+        const data: ApplyOpsResult = res?.data ?? {}
+        // A reconcile always carries the title, so "did the title change" is only
+        // answerable by whether the server found anything to do at all. The first
+        // write of every session is a reconcile, and on an aligned page it applies
+        // nothing — which is exactly when we must not refresh the tree.
+        noteSaved((data.opsApplied ?? 0) > 0)
+        return data
+    }, [pageId, noteSaved])
+
+    // Read the page straight from the block table, for the host to fold a
+    // write it did not make back into its own document. Deliberately not
+    // `noteSaved`: nothing was saved here, and refreshing the tree on a read
+    // would put a spinner on the sidebar every heartbeat.
+    const handleFetchDoc = useCallback(async (): Promise<PageDocResult> => {
+        if (!pageId) throw new Error('No pageId')
+        const res: any = await useApi(APIS.PAGE_DOC, { id: pageId })
+        const data = res?.data
+        return {
+            doc: data?.doc ?? null,
+            rev: toRev(data?.rev),
+        }
+    }, [pageId])
+
+    const handleFlush = useCallback((req: ApplyOpsRequest) => {
+        if (!pageId) return
+        // Returned rather than discarded so the closing session can wait for it.
+        return keepaliveSend(APIS.PAGE_APPLY_OPS.url, 'POST', pageId, req)
+    }, [pageId])
+
+    const save = useOpSave({
+        editor,
+        // Only the host writes. A collaborator's OpTracker stays switched off, so
+        // it accumulates nothing and cannot write even by accident.
+        enabled: enabled && session.isHost,
+        clientId,
+        onApplyOps: handleApplyOps,
+        onReconcile: handleReconcile,
+        onFlush: handleFlush,
+        serverRev: session.serverRev,
+        onFetchDoc: handleFetchDoc,
+        reconcileOnly,
+    })
+    flushNowRef.current = save.flushNow
+
+    return { ...save, session }
+}
+
+/** Read a `PageSessionVO` off the response envelope, defaulting to "no session". */
+function toSessionState(data: any): PageSessionState {
+    const role = data?.role
+    return {
+        role: role === 'HOST' || role === 'COLLABORATOR' ? role : 'NONE',
+        alive: !!data?.alive,
+        hostUserId: data?.hostUserId ?? null,
+        hostName: data?.hostName ?? null,
+        hostSelf: !!data?.hostSelf,
+        rev: toRev(data?.rev),
+    }
+}
+
+/**
+ * Fire-and-forget request that survives the page being dismissed.
+ *
+ * `pagehide` kills normal async requests, so the last save of a session and the
+ * lease release both have to go out this way. Bodies are capped around 64KB;
+ * oversized ones fall back to a normal request, which is a genuine best effort
+ * rather than a guarantee.
+ */
+function keepaliveSend(template: string, method: string, pageId: string, body: unknown): Promise<unknown> {
+    const payload = JSON.stringify(body)
+    const base = (request as any)?.defaults?.baseURL ?? '/api'
+    const url = base + template.replace(':id', pageId)
+    if (payload.length > 60_000) {
+        return fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json', ...getBearerHeader() },
+            body: payload,
+        }).catch(() => { /* best effort — page is going away */ })
+    }
+    return fetch(url, {
+        method,
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', ...getBearerHeader() },
+        body: payload,
+    }).catch(() => { /* best effort — page is going away */ })
 }
 
 export interface PageEditorProps {
@@ -228,6 +331,16 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
 
     // Create collaboration provider - deferred to avoid blocking on page switch
     const [deferredPageId, setDeferredPageId] = useState<string | undefined>(undefined);
+
+    // Identity of this editing client, for the page's write lease. Deliberately
+    // regenerated per mount rather than derived from the user: a reload or a
+    // second tab is a different document, and the lease has to sit on the
+    // document the user is actually typing into.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const clientId = useMemo(
+        () => `${userInfo?.id ?? 'anon'}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+        [pageId],
+    );
 
     // Delay provider creation to next tick to avoid blocking UI
     React.useEffect(() => {
@@ -295,6 +408,11 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     }, [deferredPageId]);
 
     useEffect(() => {
+        // Both flags describe *this* page's sync. This component is reused across
+        // page switches rather than remounted, so leaving `syncStatus` set would
+        // carry the previous page's success into the next one — and "we synced" is
+        // exactly what decides whether this client may send anchored ops.
+        setSyncStatus(false)
         setSyncTimedOut(false)
         const t = setTimeout(() => setSyncTimedOut(true), 8000)
         return () => clearTimeout(t)
@@ -330,6 +448,60 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
             setEditorContentReady(false)
         }
     }, [pageId])
+
+    // ---- Seed content: read from the block store, which is the authority ----
+
+    // `undefined` while the read is in flight, `null` once it has failed.
+    const [blockDoc, setBlockDoc] = useState<BlockStoreRead | null | undefined>(undefined)
+
+    useEffect(() => {
+        setBlockDoc(undefined)
+        if (!pageId) return
+        let cancelled = false
+        useApi(APIS.PAGE_DOC, { id: pageId })
+            .then((res: any) => {
+                if (cancelled) return
+                const data = res?.data
+                setBlockDoc({
+                    doc: data?.doc ?? null,
+                    rev: toRev(data?.rev),
+                })
+            })
+            .catch((err: any) => {
+                if (cancelled) return
+                console.error('Failed to read the page from the block store:', err)
+                setBlockDoc(null)
+            })
+        return () => { cancelled = true }
+    }, [pageId])
+
+    // The legacy content column, parsed and HTML-unescaped off the render path.
+    // No longer the authority — it survives only as the migration bridge below.
+    const legacyContent = React.useMemo(() => {
+        if (!page?.content) return undefined;
+        try {
+            return JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
+        } catch {
+            return undefined;
+        }
+    }, [page?.content]);
+
+    /**
+     * What to seed a fresh Y.Doc from, and whether the block store produced it.
+     *
+     * `null` means "not decided yet", and it holds the editor back from mounting.
+     * `CollaborationEditor` reads its `content` once, at seed time, so mounting
+     * before this read lands would seed nothing into a page that has content — and
+     * the host's first reconcile would then persist that emptiness.
+     *
+     * The rule itself lives in `chooseSeed`, where it is covered by
+     * `check:seed`; the extra `!page` guard is this component's own, because the
+     * legacy fallback cannot be evaluated before the page row arrives.
+     */
+    const seed = React.useMemo(
+        () => (page ? chooseSeed(blockDoc, legacyContent) : null),
+        [blockDoc, page, legacyContent],
+    )
 
     // Favorite state for the current page
     const [isFavorited, setIsFavorited] = useState(false)
@@ -523,13 +695,61 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         } : prev)
     }, [userInfo?.id, userInfo?.name])
 
-    const { saving, dirty, error: saveError, progress: saveProgress, saveNow } = usePageSave(
+    // Watch awareness for the host's presence. This is the fast half of noticing
+    // a host leaving; the server still decides whether the session is over.
+    const { hostPresent, hostSeen } = useHostPresence(provider?.awareness as any)
+
+    const { saving, dirty, error: saveError, progress: saveProgress, behindServer, session, saveNow } = usePageSave(
         editor.current,
         pageId || null,
         // NOT gated on `active`: backgrounded tabs must keep auto-saving.
-        !!page && !!pageId && editorContentReady,
+        // `seed.trusted` is part of the gate rather than a warning: the one thing
+        // worse than not saving is saving content we could not verify.
+        !!page && !!pageId && editorContentReady && !!seed?.trusted,
+        clientId,
+        {
+            connected: connectionStatus === 'connected',
+            hostPresent,
+            hostSeen,
+        },
+        // Sync never completed, so this client cannot claim its document matches
+        // the server's; only a whole-document reconcile is safe from here.
+        syncTimedOut && !syncStatus,
         handleSaved
     )
+
+    // Declare the host role in awareness. Hocuspocus drops an awareness entry the
+    // moment its connection goes, so this is what lets collaborators notice the
+    // host leaving in under a second instead of waiting out the lease. The field
+    // and value come from the reader's own module so the two cannot drift.
+    useEffect(() => {
+        const awareness = provider?.awareness
+        if (!awareness) return
+        awareness.setLocalStateField(
+            HOST_AWARENESS_FIELD,
+            session.isHost ? HOST_AWARENESS_HOST : 'collaborator',
+        )
+    }, [provider, session.isHost])
+
+    // The session is over: this client may no longer edit. Going read-only is the
+    // first thing that happens, before any dialog — the user must not be able to
+    // keep typing into a document nobody is persisting.
+    useEffect(() => {
+        if (!session.sessionEnded) return
+        editor.current?.setEditable(false)
+    }, [session.sessionEnded])
+
+    // ...then leave. Automatic so an unattended tab does not sit on a dead
+    // session, with a button for anyone who would rather not wait.
+    const leaveEndedSession = useCallback(() => {
+        navigator.go({ to: `/space-detail/${spaceId}` })
+    }, [navigator, spaceId])
+
+    useEffect(() => {
+        if (!session.sessionEnded) return
+        const timer = setTimeout(leaveEndedSession, 6000)
+        return () => clearTimeout(timer)
+    }, [session.sessionEnded, leaveEndedSession])
 
     // Copy a shareable link to the current page to the clipboard
     const handleCopyLink = useCallback(async () => {
@@ -558,21 +778,32 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     }, [pageId, spaceId, navigator, t])
 
     // After a server-side rollback the editor's collab doc still holds the
-    // pre-rollback content. Re-fetch the persisted page and push it into the
-    // editor (updates the Y.Doc so peers converge too), then re-baseline the
-    // dirty tracker so autosave doesn't immediately patch the restored
-    // content back to the server.
+    // pre-rollback content. Re-read the restored document from the block store and
+    // push it into the editor (updates the Y.Doc so peers converge too), then
+    // re-baseline the op tracker so autosave doesn't immediately push the restored
+    // content back out as a fresh set of ops.
+    //
+    // Read from `/doc` rather than the page row: a restore lands in the block store
+    // as a reconcile forward to a new rev, and the legacy content column is no
+    // longer what that write updates. Reading it here would push the pre-rollback
+    // content back over the restore.
     const handleVersionRestored = useCallback(async () => {
         if (!pageId) return
         try {
-            const res: any = await spaceService.getPage(pageId)
-            setPage(res)
+            const [pageRes, docRes] = await Promise.all([
+                spaceService.getPage(pageId),
+                useApi(APIS.PAGE_DOC, { id: pageId }) as Promise<any>,
+            ])
+            setPage(pageRes)
+            const restored = docRes?.data?.doc
             const ed = editor.current
-            if (ed && res?.content) {
-                const restored = JSON.parse((res.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">"))
+            if (ed && restored) {
                 ed.commands.setContent(restored)
-                const tracker = (ed.storage as any)?.dirtyTracker
-                tracker?.commit?.()
+                // The server already holds exactly this content, so re-baseline
+                // rather than reconcile: the tracker must not turn the restore
+                // into a fresh set of ops and push the page forward again.
+                const opTracker = (ed.storage as any)?.opTracker
+                opTracker?.resetBaseline?.()
             }
             event.emit(ON_PAGE_REFRESH)
         } catch (err) {
@@ -691,18 +922,15 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
     }, [page?.title, t])
 
     // Get current status display
-    const statusDisplay = getStatusDisplay(saving, dirty, saveError, saveProgress)
+    const statusDisplay = getStatusDisplay(saving, dirty, saveError, saveProgress,
+        session.hostDisconnected
+            ? { reason: 'waitingForHost' as const, hostName: session.lastHostName }
+            : behindServer
+                ? { reason: 'behind' as const }
+                : session.alive && !session.isHost
+                    ? { reason: 'collaborator' as const, hostName: session.hostName }
+                    : null)
 
-
-    // Pre-process page content: parse JSON and unescape HTML entities off the main render path
-    const parsedContent = React.useMemo(() => {
-        if (!page?.content) return undefined;
-        try {
-            return JSON.parse((page.content as string).replaceAll("&lt;", "<").replaceAll("&gt;", ">"));
-        } catch {
-            return undefined;
-        }
-    }, [page?.content]);
 
     return pageLoading ? <div className="w-full h-full">
         <header className="h-11 w-full flex flex-row justify-between px-1 border-b relative">
@@ -958,7 +1186,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
         </header>
         <main className="w-full flex-1 min-h-0">
             {
-                page && (syncStatus || syncTimedOut) && <CollaborationEditor
+                page && seed && (syncStatus || syncTimedOut) && <CollaborationEditor
                     pageInfo={page}
                     ref={editor}
                     synced={syncStatus}
@@ -971,7 +1199,7 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                     fullWidth={fullWidth}
                     withTitle={true}
                     width="w-full"
-                    content={parsedContent}
+                    content={seed.doc as any}
                     onContentReady={() => setEditorContentReady(true)}
                 />
             }
@@ -989,5 +1217,29 @@ export const PageEditor: React.FC<PageEditorProps> = (props) => {
                 onClose={() => setPresentationOpen(false)}
             />
         )}
+        {/* The host left and its lease expired, so nothing is persisting this page
+            any more. The editor is already read-only by this point; this only
+            explains why and gets the user out. Intentionally not dismissible:
+            staying would mean looking at a document that cannot be edited. */}
+        <AlertDialog open={session.sessionEnded}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>
+                        {t('inviteCollaboration.sessionEnded.title', 'Session Ended')}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                        {t('inviteCollaboration.sessionEnded.message', {
+                            defaultValue: 'The collaboration host ({{name}}) has left the session. You will be redirected shortly.',
+                            name: session.lastHostName ?? t('inviteCollaboration.header.host', 'Host'),
+                        })}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogAction onClick={leaveEndedSession}>
+                        {t('inviteCollaboration.sessionEnded.exitNow', 'Exit Now')}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </div>)
 }

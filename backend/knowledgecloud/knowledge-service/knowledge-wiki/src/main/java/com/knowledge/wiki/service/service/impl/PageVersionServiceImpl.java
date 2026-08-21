@@ -120,6 +120,39 @@ public class PageVersionServiceImpl extends AbstractVersionService<Page, PageVer
     }
 
     /**
+     * Seals whatever version the session left open. Runs in its own transaction
+     * so the {@code FOR UPDATE} read actually serializes against a concurrent
+     * patch trying to absorb into the same row.
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public PageVersion sealActiveVersion(Long pageId) {
+        if (pageId == null) {
+            return null;
+        }
+        PageVersion active = getCurrentActiveVersionForUpdate(pageId);
+        if (active == null) {
+            log.debug("sealActiveVersion: pageId={} has no version to seal", pageId);
+            return null;
+        }
+        // Already closed (an earlier checkpoint, a rollback, or a pre-migration
+        // row) — nothing to do. Re-sealing would be a lie about when it closed.
+        if (!PageVersion.SEAL_AUTOSAVE.equals(active.getSealKind())) {
+            return active;
+        }
+
+        PageVersion update = new PageVersion();
+        update.setId(active.getId());
+        update.setSealKind(PageVersion.SEAL_CHECKPOINT);
+        this.updateById(update);
+        active.setSealKind(PageVersion.SEAL_CHECKPOINT);
+
+        log.info("page.version.seal pageId={} versionId={} version={}",
+                pageId, active.getId(), active.getVersion());
+        return active;
+    }
+
+    /**
      * Clean up duplicate draft versions for a page, keeping only the latest.
      */
     private void cleanupDuplicateDrafts(Long subjectId) {
@@ -311,7 +344,9 @@ public class PageVersionServiceImpl extends AbstractVersionService<Page, PageVer
         }
 
         // 6. Apply via patchBlocks — this re-uses Task 2 and atomically seals
-        //    a new ACTIVE PageVersion containing the rollback delta.
+        //    a new ACTIVE PageVersion containing the rollback delta. Sealed as a
+        //    checkpoint so it is never absorbed into by later autosaves: a
+        //    restore point has to keep meaning exactly what it said at the time.
         if (CollUtil.isEmpty(changes)) {
             log.info("rollbackToVersion: no diff between current state and target version {} for pageId={}, no-op",
                     targetVersion.getVersion(), pageId);
@@ -319,7 +354,7 @@ public class PageVersionServiceImpl extends AbstractVersionService<Page, PageVer
         }
 
         BlockStorageService.PatchResult patchResult =
-                blockStorageService.patchBlocks(pageId, changes, blockOrder);
+                blockStorageService.patchBlocks(pageId, changes, blockOrder, true);
 
         if (patchResult == null || patchResult.getPageVersionId() == null) {
             log.warn("rollbackToVersion: patchBlocks did not produce a new PageVersion for pageId={}", pageId);
@@ -335,6 +370,7 @@ public class PageVersionServiceImpl extends AbstractVersionService<Page, PageVer
             newVersion.setChangeSummary(summary);
             newVersion.setTitle(targetVersion.getTitle());
             newVersion.setParentId(targetVersion.getParentId());
+            newVersion.setSealKind(PageVersion.SEAL_ROLLBACK);
             this.updateById(newVersion);
         }
 

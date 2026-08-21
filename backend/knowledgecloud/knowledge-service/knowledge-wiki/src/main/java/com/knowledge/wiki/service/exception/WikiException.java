@@ -44,6 +44,11 @@ public enum WikiException implements BusinessExceptionAssert {
     SHARE_LINK_NOT_FOUND(4007, "分享链接不存在或已被重置"),
     SHARE_LINK_EXPIRED(4008, "分享链接已过期"),
     SHARE_LINK_DISABLED(4009, "分享链接已关闭"),
+    // The caller is not the page's session host. Every interactive write goes
+    // through the host, so this is a normal, expected outcome for a collaborator —
+    // not an error condition the user did anything to cause.
+    NOT_SESSION_HOST(4010, "当前不是该页面的编辑主持人，无法保存"),
+    SESSION_ENDED(4011, "编辑会话已结束"),
 
     // Validation related (6000-6999)
     INVALID_PARAMETER(6001, "参数无效"),

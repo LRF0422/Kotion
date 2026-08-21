@@ -38,6 +38,17 @@ export interface UseIncrementalSaveOptions {
    * path (its promise outlives the component).
    */
   onFlush?: (payload: IncrementalPayload) => void
+  /**
+   * Optional "the user asked to save" hook, invoked by `saveNow` once the
+   * pending changes have landed. Autosaves deliberately merge into a single
+   * version per editing session, so this is what lets a deliberate save mark
+   * a restore point.
+   *
+   * Only supply it for genuinely user-initiated saves: consumers that call
+   * `saveNow` merely to flush before unmounting (hover previews, offscreen AI
+   * hosts) must leave it undefined, or every flush would cut a version.
+   */
+  onCheckpoint?: () => Promise<void>
 }
 
 export interface SaveProgress {
@@ -75,7 +86,7 @@ export function useIncrementalSave(options: UseIncrementalSaveOptions): UseIncre
   const {
     editor, enabled, debounceMs = 3000, onSave,
     batchThreshold = 500, batchSize = 400, batchConcurrency = 3,
-    onBulkSave, bulkThreshold = 2000, onFlush,
+    onBulkSave, bulkThreshold = 2000, onFlush, onCheckpoint,
   } = options
 
   const [saving, setSaving] = useState(false)
@@ -97,6 +108,11 @@ export function useIncrementalSave(options: UseIncrementalSaveOptions): UseIncre
   onBulkSaveRef.current = onBulkSave
   const onFlushRef = useRef(onFlush)
   onFlushRef.current = onFlush
+  const onCheckpointRef = useRef(onCheckpoint)
+  onCheckpointRef.current = onCheckpoint
+  // Outcome of the most recent save attempt — `doSave` reports failures through
+  // state, which `saveNow` cannot read back within the same tick.
+  const lastSaveOkRef = useRef(true)
   // Self-reference for retry timers and the pending re-run in `finally`.
   const doSaveRef = useRef<() => Promise<void>>()
 
@@ -180,6 +196,7 @@ export function useIncrementalSave(options: UseIncrementalSaveOptions): UseIncre
       setProgress(null)
       savingRef.current = false
       setSaving(false)
+      lastSaveOkRef.current = !failed
       if (failed) {
         // Exponential-backoff retry — without it a failed save is only ever
         // retried when the user happens to edit again.
@@ -339,10 +356,23 @@ export function useIncrementalSave(options: UseIncrementalSaveOptions): UseIncre
     }
   }, [editor, enabled])
 
-  const saveNow = useCallback(() => {
+  const saveNow = useCallback(async () => {
     const tracker = getTracker(editor)
     tracker?.cancelIdle()
-    return doSave()
+    await doSave()
+
+    // Seal the session's version only once the server provably holds everything
+    // the editor holds. `doSave` returns early when another save is in flight,
+    // and a partially-failed batched save leaves blocks dirty — sealing then
+    // would create a restore point for a state that never existed.
+    if (!onCheckpointRef.current) return
+    if (!lastSaveOkRef.current || savingRef.current || tracker?.hasDirty()) return
+    try {
+      await onCheckpointRef.current()
+    } catch (err) {
+      // The content is safe; only the restore point was not cut.
+      console.error('[useIncrementalSave] Checkpoint failed:', err)
+    }
   }, [editor, doSave])
 
   return { saving, dirty, error, progress, saveNow }

@@ -90,6 +90,54 @@ export const APIS = {
         url: '/knowledge-wiki/space/page/:id/blocks/bulk',
         method: 'POST'
     } as API,
+    /**
+     * Seal the current editing session's version as an explicit restore point.
+     * Autosaves merge into one version per session, so only a deliberate save
+     * cuts a version.
+     */
+    CHECKPOINT_PAGE_VERSION: {
+        url: '/knowledge-wiki/space/page/:id/checkpoint',
+        method: 'POST'
+    } as API,
+
+    // ---- Block-authority page storage (op-based save) --------------------
+    // These sit under /page rather than /space/page: the block store is
+    // addressed by page id alone and has no space in its path.
+
+    /** Read the page's current document and rev straight from the block table. */
+    PAGE_DOC: {
+        url: '/knowledge-wiki/page/:id/doc',
+        method: 'GET'
+    } as API,
+    /** Submit a batch of ops. Accepted from the session host only. */
+    PAGE_APPLY_OPS: {
+        url: '/knowledge-wiki/page/:id/ops',
+        method: 'POST'
+    } as API,
+    /**
+     * Submit the whole document and let the server diff it. The exit for every
+     * case where the writer cannot describe its change as ops: session start, a
+     * client that never synced, a restarted collab server, import.
+     */
+    PAGE_RECONCILE: {
+        url: '/knowledge-wiki/page/:id/reconcile',
+        method: 'POST'
+    } as API,
+    /** Take the page's write lease, or learn who holds it. */
+    PAGE_SESSION_CLAIM: {
+        url: '/knowledge-wiki/page/:id/session/claim',
+        method: 'POST'
+    } as API,
+    /** Renew the lease and pick up the rev watermark. */
+    PAGE_SESSION_HEARTBEAT: {
+        url: '/knowledge-wiki/page/:id/session/heartbeat',
+        method: 'POST'
+    } as API,
+    /** Hand the lease back on an orderly close, rather than waiting out its TTL. */
+    PAGE_SESSION_RELEASE: {
+        url: '/knowledge-wiki/page/:id/session',
+        method: 'DELETE'
+    } as API,
     CREATE_SPACE: {
         url: '/knowledge-wiki/space',
         method: 'POST'

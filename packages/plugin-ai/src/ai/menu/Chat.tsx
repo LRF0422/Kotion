@@ -19,6 +19,7 @@ import {
     revealBlockById,
     PageEditWindow,
     event,
+    useActiveEditor,
     DOCK_PANEL_RUNNING,
 } from "@kn/common"
 import type {
@@ -513,6 +514,31 @@ export const ExpandableChatDemo: React.FC<{
         }
         deleteSession(id)
     }, [activeSessionId, abandonAgent, deleteSession])
+
+    // ─── Page → session follow ─────────────────────────────────
+    // A page-bound session is the conversation about that page, so switching
+    // to a page that already has one should surface it here instead of making
+    // the user re-find it in the dropdown. Only an actual page change may
+    // trigger the switch — never mid-run (it would cancel the stream) and
+    // never when the incoming page has no bound session (keep the current
+    // chat, e.g. a general-purpose one).
+    const { pageId: activePageId } = useActiveEditor()
+    const followedPageRef = useRef<string | null>(null)
+    useEffect(() => {
+        // No page in view — forget the last followed page so reopening it
+        // later still counts as a switch.
+        if (!activePageId) {
+            followedPageRef.current = null
+            return
+        }
+        if (followedPageRef.current === activePageId) return
+        followedPageRef.current = activePageId
+        if (isActive) return
+        // sessions are sorted by updatedAt desc, so this is the most recent
+        // conversation bound to the incoming page.
+        const match = sessions.find(s => s.targetPage?.pageId === activePageId)
+        if (match && match.id !== activeSessionId) void handleSwitchSession(match.id)
+    }, [activePageId, sessions, activeSessionId, isActive, handleSwitchSession])
 
     // ─── Derived UI flags ─────────────────────────────────────────
     const isEmpty = messages.length === 0 && !isActive

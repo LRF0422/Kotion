@@ -13,10 +13,15 @@ public interface IPageSnapshotService {
     /**
      * Seal pending block change rows under a published page version.
      * <p>
-     * Diff-only model: only the rows produced by the patch that triggered this
-     * publish are tagged with {@code page_version_id} / {@code page_version}.
+     * Diff-only model: only the rows still pending ({@code page_version_id IS
+     * NULL}) are tagged with {@code page_version_id} / {@code page_version}.
      * No carry-forward of unchanged blocks - reads use
      * {@link #getPageStateAtVersion(Long, String)} to walk back through history.
+     * </p>
+     * <p>
+     * Idempotent and safe to call repeatedly against the SAME version: an
+     * autosave-sealed version stays open and absorbs each subsequent autosave,
+     * which simply tags the newly pending rows under it.
      * </p>
      *
      * @param pageId        the page ID
@@ -24,6 +29,20 @@ public interface IPageSnapshotService {
      * @param pageVersion   the page version number (e.g., "1", "2")
      */
     void snapshotBlocks(Long pageId, Long pageVersionId, String pageVersion);
+
+    /**
+     * Cumulative change summary for everything sealed under a page version.
+     * <p>
+     * Needed because an autosave-sealed version keeps absorbing later
+     * autosaves, so its summary cannot be derived from the triggering patch
+     * alone. Counts DISTINCT blocks per action, not rows.
+     * </p>
+     *
+     * @param pageVersionId sealed page version id
+     * @return e.g. {@code "3 added, 12 edited"}, or {@code null} when nothing is
+     *         sealed under this version
+     */
+    String summarizeVersion(Long pageVersionId);
 
     /**
      * Get the diff rows that were sealed under a specific page version.

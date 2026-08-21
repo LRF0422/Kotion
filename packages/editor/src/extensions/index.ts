@@ -82,6 +82,8 @@ export { SearchExtension, SearchNReplace, SearchStaticMenu, SearchPanel, ON_SEAR
 export { BlockOperationsExtension, BlockOperations } from "./block-operations"
 export { DirtyTracker } from "./dirty-tracker"
 export type { DirtyTrackerStorage, DirtyTrackerOptions, BlockChange, IncrementalPayload } from "./dirty-tracker"
+export { OpTracker, deriveOps } from "./op-tracker"
+export type { OpTrackerStorage, OpTrackerOptions, OpBatch, BlockOp, BlockOpKind, BlockOpPos, DeriveOpsInput } from "./op-tracker"
 export { ChangeTracker, changeTrackerPluginKey, SuggestionMark } from "./change-tracker"
 export { findSuggestionRanges } from "./change-tracker"
 export type { ChangeTrackerStorage, TrackedSuggestion, SuggestionType, TrackerSelection } from "./change-tracker"

@@ -9,7 +9,7 @@ import { resolveBlockMenuItems } from "./kit";
 import { ThemeProvider } from "styled-components";
 import light, { dark } from "../styles/theme";
 import { StyledEditor } from "../styles/editor";
-import { ExtensionWrapper, logger } from "@kn/common";
+import { ExtensionWrapper, logger, request } from "@kn/common";
 import { useSafeState, useUnmount } from "ahooks";
 import { NotionToC } from "./NotionToC";
 import { cn, useIsMobile, useTheme } from "@kn/ui";
@@ -91,6 +91,46 @@ const waitForProviderSync = (provider: TiptapCollabProvider, timeoutMs = 5000): 
     }, timeoutMs);
     provider.on("synced", handler);
   });
+};
+
+/**
+ * Ask the server for the exclusive right to seed this page's Y.Doc from REST
+ * content.
+ *
+ * `isYDocEmpty` alone is not enough to decide this. "Should I initialise this
+ * document?" is a *distributed* decision, and an empty local fragment is
+ * *local* state: two clients opening the same page concurrently both observe an
+ * empty document (neither has received the other's update yet), both seed, and
+ * Yjs merges rather than de-duplicates — so the page ends up with two copies of
+ * every block, each carrying the same blockId. `OffscreenEditorHost` makes this
+ * routine rather than rare: an AI agent editing a page the user has open is a
+ * second client running exactly this logic in the same room.
+ *
+ * Failure posture is deliberately asymmetric:
+ * - an explicit denial means another client is seeding, so we must NOT seed
+ *   (its content arrives over the collaboration channel instead);
+ * - a transport failure falls back to seeding, because refusing would render a
+ *   blank document for a real page. That leaves the old race in place only for
+ *   the window where the API is unreachable, rather than always.
+ */
+const claimSeedRight = async (pageId: string, clientId: string): Promise<boolean> => {
+  try {
+    const res: any = await request.post(
+      `/knowledge-wiki/space/page/${pageId}/seed-claim`,
+      null,
+      { params: { clientId } },
+    );
+    return res?.data === true;
+  } catch (e) {
+    logger.warn("[CollaborationEditor] seed arbitration unavailable, seeding unarbitrated", e);
+    return true;
+  }
+};
+
+const releaseSeedRight = (pageId: string, clientId: string): void => {
+  request
+    .delete(`/knowledge-wiki/space/page/${pageId}/seed-claim`, { params: { clientId } })
+    .catch(() => { /* best-effort: the claim expires on its own */ });
 };
 
 
@@ -403,6 +443,8 @@ export const CollaborationEditor = forwardRef<
   contentRef.current = content;
   const extensionsRef = React.useRef(extensions);
   extensionsRef.current = extensions;
+  const pageIdRef = React.useRef(props.id);
+  pageIdRef.current = props.id;
 
   React.useEffect(() => {
     let cancelled = false;
@@ -428,22 +470,39 @@ export const CollaborationEditor = forwardRef<
         const restContent = contentRef.current;
         // Only seed when the collaborative doc has no content of its own yet.
         if (restContent && isYDocEmpty(provider.document)) {
-          try {
-            const exts = extensionsRef.current as AnyExtension[];
-            const processed = rewriteUnknownContent(
-              restContent as JSONContent,
-              getSchema(exts),
-              { fallbackToParagraph: true },
-            ).json;
-            // Re-check emptiness right before writing in case sync landed during
-            // the await above.
-            if (processed && isYDocEmpty(provider.document)) {
-              const seededDoc = TiptapTransformer.toYdoc(processed, COLLAB_FIELD, exts);
-              Y.applyUpdate(provider.document, Y.encodeStateAsUpdate(seededDoc));
+          // Emptiness is necessary but not sufficient: every concurrent opener
+          // sees the same emptiness. The server decides who actually seeds.
+          const clientId = String(provider.document.clientID);
+          const pageId = pageIdRef.current;
+          const granted = await claimSeedRight(pageId, clientId);
+          if (cancelled) return;
+
+          if (granted) {
+            try {
+              const exts = extensionsRef.current as AnyExtension[];
+              const processed = rewriteUnknownContent(
+                restContent as JSONContent,
+                getSchema(exts),
+                { fallbackToParagraph: true },
+              ).json;
+              // Re-check emptiness right before writing in case sync landed during
+              // the awaits above.
+              if (processed && isYDocEmpty(provider.document)) {
+                const seededDoc = TiptapTransformer.toYdoc(processed, COLLAB_FIELD, exts);
+                Y.applyUpdate(provider.document, Y.encodeStateAsUpdate(seededDoc));
+              }
+            } catch (e) {
+              logger.error("[CollaborationEditor] failed to seed Y.Doc from REST content", e);
+            } finally {
+              // Hand the claim back rather than making the next opener wait out
+              // the TTL. Safe either way: by now the doc is either seeded or
+              // known to be non-empty.
+              releaseSeedRight(pageId, clientId);
             }
-          } catch (e) {
-            logger.error("[CollaborationEditor] failed to seed Y.Doc from REST content", e);
           }
+          // Denied: another client is seeding this page right now. Its content
+          // reaches us over the collaboration channel — writing our own copy is
+          // exactly what produced duplicated blocks.
         }
       }
 

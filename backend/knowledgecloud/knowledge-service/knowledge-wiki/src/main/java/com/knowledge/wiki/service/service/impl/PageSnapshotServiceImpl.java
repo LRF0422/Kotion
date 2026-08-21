@@ -91,6 +91,88 @@ public class PageSnapshotServiceImpl extends MPJBaseServiceImpl<BlockVersionMapp
     }
 
     /**
+     * Cumulative one-liner describing everything sealed under a page version.
+     * <p>
+     * An autosave-sealed version keeps absorbing subsequent autosaves, so its
+     * summary cannot be derived from the last patch alone. Counts are over
+     * DISTINCT block ids per action — a block edited across ten autosaves has
+     * ten rows under the version but is one edited block to the reader.
+     * </p>
+     *
+     * @param pageVersionId sealed page version id
+     * @return e.g. {@code "3 added, 12 edited, 1 removed"}, or {@code null}
+     *         when nothing is sealed under this version
+     */
+    @Override
+    public String summarizeVersion(Long pageVersionId) {
+        if (pageVersionId == null) {
+            return null;
+        }
+        List<BlockVersion> rows = this.lambdaQuery()
+                .select(BlockVersion::getBlockId, BlockVersion::getChangeAction)
+                .eq(BlockVersion::getPageVersionId, pageVersionId)
+                .list();
+        if (CollUtil.isEmpty(rows)) {
+            return null;
+        }
+
+        // A block can appear under several actions across the absorbed window
+        // (created, then edited). Attribute it to its strongest action so the
+        // buckets stay disjoint and the counts add up to the blocks touched.
+        Map<String, String> actionPerBlock = new HashMap<>();
+        for (BlockVersion row : rows) {
+            String action = row.getChangeAction() == null
+                    ? ""
+                    : row.getChangeAction().toLowerCase();
+            actionPerBlock.merge(row.getBlockId(), action,
+                    (a, b) -> actionRank(a) >= actionRank(b) ? a : b);
+        }
+
+        int created = 0;
+        int updated = 0;
+        int deleted = 0;
+        for (String action : actionPerBlock.values()) {
+            switch (action) {
+                case "create":
+                    created++;
+                    break;
+                case "delete":
+                    deleted++;
+                    break;
+                default:
+                    updated++;
+                    break;
+            }
+        }
+
+        List<String> parts = new ArrayList<>();
+        if (created > 0) {
+            parts.add(created + " added");
+        }
+        if (updated > 0) {
+            parts.add(updated + " edited");
+        }
+        if (deleted > 0) {
+            parts.add(deleted + " removed");
+        }
+        return parts.isEmpty() ? null : String.join(", ", parts);
+    }
+
+    /**
+     * Precedence used to collapse a block's several actions within one absorbed
+     * version: a deletion outranks a creation, which outranks an edit.
+     */
+    private static int actionRank(String action) {
+        if ("delete".equals(action)) {
+            return 3;
+        }
+        if ("create".equals(action)) {
+            return 2;
+        }
+        return 1;
+    }
+
+    /**
      * Walk-back read: full block state of a page at the given page version.
      * <p>
      * For each block touched at or before {@code pageVersion}, picks the row
@@ -123,6 +205,13 @@ public class PageSnapshotServiceImpl extends MPJBaseServiceImpl<BlockVersionMapp
         }
 
         // Walk back: per block_id, keep the row with the highest page_version.
+        //
+        // A version sealed by autosave absorbs every autosave in its window, so
+        // one block legitimately has SEVERAL rows under the SAME page_version
+        // (one per patch). Comparing page_version alone would then be a tie and
+        // leave the winner up to result-set order, i.e. it could resurrect an
+        // intermediate state. id is auto-increment = insertion order, so it is
+        // the correct tiebreak for "which of these happened last".
         Map<String, BlockVersion> latestPerBlock = new HashMap<>();
         for (BlockVersion row : rows) {
             Integer rowVer = parseVersion(row.getPageVersion());
@@ -130,8 +219,14 @@ public class PageSnapshotServiceImpl extends MPJBaseServiceImpl<BlockVersionMapp
                 continue;
             }
             BlockVersion existing = latestPerBlock.get(row.getBlockId());
-            Integer existingVer = existing == null ? null : parseVersion(existing.getPageVersion());
-            if (existing == null || existingVer == null || existingVer < rowVer) {
+            if (existing == null) {
+                latestPerBlock.put(row.getBlockId(), row);
+                continue;
+            }
+            Integer existingVer = parseVersion(existing.getPageVersion());
+            if (existingVer == null
+                    || rowVer > existingVer
+                    || (rowVer.equals(existingVer) && isLaterRow(row, existing))) {
                 latestPerBlock.put(row.getBlockId(), row);
             }
         }
@@ -142,6 +237,16 @@ public class PageSnapshotServiceImpl extends MPJBaseServiceImpl<BlockVersionMapp
                 .sorted(Comparator.comparingInt(
                         b -> b.getSortOrder() != null ? b.getSortOrder() : 0))
                 .collect(Collectors.toList());
+    }
+
+    /** Whether {@code candidate} was inserted after {@code current}. */
+    private static boolean isLaterRow(BlockVersion candidate, BlockVersion current) {
+        Long candId = candidate.getId();
+        Long curId = current.getId();
+        if (candId == null || curId == null) {
+            return candId != null;
+        }
+        return candId > curId;
     }
 
     private static Integer parseVersion(String v) {

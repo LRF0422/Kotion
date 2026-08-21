@@ -1,4 +1,4 @@
-import { PMNode as Node, ReactNodeViewRenderer, mergeAttributes } from "@kn/editor";
+import { PMNode as Node, ReactNodeViewRenderer, mergeAttributes, withNodeViewErrorBoundary } from "@kn/editor";
 import { BitableView } from "./BitableView";
 import { getDefaultFields, getDefaultViews } from "./constants/defaults";
 
@@ -48,7 +48,7 @@ export const Bitable = Node.create({
     },
 
     addNodeView() {
-        return ReactNodeViewRenderer(BitableView, {
+        return ReactNodeViewRenderer(withNodeViewErrorBoundary(BitableView), {
             stopEvent: (eventWrapper) => {
                 const event = eventWrapper.event;
                 // Allow mousedown to reach ProseMirror so it can create NodeSelection

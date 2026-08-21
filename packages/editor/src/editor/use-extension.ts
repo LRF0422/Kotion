@@ -13,6 +13,7 @@ import { Perf } from "../extensions/perf"
 import { UniqueID } from "../extensions/unique-id"
 import { BlockRank } from "../extensions/block-rank"
 import { DirtyTracker } from "../extensions/dirty-tracker"
+import { OpTracker } from "../extensions/op-tracker"
 import { ChangeTracker } from "../extensions/change-tracker"
 import { Doc } from "../extensions"
 import Document from "@tiptap/extension-document";
@@ -82,11 +83,30 @@ export const useEditorExtension = (ext?: string, withTitle?: boolean, externalEx
 			types: idTypes,
 			filterTransaction: t => !isChangeOrigin(t)
 		}))
+		// Retained for the editors still on `useIncrementalSave` (PageEditWindowImpl,
+		// OffscreenEditorHost). The main PageEditor has moved to OpTracker below, so
+		// there it tracks changes nobody reads — deliberately left registered anyway:
+		// both trackers cost O(edit) per transaction (`getChangedRanges` plus a
+		// position resolve, no serialisation and no document walk), so co-residence is
+		// not a per-keystroke regression, and gating it would mean threading a flag
+		// through this hook's dozen-odd positional call sites. Its unread state is a
+		// set of block ids, bounded by document size.
 		editorExtensions.push(DirtyTracker.configure({
 			// Top-level blocks carry their id in `attrs.id` at runtime; the tracker
 			// also falls back to `attrs.blockId` internally for robustness.
 			blockIdAttribute: 'id',
 			filterTransaction: t => !isChangeOrigin(t)
+		}))
+		// Op tracker: the replacement for DirtyTracker. Registered here but inert
+		// until the session layer flips `storage.enabled`, which it does on exactly
+		// one client per page — the host. That is why `filterTransaction` accepts
+		// *every* transaction, remote ones included, rather than filtering to this
+		// author's own edits the way DirtyTracker does: the host is the only client
+		// writing to the database, so it has to persist collaborators' edits too.
+		// Filtering remote transactions out here would drop their work on the floor.
+		editorExtensions.push(OpTracker.configure({
+			blockIdAttribute: 'id',
+			filterTransaction: () => true
 		}))
 		// Change tracker: while a session is enabled (toggled from the chat),
 		// block-level diffs against the session baseline drive the in-editor

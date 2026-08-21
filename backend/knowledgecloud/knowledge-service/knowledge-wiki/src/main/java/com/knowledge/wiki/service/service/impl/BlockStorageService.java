@@ -1,5 +1,6 @@
 package com.knowledge.wiki.service.service.impl;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -14,6 +15,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.knowledge.core.secure.utils.SecurityContextUtil;
 import com.knowledge.core.version.VersionStatus;
 import com.knowledge.wiki.service.cache.BlockCacheService;
 import com.knowledge.wiki.service.entity.BlockVersion;
@@ -54,6 +57,22 @@ import lombok.extern.slf4j.Slf4j;
 public class BlockStorageService {
 
     private static final String ROOT_PARENT_ID = "root";
+
+    /**
+     * Idle gap that closes an autosave-opened {@code PageVersion}. The next
+     * edit after this much silence starts a new version, so history reads as
+     * one entry per editing session instead of one per keystroke burst.
+     */
+    @Value("${wiki.version.coalesce-window-minutes:10}")
+    private int versionCoalesceWindowMinutes;
+
+    /**
+     * Hard cap on how long a single autosave-opened {@code PageVersion} may keep
+     * absorbing edits. Without it a continuous multi-hour session would collapse
+     * into one version with no intermediate restore points.
+     */
+    @Value("${wiki.version.max-session-minutes:60}")
+    private int versionMaxSessionMinutes;
 
     /**
      * Node types whose children are ALWAYS inline content (text, hardBreak,
@@ -927,6 +946,24 @@ public class BlockStorageService {
      * @return PatchResult with statistics and any detected conflicts
      */
     public PatchResult patchBlocks(Long pageId, List<BlockPatchItemDTO> changes, List<String> blockOrder) {
+        return patchBlocks(pageId, changes, blockOrder, false);
+    }
+
+    /**
+     * {@link #patchBlocks(Long, List, List)} with explicit control over version
+     * sealing.
+     *
+     * @param pageId     target page id
+     * @param changes    incremental change items (may be empty)
+     * @param blockOrder ordered list of all current top-level block ids
+     * @param checkpoint {@code true} for an explicit user save / import, which
+     *                   always seals its own closed {@code PageVersion};
+     *                   {@code false} for a background autosave, which is
+     *                   absorbed into the currently open version when possible
+     * @return PatchResult with statistics and any detected conflicts
+     */
+    public PatchResult patchBlocks(Long pageId, List<BlockPatchItemDTO> changes, List<String> blockOrder,
+            boolean checkpoint) {
         if (pageId == null) {
             return PatchResult.empty();
         }
@@ -1001,7 +1038,7 @@ public class BlockStorageService {
 
         // Apply through proxy so @Transactional takes effect
         PatchResult result = self.persistPatch(pageId, toUpsert, deletedRootIds,
-                newSubtreeIdsByRoot, clientPrevVersions);
+                newSubtreeIdsByRoot, clientPrevVersions, checkpoint);
 
         // Cache invalidation (outside transaction)
         blockCacheService.evictAssembledTree(pageId);
@@ -1040,8 +1077,9 @@ public class BlockStorageService {
      * <li>removes blocks no longer present (orphans), then inserts the new
      * blocks in {@link #BATCH_SIZE}-sized <b>independent</b> transactions —
      * so no single transaction is large enough to time out;</li>
-     * <li>seals exactly ONE new ACTIVE {@code PageVersion};</li>
-     * <li>writes NO per-block {@code wiki_block_version} rows.</li>
+     * <li>seals NO {@code PageVersion} and writes NO per-block
+     * {@code wiki_block_version} rows: a fresh import has no diff history worth
+     * preserving, and the first autosave afterwards opens version 1.</li>
      * </ul>
      * Intended to be called only when every change is an upsert of a brand-new
      * block (no {@code prevVersion}) — i.e. a full fresh import — which the
@@ -1067,7 +1105,10 @@ public class BlockStorageService {
         if (existingBlocks > BULK_MAX_EXISTING_BLOCKS) {
             log.warn("bulkReplaceBlocks: pageId={} already has {} blocks — routing to incremental patchBlocks",
                     pageId, existingBlocks);
-            return patchBlocks(pageId, changes, null);
+            // An import is a discrete, user-initiated event, so seal it as its
+            // own checkpoint rather than letting it merge into whatever version
+            // the previous editing session happened to leave open.
+            return patchBlocks(pageId, changes, null, true);
         }
 
         // Flatten every upsert subtree OUTSIDE any transaction (pure CPU).
@@ -1174,6 +1215,30 @@ public class BlockStorageService {
             Set<String> deletedRootIds,
             Map<String, Set<String>> newSubtreeIdsByRoot,
             Map<String, Integer> clientPrevVersions) {
+        return persistPatch(pageId, toUpsert, deletedRootIds, newSubtreeIdsByRoot,
+                clientPrevVersions, false);
+    }
+
+    /**
+     * Transactional DB phase of {@link #patchBlocks}. Must be invoked through
+     * the Spring proxy ({@code self.persistPatch}) so {@code @Transactional}
+     * is honored.
+     *
+     * <p>
+     * All upserts, deletes, orphan cleanup, and change-log recording happen
+     * inside a single atomic transaction.
+     * </p>
+     *
+     * @param checkpoint force a new closed {@code PageVersion} instead of
+     *                   absorbing into the currently open one
+     */
+    @Transactional(rollbackFor = Exception.class, timeout = 30)
+    public PatchResult persistPatch(Long pageId,
+            List<PageContent> toUpsert,
+            Set<String> deletedRootIds,
+            Map<String, Set<String>> newSubtreeIdsByRoot,
+            Map<String, Integer> clientPrevVersions,
+            boolean checkpoint) {
 
         PatchResult result = new PatchResult();
 
@@ -1292,52 +1357,120 @@ public class BlockStorageService {
                 processBatched(changeRows, BATCH_SIZE, blockVersionService::saveBatch);
             }
 
-            // 5b. Seal a new ACTIVE PageVersion; demote the previous one. The
-            // active row is read FOR UPDATE so concurrent patches on the same
-            // page (e.g. the frontend's concurrent save batches) serialize here
-            // instead of both reading the same number and sealing duplicate or
-            // forked versions.
+            // 5b. Seal the change rows under a PageVersion.
+            //
+            // Autosave fires ~3s after the last keystroke, so sealing a fresh
+            // version per patch produced dozens of versions per editing session
+            // and made the history list unusable. Instead the version opened by
+            // an autosave stays OPEN and absorbs the following autosaves until
+            // an idle gap or the session cap closes it — one version per author
+            // per editing session. An explicit save / import / rollback always
+            // gets its own closed version so it stays identifiable.
+            //
+            // The active row is read FOR UPDATE so concurrent patches on the
+            // same page (e.g. the frontend's concurrent save batches) serialize
+            // here instead of both reading the same number and sealing
+            // duplicate or forked versions.
             PageVersion currentActive = pageVersionService.getCurrentActiveVersionForUpdate(pageId);
-            PageVersion sealed = new PageVersion();
-            sealed.setSubjectId(pageId);
-            sealed.setStatus(VersionStatus.ACTIVE);
-            sealed.setVersion(String.valueOf(currentVersionNumber(pageId, currentActive) + 1));
-            if (currentActive != null) {
-                sealed.setLastVersionId(currentActive.getId());
-                sealed.setTitle(currentActive.getTitle());
-                sealed.setParentId(currentActive.getParentId());
-            }
-            sealed.setChangeSummary(buildChangeSummary(
-                    createdBlocks.size(), updatedBlocks.size(), allDeletedIds.size()));
-            pageVersionService.save(sealed);
-            if (currentActive != null) {
-                currentActive.setStatus(VersionStatus.IN_ACTIVE);
-                pageVersionService.updateById(currentActive);
+            boolean absorb = !checkpoint && canAbsorbIntoVersion(currentActive);
+
+            PageVersion target;
+            if (absorb) {
+                target = currentActive;
+            } else {
+                target = new PageVersion();
+                target.setSubjectId(pageId);
+                target.setStatus(VersionStatus.ACTIVE);
+                target.setSealKind(checkpoint
+                        ? PageVersion.SEAL_CHECKPOINT
+                        : PageVersion.SEAL_AUTOSAVE);
+                target.setVersion(String.valueOf(currentVersionNumber(pageId, currentActive) + 1));
+                if (currentActive != null) {
+                    target.setLastVersionId(currentActive.getId());
+                    target.setTitle(currentActive.getTitle());
+                    target.setParentId(currentActive.getParentId());
+                }
+                pageVersionService.save(target);
+                if (currentActive != null) {
+                    currentActive.setStatus(VersionStatus.IN_ACTIVE);
+                    pageVersionService.updateById(currentActive);
+                }
             }
 
-            // 5c. Tag the pending rows with the sealed page version.
-            pageSnapshotService.snapshotBlocks(pageId, sealed.getId(), sealed.getVersion());
+            // 5c. Tag the pending rows with the target page version.
+            pageSnapshotService.snapshotBlocks(pageId, target.getId(), target.getVersion());
 
-            result.setPageVersionId(sealed.getId());
-            result.setPageVersion(sealed.getVersion());
+            // 5d. Refresh the summary from everything now sealed under the
+            // version — this patch's own counts would understate an absorbing
+            // version. The update also bumps update_time / update_user, which is
+            // what keeps the coalescing window sliding while the user types.
+            PageVersion summaryUpdate = new PageVersion();
+            summaryUpdate.setId(target.getId());
+            summaryUpdate.setChangeSummary(pageSnapshotService.summarizeVersion(target.getId()));
+            pageVersionService.updateById(summaryUpdate);
+
+            result.setPageVersionId(target.getId());
+            result.setPageVersion(target.getVersion());
         }
 
         return result;
     }
 
-    /** Human-readable one-liner describing what a sealed patch changed. */
-    private String buildChangeSummary(int created, int updated, int deleted) {
-        List<String> parts = new ArrayList<>();
-        if (created > 0) {
-            parts.add(created + " added");
+    /**
+     * Whether an autosave may be absorbed into the given ACTIVE version instead
+     * of sealing a new one.
+     *
+     * <p>
+     * Three conditions close an open version:
+     * <ul>
+     * <li><b>Idle gap</b> — no write for {@link #versionCoalesceWindowMinutes};
+     * the user stopped editing, so the next edit is a new session.</li>
+     * <li><b>Session cap</b> — the version has been open for
+     * {@link #versionMaxSessionMinutes}; a marathon session still gets periodic
+     * restore points instead of collapsing into one unusable version.</li>
+     * <li><b>Author change</b> — a different user's edits get their own version
+     * so history stays attributable.</li>
+     * </ul>
+     * A version sealed as CHECKPOINT or ROLLBACK is closed on creation and is
+     * never absorbed into, so an explicit save or a restore point keeps meaning
+     * exactly what it said at the time.
+     * </p>
+     */
+    private boolean canAbsorbIntoVersion(PageVersion active) {
+        if (active == null) {
+            return false;
         }
-        if (updated > 0) {
-            parts.add(updated + " edited");
+        if (!PageVersion.SEAL_AUTOSAVE.equals(active.getSealKind())) {
+            return false;
         }
-        if (deleted > 0) {
-            parts.add(deleted + " removed");
+
+        LocalDateTime lastTouched = active.getUpdateTime() != null
+                ? active.getUpdateTime()
+                : active.getCreateTime();
+        if (lastTouched == null) {
+            // Cannot reason about the window — seal a new version rather than
+            // silently fold edits into an unknown-aged one.
+            return false;
         }
-        return String.join(", ", parts);
+        LocalDateTime now = LocalDateTime.now();
+        if (lastTouched.plusMinutes(versionCoalesceWindowMinutes).isBefore(now)) {
+            return false;
+        }
+
+        LocalDateTime opened = active.getCreateTime() != null ? active.getCreateTime() : lastTouched;
+        if (opened.plusMinutes(versionMaxSessionMinutes).isBefore(now)) {
+            return false;
+        }
+
+        // Only split on a *known* author change: system/async writers have no
+        // security context and must not each start their own version.
+        Long editor = SecurityContextUtil.getUserId();
+        Long owner = active.getUpdateUser() != null ? active.getUpdateUser() : active.getCreateUser();
+        if (editor != null && owner != null && !editor.equals(owner)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

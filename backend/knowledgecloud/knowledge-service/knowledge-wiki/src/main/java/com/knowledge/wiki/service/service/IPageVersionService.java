@@ -22,6 +22,25 @@ public interface IPageVersionService extends IVersionService<Page, PageVersion> 
     PageVersion getCurrentActiveVersionForUpdate(Long subjectId);
 
     /**
+     * Close the version the current editing session left open, turning it into
+     * an explicit restore point.
+     * <p>
+     * Autosaves deliberately merge into one version per session, so without
+     * this there is no way for a user to say "keep <i>this</i> exact state".
+     * Sealing only flips the version's {@code sealKind}: no blocks are written,
+     * and the version stays ACTIVE because it is still the latest state. The
+     * next edit can no longer absorb into it, so it opens a fresh version.
+     * </p>
+     * Idempotent: sealing an already-sealed (or non-existent) version is a
+     * no-op, so a double-click or a retried request cannot fragment history.
+     *
+     * @param pageId page ID
+     * @return the sealed version, or {@code null} when the page has no version
+     *         yet (nothing has been saved)
+     */
+    PageVersion sealActiveVersion(Long pageId);
+
+    /**
      * Get version history list
      * 
      * @param dto query parameters

@@ -262,6 +262,49 @@ public class SpaceController {
     }
 
     /**
+     * 封存当前编辑会话的版本，将此刻状态固定为一个显式还原点（用户主动保存时调用）
+     * POST /knowledge-wiki/space/page/{pageId}/checkpoint
+     */
+    @PostMapping("/page/{pageId}/checkpoint")
+    public R<Boolean> sealPageVersion(@PathVariable("pageId") Long pageId) {
+        spaceApplication.sealPageVersion(pageId);
+        return R.data(Boolean.TRUE);
+    }
+
+    /**
+     * 校验当前用户是否有权加入该页面的协同房间。由 room-server 的 onAuthenticate
+     * 转发客户端 token 调用——加入房间从此需要与读取页面相同的权限。
+     * GET /knowledge-wiki/space/page/{pageId}/collab/authorize
+     */
+    @GetMapping("/page/{pageId}/collab/authorize")
+    public R<Boolean> authorizeCollabRoom(@PathVariable("pageId") Long pageId) {
+        spaceApplication.authorizeCollabRoom(pageId);
+        return R.data(Boolean.TRUE);
+    }
+
+    /**
+     * 申请把 DB 内容播种进该页面协同文档的独占权。同一时刻只有一个客户端能拿到，
+     * 以此消除"两个客户端都看到空文档、都播种、Yjs 两份都留"导致的全文块翻倍。
+     * POST /knowledge-wiki/space/page/{pageId}/seed-claim
+     */
+    @PostMapping("/page/{pageId}/seed-claim")
+    public R<Boolean> claimPageSeedRight(@PathVariable("pageId") Long pageId,
+            @RequestParam("clientId") String clientId) {
+        return R.data(spaceApplication.claimPageSeedRight(pageId, clientId));
+    }
+
+    /**
+     * 播种完成后释放独占权，避免下一个打开者白等一个 TTL。
+     * DELETE /knowledge-wiki/space/page/{pageId}/seed-claim
+     */
+    @DeleteMapping("/page/{pageId}/seed-claim")
+    public R<Boolean> releasePageSeedRight(@PathVariable("pageId") Long pageId,
+            @RequestParam("clientId") String clientId) {
+        spaceApplication.releasePageSeedRight(pageId, clientId);
+        return R.data(Boolean.TRUE);
+    }
+
+    /**
      * 按内容搜索块
      * GET
      * /knowledge-wiki/space/page/block/search?keyword={keyword}&pageId={pageId}&spaceId={spaceId}

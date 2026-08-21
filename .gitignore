@@ -32,6 +32,8 @@ coverage
 out/·
 build
 dist
+# Scratch output of `pnpm --filter @kn/editor check:ops`
+.tmp-check/
 
 
 # Debug

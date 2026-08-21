@@ -77,8 +77,9 @@ public interface IPageService extends ISubjectService<Page> {
 
     /**
      * Apply an incremental block-level patch produced by the frontend
-     * DirtyTracker. Only updates the blocks listed in {@code changes} and
-     * propagates the top-level ordering from {@code blockOrder}.
+     * DirtyTracker, as an autosave. Equivalent to
+     * {@link #patchBlocks(Long, List, List, boolean)} with
+     * {@code checkpoint = false}.
      *
      * @param pageId     the page ID
      * @param changes    list of block-level changes (upsert / delete)
@@ -88,15 +89,37 @@ public interface IPageService extends ISubjectService<Page> {
     BlockStorageService.PatchResult patchBlocks(Long pageId, List<BlockPatchItemDTO> changes, List<String> blockOrder);
 
     /**
+     * Apply an incremental block-level patch produced by the frontend
+     * DirtyTracker. Only updates the blocks listed in {@code changes} and
+     * propagates the top-level ordering from {@code blockOrder}.
+     * <p>
+     * Block rows are always written. Whether the patch also <i>seals</i> a
+     * version is a separate decision: an autosave merges into the version the
+     * current editing session already opened, while a checkpoint closes that
+     * version and starts a fresh one. See
+     * {@link BlockStorageService#patchBlocks(Long, List, List, boolean)}.
+     * </p>
+     *
+     * @param pageId     the page ID
+     * @param changes    list of block-level changes (upsert / delete)
+     * @param blockOrder ordered list of all current top-level block ids
+     * @param checkpoint {@code true} to force a new, non-absorbable version —
+     *                   an explicit save, a rollback, or an import
+     * @return PatchResult with statistics and any detected conflicts
+     */
+    BlockStorageService.PatchResult patchBlocks(Long pageId, List<BlockPatchItemDTO> changes, List<String> blockOrder,
+            boolean checkpoint);
+
+    /**
      * Bulk-replace a page's blocks for a first import / paste of a very large
-     * document. Skips per-block version history and seals a single new ACTIVE
-     * PageVersion, writing blocks in independent batched transactions so a
-     * million-block import never times out. See
+     * document. Skips per-block version history and seals no PageVersion,
+     * writing blocks in independent batched transactions so a million-block
+     * import never times out. See
      * {@link BlockStorageService#bulkReplaceBlocks(Long, List)}.
      *
      * @param pageId  the page ID
      * @param changes the full set of top-level blocks (all upserts)
-     * @return PatchResult with created count and the new page version
+     * @return PatchResult with created count
      */
     BlockStorageService.PatchResult bulkReplaceBlocks(Long pageId, List<BlockPatchItemDTO> changes);
 

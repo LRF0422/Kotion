@@ -677,6 +677,12 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
     @Override
     public BlockStorageService.PatchResult patchBlocks(Long pageId, java.util.List<BlockPatchItemDTO> changes,
             java.util.List<String> blockOrder) {
+        return patchBlocks(pageId, changes, blockOrder, false);
+    }
+
+    @Override
+    public BlockStorageService.PatchResult patchBlocks(Long pageId, java.util.List<BlockPatchItemDTO> changes,
+            java.util.List<String> blockOrder, boolean checkpoint) {
         if (pageId == null) {
             throw WikiException.INVALID_PARAMETER.newException("页面ID不能为空");
         }
@@ -687,7 +693,8 @@ public class PageServiceImpl extends AbstractSubjectService<PageMapper, Page> im
         }
 
         // Apply the incremental patch (transactional internally).
-        BlockStorageService.PatchResult result = blockStorageService.patchBlocks(pageId, changes, blockOrder);
+        BlockStorageService.PatchResult result = blockStorageService.patchBlocks(pageId, changes, blockOrder,
+                checkpoint);
         // Keep the backlink index in step with every incremental save.
         syncPageLinks(pageId);
         return result;
